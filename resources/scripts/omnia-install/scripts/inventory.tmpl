@@ -1,0 +1,6 @@
+[manager]
+{{omnia_manager}}
+[compute]
+{%- for vm in compute_vms %}
+{{ vm -}}
+{% endfor %}

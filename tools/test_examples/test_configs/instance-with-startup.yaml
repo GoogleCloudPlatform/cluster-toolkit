@@ -1,0 +1,64 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: instance_with_startup
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: instance-startup
+  region: europe-west4
+  zone: europe-west4-a
+resource_groups:
+- group: primary
+  resources:
+  - source: ./resources/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+
+  - source: ./resources/file-system/filestore
+    kind: terraform
+    id: homefs
+    settings:
+      local_mount: /home
+      network_name: $(network1.network_name)
+
+  - source: ./resources/scripts/startup-script
+    kind: terraform
+    id: startup
+    settings:
+      runners:
+        - type: shell
+          file: "modules/startup-script/examples/install_ansible.sh"
+        - type: shell
+          file: "modules/filestore/scripts/install-nfs.sh"
+        - type: "ansible-local"
+          file: "modules/startup-script/examples/mount.yaml"
+
+  - source: ./resources/compute/simple-instance
+    kind: terraform
+    id: workstation
+    settings:
+      network_self_link: $(network1.network_self_link)
+      machine_type: e2-standard-8
+      network_storage:
+      - $(homefs.network_storage)
+      metadata:
+        startup-script: $(startup.startup_script_content)
+        startup-script-custom: $(startup.startup_script_custom_content)
+
+  - source: ./resources/scripts/wait-for-startup
+    kind: terraform
+    id: wait
+    settings:
+      instance_name: ((module.workstation.name[0]))

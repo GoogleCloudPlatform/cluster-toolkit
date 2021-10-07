@@ -1,0 +1,133 @@
+{
+  "header": "",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "compute_disk_size_gb",
+      "type": "number",
+      "description": "Size of boot disk to create for the partition compute nodes",
+      "default": 20,
+      "required": false
+    },
+    {
+      "name": "compute_disk_type",
+      "type": "string",
+      "description": "Type of boot disk to create for the partition compute nodes",
+      "default": "pd-standard",
+      "required": false
+    },
+    {
+      "name": "enable_placement",
+      "type": "bool",
+      "description": "Enable placement groups",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "gpu_count",
+      "type": "number",
+      "description": "Number of GPUs attached to the partition compute instances",
+      "default": 0,
+      "required": false
+    },
+    {
+      "name": "gpu_type",
+      "type": "string",
+      "description": "Type of GPUs attached to the partition compute instances",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "image",
+      "type": "string",
+      "description": "Image to be used of the compute VMs in this partition",
+      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7",
+      "required": false
+    },
+    {
+      "name": "image_hyperthreads",
+      "type": "bool",
+      "description": "Enable or disabling hypethreading",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels to add to partition compute instances. List of key key, value pairs.",
+      "default": {},
+      "required": false
+    },
+    {
+      "name": "machine_type",
+      "type": "string",
+      "description": "Compute Platform machine type to use for this partition compute nodes",
+      "default": "c2-standard-60",
+      "required": false
+    },
+    {
+      "name": "max_node_count",
+      "type": "number",
+      "description": "Maximum number of nodes allowed in this partition",
+      "default": 10,
+      "required": false
+    },
+    {
+      "name": "network_storage",
+      "type": "list(object({\n    server_ip     = string,\n    remote_mount  = string,\n    local_mount   = string,\n    fs_type       = string,\n    mount_options = string\n  }))",
+      "description": "An array of network attached storage mounts to be configured on the partition compute nodes.",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "partition_name",
+      "type": "string",
+      "description": "The name of the slurm partition",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "preemptible_bursting",
+      "type": "bool",
+      "description": "Should use preemptibles to burst",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "static_node_count",
+      "type": "number",
+      "description": "Number of nodes to be statically created",
+      "default": 0,
+      "required": false
+    },
+    {
+      "name": "subnetwork_name",
+      "type": "string",
+      "description": "The name of the pre-defined VPC subnet you want the nodes to attach to based on Region.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "zone",
+      "type": "string",
+      "description": "Compute Platform zone where the notebook server will be located",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [
+    {
+      "name": "partition",
+      "description": "The partition structure containing all the set variables"
+    }
+  ],
+  "providers": [],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    }
+  ],
+  "resources": []
+}

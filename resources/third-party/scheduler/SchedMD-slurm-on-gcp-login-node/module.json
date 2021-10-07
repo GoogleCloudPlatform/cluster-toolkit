@@ -1,0 +1,179 @@
+{
+  "header": "Copyright 2021 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "boot_disk_size",
+      "type": "number",
+      "description": "Size of boot disk to create for the cluster login node",
+      "default": 20,
+      "required": false
+    },
+    {
+      "name": "boot_disk_type",
+      "type": "string",
+      "description": "Type of boot disk to create for the cluster login node",
+      "default": "pd-standard",
+      "required": false
+    },
+    {
+      "name": "cluster_name",
+      "type": "string",
+      "description": "Name of the cluster",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "controller_name",
+      "type": "string",
+      "description": "FQDN or IP address of the controller node",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "controller_secondary_disk",
+      "type": "bool",
+      "description": "Create secondary disk mounted to controller node",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "deployment_name",
+      "type": "string",
+      "description": "Name of the deployment",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "disable_login_public_ips",
+      "type": "bool",
+      "description": "If set to true, create Cloud NAT gateway and enable IAP FW rules",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels to add to login instances. List of key key, value pairs.",
+      "default": {},
+      "required": false
+    },
+    {
+      "name": "login_image",
+      "type": "string",
+      "description": "Disk OS image with Slurm preinstalled to use for login node",
+      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7",
+      "required": false
+    },
+    {
+      "name": "login_instance_template",
+      "type": "string",
+      "description": "Instance template to use to create controller instance",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "login_machine_type",
+      "type": "string",
+      "description": "Machine type to use for login node instances.",
+      "default": "n1-standard-2",
+      "required": false
+    },
+    {
+      "name": "login_network_storage",
+      "type": "list(object({\n    server_ip    = string,\n    remote_mount = string,\n    local_mount  = string,\n    fs_type      = string,\n  mount_options = string }))",
+      "description": "An array of network attached storage mounts to be configured on the login and controller instances.",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "login_node_count",
+      "type": "number",
+      "description": "Number of login nodes in the cluster",
+      "default": 1,
+      "required": false
+    },
+    {
+      "name": "login_scopes",
+      "type": "list(string)",
+      "description": "Scopes to apply to login nodes.",
+      "default": [
+        "https://www.googleapis.com/auth/monitoring.write",
+        "https://www.googleapis.com/auth/logging.write"
+      ],
+      "required": false
+    },
+    {
+      "name": "login_service_account",
+      "type": "string",
+      "description": "Service Account for compute nodes.",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "munge_key",
+      "type": "any",
+      "description": "Specific munge key to use",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "network_storage",
+      "type": "list(object({\n    server_ip    = string,\n    remote_mount = string,\n    local_mount  = string,\n    fs_type      = string,\n  mount_options = string }))",
+      "description": " An array of network attached storage mounts to be configured on all instances.",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "region",
+      "type": "string",
+      "description": "Compute Platform region where the Slurm cluster will be located",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "shared_vpc_host_project",
+      "type": "string",
+      "description": "Host project of shared VPC",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "subnet_depend",
+      "type": "string",
+      "description": "Used as a dependency between the network and instances",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "subnetwork_name",
+      "type": "string",
+      "description": "The name of the pre-defined VPC subnet you want the nodes to attach to based on Region.",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "zone",
+      "type": "string",
+      "description": "Compute Platform zone where the notebook server will be located",
+      "default": "us-central1-b",
+      "required": false
+    }
+  ],
+  "modules": [
+    {
+      "name": "slurm_cluster_login_node",
+      "source": "github.com/SchedMD/slurm-gcp//tf/modules/login/",
+      "version": "v4.0.4"
+    }
+  ],
+  "outputs": [],
+  "providers": [],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    }
+  ],
+  "resources": []
+}

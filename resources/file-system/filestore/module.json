@@ -1,0 +1,103 @@
+{
+  "header": "Copyright 2021 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "deployment_name",
+      "type": "string",
+      "description": "Name of the HPC deployment, used as name of the filestore instace if no name is specified.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "filestore_share_name",
+      "type": "string",
+      "description": "Name of the file system share on the instance.",
+      "default": "nfsshare",
+      "required": false
+    },
+    {
+      "name": "filestore_tier",
+      "type": "string",
+      "description": "The service tier of the instance.",
+      "default": "PREMIUM",
+      "required": false
+    },
+    {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels to add to the filestore instance. List key, value pairs.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "local_mount",
+      "type": "string",
+      "description": "Mountpoint for this filestore instance",
+      "default": "/shared",
+      "required": false
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "description": "The resource name of the instance.",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "network_name",
+      "type": "string",
+      "description": "The name of the GCE VPC network to which the instance is connected.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "size_gb",
+      "type": "number",
+      "description": "Storage size gb",
+      "default": 2660,
+      "required": false
+    },
+    {
+      "name": "zone",
+      "type": "string",
+      "description": "The name of the Filestore zone of the instance.",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [
+    {
+      "name": "network_storage",
+      "description": "Describes a filestore instance."
+    }
+  ],
+  "providers": [
+    {
+      "name": "google",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    },
+    {
+      "name": "google",
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "filestore_instance",
+      "name": "filestore_instance",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "header": "Copyright 2021 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "instance_name",
+      "type": "string",
+      "description": "Name of the instance we are waiting for",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "description": "Project in which the HPC deployment will be created",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "zone",
+      "type": "string",
+      "description": "The GCP zone where the instance is running",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [],
+  "providers": [
+    {
+      "name": "null",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    },
+    {
+      "name": "null",
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "resource",
+      "name": "wait_for_startup",
+      "provider": "null",
+      "source": "hashicorp/null",
+      "mode": "managed",
+      "version": "latest"
+    }
+  ]
+}

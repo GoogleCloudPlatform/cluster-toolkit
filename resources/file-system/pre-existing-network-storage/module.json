@@ -1,0 +1,51 @@
+{
+  "header": "",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "fs_type",
+      "type": "string",
+      "description": "Type of file system to be mounted (e.g., nfs, lustre)",
+      "default": "nfs",
+      "required": false
+    },
+    {
+      "name": "local_mount",
+      "type": "string",
+      "description": "The mount point where the contents of the device may be accessed after mounting.",
+      "default": "/mnt",
+      "required": false
+    },
+    {
+      "name": "mount_options",
+      "type": "string",
+      "description": "Options describing various aspects of the file system.",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "remote_mount",
+      "type": "string",
+      "description": "Remote FS name or export (exported directory for nfs, fs name for lustre)",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "server_ip",
+      "type": "string",
+      "description": "The device name as supplied to fs-tab, excluding remote fs-name(for nfs, that is the server IP, for lustre \u003cMGS NID\u003e[:\u003cMGS NID\u003e]).",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [
+    {
+      "name": "network_storage",
+      "description": "Describes a remote network storage to be mounted by fs-tab."
+    }
+  ],
+  "providers": [],
+  "requirements": [],
+  "resources": []
+}

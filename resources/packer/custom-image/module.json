@@ -1,0 +1,48 @@
+{
+  "header": "",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "ansible_extra_arguments",
+      "type": "list(string)",
+      "description": null,
+      "default": [
+        "-vv"
+      ],
+      "required": false
+    },
+    {
+      "name": "ansible_playbook_files",
+      "type": "list(string)",
+      "description": null,
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "ansible_user",
+      "type": "string",
+      "description": null,
+      "default": "packer",
+      "required": false
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "description": null,
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "subnetwork",
+      "type": "string",
+      "description": null,
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [],
+  "providers": [],
+  "requirements": [],
+  "resources": []
+}

@@ -1,0 +1,96 @@
+{
+  "header": "Copyright 2021 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "deployment_name",
+      "type": "string",
+      "description": "Name of the HPC deployment, used to name GCS bucket for startup scripts.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "region",
+      "type": "string",
+      "description": "The region to deploy to",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "runners",
+      "type": "list(object({\n    type = string,\n    file = string,\n  }))",
+      "description": "List of runners to run on remote VM",
+      "default": [],
+      "required": false
+    }
+  ],
+  "modules": [
+    {
+      "name": "startup_scripts",
+      "source": "github.com/terraform-google-modules/terraform-google-startup-scripts",
+      "version": "v1.0.0"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "startup_script_content",
+      "description": "startup-script-stdlib.sh content as a string value."
+    },
+    {
+      "name": "startup_script_custom_content",
+      "description": "Custom startup script to load and run all runners."
+    }
+  ],
+  "providers": [
+    {
+      "name": "google",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "random",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    },
+    {
+      "name": "google",
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "random",
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "storage_bucket",
+      "name": "configs_bucket",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest"
+    },
+    {
+      "type": "storage_bucket_object",
+      "name": "scripts",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest"
+    },
+    {
+      "type": "id",
+      "name": "resource_name_suffix",
+      "provider": "random",
+      "source": "hashicorp/random",
+      "mode": "managed",
+      "version": "latest"
+    }
+  ]
+}

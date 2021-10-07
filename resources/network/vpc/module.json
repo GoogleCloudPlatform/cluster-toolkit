@@ -1,0 +1,97 @@
+{
+  "header": "Copyright 2021 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "deployment_name",
+      "type": "string",
+      "description": "The name of the current deployment",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "network_name",
+      "type": "string",
+      "description": "The name of the network to be created. Defaults to {deployment_name}_net if null.",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "description": "Project in which the HPC deployment will be created",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "region",
+      "type": "string",
+      "description": "The region where Cloud NAT and Cloud Router will be configured",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [
+    {
+      "name": "cloud_nat",
+      "source": "terraform-google-modules/cloud-nat/google",
+      "version": "~\u003e 1.4"
+    },
+    {
+      "name": "cloud_router",
+      "source": "terraform-google-modules/cloud-router/google",
+      "version": "~\u003e 0.4"
+    },
+    {
+      "name": "firewall_rules",
+      "source": "terraform-google-modules/network/google//modules/firewall-rules",
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "vpc",
+      "source": "terraform-google-modules/network/google",
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "network_name",
+      "description": "The name of the network created"
+    },
+    {
+      "name": "network_self_link",
+      "description": "The URI of the VPC being created"
+    },
+    {
+      "name": "primary_subnetwork",
+      "description": "The subnetwork in the specified primary region"
+    }
+  ],
+  "providers": [
+    {
+      "name": "google",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    },
+    {
+      "name": "google",
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "compute_subnetwork",
+      "name": "primary_subnetwork",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "data",
+      "version": "latest"
+    }
+  ]
+}
