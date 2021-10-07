@@ -14,8 +14,8 @@ and intends to address the HPC deployment needs of a broad range of customers.
 * [Packer](https://www.packer.io/downloads)
 * [golang](https://golang.org/doc/install)
   * To setup GOPATH and development environment: `export PATH=$PATH:$(go env GOPATH)/bin`
-* [terraform-docs](https://github.com/terraform-docs/terraform-docs)
-    * `GO111MODULE="on" go get github.com/terraform-docs/terraform-docs@v0.14.1`
+* [terraform-docs](https://github.com/terraform-docs/terraform-docs) (for development only)
+    * `go install github.com/terraform-docs/terraform-docs@v0.16.0`
 
 ## Build and Install
 Simply run `make` in the root directory.
