@@ -271,20 +271,6 @@ func (s *MySuite) TestCreateBlueprintDirectory(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestCopySource(c *C) {
-	blueprintName := "blueprints_TestCopySource"
-	blueprintDir := path.Join(testDir, blueprintName)
-	createBlueprintDirectory(blueprintDir)
-	copySource(blueprintDir, &resourceGroups)
-	_, err := os.Stat(
-		path.Join(
-			blueprintDir,
-			resourceGroups[0].Name,
-			"modules",
-			resources[0].ResourceName))
-	c.Assert(err, IsNil)
-}
-
 func (s *MySuite) TestWriteTopLayer_TFWriter(c *C) {
 	// Shallow copy the struct so we can set the name
 	blueprintName := "blueprints_TestWriteTopLayer_TFWriter"
