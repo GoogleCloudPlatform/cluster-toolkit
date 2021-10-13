@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package resreader extracts necessary information from resources
 package resreader
 
 import (

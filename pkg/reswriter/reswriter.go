@@ -14,6 +14,7 @@
 * limitations under the License.
  */
 
+// Package reswriter writes resources to a blueprint directory
 package reswriter
 
 import (

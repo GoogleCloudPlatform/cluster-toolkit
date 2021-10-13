@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package config manages and updates the ghpc input config
 package config
 
 import (
@@ -217,48 +218,48 @@ func expandSimpleVariable(
 				errorMessages["varNotFound"], context.varString)
 		}
 		return fmt.Sprintf("((var.%s))", varValue), nil
-	} else { // Resource variable
-
-		// Verify resource exists
-		refGrpIndex, ok := resToGrp[varSource]
-		if !ok {
-			return "", fmt.Errorf("%s: resource %s was not found",
-				errorMessages["varNotFound"], varSource)
-		}
-		if refGrpIndex != context.groupIndex {
-			log.Fatalf("Unimplemented: references to other groups are not yet supported")
-		}
-
-		// Get the resource info
-		refGrp := context.yamlConfig.ResourceGroups[refGrpIndex]
-		refResIndex := -1
-		for i := range refGrp.Resources {
-			if refGrp.Resources[i].ID == varSource {
-				refResIndex = i
-				break
-			}
-		}
-		if refResIndex == -1 {
-			log.Fatalf("Could not find resource referenced by variable %s",
-				context.varString)
-		}
-		refRes := refGrp.Resources[refResIndex]
-		resInfo := resreader.Factory(refRes.Kind).GetInfo(refRes.Source)
-
-		// Verify output exists in resource
-		found := false
-		for _, output := range resInfo.Outputs {
-			if output.Name == varValue {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return "", fmt.Errorf("%s: resource %s did not have output %s",
-				errorMessages["noOutput"], refRes.ID, varValue)
-		}
-		return fmt.Sprintf("((module.%s.%s))", varSource, varValue), nil
 	}
+
+	// Resource variable
+	// Verify resource exists
+	refGrpIndex, ok := resToGrp[varSource]
+	if !ok {
+		return "", fmt.Errorf("%s: resource %s was not found",
+			errorMessages["varNotFound"], varSource)
+	}
+	if refGrpIndex != context.groupIndex {
+		log.Fatalf("Unimplemented: references to other groups are not yet supported")
+	}
+
+	// Get the resource info
+	refGrp := context.yamlConfig.ResourceGroups[refGrpIndex]
+	refResIndex := -1
+	for i := range refGrp.Resources {
+		if refGrp.Resources[i].ID == varSource {
+			refResIndex = i
+			break
+		}
+	}
+	if refResIndex == -1 {
+		log.Fatalf("Could not find resource referenced by variable %s",
+			context.varString)
+	}
+	refRes := refGrp.Resources[refResIndex]
+	resInfo := resreader.Factory(refRes.Kind).GetInfo(refRes.Source)
+
+	// Verify output exists in resource
+	found := false
+	for _, output := range resInfo.Outputs {
+		if output.Name == varValue {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "", fmt.Errorf("%s: resource %s did not have output %s",
+			errorMessages["noOutput"], refRes.ID, varValue)
+	}
+	return fmt.Sprintf("((module.%s.%s))", varSource, varValue), nil
 }
 
 func expandVariable(

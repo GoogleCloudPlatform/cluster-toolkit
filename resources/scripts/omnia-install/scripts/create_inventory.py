@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import subprocess
-from subprocess import PIPE
-from jinja2 import Template
-import os
-import pathlib
 import argparse
+import json
+import os
+import subprocess
+from jinja2 import Template
 
 ## Parse Arguments
 parser = argparse.ArgumentParser()
@@ -32,7 +30,8 @@ gcloud_cmd = ["gcloud", "compute", "instances", "list",
               "--filter", f"labels.ghpc_deployment={args.deployment_name}",
               "--format",
               "json(name,labels.ghpc_role,networkInterfaces[0].networkIP)"]
-gcloud_process = subprocess.run(gcloud_cmd, stdout=PIPE, stderr=PIPE)
+gcloud_process = subprocess.run(
+    gcloud_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 if gcloud_process.returncode != 0:
   print(f"Failed to return omnia VM instance list: {gcloud_process.stderr}")
   exit(1)
@@ -52,5 +51,4 @@ with open(args.template) as inventory_tmpl:
   template = Template(inventory_tmpl.read())
 with open(args.outfile, "w") as inventory_file:
   inventory_file.write(
-    template.render(omnia_manager=omnia_manager, compute_vms=compute_vms)
-  )
+      template.render(omnia_manager=omnia_manager, compute_vms=compute_vms))
