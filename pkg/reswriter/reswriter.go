@@ -46,7 +46,7 @@ var kinds = map[string]ResWriter{
 	"packer":    new(PackerWriter),
 }
 
-//go:embed templates
+//go:embed *.tmpl
 var templatesFS embed.FS
 
 func factory(kind string) ResWriter {
@@ -89,8 +89,7 @@ func getAbsSourcePath(sourcePath string) string {
 
 func getTemplate(filename string) string {
 	// Create path to template from the embedded template FS
-	mainTmplPath := path.Join("templates", filename)
-	tmplText, err := templatesFS.ReadFile(mainTmplPath)
+	tmplText, err := templatesFS.ReadFile(filename)
 	if err != nil {
 		log.Fatalf("TFWriter: %v", err)
 	}
