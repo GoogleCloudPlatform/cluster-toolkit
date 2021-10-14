@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-// Package config wraps functionality around the user input config
 package config
 
 import (
