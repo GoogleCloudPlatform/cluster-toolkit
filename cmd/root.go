@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package cmd defines command line utilities for ghpc
 package cmd
 
 import (
@@ -37,6 +38,7 @@ HPC deployments on the Google Cloud Platform.`,
 	}
 )
 
+// Execute the root command
 func Execute() error {
 	return rootCmd.Execute()
 }
