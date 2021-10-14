@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package resreader extracts necessary information from resources
 package resreader
 
 import (
@@ -42,20 +43,20 @@ func addTfExtension(filename string) {
 }
 
 func getHCLFiles(dir string) []string {
-	all_files, err := ioutil.ReadDir(dir)
+	allFiles, err := ioutil.ReadDir(dir)
 	if err != nil {
 		log.Fatalf("Failed to read packer source directory %s", dir)
 	}
-	var hcl_files []string
-	for _, f := range all_files {
+	var hclFiles []string
+	for _, f := range allFiles {
 		if f.IsDir() {
 			continue
 		}
 		if filepath.Ext(f.Name()) == ".hcl" {
-			hcl_files = append(hcl_files, path.Join(dir, f.Name()))
+			hclFiles = append(hclFiles, path.Join(dir, f.Name()))
 		}
 	}
-	return hcl_files
+	return hclFiles
 }
 
 func copyHCLFilesToTmp(dir string) (string, []string) {

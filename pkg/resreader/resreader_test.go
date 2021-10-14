@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package resreader extracts necessary information from resources
 package resreader
 
 import (
@@ -111,12 +112,18 @@ func createTmpResource() {
 			"Failed to create temp dir for resource in resreader_test, %v", err)
 	}
 	mainFile, err := os.Create(path.Join(tmpResourceDir, "main.tf"))
+	if err != nil {
+		log.Fatalf("Failed to create main.tf: %v", err)
+	}
 	_, err = mainFile.WriteString(testMainTf)
 	if err != nil {
 		log.Fatalf("resreader_test: Failed to write main.tf test file. %v", err)
 	}
 
 	varFile, err := os.Create(path.Join(tmpResourceDir, "variables.tf"))
+	if err != nil {
+		log.Fatalf("Failed to create variables.tf: %v", err)
+	}
 	_, err = varFile.WriteString(testVariablesTf)
 	if err != nil {
 		log.Fatalf(
@@ -124,6 +131,9 @@ func createTmpResource() {
 	}
 
 	outFile, err := os.Create(path.Join(tmpResourceDir, "outputs.tf"))
+	if err != nil {
+		log.Fatalf("Failed to create outputs.tf: %v", err)
+	}
 	_, err = outFile.WriteString(testOutputsTf)
 	if err != nil {
 		log.Fatalf("resreader_test: Failed to write outputs.tf test file. %v", err)
