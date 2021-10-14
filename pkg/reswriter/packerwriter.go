@@ -85,7 +85,9 @@ func writePackerAutoVariables(tmplFilename string, resource config.Resource, des
 			"Couldn't create top-layer %s, does it already exist? %v",
 			err, tmplFilename)
 	}
-	tmpl.Execute(outputFile, resource)
+	if err := tmpl.Execute(outputFile, resource); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint

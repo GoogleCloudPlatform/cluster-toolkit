@@ -159,7 +159,7 @@ func applyGlobalVarsInGroup(
 				continue
 			}
 
-			if input.Required == true {
+			if input.Required {
 				// It's not explicitly set, and not global is set
 				// Fail if no default has been set
 				return fmt.Errorf("%s: Resource.ID: %s Setting: %s",
@@ -248,7 +248,10 @@ func expandSimpleVariable(
 			context.varString)
 	}
 	refRes := refGrp.Resources[refResIndex]
-	resInfo := resreader.Factory(refRes.Kind).GetInfo(refRes.Source)
+	resInfo, err := resreader.Factory(refRes.Kind).GetInfo(refRes.Source)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Verify output exists in resource
 	found := false
@@ -293,19 +296,18 @@ func handleVariable(
 	prim interface{},
 	context varContext,
 	resToGrp map[string]int) (interface{}, error) {
-	switch prim.(type) {
+	switch val := prim.(type) {
 	case string:
-		str := prim.(string)
-		context.varString = str
-		if hasVariable(str) {
-			if isSimpleVariable(str) {
+		context.varString = val
+		if hasVariable(val) {
+			if isSimpleVariable(val) {
 				return expandSimpleVariable(context, resToGrp)
 			}
 			return expandVariable(context, resToGrp)
 		}
-		return prim, nil
+		return val, nil
 	default:
-		return prim, nil
+		return val, nil
 	}
 }
 
@@ -314,7 +316,7 @@ func updateVariableType(
 	context varContext,
 	resToGrp map[string]int) (interface{}, error) {
 	var err error
-	switch value.(type) {
+	switch typedValue := value.(type) {
 	case []interface{}:
 		interfaceSlice := value.([]interface{})
 		{
@@ -326,14 +328,13 @@ func updateVariableType(
 				}
 			}
 		}
-		return interfaceSlice, err
+		return typedValue, err
 	case map[interface{}]interface{}:
-		interfaceMap := value.(map[interface{}]interface{})
 		retMap := map[interface{}]interface{}{}
-		for k, v := range interfaceMap {
+		for k, v := range typedValue {
 			retMap[k], err = updateVariableType(v, context, resToGrp)
 			if err != nil {
-				return interfaceMap, err
+				return retMap, err
 			}
 		}
 		return retMap, err

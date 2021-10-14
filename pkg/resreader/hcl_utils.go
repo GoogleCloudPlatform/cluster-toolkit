@@ -16,8 +16,9 @@ package resreader
 
 import (
 	"fmt"
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"os"
+
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
 
 func getHCLInfo(source string) (ResourceInfo, error) {
@@ -27,9 +28,11 @@ func getHCLInfo(source string) (ResourceInfo, error) {
 	fileInfo, err := os.Stat(source)
 	if os.IsNotExist(err) {
 		return ret, fmt.Errorf("Source to resource does not exist: %s", source)
-	} else if err != nil {
+	}
+	if err != nil {
 		return ret, fmt.Errorf("Failed to read source of resource: %s", source)
-	} else if !fileInfo.IsDir() {
+	}
+	if !fileInfo.IsDir() {
 		return ret, fmt.Errorf("Source of resource must be a directory: %s", source)
 	}
 	if !tfconfig.IsModuleDir(source) {

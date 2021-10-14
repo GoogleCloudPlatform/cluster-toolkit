@@ -25,7 +25,7 @@ type MetaReader struct {
 }
 
 // GetInfo reades ResourceInfo for a meta resource
-func (r MetaReader) GetInfo(source string) ResourceInfo {
+func (r MetaReader) GetInfo(source string) (ResourceInfo, error) {
 	log.Fatal("Meta GetInfo not implemented")
-	return ResourceInfo{}
+	return ResourceInfo{}, nil
 }

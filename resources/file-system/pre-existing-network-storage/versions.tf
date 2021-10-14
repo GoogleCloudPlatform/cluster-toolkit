@@ -12,15 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+*/
 
-output "network_storage" {
-  description = "Describes a remote network storage to be mounted by fs-tab."
-  value = {
-    server_ip     = var.server_ip
-    remote_mount  = var.remote_mount
-    local_mount   = var.local_mount
-    fs_type       = var.fs_type
-    mount_options = var.mount_options
-  }
+terraform {
+  required_version = ">= 0.14.0"
 }

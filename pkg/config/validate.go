@@ -93,8 +93,11 @@ func (bc BlueprintConfig) validateResourceSettings() {
 	for _, grp := range bc.Config.ResourceGroups {
 		for _, res := range grp.Resources {
 			reader := resreader.Factory(res.Kind)
-			info := reader.GetInfo(res.Source)
-			if err := validateSettings(res, info); err != nil {
+			info, err := reader.GetInfo(res.Source)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if err = validateSettings(res, info); err != nil {
 				log.Fatal(err)
 			}
 		}

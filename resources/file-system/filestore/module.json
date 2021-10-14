@@ -106,8 +106,7 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "managed",
-      "version": "latest",
-      "description": null
+      "version": "latest"
     },
     {
       "type": "id",
@@ -115,8 +114,7 @@
       "provider": "random",
       "source": "hashicorp/random",
       "mode": "managed",
-      "version": "latest",
-      "description": null
+      "version": "latest"
     }
   ]
 }

@@ -20,6 +20,7 @@ package cmd
 import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/reswriter"
+	"log"
 
 	"github.com/spf13/cobra"
 )
@@ -27,7 +28,10 @@ import (
 func init() {
 	createCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
 		"Configuration file for the new blueprints")
-	createCmd.MarkFlagRequired("config")
+	err := createCmd.MarkFlagRequired("config")
+	if err != nil {
+		log.Fatalf("Error in init for create command: %v", err)
+	}
 	rootCmd.AddCommand(createCmd)
 }
 

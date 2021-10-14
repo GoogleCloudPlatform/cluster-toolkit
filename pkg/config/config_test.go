@@ -31,7 +31,6 @@ import (
 var (
 	// Shared IO Values
 	simpleYamlFilename string
-	simpleYamlFile     os.File
 
 	// Expected/Input Values
 	expectedYaml = []byte(`

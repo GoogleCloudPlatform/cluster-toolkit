@@ -38,7 +38,9 @@ func (r PackerReader) SetInfo(source string, resInfo ResourceInfo) {
 
 func addTfExtension(filename string) {
 	newFilename := fmt.Sprintf("%s.tf", filename)
-	os.Rename(filename, newFilename)
+	if err := os.Rename(filename, newFilename); err != nil {
+		log.Fatalf("failed to add .tf extension to %s", filename)
+	}
 }
 
 func getHCLFiles(dir string) []string {
@@ -58,10 +60,11 @@ func getHCLFiles(dir string) []string {
 	return hclFiles
 }
 
-func copyHCLFilesToTmp(dir string) (string, []string) {
+func copyHCLFilesToTmp(dir string) (string, []string, error) {
 	tmpDir, err := ioutil.TempDir("", "pkwriter-*")
 	if err != nil {
-		log.Fatalf("Failed to create temp directory for packer writer.")
+		return "", []string{}, fmt.Errorf(
+			"failed to create temp directory for packer writer")
 	}
 	hclFiles := getHCLFiles(dir)
 	var hclFilePaths []string
@@ -71,7 +74,8 @@ func copyHCLFilesToTmp(dir string) (string, []string) {
 		// Open file for copying
 		hclFile, err := os.Open(hclFilename)
 		if err != nil {
-			log.Fatalf("Failed to open packer HCL file %s: %v", hclFilename, err)
+			return "", hclFiles, fmt.Errorf(
+				"failed to open packer HCL file %s: %v", hclFilename, err)
 		}
 		defer hclFile.Close()
 
@@ -79,32 +83,38 @@ func copyHCLFilesToTmp(dir string) (string, []string) {
 		destPath := path.Join(tmpDir, path.Base(hclFilename))
 		destination, err := os.Create(destPath)
 		if err != nil {
-			log.Fatalf(
-				"Failed to create copy of packer HCL file %s: %v", hclFilename, err)
+			return "", hclFiles, fmt.Errorf(
+				"failed to create copy of packer HCL file %s: %v", hclFilename, err)
 		}
 		defer destination.Close()
 
 		// Copy
-		io.Copy(destination, hclFile)
+		if _, err := io.Copy(destination, hclFile); err != nil {
+			return "", hclFiles, fmt.Errorf("PackerReader: %v", err)
+		}
 		hclFilePaths = append(hclFilePaths, destPath)
 	}
-	return tmpDir, hclFilePaths
+	return tmpDir, hclFilePaths, nil
 }
 
 // GetInfo reads the ResourceInfo for a packer module
-func (r PackerReader) GetInfo(source string) ResourceInfo {
+func (r PackerReader) GetInfo(source string) (ResourceInfo, error) {
 	if resInfo, ok := r.allResInfo[source]; ok {
-		return resInfo
+		return resInfo, nil
 	}
-	tmpDir, packerFiles := copyHCLFilesToTmp(source)
+	tmpDir, packerFiles, err := copyHCLFilesToTmp(source)
+	if err != nil {
+		return ResourceInfo{}, err
+	}
 	defer os.RemoveAll(tmpDir)
+
 	for _, packerFile := range packerFiles {
 		addTfExtension(packerFile)
 	}
 	resInfo, err := getHCLInfo(tmpDir)
 	if err != nil {
-		log.Fatalf("PackerReader: %v", err)
+		return resInfo, fmt.Errorf("PackerReader: %v", err)
 	}
 	r.allResInfo[source] = resInfo
-	return resInfo
+	return resInfo, nil
 }
