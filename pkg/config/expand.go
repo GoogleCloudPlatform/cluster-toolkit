@@ -147,19 +147,22 @@ func applyGlobalVarsInGroup(
 	globalVars map[string]interface{}) error {
 	for _, res := range resourceGroup.Resources {
 		for _, input := range resInfo[res.Source].Inputs {
+			_, globalExists := globalVars[input.Name]
 			if input.Required == true {
 				// Exists? Continue
 				if _, ok := res.Settings[input.Name]; ok {
 					continue
 				}
 
-				// Exists at top level? Update and Continue
-				if _, ok := globalVars[input.Name]; ok {
-					res.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
-				} else {
+				// Also doesn't exist as a global? return error
+				if !globalExists {
 					return fmt.Errorf("%s: Resource.ID: %s Setting: %s",
 						errorMessages["missingSetting"], res.ID, input.Name)
 				}
+			}
+			// Apply global variables if they exist
+			if globalExists {
+				res.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
 			}
 		}
 	}
@@ -169,15 +172,14 @@ func applyGlobalVarsInGroup(
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to resources settings if not already set.
 func (bc *BlueprintConfig) applyGlobalVariables() error {
-	var err error
 	for _, grp := range bc.Config.ResourceGroups {
-		err = applyGlobalVarsInGroup(
+		err := applyGlobalVarsInGroup(
 			grp, bc.ResourcesInfo[grp.Name], bc.Config.Vars)
 		if err != nil {
-			break
+			return err
 		}
 	}
-	return err
+	return nil
 }
 
 type varContext struct {
@@ -318,7 +320,7 @@ func updateVariableType(
 				interfaceSlice[i], err = updateVariableType(
 					interfaceSlice[i], context, resToGrp)
 				if err != nil {
-					break
+					return interfaceSlice, err
 				}
 			}
 		}
@@ -329,7 +331,7 @@ func updateVariableType(
 		for k, v := range interfaceMap {
 			retMap[k], err = updateVariableType(v, context, resToGrp)
 			if err != nil {
-				break
+				return interfaceMap, err
 			}
 		}
 		return retMap, err
@@ -342,14 +344,14 @@ func updateVariables(
 	context varContext,
 	interfaceMap map[string]interface{},
 	resToGrp map[string]int) error {
-	var err error
 	for key, value := range interfaceMap {
-		interfaceMap[key], err = updateVariableType(value, context, resToGrp)
+		updatedVal, err := updateVariableType(value, context, resToGrp)
 		if err != nil {
-			break
+			return err
 		}
+		interfaceMap[key] = updatedVal
 	}
-	return err
+	return nil
 }
 
 // handlePrimitives recurses through the data structures in the yaml config and

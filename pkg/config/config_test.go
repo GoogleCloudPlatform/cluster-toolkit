@@ -234,7 +234,7 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	err := bc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 
-	// Test no inputs, one required
+	// Test no inputs, one required, doesn't exist in globals
 	bc.ResourcesInfo["group1"][testResource.Source] = resreader.ResourceInfo{
 		Inputs: []resreader.VarInfo{requiredVar},
 	}
@@ -243,6 +243,26 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 		errorMessages["missingSetting"], testResource.ID, requiredVar.Name)
 	c.Assert(err, ErrorMatches, expectedErrorStr)
 
+	// Test no input, one required, exists in globals
+	bc.Config.Vars[requiredVar.Name] = "val"
+	err = bc.applyGlobalVariables()
+	c.Assert(err, IsNil)
+	c.Assert(
+		bc.Config.ResourceGroups[0].Resources[0].Settings[requiredVar.Name],
+		Equals, fmt.Sprintf("((var.%s))", requiredVar.Name))
+
+	// Test one input, one required
+	bc.Config.ResourceGroups[0].Resources[0].Settings[requiredVar.Name] = "val"
+	err = bc.applyGlobalVariables()
+	c.Assert(err, IsNil)
+
+	// Test one input, none required, exists in globals
+	bc.ResourcesInfo["group1"][testResource.Source].Inputs[0].Required = false
+	err = bc.applyGlobalVariables()
+	c.Assert(err, IsNil)
+	c.Assert(
+		bc.Config.ResourceGroups[0].Resources[0].Settings[requiredVar.Name],
+		Equals, fmt.Sprintf("((var.%s))", requiredVar.Name))
 }
 
 func (s *MySuite) TestIsSimpleVariable(c *C) {
