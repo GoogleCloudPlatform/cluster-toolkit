@@ -25,6 +25,8 @@ resource "null_resource" "omnia_install" {
     environment = {
       DEPLOYMENT_NAME = var.deployment_name
       MANAGER_NODE    = var.manager_node
+      ZONE            = var.zone
+      PROJECT_ID      = var.project_id
     }
   }
 }
