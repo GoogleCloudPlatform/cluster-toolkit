@@ -13,11 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+resource "random_id" "resource_name_suffix" {
+  byte_length = 4
+}
 
 resource "google_filestore_instance" "filestore_instance" {
   depends_on = [var.network_name]
 
-  name = var.name != null ? var.name : var.deployment_name
+  name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
   zone = var.zone
   tier = var.filestore_tier
 

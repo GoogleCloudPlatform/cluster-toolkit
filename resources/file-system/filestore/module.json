@@ -78,6 +78,11 @@
       "name": "google",
       "alias": null,
       "version": "~\u003e 3.0"
+    },
+    {
+      "name": "random",
+      "alias": null,
+      "version": "~\u003e 3.0"
     }
   ],
   "requirements": [
@@ -88,6 +93,10 @@
     {
       "name": "google",
       "version": "~\u003e 3.0"
+    },
+    {
+      "name": "random",
+      "version": "~\u003e 3.0"
     }
   ],
   "resources": [
@@ -97,7 +106,17 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "managed",
-      "version": "latest"
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "id",
+      "name": "resource_name_suffix",
+      "provider": "random",
+      "source": "hashicorp/random",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
     }
   ]
 }
