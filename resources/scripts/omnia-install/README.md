@@ -43,6 +43,8 @@ No modules.
 | <a name="input_depends"></a> [depends](#input\_depends) | Allows to add explicit dependencies | `list(any)` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used to name the cluster | `string` | n/a | yes |
 | <a name="input_manager_node"></a> [manager\_node](#input\_manager\_node) | Name of the Omnia manager node | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the Omnia cluster has been created | `string` | n/a | yes |
+| <a name="input_zone"></a> [zone](#input\_zone) | The GCP zone where the Omnia cluster is running | `string` | n/a | yes |
 
 ## Outputs
 

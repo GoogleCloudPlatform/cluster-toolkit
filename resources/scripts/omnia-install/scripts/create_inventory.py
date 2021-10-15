@@ -23,10 +23,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--template", type=str, required=True)
 parser.add_argument("--outfile", type=str, required=True)
 parser.add_argument("--deployment_name", type=str, required=True)
+parser.add_argument("--project_id", type=str, required=True)
+parser.add_argument("--zone", type=str, required=True)
 args = parser.parse_args()
 
 ## Get cluster information
-gcloud_cmd = ["gcloud", "compute", "instances", "list",
+gcloud_cmd = ["gcloud", "compute",  "instances", "list",
+              "--project", args.project_id, "--zones", args.zone,
               "--filter", f"labels.ghpc_deployment={args.deployment_name}",
               "--format",
               "json(name,labels.ghpc_role,networkInterfaces[0].networkIP)"]
