@@ -260,9 +260,6 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	bc.ResourcesInfo["group1"][testResource.Source].Inputs[0].Required = false
 	err = bc.applyGlobalVariables()
 	c.Assert(err, IsNil)
-	c.Assert(
-		bc.Config.ResourceGroups[0].Resources[0].Settings[requiredVar.Name],
-		Equals, fmt.Sprintf("((var.%s))", requiredVar.Name))
 }
 
 func (s *MySuite) TestIsSimpleVariable(c *C) {

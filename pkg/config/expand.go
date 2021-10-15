@@ -147,23 +147,25 @@ func applyGlobalVarsInGroup(
 	globalVars map[string]interface{}) error {
 	for _, res := range resourceGroup.Resources {
 		for _, input := range resInfo[res.Source].Inputs {
-			_, globalExists := globalVars[input.Name]
-			if input.Required == true {
-				// Exists? Continue
-				if _, ok := res.Settings[input.Name]; ok {
-					continue
-				}
 
-				// Also doesn't exist as a global? return error
-				if !globalExists {
-					return fmt.Errorf("%s: Resource.ID: %s Setting: %s",
-						errorMessages["missingSetting"], res.ID, input.Name)
-				}
+			// Resource setting exists? Nothing more needs to be done.
+			if _, ok := res.Settings[input.Name]; ok {
+				continue
 			}
-			// Apply global variables if they exist
-			if globalExists {
+
+			// If it's not set, is there a global we can use?
+			if _, ok := globalVars[input.Name]; ok {
 				res.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
+				continue
 			}
+
+			if input.Required == true {
+				// It's not explicitly set, and not global is set
+				// Fail if no default has been set
+				return fmt.Errorf("%s: Resource.ID: %s Setting: %s",
+					errorMessages["missingSetting"], res.ID, input.Name)
+			}
+			// Default exists, the resource will handle it
 		}
 	}
 	return nil
