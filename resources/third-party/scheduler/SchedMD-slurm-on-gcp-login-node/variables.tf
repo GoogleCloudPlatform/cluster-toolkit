@@ -153,5 +153,4 @@ variable "subnetwork_name" {
 variable "zone" {
   description = "Compute Platform zone where the notebook server will be located"
   type        = string
-  default     = "us-central1-b"
 }
