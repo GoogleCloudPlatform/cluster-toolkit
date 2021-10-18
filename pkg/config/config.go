@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package config manages and updates the ghpc input config
 package config
 
 import (
@@ -220,8 +221,12 @@ func (bc *BlueprintConfig) checkResourceAndGroupNames() {
 // expand expands variables and strings in the yaml config
 func (bc BlueprintConfig) expand() {
 	bc.addSettingsToResources()
-	bc.combineLabels()
-	bc.applyGlobalVariables()
+	if err := bc.combineLabels(); err != nil {
+		log.Fatal(err)
+	}
+	if err := bc.applyGlobalVariables(); err != nil {
+		log.Fatal(err)
+	}
 	bc.expandVariables()
 }
 

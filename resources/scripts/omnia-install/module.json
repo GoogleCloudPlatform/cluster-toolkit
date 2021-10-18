@@ -22,6 +22,20 @@
       "description": "Name of the Omnia manager node",
       "default": null,
       "required": true
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "description": "Project in which the Omnia cluster has been created",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "zone",
+      "type": "string",
+      "description": "The GCP zone where the Omnia cluster is running",
+      "default": null,
+      "required": true
     }
   ],
   "modules": [],

@@ -29,3 +29,13 @@ variable "manager_node" {
   description = "Name of the Omnia manager node"
   type        = string
 }
+
+variable "zone" {
+  description = "The GCP zone where the Omnia cluster is running"
+  type        = string
+}
+
+variable "project_id" {
+  description = "Project in which the Omnia cluster has been created"
+  type        = string
+}

@@ -156,8 +156,8 @@
       "name": "zone",
       "type": "string",
       "description": "Compute Platform zone where the notebook server will be located",
-      "default": "us-central1-b",
-      "required": false
+      "default": null,
+      "required": true
     }
   ],
   "modules": [
