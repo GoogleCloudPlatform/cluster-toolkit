@@ -100,7 +100,9 @@ func writeTopTerraformFile(
 			"Couldn't create top-layer %s, does it already exist? %v",
 			err, tmplFilename)
 	}
-	tmpl.Execute(outputFile, data)
+	if err := tmpl.Execute(outputFile, data); err != nil {
+		log.Fatalf("error writing %s template: %v", tmplFilename, err)
+	}
 
 }
 

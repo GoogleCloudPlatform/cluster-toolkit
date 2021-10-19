@@ -15,13 +15,14 @@
 package resreader
 
 import (
-	. "gopkg.in/check.v1"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"reflect"
 	"testing"
+
+	. "gopkg.in/check.v1"
 )
 
 const (
@@ -77,7 +78,7 @@ func (s *MySuite) TestFactory(c *C) {
 	c.Assert(reflect.TypeOf(tfReader), Equals, reflect.TypeOf(TFReader{}))
 }
 
-//hcl_utils.go
+// hcl_utils.go
 func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
@@ -150,7 +151,8 @@ func teardownTmpResource() {
 
 func (s *MySuite) TestTFGetInfo(c *C) {
 	reader := TFReader{allResInfo: make(map[string]ResourceInfo)}
-	resourceInfo := reader.GetInfo(tmpResourceDir)
+	resourceInfo, err := reader.GetInfo(tmpResourceDir)
+	c.Assert(err, IsNil)
 	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
 	c.Assert(resourceInfo.Outputs[0].Name, Equals, "test_output")
 }

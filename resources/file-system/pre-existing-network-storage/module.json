@@ -46,6 +46,11 @@
     }
   ],
   "providers": [],
-  "requirements": [],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    }
+  ],
   "resources": []
 }

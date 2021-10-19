@@ -52,11 +52,6 @@ var (
 			Resources: resources,
 		},
 	}
-
-	yamlConfig = config.YamlConfig{
-		BlueprintName:  "UPDATE_IN_TEST",
-		ResourceGroups: resourceGroups,
-	}
 )
 
 // Setup GoCheck
@@ -183,13 +178,15 @@ func (s *MySuite) TestFlattenInterfaceMap(c *C) {
 	mapWrapper := make(map[string]interface{})
 	for i := range inputMaps {
 		mapWrapper["key"] = inputMaps[i]
-		flattenInterfaceMap(mapWrapper, &wrapper)
+		err := flattenInterfaceMap(mapWrapper, &wrapper)
+		c.Assert(err, IsNil)
 		c.Assert(mapWrapper["key"], Equals, expectedOutputs[i])
 	}
 
 	// Test complicated case
 	mapWrapper["key"] = inputMapAllThree
-	flattenInterfaceMap(mapWrapper, &wrapper)
+	err := flattenInterfaceMap(mapWrapper, &wrapper)
+	c.Assert(err, IsNil)
 	c.Assert(
 		strings.Contains(mapWrapper["key"].(string), "str: val"), Equals, true)
 	mapString := fmt.Sprintf("map: %s", stringMapContents)
@@ -279,10 +276,14 @@ func (s *MySuite) TestWriteTopLayer_TFWriter(c *C) {
 
 	createBlueprintDirectory(blueprintDir)
 	// Normally handled by copySource, do it manually
-	os.Mkdir(path.Join(blueprintDir, "group"), 0755)
+	err := os.Mkdir(path.Join(blueprintDir, "group"), 0755)
+	if err != nil {
+		log.Fatalf(
+			"failed to create group directory in TestWriteTopLayer_TFWriter: %v", err)
+	}
 	writeTopTerraformFile(blueprintDir, "group", "main.tf", resourceGroups[0])
 
-	_, err := os.Stat(maintfPath)
+	_, err = os.Stat(maintfPath)
 	c.Assert(err, IsNil)
 
 	dat, err := ioutil.ReadFile(maintfPath)

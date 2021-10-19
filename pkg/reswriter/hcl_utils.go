@@ -60,22 +60,18 @@ func handleData(val interface{}) interface{} {
 
 func updateStringsInInterface(value interface{}) (interface{}, error) {
 	var err error
-	switch value.(type) {
+	switch typedValue := value.(type) {
 	case []interface{}:
-		interfaceSlice := value.([]interface{})
-		{
-			for i := 0; i < len(interfaceSlice); i++ {
-				interfaceSlice[i], err = updateStringsInInterface(interfaceSlice[i])
-				if err != nil {
-					break
-				}
+		for i := 0; i < len(typedValue); i++ {
+			typedValue[i], err = updateStringsInInterface(typedValue[i])
+			if err != nil {
+				break
 			}
 		}
-		return interfaceSlice, err
+		return typedValue, err
 	case map[interface{}]interface{}:
-		interfaceMap := value.(map[interface{}]interface{})
 		retMap := map[interface{}]interface{}{}
-		for k, v := range interfaceMap {
+		for k, v := range typedValue {
 			retMap[handleData(k)], err = updateStringsInInterface(v)
 			if err != nil {
 				break

@@ -21,15 +21,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
-	"github.com/gruntwork-io/terratest/modules/test-structure"
+	test_structure "github.com/gruntwork-io/terratest/modules/test-structure"
 )
 
 const rootDir = ".."
-
-var timeStamp = time.Now().Format(strings.ToLower(time.RFC3339))
 
 func getDepth(dir string) int {
 	dir = filepath.ToSlash(dir)

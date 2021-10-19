@@ -72,7 +72,9 @@ func writePackerAutoVariables(tmplFilename string, resource config.Resource, des
 	tmpl, err := template.New(tmplFilename).Funcs(funcMap).Parse(tmplText)
 
 	if err != nil {
-		log.Fatalf("PackerWriter: %v", err)
+		log.Fatalf(
+			"failed to create template %s when writing packer resource at %s: %v",
+			tmplFilename, resource.Source, err)
 	}
 	if tmpl == nil {
 		log.Fatalf("PackerWriter: Failed to parse the %s template.", tmplFilename)
@@ -85,7 +87,11 @@ func writePackerAutoVariables(tmplFilename string, resource config.Resource, des
 			"Couldn't create top-layer %s, does it already exist? %v",
 			err, tmplFilename)
 	}
-	tmpl.Execute(outputFile, resource)
+	if err := tmpl.Execute(outputFile, resource); err != nil {
+		log.Fatalf(
+			"failed to write template for %s file when writing packer resource %s: %e",
+			tmplFilename, resource.ID, err)
+	}
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint

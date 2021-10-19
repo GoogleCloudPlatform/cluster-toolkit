@@ -36,7 +36,7 @@ type ResourceInfo struct {
 
 // ResReader is a resource reader interface
 type ResReader interface {
-	GetInfo(path string) ResourceInfo
+	GetInfo(path string) (ResourceInfo, error)
 	SetInfo(path string, resInfo ResourceInfo)
 }
 

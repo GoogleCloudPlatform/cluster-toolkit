@@ -162,7 +162,13 @@ func createResourceInfo(
 	for _, res := range resourceGroup.Resources {
 		if _, exists := resInfo[res.Source]; !exists {
 			reader := resreader.Factory(res.Kind)
-			resInfo[res.Source] = reader.GetInfo(res.Source)
+			ri, err := reader.GetInfo(res.Source)
+			if err != nil {
+				log.Fatalf(
+					"failed to get info for resource at %s while setting bc.ResourcesInfo: %e",
+					res.Source, err)
+			}
+			resInfo[res.Source] = ri
 		}
 	}
 	return resInfo
@@ -222,10 +228,14 @@ func (bc *BlueprintConfig) checkResourceAndGroupNames() {
 func (bc BlueprintConfig) expand() {
 	bc.addSettingsToResources()
 	if err := bc.combineLabels(); err != nil {
-		log.Fatal(err)
+		log.Fatalf(
+			"failed to update resources labels when expanding the config: %e", err)
 	}
+
 	if err := bc.applyGlobalVariables(); err != nil {
-		log.Fatal(err)
+		log.Fatalf(
+			"failed to apply global variables in resources when expanding the config: %e",
+			err)
 	}
 	bc.expandVariables()
 }

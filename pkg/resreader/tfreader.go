@@ -16,7 +16,7 @@
 
 package resreader
 
-import "log"
+import "fmt"
 
 // TFReader implements ResReader for terraform resources
 type TFReader struct {
@@ -29,14 +29,16 @@ func (r TFReader) SetInfo(source string, resInfo ResourceInfo) {
 }
 
 // GetInfo reads the ResourceInfo for a terraform module
-func (r TFReader) GetInfo(source string) ResourceInfo {
+func (r TFReader) GetInfo(source string) (ResourceInfo, error) {
 	if resInfo, ok := r.allResInfo[source]; ok {
-		return resInfo
+		return resInfo, nil
 	}
 	resInfo, err := getHCLInfo(source)
 	if err != nil {
-		log.Fatalf("TFReader: %v", err)
+		return resInfo, fmt.Errorf(
+			"failed to get info using tfconfig for terraform resource at %s: %v",
+			source, err)
 	}
 	r.allResInfo[source] = resInfo
-	return resInfo
+	return resInfo, nil
 }
