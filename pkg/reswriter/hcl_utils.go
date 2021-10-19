@@ -25,6 +25,21 @@ import (
 	"hpc-toolkit/pkg/config"
 )
 
+func getType(obj interface{}) string {
+	// This does not handle variables with arbitrary types
+	str, ok := obj.(string)
+	if !ok { // We received a nil value.
+		return "null"
+	}
+	if strings.HasPrefix(str, "{") {
+		return "map"
+	}
+	if strings.HasPrefix(str, "[") {
+		return "list"
+	}
+	return "string"
+}
+
 func isPassthroughVariable(str string) bool {
 	match, err := regexp.MatchString(beginPassthroughExp, str)
 	if err != nil {
