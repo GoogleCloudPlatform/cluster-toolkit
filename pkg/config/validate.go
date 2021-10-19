@@ -95,10 +95,14 @@ func (bc BlueprintConfig) validateResourceSettings() {
 			reader := resreader.Factory(res.Kind)
 			info, err := reader.GetInfo(res.Source)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatalf(
+					"failed to get info for resource at %s while validating resource settings: %e",
+					res.Source, err)
 			}
 			if err = validateSettings(res, info); err != nil {
-				log.Fatal(err)
+				log.Fatalf(
+					"found an issue while validating settings for resource at %s: %e",
+					res.Source, err)
 			}
 		}
 	}

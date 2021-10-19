@@ -248,9 +248,12 @@ func expandSimpleVariable(
 			context.varString)
 	}
 	refRes := refGrp.Resources[refResIndex]
-	resInfo, err := resreader.Factory(refRes.Kind).GetInfo(refRes.Source)
+	reader := resreader.Factory(refRes.Kind)
+	resInfo, err := reader.GetInfo(refRes.Source)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf(
+			"failed to get info for resource at %s while expanding variables: %e",
+			refRes.Source, err)
 	}
 
 	// Verify output exists in resource

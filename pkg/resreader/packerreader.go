@@ -39,7 +39,9 @@ func (r PackerReader) SetInfo(source string, resInfo ResourceInfo) {
 func addTfExtension(filename string) {
 	newFilename := fmt.Sprintf("%s.tf", filename)
 	if err := os.Rename(filename, newFilename); err != nil {
-		log.Fatalf("failed to add .tf extension to %s", filename)
+		log.Fatalf(
+			"failed to add .tf extension to %s needed to get info on packer resource: %e",
+			filename, err)
 	}
 }
 
@@ -64,7 +66,7 @@ func copyHCLFilesToTmp(dir string) (string, []string, error) {
 	tmpDir, err := ioutil.TempDir("", "pkwriter-*")
 	if err != nil {
 		return "", []string{}, fmt.Errorf(
-			"failed to create temp directory for packer writer")
+			"failed to create temp directory for packer reader")
 	}
 	hclFiles := getHCLFiles(dir)
 	var hclFilePaths []string
@@ -90,7 +92,9 @@ func copyHCLFilesToTmp(dir string) (string, []string, error) {
 
 		// Copy
 		if _, err := io.Copy(destination, hclFile); err != nil {
-			return "", hclFiles, fmt.Errorf("PackerReader: %v", err)
+			return "", hclFiles, fmt.Errorf(
+				"failed to copy packer resource at %s to temporary directory to inspect: %v",
+				dir, err)
 		}
 		hclFilePaths = append(hclFilePaths, destPath)
 	}

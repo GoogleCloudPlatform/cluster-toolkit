@@ -28,9 +28,8 @@ import (
 func init() {
 	createCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
 		"Configuration file for the new blueprints")
-	err := createCmd.MarkFlagRequired("config")
-	if err != nil {
-		log.Fatalf("Error in init for create command: %v", err)
+	if err := createCmd.MarkFlagRequired("config"); err != nil {
+		log.Fatalf("error while marking 'config' flag as required: %e", err)
 	}
 	rootCmd.AddCommand(createCmd)
 }

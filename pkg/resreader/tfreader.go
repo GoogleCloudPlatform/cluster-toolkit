@@ -35,7 +35,9 @@ func (r TFReader) GetInfo(source string) (ResourceInfo, error) {
 	}
 	resInfo, err := getHCLInfo(source)
 	if err != nil {
-		return resInfo, fmt.Errorf("TFReader: %v", err)
+		return resInfo, fmt.Errorf(
+			"failed to get info using tfconfig for terraform resource at %s: %v",
+			source, err)
 	}
 	r.allResInfo[source] = resInfo
 	return resInfo, nil
