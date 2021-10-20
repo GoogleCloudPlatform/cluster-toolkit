@@ -17,7 +17,7 @@
 {{ if or .project_id .region .zone -}}
 provider "google" {
 {{- if .project_id }}
-  project_id = var.project_id
+  project = var.project_id
 {{- end }}
 {{- if .region }}
   region = var.region
@@ -29,7 +29,7 @@ provider "google" {
 
 provider "google-beta" {
 {{- if .project_id }}
-  project_id = var.project_id
+  project = var.project_id
 {{- end }}
 {{- if .region }}
   region = var.region
