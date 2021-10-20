@@ -21,7 +21,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"strings"
 	"text/template"
 
 	"hpc-toolkit/pkg/config"
@@ -56,22 +55,8 @@ func (w TFWriter) prepareToWrite(yamlConfig *config.YamlConfig) {
 }
 
 // writeResourceLevel writes any needed files to the resource layer
-func (w TFWriter) writeResourceLevel(yamlConfig *config.YamlConfig) {
-}
-
-func getType(obj interface{}) string {
-	// This does not handle variables with arbitrary types
-	str, ok := obj.(string)
-	if !ok { // We received a nil value.
-		return "null"
-	}
-	if strings.HasPrefix(str, "{") {
-		return "map"
-	}
-	if strings.HasPrefix(str, "[") {
-		return "list"
-	}
-	return "string"
+func (w TFWriter) writeResourceLevel(yamlConfig *config.YamlConfig) error {
+	return nil
 }
 
 func writeTopTerraformFile(
