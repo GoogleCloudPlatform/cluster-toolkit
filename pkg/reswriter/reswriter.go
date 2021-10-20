@@ -38,7 +38,7 @@ type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
 	prepareToWrite(*config.YamlConfig)
-	writeResourceLevel(*config.YamlConfig)
+	writeResourceLevel(*config.YamlConfig) error
 	writeTopLevels(*config.YamlConfig)
 }
 
@@ -92,7 +92,7 @@ func getTemplate(filename string) string {
 	// Create path to template from the embedded template FS
 	tmplText, err := templatesFS.ReadFile(filename)
 	if err != nil {
-		log.Fatalf("TFWriter: %v", err)
+		log.Fatalf("reswriter: %v", err)
 	}
 	return string(tmplText)
 }
@@ -147,7 +147,10 @@ func WriteBlueprint(yamlConfig *config.YamlConfig) {
 		writer.prepareToWrite(yamlConfig)
 		if writer.getNumResources() > 0 {
 			writer.writeTopLevels(yamlConfig)
-			writer.writeResourceLevel(yamlConfig)
+			err = writer.writeResourceLevel(yamlConfig)
+			if err != nil {
+				log.Fatalf("error writing resources to blueprint: %e", err)
+			}
 		}
 	}
 }

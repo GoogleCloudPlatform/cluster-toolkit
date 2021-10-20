@@ -31,27 +31,8 @@ import (
 )
 
 var (
-	testDir string
-
-	resources = []config.Resource{
-		config.Resource{
-			Source: "../../resources/network/vpc",
-			Kind:   "terraform",
-			ID:     "test-net",
-			Settings: map[string]interface{}{
-				"network_name": "deployment_name",
-				"project_id":   "project_id",
-				"region":       "region1",
-			},
-		},
-	}
-
-	resourceGroups = []config.ResourceGroup{
-		config.ResourceGroup{
-			Name:      "group1",
-			Resources: resources,
-		},
-	}
+	testDir              string
+	terraformResourceDir string
 )
 
 // Setup GoCheck
@@ -71,6 +52,13 @@ func setup() {
 		log.Fatalf("reswriter_test: %v", err)
 	}
 	testDir = dir
+
+	// Create dummy resource in testDir
+	terraformResourceDir = "tfResource"
+	err = os.Mkdir(path.Join(testDir, terraformResourceDir), 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func teardown() {
@@ -79,14 +67,14 @@ func teardown() {
 
 // Test Data Producer
 func getYamlConfigForTest() config.YamlConfig {
-	testResourceSource := "testSource"
+	testResourceSource := path.Join(testDir, terraformResourceDir)
 	testResource := config.Resource{
 		Source:   testResourceSource,
 		Kind:     "terraform",
 		ID:       "testResource",
 		Settings: make(map[string]interface{}),
 	}
-	testResourceSourceWithLabels := "./role/source"
+	testResourceSourceWithLabels := path.Join(testDir, terraformResourceDir)
 	testResourceWithLabels := config.Resource{
 		Source: testResourceSourceWithLabels,
 		ID:     "testResourceWithLabels",
@@ -110,6 +98,16 @@ func getYamlConfigForTest() config.YamlConfig {
 }
 
 // Tests
+
+// reswriter.go
+func (s *MySuite) TestWriteBlueprint(c *C) {
+	testYamlConfig := getYamlConfigForTest()
+	blueprintName := "blueprints_TestWriteBlueprint"
+	blueprintDir := path.Join(testDir, blueprintName)
+	testYamlConfig.BlueprintName = blueprintDir
+	WriteBlueprint(&testYamlConfig)
+}
+
 func (s *MySuite) TestFlattenInterfaceMap(c *C) {
 	wrapper := interfaceStruct{Elem: nil}
 	inputMaps := []interface{}{
@@ -268,11 +266,56 @@ func (s *MySuite) TestCreateBlueprintDirectory(c *C) {
 	c.Assert(err, IsNil)
 }
 
+// hcl_utils.go
+func (s *MySuite) TestGetType(c *C) {
+
+	// string
+	testString := "test string"
+	ret := getType(testString)
+	c.Assert(ret, Equals, "string")
+
+	// map
+	testMap := "{testMap: testVal}"
+	ret = getType(testMap)
+	c.Assert(ret, Equals, "map")
+
+	// list
+	testList := "[testList0,testList]"
+	ret = getType(testList)
+	c.Assert(ret, Equals, "list")
+
+	// non-string input
+	testNull := 42 // random int
+	ret = getType(testNull)
+	c.Assert(ret, Equals, "null")
+
+	// nil input
+	ret = getType(nil)
+	c.Assert(ret, Equals, "null")
+}
+
+// tfwriter.go
 func (s *MySuite) TestWriteTopLayer_TFWriter(c *C) {
 	// Shallow copy the struct so we can set the name
 	blueprintName := "blueprints_TestWriteTopLayer_TFWriter"
 	blueprintDir := path.Join(testDir, blueprintName)
 	maintfPath := path.Join(blueprintDir, "group", "main.tf")
+
+	testResources := []config.Resource{
+		config.Resource{
+			Settings: map[string]interface{}{
+				"network_name": "deployment_name",
+				"project_id":   "project_id",
+				"region":       "region1",
+			},
+		},
+	}
+
+	testResourceGroups := []config.ResourceGroup{
+		config.ResourceGroup{
+			Resources: testResources,
+		},
+	}
 
 	createBlueprintDirectory(blueprintDir)
 	// Normally handled by copySource, do it manually
@@ -281,7 +324,7 @@ func (s *MySuite) TestWriteTopLayer_TFWriter(c *C) {
 		log.Fatalf(
 			"failed to create group directory in TestWriteTopLayer_TFWriter: %v", err)
 	}
-	writeTopTerraformFile(blueprintDir, "group", "main.tf", resourceGroups[0])
+	writeTopTerraformFile(blueprintDir, "group", "main.tf", testResourceGroups[0])
 
 	_, err = os.Stat(maintfPath)
 	c.Assert(err, IsNil)
@@ -289,7 +332,69 @@ func (s *MySuite) TestWriteTopLayer_TFWriter(c *C) {
 	dat, err := ioutil.ReadFile(maintfPath)
 	text := string(dat)
 	c.Assert(err, IsNil)
-	c.Assert(len(strings.Split(text, "\n")) > 28, Equals, true)
+	// Ensure more than just the module is created, i.e it add the settings as well
+	c.Assert(len(strings.Split(text, "\n")) > 18, Equals, true)
+}
+
+// packerwriter.go
+func (s *MySuite) TestNumResources_PackerWriter(c *C) {
+	testWriter := PackerWriter{}
+	c.Assert(testWriter.getNumResources(), Equals, 0)
+	testWriter.addNumResources(-1)
+	c.Assert(testWriter.getNumResources(), Equals, -1)
+	testWriter.addNumResources(2)
+	c.Assert(testWriter.getNumResources(), Equals, 1)
+	testWriter.addNumResources(0)
+	c.Assert(testWriter.getNumResources(), Equals, 1)
+}
+
+func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
+	testWriter := PackerWriter{}
+	// Empty Config
+	testWriter.writeResourceLevel(&config.YamlConfig{})
+
+	// No Packer resources
+	testYamlConfig := getYamlConfigForTest()
+	testWriter.writeResourceLevel(&testYamlConfig)
+
+	blueprintName := "blueprints_TestWriteResourceLevel_PackerWriter"
+	blueprintDir := path.Join(testDir, blueprintName)
+	testYamlConfig.BlueprintName = blueprintDir
+	createBlueprintDirectory(blueprintDir)
+	groupDir := path.Join(blueprintDir, "packerGroup")
+	err := os.Mkdir(groupDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	resourceDir := path.Join(groupDir, "testPackerResource")
+	err = os.Mkdir(resourceDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	testPackerResource := config.Resource{
+		Kind: "packer",
+		ID:   "testPackerResource",
+	}
+	testYamlConfig.ResourceGroups = append(testYamlConfig.ResourceGroups,
+		config.ResourceGroup{
+			Name:      "packerGroup",
+			Resources: []config.Resource{testPackerResource},
+		})
+	testWriter.writeResourceLevel(&testYamlConfig)
+	_, err = os.Stat(path.Join(resourceDir, packerAutoVarFilename))
+	c.Assert(err, IsNil)
+}
+
+func (s *MySuite) TestWritePackerAutoVariables(c *C) {
+	// The happy path is tested outside of this funcation already
+
+	// Bad tmplFilename
+	badDestPath := "not/a/real/path"
+	err := writePackerAutoVariables(
+		packerAutoVarFilename, config.Resource{}, badDestPath)
+	expErr := "failed to create packer file .*"
+	c.Assert(err, ErrorMatches, expErr)
 }
 
 func TestMain(m *testing.M) {
