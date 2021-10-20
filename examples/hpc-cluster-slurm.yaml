@@ -36,7 +36,7 @@ resource_groups:
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute-partition
+    id: compute_partition
     settings:
       partition_name: compute
       max_node_count: 20
@@ -46,7 +46,7 @@ resource_groups:
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm-controller
+    id: slurm_controller
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       login_node_count: 1
@@ -55,15 +55,15 @@ resource_groups:
       login_network_storage:
       - $(homefs.network_storage)
       partitions:
-      - $(compute-partition.partition)
+      - $(compute_partition.partition)
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm-login
+    id: slurm_login
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:
       - $(homefs.network_storage)
       login_network_storage:
       - $(homefs.network_storage)
-      controller_name: $(slurm-controller.controller_node_name)
+      controller_name: $(slurm_controller.controller_node_name)

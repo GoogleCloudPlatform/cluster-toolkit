@@ -114,8 +114,12 @@ func (w TFWriter) writeTopLevels(yamlConfig *config.YamlConfig) {
 			continue
 		}
 		writeTopTerraformFile(bpName, resGroup.Name, "main.tf", resGroup)
+		writeTopTerraformFile(bpName, resGroup.Name, "outputs.tf", nil)
+		writeTopTerraformFile(
+			bpName, resGroup.Name, "providers.tf", yamlConfig.Vars)
 		writeTopTerraformFile(
 			bpName, resGroup.Name, "variables.tf", yamlConfig.Vars)
+		writeTopTerraformFile(bpName, resGroup.Name, "versions.tf", nil)
 		writeTopTerraformFile(
 			bpName, resGroup.Name, "terraform.tfvars", yamlConfig.Vars)
 	}
