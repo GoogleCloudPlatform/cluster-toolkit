@@ -4,7 +4,7 @@ This resource creates a DDN EXAScaler Cloud Lustre file system.
 
 **WARNING**: This is an experimental resource.
 
-**WARNING**: This file system has a license cost as described in the princing
+**WARNING**: This file system has a license cost as described in the pricing
 section of the [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
 
 ## License
