@@ -17,7 +17,7 @@
 package resreader
 
 import (
-	"log"
+	"fmt"
 )
 
 // MetaReader implements ResReader for meta resources
@@ -26,6 +26,5 @@ type MetaReader struct {
 
 // GetInfo reades ResourceInfo for a meta resource
 func (r MetaReader) GetInfo(source string) (ResourceInfo, error) {
-	log.Fatal("Meta GetInfo not implemented")
-	return ResourceInfo{}, nil
+	return ResourceInfo{}, fmt.Errorf("Meta GetInfo not implemented: %s", source)
 }
