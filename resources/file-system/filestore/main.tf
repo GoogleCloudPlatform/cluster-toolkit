@@ -17,7 +17,12 @@ resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
 
+locals {
+  timeouts = var.filestore_tier == "HIGH_SCALE_SSD" ? [1] : []
+}
+
 resource "google_filestore_instance" "filestore_instance" {
+  provider   = google-beta
   depends_on = [var.network_name]
 
   name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
@@ -35,4 +40,14 @@ resource "google_filestore_instance" "filestore_instance" {
     network = var.network_name
     modes   = ["MODE_IPV4"]
   }
+
+  dynamic "timeouts" {
+    for_each = local.timeouts
+    content {
+      create = "1h"
+      update = "1h"
+      delete = "1h"
+    }
+  }
+
 }
