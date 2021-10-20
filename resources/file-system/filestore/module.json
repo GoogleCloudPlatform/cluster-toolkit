@@ -75,7 +75,7 @@
   ],
   "providers": [
     {
-      "name": "google",
+      "name": "google-beta",
       "alias": null,
       "version": "~\u003e 3.0"
     },
@@ -91,7 +91,7 @@
       "version": "\u003e= 0.14.0"
     },
     {
-      "name": "google",
+      "name": "google-beta",
       "version": "~\u003e 3.0"
     },
     {
@@ -101,12 +101,13 @@
   ],
   "resources": [
     {
-      "type": "filestore_instance",
+      "type": "google_filestore_instance",
       "name": "filestore_instance",
-      "provider": "google",
-      "source": "hashicorp/google",
+      "provider": "google-beta",
+      "source": "hashicorp/google-beta",
       "mode": "managed",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     },
     {
       "type": "id",
@@ -114,7 +115,8 @@
       "provider": "random",
       "source": "hashicorp/random",
       "mode": "managed",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     }
   ]
 }

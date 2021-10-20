@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hpc-slurm
+blueprint_name: hpc-cluster-high-io
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm
-  region: europe-west4
-  zone: europe-west4-a
+  deployment_name: hpc-slurm-io
+  region: us-central1
+  zone: us-central1-a
 
 resource_groups:
 - group: primary
   resources:
-  - source: ./resources/network/vpc
+  - source: ./resources/network/pre-existing-vpc
     kind: terraform
     id: network1
 
@@ -32,38 +32,64 @@ resource_groups:
     id: homefs
     settings:
       local_mount: /home
-      network_name: $(network1.network_name)
+      network_name: ((module.network1.network_name))
+
+  - source: ./resources/file-system/filestore
+    kind: terraform
+    id: projectsfs
+    settings:
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240
+      local_mount: /projects
+      network_name: ((module.network1.network_name))
+
+  - source: ./resources/third-party/file-system/DDN-EXAScaler
+    kind: terraform
+    id: scratchfs
+    settings:
+      local_mount: /scratch
+      network_name: ((module.network1.network_name))
+      subnetwork_name: ((module.network1.primary_subnetwork.name))
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute-partition
+    id: compute_partition
     settings:
+      max_node_count: 200
       partition_name: compute
-      max_node_count: 20
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:
-      - $(homefs.network_storage)
+      - ((module.homefs.network_storage))
+      - ((module.scratchfs.network_storage))
+      - ((module.projectsfs.network_storage))
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm-controller
+    id: slurm_controller
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      login_node_count: 1
       network_storage:
-      - $(homefs.network_storage)
+      - ((module.homefs.network_storage))
+      - ((module.scratchfs.network_storage))
+      - ((module.projectsfs.network_storage))
       login_network_storage:
-      - $(homefs.network_storage)
+      - ((module.homefs.network_storage))
+      - ((module.scratchfs.network_storage))
+      - ((module.projectsfs.network_storage))
       partitions:
-      - $(compute-partition.partition)
+      - ((module.compute_partition.partition))
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm-login
+    id: slurm_login
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:
       - $(homefs.network_storage)
+      - ((module.scratchfs.network_storage))
+      - ((module.projectsfs.network_storage))
       login_network_storage:
       - $(homefs.network_storage)
-      controller_name: $(slurm-controller.controller_node_name)
+      - ((module.scratchfs.network_storage))
+      - ((module.projectsfs.network_storage))
+      controller_name: $(slurm_controller.controller_node_name)
