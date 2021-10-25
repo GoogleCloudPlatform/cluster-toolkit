@@ -1,3 +1,8 @@
+## Description
+This resource is an example of creating an image with Packer using the HPC
+Toolkit. The image created is based on the [HPC VM image](https://console.cloud.google.com/marketplace/product/click-to-deploy-images/hpc-vm-image)
+and updates packages using ansible as a provisioner.
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 

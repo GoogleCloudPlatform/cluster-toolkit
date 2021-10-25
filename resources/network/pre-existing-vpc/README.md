@@ -1,3 +1,27 @@
+## Description
+This resource defines a VPC network that already exists in GCP so that it can be
+used by other resources. For examples, rather than creating a VPC network from
+scratch for a simple deployment, the "default" network can be used from a
+project. The pre-existing-vpc can be referenced in the same ways as the
+[vpc resource](../vpc/README.md)
+
+Using a pre-existing VPC created in another Resource Group can be a good way of
+sharing a single network resource between resource groups.
+
+### Example
+```
+- source: ./resources/network/pre-existing-vpc
+  kind: terraform
+  id: network1
+  settings:
+  - project_id: $(vars.project_id)
+```
+This creates a pre-existing-vpc resource based on the "default" VPC network in
+the GCP project. "default" is the default for network_name unless otherwise
+provided. Note that the project_id setting would be inferred from the global
+variable of the same name, but it was included here for clarity.
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

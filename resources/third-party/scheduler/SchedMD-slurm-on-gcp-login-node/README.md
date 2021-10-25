@@ -1,3 +1,27 @@
+## Description
+This resource creates a login node for a Slurm cluster based on the
+SchedMD/slurm-gcp [login module](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login).
+The login node is used in conjunction with the [controller](../SchedMD-slurm-on-gcp-controller).
+
+### Example
+```
+- source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  kind: terraform
+  id: slurm_login
+  settings:
+    subnetwork_name: ((module.network1.primary_subnetwork.name))
+    network_storage:
+    - $(homefs.network_storage)
+    login_network_storage:
+    - $(homefs.network_storage)
+    controller_name: $(slurm_controller.controller_node_name)
+```
+This creates a Slurm login node connected to the primary subnet of network1 with
+the homefs filesystem mounted and connecting to `slurm_controller` as the
+slurm controller node. For more context see the
+[hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml)
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

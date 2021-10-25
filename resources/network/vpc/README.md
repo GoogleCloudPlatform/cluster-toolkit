@@ -1,3 +1,26 @@
+## Description
+This resource creates a new VPC network along with a [cloud NAT](https://github.com/terraform-google-modules/terraform-google-cloud-nat),
+[Router](https://github.com/terraform-google-modules/terraform-google-cloud-router)
+and common [firewall rules](https://github.com/terraform-google-modules/terraform-google-network/tree/master/modules/firewall-rules).
+This resource is based on submodules defined by the [Cloud Foundation Toolkit](https://cloud.google.com/foundation-toolkit).
+
+### Example
+```
+- source: ./resources/network/vpc
+  kind: terraform
+  id: network1
+  settings:
+  - deployment_name: $(vars.deployment_name)
+```
+This creates a new VPC network named based on the `deployment_name` variable
+with `_net` appended. `network_name` can be set manually as well as part of the
+settings.
+
+Note that `deployment_name` does not need to be set explicitly here,
+it would typically be inferred from the global variable of the same name. It was
+included for clarity.
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

@@ -1,3 +1,22 @@
+## Description
+This resource creates a [filestore](https://cloud.google.com/filestore)
+instance. Filestore is a high performance network file system that can be
+mounted to one or more compute VMs.
+
+### Example
+```
+- source: ./resources/file-system/filestore
+  kind: terraform
+  id: homefs
+  settings:
+    local_mount: /home
+    network_name: $(network1.network_name)
+```
+This creates a filestore instance with the resource ID of `homefs` that will be
+mounted at `/home` and is connected to the network defined in the `network1`
+resource.
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

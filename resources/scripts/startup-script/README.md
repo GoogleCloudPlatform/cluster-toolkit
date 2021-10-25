@@ -1,3 +1,34 @@
+## Description
+This resource creates startup scripts by chaining together a list of provided
+shell scripts and ansible configs. These startup scripts can be provided to
+compute VMs in their resource Settings.
+
+### Example
+```
+- source: ./resources/scripts/startup-script
+  kind: terraform
+  id: startup
+  settings:
+    runners:
+      - type: shell
+        file: "modules/startup-script/examples/install_ansible.sh"
+      - type: shell
+        file: "modules/filestore/scripts/install-nfs.sh"
+      - type: ansible-local
+        file: "modules/startup-script/examples/mount.yaml"
+
+- source: ./resources/compute/simple-instance
+  kind: terraform
+  id: compute-cluster
+  settings:
+    network_storage:
+    - $(homefs.network_storage)
+    metadata:
+      startup-script: $(startup.startup_script_content)
+      startup-script-custom: $(startup.startup_script_custom_content)
+```
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

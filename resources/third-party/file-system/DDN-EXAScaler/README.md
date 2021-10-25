@@ -1,8 +1,9 @@
 ## Description
 
-This resource creates a DDN EXAScaler Cloud Lustre file system.
+This resource creates a DDN EXAScaler Cloud Lustre file system using
+[exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp).
 
-**WARNING**: This is an experimental resource.
+**WARNING**: This is an experimental resource and is not fully supported.
 
 **WARNING**: This file system has a license cost as described in the pricing
 section of the [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
