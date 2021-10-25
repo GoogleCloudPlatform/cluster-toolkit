@@ -168,13 +168,13 @@ func createTmpResource() {
 	}
 	_, err = mainFile.WriteString(testMainTf)
 	if err != nil {
-		log.Fatalf("resreader_test: Failed to write main.tf test file. %v", err)
+		log.Fatalf("resreader_test: Failed to write main.pkr.hcl test file. %v", err)
 	}
 
 	// variables.pkr.hcl file
 	varFile, err = os.Create(path.Join(packerDir, "variables.pkr.hcl"))
 	if err != nil {
-		log.Fatalf("Failed to create variables.tf: %v", err)
+		log.Fatalf("Failed to create variables.pkr.hcl: %v", err)
 	}
 	_, err = varFile.WriteString(testVariablesTf)
 	if err != nil {
