@@ -297,12 +297,14 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 	c.Assert(obtainedYaml, Not(IsNil))
 
 	// Write file
-	outFile := path.Join(tmpTestDir, "out_TestExportYamlConfig.yaml")
+	outFilename := "out_TestExportYamlConfig.yaml"
+	outFile := path.Join(tmpTestDir, outFilename)
 	bc.ExportYamlConfig(outFile)
-	_, err := os.Stat(outFile)
-	if err != nil {
-		log.Fatalf("failed call to exportYamlConfig, no file created: %e", err)
-	}
+	fileInfo, err := os.Stat(outFile)
+	c.Assert(err, IsNil)
+	c.Assert(fileInfo.Name(), Equals, outFilename)
+	c.Assert(fileInfo.Size() > 0, Equals, true)
+	c.Assert(fileInfo.IsDir(), Equals, false)
 }
 
 // expand.go
