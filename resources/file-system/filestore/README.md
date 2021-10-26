@@ -1,3 +1,38 @@
+## Description
+This resource creates a [filestore](https://cloud.google.com/filestore)
+instance. Filestore is a high performance network file system that can be
+mounted to one or more compute VMs.
+
+### Example - PREMIUM tier
+```
+- source: ./resources/file-system/filestore
+  kind: terraform
+  id: homefs
+  settings:
+    local_mount: /home
+    network_name: $(network1.network_name)
+    size_gb: 2660
+```
+This creates a filestore instance with the resource ID of `homefs` that will be
+mounted at `/home` and is connected to the network defined in the `network1`
+resource. `size_gb` is set to the minimum for the default "PREMIUM" tier,
+2.5TiB.
+
+### Example - High Scale
+```
+- source: ./resources/file-system/filestore
+  kind: terraform
+  id: highscale
+  settings:
+    filestore_tier: HIGH_SCALE_SSD
+    size_gb: 10240
+    local_mount: /projects
+    network_name: $(network1.network_name)
+```
+This creates a high scale filestore instance that will be mounted at
+`/projects` and has the minimum capacity for a high scale SDD instance of 10TiB.
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 
