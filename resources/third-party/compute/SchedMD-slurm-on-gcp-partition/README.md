@@ -2,6 +2,8 @@
 This resource creates a compute partition that be used as input to
 [SchedMD-slurm-on-gcp-controller](../../scheduler/SchedMD-slurm-on-gcp-controller/README.md).
 
+**Warning**: updating a partition will not cause the slurm controller to update its configurations. In other words, it will not update an already deployed Slurm cluster.
+
 ### Example
 Create a partition resource with a max node count of 200, named "compute",
 connected to a resource subnetwork and with homefs mounted.

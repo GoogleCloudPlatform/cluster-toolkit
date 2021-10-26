@@ -1,7 +1,11 @@
 ## Description
 This resource creates startup scripts by chaining together a list of provided
-shell scripts and ansible configs. These startup scripts can be provided to
-compute VMs in their resource Settings.
+shell scripts and ansible configs, or "runners". These startup scripts can be
+provided to compute VMs in their resource Settings.
+
+Runners will be uploaded to a [GCS bucket](https://cloud.google.com/storage/docs/creating-buckets).
+VMs using the startup script created by this resource will pull the runners from
+that bucket, and therefore must have access to GCS.
 
 ### Example
 ```

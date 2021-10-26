@@ -3,6 +3,10 @@ This resource creates a login node for a Slurm cluster based on the
 SchedMD/slurm-gcp [login module](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login).
 The login node is used in conjunction with the [controller](../SchedMD-slurm-on-gcp-controller).
 
+**Warning**: Slurm handles startup scripts differently from virtual machines.
+This will not work in conjuntion with the [startup_script](../../../scripts/startup-script/README.md)
+resource.
+
 ### Example
 ```
 - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node

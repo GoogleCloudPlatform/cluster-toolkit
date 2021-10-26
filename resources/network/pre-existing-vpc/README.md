@@ -1,6 +1,6 @@
 ## Description
 This resource defines a VPC network that already exists in GCP so that it can be
-used by other resources. For examples, rather than creating a VPC network from
+used by other resources. For example, rather than creating a VPC network from
 scratch for a simple deployment, the "default" network can be used from a
 project. The pre-existing-vpc can be referenced in the same ways as the
 [vpc resource](../vpc/README.md)

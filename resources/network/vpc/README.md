@@ -4,6 +4,14 @@ This resource creates a new VPC network along with a [cloud NAT](https://github.
 and common [firewall rules](https://github.com/terraform-google-modules/terraform-google-network/tree/master/modules/firewall-rules).
 This resource is based on submodules defined by the [Cloud Foundation Toolkit](https://cloud.google.com/foundation-toolkit).
 
+The created cloud NAT (Network Address Translation) allows virtual machines
+without external IP addresses create outbound connections to the internet. For
+more information see the [docs](https://cloud.google.com/nat/docs/overview).
+
+The following firewall rules are created with the VPC network:
+* Allow SSH access from the Cloud Console ("35.235.240.0/20").
+* Allow traffic between nodes within the VPC
+
 ### Example
 ```
 - source: ./resources/network/vpc

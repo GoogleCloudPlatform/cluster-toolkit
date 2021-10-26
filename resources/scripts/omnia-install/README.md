@@ -10,6 +10,7 @@ runs `gcloud compute ssh` and `gcloud compute scp` on the machine creating the
 deployment (i.e. where you run `terraform apply`).
 
 ### Additional Dependencies
+**The following apply on the machine where `terraform apply` is called**
 * [gcloud](https://cloud.google.com/sdk/gcloud)
 * [python3](https://www.python.org/download/releases/3.0/)
 * [jinja2](https://palletsprojects.com/p/jinja/) python package
