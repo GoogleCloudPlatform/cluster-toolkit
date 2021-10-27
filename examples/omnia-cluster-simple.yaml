@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# WARNING: This example and the omnia-install resource are still under development
+#          and experimental! This example is not yet fully supported.
+
 blueprint_name: omnia-cluster
 
 vars:

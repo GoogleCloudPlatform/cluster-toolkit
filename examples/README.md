@@ -12,10 +12,22 @@ Please note that global variables defined under `vars` are automatically
 passed to resources if the resources have an input that matches the variable name.
 
 ## Config Descriptions
-**hpc-cluster-slurm.yaml**: Creates a basic auto-scaling SLURM cluster with a
-single SLURM patition and default settings. The blueprint also creates a new VPC
-network, and a filestore instance mounted to `/home`.
+**hpc-cluster-small.yaml**: Creates a basic auto-scaling SLURM cluster with a
+single SLURM patition and mostly default settings. The blueprint also creates a
+new VPC network, and a filestore instance mounted to `/home`.
 
+**hpc-cluster-high-io.yaml**: Creates a slurm cluster with tiered file systems
+for higher performance. It connects to the default VPC of the project and
+creates two partitions and a login node.
+
+File systems:
+* The homefs mounted at `/home` is a default "PREMIUM" tier filestore with 2.5TiB of capacity
+* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
+instance with 10TiB of capacity.
+* The scratchfs is mounted at `/scratch` and is a DDN Exascaler Lustre file
+system designed for high IO performance. The capacity is ~10TiB.
+
+### Experimental
 **omnia-cluster-simple.yaml**: Creates a simple omnia cluster, with an omnia-manager node and 8 omnia-compute nodes, on the pre-existing default network. Omnia will be automatically installed after the nodes are provisioned. All nodes mount a filestore instance on `/home`.
 
 ## Config Schema
