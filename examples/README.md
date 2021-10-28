@@ -24,7 +24,7 @@ File systems:
 * The homefs mounted at `/home` is a default "PREMIUM" tier filestore with 2.5TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
 instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a DDN Exascaler Lustre file
+* The scratchfs is mounted at `/scratch` and is a [DDN Exascaler Lustre](../resources/third-party/file-system/DDN-EXAScaler/README.md) file
 system designed for high IO performance. The capacity is ~10TiB.
 
 ### Experimental

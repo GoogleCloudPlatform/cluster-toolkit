@@ -78,3 +78,8 @@ Creates a SLURM controller node using
 * [**SchedMD-slurm-on-gcp-login-node**](third-party/scheduler/SchedMD-slurm-on-gcp-login-node/README.md):
 Creates a SLURM login node using
 [slurm-gcp](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login)
+
+#### File System
+
+* [**DDN-EXAScaler**](third-party/file-system/DDN-EXAScaler/README.md): Creates a
+[DDN Exascaler lustre](https://www.ddn.com/partners/google-cloud-platform/) file system. This resource has [license costs](https://pantheon.corp.google.com/marketplace/product/ddnstorage/exascaler-cloud).
