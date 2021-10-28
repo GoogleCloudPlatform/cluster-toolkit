@@ -23,7 +23,7 @@ Simply run `make` in the root directory.
 ## Basic Usage
 To create a blueprint, an input YAML file needs to be written or adapted from
 the examples under `examples`. A good starting point is
-`examples/hpc-cluster-slurm.yaml` which creates a blueprint for a new network,
+`examples/hpc-cluster-small.yaml` which creates a blueprint for a new network,
 a filestore instance and a slurm login node and controller.
 More information on the example configs can be found in the README.md of the
 `examples` directory.
@@ -32,7 +32,7 @@ In order to create a blueprint using `ghpc`, first ensure you've updated your
 config template to include your GCP project ID then run the following command:
 
 ```
-ghpc create --config examples/hpc-cluster-slurm.yaml
+./ghpc create --config examples/hpc-cluster-small.yaml
 ```
 
 The blueprint directory, named as the `blueprint_name` field from the input
@@ -40,7 +40,7 @@ config will be created in the same directory as ghpc.
 
 To deploy the blueprint, use terraform in the resource group directory:
 ```
-cd hpc-slurm/primary # From hpc-cluster-slurm.yaml example
+cd hpc-slurm/primary # From hpc-cluster-small.yaml example
 terraform init
 terraform apply
 ```
