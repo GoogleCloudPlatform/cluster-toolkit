@@ -1,4 +1,4 @@
-#!/bin/perl
+#!/usr/bin/perl
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@ use warnings;
 
 my $min = 80;
 my $failed = 0;
+
 while (<>){
   print $_;
   if ( $_ =~ /coverage: (\d+\.\d)%/ ) {

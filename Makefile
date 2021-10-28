@@ -20,7 +20,7 @@ vet:
 
 test-engine:
 	$(info **************** running ghpc unit tests **************)
-	go test -cover $(ENG) 2>&1 |  tools/enforce_coverage.pl
+	go test -cover $(ENG) 2>&1 |  perl tools/enforce_coverage.pl
 
 
 test-resources:
