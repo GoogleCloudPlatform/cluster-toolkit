@@ -17,9 +17,14 @@ use strict;
 use warnings;
 
 my $min = 80;
+my $failed = 0;
 while (<>){
   print $_;
   if ( $_ =~ /coverage: (\d+\.\d)%/ ) {
-    die "coverage must be above $min%: $1" if ($1 < $min);
+    $failed++ if ($1 < $min);
   }
+}
+if ($failed > 0) {
+   print STDERR "coverage must be above $min%, $failed packages were below that.\n";
+   exit 1
 }
