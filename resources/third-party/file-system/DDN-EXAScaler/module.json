@@ -31,7 +31,7 @@
         "node_count": 0,
         "node_cpu": "Intel Cascade Lake",
         "node_type": "n2-standard-2",
-        "public_ip": false
+        "public_ip": true
       },
       "required": false
     },
@@ -80,7 +80,7 @@
         "node_count": 1,
         "node_cpu": "Intel Cascade Lake",
         "node_type": "n2-standard-32",
-        "public_ip": false
+        "public_ip": true
       },
       "required": false
     },
@@ -164,7 +164,7 @@
         "node_count": 3,
         "node_cpu": "Intel Cascade Lake",
         "node_type": "n2-standard-16",
-        "public_ip": false
+        "public_ip": true
       },
       "required": false
     },
