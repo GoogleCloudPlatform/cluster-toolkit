@@ -280,7 +280,7 @@ variable "mds" {
     node_type  = "n2-standard-32"
     node_cpu   = "Intel Cascade Lake"
     nic_type   = "GVNIC"
-    public_ip  = false
+    public_ip  = true
     node_count = 1
   }
 }
@@ -327,7 +327,7 @@ variable "oss" {
     node_type  = "n2-standard-16"
     node_cpu   = "Intel Cascade Lake"
     nic_type   = "GVNIC"
-    public_ip  = false
+    public_ip  = true
     node_count = 3
   }
 }
@@ -375,7 +375,7 @@ variable "cls" {
     node_type  = "n2-standard-2"
     node_cpu   = "Intel Cascade Lake"
     nic_type   = "GVNIC"
-    public_ip  = false
+    public_ip  = true
     node_count = 0
   }
 }
