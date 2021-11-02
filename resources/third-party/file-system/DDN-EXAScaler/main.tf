@@ -24,7 +24,7 @@ locals {
     nat     = false
   }
   named_subnet_properties = {
-    address = "10.0.0.0/16"
+    address = var.subnetwork_address
     private = true
     name    = var.subnetwork_name
     new     = false
@@ -32,7 +32,7 @@ locals {
 }
 
 module "ddn_exascaler" {
-  source = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=503357e"
+  source = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=b063430"
 
   fsname          = var.fsname
   zone            = var.zone
@@ -40,6 +40,7 @@ module "ddn_exascaler" {
   admin           = var.admin
   security        = var.security
   service_account = var.service_account
+  waiter          = var.waiter
   network         = var.network_name == null ? var.network_properties : local.named_net_properties
   subnetwork      = var.subnetwork_name == null ? var.subnetwork_properties : local.named_subnet_properties
   boot            = var.boot
