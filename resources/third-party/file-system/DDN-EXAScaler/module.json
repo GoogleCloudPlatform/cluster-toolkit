@@ -189,10 +189,11 @@
     },
     {
       "name": "security",
-      "type": "object({\n    enable_ssh        = bool\n    ssh_source_range  = string\n    enable_http       = bool\n    http_source_range = string\n  })",
-      "description": "Enables/disables SSH and HTTP access",
+      "type": "object({\n    enable_local      = bool\n    enable_ssh        = bool\n    ssh_source_range  = string\n    enable_http       = bool\n    http_source_range = string\n  })",
+      "description": "Various firewall related rules",
       "default": {
         "enable_http": false,
+        "enable_local": false,
         "enable_ssh": false,
         "http_source_range": "0.0.0.0/0",
         "ssh_source_range": "0.0.0.0/0"
@@ -207,6 +208,13 @@
         "name": "default",
         "new": false
       },
+      "required": false
+    },
+    {
+      "name": "subnetwork_address",
+      "type": "string",
+      "description": "The IP range of internal addresses for the subnetwork",
+      "default": null,
       "required": false
     },
     {
@@ -229,6 +237,13 @@
       "required": false
     },
     {
+      "name": "waiter",
+      "type": "string",
+      "description": "Waiter to check progress and result for deployment.",
+      "default": null,
+      "required": false
+    },
+    {
       "name": "zone",
       "type": "string",
       "description": "Compute Platform zone where the servers will be located",
@@ -240,7 +255,7 @@
     {
       "name": "ddn_exascaler",
       "source": "github.com/DDNStorage/exascaler-cloud-terraform//gcp",
-      "version": "503357e",
+      "version": "b063430",
       "description": null
     }
   ],

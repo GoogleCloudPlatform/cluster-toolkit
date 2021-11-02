@@ -70,13 +70,30 @@ variable "service_account" {
   }
 }
 
-# Enable/disable remote SSH access: true or false
-# Source IP for remote SSH access: valid CIDR range of the form x.x.x.x/x
-# Enable/disable remote HTTP console: true or false
-# Source IP for remote HTTP access valid CIDR range of the form x.x.x.x/x
+# Waiter to check progress and result for deployment.
+# To use Google Deployment Manager:
+# waiter = "deploymentmanager"
+# To use generic Google Cloud SDK command line:
+# waiter = "sdk"
+# If you don’t want to wait until the deployment is complete:
+# waiter = null
+# https://cloud.google.com/deployment-manager/runtime-configurator/creating-a-waiter
+variable "waiter" {
+  description = "Waiter to check progress and result for deployment."
+  type        = string
+  default     = null
+}
+
+# Security options
+# enable_local: true or false, enable or disable firewall rules for local access
+# enable_ssh: true or false, enable or disable remote SSH access
+# ssh_source_range: source IP range for remote SSH access in CIDR notation
+# enable_http: true or false, enable or disable remote HTTP access
+# http_source_range: source IP range for remote HTTP access in CIDR notation
 variable "security" {
-  description = "Enables/disables SSH and HTTP access"
+  description = "Various firewall related rules"
   type = object({
+    enable_local      = bool
     enable_ssh        = bool
     ssh_source_range  = string
     enable_http       = bool
@@ -84,6 +101,7 @@ variable "security" {
   })
 
   default = {
+    enable_local      = false
     enable_http       = false
     enable_ssh        = false
     http_source_range = "0.0.0.0/0"
@@ -130,6 +148,12 @@ variable "network_properties" {
 
 variable "subnetwork_name" {
   description = "The name of the VPC subnetwork to where the system is connected."
+  type        = string
+  default     = null
+}
+
+variable "subnetwork_address" {
+  description = "The IP range of internal addresses for the subnetwork"
   type        = string
   default     = null
 }

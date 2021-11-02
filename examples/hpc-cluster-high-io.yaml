@@ -50,6 +50,7 @@ resource_groups:
       local_mount: /scratch
       network_name: $(network1.network_name)
       subnetwork_name: ((module.network1.primary_subnetwork.name))
+      subnetwork_address: ((module.network1.primary_subnetwork.ip_cidr_range))
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
