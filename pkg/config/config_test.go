@@ -62,7 +62,7 @@ resource_groups:
 			},
 		},
 	}
-	defaultLabels = map[interface{}]interface{}{
+	defaultLabels = map[string]interface{}{
 		"ghpc_blueprint":  "simple",
 		"deployment_name": "deployment_name",
 	}
@@ -283,7 +283,7 @@ func (s *MySuite) TestImportYamlConfig(c *C) {
 	c.Assert(
 		len(obtainedYamlConfig.Vars["labels"].(map[interface{}]interface{})),
 		Equals,
-		len(expectedSimpleYamlConfig.Vars["labels"].(map[interface{}]interface{})),
+		len(expectedSimpleYamlConfig.Vars["labels"].(map[string]interface{})),
 	)
 	c.Assert(obtainedYamlConfig.ResourceGroups[0].Resources[0].ID,
 		Equals, expectedSimpleYamlConfig.ResourceGroups[0].Resources[0].ID)
@@ -328,13 +328,13 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// add map
-	testSlice = append(testSlice, make(map[interface{}]interface{}))
+	testSlice = append(testSlice, make(map[string]interface{}))
 	ret, err = updateVariableType(testSlice, ctx, resToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 
 	// map, success
-	testMap := make(map[interface{}]interface{})
+	testMap := make(map[string]interface{})
 	ret, err = updateVariableType(testMap, ctx, resToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
@@ -344,7 +344,7 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add map
-	testMap["map"] = make(map[interface{}]interface{})
+	testMap["map"] = make(map[string]interface{})
 	ret, err = updateVariableType(testMap, ctx, resToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
@@ -372,7 +372,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	c.Assert(exists, Equals, true)
 
 	// Was the ghpc_blueprint label set correctly?
-	globalLabels := bc.Config.Vars["labels"].(map[interface{}]interface{})
+	globalLabels := bc.Config.Vars["labels"].(map[string]interface{})
 	ghpcBlueprint, exists := globalLabels[blueprintLabel]
 	c.Assert(exists, Equals, true)
 	c.Assert(ghpcBlueprint.(string), Equals, bc.Config.BlueprintName)

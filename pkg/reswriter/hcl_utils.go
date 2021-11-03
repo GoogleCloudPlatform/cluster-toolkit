@@ -84,10 +84,10 @@ func updateStringsInInterface(value interface{}) (interface{}, error) {
 			}
 		}
 		return typedValue, err
-	case map[interface{}]interface{}:
-		retMap := map[interface{}]interface{}{}
+	case map[string]interface{}:
+		retMap := map[string]interface{}{}
 		for k, v := range typedValue {
-			retMap[handleData(k)], err = updateStringsInInterface(v)
+			retMap[handleData(k).(string)], err = updateStringsInInterface(v)
 			if err != nil {
 				break
 			}

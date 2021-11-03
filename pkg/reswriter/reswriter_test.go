@@ -27,6 +27,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/zclconf/go-cty/cty"
+
 	. "gopkg.in/check.v1"
 )
 
@@ -114,16 +118,16 @@ func (s *MySuite) TestFlattenInterfaceMap(c *C) {
 		// Just a string
 		"str1",
 		// map of strings
-		map[interface{}]interface{}{
+		map[string]interface{}{
 			"str1": "val1",
 			"str2": "val2",
 		},
 		// slice of strings
 		[]interface{}{"str1", "str2"},
 		// map of maps
-		map[interface{}]interface{}{
-			"map1": map[interface{}]interface{}{},
-			"map2": map[interface{}]interface{}{
+		map[string]interface{}{
+			"map1": map[string]interface{}{},
+			"map2": map[string]interface{}{
 				"str1": "val1",
 				"str2": "val2",
 			},
@@ -134,23 +138,23 @@ func (s *MySuite) TestFlattenInterfaceMap(c *C) {
 			[]interface{}{"str1", "str2"},
 		},
 		// map of slice of map
-		map[interface{}]interface{}{
-			"slice": []map[interface{}]interface{}{
-				map[interface{}]interface{}{
+		map[string]interface{}{
+			"slice": []map[string]interface{}{
+				map[string]interface{}{
 					"str1": "val1",
 					"str2": "val2",
 				},
 			},
 		},
 		// empty map
-		map[interface{}]interface{}{},
+		map[string]interface{}{},
 		// empty slice
 		[]interface{}{},
 	}
 	// map of all 3
-	inputMapAllThree := map[interface{}]interface{}{
+	inputMapAllThree := map[string]interface{}{
 		"str": "val",
-		"map": map[interface{}]interface{}{
+		"map": map[string]interface{}{
 			"str1": "val1",
 			"str2": "val2",
 		},
@@ -201,10 +205,10 @@ func testHandlePrimitivesCreateMap() map[string]interface{} {
 	noQuotes := "((noQuotes))"
 
 	// Composite test variables
-	testMap := map[interface{}]interface{}{
+	testMap := map[string]interface{}{
 		"stringMap":   addQuotes,
 		"variableMap": noQuotes,
-		"deep": map[interface{}]interface{}{
+		"deep": map[string]interface{}{
 			"slice": []interface{}{addQuotes, noQuotes},
 		},
 	}
@@ -227,12 +231,12 @@ func testHandlePrimitivesHelper(c *C, varMap map[string]interface{}) {
 	c.Assert(varMap["variable"], Equals, noQuotesExpected)
 
 	// Test map
-	interfaceMap := varMap["map"].(map[interface{}]interface{})
+	interfaceMap := varMap["map"].(map[string]interface{})
 	c.Assert(interfaceMap["\"stringMap\""],
 		Equals,
 		addQuotesExpected)
 	c.Assert(interfaceMap["\"variableMap\""], Equals, noQuotesExpected)
-	interfaceMap = interfaceMap["\"deep\""].(map[interface{}]interface{})
+	interfaceMap = interfaceMap["\"deep\""].(map[string]interface{})
 	interfaceSlice := interfaceMap["\"slice\""].([]interface{})
 	c.Assert(interfaceSlice[0], Equals, addQuotesExpected)
 	c.Assert(interfaceSlice[1], Equals, noQuotesExpected)
@@ -295,45 +299,200 @@ func (s *MySuite) TestGetType(c *C) {
 }
 
 // tfwriter.go
-func (s *MySuite) TestWriteTopLayer_TFWriter(c *C) {
-	// Shallow copy the struct so we can set the name
-	blueprintName := "blueprints_TestWriteTopLayer_TFWriter"
-	blueprintDir := path.Join(testDir, blueprintName)
-	maintfPath := path.Join(blueprintDir, "group", "main.tf")
+func (s *MySuite) TestGetTypeTokens(c *C) {
+	// Success Integer
+	tok := getTypeTokens(cty.NumberIntVal(-1))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
 
-	testResources := []config.Resource{
-		config.Resource{
-			Settings: map[string]interface{}{
-				"network_name": "deployment_name",
-				"project_id":   "project_id",
-				"region":       "region1",
-			},
-		},
-	}
+	tok = getTypeTokens(cty.NumberIntVal(0))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
 
-	testResourceGroups := []config.ResourceGroup{
-		config.ResourceGroup{
-			Resources: testResources,
-		},
-	}
+	tok = getTypeTokens(cty.NumberIntVal(1))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
 
-	createBlueprintDirectory(blueprintDir)
-	// Normally handled by copySource, do it manually
-	err := os.Mkdir(path.Join(blueprintDir, "group"), 0755)
+	// Success Float
+	tok = getTypeTokens(cty.NumberFloatVal(-99.9))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
+
+	tok = getTypeTokens(cty.NumberFloatVal(99.9))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
+
+	// Success String
+	tok = getTypeTokens(cty.StringVal("Lorum"))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("string")))
+
+	tok = getTypeTokens(cty.StringVal(""))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("string")))
+
+	// Success Bool
+	tok = getTypeTokens(cty.BoolVal(true))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("bool")))
+
+	tok = getTypeTokens(cty.BoolVal(false))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("bool")))
+
+	// Success tuple
+	tok = getTypeTokens(cty.TupleVal([]cty.Value{}))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
+
+	tok = getTypeTokens(cty.TupleVal([]cty.Value{cty.StringVal("Lorum")}))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
+
+	// Success list
+	tok = getTypeTokens(cty.ListVal([]cty.Value{cty.StringVal("Lorum")}))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
+
+	// Success object
+	tok = getTypeTokens(cty.ObjectVal(map[string]cty.Value{}))
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+
+	val := cty.ObjectVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
+	tok = getTypeTokens(val)
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+
+	// Success Map
+	val = cty.MapVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
+	tok = getTypeTokens(val)
+	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+
+	// Failure
+	tok = getTypeTokens(cty.NullVal(cty.DynamicPseudoType))
+	c.Assert(len(tok), Equals, 0)
+
+}
+
+func (s *MySuite) TestSimpleTokenFromString(c *C) {
+	inputString := "Lorem"
+	tok := simpleTokenFromString("Lorem")
+	c.Assert(tok.Type, Equals, hclsyntax.TokenIdent)
+	c.Assert(len(tok.Bytes), Equals, len(inputString))
+	c.Assert(string(tok.Bytes), Equals, inputString)
+}
+
+func (s *MySuite) TestCreateBaseFile(c *C) {
+	// Success
+	baseFilename := "main.tf_TestCreateBaseFile"
+	goodPath := path.Join(testDir, baseFilename)
+	err := createBaseFile(goodPath)
+	c.Assert(err, IsNil)
+	fi, err := os.Stat(goodPath)
+	c.Assert(err, IsNil)
+	c.Assert(fi.Name(), Equals, baseFilename)
+	c.Assert(fi.Size() > 0, Equals, true)
+	c.Assert(fi.IsDir(), Equals, false)
+	b, err := ioutil.ReadFile(goodPath)
+	c.Assert(strings.Contains(string(b), "Licensed under the Apache License"),
+		Equals, true)
+
+	// Error: not a correct path
+	fakePath := path.Join("not/a/real/dir", "main.tf_TestCreateBaseFile")
+	err = createBaseFile(fakePath)
+	c.Assert(err, ErrorMatches, ".* no such file or directory")
+}
+
+func (s *MySuite) TestAppendHCLToFile(c *C) {
+	// Setup
+	testFilename := "main.tf_TestAppendHCLToFile"
+	testPath := path.Join(testDir, testFilename)
+	_, err := os.Create(testPath)
+	c.Assert(err, IsNil)
+	hclFile := hclwrite.NewEmptyFile()
+	hclBody := hclFile.Body()
+	hclBody.SetAttributeValue("dummyAttributeName", cty.NumberIntVal(0))
+
+	// Success
+	err = appendHCLToFile(testPath, hclFile.Bytes())
+	c.Assert(err, IsNil)
+}
+
+func stringExistsInFile(str string, filename string) (bool, error) {
+	b, err := ioutil.ReadFile(filename)
 	if err != nil {
-		log.Fatalf(
-			"failed to create group directory in TestWriteTopLayer_TFWriter: %v", err)
+		return false, err
 	}
-	writeTopTerraformFile(blueprintDir, "group", "main.tf", testResourceGroups[0])
+	return strings.Contains(string(b), str), nil
+}
 
-	_, err = os.Stat(maintfPath)
+func (s *MySuite) TestWriteVariables(c *C) {
+	// Setup
+	testVarDir := path.Join(testDir, "TestWriteVariables")
+	varsFilePath := path.Join(testVarDir, "variables.tf")
+	if err := os.Mkdir(testVarDir, 0755); err != nil {
+		log.Fatal("Failed to create test directory for creating variables.tf file")
+	}
+
+	// Simple success, empty vars
+	testVars := make(map[string]cty.Value)
+	err := writeVariables(testVars, testVarDir)
 	c.Assert(err, IsNil)
 
-	dat, err := ioutil.ReadFile(maintfPath)
-	text := string(dat)
+	// Failure: Bad path
+	err = writeVariables(testVars, "not/a/real/path")
+	c.Assert(err, ErrorMatches, "error creating variables.tf file: .*")
+
+	// Success, common vars
+	testVars["deployment_name"] = cty.StringVal("test_deployment")
+	testVars["project_id"] = cty.StringVal("test_project")
+	err = writeVariables(testVars, testVarDir)
 	c.Assert(err, IsNil)
-	// Ensure more than just the module is created, i.e it add the settings as well
-	c.Assert(len(strings.Split(text, "\n")) > 18, Equals, true)
+	exists, err := stringExistsInFile("\"deployment_name\"", varsFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
+	// Failure, Null values
+	testVars = make(map[string]cty.Value)
+	testVars["project_id"] = cty.NullVal(cty.DynamicPseudoType)
+	err = writeVariables(testVars, testVarDir)
+	c.Assert(err, ErrorMatches, "error determining type of variable .*")
+}
+
+func (s *MySuite) TestWriteProviders(c *C) {
+	// Setup
+	testProvDir := path.Join(testDir, "TestWriteProviders")
+	provFilePath := path.Join(testProvDir, "providers.tf")
+	if err := os.Mkdir(testProvDir, 0755); err != nil {
+		log.Fatal("Failed to create test directory for creating providers.tf file")
+	}
+
+	// Simple success, empty vars
+	testVars := make(map[string]cty.Value)
+	err := writeProviders(testVars, testProvDir)
+	c.Assert(err, IsNil)
+	exists, err := stringExistsInFile("google-beta", provFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+	exists, err = stringExistsInFile("project", provFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, false)
+
+	// Failure: Bad Path
+	err = writeProviders(testVars, "not/a/real/path")
+	c.Assert(err, ErrorMatches, "error creating providers.tf file: .*")
+
+	// Success: All vars
+	testVars["project_id"] = cty.StringVal("test_project")
+	testVars["zone"] = cty.StringVal("test_zone")
+	testVars["region"] = cty.StringVal("test_region")
+	err = writeProviders(testVars, testProvDir)
+	c.Assert(err, IsNil)
+	exists, err = stringExistsInFile("var.region", provFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
 }
 
 // packerwriter.go
