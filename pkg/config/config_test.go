@@ -62,7 +62,7 @@ resource_groups:
 			},
 		},
 	}
-	defaultLabels = map[interface{}]interface{}{
+	defaultLabels = map[string]interface{}{
 		"ghpc_blueprint":  "simple",
 		"deployment_name": "deployment_name",
 	}
@@ -174,9 +174,17 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	testYamlConfig := YamlConfig{
 		BlueprintName: "simple",
 		Vars:          map[string]interface{}{},
+		TerraformBackendDefaults: TerraformBackend{
+			Type:          "",
+			Configuration: map[string]interface{}{},
+		},
 		ResourceGroups: []ResourceGroup{
 			ResourceGroup{
-				Name:      "group1",
+				Name: "group1",
+				TerraformBackend: TerraformBackend{
+					Type:          "",
+					Configuration: map[string]interface{}{},
+				},
 				Resources: []Resource{testResource, testResourceWithLabels},
 			},
 		},
@@ -196,15 +204,19 @@ func getBlueprintConfigForTest() BlueprintConfig {
 func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
 	testResourceSource := path.Join(tmpTestDir, "resource")
 	testResourceGroup := ResourceGroup{
+		Name: "primary",
 		Resources: []Resource{
 			Resource{
-				Kind:   "terraform",
-				Source: testResourceSource,
+				ID:       "TestResource",
+				Kind:     "terraform",
+				Source:   testResourceSource,
+				Settings: map[string]interface{}{"test_variable": "test_value"},
 			},
 		},
 	}
 	return BlueprintConfig{
 		Config: YamlConfig{
+			Vars:           make(map[string]interface{}),
 			ResourceGroups: []ResourceGroup{testResourceGroup},
 		},
 	}
@@ -212,6 +224,11 @@ func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
 
 /* Tests */
 // config.go
+func (s *MySuite) TestExpandConfig(c *C) {
+	bc := getBasicBlueprintConfigWithTestResource()
+	bc.ExpandConfig()
+}
+
 func (s *MySuite) TestSetResourcesInfo(c *C) {
 	bc := getBasicBlueprintConfigWithTestResource()
 	bc.setResourcesInfo()
@@ -283,7 +300,7 @@ func (s *MySuite) TestImportYamlConfig(c *C) {
 	c.Assert(
 		len(obtainedYamlConfig.Vars["labels"].(map[interface{}]interface{})),
 		Equals,
-		len(expectedSimpleYamlConfig.Vars["labels"].(map[interface{}]interface{})),
+		len(expectedSimpleYamlConfig.Vars["labels"].(map[string]interface{})),
 	)
 	c.Assert(obtainedYamlConfig.ResourceGroups[0].Resources[0].ID,
 		Equals, expectedSimpleYamlConfig.ResourceGroups[0].Resources[0].ID)
@@ -328,13 +345,13 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// add map
-	testSlice = append(testSlice, make(map[interface{}]interface{}))
+	testSlice = append(testSlice, make(map[string]interface{}))
 	ret, err = updateVariableType(testSlice, ctx, resToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 
 	// map, success
-	testMap := make(map[interface{}]interface{})
+	testMap := make(map[string]interface{})
 	ret, err = updateVariableType(testMap, ctx, resToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
@@ -344,7 +361,7 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add map
-	testMap["map"] = make(map[interface{}]interface{})
+	testMap["map"] = make(map[string]interface{})
 	ret, err = updateVariableType(testMap, ctx, resToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
@@ -372,7 +389,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	c.Assert(exists, Equals, true)
 
 	// Was the ghpc_blueprint label set correctly?
-	globalLabels := bc.Config.Vars["labels"].(map[interface{}]interface{})
+	globalLabels := bc.Config.Vars["labels"].(map[string]interface{})
 	ghpcBlueprint, exists := globalLabels[blueprintLabel]
 	c.Assert(exists, Equals, true)
 	c.Assert(ghpcBlueprint.(string), Equals, bc.Config.BlueprintName)

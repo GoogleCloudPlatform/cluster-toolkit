@@ -79,12 +79,12 @@ func getDeploymentName(vars map[string]interface{}) string {
 // the global labels defined in Vars with resource setting labels. It also
 // determines the role and sets it for each resource independently.
 func (bc *BlueprintConfig) combineLabels() error {
-	defaultLabels := map[interface{}]interface{}{
+	defaultLabels := map[string]interface{}{
 		blueprintLabel:  bc.Config.BlueprintName,
 		deploymentLabel: getDeploymentName(bc.Config.Vars),
 	}
 	labels := "labels"
-	var globalLabels map[interface{}]interface{}
+	var globalLabels map[string]interface{}
 
 	// Add defaults to global labels if they don't already exist
 	if _, exists := bc.Config.Vars[labels]; !exists {
@@ -92,7 +92,7 @@ func (bc *BlueprintConfig) combineLabels() error {
 	}
 
 	// Cast global labels so we can index into them
-	globalLabels, ok := bc.Config.Vars[labels].(map[interface{}]interface{})
+	globalLabels, ok := bc.Config.Vars[labels].(map[string]interface{})
 	if !ok {
 		return fmt.Errorf(
 			"%s: found %T",
@@ -171,9 +171,25 @@ func applyGlobalVarsInGroup(
 	return nil
 }
 
+func updateGlobalVarTypes(vars map[string]interface{}) error {
+	for k, v := range vars {
+		val, err := updateVariableType(v, varContext{}, make(map[string]int))
+		if err != nil {
+			return fmt.Errorf("error setting type for global variabl %s: %v", k, err)
+		}
+		vars[k] = val
+	}
+	return nil
+}
+
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to resources settings if not already set.
 func (bc *BlueprintConfig) applyGlobalVariables() error {
+	// Update global variable types to match
+	if err := updateGlobalVarTypes(bc.Config.Vars); err != nil {
+		return err
+	}
+
 	for _, grp := range bc.Config.ResourceGroups {
 		err := applyGlobalVarsInGroup(
 			grp, bc.ResourcesInfo[grp.Name], bc.Config.Vars)
@@ -332,10 +348,19 @@ func updateVariableType(
 			}
 		}
 		return typedValue, err
-	case map[interface{}]interface{}:
-		retMap := map[interface{}]interface{}{}
+	case map[string]interface{}:
+		retMap := map[string]interface{}{}
 		for k, v := range typedValue {
 			retMap[k], err = updateVariableType(v, context, resToGrp)
+			if err != nil {
+				return retMap, err
+			}
+		}
+		return retMap, err
+	case map[interface{}]interface{}:
+		retMap := map[string]interface{}{}
+		for k, v := range typedValue {
+			retMap[k.(string)], err = updateVariableType(v, context, resToGrp)
 			if err != nil {
 				return retMap, err
 			}

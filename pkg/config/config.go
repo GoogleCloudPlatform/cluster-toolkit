@@ -60,6 +60,7 @@ type ResourceGroup struct {
 	Resources        []Resource
 }
 
+// TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string
 	Configuration map[string]interface{}
@@ -260,12 +261,12 @@ func (bc BlueprintConfig) expand() {
 	bc.addSettingsToResources()
 	if err := bc.combineLabels(); err != nil {
 		log.Fatalf(
-			"failed to update resources labels when expanding the config: %e", err)
+			"failed to update resources labels when expanding the config: %v", err)
 	}
 
 	if err := bc.applyGlobalVariables(); err != nil {
 		log.Fatalf(
-			"failed to apply global variables in resources when expanding the config: %e",
+			"failed to apply global variables in resources when expanding the config: %v",
 			err)
 	}
 	bc.expandVariables()
