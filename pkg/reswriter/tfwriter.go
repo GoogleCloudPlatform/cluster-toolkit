@@ -32,23 +32,6 @@ import (
 	"hpc-toolkit/pkg/config"
 )
 
-const versionBytes string = `
-terraform {
-  required_version = ">= 0.13"
-
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 3.0"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "~> 3.0"
-    }
-  }
-}
-`
-
 // TFWriter writes terraform to the blueprint folder
 type TFWriter struct {
 	numResources int
@@ -300,7 +283,7 @@ func writeVersions(dst string) error {
 		return fmt.Errorf("error creating versions.tf file: %v", err)
 	}
 	// Write hard-coded version information
-	if err := appendHCLToFile(versionsPath, []byte(versionBytes)); err != nil {
+	if err := appendHCLToFile(versionsPath, []byte(tfversions)); err != nil {
 		return fmt.Errorf("error writing HCL to versions.tf file: %v", err)
 	}
 	return nil
