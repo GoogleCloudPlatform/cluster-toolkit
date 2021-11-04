@@ -55,8 +55,14 @@ var errorMessages = map[string]string{
 
 // ResourceGroup defines a group of Resource that are all executed together
 type ResourceGroup struct {
-	Name      string `yaml:"group"`
-	Resources []Resource
+	Name             string           `yaml:"group"`
+	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
+	Resources        []Resource
+}
+
+type TerraformBackend struct {
+	Type          string
+	Configuration map[string]interface{}
 }
 
 // HasKind checks to see if a resource group contains any resources of the given
@@ -82,9 +88,10 @@ type Resource struct {
 
 // YamlConfig stores the contents on the User YAML
 type YamlConfig struct {
-	BlueprintName  string `yaml:"blueprint_name"`
-	Vars           map[string]interface{}
-	ResourceGroups []ResourceGroup `yaml:"resource_groups"`
+	BlueprintName            string `yaml:"blueprint_name"`
+	Vars                     map[string]interface{}
+	ResourceGroups           []ResourceGroup  `yaml:"resource_groups"`
+	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`
 }
 
 // BlueprintConfig is a container for the imported YAML data and supporting data for
@@ -134,6 +141,30 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 	// Ensure Vars is not a nil map if not set by the user
 	if len(yamlConfig.Vars) == 0 {
 		yamlConfig.Vars = make(map[string]interface{})
+	}
+
+	// 1. DEFAULT: use TerraformBackend configuration (if supplied) in each
+	//    resource group
+	// 2. If top-level TerraformBackendDefaults is defined, insert that
+	//    backend into resource groups which have no explicit
+	//    TerraformBackend
+	// 3. In all cases, add a prefix for GCS backends if one is not defined
+	if yamlConfig.TerraformBackendDefaults.Type != "" {
+		for i, grp := range yamlConfig.ResourceGroups {
+			if grp.TerraformBackend.Type == "" {
+				grp.TerraformBackend = yamlConfig.TerraformBackendDefaults
+			}
+			if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration["prefix"] == nil {
+				DeploymentName := yamlConfig.Vars["deployment_name"]
+				prefix := yamlConfig.BlueprintName
+				if DeploymentName != nil {
+					prefix += "/" + DeploymentName.(string)
+				}
+				prefix += "/" + grp.Name
+				grp.TerraformBackend.Configuration["prefix"] = prefix
+			}
+			yamlConfig.ResourceGroups[i].TerraformBackend = grp.TerraformBackend
+		}
 	}
 
 	return yamlConfig

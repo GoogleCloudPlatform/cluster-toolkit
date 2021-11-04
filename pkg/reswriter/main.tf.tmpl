@@ -13,9 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-
-# Modules
-{{ range .Resources -}}
+{{ if ne .TerraformBackend.Type "" }}
+terraform {
+  backend "{{.TerraformBackend.Type}}" {
+    {{- range $setting, $value := .TerraformBackend.Configuration}}
+    {{$setting}} = {{$value}}
+    {{- end}}
+  }
+}
+{{ end -}}
+{{ range .Resources }}
 module "{{.ID}}" {
   source = "./modules/{{.ResourceName}}"
   {{- range $setting, $value := .Settings}}
