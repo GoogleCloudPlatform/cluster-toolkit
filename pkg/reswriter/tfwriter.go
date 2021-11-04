@@ -185,7 +185,10 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 	return nil
 }
 
-func writeMain(resources []config.Resource, dst string) error {
+func writeMain(
+	resources []config.Resource,
+	tfBackend config.TerraformBackend,
+	dst string) error {
 	// Create file
 	mainPath := path.Join(dst, "main.tf")
 	if err := createBaseFile(mainPath); err != nil {
@@ -195,6 +198,22 @@ func writeMain(resources []config.Resource, dst string) error {
 	// Create HCL Body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
+
+	// Write Terraform backend if needed
+	if tfBackend.Type != "" {
+		tfConfig, err := convertToCty(tfBackend.Configuration)
+		if err != nil {
+			errString := "error converting terraform backend configuration to cty when writing main.tf: %v"
+			return fmt.Errorf(errString, err)
+		}
+		tfBody := hclBody.AppendNewBlock("terraform", []string{}).Body()
+		backendBlock := tfBody.AppendNewBlock("backend", []string{tfBackend.Type})
+		backendBody := backendBlock.Body()
+		for setting, value := range tfConfig {
+			backendBody.SetAttributeValue(setting, value)
+		}
+		hclBody.AppendNewline()
+	}
 
 	// For each resource:
 	for _, res := range resources {
@@ -304,7 +323,8 @@ func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 		writePath := path.Join(bpName, resGroup.Name)
 
 		// Write main.tf file
-		if err := writeMain(resGroup.Resources, writePath); err != nil {
+		if err := writeMain(
+			resGroup.Resources, resGroup.TerraformBackend, writePath); err != nil {
 			return fmt.Errorf("error writing main.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}

@@ -60,6 +60,7 @@ type ResourceGroup struct {
 	Resources        []Resource
 }
 
+// TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string
 	Configuration map[string]interface{}

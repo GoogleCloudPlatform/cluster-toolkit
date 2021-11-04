@@ -283,34 +283,6 @@ func (s *MySuite) TestGetAbsSourcePath(c *C) {
 	c.Assert(gotPath, Equals, path.Join(cwd, relPath))
 }
 
-// hcl_utils.go
-func (s *MySuite) TestGetType(c *C) {
-
-	// string
-	testString := "test string"
-	ret := getType(testString)
-	c.Assert(ret, Equals, "string")
-
-	// map
-	testMap := "{testMap: testVal}"
-	ret = getType(testMap)
-	c.Assert(ret, Equals, "map")
-
-	// list
-	testList := "[testList0,testList]"
-	ret = getType(testList)
-	c.Assert(ret, Equals, "list")
-
-	// non-string input
-	testNull := 42 // random int
-	ret = getType(testNull)
-	c.Assert(ret, Equals, "null")
-
-	// nil input
-	ret = getType(nil)
-	c.Assert(ret, Equals, "null")
-}
-
 // tfwriter.go
 func (s *MySuite) TestGetTypeTokens(c *C) {
 	// Success Integer
@@ -439,6 +411,74 @@ func stringExistsInFile(str string, filename string) (bool, error) {
 		return false, err
 	}
 	return strings.Contains(string(b), str), nil
+}
+
+// hcl_utils.go
+func (s *MySuite) TestGetType(c *C) {
+
+	// string
+	testString := "test string"
+	ret := getType(testString)
+	c.Assert(ret, Equals, "string")
+
+	// map
+	testMap := "{testMap: testVal}"
+	ret = getType(testMap)
+	c.Assert(ret, Equals, "map")
+
+	// list
+	testList := "[testList0,testList]"
+	ret = getType(testList)
+	c.Assert(ret, Equals, "list")
+
+	// non-string input
+	testNull := 42 // random int
+	ret = getType(testNull)
+	c.Assert(ret, Equals, "null")
+
+	// nil input
+	ret = getType(nil)
+	c.Assert(ret, Equals, "null")
+}
+
+func (s *MySuite) TestWriteMain(c *C) {
+	// Setup
+	testMainDir := path.Join(testDir, "TestWriteMain")
+	mainFilePath := path.Join(testMainDir, "main.tf")
+	if err := os.Mkdir(testMainDir, 0755); err != nil {
+		log.Fatal("Failed to create test dir for creating main.tf file")
+	}
+
+	// Simple success
+	testResources := []config.Resource{}
+	testBackend := config.TerraformBackend{}
+	err := writeMain(testResources, testBackend, testMainDir)
+	c.Assert(err, IsNil)
+
+	// Test with resource
+	testResource := config.Resource{
+		ID: "test_resource",
+		Settings: map[string]interface{}{
+			"testSetting": "testValue",
+		},
+	}
+	testResources = append(testResources, testResource)
+	err = writeMain(testResources, testBackend, testMainDir)
+	c.Assert(err, IsNil)
+	exists, err := stringExistsInFile("testSetting", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
+	// Test with Backend
+	testBackend.Type = "gcs"
+	testBackend.Configuration = map[string]interface{}{
+		"bucket": "a_bucket",
+	}
+	err = writeMain(testResources, testBackend, testMainDir)
+	c.Assert(err, IsNil)
+	exists, err = stringExistsInFile("a_bucket", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
 }
 
 func (s *MySuite) TestWriteVariables(c *C) {

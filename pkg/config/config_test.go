@@ -174,9 +174,17 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	testYamlConfig := YamlConfig{
 		BlueprintName: "simple",
 		Vars:          map[string]interface{}{},
+		TerraformBackendDefaults: TerraformBackend{
+			Type:          "",
+			Configuration: map[string]interface{}{},
+		},
 		ResourceGroups: []ResourceGroup{
 			ResourceGroup{
-				Name:      "group1",
+				Name: "group1",
+				TerraformBackend: TerraformBackend{
+					Type:          "",
+					Configuration: map[string]interface{}{},
+				},
 				Resources: []Resource{testResource, testResourceWithLabels},
 			},
 		},
@@ -196,15 +204,19 @@ func getBlueprintConfigForTest() BlueprintConfig {
 func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
 	testResourceSource := path.Join(tmpTestDir, "resource")
 	testResourceGroup := ResourceGroup{
+		Name: "primary",
 		Resources: []Resource{
 			Resource{
-				Kind:   "terraform",
-				Source: testResourceSource,
+				ID:       "TestResource",
+				Kind:     "terraform",
+				Source:   testResourceSource,
+				Settings: map[string]interface{}{"test_variable": "test_value"},
 			},
 		},
 	}
 	return BlueprintConfig{
 		Config: YamlConfig{
+			Vars:           make(map[string]interface{}),
 			ResourceGroups: []ResourceGroup{testResourceGroup},
 		},
 	}
@@ -212,6 +224,11 @@ func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
 
 /* Tests */
 // config.go
+func (s *MySuite) TestExpandConfig(c *C) {
+	bc := getBasicBlueprintConfigWithTestResource()
+	bc.ExpandConfig()
+}
+
 func (s *MySuite) TestSetResourcesInfo(c *C) {
 	bc := getBasicBlueprintConfigWithTestResource()
 	bc.setResourcesInfo()
