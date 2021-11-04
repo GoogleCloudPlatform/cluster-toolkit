@@ -270,6 +270,19 @@ func (s *MySuite) TestCreateBlueprintDirectory(c *C) {
 	c.Assert(err, IsNil)
 }
 
+func (s *MySuite) TestGetAbsSourcePath(c *C) {
+	// Already abs path
+	gotPath := getAbsSourcePath(testDir)
+	c.Assert(gotPath, Equals, testDir)
+
+	// Relative path
+	relPath := "relative/path"
+	cwd, err := os.Getwd()
+	c.Assert(err, IsNil)
+	gotPath = getAbsSourcePath(relPath)
+	c.Assert(gotPath, Equals, path.Join(cwd, relPath))
+}
+
 // hcl_utils.go
 func (s *MySuite) TestGetType(c *C) {
 

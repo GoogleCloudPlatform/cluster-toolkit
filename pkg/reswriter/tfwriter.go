@@ -19,7 +19,6 @@ package reswriter
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"regexp"
@@ -69,16 +68,6 @@ func (w *TFWriter) getNumResources() int {
 // AddNumResources add value to resource count
 func (w *TFWriter) addNumResources(value int) {
 	w.numResources += value
-}
-
-// prepareToWrite makes any resource kind specific changes to the config before
-// writing to the blueprint directory
-func (w TFWriter) prepareToWrite(yamlConfig *config.YamlConfig) {
-}
-
-// writeResourceLevel writes any needed files to the resource layer
-func (w TFWriter) writeResourceLevel(yamlConfig *config.YamlConfig) error {
-	return nil
 }
 
 // createBaseFile creates a baseline file for all terraform/hcl including a
@@ -146,8 +135,7 @@ func writeTfvars(vars map[string]cty.Value, dst string) error {
 	}
 
 	// Write file
-	hclBytes := handlePassthroughVariables(hclFile.Bytes())
-	err := appendHCLToFile(tfvarsPath, hclBytes)
+	err := appendHCLToFile(tfvarsPath, hclFile.Bytes())
 	if err != nil {
 		return fmt.Errorf("error writing HCL to terraform.tfvars file: %v", err)
 	}
@@ -319,11 +307,12 @@ func writeVersions(dst string) error {
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
-func (w TFWriter) writeTopLevels(yamlConfig *config.YamlConfig) {
+func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 	bpName := yamlConfig.BlueprintName
 	ctyVars, err := convertToCty(yamlConfig.Vars)
 	if err != nil {
-		log.Fatalf("error converting global vars to cty for writing: %v", err)
+		return fmt.Errorf(
+			"error converting global vars to cty for writing: %v", err)
 	}
 	for _, resGroup := range yamlConfig.ResourceGroups {
 		if !resGroup.HasKind("terraform") {
@@ -333,41 +322,44 @@ func (w TFWriter) writeTopLevels(yamlConfig *config.YamlConfig) {
 
 		// Write main.tf file
 		if err := writeMain(resGroup.Resources, writePath); err != nil {
-			log.Fatalf("error writing main.tf file for resource group %s: %v",
+			return fmt.Errorf("error writing main.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}
 
 		// Write variables.tf file
 		if err := writeVariables(ctyVars, writePath); err != nil {
-			log.Fatalf("error writing variables.tf file for resource group %s: %v",
+			return fmt.Errorf(
+				"error writing variables.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}
 
 		// Write terraform.tfvars file
 		if err := writeTfvars(ctyVars, writePath); err != nil {
-			log.Fatalf(
+			return fmt.Errorf(
 				"error writing terraform.tfvars file for resource group %s: %v",
 				resGroup.Name, err)
 		}
 
 		// Write providers.tf file
 		if err := writeProviders(ctyVars, writePath); err != nil {
-			log.Fatalf(
+			return fmt.Errorf(
 				"error writing providers.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}
 
 		// Write versions.tf file
 		if err := writeVersions(writePath); err != nil {
-			log.Fatalf(
+			return fmt.Errorf(
 				"error writing versions.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}
 
 		// License only file, outputs.tf
 		if err = createBaseFile(path.Join(writePath, "outputs.tf")); err != nil {
-			log.Fatalf("error creating outputs.tf file for resource group %s: %v",
+			return fmt.Errorf(
+				"error creating outputs.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}
 	}
+	return nil
 }

@@ -95,6 +95,9 @@ func writePackerAutoVariables(
 	return nil
 }
 
-// writeTopLevel writes any needed files to the top layer of the blueprint
-func (w PackerWriter) writeTopLevels(yamlConfig *config.YamlConfig) {
+// writeResourceGroups writes any needed files to the top and resource levels
+// of the blueprint
+func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
+	w.prepareToWrite(yamlConfig)
+	return w.writeResourceLevel(yamlConfig)
 }

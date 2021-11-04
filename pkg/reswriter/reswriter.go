@@ -54,9 +54,7 @@ const (
 type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
-	prepareToWrite(*config.YamlConfig)
-	writeResourceLevel(*config.YamlConfig) error
-	writeTopLevels(*config.YamlConfig)
+	writeResourceGroups(*config.YamlConfig) error
 }
 
 var kinds = map[string]ResWriter{
@@ -152,10 +150,8 @@ func WriteBlueprint(yamlConfig *config.YamlConfig) {
 	createBlueprintDirectory(yamlConfig.BlueprintName)
 	copySource(yamlConfig.BlueprintName, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
-		writer.prepareToWrite(yamlConfig)
 		if writer.getNumResources() > 0 {
-			writer.writeTopLevels(yamlConfig)
-			err := writer.writeResourceLevel(yamlConfig)
+			err := writer.writeResourceGroups(yamlConfig)
 			if err != nil {
 				log.Fatalf("error writing resources to blueprint: %e", err)
 			}
