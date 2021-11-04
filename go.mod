@@ -6,7 +6,7 @@ require (
 	github.com/gruntwork-io/terratest v0.38.0
 	github.com/hashicorp/hcl/v2 v2.10.1
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20210625153042-09f34846faab
-	github.com/imdario/mergo v0.3.12
+	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/otiai10/copy v1.6.0
 	github.com/spf13/cobra v1.2.1
 	github.com/zclconf/go-cty v1.9.1
