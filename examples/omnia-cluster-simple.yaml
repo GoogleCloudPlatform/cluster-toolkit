@@ -26,11 +26,11 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: ./resources/network/pre-existing-vpc
+  - source: resources/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: ./resources/file-system/filestore
+  - source: resources/file-system/filestore
     kind: terraform
     id: homefs
     settings:
@@ -39,7 +39,7 @@ resource_groups:
       labels:
         ghpc_role: storage-home
 
-  - source: ./resources/scripts/startup-script
+  - source: resources/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -51,7 +51,7 @@ resource_groups:
         - type: ansible-local
           file: "modules/startup-script/examples/mount.yaml"
 
-  - source: ./resources/compute/simple-instance
+  - source: resources/compute/simple-instance
     kind: terraform
     id: omnia_manager
     settings:
@@ -66,7 +66,7 @@ resource_groups:
         startup-script: $(startup.startup_script_content)
         startup-script-custom: $(startup.startup_script_custom_content)
 
-  - source: ./resources/compute/simple-instance
+  - source: resources/compute/simple-instance
     kind: terraform
     id: omnia_compute
     settings:
@@ -82,7 +82,7 @@ resource_groups:
         startup-script: $(startup.startup_script_content)
         startup-script-custom: $(startup.startup_script_custom_content)
 
-  - source: ./resources/scripts/omnia-install
+  - source: resources/scripts/omnia-install
     kind: terraform
     id: omnia
     settings:

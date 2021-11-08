@@ -23,11 +23,11 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: ./resources/network/pre-existing-vpc
+  - source: resources/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: ./resources/third-party/file-system/DDN-EXAScaler
+  - source: resources/third-party/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     settings:

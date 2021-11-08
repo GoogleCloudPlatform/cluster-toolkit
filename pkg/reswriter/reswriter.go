@@ -20,6 +20,7 @@ package reswriter
 import (
 	"embed"
 	"hpc-toolkit/pkg/config"
+	"io/fs"
 	"log"
 	"os"
 	"path"
@@ -32,6 +33,11 @@ const (
 	beginPassthroughExp string = `^\(\(.*$`
 	fullPassthroughExp  string = `^\(\((.*)\)\)$`
 )
+
+// ResourceFS contains embedded resources (./resources) for use in building
+// blueprints. The main package creates and injects the resources directory as
+// hpc-toolkit/resources are not accessible at the package level.
+var ResourceFS embed.FS
 
 // ResWriter interface for writing resources to a blueprint
 type ResWriter interface {
@@ -95,12 +101,73 @@ func getTemplate(filename string) string {
 	return string(tmplText)
 }
 
+type baseFS interface {
+	ReadDir(string) ([]fs.DirEntry, error)
+	ReadFile(string) ([]byte, error)
+}
+
+func copyDirFromResources(fs baseFS, source string, dest string) error {
+	dirEntries, err := fs.ReadDir(source)
+	if err != nil {
+		return err
+	}
+	for _, dirEntry := range dirEntries {
+		entryName := dirEntry.Name()
+		entrySource := path.Join(source, entryName)
+		entryDest := path.Join(dest, entryName)
+		if dirEntry.IsDir() {
+			if err := os.Mkdir(entryDest, 0755); err != nil {
+				return err
+			}
+			if err = copyDirFromResources(fs, entrySource, entryDest); err != nil {
+				return err
+			}
+		} else {
+			fileBytes, err := fs.ReadFile(entrySource)
+			if err != nil {
+				return err
+			}
+			copyFile, err := os.Create(entryDest)
+			if err != nil {
+				return nil
+			}
+			if _, err = copyFile.Write(fileBytes); err != nil {
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
+func copyEmbedded(fs baseFS, source string, dest string) error {
+	return copyDirFromResources(fs, source, dest)
+}
+
+func copyFromPath(source string, dest string) error {
+	absPath := getAbsSourcePath(source)
+	err := copy.Copy(absPath, dest)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func isLocalPath(source string) bool {
+	return strings.HasPrefix(source, "./") ||
+		strings.HasPrefix(source, "../") ||
+		strings.HasPrefix(source, "/")
+}
+
+func isEmbeddedPath(source string) bool {
+	return strings.HasPrefix(source, "resources/")
+}
+
 func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
 
 			/* Copy source files */
-			// currently assuming local source only
+			// currently assuming local or embedded source
 			resourceName := path.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
 			basePath := path.Join(blueprintName, grp.Name)
@@ -115,10 +182,23 @@ func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 			if err == nil {
 				continue
 			}
-			sourcePath := getAbsSourcePath(resource.Source)
-			err = copy.Copy(sourcePath, destPath)
-			if err != nil {
-				log.Fatalf("reswriter: Failed to copy resource %s: %v", resource.ID, err)
+
+			// Check source type and copy
+			switch src := resource.Source; {
+			case isLocalPath(src):
+				if err = copyFromPath(src, destPath); err != nil {
+					log.Fatal(err)
+				}
+			case isEmbeddedPath(src):
+				if err = os.MkdirAll(destPath, 0755); err != nil {
+					log.Fatalf("failed to create resource path %s: %v", destPath, err)
+				}
+				if err = copyEmbedded(ResourceFS, src, destPath); err != nil {
+					log.Fatal(err)
+				}
+			default:
+				log.Fatalf("resource %s source (%s) not valid, should begin with /, ./, ../ or resources/",
+					resource.ID, resource.Source)
 			}
 
 			/* Create resource level files */
