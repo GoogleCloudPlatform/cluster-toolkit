@@ -28,7 +28,8 @@
     {
       "name": "startup_scripts",
       "source": "github.com/terraform-google-modules/terraform-google-startup-scripts",
-      "version": "v1.0.0"
+      "version": "v1.0.0",
+      "description": null
     }
   ],
   "outputs": [
@@ -74,7 +75,8 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "managed",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     },
     {
       "type": "storage_bucket_object",
@@ -82,7 +84,8 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "managed",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     },
     {
       "type": "id",
@@ -90,7 +93,8 @@
       "provider": "random",
       "source": "hashicorp/random",
       "mode": "managed",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     }
   ]
 }

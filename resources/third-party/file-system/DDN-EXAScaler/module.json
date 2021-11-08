@@ -286,6 +286,10 @@
     {
       "name": "terraform",
       "version": "\u003e= 0.13.0"
+    },
+    {
+      "name": "google",
+      "version": "~\u003e 3.0"
     }
   ],
   "resources": []
