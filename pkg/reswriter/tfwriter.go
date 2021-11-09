@@ -146,6 +146,8 @@ func getTypeTokens(ctyVal cty.Value) hclwrite.Tokens {
 		typeToken.Bytes = []byte("list")
 	case "object", "map":
 		typeToken.Bytes = []byte("map")
+	case "dynamic":
+		typeToken.Bytes = []byte("any")
 	default:
 		return hclwrite.Tokens{}
 	}

@@ -433,7 +433,7 @@ func (s *MySuite) TestGetTypeTokens(c *C) {
 
 	// Failure
 	tok = getTypeTokens(cty.NullVal(cty.DynamicPseudoType))
-	c.Assert(len(tok), Equals, 0)
+	c.Assert(len(tok), Equals, 1)
 
 }
 
@@ -588,11 +588,11 @@ func (s *MySuite) TestWriteVariables(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
-	// Failure, Null values
+	// Success, "dynamic type"
 	testVars = make(map[string]cty.Value)
 	testVars["project_id"] = cty.NullVal(cty.DynamicPseudoType)
 	err = writeVariables(testVars, testVarDir)
-	c.Assert(err, ErrorMatches, "error determining type of variable .*")
+	c.Assert(err, IsNil)
 }
 
 func (s *MySuite) TestWriteProviders(c *C) {
