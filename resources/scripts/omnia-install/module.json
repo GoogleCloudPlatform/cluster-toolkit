@@ -64,7 +64,8 @@
       "provider": "null",
       "source": "hashicorp/null",
       "mode": "managed",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     }
   ]
 }

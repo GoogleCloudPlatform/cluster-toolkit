@@ -37,9 +37,7 @@ const (
 type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
-	prepareToWrite(*config.YamlConfig)
-	writeResourceLevel(*config.YamlConfig)
-	writeTopLevels(*config.YamlConfig)
+	writeResourceGroups(*config.YamlConfig) error
 }
 
 var kinds = map[string]ResWriter{
@@ -92,7 +90,7 @@ func getTemplate(filename string) string {
 	// Create path to template from the embedded template FS
 	tmplText, err := templatesFS.ReadFile(filename)
 	if err != nil {
-		log.Fatalf("TFWriter: %v", err)
+		log.Fatalf("reswriter: %v", err)
 	}
 	return string(tmplText)
 }
@@ -134,20 +132,12 @@ func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 func WriteBlueprint(yamlConfig *config.YamlConfig) {
 	createBlueprintDirectory(yamlConfig.BlueprintName)
 	copySource(yamlConfig.BlueprintName, &yamlConfig.ResourceGroups)
-	err := updateStringsInMap(yamlConfig.Vars)
-	if err != nil {
-		log.Fatalf("updateStringsInConfig: %v", err)
-	}
-	wrapper := interfaceStruct{Elem: nil}
-	err = flattenInterfaceMap(yamlConfig.Vars, &wrapper)
-	if err != nil {
-		log.Fatalf("Error flattening data structures in vars: %v", err)
-	}
 	for _, writer := range kinds {
-		writer.prepareToWrite(yamlConfig)
 		if writer.getNumResources() > 0 {
-			writer.writeTopLevels(yamlConfig)
-			writer.writeResourceLevel(yamlConfig)
+			err := writer.writeResourceGroups(yamlConfig)
+			if err != nil {
+				log.Fatalf("error writing resources to blueprint: %e", err)
+			}
 		}
 	}
 }

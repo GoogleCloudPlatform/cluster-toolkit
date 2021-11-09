@@ -1,3 +1,24 @@
+## Description
+This resource creates a compute partition that be used as input to
+[SchedMD-slurm-on-gcp-controller](../../scheduler/SchedMD-slurm-on-gcp-controller/README.md).
+
+**Warning**: updating a partition will not cause the slurm controller to update its configurations. In other words, it will not update an already deployed Slurm cluster.
+
+### Example
+Create a partition resource with a max node count of 200, named "compute",
+connected to a resource subnetwork and with homefs mounted.
+```
+- source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  kind: terraform
+  id: compute_partition
+  settings:
+    max_node_count: 200
+    partition_name: compute
+    subnetwork_name: ((module.network1.primary_subnetwork.name))
+    network_storage:
+    - $(homefs.network_storage)
+```
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 

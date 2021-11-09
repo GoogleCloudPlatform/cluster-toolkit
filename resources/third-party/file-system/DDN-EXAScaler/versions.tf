@@ -14,18 +14,12 @@
  * limitations under the License.
 */
 
-provider "google" {
-  project = var.project_id
-  region  = var.region
+terraform {
+  required_version = ">= 0.13.0"
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 3.0"
+    }
+  }
 }
-
-// Modules
-{{ range .Resources -}}
-module "{{.ID}}" {
-  source = "./modules/{{.ResourceName}}"
-  {{- range $setting, $value := .Settings}}
-  {{$setting}} = {{if eq $setting "labels"}}merge(var.labels, {{$value}})
-{{- else -}}{{$value}}{{end}}{{end}}
-}
-
-{{ end }}

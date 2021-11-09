@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"testing"
 
 	"hpc-toolkit/pkg/resreader"
@@ -31,7 +32,7 @@ import (
 var (
 	// Shared IO Values
 	simpleYamlFilename string
-	simpleYamlFile     os.File
+	tmpTestDir         string
 
 	// Expected/Input Values
 	expectedYaml = []byte(`
@@ -61,7 +62,7 @@ resource_groups:
 			},
 		},
 	}
-	defaultLabels = map[interface{}]interface{}{
+	defaultLabels = map[string]interface{}{
 		"ghpc_blueprint":  "simple",
 		"deployment_name": "deployment_name",
 	}
@@ -108,6 +109,30 @@ func setup() {
 	}
 	simpleYamlFilename = simpleYamlFile.Name()
 	simpleYamlFile.Close()
+
+	// Create test directory with simple resources
+	tmpTestDir, err = ioutil.TempDir("", "ghpc_config_tests_*")
+	if err != nil {
+		log.Fatalf("failed to create temp dir for config tests: %e", err)
+	}
+	resourceDir := path.Join(tmpTestDir, "resource")
+	err = os.Mkdir(resourceDir, 0755)
+	if err != nil {
+		log.Fatalf("failed to create test resource dir: %v", err)
+	}
+	varFile, err := os.Create(path.Join(resourceDir, "variables.tf"))
+	if err != nil {
+		log.Fatalf("failed to create variables.tf in test resource dir: %v", err)
+	}
+	testVariablesTF := `
+	variable "test_variable" {
+		description = "Test Variable"
+		type        = string
+	}`
+	_, err = varFile.WriteString(testVariablesTF)
+	if err != nil {
+		log.Fatalf("failed to write variables.tf in test resource dir: %v", err)
+	}
 }
 
 // Delete the temp YAML file
@@ -116,31 +141,15 @@ func teardown() {
 	if err != nil {
 		log.Fatalf("config_test teardown: %v", err)
 	}
+	err = os.RemoveAll(tmpTestDir)
+	if err != nil {
+		log.Fatalf(
+			"failed to tear down tmp directory (%s) for config unit tests: %v",
+			tmpTestDir, err)
+	}
 }
 
-/* Tests */
-// config.go
-func (s *MySuite) TestImportYamlConfig(c *C) {
-	obtainedYamlConfig := importYamlConfig(simpleYamlFilename)
-	c.Assert(obtainedYamlConfig.BlueprintName,
-		Equals, expectedSimpleYamlConfig.BlueprintName)
-	c.Assert(
-		len(obtainedYamlConfig.Vars["labels"].(map[interface{}]interface{})),
-		Equals,
-		len(expectedSimpleYamlConfig.Vars["labels"].(map[interface{}]interface{})),
-	)
-	c.Assert(obtainedYamlConfig.ResourceGroups[0].Resources[0].ID,
-		Equals, expectedSimpleYamlConfig.ResourceGroups[0].Resources[0].ID)
-}
-
-func (s *MySuite) TestExportYamlConfig(c *C) {
-	bc := BlueprintConfig{}
-	bc.Config = expectedSimpleYamlConfig
-	obtainedYaml := bc.ExportYamlConfig("")
-	c.Assert(obtainedYaml, Not(IsNil))
-}
-
-// expand.go
+// util function
 func getBlueprintConfigForTest() BlueprintConfig {
 	testResourceSource := "testSource"
 	testResource := Resource{
@@ -165,9 +174,17 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	testYamlConfig := YamlConfig{
 		BlueprintName: "simple",
 		Vars:          map[string]interface{}{},
+		TerraformBackendDefaults: TerraformBackend{
+			Type:          "",
+			Configuration: map[string]interface{}{},
+		},
 		ResourceGroups: []ResourceGroup{
 			ResourceGroup{
-				Name:      "group1",
+				Name: "group1",
+				TerraformBackend: TerraformBackend{
+					Type:          "",
+					Configuration: map[string]interface{}{},
+				},
 				Resources: []Resource{testResource, testResourceWithLabels},
 			},
 		},
@@ -184,6 +201,183 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	}
 }
 
+func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
+	testResourceSource := path.Join(tmpTestDir, "resource")
+	testResourceGroup := ResourceGroup{
+		Name: "primary",
+		Resources: []Resource{
+			Resource{
+				ID:       "TestResource",
+				Kind:     "terraform",
+				Source:   testResourceSource,
+				Settings: map[string]interface{}{"test_variable": "test_value"},
+			},
+		},
+	}
+	return BlueprintConfig{
+		Config: YamlConfig{
+			Vars:           make(map[string]interface{}),
+			ResourceGroups: []ResourceGroup{testResourceGroup},
+		},
+	}
+}
+
+/* Tests */
+// config.go
+func (s *MySuite) TestExpandConfig(c *C) {
+	bc := getBasicBlueprintConfigWithTestResource()
+	bc.ExpandConfig()
+}
+
+func (s *MySuite) TestSetResourcesInfo(c *C) {
+	bc := getBasicBlueprintConfigWithTestResource()
+	bc.setResourcesInfo()
+}
+
+func (s *MySuite) TestCreateResourceInfo(c *C) {
+	bc := getBasicBlueprintConfigWithTestResource()
+	createResourceInfo(bc.Config.ResourceGroups[0])
+}
+
+func (s *MySuite) TestHasType(c *C) {
+	// No resources
+	rg := ResourceGroup{}
+	c.Assert(rg.HasKind("terraform"), Equals, false)
+	c.Assert(rg.HasKind("packer"), Equals, false)
+	c.Assert(rg.HasKind("notAKind"), Equals, false)
+
+	// One terraform resources
+	rg.Resources = append(rg.Resources, Resource{Kind: "terraform"})
+	c.Assert(rg.HasKind("terraform"), Equals, true)
+	c.Assert(rg.HasKind("packer"), Equals, false)
+	c.Assert(rg.HasKind("notAKind"), Equals, false)
+
+	// Multiple terraform resources
+	rg.Resources = append(rg.Resources, Resource{Kind: "terraform"})
+	rg.Resources = append(rg.Resources, Resource{Kind: "terraform"})
+	c.Assert(rg.HasKind("terraform"), Equals, true)
+	c.Assert(rg.HasKind("packer"), Equals, false)
+	c.Assert(rg.HasKind("notAKind"), Equals, false)
+
+	// One packer kind
+	rg.Resources = []Resource{Resource{Kind: "packer"}}
+	c.Assert(rg.HasKind("terraform"), Equals, false)
+	c.Assert(rg.HasKind("packer"), Equals, true)
+	c.Assert(rg.HasKind("notAKind"), Equals, false)
+
+	// One packer, one terraform
+	rg.Resources = append(rg.Resources, Resource{Kind: "terraform"})
+	c.Assert(rg.HasKind("terraform"), Equals, true)
+	c.Assert(rg.HasKind("packer"), Equals, true)
+	c.Assert(rg.HasKind("notAKind"), Equals, false)
+
+}
+
+func (s *MySuite) TestExpand(c *C) {
+	bc := getBlueprintConfigForTest()
+	bc.expand()
+}
+
+func (s *MySuite) TestCheckResourceAndGroupNames(c *C) {
+	bc := getBlueprintConfigForTest()
+	bc.checkResourceAndGroupNames()
+	testResID := bc.Config.ResourceGroups[0].Resources[0].ID
+	c.Assert(bc.ResourceToGroup[testResID], Equals, 0)
+}
+
+func (s *MySuite) TestNewBlueprint(c *C) {
+	bc := getBlueprintConfigForTest()
+	outFile := path.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
+	bc.ExportYamlConfig(outFile)
+	newBC := NewBlueprintConfig(outFile)
+	c.Assert(bc.Config, DeepEquals, newBC.Config)
+}
+
+func (s *MySuite) TestImportYamlConfig(c *C) {
+	obtainedYamlConfig := importYamlConfig(simpleYamlFilename)
+	c.Assert(obtainedYamlConfig.BlueprintName,
+		Equals, expectedSimpleYamlConfig.BlueprintName)
+	c.Assert(
+		len(obtainedYamlConfig.Vars["labels"].(map[interface{}]interface{})),
+		Equals,
+		len(expectedSimpleYamlConfig.Vars["labels"].(map[string]interface{})),
+	)
+	c.Assert(obtainedYamlConfig.ResourceGroups[0].Resources[0].ID,
+		Equals, expectedSimpleYamlConfig.ResourceGroups[0].Resources[0].ID)
+}
+
+func (s *MySuite) TestExportYamlConfig(c *C) {
+	// Return bytes
+	bc := BlueprintConfig{}
+	bc.Config = expectedSimpleYamlConfig
+	obtainedYaml := bc.ExportYamlConfig("")
+	c.Assert(obtainedYaml, Not(IsNil))
+
+	// Write file
+	outFilename := "out_TestExportYamlConfig.yaml"
+	outFile := path.Join(tmpTestDir, outFilename)
+	bc.ExportYamlConfig(outFile)
+	fileInfo, err := os.Stat(outFile)
+	c.Assert(err, IsNil)
+	c.Assert(fileInfo.Name(), Equals, outFilename)
+	c.Assert(fileInfo.Size() > 0, Equals, true)
+	c.Assert(fileInfo.IsDir(), Equals, false)
+}
+
+// expand.go
+func (s *MySuite) TestUpdateVariableType(c *C) {
+	// slice, success
+	// empty
+	testSlice := []interface{}{}
+	ctx := varContext{}
+	resToGrp := make(map[string]int)
+	ret, err := updateVariableType(testSlice, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testSlice, DeepEquals, ret)
+	// single string
+	testSlice = append(testSlice, "string")
+	ret, err = updateVariableType(testSlice, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testSlice, DeepEquals, ret)
+	// add list
+	testSlice = append(testSlice, []interface{}{})
+	ret, err = updateVariableType(testSlice, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testSlice, DeepEquals, ret)
+	// add map
+	testSlice = append(testSlice, make(map[string]interface{}))
+	ret, err = updateVariableType(testSlice, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testSlice, DeepEquals, ret)
+
+	// map, success
+	testMap := make(map[string]interface{})
+	ret, err = updateVariableType(testMap, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testMap, DeepEquals, ret)
+	// add string
+	testMap["string"] = "string"
+	ret, err = updateVariableType(testMap, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testMap, DeepEquals, ret)
+	// add map
+	testMap["map"] = make(map[string]interface{})
+	ret, err = updateVariableType(testMap, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testMap, DeepEquals, ret)
+	// add slice
+	testMap["slice"] = []interface{}{}
+	ret, err = updateVariableType(testMap, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testMap, DeepEquals, ret)
+
+	// string, success
+	testString := "string"
+	ret, err = updateVariableType(testString, ctx, resToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(testString, DeepEquals, ret)
+}
+
 func (s *MySuite) TestCombineLabels(c *C) {
 	bc := getBlueprintConfigForTest()
 
@@ -195,7 +389,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	c.Assert(exists, Equals, true)
 
 	// Was the ghpc_blueprint label set correctly?
-	globalLabels := bc.Config.Vars["labels"].(map[interface{}]interface{})
+	globalLabels := bc.Config.Vars["labels"].(map[string]interface{})
 	ghpcBlueprint, exists := globalLabels[blueprintLabel]
 	c.Assert(exists, Equals, true)
 	c.Assert(ghpcBlueprint.(string), Equals, bc.Config.BlueprintName)
@@ -394,6 +588,55 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 }
 
 // validator.go
+func (s *MySuite) TestValidateResources(c *C) {
+	bc := getBlueprintConfigForTest()
+	bc.validateResources()
+}
+
+func (s *MySuite) TestValidateResouceSettings(c *C) {
+	testSource := path.Join(tmpTestDir, "resource")
+	testSettings := map[string]interface{}{
+		"test_variable": "test_value",
+	}
+	testResourceGroup := ResourceGroup{
+		Resources: []Resource{
+			Resource{
+				Kind:     "terraform",
+				Source:   testSource,
+				Settings: testSettings,
+			},
+		},
+	}
+	bc := BlueprintConfig{
+		Config: YamlConfig{
+			ResourceGroups: []ResourceGroup{testResourceGroup},
+		},
+	}
+	bc.validateResourceSettings()
+}
+
+func (s *MySuite) TestValidateSettings(c *C) {
+	// Succeeds: No settings, no variables
+	res := Resource{}
+	info := resreader.ResourceInfo{}
+	err := validateSettings(res, info)
+	c.Assert(err, IsNil)
+
+	// Failes One required variable, no settings
+	res.Settings = make(map[string]interface{})
+	res.Settings["TestSetting"] = "TestValue"
+	err = validateSettings(res, info)
+	expErr := fmt.Sprintf("%s: .*", errorMessages["extraSetting"])
+	c.Assert(err, ErrorMatches, expErr)
+
+	// Succeeds: One required, setting exists
+	info.Inputs = []resreader.VarInfo{
+		resreader.VarInfo{Name: "TestSetting", Required: true},
+	}
+	err = validateSettings(res, info)
+	c.Assert(err, IsNil)
+}
+
 func (s *MySuite) TestValidateResource(c *C) {
 	// Catch no ID
 	testResource := Resource{

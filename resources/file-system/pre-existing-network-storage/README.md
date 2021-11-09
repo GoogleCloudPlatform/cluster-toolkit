@@ -1,7 +1,33 @@
+## Description
+This resource defines a file-system that already exists (i.e. it does not create
+a new file system) in a way that can be shared with other resources. This allows
+a compute VM to mount a filesystem that is not a part of the current deployment.
+
+The pre-existing network storage can be referenced in the same way as any HPC
+Toolkit supported file-system such as [filestore](../filestore/README.md).
+
+### Example
+```
+- source: ./resources/file-system/pre-existing-network-storage
+  kind: terraform
+  id: homefs
+  settings:
+    server_ip: ## Set server IP here ##
+    remote_mount: nfsshare
+    local_mount: /home
+    fs_type: nfs
+```
+This creates a pre-existing-network-storage resource in terraform at the
+provided IP in `server_ip` of type nfs that will be mounted at /home. Note that
+the `server_ip` must be known before deployment.
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
-No requirements.
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
 
 ## Providers
 

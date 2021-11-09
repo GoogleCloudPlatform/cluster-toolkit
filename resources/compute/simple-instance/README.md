@@ -1,3 +1,24 @@
+## Description
+This resource creates one or more simple [compute VM instances](https://cloud.google.com/compute/docs/instances).
+
+### Example
+```
+- source: ./resources/compute/simple-instance
+  kind: terraform
+  id: compute
+  settings:
+    instance_count: 8
+    name_prefix: compute
+    network_self_link: $(network1.network_self_link)
+    machine_type: c2-standard-60
+    network_storage:
+    - $(homefs.network_storage)
+```
+This creates a cluster of 8 compute VMs named `compute-[0-7]` on the network
+defined by the `network1` resource. The VMs are of type c2-standard-60 and mount
+the `homefs` file system resource.
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

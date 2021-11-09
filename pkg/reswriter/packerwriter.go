@@ -18,7 +18,6 @@ package reswriter
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"text/template"
@@ -49,7 +48,7 @@ func (w PackerWriter) prepareToWrite(yamlConfig *config.YamlConfig) {
 }
 
 // writeResourceLevel writes any needed files to the resource layer
-func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig) {
+func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig) error {
 	for _, grp := range yamlConfig.ResourceGroups {
 		groupPath := path.Join(yamlConfig.BlueprintName, grp.Name)
 		for _, res := range grp.Resources {
@@ -57,13 +56,14 @@ func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig) {
 				continue
 			}
 			resPath := path.Join(groupPath, res.ID)
-			writePackerAutoVariables(packerAutoVarFilename, res, resPath)
+			return writePackerAutoVariables(packerAutoVarFilename, res, resPath)
 		}
 	}
-
+	return nil
 }
 
-func writePackerAutoVariables(tmplFilename string, resource config.Resource, destPath string) {
+func writePackerAutoVariables(
+	tmplFilename string, resource config.Resource, destPath string) error {
 	tmplText := getTemplate(fmt.Sprintf("%s.tmpl", tmplFilename))
 
 	funcMap := template.FuncMap{
@@ -72,22 +72,32 @@ func writePackerAutoVariables(tmplFilename string, resource config.Resource, des
 	tmpl, err := template.New(tmplFilename).Funcs(funcMap).Parse(tmplText)
 
 	if err != nil {
-		log.Fatalf("PackerWriter: %v", err)
+		return fmt.Errorf(
+			"failed to create template %s when writing packer resource at %s: %v",
+			tmplFilename, resource.Source, err)
 	}
 	if tmpl == nil {
-		log.Fatalf("PackerWriter: Failed to parse the %s template.", tmplFilename)
+		return fmt.Errorf(
+			"failed to parse the %s template", tmplFilename)
 	}
 
 	outputPath := path.Join(destPath, tmplFilename)
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
-		log.Fatalf(
-			"Couldn't create top-layer %s, does it already exist? %v",
-			err, tmplFilename)
+		return fmt.Errorf(
+			"failed to create packer file %s: %v", tmplFilename, err)
 	}
-	tmpl.Execute(outputFile, resource)
+	if err := tmpl.Execute(outputFile, resource); err != nil {
+		return fmt.Errorf(
+			"failed to write template for %s file when writing packer resource %s: %e",
+			tmplFilename, resource.ID, err)
+	}
+	return nil
 }
 
-// writeTopLevel writes any needed files to the top layer of the blueprint
-func (w PackerWriter) writeTopLevels(yamlConfig *config.YamlConfig) {
+// writeResourceGroups writes any needed files to the top and resource levels
+// of the blueprint
+func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
+	w.prepareToWrite(yamlConfig)
+	return w.writeResourceLevel(yamlConfig)
 }

@@ -164,7 +164,8 @@
     {
       "name": "slurm_cluster_login_node",
       "source": "github.com/SchedMD/slurm-gcp//tf/modules/login/",
-      "version": "v4.0.4"
+      "version": "v4.0.4",
+      "description": null
     }
   ],
   "outputs": [],

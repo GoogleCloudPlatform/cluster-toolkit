@@ -35,22 +35,26 @@
     {
       "name": "cloud_nat",
       "source": "terraform-google-modules/cloud-nat/google",
-      "version": "~\u003e 1.4"
+      "version": "~\u003e 1.4",
+      "description": null
     },
     {
       "name": "cloud_router",
       "source": "terraform-google-modules/cloud-router/google",
-      "version": "~\u003e 0.4"
+      "version": "~\u003e 0.4",
+      "description": null
     },
     {
       "name": "firewall_rules",
       "source": "terraform-google-modules/network/google//modules/firewall-rules",
-      "version": "~\u003e 3.0"
+      "version": "~\u003e 3.0",
+      "description": null
     },
     {
       "name": "vpc",
       "source": "terraform-google-modules/network/google",
-      "version": "~\u003e 3.0"
+      "version": "~\u003e 3.0",
+      "description": null
     }
   ],
   "outputs": [
@@ -91,7 +95,8 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "data",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     }
   ]
 }

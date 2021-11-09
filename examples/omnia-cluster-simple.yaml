@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# WARNING: This example and the omnia-install resource are still under development
+#          and experimental! This example is not yet fully supported.
+
 blueprint_name: omnia-cluster
 
 vars:
@@ -50,7 +53,7 @@ resource_groups:
 
   - source: ./resources/compute/simple-instance
     kind: terraform
-    id: omnia-manager
+    id: omnia_manager
     settings:
       name_prefix: omnia-manager
       network_self_link: $(network1.network_self_link)
@@ -65,7 +68,7 @@ resource_groups:
 
   - source: ./resources/compute/simple-instance
     kind: terraform
-    id: omnia-compute
+    id: omnia_compute
     settings:
       instance_count: 8
       name_prefix: omnia-compute
@@ -84,5 +87,5 @@ resource_groups:
     id: omnia
     settings:
       depends:
-      - $(omnia-compute.name)
-      manager_node: ((module.omnia-manager.name[0]))
+      - $(omnia_compute.name)
+      manager_node: ((module.omnia_manager.name[0]))

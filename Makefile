@@ -1,4 +1,4 @@
-.PHONY: tests fmt vet test-engine test-resources test-examples packer packer-clean packer-check packer-docs
+.PHONY: tests fmt vet test-engine test-resources test-examples packer packer-clean packer-check packer-docs add-google-license
 RES = ./resources
 ENG = ./cmd/... ./pkg/...
 SRC = $(ENG) $(RES)/tests/...
@@ -20,7 +20,8 @@ vet:
 
 test-engine:
 	$(info **************** running ghpc unit tests **************)
-	go test -cover $(ENG)
+	go test -cover $(ENG) 2>&1 |  perl tools/enforce_coverage.pl
+
 
 test-resources:
 	$(info **************** running resources unit tests *********)
@@ -57,4 +58,12 @@ packer-docs:
 		terraform-docs markdown $${folder} --config .tfdocs-markdown.yaml;\
 		terraform-docs json $${folder} --config .tfdocs-json.yaml;\
 	done
+endif
+
+ifeq (, $(shell which addlicense))
+add-google-license:
+	$(error "could not find addlicense in PATH, run: go install github.com/google/addlicense@latest")
+else
+add-google-license:
+	addlicense -c "Google LLC" -l apache .
 endif

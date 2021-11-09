@@ -14,11 +14,6 @@
  * limitations under the License.
 */
 
-# Deployment Variables
-{{range $name, $value := .}}
-variable "{{$name}}" {
-  description = ""
-  type = {{getType $value}}
+terraform {
+  required_version = ">= 0.14.0"
 }
-{{end}}
-

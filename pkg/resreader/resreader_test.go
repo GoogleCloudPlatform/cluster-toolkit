@@ -15,13 +15,14 @@
 package resreader
 
 import (
-	. "gopkg.in/check.v1"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"reflect"
 	"testing"
+
+	. "gopkg.in/check.v1"
 )
 
 const (
@@ -49,7 +50,11 @@ output "test_output" {
 `
 )
 
-var tmpResourceDir string
+var (
+	tmpResourceDir string
+	terraformDir   string
+	packerDir      string
+)
 
 // Setup GoCheck
 type MySuite struct{}
@@ -77,7 +82,7 @@ func (s *MySuite) TestFactory(c *C) {
 	c.Assert(reflect.TypeOf(tfReader), Equals, reflect.TypeOf(TFReader{}))
 }
 
-//hcl_utils.go
+// hcl_utils.go
 func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
@@ -85,13 +90,13 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	expectedErr := "Source to resource does not exist: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 	// Invalid source path - points to a file
-	pathToFile := path.Join(tmpResourceDir, "main.tf")
+	pathToFile := path.Join(terraformDir, "main.tf")
 	_, err = getHCLInfo(pathToFile)
 	expectedErr = "Source of resource must be a directory: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid source path - points to directory with no .tf files
-	pathToEmptyDir := path.Join(tmpResourceDir, "emptyDir")
+	pathToEmptyDir := path.Join(packerDir, "emptyDir")
 	err = os.Mkdir(pathToEmptyDir, 0755)
 	if err != nil {
 		log.Fatal("TestGetHCLInfo: Failed to create test directory.")
@@ -110,7 +115,16 @@ func createTmpResource() {
 		log.Fatalf(
 			"Failed to create temp dir for resource in resreader_test, %v", err)
 	}
-	mainFile, err := os.Create(path.Join(tmpResourceDir, "main.tf"))
+
+	// Create terraform resource dir
+	terraformDir = path.Join(tmpResourceDir, "terraformResource")
+	err = os.Mkdir(terraformDir, 0755)
+	if err != nil {
+		log.Fatalf("error creating test terraform resource dir: %e", err)
+	}
+
+	// main.tf file
+	mainFile, err := os.Create(path.Join(terraformDir, "main.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create main.tf: %v", err)
 	}
@@ -119,7 +133,8 @@ func createTmpResource() {
 		log.Fatalf("resreader_test: Failed to write main.tf test file. %v", err)
 	}
 
-	varFile, err := os.Create(path.Join(tmpResourceDir, "variables.tf"))
+	// variables.tf file
+	varFile, err := os.Create(path.Join(terraformDir, "variables.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create variables.tf: %v", err)
 	}
@@ -129,13 +144,42 @@ func createTmpResource() {
 			"resreader_test: Failed to write variables.tf test file. %v", err)
 	}
 
-	outFile, err := os.Create(path.Join(tmpResourceDir, "outputs.tf"))
+	// outputs.tf file
+	outFile, err := os.Create(path.Join(terraformDir, "outputs.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create outputs.tf: %v", err)
 	}
 	_, err = outFile.WriteString(testOutputsTf)
 	if err != nil {
 		log.Fatalf("resreader_test: Failed to write outputs.tf test file. %v", err)
+	}
+
+	// Create packer resource dir
+	packerDir = path.Join(tmpResourceDir, "packerResource")
+	err = os.Mkdir(packerDir, 0755)
+	if err != nil {
+		log.Fatalf("error creating test packer resource dir: %e", err)
+	}
+
+	// main.pkr.hcl file
+	mainFile, err = os.Create(path.Join(packerDir, "main.pkr.hcl"))
+	if err != nil {
+		log.Fatalf("Failed to create main.pkr.hcl: %v", err)
+	}
+	_, err = mainFile.WriteString(testMainTf)
+	if err != nil {
+		log.Fatalf("resreader_test: Failed to write main.pkr.hcl test file. %v", err)
+	}
+
+	// variables.pkr.hcl file
+	varFile, err = os.Create(path.Join(packerDir, "variables.pkr.hcl"))
+	if err != nil {
+		log.Fatalf("Failed to create variables.pkr.hcl: %v", err)
+	}
+	_, err = varFile.WriteString(testVariablesTf)
+	if err != nil {
+		log.Fatalf(
+			"resreader_test: Failed to write variables.pkr.hcl test file. %v", err)
 	}
 }
 
@@ -148,11 +192,36 @@ func teardownTmpResource() {
 	}
 }
 
-func (s *MySuite) TestTFGetInfo(c *C) {
+func (s *MySuite) TestGetInfo_TFWriter(c *C) {
 	reader := TFReader{allResInfo: make(map[string]ResourceInfo)}
-	resourceInfo := reader.GetInfo(tmpResourceDir)
+	resourceInfo, err := reader.GetInfo(terraformDir)
+	c.Assert(err, IsNil)
 	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
 	c.Assert(resourceInfo.Outputs[0].Name, Equals, "test_output")
+}
+
+// packerreader.go
+func (s *MySuite) TestGetInfo_PackerReader(c *C) {
+	// Didn't already exist, succeeds
+	reader := PackerReader{allResInfo: make(map[string]ResourceInfo)}
+	resourceInfo, err := reader.GetInfo(packerDir)
+	c.Assert(err, IsNil)
+	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
+
+	// Already exists, succeeds
+	existingResourceInfo, err := reader.GetInfo(packerDir)
+	c.Assert(err, IsNil)
+	c.Assert(
+		existingResourceInfo.Inputs[0].Name, Equals, resourceInfo.Inputs[0].Name)
+}
+
+// metareader.go
+func (s *MySuite) TestGetInfo_MetaReader(c *C) {
+	// Not implemented, expect that error
+	reader := MetaReader{}
+	_, err := reader.GetInfo("")
+	expErr := "Meta GetInfo not implemented: .*"
+	c.Assert(err, ErrorMatches, expErr)
 }
 
 func TestMain(m *testing.M) {

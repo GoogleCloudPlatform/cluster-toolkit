@@ -15,7 +15,7 @@
  */
 
 output "network_storage" {
-  description   = "Describes a remote network storage to be mounted by fs-tab."
+  description = "Describes a remote network storage to be mounted by fs-tab."
   value = {
     server_ip     = var.server_ip
     remote_mount  = var.remote_mount
