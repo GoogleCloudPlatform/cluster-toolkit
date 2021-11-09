@@ -145,7 +145,8 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "managed",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     },
     {
       "type": "compute_image",
@@ -153,7 +154,8 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "data",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     }
   ]
 }

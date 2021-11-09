@@ -222,7 +222,8 @@
     {
       "name": "slurm_cluster_controller",
       "source": "github.com/SchedMD/slurm-gcp//tf/modules/controller/",
-      "version": "v4.0.4"
+      "version": "v4.0.4",
+      "description": null
     }
   ],
   "outputs": [

@@ -70,7 +70,8 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "data",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     },
     {
       "type": "compute_subnetwork",
@@ -78,7 +79,8 @@
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "data",
-      "version": "latest"
+      "version": "latest",
+      "description": null
     }
   ]
 }
