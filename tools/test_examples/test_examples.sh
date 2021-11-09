@@ -27,7 +27,9 @@ do
     { echo "could not set blueprint_name"; exit 1; }
 
   PROJECT=${PROJECT:-$(gcloud config get-value project 2>/dev/null)}
-  [[ -z "$PROJECT" ]] && { echo "PROJECT is not set."; exit 1; }
+  if [ -z "$PROJECT" ]; then echo "PROJECT is not set."; exit 1;
+  else echo PROJECT=$PROJECT
+  fi
 
   sed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
     { echo "could not set project_id"; exit 1; }
