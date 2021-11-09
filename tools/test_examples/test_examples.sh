@@ -25,7 +25,12 @@ do
   cd "${tmpdir}"
   sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" ${exampleFile} || \
     { echo "could not set blueprint_name"; exit 1; }
-  PROJECT=$(gcloud config get-value project 2>/dev/null)
+
+  PROJECT=${PROJECT:-$(gcloud config get-value project 2>/dev/null)}
+  if [ -z "$PROJECT" ]; then echo "PROJECT is not set."; exit 1;
+  else echo PROJECT=$PROJECT
+  fi
+
   sed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
     { echo "could not set project_id"; exit 1; }
   cd ${cwd}
