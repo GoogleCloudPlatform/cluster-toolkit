@@ -78,10 +78,6 @@ resource_groups:
       - $(homefs.network_storage)
       - $(scratchfs.network_storage)
       - $(projectsfs.network_storage)
-      login_network_storage:
-      - $(homefs.network_storage)
-      - $(scratchfs.network_storage)
-      - $(projectsfs.network_storage)
       partitions:
       - $(compute_partition.partition)
 
@@ -91,10 +87,6 @@ resource_groups:
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:
-      - $(homefs.network_storage)
-      - $(scratchfs.network_storage)
-      - $(projectsfs.network_storage)
-      login_network_storage:
       - $(homefs.network_storage)
       - $(scratchfs.network_storage)
       - $(projectsfs.network_storage)
