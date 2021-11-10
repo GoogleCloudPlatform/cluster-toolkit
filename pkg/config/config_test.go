@@ -392,12 +392,12 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	globalLabels := bc.Config.Vars["labels"].(map[string]interface{})
 	ghpcBlueprint, exists := globalLabels[blueprintLabel]
 	c.Assert(exists, Equals, true)
-	c.Assert(ghpcBlueprint.(string), Equals, bc.Config.BlueprintName)
+	c.Assert(ghpcBlueprint, Equals, bc.Config.BlueprintName)
 
 	// Was the ghpc_deployment label set correctly?
 	ghpcDeployment, exists := globalLabels[deploymentLabel]
 	c.Assert(exists, Equals, true)
-	c.Assert(ghpcDeployment.(string), Equals, "undefined")
+	c.Assert(ghpcDeployment, Equals, "undefined")
 
 	// Was "labels" created for the resource with no settings?
 	_, exists = bc.Config.ResourceGroups[0].Resources[0].Settings["labels"]
