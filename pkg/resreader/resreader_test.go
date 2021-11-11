@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 )
 
@@ -83,6 +84,34 @@ func (s *MySuite) TestFactory(c *C) {
 }
 
 // hcl_utils.go
+func getTestFS() afero.IOFS {
+	aferoFS := afero.NewMemMapFs()
+	aferoFS.MkdirAll("resources/network/vpc", 0755)
+	afero.WriteFile(
+		aferoFS, "resources/network/vpc/main.tf", []byte(testMainTf), 0644)
+	return afero.NewIOFS(aferoFS)
+}
+
+func (s *MySuite) TestCopyFSToTempDir(c *C) {
+	// Setup
+	testResFS := getTestFS()
+
+	// Success
+	testDir, err := copyFSToTempDir(testResFS, "resources/")
+	defer os.RemoveAll(testDir)
+	c.Assert(err, IsNil)
+	fInfo, err := os.Stat(path.Join(testDir, "network/vpc/main.tf"))
+	c.Assert(err, IsNil)
+	c.Assert(fInfo.Name(), Equals, "main.tf")
+	c.Assert(fInfo.Size() > 0, Equals, true)
+	c.Assert(fInfo.IsDir(), Equals, false)
+	fInfo, err = os.Stat(path.Join(testDir, "network/vpc"))
+	c.Assert(err, IsNil)
+	c.Assert(fInfo.Name(), Equals, "vpc")
+	c.Assert(fInfo.Size() > 0, Equals, true)
+	c.Assert(fInfo.IsDir(), Equals, true)
+}
+
 func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
@@ -104,10 +133,54 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	_, err = getHCLInfo(pathToEmptyDir)
 	expectedErr = "Source is not a terraform or packer module: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Invalid: No embedded resource
+	badEmbeddedRes := "resources/does/not/exist"
+	_, err = getHCLInfo(badEmbeddedRes)
+	expectedErr = "failed to copy embedded resource at .*"
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Invalid: Unsupported Resource Source
+	badSource := "github.com/GoogleCloudPlatform/hpc-toolkit/resources"
+	_, err = getHCLInfo(badSource)
+	expectedErr = "invalid source .*"
+	c.Assert(err, ErrorMatches, expectedErr)
 }
 
 // tfreader.go
-// util functions
+func (s *MySuite) TestGetInfo_TFWriter(c *C) {
+	reader := TFReader{allResInfo: make(map[string]ResourceInfo)}
+	resourceInfo, err := reader.GetInfo(terraformDir)
+	c.Assert(err, IsNil)
+	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
+	c.Assert(resourceInfo.Outputs[0].Name, Equals, "test_output")
+}
+
+// packerreader.go
+func (s *MySuite) TestGetInfo_PackerReader(c *C) {
+	// Didn't already exist, succeeds
+	reader := PackerReader{allResInfo: make(map[string]ResourceInfo)}
+	resourceInfo, err := reader.GetInfo(packerDir)
+	c.Assert(err, IsNil)
+	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
+
+	// Already exists, succeeds
+	existingResourceInfo, err := reader.GetInfo(packerDir)
+	c.Assert(err, IsNil)
+	c.Assert(
+		existingResourceInfo.Inputs[0].Name, Equals, resourceInfo.Inputs[0].Name)
+}
+
+// metareader.go
+func (s *MySuite) TestGetInfo_MetaReader(c *C) {
+	// Not implemented, expect that error
+	reader := MetaReader{}
+	_, err := reader.GetInfo("")
+	expErr := "Meta GetInfo not implemented: .*"
+	c.Assert(err, ErrorMatches, expErr)
+}
+
+// Util Functions
 func createTmpResource() {
 	var err error
 	tmpResourceDir, err = ioutil.TempDir("", "resreader_tests_*")
@@ -190,38 +263,6 @@ func teardownTmpResource() {
 			"resreader_test: Failed to delete contents of test directory %s, %v",
 			tmpResourceDir, err)
 	}
-}
-
-func (s *MySuite) TestGetInfo_TFWriter(c *C) {
-	reader := TFReader{allResInfo: make(map[string]ResourceInfo)}
-	resourceInfo, err := reader.GetInfo(terraformDir)
-	c.Assert(err, IsNil)
-	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
-	c.Assert(resourceInfo.Outputs[0].Name, Equals, "test_output")
-}
-
-// packerreader.go
-func (s *MySuite) TestGetInfo_PackerReader(c *C) {
-	// Didn't already exist, succeeds
-	reader := PackerReader{allResInfo: make(map[string]ResourceInfo)}
-	resourceInfo, err := reader.GetInfo(packerDir)
-	c.Assert(err, IsNil)
-	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
-
-	// Already exists, succeeds
-	existingResourceInfo, err := reader.GetInfo(packerDir)
-	c.Assert(err, IsNil)
-	c.Assert(
-		existingResourceInfo.Inputs[0].Name, Equals, resourceInfo.Inputs[0].Name)
-}
-
-// metareader.go
-func (s *MySuite) TestGetInfo_MetaReader(c *C) {
-	// Not implemented, expect that error
-	reader := MetaReader{}
-	_, err := reader.GetInfo("")
-	expErr := "Meta GetInfo not implemented: .*"
-	c.Assert(err, ErrorMatches, expErr)
 }
 
 func TestMain(m *testing.M) {

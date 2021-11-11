@@ -23,18 +23,21 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: ./resources/network/pre-existing-vpc
+    # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+    # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+    # Example - ./resources/network/pre-existing-vpc
+  - source: resources/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: ./resources/file-system/filestore
+  - source: resources/file-system/filestore
     kind: terraform
     id: homefs
     settings:
       local_mount: /home
       network_name: $(network1.network_name)
 
-  - source: ./resources/file-system/filestore
+  - source: resources/file-system/filestore
     kind: terraform
     id: projectsfs
     settings:
@@ -43,7 +46,7 @@ resource_groups:
       local_mount: /projects
       network_name: $(network1.network_name)
 
-  - source: ./resources/third-party/file-system/DDN-EXAScaler
+  - source: resources/third-party/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     settings:
@@ -52,7 +55,7 @@ resource_groups:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       subnetwork_address: ((module.network1.primary_subnetwork.ip_cidr_range))
 
-  - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     settings:
@@ -64,7 +67,7 @@ resource_groups:
       - $(scratchfs.network_storage)
       - $(projectsfs.network_storage)
 
-  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     settings:
@@ -76,7 +79,7 @@ resource_groups:
       partitions:
       - $(compute_partition.partition)
 
-  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     settings:
