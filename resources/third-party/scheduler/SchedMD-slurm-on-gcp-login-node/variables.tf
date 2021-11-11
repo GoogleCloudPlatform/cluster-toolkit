@@ -75,7 +75,7 @@ variable "labels" {
 variable "login_machine_type" {
   description = "Machine type to use for login node instances."
   type        = string
-  default     = "n1-standard-2"
+  default     = "c2-standard-16"
 }
 
 variable "munge_key" {

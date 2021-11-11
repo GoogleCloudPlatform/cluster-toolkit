@@ -72,7 +72,7 @@ variable "disable_controller_public_ips" {
 variable "disable_compute_public_ips" {
   description = "If set to true, create Cloud NAT gateway and enable IAP FW rules"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "labels" {
@@ -90,7 +90,7 @@ variable "login_node_count" {
 variable "controller_machine_type" {
   description = "Compute Platform machine type to use in controller node creation"
   type        = string
-  default     = "n2-standard-2"
+  default     = "c2-standard-16"
 }
 
 variable "munge_key" {

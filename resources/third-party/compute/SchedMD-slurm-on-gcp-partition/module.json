@@ -20,7 +20,7 @@
       "name": "enable_placement",
       "type": "bool",
       "description": "Enable placement groups",
-      "default": false,
+      "default": true,
       "required": false
     },
     {
@@ -47,8 +47,8 @@
     {
       "name": "image_hyperthreads",
       "type": "bool",
-      "description": "Enable or disabling hypethreading",
-      "default": true,
+      "description": "Enable hyperthreading",
+      "default": false,
       "required": false
     },
     {
