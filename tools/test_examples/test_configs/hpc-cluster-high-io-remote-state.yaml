@@ -57,7 +57,7 @@ resource_groups:
       network_name: $(network1.network_name)
       subnetwork_name: ((module.network1.primary_subnetwork.name))
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     settings:
@@ -85,7 +85,7 @@ resource_groups:
       partitions:
       - $(compute_partition.partition)
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     settings:

@@ -20,11 +20,12 @@ package reswriter
 import (
 	"embed"
 	"hpc-toolkit/pkg/config"
-	"io/fs"
 	"log"
 	"os"
 	"path"
 	"strings"
+
+	"hpc-toolkit/pkg/resutils"
 
 	"github.com/otiai10/copy"
 )
@@ -101,46 +102,8 @@ func getTemplate(filename string) string {
 	return string(tmplText)
 }
 
-type baseFS interface {
-	ReadDir(string) ([]fs.DirEntry, error)
-	ReadFile(string) ([]byte, error)
-}
-
-func copyDirFromResources(fs baseFS, source string, dest string) error {
-	dirEntries, err := fs.ReadDir(source)
-	if err != nil {
-		return err
-	}
-	for _, dirEntry := range dirEntries {
-		entryName := dirEntry.Name()
-		entrySource := path.Join(source, entryName)
-		entryDest := path.Join(dest, entryName)
-		if dirEntry.IsDir() {
-			if err := os.Mkdir(entryDest, 0755); err != nil {
-				return err
-			}
-			if err = copyDirFromResources(fs, entrySource, entryDest); err != nil {
-				return err
-			}
-		} else {
-			fileBytes, err := fs.ReadFile(entrySource)
-			if err != nil {
-				return err
-			}
-			copyFile, err := os.Create(entryDest)
-			if err != nil {
-				return nil
-			}
-			if _, err = copyFile.Write(fileBytes); err != nil {
-				return nil
-			}
-		}
-	}
-	return nil
-}
-
-func copyEmbedded(fs baseFS, source string, dest string) error {
-	return copyDirFromResources(fs, source, dest)
+func copyEmbedded(fs resutils.BaseFS, source string, dest string) error {
+	return resutils.CopyDirFromResources(fs, source, dest)
 }
 
 func copyFromPath(source string, dest string) error {
@@ -150,16 +113,6 @@ func copyFromPath(source string, dest string) error {
 		return err
 	}
 	return nil
-}
-
-func isLocalPath(source string) bool {
-	return strings.HasPrefix(source, "./") ||
-		strings.HasPrefix(source, "../") ||
-		strings.HasPrefix(source, "/")
-}
-
-func isEmbeddedPath(source string) bool {
-	return strings.HasPrefix(source, "resources/")
 }
 
 func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
@@ -185,11 +138,11 @@ func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 
 			// Check source type and copy
 			switch src := resource.Source; {
-			case isLocalPath(src):
+			case resutils.IsLocalPath(src):
 				if err = copyFromPath(src, destPath); err != nil {
 					log.Fatal(err)
 				}
-			case isEmbeddedPath(src):
+			case resutils.IsEmbeddedPath(src):
 				if err = os.MkdirAll(destPath, 0755); err != nil {
 					log.Fatalf("failed to create resource path %s: %v", destPath, err)
 				}

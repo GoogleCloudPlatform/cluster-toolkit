@@ -59,7 +59,7 @@ resource_groups:
         startup-script: $(startup.startup_script_content)
         startup-script-custom: $(startup.startup_script_custom_content)
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
     settings:

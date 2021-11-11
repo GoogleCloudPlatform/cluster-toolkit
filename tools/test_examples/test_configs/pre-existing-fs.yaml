@@ -55,7 +55,7 @@ resource_groups:
       network_storage:
       - $(homefs.network_storage)
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm
     settings:

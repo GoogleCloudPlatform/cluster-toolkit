@@ -23,6 +23,9 @@ vars:
 resource_groups:
 - group: primary
   resources:
+    # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+    # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+    # Example - ./resources/network/pre-existing-vpc
   - source: resources/network/pre-existing-vpc
     kind: terraform
     id: network1

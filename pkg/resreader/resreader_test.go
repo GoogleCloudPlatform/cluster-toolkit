@@ -92,29 +92,6 @@ func getTestFS() afero.IOFS {
 	return afero.NewIOFS(aferoFS)
 }
 
-func (s *MySuite) TestCopyDirFromResources(c *C) {
-	// Setup
-	testResFS := getTestFS()
-	testDir := path.Join(tmpResourceDir, "TestCopyDirFromResources")
-	if err := os.Mkdir(testDir, 0755); err != nil {
-		log.Fatal(err)
-	}
-
-	// Success
-	err := copyDirFromResources(testResFS, "resources/network/vpc", testDir)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(testDir, "main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-
-	// Invalid path
-	err = copyDirFromResources(testResFS, "not/valid", testDir)
-	c.Assert(err, ErrorMatches, "*file does not exist")
-
-}
-
 func (s *MySuite) TestCopyFSToTempDir(c *C) {
 	// Setup
 	testResFS := getTestFS()

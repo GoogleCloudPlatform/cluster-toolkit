@@ -29,9 +29,9 @@ import (
 
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
-	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
+	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 )
 
@@ -111,63 +111,6 @@ func getTestFS() afero.IOFS {
 	afero.WriteFile(
 		aferoFS, "resources/network/vpc/main.tf", []byte("test string"), 0644)
 	return afero.NewIOFS(aferoFS)
-}
-
-func (s *MySuite) TestCopyDirFromResources(c *C) {
-	// Setup
-	testResFS := getTestFS()
-	log.Println(testResFS.ReadDir("."))
-	copyDir := path.Join(testDir, "TestCopyDirFromResources")
-	if err := os.Mkdir(copyDir, 0755); err != nil {
-		log.Fatal(err)
-	}
-
-	// Success
-	err := copyDirFromResources(testResFS, "resources/network/vpc", copyDir)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(copyDir, "main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-
-	// Success: copy files AND dirs
-	err = copyDirFromResources(testResFS, "resources/network/", copyDir)
-	c.Assert(err, IsNil)
-	fInfo, err = os.Stat(path.Join(copyDir, "vpc/main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(path.Join(copyDir, "vpc"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "vpc")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, true)
-
-	// Invalid path
-	err = copyDirFromResources(testResFS, "not/valid", copyDir)
-	c.Assert(err, ErrorMatches, "*file does not exist")
-}
-
-func (s *MySuite) TestIsEmbeddedPath(c *C) {
-	// True: Is an embedded path
-	ret := isEmbeddedPath("resources/anything/else")
-	c.Assert(ret, Equals, true)
-
-	// False: Local path
-	ret = isEmbeddedPath("./anything/else")
-	c.Assert(ret, Equals, false)
-
-	ret = isEmbeddedPath("./resources")
-	c.Assert(ret, Equals, false)
-
-	ret = isEmbeddedPath("../resources/")
-	c.Assert(ret, Equals, false)
-
-	// False, other
-	ret = isEmbeddedPath("github.com/resources")
-	c.Assert(ret, Equals, false)
 }
 
 func (s *MySuite) TestCopyEmbedded(c *C) {

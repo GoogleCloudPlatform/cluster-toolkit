@@ -23,7 +23,7 @@ vars:
 resource_groups:
 - group: infrastructure
   resources:
-  - source: resources/network/vpc
+  - source: ./resources/network/vpc
     kind: terraform
     id: network
 
@@ -37,7 +37,7 @@ resource_groups:
       labels:
         ghpc_role: storage-home
 
-  - source: resources/file-system/filestore
+  - source: ./resources/file-system/filestore
     kind: terraform
     id: apps
     settings:
@@ -47,7 +47,7 @@ resource_groups:
       labels:
         ghpc_role: storage-apps
 
-  - source: resources/scripts/startup-script
+  - source: ./resources/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -59,7 +59,7 @@ resource_groups:
         - type: "ansible-local"
           file: "modules/startup-script/examples/mount.yaml"
 
-  - source: resources/compute/simple-instance
+  - source: ./resources/compute/simple-instance
     kind: terraform
     id: license-server-1
     settings:
