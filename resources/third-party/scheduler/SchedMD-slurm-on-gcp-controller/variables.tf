@@ -72,7 +72,7 @@ variable "disable_controller_public_ips" {
 variable "disable_compute_public_ips" {
   description = "If set to true, create Cloud NAT gateway and enable IAP FW rules"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "labels" {

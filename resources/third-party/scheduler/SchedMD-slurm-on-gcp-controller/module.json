@@ -116,7 +116,7 @@
       "name": "disable_compute_public_ips",
       "type": "bool",
       "description": "If set to true, create Cloud NAT gateway and enable IAP FW rules",
-      "default": false,
+      "default": true,
       "required": false
     },
     {

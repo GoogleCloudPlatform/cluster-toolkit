@@ -83,6 +83,7 @@ resource_groups:
     kind: terraform
     id: slurm_login
     settings:
+      login_machine_type: n2-standard-4
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:
       - $(homefs.network_storage)
