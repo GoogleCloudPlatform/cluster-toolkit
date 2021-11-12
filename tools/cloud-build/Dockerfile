@@ -22,7 +22,7 @@ RUN apt-get -y update && apt-get install -y unzip python3-pip terraform packer
 RUN pip install pre-commit
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
-RUN go install github.com/terraform-docs/terraform-docs@v0.16.0
+RUN go install github.com/terraform-docs/terraform-docs@latest
 RUN go install golang.org/x/lint/golint@latest
 RUN go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 RUN go install github.com/go-critic/go-critic/cmd/gocritic@latest
