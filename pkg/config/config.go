@@ -273,6 +273,13 @@ func (bc BlueprintConfig) expand() {
 }
 
 func (bc BlueprintConfig) validate() {
-	bc.validateResources()
-	bc.validateResourceSettings()
+	if err := bc.validateVars(); err != nil {
+		log.Fatal(err)
+	}
+	if err := bc.validateResources(); err != nil {
+		log.Fatal(err)
+	}
+	if err := bc.validateResourceSettings(); err != nil {
+		log.Fatal(err)
+	}
 }

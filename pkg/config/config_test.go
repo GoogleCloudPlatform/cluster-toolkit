@@ -17,11 +17,13 @@ limitations under the License.
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
+	"strings"
 	"testing"
 
 	"hpc-toolkit/pkg/resreader"
@@ -591,6 +593,33 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 func (s *MySuite) TestValidateResources(c *C) {
 	bc := getBlueprintConfigForTest()
 	bc.validateResources()
+}
+
+func (s *MySuite) TestValidateVars(c *C) {
+	// Success
+	bc := getBlueprintConfigForTest()
+	err := bc.validateVars()
+	c.Assert(err, IsNil)
+
+	// Fail: Nil project_id
+	bc.Config.Vars["project_id"] = nil
+	err = bc.validateVars()
+	c.Assert(err, ErrorMatches, "global variable project_id was not set")
+
+	// Success: project_id not set
+	delete(bc.Config.Vars, "project_id")
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	err = bc.validateVars()
+	log.SetOutput(os.Stderr)
+	c.Assert(err, IsNil)
+	hasWarning := strings.Contains(buf.String(), "WARNING: No project_id")
+	c.Assert(hasWarning, Equals, true)
+
+	// Fail: labels not a map
+	bc.Config.Vars["labels"] = "a_string"
+	err = bc.validateVars()
+	c.Assert(err, ErrorMatches, "vars.labels must be a map")
 }
 
 func (s *MySuite) TestValidateResouceSettings(c *C) {
