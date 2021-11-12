@@ -230,7 +230,7 @@ variable "mgs" {
     public_ip  = bool
   })
   default = {
-    node_type  = "n2-standard-2"
+    node_type  = "n2-standard-32"
     node_cpu   = "Intel Cascade Lake"
     nic_type   = "GVNIC"
     public_ip  = true
@@ -348,7 +348,7 @@ variable "oss" {
     public_ip  = bool
   })
   default = {
-    node_type  = "n2-standard-16"
+    node_type  = "n1-standard-16"
     node_cpu   = "Intel Cascade Lake"
     nic_type   = "GVNIC"
     public_ip  = true
