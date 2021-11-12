@@ -76,7 +76,7 @@
       "name": "login_machine_type",
       "type": "string",
       "description": "Machine type to use for login node instances.",
-      "default": "c2-standard-16",
+      "default": "n2-standard-2",
       "required": false
     },
     {

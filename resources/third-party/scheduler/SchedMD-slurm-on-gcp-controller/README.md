@@ -75,7 +75,7 @@ No resources.
 | <a name="input_compute_node_service_account"></a> [compute\_node\_service\_account](#input\_compute\_node\_service\_account) | Service Account for compute nodes. | `string` | `null` | no |
 | <a name="input_controller_image"></a> [controller\_image](#input\_controller\_image) | Slurm image to use for the controller instance | `string` | `"projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7"` | no |
 | <a name="input_controller_instance_template"></a> [controller\_instance\_template](#input\_controller\_instance\_template) | Instance template to use to create controller instance | `string` | `null` | no |
-| <a name="input_controller_machine_type"></a> [controller\_machine\_type](#input\_controller\_machine\_type) | Compute Platform machine type to use in controller node creation | `string` | `"c2-standard-16"` | no |
+| <a name="input_controller_machine_type"></a> [controller\_machine\_type](#input\_controller\_machine\_type) | Compute Platform machine type to use in controller node creation | `string` | `"n2-standard-2"` | no |
 | <a name="input_controller_scopes"></a> [controller\_scopes](#input\_controller\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
 | <a name="input_controller_secondary_disk"></a> [controller\_secondary\_disk](#input\_controller\_secondary\_disk) | Create secondary disk mounted to controller node | `bool` | `false` | no |
 | <a name="input_controller_secondary_disk_size"></a> [controller\_secondary\_disk\_size](#input\_controller\_secondary\_disk\_size) | Size of disk for the secondary disk | `number` | `100` | no |

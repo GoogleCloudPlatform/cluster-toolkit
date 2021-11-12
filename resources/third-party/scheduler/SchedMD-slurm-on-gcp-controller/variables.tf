@@ -90,7 +90,7 @@ variable "login_node_count" {
 variable "controller_machine_type" {
   description = "Compute Platform machine type to use in controller node creation"
   type        = string
-  default     = "c2-standard-16"
+  default     = "n2-standard-2"
 }
 
 variable "munge_key" {
