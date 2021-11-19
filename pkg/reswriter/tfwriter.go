@@ -237,6 +237,22 @@ func writeMain(
 
 		// For each Setting
 		for setting, value := range ctySettings {
+			if setting == "labels" {
+				// Manually compose merge(var.labels, {res.labels}) using tokens
+				mergeBytes := []byte("merge(var.labels, ")
+
+				labelsStr := flattenHCLLabelsMap(
+					string(hclwrite.TokensForValue(value).Bytes()))
+
+				mergeBytes = append(mergeBytes, []byte(labelsStr)...)
+				mergeBytes = append(mergeBytes, byte(')'))
+
+				mergeTok := simpleTokenFromString(string(mergeBytes))
+				labelsTokens := []*hclwrite.Token{&mergeTok}
+
+				moduleBody.SetAttributeRaw(setting, labelsTokens)
+				continue
+			}
 			// Add attributes
 			moduleBody.SetAttributeValue(setting, value)
 		}
@@ -248,6 +264,13 @@ func writeMain(
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
 	}
 	return nil
+}
+
+func flattenHCLLabelsMap(hclString string) string {
+	hclString = strings.ReplaceAll(hclString, "\"\n", "\",")
+	hclString = strings.ReplaceAll(hclString, "\n", "")
+	hclString = strings.Join(strings.Fields(hclString), " ")
+	return hclString
 }
 
 func simpleTokenFromString(str string) hclwrite.Token {
