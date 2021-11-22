@@ -43,6 +43,10 @@ vars:
   labels:
     ghpc_blueprint: simple
     deployment_name: deployment_name
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: hpc-toolkit-tf-state
 resource_groups:
 - group: group1
   resources:
