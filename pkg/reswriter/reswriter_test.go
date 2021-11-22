@@ -493,6 +493,20 @@ func (s *MySuite) TestWriteMain(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
+	// Test with labels setting
+	testResource.Settings["labels"] = map[string]interface{}{
+		"ghpc_role":    "testResource",
+		"custom_label": "",
+	}
+	err = writeMain(testResources, testBackend, testMainDir)
+	c.Assert(err, IsNil)
+	exists, err = stringExistsInFile("custom_label", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+	exists, err = stringExistsInFile("var.labels", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
 	// Test with Backend
 	testBackend.Type = "gcs"
 	testBackend.Configuration = map[string]interface{}{
