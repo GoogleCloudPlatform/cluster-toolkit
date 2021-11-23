@@ -16,31 +16,63 @@ package resreader
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
+
+	"hpc-toolkit/pkg/resutils"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
+
+// copyFSToTempDir is a temporary workaround until tfconfig.ReadFromFilesystem
+// works against embed.FS.
+// Open Issue: https://github.com/hashicorp/terraform-config-inspect/issues/68
+func copyFSToTempDir(fs resutils.BaseFS, modulePath string) (string, error) {
+	tmpDir, err := ioutil.TempDir("", "tfconfig-module-*")
+	if err != nil {
+		return tmpDir, err
+	}
+	err = resutils.CopyDirFromResources(fs, modulePath, tmpDir)
+	return tmpDir, err
+}
 
 func getHCLInfo(source string) (ResourceInfo, error) {
 	ret := ResourceInfo{}
 
 	// Validate source
-	fileInfo, err := os.Stat(source)
-	if os.IsNotExist(err) {
-		return ret, fmt.Errorf("Source to resource does not exist: %s", source)
-	}
-	if err != nil {
-		return ret, fmt.Errorf("Failed to read source of resource: %s", source)
-	}
-	if !fileInfo.IsDir() {
-		return ret, fmt.Errorf("Source of resource must be a directory: %s", source)
-	}
-	if !tfconfig.IsModuleDir(source) {
-		return ret, fmt.Errorf(
-			"Source is not a terraform or packer module: %s", source)
-	}
+	var module *tfconfig.Module
+	switch {
+	case resutils.IsLocalPath(source):
+		fileInfo, err := os.Stat(source)
+		if os.IsNotExist(err) {
+			return ret, fmt.Errorf("Source to resource does not exist: %s", source)
+		}
+		if err != nil {
+			return ret, fmt.Errorf("Failed to read source of resource: %s", source)
+		}
+		if !fileInfo.IsDir() {
+			return ret, fmt.Errorf("Source of resource must be a directory: %s", source)
+		}
+		if !tfconfig.IsModuleDir(source) {
+			return ret, fmt.Errorf(
+				"Source is not a terraform or packer module: %s", source)
+		}
 
-	module, _ := tfconfig.LoadModule(source)
+		module, _ = tfconfig.LoadModule(source)
+	case resutils.IsEmbeddedPath(source):
+		resDir, err := copyFSToTempDir(ResourceFS, source)
+		defer os.RemoveAll(resDir)
+		if err != nil {
+			err = fmt.Errorf("failed to copy embedded resource at %s to tmp dir: %v",
+				source, err)
+			return ret, err
+		}
+		module, _ = tfconfig.LoadModule(resDir)
+	default:
+		return ret, fmt.Errorf(
+			"invalid source (%s), only local and embedded sources are supported",
+			source)
+	}
 	var vars []VarInfo
 	var outs []VarInfo
 	for _, v := range module.Variables {

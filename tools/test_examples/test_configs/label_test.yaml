@@ -12,26 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hexa-net
+blueprint_name: label_test
 
 vars:
-  project_id: hpc-toolkit-demo
-  deployment_name: network
+  project_id: test_project
+  deployment_name: test_label_merge
   region: europe-west4
   zone: europe-west4-a
+  labels:
+    "ghpc_custom": "custom_label"
+    "ghpc_deployment": "custom_deployment"
 
 resource_groups:
-- group: primary
+- group: infrastructure
   resources:
   - source: resources/network/vpc
     kind: terraform
-    id: network1
+    id: network
 
-  - source: resources/third-party/file-system/DDN-EXAScaler
+  - source: resources/file-system/filestore
     kind: terraform
-    id: scratchfs
+    id: homefs
     settings:
-      local_mount: /scratch
-      network_name: $(network1.network_name)
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      subnetwork_address: ((module.network1.primary_subnetwork.ip_cidr_range))
+      name: homefs
+      local_mount: /home
+      network_name: $(network.network_name)
+      size_gb: 3000
+      labels:
+        local_custom: "some_value"
+        ghpc_deployment: "deployment_override"
+
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: homefs1
+    settings:
+      name: homefs
+      local_mount: /home
+      network_name: $(network.network_name)
+      size_gb: 3000
+      labels:
+        ghpc_role: "foobar"
+
+

@@ -72,25 +72,13 @@ variable "disable_controller_public_ips" {
 variable "disable_compute_public_ips" {
   description = "If set to true, create Cloud NAT gateway and enable IAP FW rules"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "labels" {
   description = "Labels to add to controller instance. List of key key, value pairs."
   type        = any
   default     = {}
-}
-
-variable "login_network_storage" {
-  description = "An array of network attached storage mounts to be configured on the login and controller instances."
-  type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string
-  }))
-  default = []
 }
 
 variable "login_node_count" {

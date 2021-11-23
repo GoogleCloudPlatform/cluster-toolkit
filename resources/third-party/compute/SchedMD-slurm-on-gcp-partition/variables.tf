@@ -48,9 +48,9 @@ variable "image" {
 }
 
 variable "image_hyperthreads" {
-  description = "Enable or disabling hypethreading"
+  description = "Enable hyperthreading"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "compute_disk_type" {
@@ -109,7 +109,7 @@ variable "subnetwork_name" {
 variable "enable_placement" {
   description = "Enable placement groups"
   type        = bool
-  default     = false
+  default     = true
 }
 
 

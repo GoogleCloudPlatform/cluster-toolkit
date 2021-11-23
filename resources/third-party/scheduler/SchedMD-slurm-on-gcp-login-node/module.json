@@ -76,14 +76,7 @@
       "name": "login_machine_type",
       "type": "string",
       "description": "Machine type to use for login node instances.",
-      "default": "n1-standard-2",
-      "required": false
-    },
-    {
-      "name": "login_network_storage",
-      "type": "list(object({\n    server_ip    = string,\n    remote_mount = string,\n    local_mount  = string,\n    fs_type      = string,\n  mount_options = string }))",
-      "description": "An array of network attached storage mounts to be configured on the login and controller instances.",
-      "default": [],
+      "default": "n2-standard-2",
       "required": false
     },
     {
