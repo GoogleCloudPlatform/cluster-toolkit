@@ -333,6 +333,13 @@ func writeVersions(dst string) error {
 	return nil
 }
 
+func printTerraformInstructions(grpPath string) {
+	printInstructionsPreamble("Terraform", grpPath)
+	fmt.Printf("  cd %s\n", grpPath)
+	fmt.Println("  terraform init")
+	fmt.Println("  terraform apply")
+}
+
 // writeTopLevel writes any needed files to the top layer of the blueprint
 func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 	bpName := yamlConfig.BlueprintName
@@ -388,6 +395,7 @@ func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 				"error creating outputs.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}
+		printTerraformInstructions(writePath)
 	}
 	return nil
 }

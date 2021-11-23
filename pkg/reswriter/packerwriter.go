@@ -44,7 +44,13 @@ func (w *PackerWriter) addNumResources(value int) {
 // writing to the blueprint directory
 func (w PackerWriter) prepareToWrite(yamlConfig *config.YamlConfig) {
 	updateStringsInConfig(yamlConfig, "packer")
-	flattenToHCLStrings(yamlConfig, "pakcer")
+	flattenToHCLStrings(yamlConfig, "packer")
+}
+
+func printPackerInstructions(grpPath string) {
+	printInstructionsPreamble("Packer", grpPath)
+	fmt.Printf("  cd %s\n", grpPath)
+	fmt.Println("  packer build image.pkr.hcl")
 }
 
 // writeResourceLevel writes any needed files to the resource layer
@@ -56,7 +62,11 @@ func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig) error {
 				continue
 			}
 			resPath := path.Join(groupPath, res.ID)
-			return writePackerAutoVariables(packerAutoVarFilename, res, resPath)
+			err := writePackerAutoVariables(packerAutoVarFilename, res, resPath)
+			if err != nil {
+				return err
+			}
+			printPackerInstructions(resPath)
 		}
 	}
 	return nil

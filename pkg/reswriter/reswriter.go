@@ -19,6 +19,7 @@ package reswriter
 
 import (
 	"embed"
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"log"
 	"os"
@@ -159,6 +160,11 @@ func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 			writer.addNumResources(1)
 		}
 	}
+}
+
+func printInstructionsPreamble(kind string, path string) {
+	fmt.Printf("%s group was successfully created in directory %s\n", kind, path)
+	fmt.Println("To deploy, run the following commands:")
 }
 
 // WriteBlueprint writes the blueprint using resources defined in config.
