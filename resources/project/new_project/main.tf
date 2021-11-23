@@ -1,7 +1,3 @@
-provider "google" {
-  impersonate_service_account = "terraform@lab-common.iam.gserviceaccount.com"
-}
-
 module "project-factory" {
   source  = "terraform-google-modules/project-factory/google"
   version = "~> 10.1"
