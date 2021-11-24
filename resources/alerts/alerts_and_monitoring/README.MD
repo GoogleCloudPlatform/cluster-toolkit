@@ -1,29 +1,64 @@
-google_monitoring_alert_policy
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+Copyright 2021 Google LLC
 
-Argument Reference:
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-display_name - A short name or phrase used to identify the policy in dashboards, notifications, and incidents. To avoid confusion, don't use the same display name for multiple policies in the same project. The name is limited to 512 Unicode characters.
+     http://www.apache.org/licenses/LICENSE-2.0
 
-combiner - How to combine the results of multiple conditions to determine if an incident should be opened. Possible values are AND, OR, and AND_WITH_MATCHING_RESOURCE.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-conditions - A list of conditions for the policy. The conditions are combined by AND or OR according to the combiner field. If the combined conditions evaluate to true, then an incident is created. A policy can have from one to six conditions.
+## Requirements
 
-condition_threshold - A condition that compares a time series against a threshold.
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 3.0 |
 
-aggregations - Specifies the alignment of data points in individual time series as well as how to combine the retrieved time series together (such as when aggregating multiple streams on each resource to a single stream for each resource or when aggregating streams across all members of a group of resources). Multiple aggregations are applied in the order specified.
+## Providers
 
-trigger - The number/percent of time series for which the comparison must hold in order for the condition to trigger. If unspecified, then the condition will trigger if the comparison is true for any of the time series that have been identified by filter and aggregations.
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | ~> 3.0 |
 
-The trigger block supports:
+## Resources
 
-count - The absolute number of time series that must fail the predicate for the condition to be triggered.
+| Name                                                         | Type     |
+| ------------------------------------------------------------ | -------- |
+| [google_monitoring_notification_channel](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/monitoring_notification_channel) | resource |
+| ["google_monitoring_alert_policy" "firestore_CPU_Utilization"](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| ["google_monitoring_alert_policy" "firestore_Disk_storage" ](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| [ "google_monitoring_alert_policy" "compute_engine_memory_Usage"](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| ["google_monitoring_alert_policy" "SQL_Storage" ](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| ["google_monitoring_alert_policy" "Bigquery_execution_time" ](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| [ "google_monitoring_alert_policy" "GCS_Request_Count"](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| ["google_monitoring_alert_policy" "SQL_Network_Connection_Count"](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| ["google_monitoring_alert_policy" "SQL_memory" ](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| ["google_monitoring_alert_policy" "Firewall_rule_hit"](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
-duration -The amount of time that a time series must fail to report new data to be considered failing. Currently, only values that are a multiple of a minute--e.g. 60s, 120s, or 300s --are supported.
+## Inputs
 
-filter - A filter that identifies which time series should be compared with the threshold.The filter is similar to the one that is specified in the MetricService.ListTimeSeries request (that call is useful to verify the time series that will be retrieved / processed) and must specify the metric type and optionally may contain restrictions on resource type, resource labels, and metric labels. This field may not exceed 2048 Unicode characters in length.
-
-
-per_series_aligner - The approach to be used to align individual time series. Not all alignment functions may be applied to all time series, depending on the metric type and value type of the original time series. Alignment may change the metric type or the value type of the time series.Time series data must be aligned in order to perform cross- time series reduction. If crossSeriesReducer is specified, then perSeriesAligner must be specified and not equal ALIGN_NONE and alignmentPeriod must be specified; otherwise, an error is returned. Possible values are ALIGN_NONE, ALIGN_DELTA, ALIGN_RATE, ALIGN_MIN,......
-
-
-alignment_period - The alignment period for per-time series alignment. If present, alignmentPeriod must be at least 60 seconds. After per-time series alignment, each time series will contain data points only on the period boundaries. If perSeriesAligner is not specified or equals ALIGN_NONE, then this field is ignored. If perSeriesAligner is specified and does not equal ALIGN_NONE, then this field must be defined; otherwise an error is returned.
+| Name | Description | Type | Default |
+|:-----|-------------|------|---------|
+| <a name="input_project"></a> [project\](#input\\_project\) | Project for which the alerts and monitoring  will be created | `string` | n/a |
+| <a name="input_display_name"></a> [display\_name](#input\_display\_name) | The name of the current deployment | `string` | ALL ALERTS |
+| <a name="input_alert_combiner"></a> [alert\_combiner](#input\_alert\_combiner) | The name of the network to be created. Defaults to {deployment\_name}\_net if null. | `string` | Combiner of alert |
+| <a name="input_duration"></a> [duration](#input\_duration) | Duration of the condition | `string`       | 300s |
+| <a name="input_condition_comparision"></a> [condition\_comparison](#input\_condition_comparison) | The region where Cloud NAT and Cloud Router will be configured | `string` | COMPARISON_GT |
+| <a name="input_aggregations_aligner"></a> [aggregations\_aligner](#input\_aggregations\_aligner) | Aggregation aligner to be displayed | `string` | ALIGN_NONE |
+| <a name="input_trigger_count"></a> [trigger\_count](#input\_trigger\_count) | trigger count | `number` | 1 |
+| <a name="input_notification_email_addresses"></a> [notification_email_addresses](#input\_notification_email_addresses) | The email for notifications | `List(string)` | zi.wang@hcl.com |
+| <a name="input_cpu_threshold"></a> [cpu\_threshold](#input\_cpu_threshold) | Mention the CPU threshold value | `string` | 0.5 |
+| <a name="input_filestore_disk_threhold"></a> [filestore\_disk\_threshold](#input\_filestore_disk_threshold) | The threshold value at which alert will be sent  for file store disk | `string` | 80 |
+| <a name="input_gce_threshold"></a> [gce\_threshold](#input\_project\_id) | The threshold value at which alert will be sent  for GCE memory usage | `string` | 0.6 |
+| <a name="input_cloudsql_storage_threshold"></a> [cloudsql\_storage_threshold](#input\\_cloudsql\_storage_threshold) | The threshold value at which alert will be sent  for cloudsql storage | `string` | 80 |
+| <a name="input_query_exection\_time"></a> [query_exection\_time](#input\_query\_exection\_time) | The threshold value at which alert will be sent  if bigquery execution time  overshoots the provided the value | `string` | 2 |
+| <a name="input_storage_request_count"></a> [storage_request_count](#input\_storage\_request\_count) | The threshold value at which alert will be sent if the number of storage requests exceeds | `string` | 2000 |
+| <a name="input_sql_network_connection"></a> [sql\_network\_connection](#input\sql_network_connection) | The threshold values at which alert will be sent if the number of connection to  cloudsql database exceeds | `string` | 1000 |
+| <a name="input_memory_utilization"></a> [memory\_utilization](#input\_memory_utilization) | The threshold value at which alert will be sent if the memory utilization of cloudsql exceeds | `string` | 90 |
+| <a name="input_hit_count"></a> [hit\_count](#input\_hit_count) | The threshold value at which alert will be sent if number of hits exceeds the threshold value | `string` | 100 |

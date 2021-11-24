@@ -40,7 +40,6 @@ variable "trigger_count" {
 variable "notification_email_addresses" {
   description = "The email for notifications"
   type   = list(string)
-  default = ["zi.wang@hcl.com",]
 }
 
 variable "cpu_threshold" {

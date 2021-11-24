@@ -1,0 +1,13 @@
+blueprint_name: 
+
+resource_groups:
+- group: primary
+  resources:
+  - source: ./resources/project/new-project
+    kind: terraform
+    id: project
+    settings:
+      project_id: test_project
+      folder_id: 334688113020 # random number
+      billing_account: "111110-M2N704-854685" # random billing number
+      org_id: 123456789 # random org id

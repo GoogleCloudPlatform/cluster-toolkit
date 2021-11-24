@@ -1,41 +1,55 @@
-BILLING:
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+Copyright 2021 Google LLC
 
-This source provides alerts on mail at chosen thresholds in terms of forecasted and actual spends on the project for example it can trigger an email alert when budget is exhausted to the levels like 25%, 50% and 75%.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Arguments Required:
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-amount -  The budgeted amount for each usage period.
+## Requirements
 
-display_name - User data for display name in UI. Must be <= 60 chars.
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 3.0 |
 
-billing_account -  ID of the billing account to set a budget on.
+## Providers
 
-specified_amount - A specified amount to use as the budget. currencyCode is optional. If specified, it must match the currency of the billing account. The currencyCode is provided on output.
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | ~> 3.0 |
 
-currency_code - The 3-letter currency code defined in ISO 4217.
+## Modules
 
-units - The whole units of the amount. For example if currencyCode is "USD", then 1 unit is one US dollar.
+No modules.
 
-threshold_rules -  Rules that trigger alerts (notifications of thresholds being crossed) when spend exceeds the specified percentages of the budget.
+## Resources
 
-threshold_rules block supports:
+| Name                                                         | Type        |
+| ------------------------------------------------------------ | ----------- |
+| [google_billing_account](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/billing_account) | resource    |
+| [google_project_service](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project) | data source |
+| [google_billing_budget.budget](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/billing_budget) | data source |
 
-threshold_percent - Send an alert when this threshold is exceeded. This is a 1.0-based percentage, so 0.5 = 50%. Must be >= 0.
+## Inputs
 
-spend_basis - The type of basis used to determine if spend has passed the threshold. Default value is CURRENT_SPEND. Possible values are CURRENT_SPEND and FORECASTED_SPEND.
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| <a name="input_bill_account"></a> [bill\_account](#input\_bill\_account) | billing account for which alerts should be sent. | `string` | n/a |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project id for which APIs will be enabled | `string` | n/a     |
+| <a name="input_budget_name"></a> [budget\_name](#input\_budget\_name) | Alias name for the budget | `string` | n/a |
+| <a name="input_amount"></a> [amount](#input\_amount) | The amount to use as the budget | `string` | 1000 |
+| <a name="input_currency"></a> [currency](#input\_currency) | The currency to use for the budget | `string` | USD |
+| <a name="input_email"></a> [email](#input\_email) | The email for notifications | `string` | zi.wangs@hcl.com |
+| <a name="input_percent1"></a> [percent1](#input\_percent1) | A list of percentages of the budget to alert on when threshold is exceeded | `number` | 0.5 |
+| <a name="input_percent2"></a> [percent2](#input\_percent2) | A list of percentages of the budget to alert on when threshold is exceeded | `number` | 0.75 |
+| <a name="input_percent3"></a> [percent3](#input\_percent3) | A list of percentages of the budget to alert on when threshold is exceeded | `number` | 0.8 |
+| <a name="input_percent4"></a> [percent4](#input\_percent4) | A list of percentages of the budget to alert on when threshold is exceeded | `number` | 1 |
 
-
-budget_filter -  Filters that define which resources are used to compute the actual spend against the budget. Structure is documented below.
-
-The budget_filter block supports:
-
-projects -  A set of projects of the form projects/{project_number}, specifying that usage from only this set of projects should be included in the budget. If omitted, the report will include all usage for the billing account, regardless of which project the usage occurred on.
-
-credit_types_treatment - Specifies how credits should be treated when determining spend for threshold calculations. Default value is INCLUDE_ALL_CREDITS. Possible values are INCLUDE_ALL_CREDITS, EXCLUDE_ALL_CREDITS, and INCLUDE_SPECIFIED_CREDITS.
-
-all_updates_rule - Defines notifications that are sent on every update to the billing account's spend, regardless of the thresholds defined using threshold rules.
-
-monitoring_notification_channels - The full resource name of a monitoring notification channel in the form projects/{project_id}/notificationChannels/{channel_id}. A maximum of 5 channels are allowed.
-
-disable_default_iam_recipients - Boolean. When set to true, disables default notifications sent when a threshold is exceeded. Default recipients are those with Billing Account Administrators and Billing Account Users IAM roles for the target account.

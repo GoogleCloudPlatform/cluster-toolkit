@@ -14,3 +14,7 @@ variable "default_service_account" {
   default     = "keep"
   type        = string
 }
+
+variable "org_id" {
+  type        = string
+}

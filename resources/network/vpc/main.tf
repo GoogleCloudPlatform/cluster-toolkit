@@ -92,11 +92,19 @@ module "cloud_router" {
   network = module.vpc.network_name
 }
 
+resource "google_compute_address" "nat_ips" {
+  count  = 2
+  name   = "nat-ips-${count.index}"
+  region = local.region
+}
+
+
 module "cloud_nat" {
   source     = "terraform-google-modules/cloud-nat/google"
   version    = "~> 1.4"
   project_id = local.project_id
   region     = local.region
+  nat_ips    = google_compute_address.nat_ips.*.self_link
   router     = module.cloud_router.router.name
 }
 

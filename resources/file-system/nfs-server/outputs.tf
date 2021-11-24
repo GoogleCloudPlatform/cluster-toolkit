@@ -5,7 +5,6 @@ output "network_storage" {
     remote_mount  = "/tools"
     local_mount   = "/tools"
     fs_type       = "nfs"
-    # mount_options = "defaults,_netdev"
     mount_options = "defaults,hard,intr"
   }
 }

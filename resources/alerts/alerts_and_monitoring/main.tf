@@ -190,26 +190,6 @@ resource "google_monitoring_alert_policy" "SQL_Network_Connection_Count" {
       }
     }
   }
-
-    
-  #   conditions   {
-  #   display_name = "${var.project_id}-Compute-Disk-Storage"
-    
-  #   condition_threshold  {
-  #     filter          = "metric.type=\"agent.googleapis.com/disk/percent_used\" AND resource.type=\"gce_instance\""
-      
-  #     duration        = var.duration
-  #     comparison      = var.condition_comparison
-  #     threshold_value = var.disk_gce_threshold
-  #     trigger {
-  #       count = var.trigger_count
-  #     }
-  #     aggregations {
-  #       alignment_period   = var.duration
-  #       per_series_aligner = var.aggregations_aligner
-  #     }
-  #   }
-  # }
 }
     
 
