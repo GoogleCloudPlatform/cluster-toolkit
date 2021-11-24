@@ -44,7 +44,7 @@ variable "zone" {
 variable "image" {
   description = "Image to be used of the compute VMs in this partition"
   type        = string
-  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7"
+  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7"
 }
 
 variable "image_hyperthreads" {

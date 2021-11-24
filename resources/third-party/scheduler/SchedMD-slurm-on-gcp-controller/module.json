@@ -51,7 +51,7 @@
       "name": "controller_image",
       "type": "string",
       "description": "Slurm image to use for the controller instance",
-      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7",
+      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7",
       "required": false
     },
     {
@@ -124,6 +124,13 @@
       "type": "bool",
       "description": "If set to true, create Cloud NAT gateway and enable IAP FW rules",
       "default": false,
+      "required": false
+    },
+    {
+      "name": "intel_select_solution",
+      "type": "string",
+      "description": "Configure the cluster to meet the performance requirement of the Intel Select Solution",
+      "default": null,
       "required": false
     },
     {
@@ -215,7 +222,7 @@
     {
       "name": "slurm_cluster_controller",
       "source": "github.com/SchedMD/slurm-gcp//tf/modules/controller/",
-      "version": "v4.0.4",
+      "version": "v4.1.2",
       "description": null
     }
   ],
