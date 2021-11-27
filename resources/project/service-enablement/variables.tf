@@ -1,5 +1,5 @@
 variable "project_id" {
-  type    = string
+  type = string
 }
 
 variable "gcp_service_list" {
