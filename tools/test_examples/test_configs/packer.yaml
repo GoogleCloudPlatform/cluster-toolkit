@@ -23,14 +23,14 @@ vars:
 resource_groups:
 - group: network
   resources:
-  - source: ./resources/network/vpc
+  - source: resources/network/vpc
     kind: terraform
     id: network1
     settings:
       network_name: $(vars.deployment_name)
 - group: packer
   resources:
-  - source: ./resources/packer/custom-image
+  - source: resources/packer/custom-image
     kind: packer
     id: my-custom-image
     settings:

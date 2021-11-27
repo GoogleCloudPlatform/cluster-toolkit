@@ -72,21 +72,10 @@ variable "labels" {
   default     = {}
 }
 
-variable "login_network_storage" {
-  description = "An array of network attached storage mounts to be configured on the login and controller instances."
-  type = list(object({
-    server_ip    = string,
-    remote_mount = string,
-    local_mount  = string,
-    fs_type      = string,
-  mount_options = string }))
-  default = []
-}
-
 variable "login_machine_type" {
   description = "Machine type to use for login node instances."
   type        = string
-  default     = "n1-standard-2"
+  default     = "n2-standard-2"
 }
 
 variable "munge_key" {

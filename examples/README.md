@@ -56,6 +56,8 @@ vars:
 resource_groups:
 - group: groupName
   resources:
+
+  # Local source, prefixed with ./ (/ and ../ also accepted)
   - source: ./resources/role/resource-name # Required: Points to the resource directory.
     kind: < terraform | packer > # Required: Type of resource, currently choose from terraform or packer.
     id: <a unique id> # Required: Name of this resource used to uniquely identify it.
@@ -70,4 +72,7 @@ resource_groups:
       setting3:
         key3a: value3a
         key3b: value3b
+
+  # Embedded resource (part of the toolkit), prefixed with resources/
+  - source: resources/role/resource-name
 ```

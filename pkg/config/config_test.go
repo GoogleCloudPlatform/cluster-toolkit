@@ -17,11 +17,13 @@ limitations under the License.
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
+	"strings"
 	"testing"
 
 	"hpc-toolkit/pkg/resreader"
@@ -41,6 +43,10 @@ vars:
   labels:
     ghpc_blueprint: simple
     deployment_name: deployment_name
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: hpc-toolkit-tf-state
 resource_groups:
 - group: group1
   resources:
@@ -392,12 +398,12 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	globalLabels := bc.Config.Vars["labels"].(map[string]interface{})
 	ghpcBlueprint, exists := globalLabels[blueprintLabel]
 	c.Assert(exists, Equals, true)
-	c.Assert(ghpcBlueprint.(string), Equals, bc.Config.BlueprintName)
+	c.Assert(ghpcBlueprint, Equals, bc.Config.BlueprintName)
 
 	// Was the ghpc_deployment label set correctly?
 	ghpcDeployment, exists := globalLabels[deploymentLabel]
 	c.Assert(exists, Equals, true)
-	c.Assert(ghpcDeployment.(string), Equals, "undefined")
+	c.Assert(ghpcDeployment, Equals, "undefined")
 
 	// Was "labels" created for the resource with no settings?
 	_, exists = bc.Config.ResourceGroups[0].Resources[0].Settings["labels"]
@@ -591,6 +597,33 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 func (s *MySuite) TestValidateResources(c *C) {
 	bc := getBlueprintConfigForTest()
 	bc.validateResources()
+}
+
+func (s *MySuite) TestValidateVars(c *C) {
+	// Success
+	bc := getBlueprintConfigForTest()
+	err := bc.validateVars()
+	c.Assert(err, IsNil)
+
+	// Fail: Nil project_id
+	bc.Config.Vars["project_id"] = nil
+	err = bc.validateVars()
+	c.Assert(err, ErrorMatches, "global variable project_id was not set")
+
+	// Success: project_id not set
+	delete(bc.Config.Vars, "project_id")
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	err = bc.validateVars()
+	log.SetOutput(os.Stderr)
+	c.Assert(err, IsNil)
+	hasWarning := strings.Contains(buf.String(), "WARNING: No project_id")
+	c.Assert(hasWarning, Equals, true)
+
+	// Fail: labels not a map
+	bc.Config.Vars["labels"] = "a_string"
+	err = bc.validateVars()
+	c.Assert(err, ErrorMatches, "vars.labels must be a map")
 }
 
 func (s *MySuite) TestValidateResouceSettings(c *C) {

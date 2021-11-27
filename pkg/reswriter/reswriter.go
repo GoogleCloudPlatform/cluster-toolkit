@@ -25,6 +25,8 @@ import (
 	"path"
 	"strings"
 
+	"hpc-toolkit/pkg/resutils"
+
 	"github.com/otiai10/copy"
 )
 
@@ -32,6 +34,11 @@ const (
 	beginPassthroughExp string = `^\(\(.*$`
 	fullPassthroughExp  string = `^\(\((.*)\)\)$`
 )
+
+// ResourceFS contains embedded resources (./resources) for use in building
+// blueprints. The main package creates and injects the resources directory as
+// hpc-toolkit/resources are not accessible at the package level.
+var ResourceFS embed.FS
 
 // ResWriter interface for writing resources to a blueprint
 type ResWriter interface {
@@ -95,12 +102,25 @@ func getTemplate(filename string) string {
 	return string(tmplText)
 }
 
+func copyEmbedded(fs resutils.BaseFS, source string, dest string) error {
+	return resutils.CopyDirFromResources(fs, source, dest)
+}
+
+func copyFromPath(source string, dest string) error {
+	absPath := getAbsSourcePath(source)
+	err := copy.Copy(absPath, dest)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
 
 			/* Copy source files */
-			// currently assuming local source only
+			// currently assuming local or embedded source
 			resourceName := path.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
 			basePath := path.Join(blueprintName, grp.Name)
@@ -115,10 +135,23 @@ func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 			if err == nil {
 				continue
 			}
-			sourcePath := getAbsSourcePath(resource.Source)
-			err = copy.Copy(sourcePath, destPath)
-			if err != nil {
-				log.Fatalf("reswriter: Failed to copy resource %s: %v", resource.ID, err)
+
+			// Check source type and copy
+			switch src := resource.Source; {
+			case resutils.IsLocalPath(src):
+				if err = copyFromPath(src, destPath); err != nil {
+					log.Fatal(err)
+				}
+			case resutils.IsEmbeddedPath(src):
+				if err = os.MkdirAll(destPath, 0755); err != nil {
+					log.Fatalf("failed to create resource path %s: %v", destPath, err)
+				}
+				if err = copyEmbedded(ResourceFS, src, destPath); err != nil {
+					log.Fatal(err)
+				}
+			default:
+				log.Fatalf("resource %s source (%s) not valid, should begin with /, ./, ../ or resources/",
+					resource.ID, resource.Source)
 			}
 
 			/* Create resource level files */

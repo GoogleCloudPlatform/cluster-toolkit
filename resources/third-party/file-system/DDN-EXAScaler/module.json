@@ -104,7 +104,7 @@
         "nic_type": "GVNIC",
         "node_count": 1,
         "node_cpu": "Intel Cascade Lake",
-        "node_type": "n2-standard-2",
+        "node_type": "n2-standard-32",
         "public_ip": true
       },
       "required": false
@@ -163,7 +163,7 @@
         "nic_type": "GVNIC",
         "node_count": 3,
         "node_cpu": "Intel Cascade Lake",
-        "node_type": "n2-standard-16",
+        "node_type": "n1-standard-16",
         "public_ip": true
       },
       "required": false

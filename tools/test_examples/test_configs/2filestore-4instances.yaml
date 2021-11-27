@@ -27,7 +27,7 @@ resource_groups:
     kind: terraform
     id: network
 
-  - source: ./resources/file-system/filestore
+  - source: resources/file-system/filestore
     kind: terraform
     id: homefs
     settings:
@@ -69,7 +69,7 @@ resource_groups:
       labels:
         ghpc_role: license
 
-  - source: ./resources/compute/simple-instance
+  - source: resources/compute/simple-instance
     kind: terraform
     id: license-server-2
     settings:
@@ -79,7 +79,7 @@ resource_groups:
       labels:
         ghpc_role: license
 
-  - source: ./resources/compute/simple-instance
+  - source: resources/compute/simple-instance
     kind: terraform
     id: head-node
     settings:
@@ -95,7 +95,7 @@ resource_groups:
         startup-script: $(startup.startup_script_content)
         startup-script-custom: $(startup.startup_script_custom_content)
 
-  - source: ./resources/compute/simple-instance
+  - source: resources/compute/simple-instance
     kind: terraform
     id: compute
     settings:

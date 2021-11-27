@@ -26,7 +26,7 @@ module "slurm_cluster_controller" {
   disable_compute_public_ips    = var.disable_compute_public_ips
   disable_controller_public_ips = var.disable_controller_public_ips
   labels                        = var.labels
-  login_network_storage         = var.login_network_storage
+  login_network_storage         = var.network_storage
   login_node_count              = var.login_node_count
   machine_type                  = var.controller_machine_type
   munge_key                     = var.munge_key

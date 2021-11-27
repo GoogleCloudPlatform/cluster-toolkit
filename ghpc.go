@@ -16,11 +16,19 @@ limitations under the License.
 package main
 
 import (
+	"embed"
 	"hpc-toolkit/cmd"
+	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/reswriter"
 	"os"
 )
 
+//go:embed resources
+var resourceFS embed.FS
+
 func main() {
+	reswriter.ResourceFS = resourceFS
+	resreader.ResourceFS = resourceFS
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
