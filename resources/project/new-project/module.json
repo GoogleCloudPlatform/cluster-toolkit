@@ -1,0 +1,58 @@
+{
+  "header": "",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "billing_account",
+      "type": "string",
+      "description": "Account used to pay the bills",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "default_service_account",
+      "type": "string",
+      "description": "Project default service account setting: can be one of `delete`, `deprivilege`, `disable`, or `keep`.",
+      "default": "keep",
+      "required": false
+    },
+    {
+      "name": "folder_id",
+      "type": "string",
+      "description": "ID of the Folder",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "org_id",
+      "type": "string",
+      "description": "ID of the organization",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "description": "ID of the Project",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [
+    {
+      "name": "project_factory",
+      "source": "terraform-google-modules/project-factory/google",
+      "version": "~\u003e 10.1",
+      "description": null
+    }
+  ],
+  "outputs": [],
+  "providers": [],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    }
+  ],
+  "resources": []
+}

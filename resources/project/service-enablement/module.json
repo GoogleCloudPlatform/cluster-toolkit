@@ -1,0 +1,50 @@
+{
+  "header": "",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "gcp_service_list",
+      "type": "list(string)",
+      "description": "list of APIs to be enabled for the project",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "description": "ID of the project",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [],
+  "providers": [
+    {
+      "name": "google",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    },
+    {
+      "name": "google",
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "project_service",
+      "name": "gcp_services",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    }
+  ]
+}
