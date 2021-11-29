@@ -29,7 +29,7 @@ variable "boot_disk_type" {
 variable "login_image" {
   description = "Disk OS image with Slurm preinstalled to use for login node"
   type        = string
-  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7"
+  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7"
 }
 
 variable "login_instance_template" {

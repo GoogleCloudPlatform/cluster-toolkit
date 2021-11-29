@@ -15,7 +15,7 @@
 */
 
 module "slurm_cluster_controller" {
-  source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.0.4"
+  source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.1.2"
   boot_disk_size                = var.boot_disk_size
   boot_disk_type                = var.boot_disk_type
   image                         = var.controller_image
@@ -44,5 +44,6 @@ module "slurm_cluster_controller" {
   subnetwork_name               = var.subnetwork_name
   suspend_time                  = var.suspend_time
   zone                          = var.zone
+  intel_select_solution         = var.intel_select_solution
   cloudsql                      = var.cloudsql
 }

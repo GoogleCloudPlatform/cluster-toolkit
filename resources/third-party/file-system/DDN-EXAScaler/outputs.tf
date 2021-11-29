@@ -29,9 +29,9 @@ output "mount_command" {
   value       = module.ddn_exascaler.mount_command
 }
 
-output "web_console" {
+output "http_console" {
   description = "HTTP address to access the system web console."
-  value       = module.ddn_exascaler.web_console
+  value       = module.ddn_exascaler.http_console
 }
 
 output "network_storage" {
