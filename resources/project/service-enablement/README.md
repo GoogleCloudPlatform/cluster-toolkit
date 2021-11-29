@@ -1,32 +1,19 @@
 ## Description
-This resource creates a new VPC network along with a [cloud NAT](https://github.com/terraform-google-modules/terraform-google-cloud-nat),
-[Router](https://github.com/terraform-google-modules/terraform-google-cloud-router)
-and common [firewall rules](https://github.com/terraform-google-modules/terraform-google-network/tree/master/modules/firewall-rules).
-This resource is based on submodules defined by the [Cloud Foundation Toolkit](https://cloud.google.com/foundation-toolkit).
+Allows management of a multiple API service for a Google Cloud Platform project.
 
-The created cloud NAT (Network Address Translation) allows virtual machines
-without external IP addresses create outbound connections to the internet. For
-more information see the [docs](https://cloud.google.com/nat/docs/overview).
-
-The following firewall rules are created with the VPC network:
-* Allow SSH access from the Cloud Console ("35.235.240.0/20").
-* Allow traffic between nodes within the VPC
 
 ### Example
 ```
-- source: ./resources/network/vpc
+- source: ./resources/service-enablement
   kind: terraform
-  id: network1
+  id: services-api
   settings:
-  - deployment_name: $(vars.deployment_name)
+    gcp_service_list: [
+    "file.googleapis.com",
+    "compute.googleapis.com"
+  ]
 ```
-This creates a new VPC network named based on the `deployment_name` variable
-with `_net` appended. `network_name` can be set manually as well as part of the
-settings.
-
-Note that `deployment_name` does not need to be set explicitly here,
-it would typically be inferred from the global variable of the same name. It was
-included for clarity.
+This allows the project to enable both the filestore API as well as the compute API. 
 
 ## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
