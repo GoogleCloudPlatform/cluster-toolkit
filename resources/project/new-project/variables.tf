@@ -28,6 +28,7 @@ variable "billing_account" {
   description = "The ID of the billing account to associate projects with."
   type        = string
 }
+
 variable "default_service_account" {
   description = "Project default service account setting: can be one of `delete`, `deprivilege`, `disable`, or `keep`."
   default     = "keep"
