@@ -64,10 +64,10 @@ func CopyDirFromResources(fs BaseFS, source string, dest string) error {
 			}
 			copyFile, err := os.Create(entryDest)
 			if err != nil {
-				return nil
+				return err
 			}
 			if _, err = copyFile.Write(fileBytes); err != nil {
-				return nil
+				return err
 			}
 		}
 	}
