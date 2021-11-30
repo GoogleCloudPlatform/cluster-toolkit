@@ -53,11 +53,25 @@ terraform apply
     * `conda install go go-nocgo go-nocgo_osx-64`
 
 ## Development
-Please use the `pre-commit` hooks configured in this repository to ensure
-that all Terraform modules are validated and properly documented before pushing
-code changes. [pre-commit][https://pre-commit.com/] can be installed using
-standard package managers. It is enabled on a repo-by-repo basis by switching to
-the root directory of the repo and running:
+Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
+this repository to ensure that all Terraform and golang modules are validated
+and properly documented before pushing code changes.
+[pre-commit](https://pre-commit.com/) can be installed using standard package
+managers, more details can be found at on the website.
+
+The pre-commits configured in the HPC Toolkit have a set of
+dependencies that need to be installed before successfully passing all
+pre-commits. TFLint must be installed manually, the instructions can be found
+[here](https://github.com/terraform-linters/tflint#installation). The other
+dependencies can be installed by running the following command in the root
+directory:
+
+```shell
+make install-deps-dev
+```
+
+pre-commit is enabled on a repo-by-repo basis by switching to the root
+directory of the repo and running:
 
 ```shell
 pre-commit install
