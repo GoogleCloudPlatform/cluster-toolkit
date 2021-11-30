@@ -1,5 +1,5 @@
 ## Description
-Allows management of a multiple API service for a Google Cloud Platform project.
+Allows management of multiple API services for a Google Cloud Platform project.
 
 
 ### Example
