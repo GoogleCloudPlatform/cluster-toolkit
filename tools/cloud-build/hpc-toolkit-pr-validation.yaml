@@ -23,8 +23,9 @@ steps:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder'
   - '-c'
   - |
+    set -e
     export PROJECT=build-project
-    addlicense -check . >/dev/null
+    addlicense -check .
     make tests
 - name: 'gcr.io/cloud-builders/docker'
   args:
@@ -36,6 +37,7 @@ steps:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder'
   - '-c'
   - |
+    set -e
     pre-commit install --install-hooks
     tflint --init
     SKIP=go-unit-tests pre-commit run --all-files
