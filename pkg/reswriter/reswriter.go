@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	beginPassthroughExp string = `^\(\(.*$`
-	fullPassthroughExp  string = `^\(\((.*)\)\)$`
+	beginLiteralExp string = `^\(\(.*$`
+	fullLiteralExp  string = `^\(\((.*)\)\)$`
 )
 
 // ResourceFS contains embedded resources (./resources) for use in building
