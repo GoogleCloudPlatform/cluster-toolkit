@@ -40,19 +40,19 @@ func getType(obj interface{}) string {
 	return "string"
 }
 
-func isPassthroughVariable(str string) bool {
-	match, err := regexp.MatchString(beginPassthroughExp, str)
+func isLiteralVariable(str string) bool {
+	match, err := regexp.MatchString(beginLiteralExp, str)
 	if err != nil {
-		log.Fatalf("Failed checking if variable is a passthrough: %v", err)
+		log.Fatalf("Failed checking if variable is a literal: %v", err)
 	}
 	return match
 }
 
-func handlePassthroughVariable(str string) string {
-	re := regexp.MustCompile(fullPassthroughExp)
+func handleLiteralVariable(str string) string {
+	re := regexp.MustCompile(fullLiteralExp)
 	contents := re.FindStringSubmatch(str)
 	if len(contents) != 2 {
-		log.Fatalf("Incorrectly formatted passthrough variable: %s", str)
+		log.Fatalf("Incorrectly formatted literal variable: %s", str)
 	}
 
 	return contents[1]
@@ -64,8 +64,8 @@ func handleData(val interface{}) interface{} {
 		// We only need to act on strings
 		return val
 	}
-	if isPassthroughVariable(str) {
-		return handlePassthroughVariable(str)
+	if isLiteralVariable(str) {
+		return handleLiteralVariable(str)
 	} else if !strings.HasPrefix(str, "[") &&
 		!strings.HasPrefix(str, "{") {
 		return fmt.Sprintf("\"%s\"", str)

@@ -65,7 +65,7 @@ func createBaseFile(path string) error {
 	return err
 }
 
-func handlePassthroughVariables(hclBytes []byte) []byte {
+func handleLiteralVariables(hclBytes []byte) []byte {
 	re := regexp.MustCompile(`"\(\((.*?)\)\)"`)
 	return re.ReplaceAll(hclBytes, []byte(`${1}`))
 }
@@ -259,7 +259,7 @@ func writeMain(
 		hclBody.AppendNewline()
 	}
 	// Write file
-	hclBytes := handlePassthroughVariables(hclFile.Bytes())
+	hclBytes := handleLiteralVariables(hclFile.Bytes())
 	if err := appendHCLToFile(mainPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
 	}
@@ -313,7 +313,7 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 	}
 
 	// Write file
-	hclBytes := handlePassthroughVariables(hclFile.Bytes())
+	hclBytes := handleLiteralVariables(hclFile.Bytes())
 	if err := appendHCLToFile(providersPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to providers.tf file: %v", err)
 	}
