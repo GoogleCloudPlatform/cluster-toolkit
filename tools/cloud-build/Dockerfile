@@ -14,19 +14,21 @@
 
 # Getting Terraform and Packer
 FROM golang:bullseye
-RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
-RUN apt-get -y update && apt-get -y install software-properties-common
-RUN apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main"
-RUN apt-get -y update && apt-get install -y unzip python3-pip terraform packer
+RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
+    apt-get -y update && apt-get -y install software-properties-common && \
+    apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
+    apt-get -y update && apt-get install -y unzip python3-pip terraform packer && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pip install pre-commit
+RUN pip install pre-commit && rm -rf ~/.cache/pip/*
+
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
-RUN go install github.com/terraform-docs/terraform-docs@latest
-RUN go install golang.org/x/lint/golint@latest
-RUN go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-RUN go install github.com/go-critic/go-critic/cmd/gocritic@latest
-RUN go install github.com/google/addlicense@latest
+RUN go install github.com/terraform-docs/terraform-docs@latest      && \
+    go install golang.org/x/lint/golint@latest                      && \
+    go install github.com/fzipp/gocyclo/cmd/gocyclo@latest          && \
+    go install github.com/go-critic/go-critic/cmd/gocritic@latest   && \
+    go install github.com/google/addlicense@latest
 
 # Setting GHPC dependencies
 WORKDIR /ghpc-tmp
