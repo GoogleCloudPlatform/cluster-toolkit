@@ -24,7 +24,7 @@ Local resources point to a resource in the file system and can easily be edited.
 ```
 
 ## Common Settings
-There is a set of common setting names that are consistent accross different
+There are a few common setting names that are consistent accross different
 HPC Toolkit resources. This is intentional to allow multiple resources to share
 inferred settings from global variables. These variables are listed and
 described below.

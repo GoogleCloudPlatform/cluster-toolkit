@@ -130,4 +130,4 @@ before creating a blueprint making debugging quicker and easier.
 Resources are the building blocks of an HPC environment. They can be composed to create complex deployments using the config YAML.
 Several resources are provided by default in the [resources](../resources/README.md) folder.
 
-To learn more about how to refer to resource in a YAML, please consult the [resources README file.](../resources/README.md)
+To learn more about how to refer to a resource in a YAML, please consult the [resources README file.](../resources/README.md)
