@@ -21,7 +21,7 @@ resource "null_resource" "omnia_install" {
     "manager"      = var.manager_node
   }
   provisioner "local-exec" {
-    command = "${path.module}/scripts/install_omnia.sh"
+    command = "sh ${path.module}/scripts/install_omnia.sh"
     environment = {
       DEPLOYMENT_NAME = var.deployment_name
       MANAGER_NODE    = var.manager_node
