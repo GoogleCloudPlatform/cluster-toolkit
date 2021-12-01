@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -e
+
 run_test(){
-  set -e
   example=$1
   echo "testing $example"
-  BLUEPRINT=$(uuidgen)
   tmpdir="$(mktemp -d)"
+  BLUEPRINT="$(basename ${example})-$(basename ${tmpdir})"
   echo "testing ${example} in ${tmpdir}"
   exampleFile=$(basename $example)
   cp ${example} "${tmpdir}/"
