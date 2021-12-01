@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-BLUEPRINT='test_blueprint'
-CONFIGS=$(find tools/test_examples/test_configs examples/ -name "*.yaml" -type f)
-tmpdir="$(mktemp -d)"
-cwd=$(pwd)
-for example in $CONFIGS
-do
+run_test(){
+  set -e
+  example=$1
+  echo "testing $example"
+  BLUEPRINT=$(uuidgen)
+  tmpdir="$(mktemp -d)"
   echo "testing ${example} in ${tmpdir}"
   exampleFile=$(basename $example)
   cp ${example} "${tmpdir}/"
@@ -56,5 +56,35 @@ do
   cd ..
   rm -rf ${BLUEPRINT} || { echo "could not remove blueprint folder from $(pwd)"; exit 1; }
   cd ${cwd}
+  rm -r ${tmpdir}
+}
+
+check_background(){
+  if ! wait -n; then
+    echo "a test failed. Exiting with status 1."
+    wait
+    exit 1
+  fi
+}
+
+CONFIGS=$(find tools/test_examples/test_configs examples/ -name "*.yaml" -type f)
+cwd=$(pwd)
+NPROCS=${NPROCS:-$(nproc)}
+echo "Running tests in $NPROCS processes"
+for example in $CONFIGS
+do
+  JNUM=$(jobs | wc -l)
+  echo "$JNUM jobs running"
+  if [ $JNUM -lt $NPROCS ]
+  then
+    run_test $example &
+  else
+    echo "Reached max number of parallel tests. Waiting for one to finish."
+    check_background
+  fi
 done
-rm -r ${tmpdir}
+JNUM=$(jobs | wc -l)
+while [ $JNUM -gt 0 ]; do
+  check_background
+  JNUM=$(jobs | wc -l)
+done

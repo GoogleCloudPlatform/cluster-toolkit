@@ -38,7 +38,7 @@ steps:
   - '-c'
   - |
     set -e
-    time pre-commit install --install-hooks
+    pre-commit install --install-hooks
     time tflint --init
     time SKIP=go-unit-tests pre-commit run --all-files
 timeout: "1200s"
