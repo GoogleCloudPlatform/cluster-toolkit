@@ -14,19 +14,17 @@ and intends to address the HPC deployment needs of a broad range of customers.
 * [Packer](https://www.packer.io/downloads)
 * [golang](https://golang.org/doc/install)
   * To setup GOPATH and development environment: `export PATH=$PATH:$(go env GOPATH)/bin`
-* [terraform-docs](https://github.com/terraform-docs/terraform-docs) (for development only)
-    * `go install github.com/terraform-docs/terraform-docs@v0.16.0`
 
 ## Build and Install
 Simply run `make` in the root directory.
 
 ## Basic Usage
 To create a blueprint, an input YAML file needs to be written or adapted from
-the examples under `examples`. A good starting point is
-`examples/hpc-cluster-small.yaml` which creates a blueprint for a new network,
+the examples under [examples](examples/). A good starting point is
+[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) which creates a blueprint for a new network,
 a filestore instance and a slurm login node and controller.
-More information on the example configs can be found in the README.md of the
-`examples` directory.
+More information on the example configs can be found in the [README.md](examples/README.md) of the
+[examples](examples/) directory.
 
 In order to create a blueprint using `ghpc`, first ensure you've updated your
 config template to include your GCP project ID then run the following command:
@@ -57,7 +55,7 @@ Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
 this repository to ensure that all Terraform and golang modules are validated
 and properly documented before pushing code changes.
 [pre-commit](https://pre-commit.com/) can be installed using standard package
-managers, more details can be found at on the website.
+managers, more details can be found at [the pre-commit website]](https://pre-commit.com/).
 
 The pre-commits configured in the HPC Toolkit have a set of
 dependencies that need to be installed before successfully passing all

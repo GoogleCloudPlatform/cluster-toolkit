@@ -51,6 +51,12 @@ existing network.
 * [**custom-image**](packer/custom-image/README.md): Creates a custom VM Image
 based on the GCP HPC VM image
 
+### Project
+
+* [**new-project**](project/new-project/README.md): Creates a Google Cloud Projects
+
+* [**service-enablement**](project/service-enablement/README.md): Allows enabling various APIs for a Google Cloud Project
+
 ### Scripts
 
 * [**omnia-install**](scripts/omnia-install/README.md): Installs SLURM via omnia onto a cluster of compute VMs
