@@ -3,16 +3,6 @@
   "footer": "",
   "inputs": [
     {
-      "name": "admin",
-      "type": "object({\n    username       = string\n    ssh_public_key = string\n  })",
-      "description": "User for remote SSH access",
-      "default": {
-        "ssh_public_key": "~/.ssh/id_rsa.pub",
-        "username": "admin"
-      },
-      "required": false
-    },
-    {
       "name": "boot",
       "type": "object({\n    disk_type   = string\n    auto_delete = bool\n  })",
       "description": "Boot disk properties",
@@ -104,7 +94,7 @@
         "nic_type": "GVNIC",
         "node_count": 1,
         "node_cpu": "Intel Cascade Lake",
-        "node_type": "n2-standard-2",
+        "node_type": "n2-standard-32",
         "public_ip": true
       },
       "required": false
@@ -134,25 +124,25 @@
       "required": false
     },
     {
-      "name": "network_name",
-      "type": "string",
-      "description": "The name of the VPC network to where the system is connected.",
-      "default": null,
-      "required": false
-    },
-    {
-      "name": "network_properties",
-      "type": "object({\n    routing = string\n    tier    = string\n    name    = string\n    auto    = bool\n    mtu     = number\n    new     = bool\n    nat     = bool\n  })",
-      "description": "Network properties. Ignored if network_name is supplied.",
+      "name": "network",
+      "type": "object({\n    routing = string\n    tier    = string\n    id      = string\n    auto    = bool\n    mtu     = number\n    new     = bool\n    nat     = bool\n  })",
+      "description": "Network options",
       "default": {
         "auto": false,
+        "id": "projects/project-name/global/networks/network-name",
         "mtu": 1500,
-        "name": "default",
         "nat": false,
         "new": false,
         "routing": "REGIONAL",
         "tier": "STANDARD"
       },
+      "required": false
+    },
+    {
+      "name": "network_self_link",
+      "type": "string",
+      "description": "The self-link of the VPC network to where the system is connected.",
+      "default": null,
       "required": false
     },
     {
@@ -189,14 +179,21 @@
     },
     {
       "name": "security",
-      "type": "object({\n    enable_local      = bool\n    enable_ssh        = bool\n    ssh_source_range  = string\n    enable_http       = bool\n    http_source_range = string\n  })",
-      "description": "Various firewall related rules",
+      "type": "object({\n    admin              = string\n    public_key         = string\n    block_project_keys = bool\n    enable_local       = bool\n    enable_ssh         = bool\n    enable_http        = bool\n    ssh_source_ranges  = list(string)\n    http_source_ranges = list(string)\n  })",
+      "description": "Security options",
       "default": {
+        "admin": "stack",
+        "block_project_keys": false,
         "enable_http": false,
         "enable_local": false,
         "enable_ssh": false,
-        "http_source_range": "0.0.0.0/0",
-        "ssh_source_range": "0.0.0.0/0"
+        "http_source_ranges": [
+          "0.0.0.0/0"
+        ],
+        "public_key": "~/.ssh/id_rsa.pub",
+        "ssh_source_ranges": [
+          "0.0.0.0/0"
+        ]
       },
       "required": false
     },
@@ -211,6 +208,18 @@
       "required": false
     },
     {
+      "name": "subnetwork",
+      "type": "object({\n    address = string\n    private = bool\n    id      = string\n    new     = bool\n  })",
+      "description": "Subnetwork properties. Ignored if subnetwork_self_link is supplied.",
+      "default": {
+        "address": "10.0.0.0/16",
+        "id": "projects/project-name/regions/region-name/subnetworks/subnetwork-name",
+        "new": false,
+        "private": true
+      },
+      "required": false
+    },
+    {
       "name": "subnetwork_address",
       "type": "string",
       "description": "The IP range of internal addresses for the subnetwork",
@@ -218,22 +227,10 @@
       "required": false
     },
     {
-      "name": "subnetwork_name",
+      "name": "subnetwork_self_link",
       "type": "string",
-      "description": "The name of the VPC subnetwork to where the system is connected.",
+      "description": "The self-link of the VPC subnetwork to where the system is connected.",
       "default": null,
-      "required": false
-    },
-    {
-      "name": "subnetwork_properties",
-      "type": "object({\n    address = string\n    private = bool\n    name    = string\n    new     = bool\n  })",
-      "description": "Subnetwork properties. Ignored if subnetwork_name is supplied.",
-      "default": {
-        "address": "10.0.0.0/16",
-        "name": "default",
-        "new": false,
-        "private": true
-      },
       "required": false
     },
     {
@@ -255,11 +252,15 @@
     {
       "name": "ddn_exascaler",
       "source": "github.com/DDNStorage/exascaler-cloud-terraform//gcp",
-      "version": "b063430",
+      "version": "9aed885",
       "description": null
     }
   ],
   "outputs": [
+    {
+      "name": "http_console",
+      "description": "HTTP address to access the system web console."
+    },
     {
       "name": "mount_command",
       "description": "Command to mount the file system."
@@ -275,10 +276,6 @@
     {
       "name": "ssh_console",
       "description": "Instructions to ssh into the instances."
-    },
-    {
-      "name": "web_console",
-      "description": "HTTP address to access the system web console."
     }
   ],
   "providers": [],

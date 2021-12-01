@@ -15,7 +15,7 @@
  */
 
 module "slurm_cluster_login_node" {
-  source            = "github.com/SchedMD/slurm-gcp//tf/modules/login/?ref=v4.0.4"
+  source            = "github.com/SchedMD/slurm-gcp//tf/modules/login/?ref=v4.1.2"
   boot_disk_size    = var.boot_disk_size
   boot_disk_type    = var.boot_disk_type
   image             = var.login_image
@@ -29,7 +29,7 @@ module "slurm_cluster_login_node" {
   controller_secondary_disk = var.controller_secondary_disk
   disable_login_public_ips  = var.disable_login_public_ips
   labels                    = var.labels
-  login_network_storage     = var.login_network_storage
+  login_network_storage     = var.network_storage
   machine_type              = var.login_machine_type
   munge_key                 = var.munge_key
   network_storage           = var.network_storage

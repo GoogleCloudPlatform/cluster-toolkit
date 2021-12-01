@@ -38,22 +38,6 @@ variable "zone" {
   type        = string
 }
 
-# User for remote SSH access
-# username: remote user name
-# ssh_public_key: path local SSH public key
-# https://cloud.google.com/compute/docs/instances/adding-removing-ssh-keys
-variable "admin" {
-  description = "User for remote SSH access"
-  type = object({
-    username       = string
-    ssh_public_key = string
-  })
-  default = {
-    ssh_public_key = "~/.ssh/id_rsa.pub"
-    username       = "admin"
-  }
-}
-
 # Service account name used by deploy application
 # https://cloud.google.com/iam/docs/service-accounts
 # new: create a new custom service account, or use an existing one: true or false
@@ -85,32 +69,50 @@ variable "waiter" {
 }
 
 # Security options
+# admin: optional user name for remote SSH access
+# Set admin = null to disable creation admin user
+# public_key: path to the SSH public key on the local host
+# Set public_key = null to disable creation admin user
+# block_project_keys: true or false
+# Block project-wide public SSH keys if you want to restrict
+# deployment to only user with deployment-level public SSH key.
+# https://cloud.google.com/compute/docs/instances/adding-removing-ssh-keys
 # enable_local: true or false, enable or disable firewall rules for local access
 # enable_ssh: true or false, enable or disable remote SSH access
-# ssh_source_range: source IP range for remote SSH access in CIDR notation
+# ssh_source_ranges: source IP ranges for remote SSH access in CIDR notation
 # enable_http: true or false, enable or disable remote HTTP access
-# http_source_range: source IP range for remote HTTP access in CIDR notation
+# http_source_ranges: source IP ranges for remote HTTP access in CIDR notation
 variable "security" {
-  description = "Various firewall related rules"
+  description = "Security options"
   type = object({
-    enable_local      = bool
-    enable_ssh        = bool
-    ssh_source_range  = string
-    enable_http       = bool
-    http_source_range = string
+    admin              = string
+    public_key         = string
+    block_project_keys = bool
+    enable_local       = bool
+    enable_ssh         = bool
+    enable_http        = bool
+    ssh_source_ranges  = list(string)
+    http_source_ranges = list(string)
   })
 
   default = {
-    enable_local      = false
-    enable_http       = false
-    enable_ssh        = false
-    http_source_range = "0.0.0.0/0"
-    ssh_source_range  = "0.0.0.0/0"
+    admin              = "stack"
+    public_key         = "~/.ssh/id_rsa.pub"
+    block_project_keys = false
+    enable_local       = false
+    enable_ssh         = false
+    enable_http        = false
+    ssh_source_ranges = [
+      "0.0.0.0/0"
+    ]
+    http_source_ranges = [
+      "0.0.0.0/0"
+    ]
   }
 }
 
-variable "network_name" {
-  description = "The name of the VPC network to where the system is connected."
+variable "network_self_link" {
+  description = "The self-link of the VPC network to where the system is connected."
   type        = string
   default     = null
 }
@@ -119,26 +121,27 @@ variable "network_name" {
 # https://cloud.google.com/vpc/docs/vpc
 # routing: network-wide routing mode: REGIONAL or GLOBAL
 # tier: networking tier for VM interfaces: STANDARD or PREMIUM
-# name: existing network name, will be using if new is false
+# id: existing network id, will be using if new is false
 # auto: create subnets in each region automatically: false or true
 # mtu: maximum transmission unit in bytes: 1460 - 1500
 # new: create a new network, or use an existing one: true or false
 # nat: allow instances without external IP to communicate with the outside world: true or false
-variable "network_properties" {
-  description = "Network properties. Ignored if network_name is supplied."
+variable "network" {
+  description = "Network options"
   type = object({
     routing = string
     tier    = string
-    name    = string
+    id      = string
     auto    = bool
     mtu     = number
     new     = bool
     nat     = bool
   })
+
   default = {
     routing = "REGIONAL"
     tier    = "STANDARD"
-    name    = "default"
+    id      = "projects/project-name/global/networks/network-name"
     auto    = false
     mtu     = 1500
     new     = false
@@ -146,8 +149,8 @@ variable "network_properties" {
   }
 }
 
-variable "subnetwork_name" {
-  description = "The name of the VPC subnetwork to where the system is connected."
+variable "subnetwork_self_link" {
+  description = "The self-link of the VPC subnetwork to where the system is connected."
   type        = string
   default     = null
 }
@@ -165,20 +168,20 @@ variable "subnetwork_address" {
 # IP addresses can access Google APIs and services by using
 # Private Google Access: true or false
 # https://cloud.google.com/vpc/docs/private-access-options
-# name: existing subnetwork name, will be using if new is false
+# id: existing subnetwork id, will be using if new is false
 # new: create a new subnetwork, or use an existing one: true or false
-variable "subnetwork_properties" {
-  description = "Subnetwork properties. Ignored if subnetwork_name is supplied."
+variable "subnetwork" {
+  description = "Subnetwork properties. Ignored if subnetwork_self_link is supplied."
   type = object({
     address = string
     private = bool
-    name    = string
+    id      = string
     new     = bool
   })
   default = {
     address = "10.0.0.0/16"
     private = true
-    name    = "default"
+    id      = "projects/project-name/regions/region-name/subnetworks/subnetwork-name"
     new     = false
   }
 }
@@ -230,7 +233,7 @@ variable "mgs" {
     public_ip  = bool
   })
   default = {
-    node_type  = "n2-standard-2"
+    node_type  = "n2-standard-32"
     node_cpu   = "Intel Cascade Lake"
     nic_type   = "GVNIC"
     public_ip  = true

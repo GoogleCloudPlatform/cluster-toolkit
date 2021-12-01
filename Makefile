@@ -1,4 +1,6 @@
-.PHONY: tests fmt vet test-engine test-resources test-examples packer packer-clean packer-check packer-docs add-google-license
+.PHONY: tests fmt vet test-engine test-resources test-examples packer \
+        packer-clean packer-check packer-docs add-google-license, \
+				check-tflint, check-pre-commit, install-deps-dev
 RES = ./resources
 ENG = ./cmd/... ./pkg/...
 SRC = $(ENG) $(RES)/tests/...
@@ -46,6 +48,30 @@ packer-check:
 	  echo "checking syntax for $${folder}"; \
 	  packer fmt -check $${folder}; \
 	done
+
+ifeq (, $(shell which pre-commit))
+check-pre-commit:
+	$(info WARNING: pre-commit not installed, visit https://pre-commit.com/ for installation instructions.)
+else
+check-pre-commit:
+
+endif
+
+ifeq (, $(shell which tflint))
+check-tflint:
+	$(info WARNING: tflint not installed, visit https://github.com/terraform-linters/tflint#installation for installation instructions.)
+else
+check-tflint:
+
+endif
+
+install-deps-dev: check-pre-commit check-tflint
+	$(info **************** installing developer dependencies ****)
+	go install github.com/terraform-docs/terraform-docs@latest
+	go install golang.org/x/lint/golint@latest
+	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+	go install github.com/go-critic/go-critic/cmd/gocritic@latest
+	go install github.com/google/addlicense@latest
 
 ifeq (, $(shell which terraform-docs))
 packer-docs:

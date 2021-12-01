@@ -75,6 +75,25 @@ func getDeploymentName(vars map[string]interface{}) string {
 	return "undefined"
 }
 
+func toStringInterfaceMap(i interface{}) (map[string]interface{}, error) {
+	var ret map[string]interface{}
+	switch val := i.(type) {
+	case map[string]interface{}:
+		ret = val
+	case map[interface{}]interface{}:
+		ret = make(map[string]interface{})
+		for k, v := range val {
+			ret[k.(string)] = v
+		}
+	default:
+		return ret, fmt.Errorf(
+			"invalid type of interface{}, expected a map with keys of string or interface{} got %T",
+			i,
+		)
+	}
+	return ret, nil
+}
+
 // combineLabels sets defaults for labels based on other variables and merges
 // the global labels defined in Vars with resource setting labels. It also
 // determines the role and sets it for each resource independently.
@@ -92,8 +111,8 @@ func (bc *BlueprintConfig) combineLabels() error {
 	}
 
 	// Cast global labels so we can index into them
-	globalLabels, ok := bc.Config.Vars[labels].(map[string]interface{})
-	if !ok {
+	globalLabels, err := toStringInterfaceMap(bc.Config.Vars[labels])
+	if err != nil {
 		return fmt.Errorf(
 			"%s: found %T",
 			errorMessages["globalLabelType"],
@@ -116,6 +135,7 @@ func (bc *BlueprintConfig) combineLabels() error {
 			}
 
 			var resLabels map[interface{}]interface{}
+			var ok bool
 			// If labels aren't already set, prefill them with globals
 			if _, exists := res.Settings[labels]; !exists {
 				resLabels = make(map[interface{}]interface{})

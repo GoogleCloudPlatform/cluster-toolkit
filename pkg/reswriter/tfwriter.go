@@ -65,7 +65,7 @@ func createBaseFile(path string) error {
 	return err
 }
 
-func handlePassthroughVariables(hclBytes []byte) []byte {
+func handleLiteralVariables(hclBytes []byte) []byte {
 	re := regexp.MustCompile(`"\(\((.*?)\)\)"`)
 	return re.ReplaceAll(hclBytes, []byte(`${1}`))
 }
@@ -146,6 +146,8 @@ func getTypeTokens(ctyVal cty.Value) hclwrite.Tokens {
 		typeToken.Bytes = []byte("list")
 	case "object", "map":
 		typeToken.Bytes = []byte("map")
+	case "dynamic":
+		typeToken.Bytes = []byte("any")
 	default:
 		return hclwrite.Tokens{}
 	}
@@ -235,17 +237,40 @@ func writeMain(
 
 		// For each Setting
 		for setting, value := range ctySettings {
+			if setting == "labels" {
+				// Manually compose merge(var.labels, {res.labels}) using tokens
+				mergeBytes := []byte("merge(var.labels, ")
+
+				labelsStr := flattenHCLLabelsMap(
+					string(hclwrite.TokensForValue(value).Bytes()))
+
+				mergeBytes = append(mergeBytes, []byte(labelsStr)...)
+				mergeBytes = append(mergeBytes, byte(')'))
+
+				mergeTok := simpleTokenFromString(string(mergeBytes))
+				labelsTokens := []*hclwrite.Token{&mergeTok}
+
+				moduleBody.SetAttributeRaw(setting, labelsTokens)
+				continue
+			}
 			// Add attributes
 			moduleBody.SetAttributeValue(setting, value)
 		}
 		hclBody.AppendNewline()
 	}
 	// Write file
-	hclBytes := handlePassthroughVariables(hclFile.Bytes())
+	hclBytes := handleLiteralVariables(hclFile.Bytes())
 	if err := appendHCLToFile(mainPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
 	}
 	return nil
+}
+
+func flattenHCLLabelsMap(hclString string) string {
+	hclString = strings.ReplaceAll(hclString, "\"\n", "\",")
+	hclString = strings.ReplaceAll(hclString, "\n", "")
+	hclString = strings.Join(strings.Fields(hclString), " ")
+	return hclString
 }
 
 func simpleTokenFromString(str string) hclwrite.Token {
@@ -288,7 +313,7 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 	}
 
 	// Write file
-	hclBytes := handlePassthroughVariables(hclFile.Bytes())
+	hclBytes := handleLiteralVariables(hclFile.Bytes())
 	if err := appendHCLToFile(providersPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to providers.tf file: %v", err)
 	}
@@ -306,6 +331,13 @@ func writeVersions(dst string) error {
 		return fmt.Errorf("error writing HCL to versions.tf file: %v", err)
 	}
 	return nil
+}
+
+func printTerraformInstructions(grpPath string) {
+	printInstructionsPreamble("Terraform", grpPath)
+	fmt.Printf("  cd %s\n", grpPath)
+	fmt.Println("  terraform init")
+	fmt.Println("  terraform apply")
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
@@ -363,6 +395,7 @@ func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 				"error creating outputs.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}
+		printTerraformInstructions(writePath)
 	}
 	return nil
 }

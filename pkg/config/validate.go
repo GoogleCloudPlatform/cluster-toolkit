@@ -23,8 +23,36 @@ import (
 
 	"hpc-toolkit/pkg/resreader"
 
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 )
+
+// validateVars checks the global variables for viable types
+func (bc BlueprintConfig) validateVars() error {
+	vars := bc.Config.Vars
+	nilErr := "global variable %s was not set"
+
+	// Check for project_id
+	if _, ok := vars["project_id"]; !ok {
+		log.Println("WARNING: No project_id in global variables")
+	}
+
+	// Check type of labels (if they are defined)
+	if labels, ok := vars["labels"]; ok {
+		if _, ok := labels.(map[string]interface{}); !ok {
+			return errors.New("vars.labels must be a map")
+		}
+	}
+
+	// Check for any nil values
+	for key, val := range vars {
+		if val == nil {
+			return fmt.Errorf(nilErr, key)
+		}
+	}
+
+	return nil
+}
 
 func resource2String(c Resource) string {
 	cBytes, _ := yaml.Marshal(&c)
@@ -49,15 +77,15 @@ func hasIllegalChars(name string) bool {
 }
 
 // validateResources ensures parameters set in resources are set correctly.
-func (bc BlueprintConfig) validateResources() {
+func (bc BlueprintConfig) validateResources() error {
 	for _, grp := range bc.Config.ResourceGroups {
 		for _, res := range grp.Resources {
-			err := validateResource(res)
-			if err != nil {
-				log.Fatal(err)
+			if err := validateResource(res); err != nil {
+				return err
 			}
 		}
 	}
+	return nil
 }
 
 type resourceVariables struct {
@@ -89,21 +117,20 @@ func validateSettings(
 
 // validateResourceSettings verifies that no additional settings are provided
 // that don't have a counterpart variable in the resource.
-func (bc BlueprintConfig) validateResourceSettings() {
+func (bc BlueprintConfig) validateResourceSettings() error {
 	for _, grp := range bc.Config.ResourceGroups {
 		for _, res := range grp.Resources {
 			reader := resreader.Factory(res.Kind)
 			info, err := reader.GetInfo(res.Source)
 			if err != nil {
-				log.Fatalf(
-					"failed to get info for resource at %s while validating resource settings: %e",
-					res.Source, err)
+				errStr := "failed to get info for resource at %s while validating resource settings"
+				return errors.Wrapf(err, errStr, res.Source)
 			}
 			if err = validateSettings(res, info); err != nil {
-				log.Fatalf(
-					"found an issue while validating settings for resource at %s: %e",
-					res.Source, err)
+				errStr := "found an issue while validating settings for resource at %s"
+				return errors.Wrapf(err, errStr, res.Source)
 			}
 		}
 	}
+	return nil
 }

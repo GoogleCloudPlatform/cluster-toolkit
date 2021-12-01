@@ -31,6 +31,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
+	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 )
 
@@ -104,6 +105,24 @@ func getYamlConfigForTest() config.YamlConfig {
 // Tests
 
 // reswriter.go
+func getTestFS() afero.IOFS {
+	aferoFS := afero.NewMemMapFs()
+	aferoFS.MkdirAll("resources/network/vpc", 0755)
+	afero.WriteFile(
+		aferoFS, "resources/network/vpc/main.tf", []byte("test string"), 0644)
+	return afero.NewIOFS(aferoFS)
+}
+
+func (s *MySuite) TestCopyEmbedded(c *C) {
+	testFS := getTestFS()
+	dest := path.Join(testDir, "TestCopyEmbedded")
+	if err := os.Mkdir(dest, 0755); err != nil {
+		log.Fatal(err)
+	}
+	err := copyEmbedded(testFS, "resources/network/vpc", dest)
+	c.Assert(err, IsNil)
+}
+
 func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	blueprintName := "blueprints_TestWriteBlueprint"
@@ -357,7 +376,7 @@ func (s *MySuite) TestGetTypeTokens(c *C) {
 
 	// Failure
 	tok = getTypeTokens(cty.NullVal(cty.DynamicPseudoType))
-	c.Assert(len(tok), Equals, 0)
+	c.Assert(len(tok), Equals, 1)
 
 }
 
@@ -414,6 +433,11 @@ func stringExistsInFile(str string, filename string) (bool, error) {
 }
 
 // hcl_utils.go
+func (s *MySuite) TestFlattenToHCLStrings(c *C) {
+	testConfig := getYamlConfigForTest()
+	flattenToHCLStrings(&testConfig, "terraform")
+}
+
 func (s *MySuite) TestGetType(c *C) {
 
 	// string
@@ -469,6 +493,20 @@ func (s *MySuite) TestWriteMain(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
+	// Test with labels setting
+	testResource.Settings["labels"] = map[string]interface{}{
+		"ghpc_role":    "testResource",
+		"custom_label": "",
+	}
+	err = writeMain(testResources, testBackend, testMainDir)
+	c.Assert(err, IsNil)
+	exists, err = stringExistsInFile("custom_label", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+	exists, err = stringExistsInFile("var.labels", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
 	// Test with Backend
 	testBackend.Type = "gcs"
 	testBackend.Configuration = map[string]interface{}{
@@ -507,11 +545,11 @@ func (s *MySuite) TestWriteVariables(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
-	// Failure, Null values
+	// Success, "dynamic type"
 	testVars = make(map[string]cty.Value)
 	testVars["project_id"] = cty.NullVal(cty.DynamicPseudoType)
 	err = writeVariables(testVars, testVarDir)
-	c.Assert(err, ErrorMatches, "error determining type of variable .*")
+	c.Assert(err, IsNil)
 }
 
 func (s *MySuite) TestWriteProviders(c *C) {

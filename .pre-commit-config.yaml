@@ -41,7 +41,11 @@ repos:
       - id: go-imports
       - id: go-cyclo
         args: [-over=15]
-      - id: go-critic
       - id: go-unit-tests
       - id: go-build
       - id: go-mod-tidy
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v0.8.3
+    hooks:
+      - id: go-critic
+        args: [-disable, "#experimental,sloppyTypeAssert"]

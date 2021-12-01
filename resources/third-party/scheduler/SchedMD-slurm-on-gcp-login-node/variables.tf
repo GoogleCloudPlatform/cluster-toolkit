@@ -29,7 +29,7 @@ variable "boot_disk_type" {
 variable "login_image" {
   description = "Disk OS image with Slurm preinstalled to use for login node"
   type        = string
-  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7"
+  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7"
 }
 
 variable "login_instance_template" {
@@ -72,21 +72,10 @@ variable "labels" {
   default     = {}
 }
 
-variable "login_network_storage" {
-  description = "An array of network attached storage mounts to be configured on the login and controller instances."
-  type = list(object({
-    server_ip    = string,
-    remote_mount = string,
-    local_mount  = string,
-    fs_type      = string,
-  mount_options = string }))
-  default = []
-}
-
 variable "login_machine_type" {
   description = "Machine type to use for login node instances."
   type        = string
-  default     = "n1-standard-2"
+  default     = "n2-standard-2"
 }
 
 variable "munge_key" {

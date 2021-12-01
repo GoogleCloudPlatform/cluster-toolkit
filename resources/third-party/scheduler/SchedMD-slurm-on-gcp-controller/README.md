@@ -57,7 +57,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.0.4 |
+| <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.1.2 |
 
 ## Resources
 
@@ -73,7 +73,7 @@ No resources.
 | <a name="input_cluster_name"></a> [cluster\_name](#input\_cluster\_name) | Name of the cluster | `string` | `null` | no |
 | <a name="input_compute_node_scopes"></a> [compute\_node\_scopes](#input\_compute\_node\_scopes) | Scopes to apply to compute nodes. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/monitoring.write",<br>  "https://www.googleapis.com/auth/logging.write"<br>]</pre> | no |
 | <a name="input_compute_node_service_account"></a> [compute\_node\_service\_account](#input\_compute\_node\_service\_account) | Service Account for compute nodes. | `string` | `null` | no |
-| <a name="input_controller_image"></a> [controller\_image](#input\_controller\_image) | Slurm image to use for the controller instance | `string` | `"projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7"` | no |
+| <a name="input_controller_image"></a> [controller\_image](#input\_controller\_image) | Slurm image to use for the controller instance | `string` | `"projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7"` | no |
 | <a name="input_controller_instance_template"></a> [controller\_instance\_template](#input\_controller\_instance\_template) | Instance template to use to create controller instance | `string` | `null` | no |
 | <a name="input_controller_machine_type"></a> [controller\_machine\_type](#input\_controller\_machine\_type) | Compute Platform machine type to use in controller node creation | `string` | `"n2-standard-2"` | no |
 | <a name="input_controller_scopes"></a> [controller\_scopes](#input\_controller\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
@@ -82,11 +82,11 @@ No resources.
 | <a name="input_controller_secondary_disk_type"></a> [controller\_secondary\_disk\_type](#input\_controller\_secondary\_disk\_type) | Disk type (pd-ssd or pd-standard) for secondary disk | `string` | `"pd-ssd"` | no |
 | <a name="input_controller_service_account"></a> [controller\_service\_account](#input\_controller\_service\_account) | Service Account for the controller | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment | `string` | n/a | yes |
-| <a name="input_disable_compute_public_ips"></a> [disable\_compute\_public\_ips](#input\_disable\_compute\_public\_ips) | If set to true, create Cloud NAT gateway and enable IAP FW rules | `bool` | `false` | no |
+| <a name="input_disable_compute_public_ips"></a> [disable\_compute\_public\_ips](#input\_disable\_compute\_public\_ips) | If set to true, create Cloud NAT gateway and enable IAP FW rules | `bool` | `true` | no |
 | <a name="input_disable_controller_public_ips"></a> [disable\_controller\_public\_ips](#input\_disable\_controller\_public\_ips) | If set to true, create Cloud NAT gateway and enable IAP FW rules | `bool` | `false` | no |
+| <a name="input_intel_select_solution"></a> [intel\_select\_solution](#input\_intel\_select\_solution) | Configure the cluster to meet the performance requirement of the Intel Select Solution | `string` | `null` | no |
 | <a name="input_jwt_key"></a> [jwt\_key](#input\_jwt\_key) | Specific libjwt key to use | `any` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to controller instance. List of key key, value pairs. | `any` | `{}` | no |
-| <a name="input_login_network_storage"></a> [login\_network\_storage](#input\_login\_network\_storage) | An array of network attached storage mounts to be configured on the login and controller instances. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |
 | <a name="input_login_node_count"></a> [login\_node\_count](#input\_login\_node\_count) | Number of login nodes in the cluster | `number` | `0` | no |
 | <a name="input_munge_key"></a> [munge\_key](#input\_munge\_key) | Specific munge key to use | `any` | `null` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on all instances. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |

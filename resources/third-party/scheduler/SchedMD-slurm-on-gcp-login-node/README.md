@@ -55,7 +55,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_cluster_login_node"></a> [slurm\_cluster\_login\_node](#module\_slurm\_cluster\_login\_node) | github.com/SchedMD/slurm-gcp//tf/modules/login/ | v4.0.4 |
+| <a name="module_slurm_cluster_login_node"></a> [slurm\_cluster\_login\_node](#module\_slurm\_cluster\_login\_node) | github.com/SchedMD/slurm-gcp//tf/modules/login/ | v4.1.2 |
 
 ## Resources
 
@@ -73,10 +73,9 @@ No resources.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment | `string` | n/a | yes |
 | <a name="input_disable_login_public_ips"></a> [disable\_login\_public\_ips](#input\_disable\_login\_public\_ips) | If set to true, create Cloud NAT gateway and enable IAP FW rules | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to login instances. List of key key, value pairs. | `any` | `{}` | no |
-| <a name="input_login_image"></a> [login\_image](#input\_login\_image) | Disk OS image with Slurm preinstalled to use for login node | `string` | `"projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7"` | no |
+| <a name="input_login_image"></a> [login\_image](#input\_login\_image) | Disk OS image with Slurm preinstalled to use for login node | `string` | `"projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7"` | no |
 | <a name="input_login_instance_template"></a> [login\_instance\_template](#input\_login\_instance\_template) | Instance template to use to create controller instance | `string` | `null` | no |
-| <a name="input_login_machine_type"></a> [login\_machine\_type](#input\_login\_machine\_type) | Machine type to use for login node instances. | `string` | `"n1-standard-2"` | no |
-| <a name="input_login_network_storage"></a> [login\_network\_storage](#input\_login\_network\_storage) | An array of network attached storage mounts to be configured on the login and controller instances. | <pre>list(object({<br>    server_ip    = string,<br>    remote_mount = string,<br>    local_mount  = string,<br>    fs_type      = string,<br>  mount_options = string }))</pre> | `[]` | no |
+| <a name="input_login_machine_type"></a> [login\_machine\_type](#input\_login\_machine\_type) | Machine type to use for login node instances. | `string` | `"n2-standard-2"` | no |
 | <a name="input_login_node_count"></a> [login\_node\_count](#input\_login\_node\_count) | Number of login nodes in the cluster | `number` | `1` | no |
 | <a name="input_login_scopes"></a> [login\_scopes](#input\_login\_scopes) | Scopes to apply to login nodes. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/monitoring.write",<br>  "https://www.googleapis.com/auth/logging.write"<br>]</pre> | no |
 | <a name="input_login_service_account"></a> [login\_service\_account](#input\_login\_service\_account) | Service Account for compute nodes. | `string` | `null` | no |

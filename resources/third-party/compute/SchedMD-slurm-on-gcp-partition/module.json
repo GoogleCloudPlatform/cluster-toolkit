@@ -20,7 +20,7 @@
       "name": "enable_placement",
       "type": "bool",
       "description": "Enable placement groups",
-      "default": false,
+      "default": true,
       "required": false
     },
     {
@@ -41,14 +41,14 @@
       "name": "image",
       "type": "string",
       "description": "Image to be used of the compute VMs in this partition",
-      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7",
+      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7",
       "required": false
     },
     {
       "name": "image_hyperthreads",
       "type": "bool",
-      "description": "Enable or disabling hypethreading",
-      "default": true,
+      "description": "Enable hyperthreading",
+      "default": false,
       "required": false
     },
     {

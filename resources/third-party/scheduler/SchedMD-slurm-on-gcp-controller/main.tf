@@ -15,7 +15,7 @@
 */
 
 module "slurm_cluster_controller" {
-  source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.0.4"
+  source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.1.2"
   boot_disk_size                = var.boot_disk_size
   boot_disk_type                = var.boot_disk_type
   image                         = var.controller_image
@@ -26,7 +26,7 @@ module "slurm_cluster_controller" {
   disable_compute_public_ips    = var.disable_compute_public_ips
   disable_controller_public_ips = var.disable_controller_public_ips
   labels                        = var.labels
-  login_network_storage         = var.login_network_storage
+  login_network_storage         = var.network_storage
   login_node_count              = var.login_node_count
   machine_type                  = var.controller_machine_type
   munge_key                     = var.munge_key
@@ -44,5 +44,6 @@ module "slurm_cluster_controller" {
   subnetwork_name               = var.subnetwork_name
   suspend_time                  = var.suspend_time
   zone                          = var.zone
+  intel_select_solution         = var.intel_select_solution
   cloudsql                      = var.cloudsql
 }

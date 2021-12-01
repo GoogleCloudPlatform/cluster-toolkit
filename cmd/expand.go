@@ -16,6 +16,7 @@
 package cmd
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"log"
 
@@ -48,4 +49,6 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
 	blueprintConfig.ExpandConfig()
 	blueprintConfig.ExportYamlConfig(outputFilename)
+	fmt.Printf(
+		"Expanded config created successfully, saved as %s.\n", outputFilename)
 }

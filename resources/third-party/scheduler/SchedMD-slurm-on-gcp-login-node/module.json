@@ -62,7 +62,7 @@
       "name": "login_image",
       "type": "string",
       "description": "Disk OS image with Slurm preinstalled to use for login node",
-      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-20-11-7-hpc-centos-7",
+      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7",
       "required": false
     },
     {
@@ -76,14 +76,7 @@
       "name": "login_machine_type",
       "type": "string",
       "description": "Machine type to use for login node instances.",
-      "default": "n1-standard-2",
-      "required": false
-    },
-    {
-      "name": "login_network_storage",
-      "type": "list(object({\n    server_ip    = string,\n    remote_mount = string,\n    local_mount  = string,\n    fs_type      = string,\n  mount_options = string }))",
-      "description": "An array of network attached storage mounts to be configured on the login and controller instances.",
-      "default": [],
+      "default": "n2-standard-2",
       "required": false
     },
     {
@@ -164,7 +157,7 @@
     {
       "name": "slurm_cluster_login_node",
       "source": "github.com/SchedMD/slurm-gcp//tf/modules/login/",
-      "version": "v4.0.4",
+      "version": "v4.1.2",
       "description": null
     }
   ],

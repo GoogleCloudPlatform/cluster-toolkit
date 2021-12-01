@@ -3,8 +3,28 @@
 This directory contains a set of resources built for the HPC Toolkit. These
 resources can be used to define components of an HPC cluster.
 
+## Referring to resources
+
+There are two ways of referring to resources from a configuration YAML: using an embedded resource or a local resource.
+
+Embedded resources are embedded in the ghpc binary during compilation and cannot be edited. To refer to embedded resources, set the source path to `resources/<resource path>`. The paths match the resources in the repository at compilation time. For instance, the following code is using the embedded pre-existing-vpc resource.
+
+```
+  - source: resources/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+```
+
+Local resources point to a resource in the file system and can easily be edited. They are very useful during resource development. To use a local resource, set the source to a path starting with `/`, `./`, or `../`. For instance, the following code is using the local pre-existing-vpc resource.
+
+```
+  - source: ./resources/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+```
+
 ## Common Settings
-There is a set of common setting names that are consistent accross different
+There are a few common setting names that are consistent accross different
 HPC Toolkit resources. This is intentional to allow multiple resources to share
 inferred settings from global variables. These variables are listed and
 described below.
@@ -50,6 +70,12 @@ existing network.
 
 * [**custom-image**](packer/custom-image/README.md): Creates a custom VM Image
 based on the GCP HPC VM image
+
+### Project
+
+* [**new-project**](project/new-project/README.md): Creates a Google Cloud Projects
+
+* [**service-enablement**](project/service-enablement/README.md): Allows enabling various APIs for a Google Cloud Project
 
 ### Scripts
 
