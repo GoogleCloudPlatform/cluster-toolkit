@@ -1,0 +1,58 @@
+
+
+
+blueprint_name: hpc-cluster-small
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: hpc-slurm-small
+  region: europe-west4
+  zone: europe-west4-a
+
+resource_groups:
+- group: primary
+  resources:
+  - source: resources/monitoring/dashboard
+    kind: terraform
+    id: hpc_dash
+    settings:
+      widgets:
+      - |
+          {
+            "text": {
+              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "format": "MARKDOWN"
+            },
+            "title": "HPC Toolkit - TEST"
+          }
+      - |
+          {
+            "text": {
+              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "format": "MARKDOWN"
+            },
+            "title": "HPC Toolkit - TEST 2"
+          }
+  - source: resources/monitoring/dashboard
+    kind: terraform
+    id: empty_dash
+    settings:
+      base_dashboard: Empty
+      widgets:
+      - |
+          {
+            "text": {
+              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "format": "MARKDOWN"
+            },
+            "title": "HPC Toolkit - TEST"
+          }
+      - |
+          {
+            "text": {
+              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "format": "MARKDOWN"
+            },
+            "title": "HPC Toolkit - TEST 2"
+          }
+
