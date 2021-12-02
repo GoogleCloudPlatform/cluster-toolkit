@@ -39,9 +39,8 @@ resource_groups:
     kind: terraform
     id: slurm-sql
     settings:
-      sql_instance_name: slurm-sql7
+      sql_instance_name: slurm-sql8
       tier: "db-f1-micro"
-      network: $(network1.network_name)
       nat_ips: $(network1.nat_ips)
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
@@ -51,7 +50,7 @@ resource_groups:
       partition_name: compute
       max_node_count: 20
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      machine_type: n2-standard-2
+      machine_type: c2-standard-2
       network_storage:
       - $(homefs.network_storage)
 
