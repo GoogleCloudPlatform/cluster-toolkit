@@ -70,6 +70,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [google_compute_address.nat_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_subnetwork.primary_subnetwork](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
 
 ## Inputs
@@ -85,6 +86,7 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_nat_ips"></a> [nat\_ips](#output\_nat\_ips) | the external IPs assigned to the NAT, which will be used by cloudsql to communicate with the slurm cluster |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The name of the network created |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The URI of the VPC being created |
 | <a name="output_primary_subnetwork"></a> [primary\_subnetwork](#output\_primary\_subnetwork) | The subnetwork in the specified primary region |

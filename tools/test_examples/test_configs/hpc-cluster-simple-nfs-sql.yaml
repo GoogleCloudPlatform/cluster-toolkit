@@ -1,0 +1,81 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: hpc-cluster-simple
+
+vars:
+  project_id: dev-hpc-toolkit
+  deployment_name: hpc-cluster-simple
+  region: us-central1
+  zone: us-central1-a
+
+resource_groups:
+- group: primary
+  resources:
+  - source: resources/network/vpc
+    kind: terraform
+    id: network1
+
+  - source: resources/file-system/nfs-server
+    kind: terraform
+    id: homefs
+    settings:
+      network_name: $(network1.network_name)
+      labels:
+        ghpc_role: storage-home
+
+  - source: ./resources/database/cloudsql-federation
+    kind: terraform
+    id: slurm-sql
+    settings:
+      sql_instance_name: slurm-sql7
+      tier: "db-f1-micro"
+      network: $(network1.network_name)
+      nat_ips: $(network1.nat_ips)
+
+  - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    id: compute-partition
+    settings:
+      partition_name: compute
+      max_node_count: 20
+      subnetwork_name: ((module.network1.primary_subnetwork.name))
+      machine_type: n2-standard-2
+      network_storage:
+      - $(homefs.network_storage)
+
+  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+    kind: terraform
+    id: slurm-controller
+    settings:
+      subnetwork_name: ((module.network1.primary_subnetwork.name))
+      login_node_count: 1
+      network_storage:
+      - $(homefs.network_storage)
+      partitions:
+      - $(compute-partition.partition)
+      cloudsql: ((module.slurm-sql.cloudsql))
+      disable_compute_public_ips: true
+      disable_controller_public_ips: true
+      
+
+  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+    kind: terraform
+    id: slurm-login
+    settings:
+      subnetwork_name: ((module.network1.primary_subnetwork.name))
+      network_storage:
+      - $(homefs.network_storage)
+      controller_name: $(slurm-controller.controller_node_name)
+      disable_login_public_ips: true
