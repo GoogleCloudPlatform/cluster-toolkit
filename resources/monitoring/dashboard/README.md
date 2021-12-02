@@ -1,3 +1,28 @@
+## Description
+Create a monitoring dashboard for the HPC cluster distribution. The resources
+includes a default HPC focused dashboard with the ability to add custom widgets
+as well as the option to add an empty dashboard and add widgets as needed.
+
+## Example
+```
+- source: resources/monitoring/dashboard
+  kind: terraform
+  id: hpc_dash
+  settings:
+    widgets:
+    - |
+      {
+        "text": {
+          "content": "## Header",
+          "format": "MARKDOWN"
+        },
+        "title": "Custom Text Block Widget"
+      }
+```
+This resource creates a dashboard based on the HPC dashboard (default) with an
+extra text widget added as a multi-line string representing a JSON block.
+
+## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 
