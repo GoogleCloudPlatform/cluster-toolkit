@@ -1,0 +1,113 @@
+{
+  "header": "Copyright 2021 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "auto_delete_disk",
+      "type": "bool",
+      "description": "Whether or not the boot disk should be auto-deleted",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "deployment_name",
+      "type": "string",
+      "description": "Name of the HPC deployment, used as name of the filestore instace if no name is specified.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "disk_size",
+      "type": "number",
+      "description": "Storage size gb",
+      "default": "100",
+      "required": false
+    },
+    {
+      "name": "image_family",
+      "type": "string",
+      "description": "the VM image used by the nfs server",
+      "default": "centos-7",
+      "required": false
+    },
+    {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels to add to the filestore instance. List key, value pairs.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "machine_type",
+      "type": "string",
+      "description": "Type of the VM instance to use",
+      "default": "n2d-standard-2",
+      "required": false
+    },
+    {
+      "name": "network_name",
+      "type": "string",
+      "description": "Network to deploy to. Only one of network or subnetwork should be specified.",
+      "default": "default",
+      "required": false
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "description": "The service tier of the instance.",
+      "default": "pd-ssd",
+      "required": false
+    },
+    {
+      "name": "zone",
+      "type": "string",
+      "description": "The name of the Filestore zone of the instance.",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [
+    {
+      "name": "network_storage",
+      "description": "Describes a nfs instance."
+    }
+  ],
+  "providers": [
+    {
+      "name": "google",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    },
+    {
+      "name": "google",
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "compute_disk",
+      "name": "default",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "compute_instance",
+      "name": "compute_instance",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    }
+  ]
+}
