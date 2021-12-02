@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,20 +17,17 @@ set -e
 
 run_test(){
   example=$1
-  echo "testing $example"
   tmpdir="$(mktemp -d)"
-  BLUEPRINT="$(basename ${example})-$(basename ${tmpdir})"
-  echo "testing ${example} in ${tmpdir}"
   exampleFile=$(basename $example)
+  BLUEPRINT="${exampleFile%.yaml}-$(basename ${tmpdir##*.})"
+
+  echo "testing ${example} in ${tmpdir}"
   cp ${example} "${tmpdir}/"
   cd "${tmpdir}"
   sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" ${exampleFile} || \
     { echo "could not set blueprint_name"; exit 1; }
 
-  PROJECT=${PROJECT:-$(gcloud config get-value project 2>/dev/null)}
-  if [ -z "$PROJECT" ]; then echo "PROJECT is not set."; exit 1;
-  else echo PROJECT=$PROJECT
-  fi
+  PROJECT="invalid-project"
 
   sed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
     { echo "could not set project_id"; exit 1; }
@@ -74,6 +71,7 @@ NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
 for example in $CONFIGS
 do
+  echo JOBS running: $(jobs)
   JNUM=$(jobs | wc -l)
   echo "$JNUM jobs running"
   if [ $JNUM -lt $NPROCS ]
