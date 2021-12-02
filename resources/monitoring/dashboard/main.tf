@@ -23,6 +23,7 @@ resource "google_monitoring_dashboard" "dashboard" {
   dashboard_json = templatefile(local.dash_path, {
     widgets         = var.widgets
     deployment_name = var.deployment_name
+    title           = var.title
     }
   )
   project = var.project_id

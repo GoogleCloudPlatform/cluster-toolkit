@@ -1,5 +1,5 @@
 ## Description
-Create a monitoring dashboard for the HPC cluster distribution. The resources
+Creates a monitoring dashboard for the HPC cluster distribution. The resource
 includes a default HPC focused dashboard with the ability to add custom widgets
 as well as the option to add an empty dashboard and add widgets as needed.
 
@@ -65,9 +65,10 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_base_dashboard"></a> [base\_dashboard](#input\_base\_dashboard) | Baseline dashboard template, either custom or from ./dashboards | `string` | `"HPC"` | no |
+| <a name="input_base_dashboard"></a> [base\_dashboard](#input\_base\_dashboard) | Baseline dashboard template, select from HPC or Emtpy | `string` | `"HPC"` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
+| <a name="input_title"></a> [title](#input\_title) | Title of the created dashboard | `string` | `"HPC Toolkit Dashboard"` | no |
 | <a name="input_widgets"></a> [widgets](#input\_widgets) | List of additional widgets to add to the base dashboard. | `list(string)` | `[]` | no |
 
 ## Outputs

@@ -1,6 +1,6 @@
 {
   "category": "CUSTOM",
-  "displayName": "HPC: ${deployment_name}",
+  "displayName": "${title}: ${deployment_name}",
   "gridLayout": {
     "columns": 2,
     "widgets": [
@@ -9,7 +9,7 @@
           "content": "HPC metrics from the ${deployment_name} deployment of the HPC Toolkit.",
           "format": "MARKDOWN"
         },
-        "title": "HPC Toolkit"
+        "title": "${title}"
       },
       {
         "title": "VM Instance - Memory utilization",

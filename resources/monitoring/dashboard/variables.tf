@@ -25,9 +25,15 @@ variable "deployment_name" {
 }
 
 variable "base_dashboard" {
-  description = "Baseline dashboard template, either custom or from ./dashboards"
+  description = "Baseline dashboard template, select from HPC or Emtpy"
   type        = string
   default     = "HPC"
+}
+
+variable "title" {
+  description = "Title of the created dashboard"
+  type        = string
+  default     = "HPC Toolkit Dashboard"
 }
 
 variable "widgets" {
