@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,23 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-BLUEPRINT='test_blueprint'
-CONFIGS=$(find tools/test_examples/test_configs examples/ -name "*.yaml" -type f)
-tmpdir="$(mktemp -d)"
-cwd=$(pwd)
-for example in $CONFIGS
-do
-  echo "testing ${example} in ${tmpdir}"
+set -e
+
+run_test(){
+  example=$1
+  tmpdir="$(mktemp -d)"
   exampleFile=$(basename $example)
+  BLUEPRINT="${exampleFile%.yaml}-$(basename ${tmpdir##*.})"
+
+  echo "testing ${example} in ${tmpdir}"
   cp ${example} "${tmpdir}/"
   cd "${tmpdir}"
   sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" ${exampleFile} || \
     { echo "could not set blueprint_name"; exit 1; }
 
-  PROJECT=${PROJECT:-$(gcloud config get-value project 2>/dev/null)}
-  if [ -z "$PROJECT" ]; then echo "PROJECT is not set."; exit 1;
-  else echo PROJECT=$PROJECT
-  fi
+  PROJECT="invalid-project"
 
   sed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
     { echo "could not set project_id"; exit 1; }
@@ -56,5 +54,36 @@ do
   cd ..
   rm -rf ${BLUEPRINT} || { echo "could not remove blueprint folder from $(pwd)"; exit 1; }
   cd ${cwd}
+  rm -r ${tmpdir}
+}
+
+check_background(){
+  if ! wait -n; then
+    echo "a test failed. Exiting with status 1."
+    wait
+    exit 1
+  fi
+}
+
+CONFIGS=$(find tools/test_examples/test_configs examples/ -name "*.yaml" -type f)
+cwd=$(pwd)
+NPROCS=${NPROCS:-$(nproc)}
+echo "Running tests in $NPROCS processes"
+for example in $CONFIGS
+do
+  echo JOBS running: $(jobs)
+  JNUM=$(jobs | wc -l)
+  echo "$JNUM jobs running"
+  if [ $JNUM -lt $NPROCS ]
+  then
+    run_test $example &
+  else
+    echo "Reached max number of parallel tests. Waiting for one to finish."
+    check_background
+  fi
 done
-rm -r ${tmpdir}
+JNUM=$(jobs | wc -l)
+while [ $JNUM -gt 0 ]; do
+  check_background
+  JNUM=$(jobs | wc -l)
+done
