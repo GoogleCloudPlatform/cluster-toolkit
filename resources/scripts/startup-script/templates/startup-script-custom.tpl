@@ -1,4 +1,4 @@
-#! /bin/bash
+
 
 stdlib::run_playbook() {
   if [ ! "$(which ansible-playbook)" ]; then
@@ -19,15 +19,15 @@ stdlib::runner() {
   esac
 }
 
-stdlib::init_gsutil_crcmod_el
+stdlib::load_runners(){
+  tmpdir="$(mktemp -d)"
 
-tmpdir="$(mktemp -d)"
+  stdlib::debug "=== BEGIN Running runners ==="
 
-stdlib::debug "=== BEGIN Running runners ==="
+  %{for p in runners ~}
+  stdlib::runner ${p.type} ${p.object} $${tmpdir}
+  %{endfor ~}
 
-%{for p in runners ~}
-stdlib::runner ${p.type} ${p.object} $${tmpdir}
-%{endfor ~}
+  stdlib::debug "=== END Running runners ==="
+}
 
-stdlib::debug "=== END Running runners ==="
-echo "Finished with startup-script-custom"

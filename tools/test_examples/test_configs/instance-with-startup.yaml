@@ -55,7 +55,6 @@ resource_groups:
       - $(homefs.network_storage)
       metadata:
         startup-script: $(startup.startup_script_content)
-        startup-script-custom: $(startup.startup_script_custom_content)
 
   - source: ./resources/scripts/wait-for-startup
     kind: terraform

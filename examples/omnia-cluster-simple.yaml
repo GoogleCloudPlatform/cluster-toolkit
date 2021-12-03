@@ -64,7 +64,6 @@ resource_groups:
       - $(homefs.network_storage)
       metadata:
         startup-script: $(startup.startup_script_content)
-        startup-script-custom: $(startup.startup_script_custom_content)
 
   - source: resources/compute/simple-instance
     kind: terraform
@@ -80,7 +79,6 @@ resource_groups:
       - $(homefs.network_storage)
       metadata:
         startup-script: $(startup.startup_script_content)
-        startup-script-custom: $(startup.startup_script_custom_content)
 
   - source: resources/scripts/omnia-install
     kind: terraform

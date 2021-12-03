@@ -24,8 +24,27 @@ variable "region" {
   type        = string
 }
 
+
 variable "runners" {
-  description = "List of runners to run on remote VM"
+  description = <<EOT
+    List of runners to run on remote VM.
+    Runners can be of type ansible, shell or data.
+    {
+      type: ansible || shell
+      spec: {
+        file: <file path>
+      } || {
+        name: <name of destination script>
+        content: <text content of the script>
+      }
+    } || {
+      type: data
+      spec: {
+        dir: <folder to be compressed and uploaded with `tar zcf`>
+        dest_path: <path where expanded at destination>
+        runnable: <null or script to run after `tar zxf`>
+      }
+EOT
   type = list(object({
     type = string,
     file = string,

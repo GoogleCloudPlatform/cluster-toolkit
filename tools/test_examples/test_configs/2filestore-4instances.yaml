@@ -93,7 +93,6 @@ resource_groups:
         ghpc_role: head-node
       metadata:
         startup-script: $(startup.startup_script_content)
-        startup-script-custom: $(startup.startup_script_custom_content)
 
   - source: resources/compute/simple-instance
     kind: terraform
@@ -110,4 +109,3 @@ resource_groups:
         ghpc_role: compute
       metadata:
         startup-script: $(startup.startup_script_content)
-        startup-script-custom: $(startup.startup_script_custom_content)

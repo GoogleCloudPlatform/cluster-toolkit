@@ -7,6 +7,8 @@ Runners will be uploaded to a [GCS bucket](https://cloud.google.com/storage/docs
 VMs using the startup script created by this resource will pull the runners from
 that bucket, and therefore must have access to GCS.
 
+For more information on how to use startup scripts on Google Cloud Platform, please refer to [this document](https://cloud.google.com/compute/docs/instances/startup-scripts/linux).
+
 ### Example
 ```
 - source: ./resources/scripts/startup-script
@@ -29,7 +31,6 @@ that bucket, and therefore must have access to GCS.
     - $(homefs.network_storage)
     metadata:
       startup-script: $(startup.startup_script_content)
-      startup-script-custom: $(startup.startup_script_custom_content)
 ```
 
 ## License
@@ -65,9 +66,7 @@ limitations under the License.
 
 ## Modules
 
-| Name | Source | Version |
-|------|--------|---------|
-| <a name="module_startup_scripts"></a> [startup\_scripts](#module\_startup\_scripts) | github.com/terraform-google-modules/terraform-google-startup-scripts | v1.0.0 |
+No modules.
 
 ## Resources
 
@@ -83,12 +82,11 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
-| <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM | <pre>list(object({<br>    type = string,<br>    file = string,<br>  }))</pre> | `[]` | no |
+| <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM.<br>    Runners can be of type ansible, shell or data.<br>    {<br>      type: ansible \|\| shell<br>      spec: {<br>        file: <file path><br>      } \|\| {<br>        name: <name of destination script><br>        content: <text content of the script><br>      }<br>    } \|\| {<br>      type: data<br>      spec: {<br>        dir: <folder to be compressed and uploaded with `tar zcf`><br>        dest\_path: <path where expanded at destination><br>        runnable: <null or script to run after `tar zxf`><br>      } | <pre>list(object({<br>    type = string,<br>    file = string,<br>  }))</pre> | `[]` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_startup_script_content"></a> [startup\_script\_content](#output\_startup\_script\_content) | startup-script-stdlib.sh content as a string value. |
-| <a name="output_startup_script_custom_content"></a> [startup\_script\_custom\_content](#output\_startup\_script\_custom\_content) | Custom startup script to load and run all runners. |
+| <a name="output_startup_script_content"></a> [startup\_script\_content](#output\_startup\_script\_content) | script to load and run all runners, as a string value. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

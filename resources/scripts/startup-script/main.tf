@@ -14,10 +14,33 @@
  * limitations under the License.
  */
 
-module "startup_scripts" {
-  source                       = "github.com/terraform-google-modules/terraform-google-startup-scripts?ref=v1.0.0"
-  enable_init_gsutil_crcmod_el = true
-  enable_get_from_bucket       = true
+locals {
+  load_runners = templatefile(
+    "${path.module}/templates/startup-script-custom.tpl",
+    {
+      bucket = google_storage_bucket.configs_bucket.name,
+      runners = [
+        for p in var.runners : {
+          object = basename(p.file), type = p.type
+        }
+      ]
+    }
+  )
+
+  stdlib_head     = file("${path.module}/files/startup-script-stdlib-head.sh")
+  get_from_bucket = file("${path.module}/files/get_from_bucket.sh")
+  stdlib_body     = file("${path.module}/files/startup-script-stdlib-body.sh")
+
+  # List representing complete content, to be concatenated together.
+  stdlib_list = [
+    local.stdlib_head,
+    local.get_from_bucket,
+    local.load_runners,
+    local.stdlib_body,
+  ]
+
+  # Final content output to the user
+  stdlib = join("", local.stdlib_list)
 }
 
 resource "random_id" "resource_name_suffix" {
