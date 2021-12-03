@@ -1,0 +1,21 @@
+# In this directory, run the following command to build this builder.
+# $ gcloud builds submit . --config=cloudbuild.yaml
+
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '--tag=us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/ansible', '-f', 'Dockerfile', '.']
+
+# Simple sanity check: check that ansible-playbook has not errors
+- name: 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/ansible'
+  args: ['--version']
+
+# Run some ansible commands for check
+- name: 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/ansible'
+  entrypoint: '/usr/bin/ansible'
+  args: ['all', '-i', 'localhost,', '-c', 'local', '-e', 'ansible_python_interpreter=python3', '-m', 'setup', '-a', 'filter=ansible_hostname']
+
+images:
+- 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/ansible'
+
+timeout: 1200s
+tags: ['cloud-builders-community']
