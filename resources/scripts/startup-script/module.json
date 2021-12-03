@@ -18,8 +18,8 @@
     },
     {
       "name": "runners",
-      "type": "list(object({\n    type = string,\n    file = string,\n  }))",
-      "description": "    List of runners to run on remote VM.\n    Runners can be of type ansible, shell or data.\n    {\n      type: ansible || shell\n      spec: {\n        file: \u003cfile path\u003e\n      } || {\n        name: \u003cname of destination script\u003e\n        content: \u003ctext content of the script\u003e\n      }\n    } || {\n      type: data\n      spec: {\n        dir: \u003cfolder to be compressed and uploaded with `tar zcf`\u003e\n        dest_path: \u003cpath where expanded at destination\u003e\n        runnable: \u003cnull or script to run after `tar zxf`\u003e\n      }\n",
+      "type": "list(map(string))",
+      "description": "    List of runners to run on remote VM.\n    Runners can be of type ansible, shell or data.\n    {\n      type: ansible-local || shell\n      spec: {\n        file: \u003cfile path\u003e\n      } || {\n        name: \u003cname of destination script\u003e\n        content: \u003ctext content of the script\u003e\n      }\n    } || {\n      type: data\n      spec: {\n        dir: \u003cfolder to be compressed and uploaded with `tar zcf`\u003e\n        dest_path: \u003cpath where expanded at destination\u003e\n        runnable: \u003cnull or script to run after `tar zxf`\u003e\n      }\n",
       "default": [],
       "required": false
     }

@@ -30,7 +30,7 @@ variable "runners" {
     List of runners to run on remote VM.
     Runners can be of type ansible, shell or data.
     {
-      type: ansible || shell
+      type: ansible-local || shell
       spec: {
         file: <file path>
       } || {
@@ -45,15 +45,33 @@ variable "runners" {
         runnable: <null or script to run after `tar zxf`>
       }
 EOT
-  type = list(object({
-    type = string,
-    file = string,
-  }))
+  type        = list(map(string))
   validation {
     condition = alltrue([
-      for o in var.runners : contains(["ansible-local", "shell"], o.type)
+      for o in var.runners : contains(keys(o), "type")
     ])
-    error_message = "Type can only be 'ansible-local' or 'shell'."
+    error_message = "All runners must declare a type."
   }
+  validation {
+    condition = alltrue([
+      for o in var.runners : o["type"] == "ansible-local" || o["type"] == "shell"
+    ])
+    error_message = "The 'type' must be 'ansible-local' or 'shell'."
+  }
+  validation {
+    condition = alltrue([
+      for o in var.runners : (contains(keys(o), "file") &&
+      !contains(keys(o), "content") && !contains(keys(o), "name")) ||
+      (!contains(keys(o), "file")
+      && contains(keys(o), "content") && contains(keys(o), "name"))
+    ])
+    error_message = "Invalid runner: 'filename' cannot be specified with 'name' and 'content'."
+  }
+  # validation {
+  #   condition = alltrue([
+  #     for o in var.runners : contains(keys(o.spec),"file") || (contains(keys(o.spec),"name") && contains(key(o.spec),"content")
+  #   ])
+  #   error_message = "Type can only be 'ansible-local' or 'shell'."
+  # }
   default = []
 }

@@ -82,7 +82,7 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
-| <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM.<br>    Runners can be of type ansible, shell or data.<br>    {<br>      type: ansible \|\| shell<br>      spec: {<br>        file: <file path><br>      } \|\| {<br>        name: <name of destination script><br>        content: <text content of the script><br>      }<br>    } \|\| {<br>      type: data<br>      spec: {<br>        dir: <folder to be compressed and uploaded with `tar zcf`><br>        dest\_path: <path where expanded at destination><br>        runnable: <null or script to run after `tar zxf`><br>      } | <pre>list(object({<br>    type = string,<br>    file = string,<br>  }))</pre> | `[]` | no |
+| <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM.<br>    Runners can be of type ansible, shell or data.<br>    {<br>      type: ansible-local \|\| shell<br>      spec: {<br>        file: <file path><br>      } \|\| {<br>        name: <name of destination script><br>        content: <text content of the script><br>      }<br>    } \|\| {<br>      type: data<br>      spec: {<br>        dir: <folder to be compressed and uploaded with `tar zcf`><br>        dest\_path: <path where expanded at destination><br>        runnable: <null or script to run after `tar zxf`><br>      } | `list(map(string))` | `[]` | no |
 
 ## Outputs
 
