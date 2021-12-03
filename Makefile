@@ -73,19 +73,6 @@ install-deps-dev: check-pre-commit check-tflint
 	go install github.com/go-critic/go-critic/cmd/gocritic@latest
 	go install github.com/google/addlicense@latest
 
-ifeq (, $(shell which terraform-docs))
-packer-docs:
-	$(error "could not find terraform-docs in PATH, run: go install github.com/terraform-docs/terraform-docs@v0.16.0")
-else
-packer-docs:
-	$(info **************** creating packer documentation ********)
-	@for folder in ${PACKER_FOLDERS}; do \
-	  echo "creating documentation for $${folder}";\
-		terraform-docs markdown $${folder} --config .tfdocs-markdown.yaml;\
-		terraform-docs json $${folder} --config .tfdocs-json.yaml;\
-	done
-endif
-
 ifeq (, $(shell which addlicense))
 add-google-license:
 	$(error "could not find addlicense in PATH, run: go install github.com/google/addlicense@latest")
