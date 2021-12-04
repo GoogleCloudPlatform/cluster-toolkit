@@ -14,6 +14,11 @@
  * limitations under the License.
 */
 
+variable "deployment_name" {
+  description = "The name of the current deployment"
+  type        = string
+}
+
 variable "project_id" {
   description = "Project in which the HPC deployment will be created"
   type        = string
@@ -43,4 +48,9 @@ variable "deletion_protection" {
   description = "Whether or not to allow Terraform to destroy the instance."
   type        = string
   default     = false
+}
+
+variable "labels" {
+  description = "Labels to add to the instances. List key, value pairs."
+  type        = any
 }

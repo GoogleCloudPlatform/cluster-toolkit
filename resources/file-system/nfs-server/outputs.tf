@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-
+# render the content for each folder
 output "network_storage" {
   description = "Describes a nfs instance."
   value = {
@@ -24,3 +24,6 @@ output "network_storage" {
     mount_options = "defaults,hard,intr"
   }
 }
+
+# for p in var.runners : {
+#   object = basename(p.file), type = p.type

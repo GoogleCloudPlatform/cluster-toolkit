@@ -5,7 +5,7 @@
     {
       "name": "auto_delete_disk",
       "type": "bool",
-      "description": "Whether or not the boot disk should be auto-deleted",
+      "description": "Whether or not the nfs disk should be auto-deleted",
       "default": false,
       "required": false
     },
@@ -33,7 +33,7 @@
     {
       "name": "labels",
       "type": "any",
-      "description": "Labels to add to the filestore instance. List key, value pairs.",
+      "description": "Labels to add to the NFS instance. List key, value pairs.",
       "default": null,
       "required": true
     },
@@ -107,7 +107,7 @@
       "source": "hashicorp/google",
       "mode": "managed",
       "version": "latest",
-      "description": null
+      "description": "create a bootdisk and a nfs disk (benefit to resize anytime) /mnt and mounted directories e.g. /mnt/home /mnt/tools"
     }
   ]
 }

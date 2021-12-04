@@ -14,14 +14,30 @@
  * limitations under the License.
 */
 
+# locals {
+#   project_id   = var.project_id
+#   network_name = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
+#   region       = var.region
+# }
+# locals project_id = {if ? project_id : network_project}
+# local prefix
+# local {name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"}
+
 resource "google_compute_disk" "default" {
-  name  = "${var.deployment_name}-disk"
+  name  = "${var.deployment_name}-nfs-instance-disk"
   image = var.image_family
   size  = var.disk_size
   type  = var.type
   zone  = var.zone
 }
+# move start up script to a file, render the file 
+# single var: array_variable_exports /tools by default, # loop through the directories
+# %{for p in runners ~}
+# stdlib::runner ${p.type} ${p.object} $${tmpdir}
+# %{endfor ~}
 
+# create a bootdisk and a nfs disk (benefit to resize anytime)
+# /mnt and mounted directories e.g. /mnt/home /mnt/tools
 resource "google_compute_instance" "compute_instance" {
   name                    = "${var.deployment_name}-nfs-instance"
   zone                    = var.zone
@@ -29,11 +45,9 @@ resource "google_compute_instance" "compute_instance" {
   metadata_startup_script = <<SCRIPT
     yum -y install nfs-utils
     systemctl start nfs-server rpcbind
-    systemctl enable nfs-server rpcbind
-    mkdir -p "/home"
+    systemctl enable nfs-server rpcbind    
     mkdir -p "/tools"
-    chmod 777 "/home" "/tools"
-    echo '/home/ *(rw,sync,no_root_squash)' >> "/etc/exports"
+    chmod 777 "/tools" 
     echo '/tools/ *(rw,sync,no_root_squash)' >> "/etc/exports"
     exportfs -r
   SCRIPT
@@ -45,6 +59,7 @@ resource "google_compute_instance" "compute_instance" {
 
   network_interface {
     network = var.network_name
+    # network = local.network
   }
   labels = var.labels
 }

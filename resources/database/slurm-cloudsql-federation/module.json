@@ -10,6 +10,20 @@
       "required": false
     },
     {
+      "name": "deployment_name",
+      "type": "string",
+      "description": "The name of the current deployment",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels to add to the instances. List key, value pairs.",
+      "default": null,
+      "required": true
+    },
+    {
       "name": "nat_ips",
       "type": "list(any)",
       "description": "a list of NAT ips to be allow listed for the slurm cluster communication",
@@ -49,7 +63,7 @@
   "outputs": [
     {
       "name": "cloudsql",
-      "description": "Describes a cloudsql instance."
+      "description": "Describes the cloudsql instance."
     }
   ],
   "providers": [
@@ -60,6 +74,11 @@
     },
     {
       "name": "google-beta",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "random",
       "alias": null,
       "version": "~\u003e 3.0"
     }
@@ -75,6 +94,10 @@
     },
     {
       "name": "google-beta",
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "random",
       "version": "~\u003e 3.0"
     }
   ],
@@ -111,6 +134,15 @@
       "name": "users",
       "provider": "google",
       "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "password",
+      "name": "password",
+      "provider": "random",
+      "source": "hashicorp/random",
       "mode": "managed",
       "version": "latest",
       "description": null

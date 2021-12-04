@@ -38,6 +38,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 3.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 3.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
@@ -45,6 +46,7 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | ~> 3.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | ~> 3.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
 
@@ -58,12 +60,15 @@ No modules.
 | [google_sql_database.database](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database) | resource |
 | [google_sql_database_instance.instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database_instance) | resource |
 | [google_sql_user.users](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_user) | resource |
+| [random_password.password](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Whether or not to allow Terraform to destroy the instance. | `string` | `false` | no |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. List key, value pairs. | `any` | n/a | yes |
 | <a name="input_nat_ips"></a> [nat\_ips](#input\_nat\_ips) | a list of NAT ips to be allow listed for the slurm cluster communication | `list(any)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region where SQL instance will be configured | `string` | n/a | yes |
@@ -74,5 +79,5 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_cloudsql"></a> [cloudsql](#output\_cloudsql) | Describes a cloudsql instance. |
+| <a name="output_cloudsql"></a> [cloudsql](#output\_cloudsql) | Describes the cloudsql instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

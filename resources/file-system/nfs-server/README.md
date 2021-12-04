@@ -61,11 +61,11 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_auto_delete_disk"></a> [auto\_delete\_disk](#input\_auto\_delete\_disk) | Whether or not the boot disk should be auto-deleted | `bool` | `false` | no |
+| <a name="input_auto_delete_disk"></a> [auto\_delete\_disk](#input\_auto\_delete\_disk) | Whether or not the nfs disk should be auto-deleted | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instace if no name is specified. | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size gb | `number` | `"100"` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | the VM image used by the nfs server | `string` | `"centos-7"` | no |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the filestore instance. List key, value pairs. | `any` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NFS instance. List key, value pairs. | `any` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Type of the VM instance to use | `string` | `"n2d-standard-2"` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Network to deploy to. Only one of network or subnetwork should be specified. | `string` | `"default"` | no |
 | <a name="input_type"></a> [type](#input\_type) | The service tier of the instance. | `string` | `"pd-ssd"` | no |

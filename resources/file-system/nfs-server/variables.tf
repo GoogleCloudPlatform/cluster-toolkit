@@ -43,7 +43,7 @@ variable "image_family" {
 }
 
 variable "auto_delete_disk" {
-  description = "Whether or not the boot disk should be auto-deleted"
+  description = "Whether or not the nfs disk should be auto-deleted"
   type        = bool
   default     = false
 }
@@ -60,7 +60,9 @@ variable "machine_type" {
   default     = "n2d-standard-2"
 }
 
+# network_project for shared vpc 
+
 variable "labels" {
-  description = "Labels to add to the filestore instance. List key, value pairs."
+  description = "Labels to add to the NFS instance. List key, value pairs."
   type        = any
 }

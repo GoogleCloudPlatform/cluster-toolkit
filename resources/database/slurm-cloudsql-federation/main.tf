@@ -14,15 +14,27 @@
  * limitations under the License.
 */
 
+locals {
+  project_id        = var.project_id
+  region            = var.region
+  sql_instance_name = var.sql_instance_name == null ? "${var.deployment_name}-net" : var.sql_instance_name
+}
+
+resource "random_password" "password" {
+  length  = 12
+  special = false
+}
+
 resource "google_sql_database_instance" "instance" {
   depends_on          = [var.nat_ips]
-  name                = var.sql_instance_name
-  region              = var.region
+  name                = local.sql_instance_name
+  region              = local.region
   deletion_protection = var.deletion_protection
   database_version    = "MYSQL_5_7"
 
   settings {
-    tier = var.tier
+    user_label = var.labels
+    tier       = var.tier
     ip_configuration {
 
       ipv4_enabled = true
@@ -48,13 +60,12 @@ resource "google_sql_database" "database" {
 resource "google_sql_user" "users" {
   name     = "slurm"
   instance = google_sql_database_instance.instance.name
-  password = "verysecure"
+  password = random_password.password.result
 }
 
 resource "google_bigquery_connection" "connection" {
-  provider      = google-beta
-  project       = var.project_id
-  friendly_name = "👋"
+  provider = google-beta
+  project  = local.project_id
   cloud_sql {
     instance_id = google_sql_database_instance.instance.connection_name
     database    = google_sql_database.database.name
