@@ -55,8 +55,8 @@
       "name": "network_project",
       "type": "string",
       "description": "the project where the shared network locates in",
-      "default": null,
-      "required": true
+      "default": "default",
+      "required": false
     },
     {
       "name": "type",
@@ -100,7 +100,7 @@
   "resources": [
     {
       "type": "compute_disk",
-      "name": "default",
+      "name": "attached_disk",
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "managed",

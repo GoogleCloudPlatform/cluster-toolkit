@@ -17,11 +17,11 @@
 locals {
   project_id = var.project_id == null ? var.network_project : var.project_id
   # region     = var.region
-  # name       = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
 }
 
-resource "google_compute_disk" "default" {
-  name   = "${var.deployment_name}-nfs-instance-disk"
+resource "google_compute_disk" "attached_disk" {
+  name   = "${local.name}-nfs-instance-disk"
   image  = var.image_family
   size   = var.disk_size
   type   = var.type

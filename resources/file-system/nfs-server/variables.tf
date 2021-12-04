@@ -22,6 +22,7 @@ variable "deployment_name" {
 variable "network_project" {
   description = "the project where the shared network locates in"
   type        = string
+  default     = "default"
 }
 
 variable "zone" {
