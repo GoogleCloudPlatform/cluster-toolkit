@@ -14,14 +14,11 @@
  * limitations under the License.
 */
 
-# locals {
-#   project_id   = var.project_id
-#   network_name = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
-#   region       = var.region
-# }
-# locals project_id = {if ? project_id : network_project}
-# local prefix
-# local {name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"}
+locals {
+  # project_id = var.project_id == null ? var.network_project : var.project_id
+  # region     = var.region
+  # name       = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+}
 
 resource "google_compute_disk" "default" {
   name  = "${var.deployment_name}-nfs-instance-disk"
