@@ -19,6 +19,11 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "network_project" {
+  description = "the project where the shared network locates in"
+  type        = string
+}
+
 variable "zone" {
   description = "The name of the Filestore zone of the instance."
   type        = string
@@ -59,8 +64,6 @@ variable "machine_type" {
   type        = string
   default     = "n2d-standard-2"
 }
-
-# network_project for shared vpc 
 
 variable "labels" {
   description = "Labels to add to the NFS instance. List key, value pairs."

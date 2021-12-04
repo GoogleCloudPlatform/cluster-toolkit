@@ -52,6 +52,13 @@
       "required": false
     },
     {
+      "name": "network_project",
+      "type": "string",
+      "description": "the project where the shared network locates in",
+      "default": null,
+      "required": true
+    },
+    {
       "name": "type",
       "type": "string",
       "description": "The service tier of the instance.",
@@ -107,7 +114,7 @@
       "source": "hashicorp/google",
       "mode": "managed",
       "version": "latest",
-      "description": "create a bootdisk and a nfs disk (benefit to resize anytime) /mnt and mounted directories e.g. /mnt/home /mnt/tools"
+      "description": "/mnt and mounted directories e.g. /mnt/home /mnt/tools"
     }
   ]
 }

@@ -35,7 +35,7 @@ resource_groups:
       labels:
         ghpc_role: storage-home
 
-  - source: ./resources/database/cloudsql-federation
+  - source: ./resources/database/slurm-cloudsql-federation
     kind: terraform
     id: slurm-sql
     settings:

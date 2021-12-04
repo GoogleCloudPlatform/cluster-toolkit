@@ -15,17 +15,18 @@
 */
 
 locals {
-  # project_id = var.project_id == null ? var.network_project : var.project_id
+  project_id = var.project_id == null ? var.network_project : var.project_id
   # region     = var.region
   # name       = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
 }
 
 resource "google_compute_disk" "default" {
-  name  = "${var.deployment_name}-nfs-instance-disk"
-  image = var.image_family
-  size  = var.disk_size
-  type  = var.type
-  zone  = var.zone
+  name   = "${var.deployment_name}-nfs-instance-disk"
+  image  = var.image_family
+  size   = var.disk_size
+  type   = var.type
+  zone   = var.zone
+  labels = var.labels
 }
 # move start up script to a file, render the file 
 # single var: array_variable_exports /tools by default, # loop through the directories
@@ -33,7 +34,6 @@ resource "google_compute_disk" "default" {
 # stdlib::runner ${p.type} ${p.object} $${tmpdir}
 # %{endfor ~}
 
-# create a bootdisk and a nfs disk (benefit to resize anytime)
 # /mnt and mounted directories e.g. /mnt/home /mnt/tools
 resource "google_compute_instance" "compute_instance" {
   name                    = "${var.deployment_name}-nfs-instance"
@@ -51,12 +51,17 @@ resource "google_compute_instance" "compute_instance" {
 
   boot_disk {
     auto_delete = var.auto_delete_disk
+  }
+
+  attached_disk {
+    auto_delete = var.auto_delete_disk
     source      = google_compute_disk.default.name
   }
 
   network_interface {
-    network = var.network_name
-    # network = local.network
+    network            = var.network_name
+    subnetwork_project = local.project_id
+
   }
   labels = var.labels
 }
