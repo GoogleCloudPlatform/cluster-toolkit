@@ -24,6 +24,8 @@ locals {
   name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
 }
 
+data "google_compute_default_service_account" "default" {}
+
 resource "google_compute_disk" "attached_disk" {
   name   = "${local.name}-nfs-instance-disk"
   image  = var.image_family
@@ -32,6 +34,7 @@ resource "google_compute_disk" "attached_disk" {
   zone   = var.zone
   labels = var.labels
 }
+
 # move start up script to a file, render the file 
 # single var: array_variable_exports /tools by default, # loop through the directories
 # %{for p in runners ~}
@@ -44,28 +47,39 @@ resource "google_compute_instance" "compute_instance" {
   zone         = var.zone
   machine_type = var.machine_type
   # metadata_startup_script = file("${path.module}/startup.sh")
-  metadata_startup_script = <<SCRIPT
-    yum -y install nfs-utils
-    systemctl start nfs-server rpcbind
-    systemctl enable nfs-server rpcbind    
-    mkdir -p "/tools"
-    chmod 777 "/tools" 
-    echo '/tools/ *(rw,sync,no_root_squash)' >> "/etc/exports"
-    exportfs -r
-  SCRIPT
+  # metadata_startup_script = <<SCRIPT
+  #   yum -y install nfs-utils
+  #   systemctl start nfs-server rpcbind
+  #   systemctl enable nfs-server rpcbind    
+  #   mkdir -p "/tools"
+  #   chmod 777 "/tools" 
+  #   echo '/tools/ *(rw,sync,no_root_squash)' >> "/etc/exports"
+  #   exportfs -r
+  # SCRIPT
 
   boot_disk {
     auto_delete = var.auto_delete_disk
+    initialize_params {
+      # https://cloud.google.com/compute/docs/images#hpc_images
+      image = "cloud-hpc-image-public/hpc-centos-7"
+    }
   }
 
   attached_disk {
-    source = google_compute_disk.attached_disk.name
+    source = google_compute_disk.attached_disk.id
   }
 
   network_interface {
     network            = var.network_name
     subnetwork_project = local.project_id
-
   }
+
+  service_account {
+    email  = var.service_account == null ? data.google_compute_default_service_account.default.email : var.service_account
+    scopes = var.scopes
+  }
+
+  metadata = var.metadata
+
   labels = var.labels
 }

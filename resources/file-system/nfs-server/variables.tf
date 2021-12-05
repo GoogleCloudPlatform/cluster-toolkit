@@ -81,3 +81,21 @@ variable "labels" {
   description = "Labels to add to the NFS instance. List key, value pairs."
   type        = any
 }
+
+variable "metadata" {
+  description = "Metadata, provided as a map"
+  type        = map(string)
+  default     = {}
+}
+
+variable "service_account" {
+  description = "Service Account for the NFS Server"
+  type        = string
+  default     = null
+}
+
+variable "scopes" {
+  description = "Scopes to apply to the controller"
+  type        = list(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}

@@ -14,26 +14,10 @@
 # limitations under the License.
 
 
-if [ ! "$(which mount.nfs)" ]; then
-  if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-
-    yum -y install nfs-utils
-    systemctl start nfs-server rpcbind
-    systemctl enable nfs-server rpcbind
-    mkdir -p "/tools"
-    chmod 777 "/tools" 
-    echo '/tools/ *(rw,sync,no_root_squash)' >> "/etc/exports"
-    exportfs -r
-  elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
-    apt-get -y update
-    apt-get -y install nfs-common
-    systemctl start nfs-server rpcbind
-    systemctl enable nfs-server rpcbind    
-    mkdir -p "/tools"
-    chmod 777 "/tools" 
-    echo '/tools/ *(rw,sync,no_root_squash)' >> "/etc/exports"
-  else
-    echo 'Unsuported distribution'
-    exit 1
-  fi
-fi
+yum -y install nfs-utils
+systemctl start nfs-server rpcbind
+systemctl enable nfs-server rpcbind
+mkdir -p "/tools"
+chmod 777 "/tools" 
+echo '/tools/ *(rw,sync,no_root_squash)' >> "/etc/exports"
+exportfs -r

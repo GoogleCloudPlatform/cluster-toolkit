@@ -45,6 +45,13 @@
       "required": false
     },
     {
+      "name": "metadata",
+      "type": "map(string)",
+      "description": "Metadata, provided as a map",
+      "default": {},
+      "required": false
+    },
+    {
       "name": "name",
       "type": "string",
       "description": "The resource name of the instance.",
@@ -71,6 +78,22 @@
       "description": "Project in which the HPC deployment will be created",
       "default": null,
       "required": true
+    },
+    {
+      "name": "scopes",
+      "type": "list(string)",
+      "description": "Scopes to apply to the controller",
+      "default": [
+        "https://www.googleapis.com/auth/cloud-platform"
+      ],
+      "required": false
+    },
+    {
+      "name": "service_account",
+      "type": "string",
+      "description": "Service Account for the NFS Server",
+      "default": null,
+      "required": false
     },
     {
       "name": "type",
@@ -145,6 +168,15 @@
       "provider": "random",
       "source": "hashicorp/random",
       "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "compute_default_service_account",
+      "name": "default",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "data",
       "version": "latest",
       "description": null
     }

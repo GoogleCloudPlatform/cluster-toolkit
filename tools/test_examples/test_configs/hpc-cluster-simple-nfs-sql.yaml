@@ -27,6 +27,14 @@ resource_groups:
     kind: terraform
     id: network1
 
+  - source: ./resources/scripts/startup-script
+    kind: terraform
+    id: startup
+    settings:
+      runners:
+        - type: shell
+          file: "modules/nfs-server/scripts/install-nfs.sh"
+
   - source: resources/file-system/nfs-server
     kind: terraform
     id: homefs
@@ -34,6 +42,9 @@ resource_groups:
       network_name: $(network1.network_name)
       labels:
         ghpc_role: storage-home
+      metadata:
+        startup-script: $(startup.startup_script_content)
+        startup-script-custom: $(startup.startup_script_custom_content)
 
   - source: ./resources/database/slurm-cloudsql-federation
     kind: terraform
