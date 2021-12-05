@@ -14,6 +14,10 @@
  * limitations under the License.
 */
 
+resource "random_id" "resource_name_suffix" {
+  byte_length = 4
+}
+
 locals {
   project_id = var.project_id == null ? var.network_project : var.project_id
   # region     = var.region
@@ -36,9 +40,10 @@ resource "google_compute_disk" "attached_disk" {
 
 # /mnt and mounted directories e.g. /mnt/home /mnt/tools
 resource "google_compute_instance" "compute_instance" {
-  name                    = "${var.deployment_name}-nfs-instance"
-  zone                    = var.zone
-  machine_type            = var.machine_type
+  name         = "${var.deployment_name}-nfs-instance"
+  zone         = var.zone
+  machine_type = var.machine_type
+  # metadata_startup_script = file("${path.module}/startup.sh")
   metadata_startup_script = <<SCRIPT
     yum -y install nfs-utils
     systemctl start nfs-server rpcbind
@@ -54,8 +59,7 @@ resource "google_compute_instance" "compute_instance" {
   }
 
   attached_disk {
-    auto_delete = var.auto_delete_disk
-    source      = google_compute_disk.default.name
+    source = google_compute_disk.attached_disk.name
   }
 
   network_interface {

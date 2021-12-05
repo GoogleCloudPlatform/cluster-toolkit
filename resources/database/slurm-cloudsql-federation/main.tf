@@ -33,8 +33,8 @@ resource "google_sql_database_instance" "instance" {
   database_version    = "MYSQL_5_7"
 
   settings {
-    user_label = var.labels
-    tier       = var.tier
+    user_labels = var.labels
+    tier        = var.tier
     ip_configuration {
 
       ipv4_enabled = true
