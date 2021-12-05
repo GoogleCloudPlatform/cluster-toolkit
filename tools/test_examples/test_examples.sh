@@ -23,7 +23,7 @@ do
   exampleFile=$(basename $example)
   cp ${example} "${tmpdir}/"
   cd "${tmpdir}"
-  gsed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" ${exampleFile} || \
+  sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" ${exampleFile} || \
     { echo "could not set blueprint_name"; exit 1; }
 
   PROJECT=${PROJECT:-$(gcloud config get-value project 2>/dev/null)}
@@ -31,7 +31,7 @@ do
   else echo PROJECT=$PROJECT
   fi
 
-  gsed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
+  sed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
     { echo "could not set project_id"; exit 1; }
   cd ${cwd}
   ./ghpc create -c ${tmpdir}/${exampleFile} || { echo "error creating blueprint"; exit 1; }
