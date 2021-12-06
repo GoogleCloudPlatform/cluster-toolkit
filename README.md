@@ -74,3 +74,14 @@ directory of the repo and running:
 ```shell
 pre-commit install
 ```
+
+### Packer
+Auto-generated READMEs are created for Packer resources similar to Terraform
+resources. These docs are generated as part of a pre-commit hook (packer-readme)
+which searches for `*.pkr.hcl` files. If a packer config is written in another
+file, for instance JSON, terraform docs should be run manually against the
+resource directory before pushing changes. To generate the documentation, run
+the following script against the packer config file:
+```
+tools/autodoc/terraform_docs.sh resources/packer/new_resource/image.json
+```
