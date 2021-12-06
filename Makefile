@@ -6,7 +6,7 @@ ENG = ./cmd/... ./pkg/...
 SRC = $(ENG) $(RES)/tests/...
 PACKER_FOLDERS=$(shell find ${RES} -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
 
-ghpc: $(shell find . -type f -name "*.go")
+ghpc: $(shell find ./cmd ./pkg ./resources ghpc.go -type f)
 	$(info **************** building ghpc ************************)
 	go build ghpc.go
 
@@ -30,7 +30,7 @@ test-resources:
 	$(info **************** running resources unit tests *********)
 	go test $(RES)/...
 
-test-examples: ghpc
+test-examples: ghpc-dev
 	$(info *********** running basic integration tests ***********)
 	tools/test_examples/test_examples.sh
 
