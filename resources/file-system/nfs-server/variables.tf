@@ -19,21 +19,10 @@ variable "deployment_name" {
   type        = string
 }
 
-variable "project_id" {
-  description = "Project in which the HPC deployment will be created"
-  type        = string
-}
-
 variable "name" {
   description = "The resource name of the instance."
   type        = string
   default     = null
-}
-
-variable "network_project" {
-  description = "the project where the shared network located in"
-  type        = string
-  default     = "default"
 }
 
 variable "zone" {

@@ -75,8 +75,6 @@ No modules.
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Network to deploy to. Only one of network or subnetwork should be specified. | `string` | `"default"` | no |
-| <a name="input_network_project"></a> [network\_project](#input\_network\_project) | the project where the shared network located in | `string` | `"default"` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_scopes"></a> [scopes](#input\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service Account for the NFS Server | `string` | `null` | no |
 | <a name="input_type"></a> [type](#input\_type) | The service tier of the instance. | `string` | `"pd-ssd"` | no |

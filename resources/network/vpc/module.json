@@ -60,7 +60,7 @@
   "outputs": [
     {
       "name": "nat_ips",
-      "description": "the external IPs assigned to the NAT, which will be used by cloudsql to communicate with the slurm cluster"
+      "description": "the external IPs assigned to the NAT"
     },
     {
       "name": "network_name",

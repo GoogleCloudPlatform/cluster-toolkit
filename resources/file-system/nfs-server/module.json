@@ -76,20 +76,6 @@
       "required": false
     },
     {
-      "name": "network_project",
-      "type": "string",
-      "description": "the project where the shared network located in",
-      "default": "default",
-      "required": false
-    },
-    {
-      "name": "project_id",
-      "type": "string",
-      "description": "Project in which the HPC deployment will be created",
-      "default": null,
-      "required": true
-    },
-    {
       "name": "scopes",
       "type": "list(string)",
       "description": "Scopes to apply to the controller",

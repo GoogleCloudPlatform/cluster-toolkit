@@ -19,8 +19,7 @@ resource "random_id" "resource_name_suffix" {
 }
 
 locals {
-  project_id = var.project_id == null ? var.network_project : var.project_id
-  name       = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
 }
 
 data "google_compute_default_service_account" "default" {}
@@ -51,8 +50,7 @@ resource "google_compute_instance" "compute_instance" {
   }
 
   network_interface {
-    network            = var.network_name
-    subnetwork_project = local.project_id
+    network = var.network_name
   }
 
   service_account {

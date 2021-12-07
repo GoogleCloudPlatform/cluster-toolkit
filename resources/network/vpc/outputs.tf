@@ -31,6 +31,6 @@ output "primary_subnetwork" {
 }
 
 output "nat_ips" {
-  description = "the external IPs assigned to the NAT, which will be used by cloudsql to communicate with the slurm cluster"
+  description = "the external IPs assigned to the NAT"
   value       = google_compute_address.nat_ips.*.address
 }
