@@ -1,14 +1,16 @@
 .PHONY: tests fmt vet test-engine test-resources test-examples packer \
         packer-clean packer-check packer-docs add-google-license, \
-				check-tflint, check-pre-commit, install-deps-dev
+        check-tflint, check-pre-commit, install-deps-dev, ghpc-dev
 RES = ./resources
 ENG = ./cmd/... ./pkg/...
 SRC = $(ENG) $(RES)/tests/...
 PACKER_FOLDERS=$(shell find ${RES} -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
 
-ghpc: fmt vet
+ghpc: $(shell find ./cmd ./pkg ./resources ghpc.go -type f)
 	$(info **************** building ghpc ************************)
 	go build ghpc.go
+
+ghpc-dev: fmt vet ghpc
 
 tests: vet packer-check test-engine test-resources test-examples
 
@@ -24,13 +26,12 @@ test-engine:
 	$(info **************** running ghpc unit tests **************)
 	go test -cover $(ENG) 2>&1 |  perl tools/enforce_coverage.pl
 
-
 test-resources:
 	$(info **************** running resources unit tests *********)
 	go test $(RES)/...
 
-test-examples: ghpc
-	$(info **************** running basic integration tests ******)
+test-examples: ghpc-dev
+	$(info *********** running basic integration tests ***********)
 	tools/test_examples/test_examples.sh
 
 packer: packer-clean packer-docs
@@ -66,7 +67,7 @@ check-tflint:
 endif
 
 install-deps-dev: check-pre-commit check-tflint
-	$(info **************** installing developer dependencies ****)
+	$(info *********** installing developer dependencies *********)
 	go install github.com/terraform-docs/terraform-docs@latest
 	go install golang.org/x/lint/golint@latest
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
@@ -78,7 +79,7 @@ packer-docs:
 	$(error "could not find terraform-docs in PATH, run: go install github.com/terraform-docs/terraform-docs@v0.16.0")
 else
 packer-docs:
-	$(info **************** creating packer documentation ********)
+	$(info *********** creating packer documentation *************)
 	@for folder in ${PACKER_FOLDERS}; do \
 	  echo "creating documentation for $${folder}";\
 		terraform-docs markdown $${folder} --config .tfdocs-markdown.yaml;\
