@@ -32,6 +32,13 @@ repos:
         exclude: \.terraform\/.*$
         pass_filenames: true
         require_serial: true
+      - id: packer-readme
+        name: packer-readme
+        entry: tools/autodoc/terraform_docs.sh
+        language: script
+        files: ^.*\.pkr\.hcl$
+        pass_filenames: true
+        require_serial: true
   - repo: git://github.com/dnephin/pre-commit-golang
     rev: v0.4.0
     hooks:
