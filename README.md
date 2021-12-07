@@ -21,10 +21,10 @@ Simply run `make` in the root directory.
 ## Basic Usage
 To create a blueprint, an input YAML file needs to be written or adapted from
 the examples under [examples](examples/). A good starting point is
-[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) which creates a blueprint for a new network,
-a filestore instance and a slurm login node and controller.
-More information on the example configs can be found in the [README.md](examples/README.md) of the
-[examples](examples/) directory.
+[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) which creates
+a blueprint for a new network, a filestore instance and a slurm login node and
+controller. More information on the example configs can be found in the
+[README.md](examples/README.md) of the [examples](examples/) directory.
 
 In order to create a blueprint using `ghpc`, first ensure you've updated your
 config template to include your GCP project ID then run the following command:
@@ -74,6 +74,13 @@ directory of the repo and running:
 ```shell
 pre-commit install
 ```
+
+During development, to re-build the ghpc binary run the following command:
+```
+make ghpc-dev
+```
+which in addition to building the binary will also run go fmt and vet against
+the codebase.
 
 ### Packer
 Auto-generated READMEs are created for Packer resources similar to Terraform
