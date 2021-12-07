@@ -15,7 +15,7 @@
 */
 
 variable "deployment_name" {
-  description = "Name of the HPC deployment, used as name of the filestore instace if no name is specified."
+  description = "Name of the HPC deployment, used as name of the NFS instace if no name is specified."
   type        = string
 }
 
@@ -31,13 +31,13 @@ variable "name" {
 }
 
 variable "network_project" {
-  description = "the project where the shared network locates in"
+  description = "the project where the shared network located in"
   type        = string
   default     = "default"
 }
 
 variable "zone" {
-  description = "The name of the Filestore zone of the instance."
+  description = "The zone name where the nfs instance located in."
   type        = string
 }
 

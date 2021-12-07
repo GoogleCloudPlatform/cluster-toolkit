@@ -12,7 +12,7 @@
     {
       "name": "deployment_name",
       "type": "string",
-      "description": "Name of the HPC deployment, used as name of the filestore instace if no name is specified.",
+      "description": "Name of the HPC deployment, used as name of the NFS instace if no name is specified.",
       "default": null,
       "required": true
     },
@@ -78,7 +78,7 @@
     {
       "name": "network_project",
       "type": "string",
-      "description": "the project where the shared network locates in",
+      "description": "the project where the shared network located in",
       "default": "default",
       "required": false
     },
@@ -115,7 +115,7 @@
     {
       "name": "zone",
       "type": "string",
-      "description": "The name of the Filestore zone of the instance.",
+      "description": "The zone name where the nfs instance located in.",
       "default": null,
       "required": true
     }

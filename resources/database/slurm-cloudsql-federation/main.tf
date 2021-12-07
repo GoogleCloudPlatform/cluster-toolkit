@@ -14,10 +14,14 @@
  * limitations under the License.
 */
 
+resource "random_id" "resource_name_suffix" {
+  byte_length = 4
+}
+
 locals {
   project_id        = var.project_id
   region            = var.region
-  sql_instance_name = var.sql_instance_name == null ? "${var.deployment_name}-net" : var.sql_instance_name
+  sql_instance_name = var.sql_instance_name == null ? "${var.deployment_name}-sql-${random_id.resource_name_suffix.hex}" : var.sql_instance_name
 }
 
 resource "random_password" "password" {

@@ -12,7 +12,7 @@ terraform-google-sql makes it easy to create Google CloudSQL instance and implem
     network: $(network1.network_name)
     nat_ips: $(network1.nat_ips)
 ```
-This creates a new project with pre-defined project ID, a designated folder and organization and associated billing account which will be used to pay for services consumed.
+This creates a cloud sql instance, including a database, user that would allow the slurm cluster to use as an external DB. In addition, it will allow BigQuery to run federated query through it.
 
 ## License
 
@@ -60,6 +60,7 @@ No modules.
 | [google_sql_database.database](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database) | resource |
 | [google_sql_database_instance.instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database_instance) | resource |
 | [google_sql_user.users](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_user) | resource |
+| [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [random_password.password](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 
 ## Inputs

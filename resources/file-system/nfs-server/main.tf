@@ -20,8 +20,7 @@ resource "random_id" "resource_name_suffix" {
 
 locals {
   project_id = var.project_id == null ? var.network_project : var.project_id
-  # region     = var.region
-  name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  name       = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
 }
 
 data "google_compute_default_service_account" "default" {}

@@ -15,7 +15,7 @@
 blueprint_name: hpc-cluster-simple
 
 vars:
-  project_id: dev-hpc-toolkit
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: hpc-cluster-simple
   region: us-central1
   zone: us-central1-a

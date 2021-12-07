@@ -139,6 +139,15 @@
       "description": null
     },
     {
+      "type": "id",
+      "name": "resource_name_suffix",
+      "provider": "random",
+      "source": "hashicorp/random",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
       "type": "password",
       "name": "password",
       "provider": "random",

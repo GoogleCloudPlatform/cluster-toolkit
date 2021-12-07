@@ -1,6 +1,6 @@
 ## Description
 
-This resource creates a Network File Sharing (NFS) disk to share directories and files  with other clients over a network via the [Terraform Google Documentation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk )   to be mounted upon a google compute engine instance created through the [Terraform Google Documentation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance ).   
+This resource creates a Network File Sharing (NFS) disk to share directories and files  with other clients over a network via the [Compute Disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk )   to be mounted upon a google compute engine instance created through the [Compute Instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance ).   
 
 ### Example
 
@@ -66,7 +66,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_auto_delete_disk"></a> [auto\_delete\_disk](#input\_auto\_delete\_disk) | Whether or not the nfs disk should be auto-deleted | `bool` | `false` | no |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instace if no name is specified. | `string` | n/a | yes |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the NFS instace if no name is specified. | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size gb | `number` | `"100"` | no |
 | <a name="input_image"></a> [image](#input\_image) | the VM image used by the nfs server | `string` | `"cloud-hpc-image-public/hpc-centos-7"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NFS instance. List key, value pairs. | `any` | n/a | yes |
@@ -75,12 +75,12 @@ No modules.
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Network to deploy to. Only one of network or subnetwork should be specified. | `string` | `"default"` | no |
-| <a name="input_network_project"></a> [network\_project](#input\_network\_project) | the project where the shared network locates in | `string` | `"default"` | no |
+| <a name="input_network_project"></a> [network\_project](#input\_network\_project) | the project where the shared network located in | `string` | `"default"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_scopes"></a> [scopes](#input\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service Account for the NFS Server | `string` | `null` | no |
 | <a name="input_type"></a> [type](#input\_type) | The service tier of the instance. | `string` | `"pd-ssd"` | no |
-| <a name="input_zone"></a> [zone](#input\_zone) | The name of the Filestore zone of the instance. | `string` | n/a | yes |
+| <a name="input_zone"></a> [zone](#input\_zone) | The zone name where the nfs instance located in. | `string` | n/a | yes |
 
 ## Outputs
 
