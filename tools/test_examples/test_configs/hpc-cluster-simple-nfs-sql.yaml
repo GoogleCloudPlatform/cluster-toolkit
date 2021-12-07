@@ -27,14 +27,6 @@ resource_groups:
     kind: terraform
     id: network1
 
-  - source: ./resources/scripts/startup-script
-    kind: terraform
-    id: startup
-    settings:
-      runners:
-        - type: shell
-          file: "modules/nfs-server/scripts/install-nfs.sh"
-
   - source: resources/file-system/nfs-server
     kind: terraform
     id: homefs
@@ -42,17 +34,14 @@ resource_groups:
       network_name: $(network1.network_name)
       labels:
         ghpc_role: storage-home
-      metadata:
-        startup-script: $(startup.startup_script_content)
-        startup-script-custom: $(startup.startup_script_custom_content)
 
-  - source: ./resources/database/slurm-cloudsql-federation
-    kind: terraform
-    id: slurm-sql
-    settings:
-      sql_instance_name: slurm-sql8
-      tier: "db-f1-micro"
-      nat_ips: $(network1.nat_ips)
+  # - source: ./resources/database/slurm-cloudsql-federation
+  #   kind: terraform
+  #   id: slurm-sql
+  #   settings:
+  #     sql_instance_name: slurm-sql8
+  #     tier: "db-f1-micro"
+  #     nat_ips: $(network1.nat_ips)
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
@@ -61,9 +50,8 @@ resource_groups:
       partition_name: compute
       max_node_count: 20
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      machine_type: c2-standard-2
-      network_storage:
-      - $(homefs.network_storage)
+      machine_type: c2-standard-4
+      network_storage: $(homefs.network_storage)
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
@@ -71,11 +59,10 @@ resource_groups:
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       login_node_count: 1
-      network_storage:
-      - $(homefs.network_storage)
+      network_storage: $(homefs.network_storage)
       partitions:
       - $(compute-partition.partition)
-      cloudsql: ((module.slurm-sql.cloudsql))
+      # cloudsql: ((module.slurm-sql.cloudsql))
       disable_compute_public_ips: true
       disable_controller_public_ips: true
       
@@ -85,7 +72,5 @@ resource_groups:
     id: slurm-login
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      network_storage:
-      - $(homefs.network_storage)
       controller_name: $(slurm-controller.controller_node_name)
       disable_login_public_ips: true

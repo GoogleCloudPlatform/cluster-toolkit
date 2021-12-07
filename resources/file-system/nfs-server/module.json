@@ -24,10 +24,10 @@
       "required": false
     },
     {
-      "name": "image_family",
+      "name": "image",
       "type": "string",
       "description": "the VM image used by the nfs server",
-      "default": "centos-7",
+      "default": "cloud-hpc-image-public/hpc-centos-7",
       "required": false
     },
     {
@@ -36,6 +36,16 @@
       "description": "Labels to add to the NFS instance. List key, value pairs.",
       "default": null,
       "required": true
+    },
+    {
+      "name": "local_mounts",
+      "type": "list(string)",
+      "description": "Mountpoint for this NFS compute instance",
+      "default": [
+        "/tools",
+        "/data"
+      ],
+      "required": false
     },
     {
       "name": "machine_type",
@@ -114,7 +124,7 @@
   "outputs": [
     {
       "name": "network_storage",
-      "description": "Describes a nfs instance."
+      "description": "export of all desired folder directories"
     }
   ],
   "providers": [
@@ -160,7 +170,7 @@
       "source": "hashicorp/google",
       "mode": "managed",
       "version": "latest",
-      "description": "/mnt and mounted directories e.g. /mnt/home /mnt/tools"
+      "description": null
     },
     {
       "type": "id",

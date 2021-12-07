@@ -28,40 +28,22 @@ data "google_compute_default_service_account" "default" {}
 
 resource "google_compute_disk" "attached_disk" {
   name   = "${local.name}-nfs-instance-disk"
-  image  = var.image_family
+  image  = var.image
   size   = var.disk_size
   type   = var.type
   zone   = var.zone
   labels = var.labels
 }
 
-# move start up script to a file, render the file 
-# single var: array_variable_exports /tools by default, # loop through the directories
-# %{for p in runners ~}
-# stdlib::runner ${p.type} ${p.object} $${tmpdir}
-# %{endfor ~}
-
-# /mnt and mounted directories e.g. /mnt/home /mnt/tools
 resource "google_compute_instance" "compute_instance" {
   name         = "${var.deployment_name}-nfs-instance"
   zone         = var.zone
   machine_type = var.machine_type
-  # metadata_startup_script = file("${path.module}/startup.sh")
-  # metadata_startup_script = <<SCRIPT
-  #   yum -y install nfs-utils
-  #   systemctl start nfs-server rpcbind
-  #   systemctl enable nfs-server rpcbind    
-  #   mkdir -p "/tools"
-  #   chmod 777 "/tools" 
-  #   echo '/tools/ *(rw,sync,no_root_squash)' >> "/etc/exports"
-  #   exportfs -r
-  # SCRIPT
 
   boot_disk {
     auto_delete = var.auto_delete_disk
     initialize_params {
-      # https://cloud.google.com/compute/docs/images#hpc_images
-      image = "cloud-hpc-image-public/hpc-centos-7"
+      image = var.image
     }
   }
 
@@ -79,7 +61,8 @@ resource "google_compute_instance" "compute_instance" {
     scopes = var.scopes
   }
 
-  metadata = var.metadata
+  metadata                = var.metadata
+  metadata_startup_script = templatefile("${path.module}/scripts/install-nfs.sh", { local_mounts = var.local_mounts })
 
   labels = var.labels
 }

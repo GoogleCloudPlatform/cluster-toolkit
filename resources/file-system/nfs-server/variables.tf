@@ -53,10 +53,10 @@ variable "type" {
   default     = "pd-ssd"
 }
 
-variable "image_family" {
+variable "image" {
   description = "the VM image used by the nfs server"
   type        = string
-  default     = "centos-7"
+  default     = "cloud-hpc-image-public/hpc-centos-7"
 }
 
 variable "auto_delete_disk" {
@@ -98,4 +98,10 @@ variable "scopes" {
   description = "Scopes to apply to the controller"
   type        = list(string)
   default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "local_mounts" {
+  description = "Mountpoint for this NFS compute instance"
+  type        = list(string)
+  default     = ["/tools", "/data"]
 }

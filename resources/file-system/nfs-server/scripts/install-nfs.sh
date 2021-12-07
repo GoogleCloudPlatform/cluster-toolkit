@@ -13,11 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 yum -y install nfs-utils
 systemctl start nfs-server rpcbind
-systemctl enable nfs-server rpcbind
-mkdir -p "/tools"
-chmod 777 "/tools" 
-echo '/tools/ *(rw,sync,no_root_squash)' >> "/etc/exports"
+systemctl enable nfs-server 
+mkdir /exports
+%{ for mount in local_mounts ~}
+echo ${mount}
+mkdir -p /exports${mount}
+chmod 777 /exports${mount}
+echo '/exports${mount} *(rw,sync,no_root_squash)' >> "/etc/exports"    
+%{ endfor ~}
 exportfs -r

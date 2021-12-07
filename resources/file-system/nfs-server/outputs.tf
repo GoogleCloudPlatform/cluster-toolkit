@@ -15,15 +15,13 @@
 */
 # render the content for each folder
 output "network_storage" {
-  description = "Describes a nfs instance."
-  value = {
-    server_ip     = google_compute_instance.compute_instance.network_interface[0].network_ip
-    remote_mount  = "/tools"
-    local_mount   = "/tools"
+  description = "export of all desired folder directories"
+  value = [for mount in var.local_mounts : {
+    remote_mount  = "/exports${mount}"
+    local_mount   = "/exports${mount}"
     fs_type       = "nfs"
     mount_options = "defaults,hard,intr"
-  }
+    server_ip     = google_compute_instance.compute_instance.network_interface[0].network_ip
+    }
+  ]
 }
-
-# for p in var.runners : {
-#   object = basename(p.file), type = p.type
