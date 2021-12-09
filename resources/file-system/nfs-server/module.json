@@ -128,7 +128,7 @@
   "requirements": [
     {
       "name": "terraform",
-      "version": "\u003e= 0.13.0"
+      "version": "\u003e= 0.14.0"
     },
     {
       "name": "google",

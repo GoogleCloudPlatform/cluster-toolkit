@@ -92,5 +92,11 @@ variable "scopes" {
 variable "local_mounts" {
   description = "Mountpoint for this NFS compute instance"
   type        = list(string)
-  default     = ["/tools", "/data"]
+  validation {
+    condition = alltrue([
+      for m in var.local_mounts : substr(m, 0, 1) == "/"
+    ])
+    error_message = "Local mountpoints have to start with '/'."
+  }
+  default = ["/tools", "/data"]
 }
