@@ -54,3 +54,15 @@ variable "labels" {
   description = "Labels to add to the instances. List key, value pairs."
   type        = any
 }
+
+variable "sql_username" {
+  description = "Username for the SQL database"
+  type        = string
+  default     = "slurm"
+
+}
+
+variable "sql_password" {
+  description = "Password for the SQL database."
+  type        = any
+}

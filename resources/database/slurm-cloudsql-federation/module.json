@@ -52,6 +52,20 @@
       "required": true
     },
     {
+      "name": "sql_password",
+      "type": "any",
+      "description": "Password for the SQL database.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "sql_username",
+      "type": "string",
+      "description": "Username for the SQL database",
+      "default": "slurm",
+      "required": false
+    },
+    {
       "name": "tier",
       "type": "string",
       "description": "The machine type to use for the SQL instance",

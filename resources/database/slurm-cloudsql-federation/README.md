@@ -74,6 +74,8 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region where SQL instance will be configured | `string` | n/a | yes |
 | <a name="input_sql_instance_name"></a> [sql\_instance\_name](#input\_sql\_instance\_name) | name given to the sql instance for ease of identificaion | `string` | n/a | yes |
+| <a name="input_sql_password"></a> [sql\_password](#input\_sql\_password) | Password for the SQL database. | `any` | n/a | yes |
+| <a name="input_sql_username"></a> [sql\_username](#input\_sql\_username) | Username for the SQL database | `string` | `"slurm"` | no |
 | <a name="input_tier"></a> [tier](#input\_tier) | The machine type to use for the SQL instance | `string` | n/a | yes |
 
 ## Outputs
