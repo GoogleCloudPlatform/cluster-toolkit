@@ -56,7 +56,7 @@
       "type": "any",
       "description": "Password for the SQL database.",
       "default": null,
-      "required": true
+      "required": false
     },
     {
       "name": "sql_username",

@@ -65,4 +65,5 @@ variable "sql_username" {
 variable "sql_password" {
   description = "Password for the SQL database."
   type        = any
+  default     = null
 }
