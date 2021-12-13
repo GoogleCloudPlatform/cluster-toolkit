@@ -1,0 +1,174 @@
+{
+  "header": "Copyright 2021 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "deletion_protection",
+      "type": "string",
+      "description": "Whether or not to allow Terraform to destroy the instance.",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "deployment_name",
+      "type": "string",
+      "description": "The name of the current deployment",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels to add to the instances. List key, value pairs.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "nat_ips",
+      "type": "list(any)",
+      "description": "a list of NAT ips to be allow listed for the slurm cluster communication",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "description": "Project in which the HPC deployment will be created",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "region",
+      "type": "string",
+      "description": "The region where SQL instance will be configured",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "sql_instance_name",
+      "type": "string",
+      "description": "name given to the sql instance for ease of identificaion",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "sql_password",
+      "type": "any",
+      "description": "Password for the SQL database.",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "sql_username",
+      "type": "string",
+      "description": "Username for the SQL database",
+      "default": "slurm",
+      "required": false
+    },
+    {
+      "name": "tier",
+      "type": "string",
+      "description": "The machine type to use for the SQL instance",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [
+    {
+      "name": "cloudsql",
+      "description": "Describes the cloudsql instance."
+    }
+  ],
+  "providers": [
+    {
+      "name": "google",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "google-beta",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "random",
+      "alias": null,
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.13.0"
+    },
+    {
+      "name": "google",
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "google-beta",
+      "version": "~\u003e 3.0"
+    },
+    {
+      "name": "random",
+      "version": "~\u003e 3.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "google_bigquery_connection",
+      "name": "connection",
+      "provider": "google-beta",
+      "source": "hashicorp/google-beta",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "sql_database",
+      "name": "database",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "sql_database_instance",
+      "name": "instance",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "sql_user",
+      "name": "users",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "id",
+      "name": "resource_name_suffix",
+      "provider": "random",
+      "source": "hashicorp/random",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "password",
+      "name": "password",
+      "provider": "random",
+      "source": "hashicorp/random",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    }
+  ]
+}

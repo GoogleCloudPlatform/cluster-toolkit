@@ -14,23 +14,13 @@
  * limitations under the License.
 */
 
-output "network_name" {
-  description = "The name of the network created"
-  value       = module.vpc.network_name
-}
-
-output "network_self_link" {
-  description = "The URI of the VPC being created"
-  value       = module.vpc.network_self_link
-
-}
-
-output "primary_subnetwork" {
-  description = "The subnetwork in the specified primary region"
-  value       = data.google_compute_subnetwork.primary_subnetwork
-}
-
-output "nat_ips" {
-  description = "the external IPs assigned to the NAT"
-  value       = google_compute_address.nat_ips.*.address
+output "cloudsql" {
+  description = "Describes the cloudsql instance."
+  sensitive   = true
+  value = {
+    server_ip = google_sql_database_instance.instance.ip_address[0].ip_address
+    user      = google_sql_user.users.name
+    password  = google_sql_user.users.password
+    db_name   = google_sql_database.database.name
+  }
 }

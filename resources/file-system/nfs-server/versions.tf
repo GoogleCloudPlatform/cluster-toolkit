@@ -14,23 +14,17 @@
  * limitations under the License.
 */
 
-output "network_name" {
-  description = "The name of the network created"
-  value       = module.vpc.network_name
-}
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 3.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
 
-output "network_self_link" {
-  description = "The URI of the VPC being created"
-  value       = module.vpc.network_self_link
-
-}
-
-output "primary_subnetwork" {
-  description = "The subnetwork in the specified primary region"
-  value       = data.google_compute_subnetwork.primary_subnetwork
-}
-
-output "nat_ips" {
-  description = "the external IPs assigned to the NAT"
-  value       = google_compute_address.nat_ips.*.address
+  required_version = ">= 0.14.0"
 }

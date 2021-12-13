@@ -13,24 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-
-output "network_name" {
-  description = "The name of the network created"
-  value       = module.vpc.network_name
-}
-
-output "network_self_link" {
-  description = "The URI of the VPC being created"
-  value       = module.vpc.network_self_link
-
-}
-
-output "primary_subnetwork" {
-  description = "The subnetwork in the specified primary region"
-  value       = data.google_compute_subnetwork.primary_subnetwork
-}
-
-output "nat_ips" {
-  description = "the external IPs assigned to the NAT"
-  value       = google_compute_address.nat_ips.*.address
+# render the content for each folder
+output "network_storage" {
+  description = "export of all desired folder directories"
+  value = [for mount in var.local_mounts : {
+    remote_mount  = "/exports${mount}"
+    local_mount   = "${mount}"
+    fs_type       = "nfs"
+    mount_options = "defaults,hard,intr"
+    server_ip     = google_compute_instance.compute_instance.network_interface[0].network_ip
+    }
+  ]
 }
