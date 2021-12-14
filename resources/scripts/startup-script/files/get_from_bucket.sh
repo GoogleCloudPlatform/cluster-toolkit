@@ -22,6 +22,8 @@
 # verify the checksum other than the default behavior of gsutil.
 #
 # This function should have no other platform dependencies other than gsutil.
+
+# This code originated from: https://github.com/terraform-google-modules/terraform-google-startup-scripts?ref=v1.0.0
 stdlib::get_from_bucket() {
   local OPTIND opt url fname dir="${VARDIR:-/var/lib/startup}"
   while getopts ":u:f:d:" opt; do

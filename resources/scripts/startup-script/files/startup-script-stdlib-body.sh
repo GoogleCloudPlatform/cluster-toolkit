@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This code contains minor changes from the original: https://github.com/terraform-google-modules/terraform-google-startup-scripts?ref=v1.0.0
+
+
 stdlib::main() {
   DELETE_AT_EXIT="$(mktemp -d)"
   readonly DELETE_AT_EXIT

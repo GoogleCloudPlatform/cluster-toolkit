@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This code contains minor changes from the original in: https://github.com/terraform-google-modules/terraform-google-startup-scripts?ref=v1.0.0
+
 # Standard library of functions useful for startup scripts.
 
 # These are outside init_global_vars so logging functions work with the most

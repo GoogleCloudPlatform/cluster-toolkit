@@ -26,7 +26,7 @@
     {
       "name": "runners",
       "type": "list(map(string))",
-      "description": "    List of runners to run on remote VM.\n    Runners can be of type ansible-local, shell or data.\n    A runner must specify one of 'source' or 'content'.\n    All runners must specify 'destination'. If 'destination' does not include a\n    path, it will be copied in a temporary folder and deleted after running.\n",
+      "description": "    List of runners to run on remote VM.\n    Runners can be of type ansible-local, shell or data.\n    A runner must specify one of 'source' or 'content'.\n    All runners must specify 'destination'. If 'destination' does not include a\n    path, it will be copied in a temporary folder and deleted after running.\n    Runners may also pass 'args', which will be passed as argument to shell runners only.\n",
       "default": [],
       "required": false
     }

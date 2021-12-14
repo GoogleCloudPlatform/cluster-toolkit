@@ -15,6 +15,7 @@ stdlib::runner() {
   object=$2
   destination=$3
   tmpdir=$4
+  args=$5
 
   destpath="$(dirname $destination)"
   filename="$(basename $destination)"
@@ -28,7 +29,7 @@ stdlib::runner() {
   case "$1" in
     ansible-local) stdlib::run_playbook "$destpath/$filename";;
     # shellcheck source=/dev/null
-    shell)  source "$destpath/$filename";;
+    shell)  sh -c "source '$destpath/$filename' $args";;
   esac
 }
 
@@ -37,8 +38,8 @@ stdlib::load_runners(){
 
   stdlib::debug "=== BEGIN Running runners ==="
 
-  %{for p in runners ~}
-  stdlib::runner ${p.type} ${p.object} ${p.destination} $${tmpdir}
+  %{for r in runners ~}
+  stdlib::runner "${r.type}" "${r.object}" "${r.destination}" $${tmpdir} "${r.args}"
   %{endfor ~}
 
   stdlib::debug "=== END Running runners ==="

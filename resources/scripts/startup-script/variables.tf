@@ -38,6 +38,7 @@ variable "runners" {
     A runner must specify one of 'source' or 'content'.
     All runners must specify 'destination'. If 'destination' does not include a
     path, it will be copied in a temporary folder and deleted after running.
+    Runners may also pass 'args', which will be passed as argument to shell runners only.
 EOT
   type        = list(map(string))
   validation {
@@ -64,7 +65,7 @@ EOT
       (contains(keys(r), "content") && !contains(keys(r), "source")) ||
       (!contains(keys(r), "content") && contains(keys(r), "source"))
     ])
-    error_message = "A runner must specify one of 'content' or 'source file, but not both'."
+    error_message = "A runner must specify one of 'content' or 'source file', but not both."
   }
   default = []
 }

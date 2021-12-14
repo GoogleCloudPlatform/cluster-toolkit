@@ -24,6 +24,7 @@ locals {
           object      = basename(runner["destination"]),
           type        = runner["type"]
           destination = runner["destination"]
+          args        = contains(keys(runner), "args") ? runner["args"] : ""
         }
       ]
     }

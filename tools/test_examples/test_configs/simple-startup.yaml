@@ -38,7 +38,6 @@ resource_groups:
         - type: shell
           source: "modules/startup-script/examples/hello.sh"
           destination: "hello.sh"
-#          args:
         - type: data
           source: /tmp/foo.tgz
           destination: /tmp/foo.tgz
@@ -46,7 +45,9 @@ resource_groups:
           destination: "decompress.sh"
           content: |
             #!/bin/sh
-            tar zxvf /tmp/foo.tgz -C /
+            echo $2
+            tar zxvf /tmp/$1 -C /
+          args: "foo.tgz 'Expanding the file'"
 
   - source: ./resources/compute/simple-instance
     kind: terraform
