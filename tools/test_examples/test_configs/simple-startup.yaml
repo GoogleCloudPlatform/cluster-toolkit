@@ -12,55 +12,54 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: instance_with_startup
+# WARNING: This example and the omnia-install resource are still under development
+#          and experimental! This example is not yet fully supported.
+
+blueprint_name: simple_startup
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: instance-startup
-  region: europe-west4
-  zone: europe-west4-a
+  project_id: gcp-rescale-perf
+  deployment_name: simple-startup
+  region: us-central1
+  zone: us-central1-a
+
 resource_groups:
 - group: primary
   resources:
-  - source: resources/network/pre-existing-vpc
+  - source: ./resources/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
-    kind: terraform
-    id: homefs
-    settings:
-      local_mount: /home
-      network_name: $(network1.network_name)
-
-  - source: resources/scripts/startup-script
+  - source: ./resources/scripts/startup-script
     kind: terraform
     id: startup
     settings:
       runners:
         - type: shell
-          source: "modules/startup-script/examples/install_ansible.sh"
-          destination: "tmp.sh"
+          source: "modules/startup-script/examples/hello.sh"
+          destination: "hello.sh"
+        - type: data
+          source: /tmp/foo.tgz
+          destination: /tmp/foo.tgz
         - type: shell
-          source: "modules/filestore/scripts/install-nfs.sh"
-          destination: "tmp.sh"
-        - type: "ansible-local"
-          source: "modules/startup-script/examples/mount.yaml"
-          destination: "tmp.sh"
+          destination: "decompress.sh"
+          content: |
+            #!/bin/sh
+            echo $2
+            tar zxvf /tmp/$1 -C /
+          args: "foo.tgz 'Expanding the file'"
 
-  - source: resources/compute/simple-instance
+  - source: ./resources/compute/simple-instance
     kind: terraform
-    id: workstation
+    id: instance
     settings:
       network_self_link: $(network1.network_self_link)
-      machine_type: e2-standard-8
-      network_storage:
-      - $(homefs.network_storage)
+      machine_type: e2-standard-4
       metadata:
         startup-script: $(startup.startup_script_content)
 
   - source: ./resources/scripts/wait-for-startup
     kind: terraform
-    id: wait
+    id: waiter
     settings:
-      instance_name: ((module.workstation.name[0]))
+      instance_name: ((module.instance.name[0]))

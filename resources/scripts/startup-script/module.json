@@ -3,6 +3,13 @@
   "footer": "",
   "inputs": [
     {
+      "name": "debug_file",
+      "type": "string",
+      "description": "Path to an optional local to be written with 'startup_script_content'.",
+      "default": null,
+      "required": false
+    },
+    {
       "name": "deployment_name",
       "type": "string",
       "description": "Name of the HPC deployment, used to name GCS bucket for startup scripts.",
@@ -18,28 +25,17 @@
     },
     {
       "name": "runners",
-      "type": "list(object({\n    type = string,\n    file = string,\n  }))",
-      "description": "List of runners to run on remote VM",
+      "type": "list(map(string))",
+      "description": "    List of runners to run on remote VM.\n    Runners can be of type ansible-local, shell or data.\n    A runner must specify one of 'source' or 'content'.\n    All runners must specify 'destination'. If 'destination' does not include a\n    path, it will be copied in a temporary folder and deleted after running.\n    Runners may also pass 'args', which will be passed as argument to shell runners only.\n",
       "default": [],
       "required": false
     }
   ],
-  "modules": [
-    {
-      "name": "startup_scripts",
-      "source": "github.com/terraform-google-modules/terraform-google-startup-scripts",
-      "version": "v1.0.0",
-      "description": null
-    }
-  ],
+  "modules": [],
   "outputs": [
     {
       "name": "startup_script_content",
-      "description": "startup-script-stdlib.sh content as a string value."
-    },
-    {
-      "name": "startup_script_custom_content",
-      "description": "Custom startup script to load and run all runners."
+      "description": "script to load and run all runners, as a string value."
     }
   ],
   "providers": [
@@ -47,6 +43,11 @@
       "name": "google",
       "alias": null,
       "version": "~\u003e 3.0"
+    },
+    {
+      "name": "local",
+      "alias": null,
+      "version": "~\u003e 2.0"
     },
     {
       "name": "random",
@@ -62,6 +63,10 @@
     {
       "name": "google",
       "version": "~\u003e 3.0"
+    },
+    {
+      "name": "local",
+      "version": "~\u003e 2.0"
     },
     {
       "name": "random",
@@ -83,6 +88,15 @@
       "name": "scripts",
       "provider": "google",
       "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "file",
+      "name": "debug_file",
+      "provider": "local",
+      "source": "hashicorp/local",
       "mode": "managed",
       "version": "latest",
       "description": null

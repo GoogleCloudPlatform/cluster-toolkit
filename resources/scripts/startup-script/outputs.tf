@@ -15,21 +15,6 @@
  */
 
 output "startup_script_content" {
-  description = "startup-script-stdlib.sh content as a string value."
-  value       = module.startup_scripts.content
-}
-
-output "startup_script_custom_content" {
-  description = "Custom startup script to load and run all runners."
-  value = templatefile(
-    "${path.module}/templates/startup-script-custom.tpl",
-    {
-      bucket = google_storage_bucket.configs_bucket.name,
-      runners = [
-        for p in var.runners : {
-          object = basename(p.file), type = p.type
-        }
-      ]
-    }
-  )
+  description = "script to load and run all runners, as a string value."
+  value       = local.stdlib
 }

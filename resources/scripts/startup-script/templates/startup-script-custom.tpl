@@ -1,4 +1,4 @@
-#! /bin/bash
+
 
 stdlib::run_playbook() {
   if [ ! "$(which ansible-playbook)" ]; then
@@ -10,24 +10,38 @@ stdlib::run_playbook() {
 }
 
 stdlib::runner() {
-  stdlib::get_from_bucket -u "gs://${bucket}/$2" -d "$3"
+
+  type=$1
+  object=$2
+  destination=$3
+  tmpdir=$4
+  args=$5
+
+  destpath="$(dirname $destination)"
+  filename="$(basename $destination)"
+
+  if [ "$destpath" = "." ]; then
+    destpath=$tmpdir
+  fi
+
+  stdlib::get_from_bucket -u "gs://${bucket}/$object" -d "$destpath" -f "$filename"
 
   case "$1" in
-    ansible-local) stdlib::run_playbook "$3/$2";;
+    ansible-local) stdlib::run_playbook "$destpath/$filename";;
     # shellcheck source=/dev/null
-    shell)  source "$3/$2";;
+    shell)  sh -c "source '$destpath/$filename' $args";;
   esac
 }
 
-stdlib::init_gsutil_crcmod_el
+stdlib::load_runners(){
+  tmpdir="$(mktemp -d)"
 
-tmpdir="$(mktemp -d)"
+  stdlib::debug "=== BEGIN Running runners ==="
 
-stdlib::debug "=== BEGIN Running runners ==="
+  %{for r in runners ~}
+  stdlib::runner "${r.type}" "${r.object}" "${r.destination}" $${tmpdir} "${r.args}"
+  %{endfor ~}
 
-%{for p in runners ~}
-stdlib::runner ${p.type} ${p.object} $${tmpdir}
-%{endfor ~}
+  stdlib::debug "=== END Running runners ==="
+}
 
-stdlib::debug "=== END Running runners ==="
-echo "Finished with startup-script-custom"
