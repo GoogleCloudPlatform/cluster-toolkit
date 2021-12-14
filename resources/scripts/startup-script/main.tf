@@ -20,9 +20,10 @@ locals {
     {
       bucket = google_storage_bucket.configs_bucket.name,
       runners = [
-        for r in var.runners : {
-          object = contains(keys(r), "file") ? basename(r["file"]) : r["name"],
-          type   = r.type
+        for runner in var.runners : {
+          object      = basename(runner["destination"]),
+          type        = runner["type"]
+          destination = runner["destination"]
         }
       ]
     }
@@ -44,8 +45,11 @@ locals {
   stdlib = join("", local.stdlib_list)
 
   runners_dic = { for runner in var.runners :
-    contains(keys(runner), "name") ? runner["name"] : basename(runner["file"])
-    => contains(keys(runner), "content") ? runner["content"] : file(runner["file"])
+    basename(runner["destination"])
+    => {
+      content = contains(keys(runner), "content") ? runner["content"] : null
+      source  = contains(keys(runner), "source") ? runner["source"] : null
+    }
   }
 }
 
@@ -60,18 +64,21 @@ resource "google_storage_bucket" "configs_bucket" {
   storage_class               = "REGIONAL"
 }
 
-# resource "google_storage_bucket_object" "scripts" {
-#   # this writes all scripts exactly once into GCS
-#   for_each = toset(var.runners[*].file)
-#   name     = basename(each.key)
-#   content  = file(each.key)
-#   bucket   = google_storage_bucket.configs_bucket.name
-# }
-
 resource "google_storage_bucket_object" "scripts" {
   # this writes all scripts exactly once into GCS
   for_each = local.runners_dic
   name     = each.key
-  content  = each.value
+  content  = each.value["content"]
+  source   = each.value["source"]
   bucket   = google_storage_bucket.configs_bucket.name
+  timeouts {
+    create = "10m"
+    update = "10m"
+  }
+}
+
+resource "local_file" "debug_file" {
+  for_each = toset(var.debug_file != null ? [var.debug_file] : [])
+  filename = var.debug_file
+  content  = local.stdlib
 }

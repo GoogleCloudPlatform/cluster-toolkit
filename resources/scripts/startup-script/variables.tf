@@ -25,53 +25,46 @@ variable "region" {
 }
 
 
+variable "debug_file" {
+  description = "Path to an optional local to be written with 'startup_script_content'."
+  type        = string
+  default     = null
+}
+
 variable "runners" {
   description = <<EOT
     List of runners to run on remote VM.
-    Runners can be of type ansible, shell or data.
-    {
-      type: ansible-local || shell
-      spec: {
-        file: <file path>
-      } || {
-        name: <name of destination script>
-        content: <text content of the script>
-      }
-    } || {
-      type: data
-      spec: {
-        dir: <folder to be compressed and uploaded with `tar zcf`>
-        dest_path: <path where expanded at destination>
-        runnable: <null or script to run after `tar zxf`>
-      }
+    Runners can be of type ansible-local, shell or data.
+    A runner must specify one of 'source' or 'content'.
+    All runners must specify 'destination'. If 'destination' does not include a
+    path, it will be copied in a temporary folder and deleted after running.
 EOT
   type        = list(map(string))
   validation {
     condition = alltrue([
-      for o in var.runners : contains(keys(o), "type")
+      for r in var.runners : contains(keys(r), "type")
     ])
     error_message = "All runners must declare a type."
   }
   validation {
     condition = alltrue([
-      for o in var.runners : o["type"] == "ansible-local" || o["type"] == "shell"
+      for r in var.runners : contains(keys(r), "destination")
     ])
-    error_message = "The 'type' must be 'ansible-local' or 'shell'."
+    error_message = "All runners must declare a destination name (even without a path)."
   }
   validation {
     condition = alltrue([
-      for o in var.runners : (contains(keys(o), "file") &&
-      !contains(keys(o), "content") && !contains(keys(o), "name")) ||
-      (!contains(keys(o), "file")
-      && contains(keys(o), "content") && contains(keys(o), "name"))
+      for r in var.runners : r["type"] == "ansible-local" || r["type"] == "shell" || r["type"] == "data"
     ])
-    error_message = "Invalid runner: 'filename' cannot be specified with 'name' and 'content'."
+    error_message = "The 'type' must be 'ansible-local', 'shell' or 'data'."
   }
-  # validation {
-  #   condition = alltrue([
-  #     for o in var.runners : contains(keys(o.spec),"file") || (contains(keys(o.spec),"name") && contains(key(o.spec),"content")
-  #   ])
-  #   error_message = "Type can only be 'ansible-local' or 'shell'."
-  # }
+  validation {
+    condition = alltrue([
+      for r in var.runners :
+      (contains(keys(r), "content") && !contains(keys(r), "source")) ||
+      (!contains(keys(r), "content") && contains(keys(r), "source"))
+    ])
+    error_message = "A runner must specify one of 'content' or 'source file, but not both'."
+  }
   default = []
 }

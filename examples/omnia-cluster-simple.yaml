@@ -45,11 +45,14 @@ resource_groups:
     settings:
       runners:
         - type: shell
-          file: "modules/startup-script/examples/install_ansible.sh"
+          source: "modules/startup-script/examples/install_ansible.sh"
+          destination: "install_ansible.sh"
         - type: shell
-          file: "modules/filestore/scripts/install-nfs.sh"
+          source: "modules/filestore/scripts/install-nfs.sh"
+          destination: "install-nfs.sh"
         - type: ansible-local
-          file: "modules/startup-script/examples/mount.yaml"
+          source: "modules/startup-script/examples/mount.yaml"
+          destination: "mount.yaml"
 
   - source: resources/compute/simple-instance
     kind: terraform

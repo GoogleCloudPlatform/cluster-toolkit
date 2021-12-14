@@ -3,6 +3,13 @@
   "footer": "",
   "inputs": [
     {
+      "name": "debug_file",
+      "type": "string",
+      "description": "Path to an optional local to be written with 'startup_script_content'.",
+      "default": null,
+      "required": false
+    },
+    {
       "name": "deployment_name",
       "type": "string",
       "description": "Name of the HPC deployment, used to name GCS bucket for startup scripts.",
@@ -19,7 +26,7 @@
     {
       "name": "runners",
       "type": "list(map(string))",
-      "description": "    List of runners to run on remote VM.\n    Runners can be of type ansible, shell or data.\n    {\n      type: ansible-local || shell\n      spec: {\n        file: \u003cfile path\u003e\n      } || {\n        name: \u003cname of destination script\u003e\n        content: \u003ctext content of the script\u003e\n      }\n    } || {\n      type: data\n      spec: {\n        dir: \u003cfolder to be compressed and uploaded with `tar zcf`\u003e\n        dest_path: \u003cpath where expanded at destination\u003e\n        runnable: \u003cnull or script to run after `tar zxf`\u003e\n      }\n",
+      "description": "    List of runners to run on remote VM.\n    Runners can be of type ansible-local, shell or data.\n    A runner must specify one of 'source' or 'content'.\n    All runners must specify 'destination'. If 'destination' does not include a\n    path, it will be copied in a temporary folder and deleted after running.\n",
       "default": [],
       "required": false
     }
@@ -38,6 +45,11 @@
       "version": "~\u003e 3.0"
     },
     {
+      "name": "local",
+      "alias": null,
+      "version": "~\u003e 2.0"
+    },
+    {
       "name": "random",
       "alias": null,
       "version": "~\u003e 3.0"
@@ -51,6 +63,10 @@
     {
       "name": "google",
       "version": "~\u003e 3.0"
+    },
+    {
+      "name": "local",
+      "version": "~\u003e 2.0"
     },
     {
       "name": "random",
@@ -72,6 +88,15 @@
       "name": "scripts",
       "provider": "google",
       "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "file",
+      "name": "debug_file",
+      "provider": "local",
+      "source": "hashicorp/local",
       "mode": "managed",
       "version": "latest",
       "description": null

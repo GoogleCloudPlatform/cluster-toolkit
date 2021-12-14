@@ -10,12 +10,25 @@ stdlib::run_playbook() {
 }
 
 stdlib::runner() {
-  stdlib::get_from_bucket -u "gs://${bucket}/$2" -d "$3"
+
+  type=$1
+  object=$2
+  destination=$3
+  tmpdir=$4
+
+  destpath="$(dirname $destination)"
+  filename="$(basename $destination)"
+
+  if [ "$destpath" = "." ]; then
+    destpath=$tmpdir
+  fi
+
+  stdlib::get_from_bucket -u "gs://${bucket}/$object" -d "$destpath" -f "$filename"
 
   case "$1" in
-    ansible-local) stdlib::run_playbook "$3/$2";;
+    ansible-local) stdlib::run_playbook "$destpath/$filename";;
     # shellcheck source=/dev/null
-    shell)  source "$3/$2";;
+    shell)  source "$destpath/$filename";;
   esac
 }
 
@@ -25,7 +38,7 @@ stdlib::load_runners(){
   stdlib::debug "=== BEGIN Running runners ==="
 
   %{for p in runners ~}
-  stdlib::runner ${p.type} ${p.object} $${tmpdir}
+  stdlib::runner ${p.type} ${p.object} ${p.destination} $${tmpdir}
   %{endfor ~}
 
   stdlib::debug "=== END Running runners ==="
