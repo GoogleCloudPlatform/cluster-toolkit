@@ -1,8 +1,0 @@
-- name: Simple test
-  hosts: all
-  tasks:
-  - name: "Check hostname"
-    command: hostname
-    register: hostname
-  - debug: msg="{{ hostname.stdout }}"
-

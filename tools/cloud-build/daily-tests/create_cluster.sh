@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG BASE_IMAGE=alpine:edge
-FROM ${BASE_IMAGE}
 
-ARG ANSIBLE_VERSION=2.7.0-r1
+set -e
 
-RUN apk add terraform packer --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
+# Copy SSH key to expected location for DDN EXAScaler resource
+mkdir -p ~/.ssh
+cp $ROOT_DIR/id_rsa* ~/.ssh
 
-RUN apk add --update ansible openssh-client && \
-    rm -rf /var/cache/apk/*
-
-ENTRYPOINT ["/usr/bin/ansible-playbook"]
+# Use terraform to create the cluster
+cd $BLUEPRINT_DIR
+terraform init
+terraform apply -auto-approve -no-color

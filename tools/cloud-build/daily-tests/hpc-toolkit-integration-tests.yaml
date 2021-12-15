@@ -1,0 +1,31 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+timeout: 7200s
+steps:
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  args:
+  - -c
+  - |
+    echo "build_id: ${BUILD_ID}" > test-vars.yml
+    echo "project: ${PROJECT_ID}" >> test-vars.yml
+    echo "zone: us-central1-a" >> test-vars.yml
+    echo "workspace: /workspace" >> test-vars.yml
+    echo "network: default" >> test-vars.yml
+    echo "login_node: slurm-hpc-slurm-io-login0" >> test-vars.yml
+    ansible-playbook tools/cloud-build/daily-tests/daily-tests.yml \
+      --user=sa_106486320838376751393 --extra-vars="@test-vars.yml"

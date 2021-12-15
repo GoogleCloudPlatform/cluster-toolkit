@@ -15,12 +15,17 @@
 # Getting Terraform and Packer
 FROM golang:bullseye
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
-    apt-get -y update && apt-get -y install software-properties-common && \
+    apt-get -y update && apt-get -y install software-properties-common keychain dnsutils && \
     apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
     apt-get -y update && apt-get install -y unzip python3-pip terraform packer && \
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+      | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+      | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
+    apt-get -y update && apt-get -y install google-cloud-sdk && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pip install pre-commit && rm -rf ~/.cache/pip/*
+RUN pip install pre-commit ansible && rm -rf ~/.cache/pip/*
 
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
