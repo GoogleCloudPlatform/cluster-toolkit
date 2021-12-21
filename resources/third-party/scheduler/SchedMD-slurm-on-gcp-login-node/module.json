@@ -62,7 +62,7 @@
       "name": "login_image",
       "type": "string",
       "description": "Disk OS image with Slurm preinstalled to use for login node",
-      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7",
+      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-4-hpc-centos-7",
       "required": false
     },
     {
@@ -100,6 +100,13 @@
       "name": "login_service_account",
       "type": "string",
       "description": "Service Account for compute nodes.",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "login_startup_script",
+      "type": "string",
+      "description": "Custom startup script to run on the login node",
       "default": null,
       "required": false
     },
@@ -157,7 +164,7 @@
     {
       "name": "slurm_cluster_login_node",
       "source": "github.com/SchedMD/slurm-gcp//tf/modules/login/",
-      "version": "v4.1.2",
+      "version": "v4.1.3",
       "description": null
     }
   ],

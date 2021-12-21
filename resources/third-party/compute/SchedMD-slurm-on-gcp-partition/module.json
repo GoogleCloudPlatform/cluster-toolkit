@@ -41,7 +41,7 @@
       "name": "image",
       "type": "string",
       "description": "Image to be used of the compute VMs in this partition",
-      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7",
+      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-4-hpc-centos-7",
       "required": false
     },
     {
@@ -88,7 +88,7 @@
     },
     {
       "name": "preemptible_bursting",
-      "type": "bool",
+      "type": "string",
       "description": "Should use preemptibles to burst",
       "default": false,
       "required": false
