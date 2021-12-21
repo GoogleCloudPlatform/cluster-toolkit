@@ -43,6 +43,6 @@ steps:
 
 artifacts:
   objects:
-    location: gs://hpc-toolkit-daily-test-logs
+    location: gs://hpc-toolkit-daily-test-logs/${BUILD_ID}
     paths:
     - blueprint.tgz

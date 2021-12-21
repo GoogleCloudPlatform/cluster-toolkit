@@ -36,7 +36,7 @@ fi
 
 ## Build ghpc
 cd $ROOT_DIR
-go build ghpc.go
+make
 
 ## Prep deployment blueprint
 sed -i "s/project_id: .*/project_id: ${PROJECT_ID}/"  ${EXAMPLE_YAML} || \

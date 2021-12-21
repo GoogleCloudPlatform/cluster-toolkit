@@ -37,7 +37,7 @@
       ROOT_DIR: "{{ workspace }}"
       BLUEPRINT_DIR: "{{ blueprint_dir }}"
     args:
-      creates: "{{ workspace }}/{{ blueprint_dir }}"
+      creates: "{{ workspace }}/{{ blueprint_dir }}.tgz"
   - name: Create Infrastructure and test
     block:
     - name: Create Cluster with Terraform
