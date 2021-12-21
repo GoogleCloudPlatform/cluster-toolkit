@@ -48,10 +48,17 @@
       "required": false
     },
     {
+      "name": "compute_startup_script",
+      "type": "string",
+      "description": "Custom startup script to run on the compute nodes",
+      "default": null,
+      "required": false
+    },
+    {
       "name": "controller_image",
       "type": "string",
       "description": "Slurm image to use for the controller instance",
-      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7",
+      "default": "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-4-hpc-centos-7",
       "required": false
     },
     {
@@ -102,6 +109,13 @@
       "name": "controller_service_account",
       "type": "string",
       "description": "Service Account for the controller",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "controller_startup_script",
+      "type": "string",
+      "description": "Custom startup script to run on the controller",
       "default": null,
       "required": false
     },
@@ -170,7 +184,7 @@
     },
     {
       "name": "partitions",
-      "type": "list(object({\n    name                 = string,\n    machine_type         = string,\n    max_node_count       = number,\n    zone                 = string,\n    image                = string,\n    image_hyperthreads   = bool,\n    compute_disk_type    = string,\n    compute_disk_size_gb = number,\n    compute_labels       = any,\n    cpu_platform         = string,\n    gpu_type             = string,\n    gpu_count            = number,\n    network_storage = list(object({\n      server_ip     = string,\n      remote_mount  = string,\n      local_mount   = string,\n      fs_type       = string,\n      mount_options = string\n    })),\n    preemptible_bursting = bool,\n    vpc_subnet           = string,\n    exclusive            = bool,\n    enable_placement     = bool,\n    regional_capacity    = bool,\n    regional_policy      = any,\n    instance_template    = string,\n    static_node_count    = number\n  }))",
+      "type": "list(object({\n    name                 = string,\n    machine_type         = string,\n    max_node_count       = number,\n    zone                 = string,\n    image                = string,\n    image_hyperthreads   = bool,\n    compute_disk_type    = string,\n    compute_disk_size_gb = number,\n    compute_labels       = any,\n    cpu_platform         = string,\n    gpu_type             = string,\n    gpu_count            = number,\n    network_storage = list(object({\n      server_ip     = string,\n      remote_mount  = string,\n      local_mount   = string,\n      fs_type       = string,\n      mount_options = string\n    })),\n    preemptible_bursting = string,\n    vpc_subnet           = string,\n    exclusive            = bool,\n    enable_placement     = bool,\n    regional_capacity    = bool,\n    regional_policy      = any,\n    instance_template    = string,\n    static_node_count    = number\n  }))",
       "description": "An array of configurations for specifying multiple machine types residing in their own Slurm partitions.",
       "default": null,
       "required": true
@@ -222,7 +236,7 @@
     {
       "name": "slurm_cluster_controller",
       "source": "github.com/SchedMD/slurm-gcp//tf/modules/controller/",
-      "version": "v4.1.2",
+      "version": "v4.1.3",
       "description": null
     }
   ],

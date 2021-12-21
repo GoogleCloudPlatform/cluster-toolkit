@@ -15,7 +15,7 @@
 */
 
 module "slurm_cluster_controller" {
-  source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.1.2"
+  source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.1.3"
   boot_disk_size                = var.boot_disk_size
   boot_disk_type                = var.boot_disk_type
   image                         = var.controller_image
@@ -33,6 +33,8 @@ module "slurm_cluster_controller" {
   jwt_key                       = var.jwt_key
   network_storage               = var.network_storage
   partitions                    = var.partitions
+  controller_startup_script     = var.controller_startup_script
+  compute_startup_script        = var.compute_startup_script
   project                       = var.project_id
   region                        = var.region
   secondary_disk                = var.controller_secondary_disk

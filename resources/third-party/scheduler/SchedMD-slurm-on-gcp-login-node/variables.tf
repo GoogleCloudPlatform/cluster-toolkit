@@ -29,7 +29,7 @@ variable "boot_disk_type" {
 variable "login_image" {
   description = "Disk OS image with Slurm preinstalled to use for login node"
   type        = string
-  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-2-hpc-centos-7"
+  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-4-hpc-centos-7"
 }
 
 variable "login_instance_template" {
@@ -142,4 +142,10 @@ variable "subnetwork_name" {
 variable "zone" {
   description = "Compute Platform zone where the notebook server will be located"
   type        = string
+}
+
+variable "login_startup_script" {
+  description = "Custom startup script to run on the login node"
+  type        = string
+  default     = null
 }
