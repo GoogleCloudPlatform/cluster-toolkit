@@ -14,7 +14,7 @@
 
 
 - name: Get partition info
-  command: sinfo
+  command: sinfo --format='%P' --noheader
   register: partition_output
 - name: Check partition compute exists
   fail:
@@ -22,7 +22,7 @@
   when: "\"{{ item }}\" not in partition_output.stdout"
   loop: "{{ partitions }}"
 
-- name: Get homefs info
+- name: Get mount info
   stat:
     path: "{{ item }}"
   register: stat_mounts
@@ -33,16 +33,12 @@
   when: not {{ item.stat.exists }}
   loop: "{{ stat_mounts.results }}"
 
-- name: Test cluster with hostname
-  command: "srun -N {{ item }} hostname"
-  loop:
-  - 1
-  - 2
-  loop_control:
-    pause: 60
-- name: Pause for 2 minutes to allow nodes to turn down
+- name: Test Mounts on partitions
+  command: srun -N 1 ls -laF {{ mounts | join(' ') }}
+  loop: "{{ partitions }}"
+- name: Pause for 1 minutes to allow nodes to turn down
   pause:
-    minutes: 2
+    minutes: 1
 
 - name: Test partitions with hostname
   command: srun -N 2 --partition {{ item }} hostname

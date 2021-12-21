@@ -13,38 +13,43 @@
 # limitations under the License.
 
 - name: "Setup Integration tests for HPC toolkit"
-  hosts: all,localhost
+  hosts: localhost
   vars:
     scripts_dir: "{{ workspace }}/tools/cloud-build/daily-tests"
-    blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io.yaml"
-    blueprint_dir: "{{ workspace }}/hpc-cluster-high-io/primary"
   tasks:
   ## Create SSH Keys
+  - name: "Create .ssh folder"
+    file:
+      path: "/builder/home/.ssh"
+      state: directory
+      mode: 0700
   - name: Create SSH Key
     openssh_keypair:
-      path: "{{ workspace }}/id_rsa"
+      path: "/builder/home/.ssh/id_rsa"
 
   ## Create cluster
   - name: Create blueprint
     command: "{{ scripts_dir }}/create_blueprint.sh"
     environment:
+      MAX_NODES: "{{ max_nodes }}"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
+      BLUEPRINT_DIR: "{{ blueprint_dir }}"
     args:
-      creates: "{{ blueprint_dir }}"
+      creates: "{{ workspace }}/{{ blueprint_dir }}"
   - name: Create Infrastructure and test
     block:
-    - name: Create Cluster
+    - name: Create Cluster with Terraform
       become: false
-      command: "{{ scripts_dir }}/create_cluster.sh"
+      command:
+        cmd: "{{ item }}"
+        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
       args:
-        creates: "{{ blueprint_dir }}/.terraform"
-      register: login_ip
-      environment:
-        BLUEPRINT_DIR: "{{ blueprint_dir }}"
-        LOGIN_NAME: "{{ login_node }}"
-        ROOT_DIR: "{{ workspace }}"
+        creates: "{{ workspace }}/{{ blueprint_dir }}/.terraform"
+      with_items:
+      - "terraform init"
+      - "terraform apply -auto-approve -no-color"
     - name: Get login IP
       become: false
       register: login_ip
@@ -79,7 +84,7 @@
         - add
         - --ttl
         - 2h
-        - "--key-file={{ workspace }}/id_rsa.pub"
+        - "--key-file=/builder/home/.ssh/id_rsa.pub"
     - name: Add Login node as host
       add_host:
         hostname: "{{ login_ip.stdout }}"
@@ -110,28 +115,29 @@
 
 - name: Run Integration Tests
   hosts: remote_host
-  vars:
-    blueprint_dir: "{{ workspace }}/hpc-cluster-high-io/primary"
-    ansible_ssh_private_key_file: id_rsa
   gather_facts: no
   tasks:
   - name: Slurm Test Block
+    vars:
+      ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     block:
     - name: Pause for 2 minutes to allow cluster setup
       pause:
         minutes: 2
-    - name: "Run Integration tests for HPC toolkit"
+    - name: Run Integration tests for HPC toolkit
       include_tasks: slurm-tests.yml
       run_once: true
       vars:
-        partitions:
-        - compute
-        mounts:
-        - /home
-        - /scratch
+        mounts: "{{ mounts }}"
+        partitions: "{{ partitions }}"
 
     ## Always cleanup, even on failure
     always:
+    - name: Fetch SLURM Logs
+      fetch:
+        fail_on_missing: no
+        src: /var/logs/slurm
+        dest: "{{ workspace }}/slurm-logs"
     - name: Tear Down Cluster
       run_once: true
       delegate_to: localhost
