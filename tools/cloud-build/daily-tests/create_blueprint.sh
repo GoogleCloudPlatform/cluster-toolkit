@@ -47,3 +47,5 @@ sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/"  ${EXAMPLE_YAML} || 
      { echo "could not set max_node_count"; exit 1; }
 
 ./ghpc create -c ${EXAMPLE_YAML}
+
+tar -czf ${BLUEPRINT_DIR}.tgz ${BLUEPRINT_DIR}

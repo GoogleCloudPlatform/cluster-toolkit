@@ -45,4 +45,4 @@ artifacts:
   objects:
     location: gs://hpc-toolkit-daily-test-logs
     paths:
-    - slurm-logs
+    - blueprint.tgz

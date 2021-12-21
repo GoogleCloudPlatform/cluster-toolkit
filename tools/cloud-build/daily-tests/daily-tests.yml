@@ -133,17 +133,12 @@
 
     ## Always cleanup, even on failure
     always:
-    - name: Fetch SLURM Logs
-      fetch:
-        fail_on_missing: no
-        src: /var/logs/slurm
-        dest: "{{ workspace }}/slurm-logs"
     - name: Tear Down Cluster
       run_once: true
       delegate_to: localhost
       command:
         cmd: terraform destroy -auto-approve
-        chdir: "{{ blueprint_dir }}"
+        chdir: "{{ workspace }}/{{ blueprint_dir }}"
     - name: Delete Firewall Rule
       run_once: true
       delegate_to: localhost

@@ -36,9 +36,9 @@
 - name: Test Mounts on partitions
   command: srun -N 1 ls -laF {{ mounts | join(' ') }}
   loop: "{{ partitions }}"
-- name: Pause for 1 minutes to allow nodes to turn down
+- name: Pause for 4 minutes to allow nodes to turn down
   pause:
-    minutes: 1
+    minutes: 4
 
 - name: Test partitions with hostname
   command: srun -N 2 --partition {{ item }} hostname
