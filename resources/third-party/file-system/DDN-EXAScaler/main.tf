@@ -38,7 +38,7 @@ provider "google" {
 }
 
 module "ddn_exascaler" {
-  source = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=9aed885"
+  source = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=af5a5b3"
 
   fsname          = var.fsname
   zone            = var.zone
