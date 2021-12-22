@@ -38,7 +38,7 @@ config will be created in the same directory as ghpc.
 
 To deploy the blueprint, use terraform in the resource group directory:
 ```
-cd hpc-slurm/primary # From hpc-cluster-small.yaml example
+cd hpc-cluster-small/primary # From hpc-cluster-small.yaml example
 terraform init
 terraform apply
 ```
@@ -55,7 +55,7 @@ Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
 this repository to ensure that all Terraform and golang modules are validated
 and properly documented before pushing code changes.
 [pre-commit](https://pre-commit.com/) can be installed using standard package
-managers, more details can be found at [the pre-commit website]](https://pre-commit.com/).
+managers, more details can be found at [the pre-commit website](https://pre-commit.com/).
 
 The pre-commits configured in the HPC Toolkit have a set of
 dependencies that need to be installed before successfully passing all
