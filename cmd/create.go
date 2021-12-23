@@ -18,9 +18,9 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/reswriter"
-	"log"
 
 	"github.com/spf13/cobra"
 )
@@ -28,16 +28,15 @@ import (
 func init() {
 	createCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
 		"Configuration file for the new blueprints")
-	if err := createCmd.MarkFlagRequired("config"); err != nil {
-		log.Fatalf("error while marking 'config' flag as required: %e", err)
-	}
+	cobra.CheckErr(createCmd.Flags().MarkDeprecated("config",
+		"please see the command usage for more details."))
 	rootCmd.AddCommand(createCmd)
 }
 
 var (
 	yamlFilename string
 	createCmd    = &cobra.Command{
-		Use:   "create",
+		Use:   "create FILENAME",
 		Short: "Create a new blueprint.",
 		Long:  "Create a new blueprint based on a provided YAML config.",
 		Run:   runCreateCmd,
@@ -45,6 +44,15 @@ var (
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
+	if yamlFilename == "" {
+		if len(args) == 0 {
+			fmt.Println(cmd.UsageString())
+			return
+		}
+
+		yamlFilename = args[0]
+	}
+
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
 	blueprintConfig.ExpandConfig()
 	reswriter.WriteBlueprint(&blueprintConfig.Config)
