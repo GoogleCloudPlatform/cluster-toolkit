@@ -1,7 +1,8 @@
 .PHONY: tests fmt vet test-engine test-resources test-examples packer \
         packer-clean packer-check packer-docs add-google-license, \
         check-tflint, check-pre-commit, install-deps-dev, ghpc-dev, \
-        check-deps, check-terraform-exists, check-packer-exists
+        check-deps, check-terraform-exists, check-packer-exists, \
+				check-terraform-version, check-packer-version
 RES = ./resources
 ENG = ./cmd/... ./pkg/...
 SRC = $(ENG) $(RES)/tests/...
