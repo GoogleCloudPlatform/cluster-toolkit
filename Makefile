@@ -1,12 +1,16 @@
 .PHONY: tests fmt vet test-engine test-resources test-examples packer \
         packer-clean packer-check packer-docs add-google-license, \
-        check-tflint, check-pre-commit, install-deps-dev, ghpc-dev
+        check-tflint, check-pre-commit, install-deps-dev, ghpc-dev, \
+        check-deps, check-terraform-exists, check-packer-exists, \
+				check-terraform-version, check-packer-version
 RES = ./resources
 ENG = ./cmd/... ./pkg/...
 SRC = $(ENG) $(RES)/tests/...
+TF_VERSION_CHECK=$(shell expr `terraform version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 0.14)
+PK_VERSION_CHECK=$(shell expr `packer version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 1.6)
 PACKER_FOLDERS=$(shell find ${RES} -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
 
-ghpc: $(shell find ./cmd ./pkg ./resources ghpc.go -type f)
+ghpc: check-deps $(shell find ./cmd ./pkg ./resources ghpc.go -type f)
 	$(info **************** building ghpc ************************)
 	go build ghpc.go
 
@@ -49,6 +53,40 @@ packer-check:
 	  echo "checking syntax for $${folder}"; \
 	  packer fmt -check $${folder}; \
 	done
+
+check-deps: check-terraform-exists check-terraform-version check-packer-exists check-packer-version
+
+ifeq (, $(shell which terraform))
+check-terraform-exists:
+	$(error ERROR: terraform not installed, visit https://learn.hashicorp.com/tutorials/terraform/install-cli)
+else
+check-terraform-exists:
+
+endif
+
+ifneq ("$(TF_VERSION_CHECK)", "1")
+check-terraform-version:
+	$(error ERROR: terraform version must be greater than 0.14, update at https://learn.hashicorp.com/tutorials/terraform/install-cli)
+else
+check-terraform-version:
+
+endif
+
+ifeq (, $(shell which packer))
+check-packer-exists:
+	$(error ERROR: packer not installed, visit https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
+else
+check-packer-exists:
+
+endif
+
+ifneq ("$(PK_VERSION_CHECK)", "1")
+check-packer-version:
+	$(error ERROR: packer version must be greater than 1.6.6, update at https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
+else
+check-packer-version:
+
+endif
 
 ifeq (, $(shell which pre-commit))
 check-pre-commit:
