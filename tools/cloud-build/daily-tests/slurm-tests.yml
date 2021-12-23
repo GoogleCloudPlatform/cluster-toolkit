@@ -19,7 +19,7 @@
 - name: Check partition compute exists
   fail:
     msg: Test Check Partitions failed
-  when: "\"{{ item }}\" not in partition_output.stdout"
+  when: item not in partition_output.stdout
   loop: "{{ partitions }}"
 
 - name: Get mount info
@@ -30,15 +30,12 @@
 - name: Check if mount exists
   fail:
     msg: "{{ item.item }} not mounted"
-  when: not {{ item.stat.exists }}
+  when: not item.stat.exists
   loop: "{{ stat_mounts.results }}"
 
 - name: Test Mounts on partitions
   command: srun -N 1 ls -laF {{ mounts | join(' ') }}
   loop: "{{ partitions }}"
-- name: Pause for 2 minutes to allow nodes to turn down
-  pause:
-    minutes: 2
 
 - name: Test partitions with hostname
   command: srun -N 2 --partition {{ item }} hostname
