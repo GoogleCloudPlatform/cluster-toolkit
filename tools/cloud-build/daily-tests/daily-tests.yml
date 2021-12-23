@@ -36,6 +36,7 @@
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
       BLUEPRINT_DIR: "{{ blueprint_dir }}"
+      BUILD_ID: "{{ build_id }}"
     args:
       creates: "{{ workspace }}/{{ blueprint_dir }}.tgz"
   - name: Create Infrastructure and test
@@ -99,7 +100,7 @@
       delegate_to: localhost
       command:
         cmd: terraform destroy -auto-approve
-        chdir: "{{ blueprint_dir }}"
+        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
     - name: Delete Firewall Rule
       command:
         argv:
@@ -138,7 +139,7 @@
       delegate_to: localhost
       command:
         cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ blueprint_dir }}"
+        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
     - name: Delete Firewall Rule
       run_once: true
       delegate_to: localhost

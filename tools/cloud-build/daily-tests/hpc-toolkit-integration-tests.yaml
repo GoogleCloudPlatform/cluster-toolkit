@@ -21,6 +21,8 @@ steps:
   args:
   - -c
   - |
+    BUILD_ID_FULL=$BUILD_ID
+    LOGIN_ID=slurm-hpc-slurm-io-$${BUILD_ID_FULL:0:6}-login0
     cat <<EOT >> test-vars.yml
     build_id: ${BUILD_ID}
     project: ${PROJECT_ID}
@@ -29,8 +31,8 @@ steps:
     blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io.yaml"
     blueprint_dir: blueprint
     network: default
-    max_nodes: 2
-    login_node: slurm-hpc-slurm-io-login0
+    max_nodes: 5
+    login_node: $${LOGIN_ID}
     partitions:
     - compute
     mounts:
