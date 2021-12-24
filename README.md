@@ -30,7 +30,7 @@ In order to create a blueprint using `ghpc`, first ensure you've updated your
 config template to include your GCP project ID then run the following command:
 
 ```
-./ghpc create --config examples/hpc-cluster-small.yaml
+./ghpc create examples/hpc-cluster-small.yaml
 ```
 
 The blueprint directory, named as the `blueprint_name` field from the input
