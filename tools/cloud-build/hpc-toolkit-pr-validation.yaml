@@ -25,7 +25,7 @@ steps:
   - |
     set -e
     export PROJECT=build-project
-    time addlicense -check .
+    time addlicense -check . || { echo "addlicense failed"; exit 1; }
     time make tests
 - name: 'gcr.io/cloud-builders/docker'
   args:
