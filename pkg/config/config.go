@@ -232,30 +232,33 @@ func validateGroupName(name string, usedNames map[string]bool) {
 
 // checkResourceAndGroupNames checks and imports resource and resource group IDs
 // and names respectively.
-func (bc *BlueprintConfig) checkResourceAndGroupNames() {
-	bc.ResourceToGroup = make(map[string]int)
+func checkResourceAndGroupNames(
+	resGroups []ResourceGroup) (map[string]int, error) {
+	resourceToGroup := make(map[string]int)
 	groupNames := make(map[string]bool)
-	for iGrp, grp := range bc.Config.ResourceGroups {
+	for iGrp, grp := range resGroups {
 		validateGroupName(grp.Name, groupNames)
 		var groupKind string
 		for _, res := range grp.Resources {
 			// Verify no duplicate resource names
-			if _, ok := bc.ResourceToGroup[res.ID]; ok {
-				log.Fatalf(
+			if _, ok := resourceToGroup[res.ID]; ok {
+				return resourceToGroup, fmt.Errorf(
 					"%s: %s used more than once", errorMessages["duplicateID"], res.ID)
 			}
-			bc.ResourceToGroup[res.ID] = iGrp
+			resourceToGroup[res.ID] = iGrp
 
 			// Verify Resource Kind matches group Kind
 			if groupKind == "" {
 				groupKind = res.Kind
 			} else if groupKind != res.Kind {
-				log.Fatalf("%s: resource group %s, got: %s, wanted: %s",
+				return resourceToGroup, fmt.Errorf(
+					"%s: resource group %s, got: %s, wanted: %s",
 					errorMessages["mixedResources"],
 					grp.Name, groupKind, res.Kind)
 			}
 		}
 	}
+	return resourceToGroup, nil
 }
 
 func checkUsedResourceNames(
@@ -279,8 +282,12 @@ func checkUsedResourceNames(
 }
 
 func (bc *BlueprintConfig) validateConfig() {
-	bc.checkResourceAndGroupNames()
-	if err := checkUsedResourceNames(
+	resourceToGroup, err := checkResourceAndGroupNames(bc.Config.ResourceGroups)
+	if err != nil {
+		log.Fatal(err)
+	}
+	bc.ResourceToGroup = resourceToGroup
+	if err = checkUsedResourceNames(
 		bc.Config.ResourceGroups, bc.ResourceToGroup); err != nil {
 		log.Fatal(err)
 	}

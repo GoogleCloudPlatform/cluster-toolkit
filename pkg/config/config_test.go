@@ -294,7 +294,7 @@ func (s *MySuite) TestExpand(c *C) {
 
 func (s *MySuite) TestCheckResourceAndGroupNames(c *C) {
 	bc := getBlueprintConfigForTest()
-	bc.checkResourceAndGroupNames()
+	checkResourceAndGroupNames(bc.Config.ResourceGroups)
 	testResID := bc.Config.ResourceGroups[0].Resources[0].ID
 	c.Assert(bc.ResourceToGroup[testResID], Equals, 0)
 }
