@@ -34,7 +34,7 @@ HPC deployments on the Google Cloud Platform.`,
 				log.Fatalf("cmd.Help function failed: %s", err)
 			}
 		},
-		Version: "v0.2.1-alpha (private preview)",
+		Version: "v0.2.2-alpha (private preview)",
 	}
 )
 
