@@ -42,7 +42,3 @@ COPY ./ ./
 RUN make ghpc vet
 
 WORKDIR /ghpc
-
-
-
-
