@@ -10,8 +10,8 @@ manner. The HPC Toolkit is designed to be highly customizable and extensible,
 and intends to address the HPC deployment needs of a broad range of customers.
 
 ## Dependencies
-* [Terraform](https://www.terraform.io/downloads.html)
-* [Packer](https://www.packer.io/downloads)
+* [Terraform](https://www.terraform.io/downloads.html): version 0.14 or greater
+* [Packer](https://www.packer.io/downloads): version 1.6.0 or greater
 * [golang](https://golang.org/doc/install)
   * To setup GOPATH and development environment: `export PATH=$PATH:$(go env GOPATH)/bin`
 
@@ -21,16 +21,16 @@ Simply run `make` in the root directory.
 ## Basic Usage
 To create a blueprint, an input YAML file needs to be written or adapted from
 the examples under [examples](examples/). A good starting point is
-[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) which creates a blueprint for a new network,
-a filestore instance and a slurm login node and controller.
-More information on the example configs can be found in the [README.md](examples/README.md) of the
-[examples](examples/) directory.
+[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) which creates
+a blueprint for a new network, a filestore instance and a slurm login node and
+controller. More information on the example configs can be found in the
+[README.md](examples/README.md) of the [examples](examples/) directory.
 
 In order to create a blueprint using `ghpc`, first ensure you've updated your
 config template to include your GCP project ID then run the following command:
 
 ```
-./ghpc create --config examples/hpc-cluster-small.yaml
+./ghpc create examples/hpc-cluster-small.yaml
 ```
 
 The blueprint directory, named as the `blueprint_name` field from the input
@@ -38,7 +38,7 @@ config will be created in the same directory as ghpc.
 
 To deploy the blueprint, use terraform in the resource group directory:
 ```
-cd hpc-slurm/primary # From hpc-cluster-small.yaml example
+cd hpc-cluster-small/primary # From hpc-cluster-small.yaml example
 terraform init
 terraform apply
 ```
@@ -55,7 +55,7 @@ Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
 this repository to ensure that all Terraform and golang modules are validated
 and properly documented before pushing code changes.
 [pre-commit](https://pre-commit.com/) can be installed using standard package
-managers, more details can be found at [the pre-commit website]](https://pre-commit.com/).
+managers, more details can be found at [the pre-commit website](https://pre-commit.com/).
 
 The pre-commits configured in the HPC Toolkit have a set of
 dependencies that need to be installed before successfully passing all
@@ -73,4 +73,22 @@ directory of the repo and running:
 
 ```shell
 pre-commit install
+```
+
+During development, to re-build the ghpc binary run the following command:
+```
+make ghpc-dev
+```
+which in addition to building the binary will also run go fmt and vet against
+the codebase.
+
+### Packer
+Auto-generated READMEs are created for Packer resources similar to Terraform
+resources. These docs are generated as part of a pre-commit hook (packer-readme)
+which searches for `*.pkr.hcl` files. If a packer config is written in another
+file, for instance JSON, terraform docs should be run manually against the
+resource directory before pushing changes. To generate the documentation, run
+the following script against the packer config file:
+```
+tools/autodoc/terraform_docs.sh resources/packer/new_resource/image.json
 ```

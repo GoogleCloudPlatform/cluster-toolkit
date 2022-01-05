@@ -24,17 +24,48 @@ variable "region" {
   type        = string
 }
 
+
+variable "debug_file" {
+  description = "Path to an optional local to be written with 'startup_script_content'."
+  type        = string
+  default     = null
+}
+
 variable "runners" {
-  description = "List of runners to run on remote VM"
-  type = list(object({
-    type = string,
-    file = string,
-  }))
+  description = <<EOT
+    List of runners to run on remote VM.
+    Runners can be of type ansible-local, shell or data.
+    A runner must specify one of 'source' or 'content'.
+    All runners must specify 'destination'. If 'destination' does not include a
+    path, it will be copied in a temporary folder and deleted after running.
+    Runners may also pass 'args', which will be passed as argument to shell runners only.
+EOT
+  type        = list(map(string))
   validation {
     condition = alltrue([
-      for o in var.runners : contains(["ansible-local", "shell"], o.type)
+      for r in var.runners : contains(keys(r), "type")
     ])
-    error_message = "Type can only be 'ansible-local' or 'shell'."
+    error_message = "All runners must declare a type."
+  }
+  validation {
+    condition = alltrue([
+      for r in var.runners : contains(keys(r), "destination")
+    ])
+    error_message = "All runners must declare a destination name (even without a path)."
+  }
+  validation {
+    condition = alltrue([
+      for r in var.runners : r["type"] == "ansible-local" || r["type"] == "shell" || r["type"] == "data"
+    ])
+    error_message = "The 'type' must be 'ansible-local', 'shell' or 'data'."
+  }
+  validation {
+    condition = alltrue([
+      for r in var.runners :
+      (contains(keys(r), "content") && !contains(keys(r), "source")) ||
+      (!contains(keys(r), "content") && contains(keys(r), "source"))
+    ])
+    error_message = "A runner must specify one of 'content' or 'source file', but not both."
   }
   default = []
 }

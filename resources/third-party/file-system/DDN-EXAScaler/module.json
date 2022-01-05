@@ -49,7 +49,7 @@
       "type": "object({\n    project = string\n    name    = string\n  })",
       "description": "Source image properties",
       "default": {
-        "name": "exascaler-cloud-v522-centos7",
+        "name": "exascaler-cloud-v523-centos7",
         "project": "ddn-public"
       },
       "required": false
@@ -76,11 +76,12 @@
     },
     {
       "name": "mdt",
-      "type": "object({\n    disk_bus   = string\n    disk_type  = string\n    disk_size  = number\n    disk_count = number\n  })",
+      "type": "object({\n    disk_bus   = string\n    disk_type  = string\n    disk_size  = number\n    disk_count = number\n    disk_raid  = bool\n  })",
       "description": "Metadata target properties",
       "default": {
         "disk_bus": "SCSI",
         "disk_count": 1,
+        "disk_raid": false,
         "disk_size": 3500,
         "disk_type": "pd-ssd"
       },
@@ -101,11 +102,12 @@
     },
     {
       "name": "mgt",
-      "type": "object({\n    disk_bus   = string\n    disk_type  = string\n    disk_size  = number\n    disk_count = number\n  })",
+      "type": "object({\n    disk_bus   = string\n    disk_type  = string\n    disk_size  = number\n    disk_count = number\n    disk_raid  = bool\n  })",
       "description": "Management target properties",
       "default": {
         "disk_bus": "SCSI",
         "disk_count": 1,
+        "disk_raid": false,
         "disk_size": 128,
         "disk_type": "pd-standard"
       },
@@ -113,11 +115,12 @@
     },
     {
       "name": "mnt",
-      "type": "object({\n    disk_bus   = string\n    disk_type  = string\n    disk_size  = number\n    disk_count = number\n  })",
+      "type": "object({\n    disk_bus   = string\n    disk_type  = string\n    disk_size  = number\n    disk_count = number\n    disk_raid  = bool\n  })",
       "description": "Monitoring target properties",
       "default": {
         "disk_bus": "SCSI",
         "disk_count": 1,
+        "disk_raid": false,
         "disk_size": 128,
         "disk_type": "pd-standard"
       },
@@ -160,11 +163,12 @@
     },
     {
       "name": "ost",
-      "type": "object({\n    disk_bus   = string\n    disk_type  = string\n    disk_size  = number\n    disk_count = number\n  })",
+      "type": "object({\n    disk_bus   = string\n    disk_type  = string\n    disk_size  = number\n    disk_count = number\n    disk_raid  = bool\n  })",
       "description": "Object Storage target properties",
       "default": {
         "disk_bus": "SCSI",
         "disk_count": 1,
+        "disk_raid": false,
         "disk_size": 3500,
         "disk_type": "pd-ssd"
       },
@@ -199,10 +203,10 @@
     },
     {
       "name": "service_account",
-      "type": "object({\n    new  = bool\n    name = string\n  })",
+      "type": "object({\n    new   = bool\n    email = string\n  })",
       "description": "Service account name used by deploy application",
       "default": {
-        "name": "default",
+        "email": null,
         "new": false
       },
       "required": false
@@ -252,7 +256,7 @@
     {
       "name": "ddn_exascaler",
       "source": "github.com/DDNStorage/exascaler-cloud-terraform//gcp",
-      "version": "9aed885",
+      "version": "af5a5b3",
       "description": null
     }
   ],

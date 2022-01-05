@@ -55,6 +55,11 @@ more simple VM instances.
 Used when specifying a pre-existing file system to be mounted by
 simple_instances and slurm resources.
 
+### Monitoring
+
+* [**dashboard**](monitoring/dashboard/README.md): Creates a
+[monitoring dashboard](https://cloud.google.com/monitoring/dashboards) for
+visually tracking a HPC Toolkit deployment.
 
 ### Network
 

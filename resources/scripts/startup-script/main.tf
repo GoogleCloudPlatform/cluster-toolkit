@@ -14,10 +14,44 @@
  * limitations under the License.
  */
 
-module "startup_scripts" {
-  source                       = "github.com/terraform-google-modules/terraform-google-startup-scripts?ref=v1.0.0"
-  enable_init_gsutil_crcmod_el = true
-  enable_get_from_bucket       = true
+locals {
+  load_runners = templatefile(
+    "${path.module}/templates/startup-script-custom.tpl",
+    {
+      bucket = google_storage_bucket.configs_bucket.name,
+      runners = [
+        for runner in var.runners : {
+          object      = basename(runner["destination"]),
+          type        = runner["type"]
+          destination = runner["destination"]
+          args        = contains(keys(runner), "args") ? runner["args"] : ""
+        }
+      ]
+    }
+  )
+
+  stdlib_head     = file("${path.module}/files/startup-script-stdlib-head.sh")
+  get_from_bucket = file("${path.module}/files/get_from_bucket.sh")
+  stdlib_body     = file("${path.module}/files/startup-script-stdlib-body.sh")
+
+  # List representing complete content, to be concatenated together.
+  stdlib_list = [
+    local.stdlib_head,
+    local.get_from_bucket,
+    local.load_runners,
+    local.stdlib_body,
+  ]
+
+  # Final content output to the user
+  stdlib = join("", local.stdlib_list)
+
+  runners_dic = { for runner in var.runners :
+    basename(runner["destination"])
+    => {
+      content = contains(keys(runner), "content") ? runner["content"] : null
+      source  = contains(keys(runner), "source") ? runner["source"] : null
+    }
+  }
 }
 
 resource "random_id" "resource_name_suffix" {
@@ -33,8 +67,19 @@ resource "google_storage_bucket" "configs_bucket" {
 
 resource "google_storage_bucket_object" "scripts" {
   # this writes all scripts exactly once into GCS
-  for_each = toset(var.runners[*].file)
-  name     = basename(each.key)
-  content  = file(each.key)
+  for_each = local.runners_dic
+  name     = each.key
+  content  = each.value["content"]
+  source   = each.value["source"]
   bucket   = google_storage_bucket.configs_bucket.name
+  timeouts {
+    create = "10m"
+    update = "10m"
+  }
+}
+
+resource "local_file" "debug_file" {
+  for_each = toset(var.debug_file != null ? [var.debug_file] : [])
+  filename = var.debug_file
+  content  = local.stdlib
 }

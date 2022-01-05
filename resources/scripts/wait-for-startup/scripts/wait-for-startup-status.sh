@@ -22,7 +22,7 @@ do
   GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
   FINISH_LINE="startup-script exit status"
   STATUS_LINE=$(${GCLOUD} 2>/dev/null| grep "${FINISH_LINE}")
-  STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/'<<< ${STATUS_LINE})
+  STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/'<<< ${STATUS_LINE} | uniq)
   if [ ! -z "${STATUS}" ]; then break; fi
   echo "could not detect end of startup script. Sleeping."
   sleep 5
@@ -34,8 +34,8 @@ then
   echo "startup-script finished successfully"
 elif [ "${STATUS}" == 1 ]
 then
-  echo "startup-script finished with errors"
-  echo "to inspect the startup script output, please run\n${GCLOUD}"
+  echo "startup-script finished with errors, to inspect the startup script output, please run:"
+  echo "${GCLOUD}"
 else
   echo "invalid return status '${STATUS}'"
   exit 1

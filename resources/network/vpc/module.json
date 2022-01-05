@@ -59,6 +59,10 @@
   ],
   "outputs": [
     {
+      "name": "nat_ips",
+      "description": "the external IPs assigned to the NAT"
+    },
+    {
       "name": "network_name",
       "description": "The name of the network created"
     },
@@ -89,6 +93,15 @@
     }
   ],
   "resources": [
+    {
+      "type": "compute_address",
+      "name": "nat_ips",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
     {
       "type": "compute_subnetwork",
       "name": "primary_subnetwork",

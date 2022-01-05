@@ -24,7 +24,7 @@ variable "fsname" {
   default     = "exacloud"
 }
 
-# Project ID
+# Project ID to manage resources
 # https://cloud.google.com/resource-manager/docs/creating-managing-projects
 variable "project_id" {
   description = "Compute Platform project that will host the EXAScaler filesystem"
@@ -40,17 +40,18 @@ variable "zone" {
 
 # Service account name used by deploy application
 # https://cloud.google.com/iam/docs/service-accounts
-# new: create a new custom service account, or use an existing one: true or false
-# name: existing service account name, will be using if new is false
+# new: create a new custom service account or use an existing one: true or false
+# email: existing service account email address, will be using if new is false
+# set email = null to use the default compute service account
 variable "service_account" {
   description = "Service account name used by deploy application"
   type = object({
-    new  = bool
-    name = string
+    new   = bool
+    email = string
   })
   default = {
-    new  = false
-    name = "default"
+    new   = false
+    email = null
   }
 }
 
@@ -124,7 +125,7 @@ variable "network_self_link" {
 # id: existing network id, will be using if new is false
 # auto: create subnets in each region automatically: false or true
 # mtu: maximum transmission unit in bytes: 1460 - 1500
-# new: create a new network, or use an existing one: true or false
+# new: create a new network or use an existing one: true or false
 # nat: allow instances without external IP to communicate with the outside world: true or false
 variable "network" {
   description = "Network options"
@@ -169,7 +170,7 @@ variable "subnetwork_address" {
 # Private Google Access: true or false
 # https://cloud.google.com/vpc/docs/private-access-options
 # id: existing subnetwork id, will be using if new is false
-# new: create a new subnetwork, or use an existing one: true or false
+# new: create a new subnetwork or use an existing one: true or false
 variable "subnetwork" {
   description = "Subnetwork properties. Ignored if subnetwork_self_link is supplied."
   type = object({
@@ -212,17 +213,19 @@ variable "image" {
   })
   default = {
     project = "ddn-public"
-    name    = "exascaler-cloud-v522-centos7"
+    name    = "exascaler-cloud-v523-centos7"
   }
 }
 
 # Management server properties
+# node_type: type of management server
 # https://cloud.google.com/compute/docs/machine-types
+# node_cpu: CPU family
 # https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+# nic_type: type of network connectivity, GVNIC or VIRTIO_NET
 # https://cloud.google.com/compute/docs/networking/using-gvnic
-# nic_type: GVNIC or VIRTIO_NET
-# public_ip: true or false
-# node_count: number of instances
+# public_ip: assign an external IP address, true or false
+# node_count: number of management servers
 variable "mgs" {
   description = "Management server properties"
   type = object({
@@ -243,11 +246,11 @@ variable "mgs" {
 
 # Management target properties
 # https://cloud.google.com/compute/docs/disks
-# disk_bus: SCSI or NVME (NVME is for scratch disks only)
-# disk_type: pd-standard, pd-ssd, pd-balanced or scratch
-# disk_size: target size in in GB
-# scratch disk size must be exactly 375
-# disk_count: number of targets
+# disk_bus: type of management target interface, SCSI or NVME (NVME is for scratch disks only)
+# disk_type: type of management target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_size: size of management target in GB (scratch disk size must be exactly 375)
+# disk_count: number of management targets
+# disk_raid: create striped management target, true or false
 variable "mgt" {
   description = "Management target properties"
   type = object({
@@ -255,23 +258,25 @@ variable "mgt" {
     disk_type  = string
     disk_size  = number
     disk_count = number
+    disk_raid  = bool
   })
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-standard"
     disk_size  = 128
     disk_count = 1
+    disk_raid  = false
   }
 }
 
 
 # Monitoring target properties
 # https://cloud.google.com/compute/docs/disks
-# disk_bus: SCSI or NVME (NVME is for scratch disks only)
-# disk_type: pd-standard, pd-ssd, pd-balanced or scratch
-# disk_size: target size in in GB
-# scratch disk size must be exactly 375
-# disk_count: number of targets
+# disk_bus: type of monitoring target interface, SCSI or NVME (NVME is for scratch disks only)
+# disk_type: type of monitoring target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_size: size of monitoring target in GB (scratch disk size must be exactly 375)
+# disk_count: number of monitoring targets
+# disk_raid: create striped monitoring target, true or false
 variable "mnt" {
   description = "Monitoring target properties"
   type = object({
@@ -279,21 +284,26 @@ variable "mnt" {
     disk_type  = string
     disk_size  = number
     disk_count = number
+    disk_raid  = bool
   })
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-standard"
     disk_size  = 128
     disk_count = 1
+    disk_raid  = false
   }
 }
+
 # Metadata server properties
+# node_type: type of metadata server
 # https://cloud.google.com/compute/docs/machine-types
+# node_cpu: CPU family
 # https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+# nic_type: type of network connectivity, GVNIC or VIRTIO_NET
 # https://cloud.google.com/compute/docs/networking/using-gvnic
-# nic_type: GVNIC or VIRTIO_NET
-# public_ip: true or false
-# node_count: number of instances
+# public_ip: assign an external IP address, true or false
+# node_count: number of metadata servers
 variable "mds" {
   description = "Metadata server properties"
   type = object({
@@ -314,11 +324,11 @@ variable "mds" {
 
 # Metadata target properties
 # https://cloud.google.com/compute/docs/disks
-# disk_bus: SCSI or NVME (NVME is for scratch disks only)
-# disk_type: pd-standard, pd-ssd, pd-balanced or scratch
-# disk_size: target size in in GB
-# scratch disk size must be exactly 375
-# disk_count: number of targets
+# disk_bus: type of metadata target interface, SCSI or NVME (NVME is for scratch disks only)
+# disk_type: type of metadata target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_size: size of metadata target in GB (scratch disk size must be exactly 375)
+# disk_count: number of metadata targets
+# disk_raid: create striped metadata target, true or false
 variable "mdt" {
   description = "Metadata target properties"
   type = object({
@@ -326,21 +336,26 @@ variable "mdt" {
     disk_type  = string
     disk_size  = number
     disk_count = number
+    disk_raid  = bool
   })
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-ssd"
     disk_size  = 3500
     disk_count = 1
+    disk_raid  = false
   }
 }
 
 # Object Storage server properties
+# node_type: type of storage server
 # https://cloud.google.com/compute/docs/machine-types
+# node_cpu: CPU family
 # https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+# nic_type: type of network connectivity, GVNIC or VIRTIO_NET
 # https://cloud.google.com/compute/docs/networking/using-gvnic
-# nic_type: GVNIC or VIRTIO_NET
-# public_ip: true or false
+# public_ip: assign an external IP address, true or false
+# node_count: number of storage servers
 variable "oss" {
   description = "Object Storage server properties"
   type = object({
@@ -361,11 +376,11 @@ variable "oss" {
 
 # Object Storage target properties
 # https://cloud.google.com/compute/docs/disks
-# disk_bus: SCSI or NVME (NVME is for scratch disks only)
-# disk_type: pd-standard, pd-ssd, pd-balanced or scratch
-# disk_size: target size in in GB
-# scratch disk size must be exactly 375
-# disk_count: number of targets
+# disk_bus: type of storage target interface, SCSI or NVME (NVME is for scratch disks only)
+# disk_type: type of storage target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_size: size of storage target in GB (scratch disk size must be exactly 375)
+# disk_count: number of storage targets
+# disk_raid: create striped storage target, true or false
 variable "ost" {
   description = "Object Storage target properties"
   type = object({
@@ -373,22 +388,26 @@ variable "ost" {
     disk_type  = string
     disk_size  = number
     disk_count = number
+    disk_raid  = bool
   })
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-ssd"
     disk_size  = 3500
     disk_count = 1
+    disk_raid  = false
   }
 }
 
 # Compute client properties
+# node_type: type of compute client
 # https://cloud.google.com/compute/docs/machine-types
+# node_cpu: CPU family
 # https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+# nic_type: type of network connectivity, GVNIC or VIRTIO_NET
 # https://cloud.google.com/compute/docs/networking/using-gvnic
-# nic_type: GVNIC or VIRTIO_NET
-# public_ip: true or false
-# node_count: number of instances
+# public_ip: assign an external IP address, true or false
+# node_count: number of compute clients
 variable "cls" {
   description = "Compute client properties"
   type = object({
@@ -408,11 +427,10 @@ variable "cls" {
 }
 # Compute client target properties
 # https://cloud.google.com/compute/docs/disks
-# disk_bus: SCSI or NVME (NVME is for scratch disks only)
-# disk_type: pd-standard, pd-ssd, pd-balanced or scratch
-# disk_size: target size in in GB
-# scratch disk size must be exactly 375
-# disk_count: number of targets, 0 to disable
+# disk_bus: type of compute target interface, SCSI or NVME (NVME is for scratch disks only)
+# disk_type: type of compute target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_size: size of compute target in GB (scratch disk size must be exactly 375)
+# disk_count: number of compute targets
 variable "clt" {
   description = "Compute client target properties"
   type = object({

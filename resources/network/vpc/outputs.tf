@@ -30,3 +30,7 @@ output "primary_subnetwork" {
   value       = data.google_compute_subnetwork.primary_subnetwork
 }
 
+output "nat_ips" {
+  description = "the external IPs assigned to the NAT"
+  value       = google_compute_address.nat_ips.*.address
+}
