@@ -16,6 +16,7 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 
@@ -110,7 +111,7 @@ type BlueprintConfig struct {
 // ExpandConfig expands the yaml config in place
 func (bc *BlueprintConfig) ExpandConfig() {
 	bc.setResourcesInfo()
-	bc.checkResourceAndGroupNames()
+	bc.validateConfig()
 	bc.expand()
 	bc.validate()
 	bc.expanded = true
@@ -254,6 +255,34 @@ func (bc *BlueprintConfig) checkResourceAndGroupNames() {
 					grp.Name, groupKind, res.Kind)
 			}
 		}
+	}
+}
+
+func checkUsedResourceNames(
+	resGroups []ResourceGroup, idToGroup map[string]int) error {
+	for iGrp, grp := range resGroups {
+		for _, res := range grp.Resources {
+			for _, usedRes := range res.Use {
+				// Check if resource even exists
+				if _, ok := idToGroup[usedRes]; !ok {
+					return fmt.Errorf("used resource ID %s does not exist", usedRes)
+				}
+				// Ensure resource is from the correct group
+				if idToGroup[usedRes] != iGrp {
+					return fmt.Errorf(
+						"used resource ID %s not found in this Resource Group", usedRes)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (bc *BlueprintConfig) validateConfig() {
+	bc.checkResourceAndGroupNames()
+	if err := checkUsedResourceNames(
+		bc.Config.ResourceGroups, bc.ResourceToGroup); err != nil {
+		log.Fatal(err)
 	}
 }
 
