@@ -156,12 +156,19 @@ func teardown() {
 }
 
 // util function
+func cleanErrorRegexp(errRegexp string) string {
+	errRegexp = strings.ReplaceAll(errRegexp, "[", "\\[")
+	errRegexp = strings.ReplaceAll(errRegexp, "]", "\\]")
+	return errRegexp
+}
+
 func getBlueprintConfigForTest() BlueprintConfig {
 	testResourceSource := "testSource"
 	testResource := Resource{
 		Source:   testResourceSource,
 		Kind:     "terraform",
 		ID:       "testResource",
+		Use:      []string{},
 		Settings: make(map[string]interface{}),
 	}
 	testResourceSourceWithLabels := "./role/source"
@@ -169,6 +176,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 		Source: testResourceSourceWithLabels,
 		ID:     "testResourceWithLabels",
 		Kind:   "terraform",
+		Use:    []string{},
 		Settings: map[string]interface{}{
 			"resourceLabel": "resourceLabelValue",
 		},
@@ -679,7 +687,7 @@ func (s *MySuite) TestValidateResource(c *C) {
 	err := validateResource(testResource)
 	expectedErrorStr := fmt.Sprintf(
 		"%s\n%s", errorMessages["emptyID"], resource2String(testResource))
-	c.Assert(err, ErrorMatches, expectedErrorStr)
+	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Catch no Source
 	testResource.ID = "testResource"
@@ -687,7 +695,7 @@ func (s *MySuite) TestValidateResource(c *C) {
 	err = validateResource(testResource)
 	expectedErrorStr = fmt.Sprintf(
 		"%s\n%s", errorMessages["emptySource"], resource2String(testResource))
-	c.Assert(err, ErrorMatches, expectedErrorStr)
+	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Catch invalid kind
 	testResource.Source = "testSource"
@@ -695,7 +703,7 @@ func (s *MySuite) TestValidateResource(c *C) {
 	err = validateResource(testResource)
 	expectedErrorStr = fmt.Sprintf(
 		"%s\n%s", errorMessages["wrongKind"], resource2String(testResource))
-	c.Assert(err, ErrorMatches, expectedErrorStr)
+	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Successful validation
 	testResource.Kind = "terraform"

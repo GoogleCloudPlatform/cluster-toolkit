@@ -84,6 +84,7 @@ type Resource struct {
 	Kind         string
 	ID           string
 	ResourceName string
+	Use          []string
 	Settings     map[string]interface{}
 }
 
