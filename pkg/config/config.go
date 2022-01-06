@@ -271,6 +271,8 @@ func checkResourceAndGroupNames(
 	return resourceToGroup, nil
 }
 
+// checkUsedResourceNames verifies that any used resources have valid names and
+// are in the correct group
 func checkUsedResourceNames(
 	resGroups []ResourceGroup, idToGroup map[string]int) error {
 	for iGrp, grp := range resGroups {
@@ -291,6 +293,7 @@ func checkUsedResourceNames(
 	return nil
 }
 
+// validateConfig runs a set of simple early checks on the imported input YAML
 func (bc *BlueprintConfig) validateConfig() {
 	resourceToGroup, err := checkResourceAndGroupNames(bc.Config.ResourceGroups)
 	if err != nil {
