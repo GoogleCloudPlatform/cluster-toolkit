@@ -33,60 +33,60 @@ resource_groups:
   - source: resources/file-system/filestore
     kind: terraform
     id: homefs
+    use: [network1]
     settings:
       local_mount: /home
-      network_name: $(network1.network_name)
 
   - source: resources/file-system/filestore
     kind: terraform
     id: projectsfs
+    use: [network1]
     settings:
       filestore_tier: HIGH_SCALE_SSD
       size_gb: 10240
       local_mount: /projects
-      network_name: $(network1.network_name)
 
   - source: resources/third-party/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
+    use: [network1]
     settings:
       local_mount: /scratch
-      network_self_link: $(network1.network_self_link)
       subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
       subnetwork_address: ((module.network1.primary_subnetwork.ip_cidr_range))
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
+    use:
+    - homefs
+    - scratchfs
+    - projectsfs
     settings:
       max_node_count: 200
       partition_name: compute
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      network_storage:
-      - $(homefs.network_storage)
-      - $(scratchfs.network_storage)
-      - $(projectsfs.network_storage)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
+    use:
+    - homefs
+    - scratchfs
+    - projectsfs
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      network_storage:
-      - $(homefs.network_storage)
-      - $(scratchfs.network_storage)
-      - $(projectsfs.network_storage)
       partitions:
       - $(compute_partition.partition)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
+    use:
+    - homefs
+    - scratchfs
+    - projectsfs
     settings:
       login_machine_type: n2-standard-4
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      network_storage:
-      - $(homefs.network_storage)
-      - $(scratchfs.network_storage)
-      - $(projectsfs.network_storage)
       controller_name: $(slurm_controller.controller_node_name)

@@ -30,9 +30,9 @@ resource_groups:
   - source: resources/file-system/filestore
     kind: terraform
     id: homefs
+    use: [network1]
     settings:
       local_mount: /home
-      network_name: $(network1.network_name)
 
   - source: resources/scripts/startup-script
     kind: terraform
@@ -52,36 +52,35 @@ resource_groups:
   - source: resources/compute/simple-instance
     kind: terraform
     id: workstation
+    use:
+    - network1
+    - homefs
     settings:
       name_prefix: workstation
-      network_self_link: $(network1.network_self_link)
       machine_type: e2-standard-8
-      network_storage:
-      - $(homefs.network_storage)
       metadata:
         startup-script: $(startup.startup_script_content)
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
+    use: [homefs]
     settings:
       partition_name: compute
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      network_storage:
-      - $(homefs.network_storage)
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: debug-partition
+    use: [homefs]
     settings:
       partition_name: debug
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      network_storage:
-      - $(homefs.network_storage)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm
+    use: [homefs]
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:

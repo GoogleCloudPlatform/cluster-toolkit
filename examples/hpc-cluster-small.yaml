@@ -33,36 +33,33 @@ resource_groups:
   - source: resources/file-system/filestore
     kind: terraform
     id: homefs
+    use: [network1]
     settings:
       local_mount: /home
-      network_name: $(network1.network_name)
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
+    use: [homefs]
     settings:
       partition_name: compute
       max_node_count: 20
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      network_storage:
-      - $(homefs.network_storage)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
+    use: [homefs]
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       login_node_count: 1
-      network_storage:
-      - $(homefs.network_storage)
       partitions:
       - $(compute_partition.partition)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
+    use: [homefs]
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
-      network_storage:
-      - $(homefs.network_storage)
       controller_name: $(slurm_controller.controller_node_name)
