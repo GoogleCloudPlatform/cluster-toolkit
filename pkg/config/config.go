@@ -61,14 +61,14 @@ type ResourceGroup struct {
 	Resources        []Resource
 }
 
-func (g *ResourceGroup) getResourceByID(resID string) *Resource {
+func (g ResourceGroup) getResourceByID(resID string) Resource {
 	for i := range g.Resources {
-		res := &g.Resources[i]
+		res := g.Resources[i]
 		if g.Resources[i].ID == resID {
 			return res
 		}
 	}
-	return nil
+	return Resource{}
 }
 
 // TerraformBackend defines the configuration for the terraform state backend

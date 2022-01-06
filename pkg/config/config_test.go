@@ -251,7 +251,27 @@ func (s *MySuite) TestCreateResourceInfo(c *C) {
 	createResourceInfo(bc.Config.ResourceGroups[0])
 }
 
-func (s *MySuite) TestHasType(c *C) {
+func (s *MySuite) TestGetResouceByID(c *C) {
+	testID := "testID"
+
+	// No Resources
+	rg := ResourceGroup{}
+	got := rg.getResourceByID(testID)
+	c.Assert(got, DeepEquals, Resource{})
+
+	// No Match
+	rg.Resources = []Resource{Resource{ID: "NoMatch"}}
+	got = rg.getResourceByID(testID)
+	c.Assert(got, DeepEquals, Resource{})
+
+	// Match
+	expected := Resource{ID: testID}
+	rg.Resources = []Resource{expected}
+	got = rg.getResourceByID(testID)
+	c.Assert(got, DeepEquals, expected)
+}
+
+func (s *MySuite) TestHasKind(c *C) {
 	// No resources
 	rg := ResourceGroup{}
 	c.Assert(rg.HasKind("terraform"), Equals, false)

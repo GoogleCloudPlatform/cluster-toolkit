@@ -53,6 +53,8 @@ func appendAsSlice(
 	switch v := interfaceSlice.(type) {
 	case []string:
 		return append(v, value), nil
+	case []interface{}:
+		return append(v, value), nil
 	default:
 		return v, fmt.Errorf("invalid type, expected []string, got %T", v)
 	}
@@ -60,7 +62,7 @@ func appendAsSlice(
 
 func useResource(
 	res *Resource,
-	useRes *Resource,
+	useRes Resource,
 	info map[string]resreader.ResourceInfo) error {
 	resInfo := info[res.Source]
 	useInfo := info[useRes.Source]
@@ -95,14 +97,21 @@ func useResource(
 	return nil
 }
 
+// applyUseResources applies variables from resources listed in the "use" field
+// when/if applicable
 func (bc *BlueprintConfig) applyUseResources() error {
 	for iGrp := range bc.Config.ResourceGroups {
 		group := &bc.Config.ResourceGroups[iGrp]
 		for iRes := range group.Resources {
 			res := &group.Resources[iRes]
 			for _, useResID := range res.Use {
+				useRes := group.getResourceByID(useResID)
+				if useRes.ID == "" {
+					return fmt.Errorf("could not find resource %s used by %s in group %s",
+						useResID, res.ID, group.Name)
+				}
 				err := useResource(
-					res, group.getResourceByID(useResID), bc.ResourcesInfo[group.Name])
+					res, useRes, bc.ResourcesInfo[group.Name])
 				if err != nil {
 					return fmt.Errorf(
 						"error apply \"use\" resources to resource %s: %v", res.ID, err)

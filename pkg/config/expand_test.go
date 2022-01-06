@@ -15,6 +15,103 @@ func (s *MySuite) TestGetResourceVarName(c *C) {
 	c.Assert(got, Equals, expected)
 }
 
+func (s *MySuite) TestAppendAsSlice(c *C) {
+	// Fail: Empty Interface
+	var inputInterface interface{}
+	addVar := "testValue"
+	_, err := appendAsSlice(inputInterface, addVar)
+	c.Assert(err, ErrorMatches, `invalid type, expected \[\]string, got .*`)
+
+	// Fail: Incorrect Type
+	inputInterface = 42
+	_, err = appendAsSlice(inputInterface, addVar)
+	c.Assert(err, ErrorMatches, `invalid type, expected \[\]string, got .*`)
+
+	// Pass: Empty slice
+	inputInterface = []string{}
+	got, err := appendAsSlice(inputInterface, addVar)
+	c.Assert(err, IsNil)
+	c.Assert(got, DeepEquals, []string{addVar})
+
+	// Pass: Non-Empty Slice
+	inputSlice := []string{"Elem1", "Elem2"}
+	inputInterface = inputSlice
+	got, err = appendAsSlice(inputInterface, addVar)
+	c.Assert(err, IsNil)
+	c.Assert(got, DeepEquals, append(inputSlice, addVar))
+}
+
+func (s *MySuite) TestUseResource(c *C) {
+	// Setup
+	resSource := "resSource"
+	res := Resource{
+		ID:       "PrimaryResource",
+		Source:   resSource,
+		Settings: make(map[string]interface{}),
+	}
+	useResSource := "useSource"
+	useRes := Resource{
+		ID:     "UsedResource",
+		Source: useResSource,
+	}
+	info := make(map[string]resreader.ResourceInfo)
+	resInfo := resreader.ResourceInfo{}
+	useInfo := resreader.ResourceInfo{}
+	info[resSource] = resInfo
+	info[useResSource] = useInfo
+
+	// Pass: No Inputs, No Outputs
+	err := useResource(&res, useRes, info)
+	c.Assert(err, IsNil)
+	c.Assert(len(res.Settings), Equals, 0)
+
+	// Pass: Has Output, no maching input
+	varInfoNumber := resreader.VarInfo{
+		Name: "val1",
+		Type: "number",
+	}
+	useInfo.Outputs = []resreader.VarInfo{varInfoNumber}
+	info[useResSource] = useInfo
+	err = useResource(&res, useRes, info)
+	c.Assert(err, IsNil)
+	c.Assert(len(res.Settings), Equals, 0)
+
+	// Pass: Single Input/Output match - no lists
+	resInfo.Inputs = []resreader.VarInfo{varInfoNumber}
+	info[resSource] = resInfo
+	err = useResource(&res, useRes, info)
+	c.Assert(err, IsNil)
+	expectedSetting := getResourceVarName("UsedResource", "val1")
+	c.Assert(res.Settings["val1"], Equals, expectedSetting)
+
+	// Pass: Setting already set with non-list, non-list output available
+	err = useResource(&res, useRes, info)
+	c.Assert(err, IsNil)
+	c.Assert(len(res.Settings), Equals, 1)
+
+	// Pass: Single Input/Output match, input is list
+	varInfoList := resreader.VarInfo{
+		Name: "val1",
+		Type: "list",
+	}
+	resInfo.Inputs = []resreader.VarInfo{varInfoList}
+	info[resSource] = resInfo
+	res.Settings = make(map[string]interface{})
+	err = useResource(&res, useRes, info)
+	c.Assert(err, IsNil)
+	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 1)
+	c.Assert(res.Settings["val1"], DeepEquals, []interface{}{expectedSetting})
+
+	// Pass: Setting exists, Input is List, Output is not a list
+	err = useResource(&res, useRes, info)
+	c.Assert(err, IsNil)
+	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 2)
+	c.Assert(
+		res.Settings["val1"],
+		DeepEquals,
+		[]interface{}{expectedSetting, expectedSetting})
+}
+
 func (s *MySuite) TestUpdateVariableType(c *C) {
 	// slice, success
 	// empty
