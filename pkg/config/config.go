@@ -61,6 +61,16 @@ type ResourceGroup struct {
 	Resources        []Resource
 }
 
+func (g *ResourceGroup) getResourceByID(resID string) *Resource {
+	for i := range g.Resources {
+		res := &g.Resources[i]
+		if g.Resources[i].ID == resID {
+			return res
+		}
+	}
+	return nil
+}
+
 // TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string
@@ -299,6 +309,11 @@ func (bc BlueprintConfig) expand() {
 	if err := bc.combineLabels(); err != nil {
 		log.Fatalf(
 			"failed to update resources labels when expanding the config: %v", err)
+	}
+
+	if err := bc.applyUseResources(); err != nil {
+		log.Fatalf(
+			"failed to apply \"use\" resources when expanding the config: %v", err)
 	}
 
 	if err := bc.applyGlobalVariables(); err != nil {

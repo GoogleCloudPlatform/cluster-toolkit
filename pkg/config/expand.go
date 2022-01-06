@@ -44,6 +44,75 @@ func (bc *BlueprintConfig) addSettingsToResources() {
 	}
 }
 
+func getResourceVarName(resID string, varName string) string {
+	return fmt.Sprintf("$(%s.%s)", resID, varName)
+}
+
+func appendAsSlice(
+	interfaceSlice interface{}, value string) (interface{}, error) {
+	switch v := interfaceSlice.(type) {
+	case []string:
+		return append(v, value), nil
+	default:
+		return v, fmt.Errorf("invalid type, expected []string, got %T", v)
+	}
+}
+
+func useResource(
+	res *Resource,
+	useRes *Resource,
+	info map[string]resreader.ResourceInfo) error {
+	resInfo := info[res.Source]
+	useInfo := info[useRes.Source]
+	for _, useOutput := range useInfo.Outputs {
+		for _, resInput := range resInfo.Inputs {
+			if useOutput.Name == resInput.Name {
+				resVarName := getResourceVarName(useRes.ID, useOutput.Name)
+				isInputList := strings.HasPrefix(resInput.Type, "list")
+				if _, ok := res.Settings[resInput.Name]; ok {
+					if !isInputList || useOutput.Type == "list" {
+						continue
+					} else {
+						newValue, err := appendAsSlice(
+							res.Settings[resInput.Name], resVarName)
+						if err != nil {
+							return fmt.Errorf(
+								"failed to append variable %s to setting in resource %s: %v",
+								resVarName, res.ID, err)
+						}
+						res.Settings[resInput.Name] = newValue
+					}
+				} else {
+					if !isInputList || useOutput.Type == "list" {
+						res.Settings[resInput.Name] = resVarName
+					} else {
+						res.Settings[resInput.Name] = []interface{}{resVarName}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (bc *BlueprintConfig) applyUseResources() error {
+	for iGrp := range bc.Config.ResourceGroups {
+		group := &bc.Config.ResourceGroups[iGrp]
+		for iRes := range group.Resources {
+			res := &group.Resources[iRes]
+			for _, useResID := range res.Use {
+				err := useResource(
+					res, group.getResourceByID(useResID), bc.ResourcesInfo[group.Name])
+				if err != nil {
+					return fmt.Errorf(
+						"error apply \"use\" resources to resource %s: %v", res.ID, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (bc BlueprintConfig) resourceHasInput(
 	resGroup string, source string, inputName string) bool {
 	for _, input := range bc.ResourcesInfo[resGroup][source].Inputs {
@@ -405,7 +474,7 @@ func updateVariables(
 	return nil
 }
 
-// handlePrimitives recurses through the data structures in the yaml config and
+// expandVariables recurses through the data structures in the yaml config and
 // expands all variables
 func (bc *BlueprintConfig) expandVariables() {
 	for iGrp, grp := range bc.Config.ResourceGroups {
