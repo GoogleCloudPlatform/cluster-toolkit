@@ -117,7 +117,7 @@ variable "network_storage" {
   default = []
 }
 
-variable "partitions" {
+variable "partition" {
   description = "An array of configurations for specifying multiple machine types residing in their own Slurm partitions."
   type = list(object({
     name                 = string,

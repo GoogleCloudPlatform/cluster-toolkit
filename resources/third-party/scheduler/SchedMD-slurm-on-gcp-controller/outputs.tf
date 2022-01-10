@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-output "controller_node_name" {
+output "controller_name" {
   description = "Name of the controller node"
   value       = module.slurm_cluster_controller.controller_node_name
 }

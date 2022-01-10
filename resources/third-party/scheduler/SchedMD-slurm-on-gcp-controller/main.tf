@@ -32,7 +32,7 @@ module "slurm_cluster_controller" {
   munge_key                     = var.munge_key
   jwt_key                       = var.jwt_key
   network_storage               = var.network_storage
-  partitions                    = var.partitions
+  partitions                    = var.partition
   controller_startup_script     = var.controller_startup_script
   compute_startup_script        = var.compute_startup_script
   project                       = var.project_id

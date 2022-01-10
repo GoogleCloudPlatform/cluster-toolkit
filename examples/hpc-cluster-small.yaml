@@ -40,26 +40,27 @@ resource_groups:
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
-    use: [homefs]
+    use:
+    - homefs
+    - network1
     settings:
       partition_name: compute
       max_node_count: 20
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
-    use: [homefs]
+    use:
+    - homefs
+    - compute_partition
+    - network1
     settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
       login_node_count: 1
-      partitions:
-      - $(compute_partition.partition)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
-    use: [homefs]
-    settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      controller_name: $(slurm_controller.controller_node_name)
+    use:
+    - homefs
+    - slurm_controller
+    - network1

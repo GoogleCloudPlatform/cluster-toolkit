@@ -25,9 +25,24 @@ output "network_self_link" {
 
 }
 
-output "primary_subnetwork" {
+output "subnetwork" {
   description = "The subnetwork in the specified primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork
+}
+
+output "subnetwork_name" {
+  description = "The name of the subnetwork in the specified primary region"
+  value       = data.google_compute_subnetwork.primary_subnetwork.name
+}
+
+output "subnetwork_self_link" {
+  description = "The subnetwork self-link in the specified primary region"
+  value       = data.google_compute_subnetwork.primary_subnetwork.self_link
+}
+
+output "subnetwork_address" {
+  description = "The subnetwork address in the specified primary region"
+  value       = data.google_compute_subnetwork.primary_subnetwork.ip_cidr_range
 }
 
 output "nat_ips" {
