@@ -45,7 +45,7 @@ var ResourceFS embed.FS
 type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
-	writeResourceGroups(*config.YamlConfig) error
+	writeResourceGroups(*config.YamlConfig, [][]map[string]string) error
 }
 
 var kinds = map[string]ResWriter{
@@ -168,12 +168,14 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig) {
+func WriteBlueprint(
+	yamlConfig *config.YamlConfig, applyFunctions [][]map[string]string,
+) {
 	createBlueprintDirectory(yamlConfig.BlueprintName)
 	copySource(yamlConfig.BlueprintName, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
-			err := writer.writeResourceGroups(yamlConfig)
+			err := writer.writeResourceGroups(yamlConfig, applyFunctions)
 			if err != nil {
 				log.Fatalf("error writing resources to blueprint: %e", err)
 			}

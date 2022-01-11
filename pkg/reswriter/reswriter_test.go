@@ -70,7 +70,7 @@ func teardown() {
 	os.RemoveAll(testDir)
 }
 
-// Test Data Producer
+// Test Data Producers
 func getYamlConfigForTest() config.YamlConfig {
 	testResourceSource := path.Join(testDir, terraformResourceDir)
 	testResource := config.Resource{
@@ -102,6 +102,14 @@ func getYamlConfigForTest() config.YamlConfig {
 	return testYamlConfig
 }
 
+func createTestApplyFunctions(config config.YamlConfig) [][]map[string]string {
+	applyFuncs := make([][]map[string]string, len(config.ResourceGroups))
+	for iGrp, group := range config.ResourceGroups {
+		applyFuncs[iGrp] = make([]map[string]string, len(group.Resources))
+	}
+	return applyFuncs
+}
+
 // Tests
 
 // reswriter.go
@@ -128,7 +136,8 @@ func (s *MySuite) TestWriteBlueprint(c *C) {
 	blueprintName := "blueprints_TestWriteBlueprint"
 	blueprintDir := path.Join(testDir, blueprintName)
 	testYamlConfig.BlueprintName = blueprintDir
-	WriteBlueprint(&testYamlConfig)
+	testApplyFunctions := createTestApplyFunctions(testYamlConfig)
+	WriteBlueprint(&testYamlConfig, testApplyFunctions)
 }
 
 func (s *MySuite) TestFlattenInterfaceMap(c *C) {
@@ -476,7 +485,8 @@ func (s *MySuite) TestWriteMain(c *C) {
 	// Simple success
 	testResources := []config.Resource{}
 	testBackend := config.TerraformBackend{}
-	err := writeMain(testResources, testBackend, testMainDir)
+	testApplyFunctions := []map[string]string{}
+	err := writeMain(testResources, testApplyFunctions, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 
 	// Test with resource
@@ -487,7 +497,8 @@ func (s *MySuite) TestWriteMain(c *C) {
 		},
 	}
 	testResources = append(testResources, testResource)
-	err = writeMain(testResources, testBackend, testMainDir)
+	testApplyFunctions = append(testApplyFunctions, make(map[string]string))
+	err = writeMain(testResources, testApplyFunctions, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err := stringExistsInFile("testSetting", mainFilePath)
 	c.Assert(err, IsNil)
@@ -498,7 +509,8 @@ func (s *MySuite) TestWriteMain(c *C) {
 		"ghpc_role":    "testResource",
 		"custom_label": "",
 	}
-	err = writeMain(testResources, testBackend, testMainDir)
+	testApplyFunctions = append(testApplyFunctions, make(map[string]string))
+	err = writeMain(testResources, testApplyFunctions, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("custom_label", mainFilePath)
 	c.Assert(err, IsNil)
@@ -512,7 +524,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 	testBackend.Configuration = map[string]interface{}{
 		"bucket": "a_bucket",
 	}
-	err = writeMain(testResources, testBackend, testMainDir)
+	err = writeMain(testResources, testApplyFunctions, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("a_bucket", mainFilePath)
 	c.Assert(err, IsNil)

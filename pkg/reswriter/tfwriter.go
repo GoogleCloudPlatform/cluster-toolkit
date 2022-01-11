@@ -189,6 +189,7 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 
 func writeMain(
 	resources []config.Resource,
+	applyFunctions []map[string]string,
 	tfBackend config.TerraformBackend,
 	dst string) error {
 	// Create file
@@ -218,7 +219,7 @@ func writeMain(
 	}
 
 	// For each resource:
-	for _, res := range resources {
+	for iRes, res := range resources {
 		// Convert settings to cty.Value
 		ctySettings, err := convertToCty(res.Settings)
 		if err != nil {
@@ -253,6 +254,18 @@ func writeMain(
 				moduleBody.SetAttributeRaw(setting, labelsTokens)
 				continue
 			}
+
+			if fn, ok := applyFunctions[iRes][setting]; ok {
+				fnBytes := []byte(fn + "(")
+				valueStr := hclwrite.TokensForValue(value).Bytes()
+				fnBytes = append(fnBytes, valueStr...)
+				fnBytes = append(fnBytes, byte(')'))
+				fnToken := simpleTokenFromString(string(fnBytes))
+				fnTokens := []*hclwrite.Token{&fnToken}
+				moduleBody.SetAttributeRaw(setting, fnTokens)
+				continue
+			}
+
 			// Add attributes
 			moduleBody.SetAttributeValue(setting, value)
 		}
@@ -341,14 +354,15 @@ func printTerraformInstructions(grpPath string) {
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
-func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
+func (w TFWriter) writeResourceGroups(
+	yamlConfig *config.YamlConfig, applyFunctions [][]map[string]string) error {
 	bpName := yamlConfig.BlueprintName
 	ctyVars, err := convertToCty(yamlConfig.Vars)
 	if err != nil {
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %v", err)
 	}
-	for _, resGroup := range yamlConfig.ResourceGroups {
+	for iGrp, resGroup := range yamlConfig.ResourceGroups {
 		if !resGroup.HasKind("terraform") {
 			continue
 		}
@@ -356,7 +370,11 @@ func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 
 		// Write main.tf file
 		if err := writeMain(
-			resGroup.Resources, resGroup.TerraformBackend, writePath); err != nil {
+			resGroup.Resources,
+			applyFunctions[iGrp],
+			resGroup.TerraformBackend,
+			writePath,
+		); err != nil {
 			return fmt.Errorf("error writing main.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}

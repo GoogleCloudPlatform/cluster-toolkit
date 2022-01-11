@@ -99,6 +99,17 @@ type Resource struct {
 	Settings     map[string]interface{}
 }
 
+// getSetSettings returns a slice of explicitly set settings at a given point.
+func (r Resource) getSetSettings() []string {
+	setSettings := make([]string, len(r.Settings))
+	i := 0
+	for setting := range r.Settings {
+		setSettings[i] = setting
+		i++
+	}
+	return setSettings
+}
+
 // YamlConfig stores the contents on the User YAML
 type YamlConfig struct {
 	BlueprintName            string `yaml:"blueprint_name"`
@@ -115,7 +126,9 @@ type BlueprintConfig struct {
 	ResourcesInfo map[string]map[string]resreader.ResourceInfo
 	// Maps resource ID to group index
 	ResourceToGroup map[string]int
-	expanded        bool
+	// Lists functions to be applied while writing
+	ApplyFunctions [][]map[string]string
+	expanded       bool
 }
 
 // ExpandConfig expands the yaml config in place
@@ -307,7 +320,7 @@ func (bc *BlueprintConfig) validateConfig() {
 }
 
 // expand expands variables and strings in the yaml config
-func (bc BlueprintConfig) expand() {
+func (bc *BlueprintConfig) expand() {
 	bc.addSettingsToResources()
 	if err := bc.combineLabels(); err != nil {
 		log.Fatalf(

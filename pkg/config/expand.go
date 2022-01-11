@@ -48,74 +48,77 @@ func getResourceVarName(resID string, varName string) string {
 	return fmt.Sprintf("$(%s.%s)", resID, varName)
 }
 
-func appendAsSlice(
-	interfaceSlice interface{}, value string) (interface{}, error) {
-	switch v := interfaceSlice.(type) {
-	case []string:
-		return append(v, value), nil
-	case []interface{}:
-		return append(v, value), nil
-	default:
-		return v, fmt.Errorf("invalid type, expected []string, got %T", v)
+func stringSliceContains(slice []string, value string) bool {
+	for _, elem := range slice {
+		if elem == value {
+			return true
+		}
 	}
+	return false
 }
 
 func useResource(
 	res *Resource,
 	useRes Resource,
-	info map[string]resreader.ResourceInfo) error {
+	info map[string]resreader.ResourceInfo,
+	hardSettings []string) map[string]string {
+
 	resInfo := info[res.Source]
 	useInfo := info[useRes.Source]
+	settingsFunctions := make(map[string]string)
+
 	for _, useOutput := range useInfo.Outputs {
+		// Skip if setting is already set
+		if stringSliceContains(hardSettings, useOutput.Name) {
+			continue
+		}
+
 		for _, resInput := range resInfo.Inputs {
 			if useOutput.Name == resInput.Name {
 				resVarName := getResourceVarName(useRes.ID, useOutput.Name)
 				isInputList := strings.HasPrefix(resInput.Type, "list")
-				if _, ok := res.Settings[resInput.Name]; ok {
-					if !isInputList || useOutput.Type == "list" {
-						continue
-					} else {
-						newValue, err := appendAsSlice(
-							res.Settings[resInput.Name], resVarName)
-						if err != nil {
-							return fmt.Errorf(
-								"failed to append variable %s to setting in resource %s: %v",
-								resVarName, res.ID, err)
-						}
-						res.Settings[resInput.Name] = newValue
-					}
-				} else {
-					if !isInputList || useOutput.Type == "list" {
+				_, isAlreadySet := res.Settings[resInput.Name]
+				// If input is not a list, set value if not already set and continue
+				if !isInputList {
+					if !isAlreadySet {
 						res.Settings[resInput.Name] = resVarName
-					} else {
-						res.Settings[resInput.Name] = []interface{}{resVarName}
 					}
+					continue
 				}
+				if !isAlreadySet {
+					// Input is a list, create an outer list for it
+					res.Settings[resInput.Name] = []interface{}{}
+				}
+				// Append value list to the outer list
+				res.Settings[resInput.Name] = append(
+					res.Settings[resInput.Name].([]interface{}), resVarName)
+				settingsFunctions[resInput.Name] = "flatten"
 			}
 		}
 	}
-	return nil
+	return settingsFunctions
 }
 
 // applyUseResources applies variables from resources listed in the "use" field
 // when/if applicable
 func (bc *BlueprintConfig) applyUseResources() error {
+	bc.ApplyFunctions = make([][]map[string]string, len(bc.Config.ResourceGroups))
 	for iGrp := range bc.Config.ResourceGroups {
 		group := &bc.Config.ResourceGroups[iGrp]
+		bc.ApplyFunctions[iGrp] = make([]map[string]string, len(group.Resources))
 		for iRes := range group.Resources {
 			res := &group.Resources[iRes]
+			// Determine which settings are already set before starting
+			hardSettings := res.getSetSettings()
 			for _, useResID := range res.Use {
 				useRes := group.getResourceByID(useResID)
 				if useRes.ID == "" {
 					return fmt.Errorf("could not find resource %s used by %s in group %s",
 						useResID, res.ID, group.Name)
 				}
-				err := useResource(
-					res, useRes, bc.ResourcesInfo[group.Name])
-				if err != nil {
-					return fmt.Errorf(
-						"error apply \"use\" resources to resource %s: %v", res.ID, err)
-				}
+				applyFunctions := useResource(
+					res, useRes, bc.ResourcesInfo[group.Name], hardSettings)
+				bc.ApplyFunctions[iGrp][iRes] = applyFunctions
 			}
 		}
 	}
