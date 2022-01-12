@@ -308,11 +308,6 @@ func (s *MySuite) TestHasKind(c *C) {
 
 }
 
-func (s *MySuite) TestExpand(c *C) {
-	bc := getBlueprintConfigForTest()
-	bc.expand()
-}
-
 func (s *MySuite) TestCheckResourceAndGroupNames(c *C) {
 	bc := getBlueprintConfigForTest()
 	checkResourceAndGroupNames(bc.Config.ResourceGroups)

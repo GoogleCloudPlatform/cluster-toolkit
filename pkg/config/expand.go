@@ -33,6 +33,28 @@ const (
 	anyVariableExp    string = `\$\((.*)\)`
 )
 
+// expand expands variables and strings in the yaml config. Used directly by
+// ExpandConfig for the create and expand commands.
+func (bc *BlueprintConfig) expand() {
+	bc.addSettingsToResources()
+	if err := bc.combineLabels(); err != nil {
+		log.Fatalf(
+			"failed to update resources labels when expanding the config: %v", err)
+	}
+
+	if err := bc.applyUseResources(); err != nil {
+		log.Fatalf(
+			"failed to apply \"use\" resources when expanding the config: %v", err)
+	}
+
+	if err := bc.applyGlobalVariables(); err != nil {
+		log.Fatalf(
+			"failed to apply global variables in resources when expanding the config: %v",
+			err)
+	}
+	bc.expandVariables()
+}
+
 func (bc *BlueprintConfig) addSettingsToResources() {
 	for iGrp, grp := range bc.Config.ResourceGroups {
 		for iRes, res := range grp.Resources {

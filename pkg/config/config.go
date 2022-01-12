@@ -325,36 +325,3 @@ func (bc *BlueprintConfig) validateConfig() {
 		log.Fatal(err)
 	}
 }
-
-// expand expands variables and strings in the yaml config
-func (bc *BlueprintConfig) expand() {
-	bc.addSettingsToResources()
-	if err := bc.combineLabels(); err != nil {
-		log.Fatalf(
-			"failed to update resources labels when expanding the config: %v", err)
-	}
-
-	if err := bc.applyUseResources(); err != nil {
-		log.Fatalf(
-			"failed to apply \"use\" resources when expanding the config: %v", err)
-	}
-
-	if err := bc.applyGlobalVariables(); err != nil {
-		log.Fatalf(
-			"failed to apply global variables in resources when expanding the config: %v",
-			err)
-	}
-	bc.expandVariables()
-}
-
-func (bc BlueprintConfig) validate() {
-	if err := bc.validateVars(); err != nil {
-		log.Fatal(err)
-	}
-	if err := bc.validateResources(); err != nil {
-		log.Fatal(err)
-	}
-	if err := bc.validateResourceSettings(); err != nil {
-		log.Fatal(err)
-	}
-}

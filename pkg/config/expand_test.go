@@ -21,6 +21,11 @@ import (
 	. "gopkg.in/check.v1"
 )
 
+func (s *MySuite) TestExpand(c *C) {
+	bc := getBlueprintConfigForTest()
+	bc.expand()
+}
+
 func (s *MySuite) TestGetResourceVarName(c *C) {
 	resID := "resID"
 	varName := "varName"
