@@ -136,8 +136,7 @@ func (s *MySuite) TestWriteBlueprint(c *C) {
 	blueprintName := "blueprints_TestWriteBlueprint"
 	blueprintDir := path.Join(testDir, blueprintName)
 	testYamlConfig.BlueprintName = blueprintDir
-	testApplyFunctions := createTestApplyFunctions(testYamlConfig)
-	WriteBlueprint(&testYamlConfig, testApplyFunctions)
+	WriteBlueprint(&testYamlConfig)
 }
 
 func (s *MySuite) TestFlattenInterfaceMap(c *C) {
@@ -485,8 +484,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 	// Simple success
 	testResources := []config.Resource{}
 	testBackend := config.TerraformBackend{}
-	testApplyFunctions := []map[string]string{}
-	err := writeMain(testResources, testApplyFunctions, testBackend, testMainDir)
+	err := writeMain(testResources, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 
 	// Test with resource
@@ -497,8 +495,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 		},
 	}
 	testResources = append(testResources, testResource)
-	testApplyFunctions = append(testApplyFunctions, make(map[string]string))
-	err = writeMain(testResources, testApplyFunctions, testBackend, testMainDir)
+	err = writeMain(testResources, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err := stringExistsInFile("testSetting", mainFilePath)
 	c.Assert(err, IsNil)
@@ -509,8 +506,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 		"ghpc_role":    "testResource",
 		"custom_label": "",
 	}
-	testApplyFunctions = append(testApplyFunctions, make(map[string]string))
-	err = writeMain(testResources, testApplyFunctions, testBackend, testMainDir)
+	err = writeMain(testResources, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("custom_label", mainFilePath)
 	c.Assert(err, IsNil)
@@ -524,9 +520,26 @@ func (s *MySuite) TestWriteMain(c *C) {
 	testBackend.Configuration = map[string]interface{}{
 		"bucket": "a_bucket",
 	}
-	err = writeMain(testResources, testApplyFunctions, testBackend, testMainDir)
+	err = writeMain(testResources, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("a_bucket", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
+	// Test with WrapSettingsWith
+	testResourceWithWrap := config.Resource{
+		ID: "test_resource_with_wrap",
+		WrapSettingsWith: map[string][]string{
+			"wrappedSetting": []string{"list(flatten(", "))"},
+		},
+		Settings: map[string]interface{}{
+			"wrappedSetting": []interface{}{"val1", "val2"},
+		},
+	}
+	testResources = append(testResources, testResourceWithWrap)
+	err = writeMain(testResources, testBackend, testMainDir)
+	c.Assert(err, IsNil)
+	exists, err = stringExistsInFile("list(flatten(", mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 }

@@ -61,11 +61,10 @@ func useResource(
 	res *Resource,
 	useRes Resource,
 	info map[string]resreader.ResourceInfo,
-	hardSettings []string) map[string]string {
-
+	hardSettings []string,
+) {
 	resInfo := info[res.Source]
 	useInfo := info[useRes.Source]
-	settingsFunctions := make(map[string]string)
 
 	for _, useOutput := range useInfo.Outputs {
 		// Skip if setting is already set
@@ -92,20 +91,18 @@ func useResource(
 				// Append value list to the outer list
 				res.Settings[resInput.Name] = append(
 					res.Settings[resInput.Name].([]interface{}), resVarName)
-				settingsFunctions[resInput.Name] = "flatten"
+				res.createWrapSettingsWith()
+				res.WrapSettingsWith[resInput.Name] = []string{"flatten(", ")"}
 			}
 		}
 	}
-	return settingsFunctions
 }
 
 // applyUseResources applies variables from resources listed in the "use" field
 // when/if applicable
 func (bc *BlueprintConfig) applyUseResources() error {
-	bc.ApplyFunctions = make([][]map[string]string, len(bc.Config.ResourceGroups))
 	for iGrp := range bc.Config.ResourceGroups {
 		group := &bc.Config.ResourceGroups[iGrp]
-		bc.ApplyFunctions[iGrp] = make([]map[string]string, len(group.Resources))
 		for iRes := range group.Resources {
 			res := &group.Resources[iRes]
 			// Determine which settings are already set before starting
@@ -116,9 +113,7 @@ func (bc *BlueprintConfig) applyUseResources() error {
 					return fmt.Errorf("could not find resource %s used by %s in group %s",
 						useResID, res.ID, group.Name)
 				}
-				applyFunctions := useResource(
-					res, useRes, bc.ResourcesInfo[group.Name], hardSettings)
-				bc.ApplyFunctions[iGrp][iRes] = applyFunctions
+				useResource(res, useRes, bc.ResourcesInfo[group.Name], hardSettings)
 			}
 		}
 	}

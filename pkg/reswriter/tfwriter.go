@@ -189,9 +189,9 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 
 func writeMain(
 	resources []config.Resource,
-	applyFunctions []map[string]string,
 	tfBackend config.TerraformBackend,
-	dst string) error {
+	dst string,
+) error {
 	// Create file
 	mainPath := path.Join(dst, "main.tf")
 	if err := createBaseFile(mainPath); err != nil {
@@ -219,7 +219,7 @@ func writeMain(
 	}
 
 	// For each resource:
-	for iRes, res := range resources {
+	for _, res := range resources {
 		// Convert settings to cty.Value
 		ctySettings, err := convertToCty(res.Settings)
 		if err != nil {
@@ -255,19 +255,24 @@ func writeMain(
 				continue
 			}
 
-			if fn, ok := applyFunctions[iRes][setting]; ok {
-				fnBytes := []byte(fn + "(")
-				valueStr := hclwrite.TokensForValue(value).Bytes()
-				fnBytes = append(fnBytes, valueStr...)
-				fnBytes = append(fnBytes, byte(')'))
-				fnToken := simpleTokenFromString(string(fnBytes))
-				fnTokens := []*hclwrite.Token{&fnToken}
-				moduleBody.SetAttributeRaw(setting, fnTokens)
-				continue
-			}
+			if wrap, ok := res.WrapSettingsWith[setting]; ok {
+				if len(wrap) != 2 {
+					return fmt.Errorf(
+						"invalid length of WrapSettingsWith, expected 2 got %d", len(wrap))
+				}
+				wrapBytes := []byte(wrap[0])
+				endBytes := []byte(wrap[1])
 
-			// Add attributes
-			moduleBody.SetAttributeValue(setting, value)
+				valueStr := hclwrite.TokensForValue(value).Bytes()
+				wrapBytes = append(wrapBytes, valueStr...)
+				wrapBytes = append(wrapBytes, endBytes...)
+				wrapToken := simpleTokenFromString(string(wrapBytes))
+				wrapTokens := []*hclwrite.Token{&wrapToken}
+				moduleBody.SetAttributeRaw(setting, wrapTokens)
+			} else {
+				// Add attributes
+				moduleBody.SetAttributeValue(setting, value)
+			}
 		}
 		hclBody.AppendNewline()
 	}
@@ -354,15 +359,14 @@ func printTerraformInstructions(grpPath string) {
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
-func (w TFWriter) writeResourceGroups(
-	yamlConfig *config.YamlConfig, applyFunctions [][]map[string]string) error {
+func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 	bpName := yamlConfig.BlueprintName
 	ctyVars, err := convertToCty(yamlConfig.Vars)
 	if err != nil {
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %v", err)
 	}
-	for iGrp, resGroup := range yamlConfig.ResourceGroups {
+	for _, resGroup := range yamlConfig.ResourceGroups {
 		if !resGroup.HasKind("terraform") {
 			continue
 		}
@@ -370,10 +374,7 @@ func (w TFWriter) writeResourceGroups(
 
 		// Write main.tf file
 		if err := writeMain(
-			resGroup.Resources,
-			applyFunctions[iGrp],
-			resGroup.TerraformBackend,
-			writePath,
+			resGroup.Resources, resGroup.TerraformBackend, writePath,
 		); err != nil {
 			return fmt.Errorf("error writing main.tf file for resource group %s: %v",
 				resGroup.Name, err)

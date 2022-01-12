@@ -91,12 +91,13 @@ func (g ResourceGroup) HasKind(kind string) bool {
 
 // Resource stores YAML definition of a resource
 type Resource struct {
-	Source       string
-	Kind         string
-	ID           string
-	ResourceName string
-	Use          []string
-	Settings     map[string]interface{}
+	Source           string
+	Kind             string
+	ID               string
+	ResourceName     string
+	Use              []string
+	WrapSettingsWith map[string][]string
+	Settings         map[string]interface{}
 }
 
 // getSetSettings returns a slice of explicitly set settings at a given point.
@@ -108,6 +109,14 @@ func (r Resource) getSetSettings() []string {
 		i++
 	}
 	return setSettings
+}
+
+// createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
+// a new map is created.
+func (r *Resource) createWrapSettingsWith() {
+	if r.WrapSettingsWith == nil {
+		r.WrapSettingsWith = make(map[string][]string)
+	}
 }
 
 // YamlConfig stores the contents on the User YAML
@@ -126,9 +135,7 @@ type BlueprintConfig struct {
 	ResourcesInfo map[string]map[string]resreader.ResourceInfo
 	// Maps resource ID to group index
 	ResourceToGroup map[string]int
-	// Lists functions to be applied while writing
-	ApplyFunctions [][]map[string]string
-	expanded       bool
+	expanded        bool
 }
 
 // ExpandConfig expands the yaml config in place

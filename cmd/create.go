@@ -55,6 +55,5 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
 	blueprintConfig.ExpandConfig()
-	reswriter.WriteBlueprint(
-		&blueprintConfig.Config, blueprintConfig.ApplyFunctions)
+	reswriter.WriteBlueprint(&blueprintConfig.Config)
 }

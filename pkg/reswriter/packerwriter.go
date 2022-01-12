@@ -107,9 +107,7 @@ func writePackerAutoVariables(
 
 // writeResourceGroups writes any needed files to the top and resource levels
 // of the blueprint
-func (w PackerWriter) writeResourceGroups(
-	yamlConfig *config.YamlConfig, applyFunctions [][]map[string]string,
-) error {
+func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 	w.prepareToWrite(yamlConfig)
 	return w.writeResourceLevel(yamlConfig)
 }

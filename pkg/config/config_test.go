@@ -57,9 +57,10 @@ resource_groups:
 `)
 	testResources = []Resource{
 		{
-			Source: "./resources/network/vpc",
-			Kind:   "terraform",
-			ID:     "vpc",
+			Source:           "./resources/network/vpc",
+			Kind:             "terraform",
+			ID:               "vpc",
+			WrapSettingsWith: make(map[string][]string),
 			Settings: map[string]interface{}{
 				"network_name": "$\"${var.deployment_name}_net\"",
 				"project_id":   "project_name",
@@ -163,18 +164,20 @@ func cleanErrorRegexp(errRegexp string) string {
 func getBlueprintConfigForTest() BlueprintConfig {
 	testResourceSource := "testSource"
 	testResource := Resource{
-		Source:   testResourceSource,
-		Kind:     "terraform",
-		ID:       "testResource",
-		Use:      []string{},
-		Settings: make(map[string]interface{}),
+		Source:           testResourceSource,
+		Kind:             "terraform",
+		ID:               "testResource",
+		Use:              []string{},
+		WrapSettingsWith: make(map[string][]string),
+		Settings:         make(map[string]interface{}),
 	}
 	testResourceSourceWithLabels := "./role/source"
 	testResourceWithLabels := Resource{
-		Source: testResourceSourceWithLabels,
-		ID:     "testResourceWithLabels",
-		Kind:   "terraform",
-		Use:    []string{},
+		Source:           testResourceSourceWithLabels,
+		ID:               "testResourceWithLabels",
+		Kind:             "terraform",
+		Use:              []string{},
+		WrapSettingsWith: make(map[string][]string),
 		Settings: map[string]interface{}{
 			"resourceLabel": "resourceLabelValue",
 		},
