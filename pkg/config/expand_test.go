@@ -47,16 +47,14 @@ func (s *MySuite) TestUseResource(c *C) {
 		ID:     "UsedResource",
 		Source: useResSource,
 	}
-	info := make(map[string]resreader.ResourceInfo)
 	resInfo := resreader.ResourceInfo{}
 	useInfo := resreader.ResourceInfo{}
-	info[resSource] = resInfo
-	info[useResSource] = useInfo
-	hardSettings := []string{}
+	hasChanged := make(map[string]bool)
 
 	// Pass: No Inputs, No Outputs
-	useResource(&res, useRes, info, hardSettings)
+	useResource(&res, useRes, resInfo, useInfo, hasChanged)
 	c.Assert(len(res.Settings), Equals, 0)
+	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Has Output, no maching input
 	varInfoNumber := resreader.VarInfo{
@@ -64,35 +62,42 @@ func (s *MySuite) TestUseResource(c *C) {
 		Type: "number",
 	}
 	useInfo.Outputs = []resreader.VarInfo{varInfoNumber}
-	info[useResSource] = useInfo
-	useResource(&res, useRes, info, hardSettings)
+	useResource(&res, useRes, resInfo, useInfo, hasChanged)
 	c.Assert(len(res.Settings), Equals, 0)
+	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Single Input/Output match - no lists
 	resInfo.Inputs = []resreader.VarInfo{varInfoNumber}
-	info[resSource] = resInfo
-	useResource(&res, useRes, info, hardSettings)
+	useResource(&res, useRes, resInfo, useInfo, hasChanged)
 	expectedSetting := getResourceVarName("UsedResource", "val1")
 	c.Assert(res.Settings["val1"], Equals, expectedSetting)
+	c.Assert(len(hasChanged), Equals, 1)
 
-	// Pass: Setting already set with non-list, non-list output available
-	useResource(&res, useRes, info, hardSettings)
+	// Pass: Already set, has been changed by useResource
+	useResource(&res, useRes, resInfo, useInfo, hasChanged)
 	c.Assert(len(res.Settings), Equals, 1)
+	c.Assert(len(hasChanged), Equals, 1)
 
-	// Pass: Single Input/Output match, input is list
+	// Pass: Already set, has not been changed by useResource
+	hasChanged = make(map[string]bool)
+	useResource(&res, useRes, resInfo, useInfo, hasChanged)
+	c.Assert(len(res.Settings), Equals, 1)
+	c.Assert(len(hasChanged), Equals, 0)
+
+	// Pass: Single Input/Output match, input is list, not already set
 	varInfoList := resreader.VarInfo{
 		Name: "val1",
 		Type: "list",
 	}
 	resInfo.Inputs = []resreader.VarInfo{varInfoList}
-	info[resSource] = resInfo
 	res.Settings = make(map[string]interface{})
-	useResource(&res, useRes, info, hardSettings)
+	useResource(&res, useRes, resInfo, useInfo, hasChanged)
 	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 1)
 	c.Assert(res.Settings["val1"], DeepEquals, []interface{}{expectedSetting})
+	c.Assert(len(hasChanged), Equals, 1)
 
 	// Pass: Setting exists, Input is List, Output is not a list
-	useResource(&res, useRes, info, hardSettings)
+	useResource(&res, useRes, resInfo, useInfo, hasChanged)
 	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 2)
 	c.Assert(
 		res.Settings["val1"],

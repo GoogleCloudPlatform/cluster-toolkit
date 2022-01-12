@@ -82,39 +82,43 @@ func stringSliceContains(slice []string, value string) bool {
 func useResource(
 	res *Resource,
 	useRes Resource,
-	info map[string]resreader.ResourceInfo,
-	hardSettings []string,
+	resInfo resreader.ResourceInfo,
+	useInfo resreader.ResourceInfo,
+	changedSettings map[string]bool,
 ) {
-	resInfo := info[res.Source]
-	useInfo := info[useRes.Source]
+	resInputs := make(map[string]string)
+	for _, input := range resInfo.Inputs {
+		resInputs[input.Name] = input.Type
+	}
 
 	for _, useOutput := range useInfo.Outputs {
-		// Skip if setting is already set
-		if stringSliceContains(hardSettings, useOutput.Name) {
+		settingName := useOutput.Name
+		_, isAlreadySet := res.Settings[settingName]
+		_, hasChanged := changedSettings[settingName]
+
+		// Skip if setting is already set and wasn't previously updated by useResource
+		if isAlreadySet && !hasChanged {
 			continue
 		}
 
-		for _, resInput := range resInfo.Inputs {
-			if useOutput.Name == resInput.Name {
-				resVarName := getResourceVarName(useRes.ID, useOutput.Name)
-				isInputList := strings.HasPrefix(resInput.Type, "list")
-				_, isAlreadySet := res.Settings[resInput.Name]
-				// If input is not a list, set value if not already set and continue
-				if !isInputList {
-					if !isAlreadySet {
-						res.Settings[resInput.Name] = resVarName
-					}
-					continue
-				}
+		if inputType, ok := resInputs[settingName]; ok {
+			resVarName := getResourceVarName(useRes.ID, settingName)
+			isInputList := strings.HasPrefix(inputType, "list")
+			if isInputList {
 				if !isAlreadySet {
 					// Input is a list, create an outer list for it
-					res.Settings[resInput.Name] = []interface{}{}
+					res.Settings[settingName] = []interface{}{}
+					changedSettings[settingName] = true
+					res.createWrapSettingsWith()
+					res.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
 				}
 				// Append value list to the outer list
-				res.Settings[resInput.Name] = append(
-					res.Settings[resInput.Name].([]interface{}), resVarName)
-				res.createWrapSettingsWith()
-				res.WrapSettingsWith[resInput.Name] = []string{"flatten(", ")"}
+				res.Settings[settingName] = append(
+					res.Settings[settingName].([]interface{}), resVarName)
+			} else if !isAlreadySet {
+				// If input is not a list, set value if not already set and continue
+				res.Settings[settingName] = resVarName
+				changedSettings[settingName] = true
 			}
 		}
 	}
@@ -127,15 +131,16 @@ func (bc *BlueprintConfig) applyUseResources() error {
 		group := &bc.Config.ResourceGroups[iGrp]
 		for iRes := range group.Resources {
 			res := &group.Resources[iRes]
-			// Determine which settings are already set before starting
-			hardSettings := res.getSetSettings()
+			resInfo := bc.ResourcesInfo[group.Name][res.Source]
+			changedSettings := make(map[string]bool)
 			for _, useResID := range res.Use {
 				useRes := group.getResourceByID(useResID)
+				useInfo := bc.ResourcesInfo[group.Name][useRes.Source]
 				if useRes.ID == "" {
 					return fmt.Errorf("could not find resource %s used by %s in group %s",
 						useResID, res.ID, group.Name)
 				}
-				useResource(res, useRes, bc.ResourcesInfo[group.Name], hardSettings)
+				useResource(res, useRes, resInfo, useInfo, changedSettings)
 			}
 		}
 	}
