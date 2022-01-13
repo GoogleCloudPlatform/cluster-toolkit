@@ -33,10 +33,10 @@ resource_groups:
   - source: resources/file-system/filestore
     kind: terraform
     id: homefs
+    use: [network]
     settings:
       name: homefs
       local_mount: /home
-      network_name: $(network.network_name)
       size_gb: 3000
       labels:
         local_custom: "some_value"
@@ -45,10 +45,10 @@ resource_groups:
   - source: resources/file-system/filestore
     kind: terraform
     id: homefs1
+    use: [network]
     settings:
       name: homefs
       local_mount: /home
-      network_name: $(network.network_name)
       size_gb: 3000
       labels:
         ghpc_role: "foobar"

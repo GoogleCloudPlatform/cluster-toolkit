@@ -27,6 +27,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// validate is the top-level function for running the validation suite.
+func (bc BlueprintConfig) validate() {
+	if err := bc.validateVars(); err != nil {
+		log.Fatal(err)
+	}
+	if err := bc.validateResources(); err != nil {
+		log.Fatal(err)
+	}
+	if err := bc.validateResourceSettings(); err != nil {
+		log.Fatal(err)
+	}
+}
+
 // validateVars checks the global variables for viable types
 func (bc BlueprintConfig) validateVars() error {
 	vars := bc.Config.Vars

@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hpc-cluster-high-io
+blueprint_name: use-resources
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-io
+  deployment_name: hpc-slurm-use-resources
   region: us-central1
   zone: us-central1-a
 
@@ -36,15 +36,13 @@ resource_groups:
     use: [network1]
     settings:
       local_mount: /home
+      network_name: $(network1.network_name)
 
-  - source: resources/file-system/filestore
+
+  - source: resources/file-system/nfs-server
     kind: terraform
     id: projectsfs
     use: [network1]
-    settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /projects
 
   - source: resources/third-party/file-system/DDN-EXAScaler
     kind: terraform
@@ -61,7 +59,6 @@ resource_groups:
     use:
     - homefs
     - scratchfs
-    - projectsfs
     settings:
       max_node_count: 200
       partition_name: compute
@@ -71,8 +68,6 @@ resource_groups:
     kind: terraform
     id: slurm_controller
     use:
-    - homefs
-    - scratchfs
     - projectsfs
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
@@ -90,3 +85,4 @@ resource_groups:
       login_machine_type: n2-standard-4
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       controller_name: $(slurm_controller.controller_node_name)
+      network_storage: $(projectsfs.network_storage)

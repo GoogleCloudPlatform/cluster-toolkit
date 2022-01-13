@@ -30,9 +30,9 @@ resource_groups:
   - source: resources/file-system/filestore
     kind: terraform
     id: homefs
+    use: [network1]
     settings:
       local_mount: /home
-      network_name: $(network1.network_name)
       labels:
         ghpc_role: storage-home
 
@@ -54,12 +54,12 @@ resource_groups:
   - source: resources/compute/simple-instance
     kind: terraform
     id: workstation
+    use:
+    - network1
+    - homefs
     settings:
       name_prefix: workstation
-      network_self_link: $(network1.network_self_link)
       machine_type: e2-standard-8
-      network_storage:
-      - $(homefs.network_storage)
       metadata:
         startup-script: $(startup.startup_script_content)
       labels:

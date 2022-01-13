@@ -52,8 +52,8 @@ resource_groups:
   - source: ./resources/compute/simple-instance
     kind: terraform
     id: instance
+    use: [network1]
     settings:
-      network_self_link: $(network1.network_self_link)
       machine_type: e2-standard-4
       metadata:
         startup-script: $(startup.startup_script_content)
