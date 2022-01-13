@@ -79,28 +79,32 @@ func stringSliceContains(slice []string, value string) bool {
 	return false
 }
 
+func getResourceInputMap(inputs []resreader.VarInfo) map[string]string {
+	resInputs := make(map[string]string)
+	for _, input := range inputs {
+		resInputs[input.Name] = input.Type
+	}
+	return resInputs
+}
+
 func useResource(
 	res *Resource,
 	useRes Resource,
-	resInfo resreader.ResourceInfo,
-	useInfo resreader.ResourceInfo,
+	resInputs map[string]string,
+	useOutputs []resreader.VarInfo,
 	changedSettings map[string]bool,
 ) {
-	resInputs := make(map[string]string)
-	for _, input := range resInfo.Inputs {
-		resInputs[input.Name] = input.Type
-	}
-
-	for _, useOutput := range useInfo.Outputs {
+	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
 		_, isAlreadySet := res.Settings[settingName]
 		_, hasChanged := changedSettings[settingName]
 
-		// Skip if setting is already set and wasn't previously updated by useResource
+		// Skip settings explicitly defined by users
 		if isAlreadySet && !hasChanged {
 			continue
 		}
 
+		// This output corresponds to an input that was not explicitly set by the user
 		if inputType, ok := resInputs[settingName]; ok {
 			resVarName := getResourceVarName(useRes.ID, settingName)
 			isInputList := strings.HasPrefix(inputType, "list")
@@ -132,6 +136,7 @@ func (bc *BlueprintConfig) applyUseResources() error {
 		for iRes := range group.Resources {
 			res := &group.Resources[iRes]
 			resInfo := bc.ResourcesInfo[group.Name][res.Source]
+			resInputs := getResourceInputMap(resInfo.Inputs)
 			changedSettings := make(map[string]bool)
 			for _, useResID := range res.Use {
 				useRes := group.getResourceByID(useResID)
@@ -140,7 +145,7 @@ func (bc *BlueprintConfig) applyUseResources() error {
 					return fmt.Errorf("could not find resource %s used by %s in group %s",
 						useResID, res.ID, group.Name)
 				}
-				useResource(res, useRes, resInfo, useInfo, changedSettings)
+				useResource(res, useRes, resInputs, useInfo.Outputs, changedSettings)
 			}
 		}
 	}

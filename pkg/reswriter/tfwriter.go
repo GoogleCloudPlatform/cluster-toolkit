@@ -258,7 +258,8 @@ func writeMain(
 			if wrap, ok := res.WrapSettingsWith[setting]; ok {
 				if len(wrap) != 2 {
 					return fmt.Errorf(
-						"invalid length of WrapSettingsWith, expected 2 got %d", len(wrap))
+						"invalid length of WrapSettingsWith for %s.%s, expected 2 got %d",
+						res.ID, setting, len(wrap))
 				}
 				wrapBytes := []byte(wrap[0])
 				endBytes := []byte(wrap[1])

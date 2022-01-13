@@ -52,7 +52,8 @@ func (s *MySuite) TestUseResource(c *C) {
 	hasChanged := make(map[string]bool)
 
 	// Pass: No Inputs, No Outputs
-	useResource(&res, useRes, resInfo, useInfo, hasChanged)
+	resInputs := getResourceInputMap(resInfo.Inputs)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings), Equals, 0)
 	c.Assert(len(hasChanged), Equals, 0)
 
@@ -62,25 +63,26 @@ func (s *MySuite) TestUseResource(c *C) {
 		Type: "number",
 	}
 	useInfo.Outputs = []resreader.VarInfo{varInfoNumber}
-	useResource(&res, useRes, resInfo, useInfo, hasChanged)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings), Equals, 0)
 	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Single Input/Output match - no lists
 	resInfo.Inputs = []resreader.VarInfo{varInfoNumber}
-	useResource(&res, useRes, resInfo, useInfo, hasChanged)
+	resInputs = getResourceInputMap(resInfo.Inputs)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	expectedSetting := getResourceVarName("UsedResource", "val1")
 	c.Assert(res.Settings["val1"], Equals, expectedSetting)
 	c.Assert(len(hasChanged), Equals, 1)
 
 	// Pass: Already set, has been changed by useResource
-	useResource(&res, useRes, resInfo, useInfo, hasChanged)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings), Equals, 1)
 	c.Assert(len(hasChanged), Equals, 1)
 
 	// Pass: Already set, has not been changed by useResource
 	hasChanged = make(map[string]bool)
-	useResource(&res, useRes, resInfo, useInfo, hasChanged)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings), Equals, 1)
 	c.Assert(len(hasChanged), Equals, 0)
 
@@ -90,14 +92,15 @@ func (s *MySuite) TestUseResource(c *C) {
 		Type: "list",
 	}
 	resInfo.Inputs = []resreader.VarInfo{varInfoList}
+	resInputs = getResourceInputMap(resInfo.Inputs)
 	res.Settings = make(map[string]interface{})
-	useResource(&res, useRes, resInfo, useInfo, hasChanged)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 1)
 	c.Assert(res.Settings["val1"], DeepEquals, []interface{}{expectedSetting})
 	c.Assert(len(hasChanged), Equals, 1)
 
 	// Pass: Setting exists, Input is List, Output is not a list
-	useResource(&res, useRes, resInfo, useInfo, hasChanged)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 2)
 	c.Assert(
 		res.Settings["val1"],
