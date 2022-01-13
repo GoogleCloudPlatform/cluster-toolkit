@@ -341,8 +341,8 @@ func printTerraformInstructions(grpPath string) {
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
-func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
-	bpName := yamlConfig.BlueprintName
+func (w TFWriter) writeResourceGroups(bpConfig *config.BlueprintConfig) error {
+	yamlConfig := bpConfig.Config
 	ctyVars, err := convertToCty(yamlConfig.Vars)
 	if err != nil {
 		return fmt.Errorf(
@@ -352,7 +352,7 @@ func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
 		if !resGroup.HasKind("terraform") {
 			continue
 		}
-		writePath := path.Join(bpName, resGroup.Name)
+		writePath := path.Join(bpConfig.Directory, yamlConfig.BlueprintName, resGroup.Name)
 
 		// Write main.tf file
 		if err := writeMain(

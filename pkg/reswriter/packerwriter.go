@@ -54,9 +54,10 @@ func printPackerInstructions(grpPath string) {
 }
 
 // writeResourceLevel writes any needed files to the resource layer
-func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig) error {
+func (w PackerWriter) writeResourceLevel(bpConfig *config.BlueprintConfig) error {
+	yamlConfig := bpConfig.Config
 	for _, grp := range yamlConfig.ResourceGroups {
-		groupPath := path.Join(yamlConfig.BlueprintName, grp.Name)
+		groupPath := path.Join(bpConfig.Directory, yamlConfig.BlueprintName, grp.Name)
 		for _, res := range grp.Resources {
 			if res.Kind != "packer" {
 				continue
@@ -107,7 +108,8 @@ func writePackerAutoVariables(
 
 // writeResourceGroups writes any needed files to the top and resource levels
 // of the blueprint
-func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig) error {
+func (w PackerWriter) writeResourceGroups(bpConfig *config.BlueprintConfig) error {
+	yamlConfig := &bpConfig.Config
 	w.prepareToWrite(yamlConfig)
-	return w.writeResourceLevel(yamlConfig)
+	return w.writeResourceLevel(bpConfig)
 }

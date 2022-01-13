@@ -30,11 +30,14 @@ func init() {
 		"Configuration file for the new blueprints")
 	cobra.CheckErr(createCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
+	createCmd.Flags().StringVarP(&bpDirectory, "out", "o", "",
+		"Output directory for the new blueprints")
 	rootCmd.AddCommand(createCmd)
 }
 
 var (
 	yamlFilename string
+	bpDirectory  string
 	createCmd    = &cobra.Command{
 		Use:   "create FILENAME",
 		Short: "Create a new blueprint.",
@@ -53,7 +56,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 		yamlFilename = args[0]
 	}
 
-	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
+	blueprintConfig := config.NewBlueprintConfig(bpDirectory, yamlFilename)
 	blueprintConfig.ExpandConfig()
-	reswriter.WriteBlueprint(&blueprintConfig.Config)
+	reswriter.WriteBlueprint(&blueprintConfig)
 }

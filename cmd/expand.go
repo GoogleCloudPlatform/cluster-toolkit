@@ -46,7 +46,7 @@ var (
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
+	blueprintConfig := config.NewBlueprintConfig(".", yamlFilename)
 	blueprintConfig.ExpandConfig()
 	blueprintConfig.ExportYamlConfig(outputFilename)
 	fmt.Printf(

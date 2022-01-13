@@ -45,7 +45,7 @@ var ResourceFS embed.FS
 type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
-	writeResourceGroups(*config.YamlConfig) error
+	writeResourceGroups(*config.BlueprintConfig) error
 }
 
 var kinds = map[string]ResWriter{
@@ -66,20 +66,20 @@ func factory(kind string) ResWriter {
 	return writer
 }
 
-func mkdirWrapper(path string) {
-	err := os.Mkdir(path, 0755)
+func mkdirWrapper(directory string) {
+	err := os.MkdirAll(directory, 0755)
 	if err != nil {
 		log.Fatalf("createBlueprintDirectory: %v", err)
 	}
 }
 
-func createBlueprintDirectory(blueprintName string) {
-	if _, err := os.Stat(blueprintName); !os.IsNotExist(err) {
+func createBlueprintDirectory(directory string) {
+	if _, err := os.Stat(directory); !os.IsNotExist(err) {
 		log.Fatalf(
-			"reswriter: Blueprint directory already exists: %s", blueprintName)
+			"reswriter: Blueprint directory already exists: %s", directory)
 	}
 	// Create blueprint directory
-	mkdirWrapper(blueprintName)
+	mkdirWrapper(directory)
 }
 
 func getAbsSourcePath(sourcePath string) string {
@@ -116,7 +116,7 @@ func copyFromPath(source string, dest string) error {
 	return nil
 }
 
-func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
+func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
 
@@ -124,7 +124,7 @@ func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 			// currently assuming local or embedded source
 			resourceName := path.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
-			basePath := path.Join(blueprintName, grp.Name)
+			basePath := path.Join(blueprintPath, grp.Name)
 			var destPath string
 			switch resource.Kind {
 			case "terraform":
@@ -168,12 +168,14 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig) {
-	createBlueprintDirectory(yamlConfig.BlueprintName)
-	copySource(yamlConfig.BlueprintName, &yamlConfig.ResourceGroups)
+func WriteBlueprint(bpConfig *config.BlueprintConfig) {
+	yamlConfig := bpConfig.Config
+	bpDirectoryPath := path.Join(bpConfig.Directory, yamlConfig.BlueprintName)
+	createBlueprintDirectory(bpDirectoryPath)
+	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
-			err := writer.writeResourceGroups(yamlConfig)
+			err := writer.writeResourceGroups(bpConfig)
 			if err != nil {
 				log.Fatalf("error writing resources to blueprint: %e", err)
 			}
