@@ -91,12 +91,32 @@ func (g ResourceGroup) HasKind(kind string) bool {
 
 // Resource stores YAML definition of a resource
 type Resource struct {
-	Source       string
-	Kind         string
-	ID           string
-	ResourceName string
-	Use          []string
-	Settings     map[string]interface{}
+	Source           string
+	Kind             string
+	ID               string
+	ResourceName     string
+	Use              []string
+	WrapSettingsWith map[string][]string
+	Settings         map[string]interface{}
+}
+
+// getSetSettings returns a slice of explicitly set settings at a given point.
+func (r Resource) getSetSettings() []string {
+	setSettings := make([]string, len(r.Settings))
+	i := 0
+	for setting := range r.Settings {
+		setSettings[i] = setting
+		i++
+	}
+	return setSettings
+}
+
+// createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
+// a new map is created.
+func (r *Resource) createWrapSettingsWith() {
+	if r.WrapSettingsWith == nil {
+		r.WrapSettingsWith = make(map[string][]string)
+	}
 }
 
 // YamlConfig stores the contents on the User YAML
@@ -302,39 +322,6 @@ func (bc *BlueprintConfig) validateConfig() {
 	bc.ResourceToGroup = resourceToGroup
 	if err = checkUsedResourceNames(
 		bc.Config.ResourceGroups, bc.ResourceToGroup); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// expand expands variables and strings in the yaml config
-func (bc BlueprintConfig) expand() {
-	bc.addSettingsToResources()
-	if err := bc.combineLabels(); err != nil {
-		log.Fatalf(
-			"failed to update resources labels when expanding the config: %v", err)
-	}
-
-	if err := bc.applyUseResources(); err != nil {
-		log.Fatalf(
-			"failed to apply \"use\" resources when expanding the config: %v", err)
-	}
-
-	if err := bc.applyGlobalVariables(); err != nil {
-		log.Fatalf(
-			"failed to apply global variables in resources when expanding the config: %v",
-			err)
-	}
-	bc.expandVariables()
-}
-
-func (bc BlueprintConfig) validate() {
-	if err := bc.validateVars(); err != nil {
-		log.Fatal(err)
-	}
-	if err := bc.validateResources(); err != nil {
-		log.Fatal(err)
-	}
-	if err := bc.validateResourceSettings(); err != nil {
 		log.Fatal(err)
 	}
 }

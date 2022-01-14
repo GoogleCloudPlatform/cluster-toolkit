@@ -33,6 +33,28 @@ const (
 	anyVariableExp    string = `\$\((.*)\)`
 )
 
+// expand expands variables and strings in the yaml config. Used directly by
+// ExpandConfig for the create and expand commands.
+func (bc *BlueprintConfig) expand() {
+	bc.addSettingsToResources()
+	if err := bc.combineLabels(); err != nil {
+		log.Fatalf(
+			"failed to update resources labels when expanding the config: %v", err)
+	}
+
+	if err := bc.applyUseResources(); err != nil {
+		log.Fatalf(
+			"failed to apply \"use\" resources when expanding the config: %v", err)
+	}
+
+	if err := bc.applyGlobalVariables(); err != nil {
+		log.Fatalf(
+			"failed to apply global variables in resources when expanding the config: %v",
+			err)
+	}
+	bc.expandVariables()
+}
+
 func (bc *BlueprintConfig) addSettingsToResources() {
 	for iGrp, grp := range bc.Config.ResourceGroups {
 		for iRes, res := range grp.Resources {
@@ -48,53 +70,62 @@ func getResourceVarName(resID string, varName string) string {
 	return fmt.Sprintf("$(%s.%s)", resID, varName)
 }
 
-func appendAsSlice(
-	interfaceSlice interface{}, value string) (interface{}, error) {
-	switch v := interfaceSlice.(type) {
-	case []string:
-		return append(v, value), nil
-	case []interface{}:
-		return append(v, value), nil
-	default:
-		return v, fmt.Errorf("invalid type, expected []string, got %T", v)
+func stringSliceContains(slice []string, value string) bool {
+	for _, elem := range slice {
+		if elem == value {
+			return true
+		}
 	}
+	return false
+}
+
+func getResourceInputMap(inputs []resreader.VarInfo) map[string]string {
+	resInputs := make(map[string]string)
+	for _, input := range inputs {
+		resInputs[input.Name] = input.Type
+	}
+	return resInputs
 }
 
 func useResource(
 	res *Resource,
 	useRes Resource,
-	info map[string]resreader.ResourceInfo) error {
-	resInfo := info[res.Source]
-	useInfo := info[useRes.Source]
-	for _, useOutput := range useInfo.Outputs {
-		for _, resInput := range resInfo.Inputs {
-			if useOutput.Name == resInput.Name {
-				resVarName := getResourceVarName(useRes.ID, useOutput.Name)
-				isInputList := strings.HasPrefix(resInput.Type, "list")
-				if _, ok := res.Settings[resInput.Name]; ok {
-					if !isInputList || useOutput.Type == "list" {
-						continue
-					} else {
-						newValue, err := appendAsSlice(
-							res.Settings[resInput.Name], resVarName)
-						if err != nil {
-							return fmt.Errorf(
-								"failed to append variable %s to setting in resource %s: %v",
-								resVarName, res.ID, err)
-						}
-						res.Settings[resInput.Name] = newValue
-					}
-				} else {
-					if !isInputList || useOutput.Type == "list" {
-						res.Settings[resInput.Name] = resVarName
-					} else {
-						res.Settings[resInput.Name] = []interface{}{resVarName}
-					}
+	resInputs map[string]string,
+	useOutputs []resreader.VarInfo,
+	changedSettings map[string]bool,
+) {
+	for _, useOutput := range useOutputs {
+		settingName := useOutput.Name
+		_, isAlreadySet := res.Settings[settingName]
+		_, hasChanged := changedSettings[settingName]
+
+		// Skip settings explicitly defined by users
+		if isAlreadySet && !hasChanged {
+			continue
+		}
+
+		// This output corresponds to an input that was not explicitly set by the user
+		if inputType, ok := resInputs[settingName]; ok {
+			resVarName := getResourceVarName(useRes.ID, settingName)
+			isInputList := strings.HasPrefix(inputType, "list")
+			if isInputList {
+				if !isAlreadySet {
+					// Input is a list, create an outer list for it
+					res.Settings[settingName] = []interface{}{}
+					changedSettings[settingName] = true
+					res.createWrapSettingsWith()
+					res.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
 				}
+				// Append value list to the outer list
+				res.Settings[settingName] = append(
+					res.Settings[settingName].([]interface{}), resVarName)
+			} else if !isAlreadySet {
+				// If input is not a list, set value if not already set and continue
+				res.Settings[settingName] = resVarName
+				changedSettings[settingName] = true
 			}
 		}
 	}
-	return nil
 }
 
 // applyUseResources applies variables from resources listed in the "use" field
@@ -104,18 +135,17 @@ func (bc *BlueprintConfig) applyUseResources() error {
 		group := &bc.Config.ResourceGroups[iGrp]
 		for iRes := range group.Resources {
 			res := &group.Resources[iRes]
+			resInfo := bc.ResourcesInfo[group.Name][res.Source]
+			resInputs := getResourceInputMap(resInfo.Inputs)
+			changedSettings := make(map[string]bool)
 			for _, useResID := range res.Use {
 				useRes := group.getResourceByID(useResID)
+				useInfo := bc.ResourcesInfo[group.Name][useRes.Source]
 				if useRes.ID == "" {
 					return fmt.Errorf("could not find resource %s used by %s in group %s",
 						useResID, res.ID, group.Name)
 				}
-				err := useResource(
-					res, useRes, bc.ResourcesInfo[group.Name])
-				if err != nil {
-					return fmt.Errorf(
-						"error apply \"use\" resources to resource %s: %v", res.ID, err)
-				}
+				useResource(res, useRes, resInputs, useInfo.Outputs, changedSettings)
 			}
 		}
 	}

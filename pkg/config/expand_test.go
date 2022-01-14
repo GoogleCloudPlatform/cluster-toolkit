@@ -21,38 +21,17 @@ import (
 	. "gopkg.in/check.v1"
 )
 
+func (s *MySuite) TestExpand(c *C) {
+	bc := getBlueprintConfigForTest()
+	bc.expand()
+}
+
 func (s *MySuite) TestGetResourceVarName(c *C) {
 	resID := "resID"
 	varName := "varName"
 	expected := fmt.Sprintf("$(%s.%s)", resID, varName)
 	got := getResourceVarName(resID, varName)
 	c.Assert(got, Equals, expected)
-}
-
-func (s *MySuite) TestAppendAsSlice(c *C) {
-	// Fail: Empty Interface
-	var inputInterface interface{}
-	addVar := "testValue"
-	_, err := appendAsSlice(inputInterface, addVar)
-	c.Assert(err, ErrorMatches, `invalid type, expected \[\]string, got .*`)
-
-	// Fail: Incorrect Type
-	inputInterface = 42
-	_, err = appendAsSlice(inputInterface, addVar)
-	c.Assert(err, ErrorMatches, `invalid type, expected \[\]string, got .*`)
-
-	// Pass: Empty slice
-	inputInterface = []string{}
-	got, err := appendAsSlice(inputInterface, addVar)
-	c.Assert(err, IsNil)
-	c.Assert(got, DeepEquals, []string{addVar})
-
-	// Pass: Non-Empty Slice
-	inputSlice := []string{"Elem1", "Elem2"}
-	inputInterface = inputSlice
-	got, err = appendAsSlice(inputInterface, addVar)
-	c.Assert(err, IsNil)
-	c.Assert(got, DeepEquals, append(inputSlice, addVar))
 }
 
 func (s *MySuite) TestUseResource(c *C) {
@@ -68,16 +47,15 @@ func (s *MySuite) TestUseResource(c *C) {
 		ID:     "UsedResource",
 		Source: useResSource,
 	}
-	info := make(map[string]resreader.ResourceInfo)
 	resInfo := resreader.ResourceInfo{}
 	useInfo := resreader.ResourceInfo{}
-	info[resSource] = resInfo
-	info[useResSource] = useInfo
+	hasChanged := make(map[string]bool)
 
 	// Pass: No Inputs, No Outputs
-	err := useResource(&res, useRes, info)
-	c.Assert(err, IsNil)
+	resInputs := getResourceInputMap(resInfo.Inputs)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings), Equals, 0)
+	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Has Output, no maching input
 	varInfoNumber := resreader.VarInfo{
@@ -85,45 +63,97 @@ func (s *MySuite) TestUseResource(c *C) {
 		Type: "number",
 	}
 	useInfo.Outputs = []resreader.VarInfo{varInfoNumber}
-	info[useResSource] = useInfo
-	err = useResource(&res, useRes, info)
-	c.Assert(err, IsNil)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings), Equals, 0)
+	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Single Input/Output match - no lists
 	resInfo.Inputs = []resreader.VarInfo{varInfoNumber}
-	info[resSource] = resInfo
-	err = useResource(&res, useRes, info)
-	c.Assert(err, IsNil)
+	resInputs = getResourceInputMap(resInfo.Inputs)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	expectedSetting := getResourceVarName("UsedResource", "val1")
 	c.Assert(res.Settings["val1"], Equals, expectedSetting)
+	c.Assert(len(hasChanged), Equals, 1)
 
-	// Pass: Setting already set with non-list, non-list output available
-	err = useResource(&res, useRes, info)
-	c.Assert(err, IsNil)
+	// Pass: Already set, has been changed by useResource
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings), Equals, 1)
+	c.Assert(len(hasChanged), Equals, 1)
 
-	// Pass: Single Input/Output match, input is list
+	// Pass: Already set, has not been changed by useResource
+	hasChanged = make(map[string]bool)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
+	c.Assert(len(res.Settings), Equals, 1)
+	c.Assert(len(hasChanged), Equals, 0)
+
+	// Pass: Single Input/Output match, input is list, not already set
 	varInfoList := resreader.VarInfo{
 		Name: "val1",
 		Type: "list",
 	}
 	resInfo.Inputs = []resreader.VarInfo{varInfoList}
-	info[resSource] = resInfo
+	resInputs = getResourceInputMap(resInfo.Inputs)
 	res.Settings = make(map[string]interface{})
-	err = useResource(&res, useRes, info)
-	c.Assert(err, IsNil)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 1)
 	c.Assert(res.Settings["val1"], DeepEquals, []interface{}{expectedSetting})
+	c.Assert(len(hasChanged), Equals, 1)
 
 	// Pass: Setting exists, Input is List, Output is not a list
-	err = useResource(&res, useRes, info)
-	c.Assert(err, IsNil)
+	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 2)
 	c.Assert(
 		res.Settings["val1"],
 		DeepEquals,
 		[]interface{}{expectedSetting, expectedSetting})
+}
+
+func (s *MySuite) TestApplyUseResources(c *C) {
+	// Setup
+	usingResourceID := "usingResource"
+	usingResourceSource := "path/using"
+	usedResourceID := "usedResource"
+	usedResourceSource := "path/used"
+	sharedVarName := "sharedVar"
+	usingResource := Resource{
+		ID:     usingResourceID,
+		Source: usingResourceSource,
+		Use:    []string{usedResourceID},
+	}
+	usedResource := Resource{
+		ID:     usedResourceID,
+		Source: usedResourceSource,
+	}
+	sharedVar := resreader.VarInfo{
+		Name: sharedVarName,
+		Type: "number",
+	}
+
+	// Simple Case
+	bc := getBlueprintConfigForTest()
+	err := bc.applyUseResources()
+	c.Assert(err, IsNil)
+
+	// Has Use Resources
+	bc.Config.ResourceGroups[0].Resources = append(
+		bc.Config.ResourceGroups[0].Resources, usingResource)
+	bc.Config.ResourceGroups[0].Resources = append(
+		bc.Config.ResourceGroups[0].Resources, usedResource)
+
+	grpName := bc.Config.ResourceGroups[0].Name
+	usingInfo := bc.ResourcesInfo[grpName][usingResourceSource]
+	usedInfo := bc.ResourcesInfo[grpName][usedResourceSource]
+	usingInfo.Inputs = []resreader.VarInfo{sharedVar}
+	usedInfo.Outputs = []resreader.VarInfo{sharedVar}
+	err = bc.applyUseResources()
+	c.Assert(err, IsNil)
+
+	// Use ID doesn't exists (fail)
+	resLen := len(bc.Config.ResourceGroups[0].Resources)
+	bc.Config.ResourceGroups[0].Resources[resLen-1].ID = "wrongID"
+	err = bc.applyUseResources()
+	c.Assert(err, ErrorMatches, "could not find resource .* used by .* in group .*")
+
 }
 
 func (s *MySuite) TestUpdateVariableType(c *C) {

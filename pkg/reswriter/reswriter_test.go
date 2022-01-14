@@ -70,7 +70,7 @@ func teardown() {
 	os.RemoveAll(testDir)
 }
 
-// Test Data Producer
+// Test Data Producers
 func getYamlConfigForTest() config.YamlConfig {
 	testResourceSource := path.Join(testDir, terraformResourceDir)
 	testResource := config.Resource{
@@ -100,6 +100,14 @@ func getYamlConfigForTest() config.YamlConfig {
 	}
 
 	return testYamlConfig
+}
+
+func createTestApplyFunctions(config config.YamlConfig) [][]map[string]string {
+	applyFuncs := make([][]map[string]string, len(config.ResourceGroups))
+	for iGrp, group := range config.ResourceGroups {
+		applyFuncs[iGrp] = make([]map[string]string, len(group.Resources))
+	}
+	return applyFuncs
 }
 
 // Tests
@@ -515,6 +523,23 @@ func (s *MySuite) TestWriteMain(c *C) {
 	err = writeMain(testResources, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("a_bucket", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
+	// Test with WrapSettingsWith
+	testResourceWithWrap := config.Resource{
+		ID: "test_resource_with_wrap",
+		WrapSettingsWith: map[string][]string{
+			"wrappedSetting": []string{"list(flatten(", "))"},
+		},
+		Settings: map[string]interface{}{
+			"wrappedSetting": []interface{}{"val1", "val2"},
+		},
+	}
+	testResources = append(testResources, testResourceWithWrap)
+	err = writeMain(testResources, testBackend, testMainDir)
+	c.Assert(err, IsNil)
+	exists, err = stringExistsInFile("list(flatten(", mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 }
