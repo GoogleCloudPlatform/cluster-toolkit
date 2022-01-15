@@ -59,10 +59,10 @@ resource_groups:
     kind: terraform
     id: compute_partition
     use:
+    - network1
     - homefs
     - scratchfs
     - projectsfs
-    - network1
     settings:
       max_node_count: 200
       partition_name: compute
@@ -71,20 +71,20 @@ resource_groups:
     kind: terraform
     id: slurm_controller
     use:
+    - network1
     - homefs
     - scratchfs
     - projectsfs
     - compute_partition
-    - network1
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:
+    - network1
     - homefs
     - scratchfs
     - projectsfs
     - slurm_controller
-    - network1
     settings:
       login_machine_type: n2-standard-4
