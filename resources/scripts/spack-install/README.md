@@ -7,6 +7,17 @@ This resource can be used to install spack on a VM. This includes:
  4. Installing application licenses that spack packages might depend on
  5. Installing various spack specs.
 
+The output of this resource is a startup script that is intended to be attached
+to either the controller node of a scheduler, or a single VM. The resulting
+installation of spack can then be mounted across many other VMs to share a
+software stack.
+
+Two output variables are defined by this resource:
+ - `startup_script` - Can be used to chain this with
+   `resources/scripts/startup_script` as a runner
+ - `controller_startup_script` - Can be added to a scheduler by simply adding a
+   `use: [spack]` option to the contoller node
+
 **Please note**: This resource currently is capable of re-running to install
 additional packages, but cannot be used to uninstall packages from the VM.
 
@@ -14,6 +25,8 @@ additional packages, but cannot be used to uninstall packages from the VM.
 license file from a GCS bucket to a specific directory on the target VM.
 
 ## Example
+
+As an example, the below is a possible definition of a spack installation.
 
 ```
   - source: ./resources/scripts/spack-install
@@ -33,6 +46,34 @@ license file from a GCS bucket to a specific directory on the target VM.
         - intel-mkl%gcc@10.3.0 target=skylake
         - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
         - fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5 target=x86_64
+```
+
+Following the above description of this resource, it can be added to a Slurm deployment via the following:
+
+```
+- source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+    kind: terraform
+    id: slurm_controller
+    use: [spack]
+    settings:
+      subnetwork_name: ((module.network1.primary_subnetwork.name))
+      login_node_count: 1
+      partitions:
+      - $(compute_partition.partition)
+
+```
+
+Alternatively, it can be added as a startup script via:
+
+```
+  - source: resources/scripts/startup-script
+    kind: terraform
+    id: startup
+    settings:
+      runners:
+        - type: shell
+          content: $(spack.install_script)
+          destination: "/apps/spack-install.sh"
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
