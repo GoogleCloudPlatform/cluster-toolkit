@@ -293,9 +293,10 @@ func (s *MySuite) TestCheckResourceAndGroupNames(c *C) {
 
 func (s *MySuite) TestNewBlueprint(c *C) {
 	bc := getBlueprintConfigForTest()
-	outFile := path.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
-	bc.ExportYamlConfig(outFile)
-	newBC := NewBlueprintConfig(outFile)
+	bc.Directory = tmpTestDir
+	testYamlFilename := path.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
+	bc.ExportYamlConfig(testYamlFilename)
+	newBC := NewBlueprintConfig(tmpTestDir, testYamlFilename)
 	c.Assert(bc.Config, DeepEquals, newBC.Config)
 }
 
