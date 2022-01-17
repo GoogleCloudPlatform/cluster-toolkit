@@ -18,6 +18,7 @@ package reswriter
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/backend"
 	"hpc-toolkit/pkg/config"
 	"io/ioutil"
 	"log"
@@ -289,27 +290,6 @@ func (s *MySuite) TestUpdateStrings(c *C) {
 	testHandlePrimitivesHelper(
 		c, yamlConfig.ResourceGroups[0].Resources[0].Settings)
 
-}
-
-func (s *MySuite) TestCreateBlueprintDirectory(c *C) {
-	blueprintName := "blueprints_TestCreateBlueprintDirectory"
-	blueprintDir := path.Join(testDir, blueprintName)
-	createBlueprintDirectory(blueprintDir)
-	_, err := os.Stat(blueprintDir)
-	c.Assert(err, IsNil)
-}
-
-func (s *MySuite) TestGetAbsSourcePath(c *C) {
-	// Already abs path
-	gotPath := getAbsSourcePath(testDir)
-	c.Assert(gotPath, Equals, testDir)
-
-	// Relative path
-	relPath := "relative/path"
-	cwd, err := os.Getwd()
-	c.Assert(err, IsNil)
-	gotPath = getAbsSourcePath(relPath)
-	c.Assert(gotPath, Equals, path.Join(cwd, relPath))
 }
 
 // tfwriter.go
@@ -609,6 +589,7 @@ func (s *MySuite) TestNumResources_PackerWriter(c *C) {
 }
 
 func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
+	backend := backend.GetBackendLocal()
 	testWriter := PackerWriter{}
 	testBlueprintConfig := config.BlueprintConfig{}
 	// Empty Config
@@ -620,15 +601,15 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 	testWriter.writeResourceLevel(&testBlueprintConfig)
 
 	blueprintDir := path.Join(testDir, blueprintName)
-	createBlueprintDirectory(blueprintDir)
+	if err := backend.CreateDirectory(blueprintDir); err != nil {
+		log.Fatal(err)
+	}
 	groupDir := path.Join(blueprintDir, "packerGroup")
-	err := os.Mkdir(groupDir, 0755)
-	if err != nil {
+	if err := backend.CreateDirectory(groupDir); err != nil {
 		log.Fatal(err)
 	}
 	resourceDir := path.Join(groupDir, "testPackerResource")
-	err = os.Mkdir(resourceDir, 0755)
-	if err != nil {
+	if err := backend.CreateDirectory(resourceDir); err != nil {
 		log.Fatal(err)
 	}
 
@@ -642,7 +623,7 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 			Resources: []config.Resource{testPackerResource},
 		})
 	testWriter.writeResourceLevel(&testBlueprintConfig)
-	_, err = os.Stat(path.Join(resourceDir, packerAutoVarFilename))
+	_, err := os.Stat(path.Join(resourceDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 

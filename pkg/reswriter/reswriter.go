@@ -20,15 +20,13 @@ package reswriter
 import (
 	"embed"
 	"fmt"
+	"hpc-toolkit/pkg/backend"
 	"hpc-toolkit/pkg/config"
 	"log"
 	"os"
 	"path"
-	"strings"
 
 	"hpc-toolkit/pkg/resutils"
-
-	"github.com/otiai10/copy"
 )
 
 const (
@@ -66,34 +64,6 @@ func factory(kind string) ResWriter {
 	return writer
 }
 
-func mkdirWrapper(directory string) {
-	err := os.MkdirAll(directory, 0755)
-	if err != nil {
-		log.Fatalf("createBlueprintDirectory: %v", err)
-	}
-}
-
-func createBlueprintDirectory(directory string) {
-	if _, err := os.Stat(directory); !os.IsNotExist(err) {
-		log.Fatalf(
-			"reswriter: Blueprint directory already exists: %s", directory)
-	}
-	// Create blueprint directory
-	mkdirWrapper(directory)
-}
-
-func getAbsSourcePath(sourcePath string) string {
-	if strings.HasPrefix(sourcePath, "/") { // Absolute Path Already
-		return sourcePath
-	}
-	// Otherwise base it off of the CWD
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("reswriter: %v", err)
-	}
-	return path.Join(cwd, sourcePath)
-}
-
 func getTemplate(filename string) string {
 	// Create path to template from the embedded template FS
 	tmplText, err := templatesFS.ReadFile(filename)
@@ -107,16 +77,7 @@ func copyEmbedded(fs resutils.BaseFS, source string, dest string) error {
 	return resutils.CopyDirFromResources(fs, source, dest)
 }
 
-func copyFromPath(source string, dest string) error {
-	absPath := getAbsSourcePath(source)
-	err := copy.Copy(absPath, dest)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
+func copySource(backend backend.Backend, blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
 
@@ -140,11 +101,11 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 			// Check source type and copy
 			switch src := resource.Source; {
 			case resutils.IsLocalPath(src):
-				if err = copyFromPath(src, destPath); err != nil {
+				if err = backend.CopyFromPath(src, destPath); err != nil {
 					log.Fatal(err)
 				}
 			case resutils.IsEmbeddedPath(src):
-				if err = os.MkdirAll(destPath, 0755); err != nil {
+				if err = backend.CreateDirectory(destPath); err != nil {
 					log.Fatalf("failed to create resource path %s: %v", destPath, err)
 				}
 				if err = copyEmbedded(ResourceFS, src, destPath); err != nil {
@@ -169,15 +130,19 @@ func printInstructionsPreamble(kind string, path string) {
 
 // WriteBlueprint writes the blueprint using resources defined in config.
 func WriteBlueprint(bpConfig *config.BlueprintConfig) {
+	backend := backend.GetBackendLocal()
 	yamlConfig := bpConfig.Config
 	bpDirectoryPath := path.Join(bpConfig.Directory, yamlConfig.BlueprintName)
-	createBlueprintDirectory(bpDirectoryPath)
-	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
+	if err := backend.CreateDirectory(bpDirectoryPath); err != nil {
+		log.Fatalf("failed to create a directory for blueprints: %v", err)
+	}
+
+	copySource(backend, bpDirectoryPath, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
 			err := writer.writeResourceGroups(bpConfig)
 			if err != nil {
-				log.Fatalf("error writing resources to blueprint: %e", err)
+				log.Fatalf("error writing resources to blueprint: %v", err)
 			}
 		}
 	}
