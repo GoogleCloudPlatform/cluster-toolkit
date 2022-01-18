@@ -34,7 +34,11 @@ config template to include your GCP project ID then run the following command:
 ```
 
 The blueprint directory, named as the `blueprint_name` field from the input
-config will be created in the same directory as ghpc.
+config will be created in the same directory as ghpc. The output directory can be specified by -o flag.
+
+```
+./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
+```
 
 To deploy the blueprint, use terraform in the resource group directory:
 ```
