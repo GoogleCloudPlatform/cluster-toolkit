@@ -20,7 +20,7 @@ steps:
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest',
   '.' ]
 - name: 'gcr.io/cloud-builders/docker'
-  args: [ 'run', '--entrypoint', './test_examples.sh',
+  args: [ 'run', '--entrypoint', './validate_configs.sh',
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest']
 images: [
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest']

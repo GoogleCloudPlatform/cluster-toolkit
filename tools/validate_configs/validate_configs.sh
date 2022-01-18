@@ -32,7 +32,7 @@ run_test(){
   sed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
     { echo "could not set project_id"; exit 1; }
   cd ${cwd}
-  ./ghpc create ${tmpdir}/${exampleFile} || { echo "error creating blueprint"; exit 1; }
+  ./ghpc create ${tmpdir}/${exampleFile} >/dev/null || { echo "error creating blueprint for ${exampleFile}"; exit 1; }
   mv ${BLUEPRINT} ${tmpdir}
   cd ${tmpdir}/${BLUEPRINT} || { echo "can't cd into the blueprint folder"; exit 1; }
   for folder in `ls`;
@@ -65,7 +65,7 @@ check_background(){
   fi
 }
 
-CONFIGS=$(find tools/test_examples/test_configs examples/ -name "*.yaml" -type f)
+CONFIGS=$(find tools/validate_configs/test_configs examples/ -name "*.yaml" -type f)
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
