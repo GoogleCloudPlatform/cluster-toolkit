@@ -1,16 +1,15 @@
 .PHONY: tests fmt vet test-engine test-resources test-examples packer \
         packer-clean packer-check packer-docs add-google-license, \
         check-tflint, check-pre-commit, install-deps-dev, ghpc-dev, \
-        check-deps, check-terraform-exists, check-packer-exists, \
+        check-terraform-exists, check-packer-exists, \
 				check-terraform-version, check-packer-version
 RES = ./resources
 ENG = ./cmd/... ./pkg/...
 SRC = $(ENG) $(RES)/tests/...
 TF_VERSION_CHECK=$(shell expr `terraform version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 0.14)
-PK_VERSION_CHECK=$(shell expr `packer version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 1.6)
 PACKER_FOLDERS=$(shell find ${RES} -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
 
-ghpc: check-deps $(shell find ./cmd ./pkg ./resources ghpc.go -type f)
+ghpc: check-terraform-exists check-terraform-version $(shell find ./cmd ./pkg ./resources ghpc.go -type f)
 	$(info **************** building ghpc ************************)
 	go build ghpc.go
 
@@ -38,23 +37,21 @@ test-examples: ghpc-dev
 	$(info *********** running basic integration tests ***********)
 	tools/test_examples/test_examples.sh
 
-packer: packer-clean packer-docs
+packer: check-packer-exists check-packer-version packer-clean packer-docs
 
-packer-clean:
+packer-clean: check-packer-exists check-packer-version
 	$(info **************** formatting packer files **************)
 	@for folder in ${PACKER_FOLDERS}; do \
 	  echo "cleaning syntax for $${folder}";\
 		packer fmt $${folder};\
 	done
 
-packer-check:
+packer-check: check-packer-exists check-packer-version
 	$(info **************** checking packer syntax ***************)
 	@for folder in ${PACKER_FOLDERS}; do \
 	  echo "checking syntax for $${folder}"; \
 	  packer fmt -check $${folder}; \
 	done
-
-check-deps: check-terraform-exists check-terraform-version check-packer-exists check-packer-version
 
 ifeq (, $(shell which terraform))
 check-terraform-exists:
@@ -76,8 +73,8 @@ ifeq (, $(shell which packer))
 check-packer-exists:
 	$(error ERROR: packer not installed, visit https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
 else
+PK_VERSION_CHECK=$(shell expr `packer version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 1.6)
 check-packer-exists:
-
 endif
 
 ifneq ("$(PK_VERSION_CHECK)", "1")
