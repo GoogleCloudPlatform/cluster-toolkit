@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: 
+blueprint_name: new_project
 
 resource_groups:
 - group: primary
@@ -25,4 +25,4 @@ resource_groups:
       folder_id: 334688113020 # random number
       billing_account: "111110-M2N704-854685" # random billing number
       org_id: 123456789 # random org id
-      
+

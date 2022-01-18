@@ -30,8 +30,8 @@ resource_groups:
   - source: resources/third-party/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
+    use: [network1]
     settings:
       local_mount: /scratch
-      network_self_link: $(network1.network_self_link)
       subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
       subnetwork_address: ((module.network1.primary_subnetwork.ip_cidr_range))

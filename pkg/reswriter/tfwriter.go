@@ -190,7 +190,8 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 func writeMain(
 	resources []config.Resource,
 	tfBackend config.TerraformBackend,
-	dst string) error {
+	dst string,
+) error {
 	// Create file
 	mainPath := path.Join(dst, "main.tf")
 	if err := createBaseFile(mainPath); err != nil {
@@ -253,8 +254,26 @@ func writeMain(
 				moduleBody.SetAttributeRaw(setting, labelsTokens)
 				continue
 			}
-			// Add attributes
-			moduleBody.SetAttributeValue(setting, value)
+
+			if wrap, ok := res.WrapSettingsWith[setting]; ok {
+				if len(wrap) != 2 {
+					return fmt.Errorf(
+						"invalid length of WrapSettingsWith for %s.%s, expected 2 got %d",
+						res.ID, setting, len(wrap))
+				}
+				wrapBytes := []byte(wrap[0])
+				endBytes := []byte(wrap[1])
+
+				valueStr := hclwrite.TokensForValue(value).Bytes()
+				wrapBytes = append(wrapBytes, valueStr...)
+				wrapBytes = append(wrapBytes, endBytes...)
+				wrapToken := simpleTokenFromString(string(wrapBytes))
+				wrapTokens := []*hclwrite.Token{&wrapToken}
+				moduleBody.SetAttributeRaw(setting, wrapTokens)
+			} else {
+				// Add attributes
+				moduleBody.SetAttributeValue(setting, value)
+			}
 		}
 		hclBody.AppendNewline()
 	}
@@ -356,7 +375,8 @@ func (w TFWriter) writeResourceGroups(bpConfig *config.BlueprintConfig) error {
 
 		// Write main.tf file
 		if err := writeMain(
-			resGroup.Resources, resGroup.TerraformBackend, writePath); err != nil {
+			resGroup.Resources, resGroup.TerraformBackend, writePath,
+		); err != nil {
 			return fmt.Errorf("error writing main.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}

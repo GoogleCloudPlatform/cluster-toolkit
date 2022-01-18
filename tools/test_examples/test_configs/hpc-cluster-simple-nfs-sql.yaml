@@ -30,42 +30,41 @@ resource_groups:
   - source: resources/file-system/nfs-server
     kind: terraform
     id: homefs
+    use: [network1]
     settings:
-      network_name: $(network1.network_name)
       labels:
         ghpc_role: storage-home
 
   - source: ./resources/database/slurm-cloudsql-federation
     kind: terraform
     id: slurm-sql
+    use: [network1]
     settings:
       sql_instance_name: slurm-sql8
       tier: "db-f1-micro"
-      nat_ips: $(network1.nat_ips)
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
+    use: [homefs]
     settings:
       partition_name: compute
       max_node_count: 20
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       machine_type: c2-standard-4
-      network_storage: $(homefs.network_storage)
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm-controller
+    use: [homefs]
     settings:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       login_node_count: 1
-      network_storage: $(homefs.network_storage)
       partitions:
       - $(compute-partition.partition)
       cloudsql: ((module.slurm-sql.cloudsql))
       disable_compute_public_ips: true
       disable_controller_public_ips: true
-      
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform

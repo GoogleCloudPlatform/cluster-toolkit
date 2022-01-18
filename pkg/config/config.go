@@ -16,6 +16,7 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 
@@ -60,6 +61,16 @@ type ResourceGroup struct {
 	Resources        []Resource
 }
 
+func (g ResourceGroup) getResourceByID(resID string) Resource {
+	for i := range g.Resources {
+		res := g.Resources[i]
+		if g.Resources[i].ID == resID {
+			return res
+		}
+	}
+	return Resource{}
+}
+
 // TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string
@@ -80,11 +91,32 @@ func (g ResourceGroup) HasKind(kind string) bool {
 
 // Resource stores YAML definition of a resource
 type Resource struct {
-	Source       string
-	Kind         string
-	ID           string
-	ResourceName string
-	Settings     map[string]interface{}
+	Source           string
+	Kind             string
+	ID               string
+	ResourceName     string
+	Use              []string
+	WrapSettingsWith map[string][]string
+	Settings         map[string]interface{}
+}
+
+// getSetSettings returns a slice of explicitly set settings at a given point.
+func (r Resource) getSetSettings() []string {
+	setSettings := make([]string, len(r.Settings))
+	i := 0
+	for setting := range r.Settings {
+		setSettings[i] = setting
+		i++
+	}
+	return setSettings
+}
+
+// createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
+// a new map is created.
+func (r *Resource) createWrapSettingsWith() {
+	if r.WrapSettingsWith == nil {
+		r.WrapSettingsWith = make(map[string][]string)
+	}
 }
 
 // YamlConfig stores the contents on the User YAML
@@ -110,7 +142,7 @@ type BlueprintConfig struct {
 // ExpandConfig expands the yaml config in place
 func (bc *BlueprintConfig) ExpandConfig() {
 	bc.setResourcesInfo()
-	bc.checkResourceAndGroupNames()
+	bc.validateConfig()
 	bc.expand()
 	bc.validate()
 	bc.expanded = true
@@ -232,56 +264,66 @@ func validateGroupName(name string, usedNames map[string]bool) {
 
 // checkResourceAndGroupNames checks and imports resource and resource group IDs
 // and names respectively.
-func (bc *BlueprintConfig) checkResourceAndGroupNames() {
-	bc.ResourceToGroup = make(map[string]int)
+func checkResourceAndGroupNames(
+	resGroups []ResourceGroup) (map[string]int, error) {
+	resourceToGroup := make(map[string]int)
 	groupNames := make(map[string]bool)
-	for iGrp, grp := range bc.Config.ResourceGroups {
+	for iGrp, grp := range resGroups {
 		validateGroupName(grp.Name, groupNames)
 		var groupKind string
 		for _, res := range grp.Resources {
 			// Verify no duplicate resource names
-			if _, ok := bc.ResourceToGroup[res.ID]; ok {
-				log.Fatalf(
+			if _, ok := resourceToGroup[res.ID]; ok {
+				return resourceToGroup, fmt.Errorf(
 					"%s: %s used more than once", errorMessages["duplicateID"], res.ID)
 			}
-			bc.ResourceToGroup[res.ID] = iGrp
+			resourceToGroup[res.ID] = iGrp
 
 			// Verify Resource Kind matches group Kind
 			if groupKind == "" {
 				groupKind = res.Kind
 			} else if groupKind != res.Kind {
-				log.Fatalf("%s: resource group %s, got: %s, wanted: %s",
+				return resourceToGroup, fmt.Errorf(
+					"%s: resource group %s, got: %s, wanted: %s",
 					errorMessages["mixedResources"],
 					grp.Name, groupKind, res.Kind)
 			}
 		}
 	}
+	return resourceToGroup, nil
 }
 
-// expand expands variables and strings in the yaml config
-func (bc BlueprintConfig) expand() {
-	bc.addSettingsToResources()
-	if err := bc.combineLabels(); err != nil {
-		log.Fatalf(
-			"failed to update resources labels when expanding the config: %v", err)
+// checkUsedResourceNames verifies that any used resources have valid names and
+// are in the correct group
+func checkUsedResourceNames(
+	resGroups []ResourceGroup, idToGroup map[string]int) error {
+	for iGrp, grp := range resGroups {
+		for _, res := range grp.Resources {
+			for _, usedRes := range res.Use {
+				// Check if resource even exists
+				if _, ok := idToGroup[usedRes]; !ok {
+					return fmt.Errorf("used resource ID %s does not exist", usedRes)
+				}
+				// Ensure resource is from the correct group
+				if idToGroup[usedRes] != iGrp {
+					return fmt.Errorf(
+						"used resource ID %s not found in this Resource Group", usedRes)
+				}
+			}
+		}
 	}
-
-	if err := bc.applyGlobalVariables(); err != nil {
-		log.Fatalf(
-			"failed to apply global variables in resources when expanding the config: %v",
-			err)
-	}
-	bc.expandVariables()
+	return nil
 }
 
-func (bc BlueprintConfig) validate() {
-	if err := bc.validateVars(); err != nil {
+// validateConfig runs a set of simple early checks on the imported input YAML
+func (bc *BlueprintConfig) validateConfig() {
+	resourceToGroup, err := checkResourceAndGroupNames(bc.Config.ResourceGroups)
+	if err != nil {
 		log.Fatal(err)
 	}
-	if err := bc.validateResources(); err != nil {
-		log.Fatal(err)
-	}
-	if err := bc.validateResourceSettings(); err != nil {
+	bc.ResourceToGroup = resourceToGroup
+	if err = checkUsedResourceNames(
+		bc.Config.ResourceGroups, bc.ResourceToGroup); err != nil {
 		log.Fatal(err)
 	}
 }
