@@ -14,6 +14,13 @@
 
 timeout: 7200s
 steps:
+- name: golang
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    cd /workspace
+    make
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
   env:
