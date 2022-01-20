@@ -1,0 +1,13 @@
+FROM golang:bullseye
+
+RUN apt-get -y update && apt-get install -y python3-pip git && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN pip install pre-commit && rm -rf ~/.cache/pip/*
+
+RUN go install github.com/terraform-docs/terraform-docs@latest      && \
+    go install golang.org/x/lint/golint@latest                      && \
+    go install github.com/fzipp/gocyclo/cmd/gocyclo@latest          && \
+    go install github.com/go-critic/go-critic/cmd/gocritic@latest   && \
+    go install github.com/google/addlicense@latest
+

@@ -1,0 +1,8 @@
+FROM us-central1-docker.pkg.dev/hpc-toolkit-dev/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+
+RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add - && \
+    apt-get -y update && apt-get -y install software-properties-common && \
+    apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
+    apt-get -y update && apt-get -y install terraform unzip
+
+RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash

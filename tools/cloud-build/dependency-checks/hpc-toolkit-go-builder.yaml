@@ -1,0 +1,70 @@
+steps:
+- name: golang:bullseye
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    make
+    make test-engine
+
+- name: gcr.io/cloud-builders/docker
+  args:
+  - build
+  - -t
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+  - --cache-from
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+  - -f
+  - tools/cloud-build/partial-builds/Dockerfile.precommit
+  - '.'
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    pre-commit install
+    echo -e "\n// TEST COMMENT" >> ghpc.go
+    git add -u
+    pre-commit run
+    git reset --hard HEAD
+
+- name: gcr.io/cloud-builders/docker
+  args:
+  - build
+  - -t
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
+  - --cache-from
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
+  - -f
+  - tools/cloud-build/partial-builds/Dockerfile.terraform
+  - '.'
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    tflint --init
+    echo "# TEST COMMENT" >> resources/network/vpc/main.tf
+    git add -u
+    pre-commit run
+    git reset --hard HEAD
+
+- name: gcr.io/cloud-builders/docker
+  args:
+  - build
+  - -t
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
+  - --cache-from
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
+  - -f
+  - tools/cloud-build/partial-builds/Dockerfile.packer
+  - '.'
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    git status
+    echo "# TEST COMMENT" >> resources/packer/custom-image/image.pkr.hcl
+    git add -u
+    pre-commit run
