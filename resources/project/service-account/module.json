@@ -1,0 +1,67 @@
+{
+  "header": "Copyright 2022 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "display_name",
+      "type": "string",
+      "description": "display names of the created service accounts",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "names",
+      "type": "list(string)",
+      "description": "names of the services accounts to create",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "prefix",
+      "type": "string",
+      "description": "prefix applied to service account names",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "description": "ID of the project",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "project_roles",
+      "type": "list(string)",
+      "description": "list of roles to apply to created service accounts",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [
+    {
+      "name": "service_accounts",
+      "source": "terraform-google-modules/service-accounts/google",
+      "version": "~\u003e 3.0",
+      "description": null
+    }
+  ],
+  "outputs": [
+    {
+      "name": "email_address",
+      "description": "singular service account email address"
+    },
+    {
+      "name": "email_addresses",
+      "description": "list of service account email addresses"
+    }
+  ],
+  "providers": [],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.14.0"
+    }
+  ],
+  "resources": []
+}
