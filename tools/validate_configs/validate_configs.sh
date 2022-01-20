@@ -25,60 +25,58 @@ run_test(){
   cp ${example} "${tmpdir}/"
   cd "${tmpdir}"
   sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" ${exampleFile} || \
-    { echo "could not set blueprint_name"; exit 1; }
+    { echo "*** ERROR: could not set blueprint_name in ${example}"; exit 1; }
 
   PROJECT="invalid-project"
 
   sed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
-    { echo "could not set project_id"; exit 1; }
+    { echo "*** ERROR: could not set project_id in ${example}"; exit 1; }
   cd ${cwd}
-  ./ghpc create ${tmpdir}/${exampleFile} >/dev/null || { echo "error creating blueprint for ${exampleFile}"; exit 1; }
+  ./ghpc create ${tmpdir}/${exampleFile} >/dev/null || { echo "*** ERROR: error creating blueprint with ghpc for ${exampleFile}"; exit 1; }
   mv ${BLUEPRINT} ${tmpdir}
-  cd ${tmpdir}/${BLUEPRINT} || { echo "can't cd into the blueprint folder"; exit 1; }
+  cd ${tmpdir}/${BLUEPRINT} || { echo "*** ERROR: can't cd into the blueprint folder ${BLUEPRINT}"; exit 1; }
   for folder in `ls`;
   do
     cd $folder
-    echo "testing the group ${folder}..."
     if [ -f 'main.tf' ];
     then
       tfpw=$(pwd)
       terraform init -no-color -backend=false > "${exampleFile}.init"|| \
-        { echo "terraform init failed for ${example}, logs in ${tfpw}"; exit 1; }
+        { echo "*** ERROR: terraform init failed for ${example}, logs in ${tfpw}"; exit 1; }
       terraform validate -no-color > "${exampleFile}.plan" || \
-        { echo "terraform validate failed for ${example}, logs in ${tfpw}"; exit 1; }
+        { echo "*** ERROR: terraform validate failed for ${example}, logs in ${tfpw}"; exit 1; }
     else
-      echo "terraform not found in folder ${folder}. Skipping."
+      echo "terraform not found in folder ${BLUEPRINT}/${folder}. Skipping."
     fi
     cd .. # back to blueprint folder
   done
   cd ..
-  rm -rf ${BLUEPRINT} || { echo "could not remove blueprint folder from $(pwd)"; exit 1; }
+  rm -rf ${BLUEPRINT} || { echo "*** ERROR: could not remove blueprint folder from $(pwd)"; exit 1; }
   cd ${cwd}
   rm -r ${tmpdir}
 }
 
 check_background(){
   if ! wait -n; then
-    echo "a test failed. Exiting with status 1."
     wait
+    echo "*** ERROR: a test failed. Exiting with status 1."
     exit 1
   fi
 }
 
-CONFIGS=$(find tools/validate_configs/test_configs examples/ -name "*.yaml" -type f)
+CONFIGS=$(find examples/ tools/validate_configs/test_configs/   -name "*.yaml" -type f)
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
 for example in $CONFIGS
 do
-  echo JOBS running: $(jobs)
   JNUM=$(jobs | wc -l)
-  echo "$JNUM jobs running"
+  # echo "$JNUM jobs running"
   if [ $JNUM -lt $NPROCS ]
   then
     run_test $example &
   else
-    echo "Reached max number of parallel tests. Waiting for one to finish."
+    # echo "Reached max number of parallel tests (${JNUM}). Waiting for one to finish."
     check_background
   fi
 done
@@ -87,3 +85,4 @@ while [ $JNUM -gt 0 ]; do
   check_background
   JNUM=$(jobs | wc -l)
 done
+echo "All configs have been validated successfully (passed)."
