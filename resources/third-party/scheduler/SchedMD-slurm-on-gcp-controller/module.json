@@ -183,7 +183,7 @@
       "required": false
     },
     {
-      "name": "partitions",
+      "name": "partition",
       "type": "list(object({\n    name                 = string,\n    machine_type         = string,\n    max_node_count       = number,\n    zone                 = string,\n    image                = string,\n    image_hyperthreads   = bool,\n    compute_disk_type    = string,\n    compute_disk_size_gb = number,\n    compute_labels       = any,\n    cpu_platform         = string,\n    gpu_type             = string,\n    gpu_count            = number,\n    network_storage = list(object({\n      server_ip     = string,\n      remote_mount  = string,\n      local_mount   = string,\n      fs_type       = string,\n      mount_options = string\n    })),\n    preemptible_bursting = string,\n    vpc_subnet           = string,\n    exclusive            = bool,\n    enable_placement     = bool,\n    regional_capacity    = bool,\n    regional_policy      = any,\n    instance_template    = string,\n    static_node_count    = number\n  }))",
       "description": "An array of configurations for specifying multiple machine types residing in their own Slurm partitions.",
       "default": null,
@@ -242,7 +242,7 @@
   ],
   "outputs": [
     {
-      "name": "controller_node_name",
+      "name": "controller_name",
       "description": "Name of the controller node"
     }
   ],
