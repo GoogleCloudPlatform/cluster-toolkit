@@ -46,30 +46,32 @@ resource_groups:
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
-    use: [homefs]
+    use:
+    - homefs
+    - network1
     settings:
       partition_name: compute
       max_node_count: 20
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
       machine_type: c2-standard-4
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm-controller
-    use: [homefs]
+    use:
+    - homefs
+    - compute-partition
+    - slurm-sql
+    - network1
     settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
       login_node_count: 1
-      partitions:
-      - $(compute-partition.partition)
-      cloudsql: ((module.slurm-sql.cloudsql))
       disable_compute_public_ips: true
       disable_controller_public_ips: true
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm-login
+    use:
+    - slurm-controller
+    - network1
     settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      controller_name: $(slurm-controller.controller_node_name)
       disable_login_public_ips: true

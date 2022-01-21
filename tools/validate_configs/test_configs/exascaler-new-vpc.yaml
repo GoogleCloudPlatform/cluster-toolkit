@@ -33,5 +33,3 @@ resource_groups:
     use: [network1]
     settings:
       local_mount: /scratch
-      subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
-      subnetwork_address: ((module.network1.primary_subnetwork.ip_cidr_range))

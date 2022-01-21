@@ -55,7 +55,6 @@ resource_groups:
     use: [network1]
     settings:
       local_mount: /scratch
-      subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
@@ -64,10 +63,10 @@ resource_groups:
     - homefs
     - scratchfs
     - projectsfs
+    - network1
     settings:
       max_node_count: 200
       partition_name: compute
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
@@ -76,10 +75,8 @@ resource_groups:
     - homefs
     - scratchfs
     - projectsfs
-    settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      partitions:
-      - $(compute_partition.partition)
+    - compute_partition
+    - network1
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
@@ -88,6 +85,5 @@ resource_groups:
     - homefs
     - scratchfs
     - projectsfs
-    settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      controller_name: $(slurm_controller.controller_node_name)
+    - slurm_controller
+    - network1
