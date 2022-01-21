@@ -81,7 +81,7 @@ else
 ## TERRAFORM IS PRESENT
 warn-terraform-missing:
 
-TF_VERSION_CHECK=$(shell expr `terraform version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 1.0)
+TF_VERSION_CHECK=$(shell expr `terraform version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= 1.0)
 ifneq ("$(TF_VERSION_CHECK)", "1")
 warn-terraform-version:
 	$(warning WARNING: terraform version must be greater than 1.0.0, update at https://learn.hashicorp.com/tutorials/terraform/install-cli)
@@ -125,7 +125,7 @@ else
 ## PACKER IS PRESENT
 warn-packer-missing:
 
-PK_VERSION_CHECK=$(shell expr `packer version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 1.6)
+PK_VERSION_CHECK=$(shell expr `packer version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= 1.6)
 ifneq ("$(PK_VERSION_CHECK)", "1")
 ### WRONG PACKER VERSION, MAY ALSO MEAN THE USER HAS SOME OTHER PACKER TOOL
 warn-packer-version:
