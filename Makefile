@@ -1,7 +1,11 @@
 # PREAMBLE
+MIN_PACKER_VERSION=1.6 # for building images
+MIN_TERRAFORM_VERSION=1.0 # for deploying modules
+MIN_GOLANG_VERSION=1.16 # for building ghpc
+
 .PHONY: tests format add-google-license install-dev-deps \
-        warn-terraform-missing warn-packer-missing \
-				warn-terraform-version warn-packer-version \
+        warn-go-missing warn-terraform-missing warn-packer-missing \
+				warn-go-version warn-terraform-version warn-packer-version \
 				test-engine validate_configs packer-check \
 				terraform-format packer-format \
         check-tflint check-pre-commit
@@ -12,13 +16,13 @@ PACKER_FOLDERS=$(shell find ./resources ./tools -type f -name "*.pkr.hcl" -not -
 
 # RULES MEANT TO BE USED DIRECTLY
 
-ghpc: warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg ghpc.go -type f)
+ghpc: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg ghpc.go -type f)
 	$(info **************** building ghpc ************************)
 	go build ghpc.go
 
 tests: warn-terraform-version warn-packer-version test-engine validate_configs packer-check
 
-format: warn-terraform-version warn-packer-version terraform-format packer-format
+format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
 	go fmt $(ENG)
 
@@ -40,7 +44,7 @@ endif
 
 # RULES SUPPORTING THE ABOVE
 
-test-engine:
+test-engine: warn-go-missing
 	$(info **************** vetting go code **********************)
 	go vet $(ENG)
 	$(info **************** running ghpc unit tests **************)
@@ -63,6 +67,28 @@ check-tflint:
 endif
 
 ###################################
+# GO SECTION
+ifeq (, $(shell which go))
+## GO IS NOT PRESENT
+warn-go-missing:
+	$(error ERROR: could not find go in PATH, visit: https://go.dev/doc/install)
+
+warn-go-version: warn-go-missing
+
+else
+## GO IS PRESENT
+warn-go-missing:
+
+GO_VERSION_CHECK=$(shell expr `go version | cut -f 3 -d ' ' | cut -f 1 -d '-' | cut -c 3-` \>= $(MIN_GOLANG_VERSION))
+ifneq ("$(GO_VERSION_CHECK)", "1")
+warn-go-version:
+	$(warning WARNING: Go version must be greater than $(MIN_GOLANG_VERSION), update at  https://go.dev/doc/install)
+else
+warn-go-version:
+
+endif
+endif
+###################################
 # TERRAFORM SECTION
 ifeq (, $(shell which terraform))
 ## TERRAFORM IS NOT PRESENT
@@ -81,10 +107,10 @@ else
 ## TERRAFORM IS PRESENT
 warn-terraform-missing:
 
-TF_VERSION_CHECK=$(shell expr `terraform version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= 1.0)
+TF_VERSION_CHECK=$(shell expr `terraform version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= $(MIN_TERRAFORM_VERSION))
 ifneq ("$(TF_VERSION_CHECK)", "1")
 warn-terraform-version:
-	$(warning WARNING: terraform version must be greater than 1.0.0, update at https://learn.hashicorp.com/tutorials/terraform/install-cli)
+	$(warning WARNING: terraform version must be greater than $(MIN_TERRAFORM_VERSION), update at https://learn.hashicorp.com/tutorials/terraform/install-cli)
 else
 warn-terraform-version:
 endif
@@ -125,11 +151,11 @@ else
 ## PACKER IS PRESENT
 warn-packer-missing:
 
-PK_VERSION_CHECK=$(shell expr `packer version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= 1.6)
+PK_VERSION_CHECK=$(shell expr `packer version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= $(MIN_PACKER_VERSION))
 ifneq ("$(PK_VERSION_CHECK)", "1")
 ### WRONG PACKER VERSION, MAY ALSO MEAN THE USER HAS SOME OTHER PACKER TOOL
 warn-packer-version:
-	$(warning WARNING: packer version must be greater than 1.6.6, update at https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
+	$(warning WARNING: packer version must be greater than $(MIN_PACKER_VERSION), update at https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
 
 packer-check: warn-packer-version
 	$(warning WARNING: wrong packer version, not checking packer code)
