@@ -39,6 +39,6 @@ RUN go install github.com/terraform-docs/terraform-docs@latest      && \
 WORKDIR /ghpc-tmp
 COPY ./ ./
 
-RUN make ghpc vet
+RUN make ghpc
 
 WORKDIR /ghpc

@@ -23,7 +23,7 @@ WORKDIR /ghpc
 COPY ghpc .
 COPY resources resources
 COPY examples examples
-COPY test_examples.sh .
+COPY validate_configs.sh .
 
 ENTRYPOINT ['./ghpc']
 

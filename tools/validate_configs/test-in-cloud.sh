@@ -13,19 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# An artifact registry repo is needed before running this:
+# https://cloud.google.com/artifact-registry/docs
+# gcloud artifacts repositories create hpc-toolkit-repo --repository-format=docker --location=us-central1 --description="Docker repository for HPC Toolkit"
+# gcloud artifacts repositories list
 
 tmpdir="$(mktemp -d)"
 echo "created temporary build directory at ${tmpdir}"
-cp -R tools/test_examples/* ${tmpdir}
+cp -R tools/validate_configs/* ${tmpdir}
 cp -R examples ${tmpdir}
 cp -R resources ${tmpdir}
 cp -R ghpc ${tmpdir}
 cd ${tmpdir}
-sudo docker build . -t "hpc-toolkit-test_examples"
+gcloud builds submit --config hpc-toolkit.yaml
 cd -
 if [ -d ${tmpdir} ]; then
   echo "removing ${tmpdir}"
   rm -rf ${tmpdir}
 fi
-
-sudo docker run "hpc-toolkit-test_examples:latest"
