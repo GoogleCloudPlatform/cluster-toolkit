@@ -20,7 +20,7 @@
 
 tmpdir="$(mktemp -d)"
 echo "created temporary build directory at ${tmpdir}"
-cp -R tools/test_examples/* ${tmpdir}
+cp -R tools/validate_configs/* ${tmpdir}
 cp -R examples ${tmpdir}
 cp -R resources ${tmpdir}
 cp -R ghpc ${tmpdir}

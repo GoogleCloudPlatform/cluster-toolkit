@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,19 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+blueprint_name: hexa-net
 
-tmpdir="$(mktemp -d)"
-echo "created temporary build directory at ${tmpdir}"
-cp -R tools/test_examples/* ${tmpdir}
-cp -R examples ${tmpdir}
-cp -R resources ${tmpdir}
-cp -R ghpc ${tmpdir}
-cd ${tmpdir}
-sudo docker build . -t "hpc-toolkit-test_examples"
-cd -
-if [ -d ${tmpdir} ]; then
-  echo "removing ${tmpdir}"
-  rm -rf ${tmpdir}
-fi
+vars:
+  project_id: hpc-toolkit-demo
+  deployment_name: network
+  region: europe-west4
+  zone: europe-west4-a
 
-sudo docker run "hpc-toolkit-test_examples:latest"
+resource_groups:
+- group: primary
+  resources:
+  - source: ./resources/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+
+  - source: ./resources/third-party/file-system/DDN-EXAScaler
+    kind: terraform
+    id: scratchfs
+    use: [network1]
+    settings:
+      local_mount: /scratch

@@ -12,55 +12,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hpc-cluster-small
+blueprint_name: hpc-cluster-simple
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-small
-  region: europe-west4
-  zone: europe-west4-a
+  deployment_name: hpc-cluster-simple
+  region: us-central1
+  zone: us-central1-a
 
 resource_groups:
 - group: primary
   resources:
-    # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-    # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-    # Example - ./resources/network/vpc
   - source: resources/network/vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: resources/file-system/nfs-server
     kind: terraform
     id: homefs
     use: [network1]
     settings:
-      local_mount: /home
+      labels:
+        ghpc_role: storage-home
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./resources/database/slurm-cloudsql-federation
     kind: terraform
-    id: compute_partition
+    id: slurm-sql
+    use: [network1]
+    settings:
+      sql_instance_name: slurm-sql8
+      tier: "db-f1-micro"
+
+  - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    id: compute-partition
     use:
-    - network1
     - homefs
+    - network1
     settings:
       partition_name: compute
       max_node_count: 20
+      machine_type: c2-standard-4
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm_controller
+    id: slurm-controller
     use:
-    - network1
     - homefs
-    - compute_partition
+    - compute-partition
+    - slurm-sql
+    - network1
     settings:
       login_node_count: 1
+      disable_compute_public_ips: true
+      disable_controller_public_ips: true
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm_login
+    id: slurm-login
     use:
+    - slurm-controller
     - network1
-    - homefs
-    - slurm_controller
+    settings:
+      disable_login_public_ips: true

@@ -12,9 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+*/
 
-output "controller_name" {
-  description = "Name of the controller node"
-  value       = module.slurm_cluster_controller.controller_node_name
+terraform {
+  required_providers {
+  }
+
+  required_version = ">= 0.14.0"
 }
+

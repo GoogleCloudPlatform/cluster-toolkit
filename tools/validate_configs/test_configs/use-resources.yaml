@@ -12,23 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hpc-cluster-high-io-remote-state
+blueprint_name: use-resources
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-io
+  deployment_name: hpc-slurm-use-resources
   region: us-central1
   zone: us-central1-a
-
-terraform_backend_defaults:
-  type: gcs
-  configuration:
-    bucket: a_bucket
-    impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
 
 resource_groups:
 - group: primary
   resources:
+    # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+    # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+    # Example - ./resources/network/pre-existing-vpc
   - source: resources/network/pre-existing-vpc
     kind: terraform
     id: network1
@@ -39,55 +36,51 @@ resource_groups:
     use: [network1]
     settings:
       local_mount: /home
+      network_name: $(network1.network_name)
 
-  - source: resources/file-system/filestore
+
+  - source: resources/file-system/nfs-server
     kind: terraform
     id: projectsfs
     use: [network1]
-    settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /projects
 
   - source: resources/third-party/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
-    use: [network1]
     settings:
       local_mount: /scratch
-      subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
+      network_self_link: $(network1.network_self_link)
+      subnetwork_self_link: $(network1.subnetwork_self_link)
+      subnetwork_address: $(network1.subnetwork_address)
 
-  - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
     - homefs
     - scratchfs
-    - projectsfs
+    - network1
     settings:
       max_node_count: 200
       partition_name: compute
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
-    - homefs
-    - scratchfs
     - projectsfs
-    settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      partitions:
-      - $(compute_partition.partition)
+    - compute_partition
+    - network1
 
-  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:
     - homefs
     - scratchfs
     - projectsfs
+    - slurm_controller
+    - network1
     settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      controller_name: $(slurm_controller.controller_node_name)
+      login_machine_type: n2-standard-4
+      network_storage: $(projectsfs.network_storage)

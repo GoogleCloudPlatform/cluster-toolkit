@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,18 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Getting Terraform and Packer
-FROM centos:centos7
-RUN yum install -y yum-utils && \
-    yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo && \
-    yum -y install terraform packer git
 
-# Setting GHPC dependencies
-WORKDIR /ghpc
-COPY ghpc .
-COPY resources resources
-COPY examples examples
-COPY test_examples.sh .
+tmpdir="$(mktemp -d)"
+echo "created temporary build directory at ${tmpdir}"
+cp -R tools/validate_configs/* ${tmpdir}
+cp -R examples ${tmpdir}
+cp -R resources ${tmpdir}
+cp -R ghpc ${tmpdir}
+cd ${tmpdir}
+sudo docker build . -t "hpc-toolkit-validate_configs"
+cd -
+if [ -d ${tmpdir} ]; then
+  echo "removing ${tmpdir}"
+  rm -rf ${tmpdir}
+fi
 
-ENTRYPOINT ['./ghpc']
-
+sudo docker run "hpc-toolkit-validate_configs:latest"

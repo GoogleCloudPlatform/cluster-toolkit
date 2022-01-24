@@ -12,55 +12,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hpc-cluster-small
+blueprint_name: hpc-slurm-sa
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-small
+  deployment_name: hpc-slurm
   region: europe-west4
   zone: europe-west4-a
 
 resource_groups:
 - group: primary
   resources:
-    # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-    # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-    # Example - ./resources/network/vpc
   - source: resources/network/vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: resources/file-system/pre-existing-network-storage
     kind: terraform
     id: homefs
-    use: [network1]
     settings:
+      server_ip: '$controller'
+      remote_mount: /home
       local_mount: /home
+      fs_type: nfs
+
+  - source: resources/project/service-account
+    kind: terraform
+    id: service_acct
+    settings:
+      project_id: $(vars.project_id)
+      names:
+      - "hpc-service-acct"
+      project_roles:
+      - "compute.instanceAdmin.v1"
+
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute_partition
-    use:
-    - network1
-    - homefs
+    id: compute-partition
     settings:
       partition_name: compute
-      max_node_count: 20
+      subnetwork_name: ((module.network1.primary_subnetwork.name))
+      network_storage:
+      - $(homefs.network_storage)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm_controller
-    use:
-    - network1
-    - homefs
-    - compute_partition
+    id: slurm
     settings:
-      login_node_count: 1
-
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
-    id: slurm_login
-    use:
-    - network1
-    - homefs
-    - slurm_controller
+      subnetwork_name: ((module.network1.primary_subnetwork.name))
+      network_storage:
+      - $(homefs.network_storage)
+      partitions:
+      - $(compute-partition.partition)
+      controller_service_account: $(service_acct.email)

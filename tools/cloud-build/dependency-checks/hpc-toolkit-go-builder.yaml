@@ -15,7 +15,7 @@ steps:
   - --cache-from
   - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
   - -f
-  - tools/cloud-build/partial-builds/Dockerfile.precommit
+  - tools/cloud-build/dependency-checks/Dockerfile.precommit
   - '.'
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
   entrypoint: /bin/bash
@@ -36,7 +36,7 @@ steps:
   - --cache-from
   - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
   - -f
-  - tools/cloud-build/partial-builds/Dockerfile.terraform
+  - tools/cloud-build/dependency-checks/Dockerfile.terraform
   - '.'
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
   entrypoint: /bin/bash
@@ -57,7 +57,7 @@ steps:
   - --cache-from
   - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
   - -f
-  - tools/cloud-build/partial-builds/Dockerfile.packer
+  - tools/cloud-build/dependency-checks/Dockerfile.packer
   - '.'
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
   entrypoint: /bin/bash

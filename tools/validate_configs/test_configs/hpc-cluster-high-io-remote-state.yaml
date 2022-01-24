@@ -12,64 +12,78 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hpc-cluster-simple
+blueprint_name: hpc-cluster-high-io-remote-state
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-cluster-simple
+  deployment_name: hpc-slurm-io
   region: us-central1
   zone: us-central1-a
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: a_bucket
+    impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
 
 resource_groups:
 - group: primary
   resources:
-  - source: resources/network/vpc
+  - source: resources/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/nfs-server
+  - source: resources/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
     settings:
-      labels:
-        ghpc_role: storage-home
+      local_mount: /home
 
-  - source: ./resources/database/slurm-cloudsql-federation
+  - source: resources/file-system/filestore
     kind: terraform
-    id: slurm-sql
+    id: projectsfs
     use: [network1]
     settings:
-      sql_instance_name: slurm-sql8
-      tier: "db-f1-micro"
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240
+      local_mount: /projects
+
+  - source: resources/third-party/file-system/DDN-EXAScaler
+    kind: terraform
+    id: scratchfs
+    use: [network1]
+    settings:
+      local_mount: /scratch
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute-partition
-    use: [homefs]
+    id: compute_partition
+    use:
+    - homefs
+    - scratchfs
+    - projectsfs
+    - network1
     settings:
+      max_node_count: 200
       partition_name: compute
-      max_node_count: 20
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      machine_type: c2-standard-4
 
-  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm-controller
-    use: [homefs]
-    settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      login_node_count: 1
-      partitions:
-      - $(compute-partition.partition)
-      cloudsql: ((module.slurm-sql.cloudsql))
-      disable_compute_public_ips: true
-      disable_controller_public_ips: true
+    id: slurm_controller
+    use:
+    - homefs
+    - scratchfs
+    - projectsfs
+    - compute_partition
+    - network1
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm-login
-    settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      controller_name: $(slurm-controller.controller_node_name)
-      disable_login_public_ips: true
+    id: slurm_login
+    use:
+    - homefs
+    - scratchfs
+    - projectsfs
+    - slurm_controller
+    - network1
