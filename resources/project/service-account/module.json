@@ -3,18 +3,67 @@
   "footer": "",
   "inputs": [
     {
+      "name": "billing_account_id",
+      "type": "string",
+      "description": "If assigning billing role, specify a billing account (default is to assign at the organizational level).",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "description": "Default description of the created service accounts (defaults to no description).",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "descriptions",
+      "type": "list(string)",
+      "description": "List of descriptions of the created service accounts (elements default to the value of description).",
+      "default": [],
+      "required": false
+    },
+    {
       "name": "display_name",
       "type": "string",
-      "description": "display names of the created service accounts",
+      "description": "display names of the created service accounts.",
       "default": "",
+      "required": false
+    },
+    {
+      "name": "generate_keys",
+      "type": "bool",
+      "description": "Generate keys for service accounts.",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "grant_billing_role",
+      "type": "bool",
+      "description": "Grant billing user role.",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "grant_xpn_roles",
+      "type": "bool",
+      "description": "Grant roles for shared VPC management.",
+      "default": true,
       "required": false
     },
     {
       "name": "names",
       "type": "list(string)",
-      "description": "names of the services accounts to create",
-      "default": null,
-      "required": true
+      "description": "Names of the services accounts to create.",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "org_id",
+      "type": "string",
+      "description": "Id of the organization for org-level roles.",
+      "default": "",
+      "required": false
     },
     {
       "name": "prefix",
@@ -42,18 +91,54 @@
     {
       "name": "service_accounts",
       "source": "terraform-google-modules/service-accounts/google",
-      "version": "~\u003e 3.0",
+      "version": "~\u003e 4.1",
       "description": null
     }
   ],
   "outputs": [
     {
-      "name": "email_address",
-      "description": "singular service account email address"
+      "name": "email",
+      "description": "Service account email (for single use)."
     },
     {
-      "name": "email_addresses",
-      "description": "list of service account email addresses"
+      "name": "emails",
+      "description": "Service account emails by name."
+    },
+    {
+      "name": "emails_list",
+      "description": "Service account emails s list."
+    },
+    {
+      "name": "iam_email",
+      "description": "IAM-format service account email (for single use)."
+    },
+    {
+      "name": "iam_emails",
+      "description": "IAM-format service account emails by name."
+    },
+    {
+      "name": "iam_emails_list",
+      "description": "IAM-format service account emails s list."
+    },
+    {
+      "name": "key",
+      "description": "Service account key (for single use)."
+    },
+    {
+      "name": "keys",
+      "description": "Map of service account keys."
+    },
+    {
+      "name": "service_account",
+      "description": "Service account resource (for single use)."
+    },
+    {
+      "name": "service_accounts",
+      "description": "Service account resources as list."
+    },
+    {
+      "name": "service_accounts_map",
+      "description": "Service account resources by name."
     }
   ],
   "providers": [],

@@ -14,11 +14,47 @@
  * limitations under the License.
  */
 
-output "email_addresses" {
-  description = "list of service account email addresses"
+output "email" {
+  description = "Service account email (for single use)."
+  value       = module.service_accounts.email
+}
+output "emails" {
+  description = "Service account emails by name."
+  value       = module.service_accounts.emails
+}
+output "emails_list" {
+  description = "Service account emails s list."
   value       = module.service_accounts.emails_list
 }
-output "email_address" {
-  description = "singular service account email address"
-  value       = module.service_accounts.email
+output "iam_email" {
+  description = "IAM-format service account email (for single use)."
+  value       = module.service_accounts.iam_email
+}
+output "iam_emails" {
+  description = "IAM-format service account emails by name."
+  value       = module.service_accounts.iam_emails
+}
+output "iam_emails_list" {
+  description = "IAM-format service account emails s list."
+  value       = module.service_accounts.iam_emails_list
+}
+output "key" {
+  description = "Service account key (for single use)."
+  value       = module.service_accounts.key
+}
+output "keys" {
+  description = "Map of service account keys."
+  value       = module.service_accounts.keys
+}
+output "service_account" {
+  description = "Service account resource (for single use)."
+  value       = module.service_accounts.service_account
+}
+output "service_accounts" {
+  description = "Service account resources as list."
+  value       = module.service_accounts.service_accounts
+}
+output "service_accounts_map" {
+  description = "Service account resources by name."
+  value       = module.service_accounts.service_accounts_map
 }

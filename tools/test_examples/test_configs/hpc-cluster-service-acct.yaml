@@ -65,4 +65,4 @@ resource_groups:
       - $(homefs.network_storage)
       partitions:
       - $(compute-partition.partition)
-      controller_service_account: $(service_acct.email_address)
+      controller_service_account: $(service_acct.email)
