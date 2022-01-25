@@ -71,19 +71,7 @@ func teardown() {
 	os.RemoveAll(testDir)
 }
 
-// Test Data Producer
-func getBlueprintConfigForTest(testDir string, testYamlFilename string) config.BlueprintConfig {
-	testYamlConfig := getYamlConfigForTest()
-	testYamlConfig.BlueprintName = testYamlFilename
-	testBlueprintConfig := config.BlueprintConfig{
-		Config:    testYamlConfig,
-		Directory: testDir,
-	}
-
-	return testBlueprintConfig
-}
-
-// Test Data Producer
+// Test Data Producers
 func getYamlConfigForTest() config.YamlConfig {
 	testResourceSource := path.Join(testDir, terraformResourceDir)
 	testResource := config.Resource{
@@ -145,9 +133,10 @@ func (s *MySuite) TestCopyEmbedded(c *C) {
 }
 
 func (s *MySuite) TestWriteBlueprint(c *C) {
-	testBlueprintName := "blueprints_TestWriteBlueprint"
-	testBlueprintConfig := getBlueprintConfigForTest(testDir, testBlueprintName)
-	WriteBlueprint(&testBlueprintConfig)
+	testYamlConfig := getYamlConfigForTest()
+	blueprintName := "blueprints_TestWriteBlueprint"
+	testYamlConfig.BlueprintName = blueprintName
+	WriteBlueprint(&testYamlConfig, testDir)
 }
 
 func (s *MySuite) TestFlattenInterfaceMap(c *C) {
@@ -616,15 +605,15 @@ func (s *MySuite) TestNumResources_PackerWriter(c *C) {
 func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 	backend := backend.GetBackendLocal()
 	testWriter := PackerWriter{}
-	testBlueprintConfig := config.BlueprintConfig{}
 	// Empty Config
-	testWriter.writeResourceLevel(&testBlueprintConfig)
+	testWriter.writeResourceLevel(&config.YamlConfig{}, testDir)
 
 	// No Packer resources
-	blueprintName := "blueprints_TestWriteResourceLevel_PackerWriter"
-	testBlueprintConfig = getBlueprintConfigForTest(testDir, blueprintName)
-	testWriter.writeResourceLevel(&testBlueprintConfig)
+	testYamlConfig := getYamlConfigForTest()
+	testWriter.writeResourceLevel(&testYamlConfig, testDir)
 
+	blueprintName := "blueprints_TestWriteResourceLevel_PackerWriter"
+	testYamlConfig.BlueprintName = blueprintName
 	blueprintDir := path.Join(testDir, blueprintName)
 	if err := backend.CreateDirectory(blueprintDir); err != nil {
 		log.Fatal(err)
@@ -642,12 +631,12 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 		Kind: "packer",
 		ID:   "testPackerResource",
 	}
-	testBlueprintConfig.Config.ResourceGroups = append(testBlueprintConfig.Config.ResourceGroups,
+	testYamlConfig.ResourceGroups = append(testYamlConfig.ResourceGroups,
 		config.ResourceGroup{
 			Name:      "packerGroup",
 			Resources: []config.Resource{testPackerResource},
 		})
-	testWriter.writeResourceLevel(&testBlueprintConfig)
+	testWriter.writeResourceLevel(&testYamlConfig, testDir)
 	_, err := os.Stat(path.Join(resourceDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }

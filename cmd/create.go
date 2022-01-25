@@ -56,7 +56,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 		yamlFilename = args[0]
 	}
 
-	blueprintConfig := config.NewBlueprintConfig(bpDirectory, yamlFilename)
+	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
 	blueprintConfig.ExpandConfig()
-	reswriter.WriteBlueprint(&blueprintConfig)
+	reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory)
 }

@@ -135,7 +135,6 @@ type BlueprintConfig struct {
 	ResourcesInfo map[string]map[string]resreader.ResourceInfo
 	// Maps resource ID to group index
 	ResourceToGroup map[string]int
-	Directory       string
 	expanded        bool
 }
 
@@ -149,10 +148,9 @@ func (bc *BlueprintConfig) ExpandConfig() {
 }
 
 // NewBlueprintConfig is a constructor for BlueprintConfig
-func NewBlueprintConfig(bpDirectory string, configFilename string) BlueprintConfig {
+func NewBlueprintConfig(configFilename string) BlueprintConfig {
 	newBlueprintConfig := BlueprintConfig{
-		Config:    importYamlConfig(configFilename),
-		Directory: bpDirectory,
+		Config: importYamlConfig(configFilename),
 	}
 	return newBlueprintConfig
 }

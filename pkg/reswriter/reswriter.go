@@ -43,7 +43,7 @@ var ResourceFS embed.FS
 type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
-	writeResourceGroups(*config.BlueprintConfig) error
+	writeResourceGroups(*config.YamlConfig, string) error
 }
 
 var kinds = map[string]ResWriter{
@@ -77,7 +77,8 @@ func copyEmbedded(fs resutils.BaseFS, source string, dest string) error {
 	return resutils.CopyDirFromResources(fs, source, dest)
 }
 
-func copySource(backend backend.Backend, blueprintPath string, resourceGroups *[]config.ResourceGroup) {
+func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
+	backend := backend.GetBackendLocal()
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
 
@@ -129,18 +130,17 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(bpConfig *config.BlueprintConfig) {
+func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
 	backend := backend.GetBackendLocal()
-	yamlConfig := bpConfig.Config
-	bpDirectoryPath := path.Join(bpConfig.Directory, yamlConfig.BlueprintName)
+	bpDirectoryPath := path.Join(bpDirectory, yamlConfig.BlueprintName)
 	if err := backend.CreateDirectory(bpDirectoryPath); err != nil {
 		log.Fatalf("failed to create a directory for blueprints: %v", err)
 	}
 
-	copySource(backend, bpDirectoryPath, &yamlConfig.ResourceGroups)
+	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
-			err := writer.writeResourceGroups(bpConfig)
+			err := writer.writeResourceGroups(yamlConfig, bpDirectory)
 			if err != nil {
 				log.Fatalf("error writing resources to blueprint: %v", err)
 			}
