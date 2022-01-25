@@ -18,7 +18,7 @@
 blueprint_name: simple_startup
 
 vars:
-  project_id: gcp-rescale-perf
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: simple-startup
   region: us-central1
   zone: us-central1-a

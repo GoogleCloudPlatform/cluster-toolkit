@@ -50,19 +50,19 @@ resource_groups:
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
+    use: [network1]
     settings:
       partition_name: compute
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:
       - $(homefs.network_storage)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm
+    use: [network1]
     settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:
       - $(homefs.network_storage)
-      partitions:
+      partition:
       - $(compute-partition.partition)
       controller_service_account: $(service_acct.email)
