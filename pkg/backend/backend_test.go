@@ -118,14 +118,21 @@ func (s *MySuite) TestCopyFromPathLocal(c *C) {
 }
 
 func (s *MySuite) TestMkdirWrapper(c *C) {
-	// Test to create a directory causing a permission denied error
-	testViolatedDir := "/TestViolatedDir"
-	err := mkdirWrapper(testViolatedDir)
+	testMkdirWrapperDir := path.Join(testDir, "testMkdirWrapperDir")
+	if err := os.Mkdir(testMkdirWrapperDir, 0444); err != nil { // Make it ReadOnly
+		log.Fatalf("Failed to create the directory %s: %v", testMkdirWrapperDir, err)
+	}
+	testNewDir := path.Join(testMkdirWrapperDir, "testNewDir")
+
+	// Failure: permission denied
+	err := mkdirWrapper(testNewDir)
 	expErr := "Failed to create the directory .*"
 	c.Assert(err, ErrorMatches, expErr)
 
-	// Test to create a directory
-	testNewDir := path.Join(testDir, "testNewDir")
+	// Success: create a new directory under the writable directory
+	if err := os.Chmod(testMkdirWrapperDir, 0755); err != nil { // Make it Writable
+		log.Fatalf("Failed to change the permission %s: %v", testMkdirWrapperDir, err)
+	}
 	err = mkdirWrapper(testNewDir)
 	c.Assert(err, IsNil)
 }
