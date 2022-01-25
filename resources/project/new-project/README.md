@@ -59,6 +59,7 @@ No resources.
 | <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The ID of the billing account to associate projects with. | `string` | n/a | yes |
 | <a name="input_default_service_account"></a> [default\_service\_account](#input\_default\_service\_account) | Project default service account setting: can be one of `delete`, `deprivilege`, `disable`, or `keep`. | `string` | `"keep"` | no |
 | <a name="input_folder_id"></a> [folder\_id](#input\_folder\_id) | ID of the Folder | `string` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels for the project. List key, value pairs. | `any` | n/a | yes |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | ID of the organization | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of the Project | `string` | n/a | yes |
 

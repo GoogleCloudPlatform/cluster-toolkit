@@ -24,6 +24,13 @@
       "required": true
     },
     {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels for the project. List key, value pairs.",
+      "default": null,
+      "required": true
+    },
+    {
       "name": "org_id",
       "type": "string",
       "description": "ID of the organization",

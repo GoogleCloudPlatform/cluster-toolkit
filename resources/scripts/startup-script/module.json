@@ -17,6 +17,13 @@
       "required": true
     },
     {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels for the created GCS bucket. List key, value pairs.",
+      "default": null,
+      "required": true
+    },
+    {
       "name": "region",
       "type": "string",
       "description": "The region to deploy to",

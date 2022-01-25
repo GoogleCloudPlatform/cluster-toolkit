@@ -31,6 +31,11 @@ variable "debug_file" {
   default     = null
 }
 
+variable "labels" {
+  description = "Labels for the created GCS bucket. List key, value pairs."
+  type        = any
+}
+
 variable "runners" {
   description = <<EOT
     List of runners to run on remote VM.
