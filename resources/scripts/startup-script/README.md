@@ -9,7 +9,14 @@ This resource creates startup scripts by chaining together a list runners. Each 
 - `source`: (Optional) A path to the file or data you want to upload. Must be defined if `content` is not. The source path is relative to the resource group directory in the blueprint. Scripts distributed as part of modules should start with modules/ followed by the name of the module used (not to be confused with the resource ID) and the path to the script. Examples shown below. To reference any other source file, an absolute path must be used.
 - `args`: (Optional) Arguments to be passed to shell scripts. This will not be used for other runner types.
 
-Runners will be uploaded to a [GCS bucket](https://cloud.google.com/storage/docs/creating-buckets). This bucket will be created by this resource and named as `${var.deployment_name}-startup-scripts-${random_id}`.  VMs using the startup script created by this resource will pull the runners content from a GCS bucket and therefore must have access to GCS.
+Runners will be uploaded to a [GCS bucket](https://cloud.google.com/storage/docs/creating-buckets).
+This bucket will be created by this resource and named as
+`${var.deployment_name}-startup-scripts-${random_id}`. VMs using the startup
+script created by this resource will pull the runners content from a GCS bucket
+and therefore must have access to GCS.
+
+To ensure access to GCS, set the following OAuth scope on the instance using
+the startup scripts: "https://www.googleapis.com/auth/devstorage.read_only".
 
 For more information on how to use startup scripts on Google Cloud Platform, please refer to [this document](https://cloud.google.com/compute/docs/instances/startup-scripts/linux).
 

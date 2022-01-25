@@ -15,7 +15,7 @@
 blueprint_name: complex_data
 
 vars:
-  project_id: test_project ## Set GCP Project ID Here ##
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: test_complex-data
   region: europe-west4
   zone: europe-west4-a
