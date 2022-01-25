@@ -63,6 +63,6 @@ resource_groups:
       subnetwork_name: ((module.network1.primary_subnetwork.name))
       network_storage:
       - $(homefs.network_storage)
-      partitions:
+      partition:
       - $(compute-partition.partition)
       controller_service_account: $(service_acct.email)
