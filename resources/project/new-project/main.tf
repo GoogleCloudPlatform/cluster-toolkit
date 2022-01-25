@@ -25,5 +25,4 @@ module "project_factory" {
   billing_account         = var.billing_account
   default_service_account = var.default_service_account
   labels                  = var.labels
-  bucket_labels           = var.labels
 }

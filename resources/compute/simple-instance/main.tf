@@ -45,6 +45,7 @@ resource "google_compute_instance" "compute_vm" {
   boot_disk {
     source      = google_compute_disk.boot_disk[count.index].self_link
     device_name = google_compute_disk.boot_disk[count.index].name
+    auto_delete = true
   }
 
   network_interface {
