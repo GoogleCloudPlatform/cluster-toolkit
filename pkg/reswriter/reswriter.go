@@ -20,15 +20,13 @@ package reswriter
 import (
 	"embed"
 	"fmt"
+	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
 	"log"
 	"os"
 	"path"
-	"strings"
 
 	"hpc-toolkit/pkg/resutils"
-
-	"github.com/otiai10/copy"
 )
 
 const (
@@ -45,7 +43,7 @@ var ResourceFS embed.FS
 type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
-	writeResourceGroups(*config.YamlConfig) error
+	writeResourceGroups(*config.YamlConfig, string) error
 }
 
 var kinds = map[string]ResWriter{
@@ -66,34 +64,6 @@ func factory(kind string) ResWriter {
 	return writer
 }
 
-func mkdirWrapper(path string) {
-	err := os.Mkdir(path, 0755)
-	if err != nil {
-		log.Fatalf("createBlueprintDirectory: %v", err)
-	}
-}
-
-func createBlueprintDirectory(blueprintName string) {
-	if _, err := os.Stat(blueprintName); !os.IsNotExist(err) {
-		log.Fatalf(
-			"reswriter: Blueprint directory already exists: %s", blueprintName)
-	}
-	// Create blueprint directory
-	mkdirWrapper(blueprintName)
-}
-
-func getAbsSourcePath(sourcePath string) string {
-	if strings.HasPrefix(sourcePath, "/") { // Absolute Path Already
-		return sourcePath
-	}
-	// Otherwise base it off of the CWD
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("reswriter: %v", err)
-	}
-	return path.Join(cwd, sourcePath)
-}
-
 func getTemplate(filename string) string {
 	// Create path to template from the embedded template FS
 	tmplText, err := templatesFS.ReadFile(filename)
@@ -107,16 +77,8 @@ func copyEmbedded(fs resutils.BaseFS, source string, dest string) error {
 	return resutils.CopyDirFromResources(fs, source, dest)
 }
 
-func copyFromPath(source string, dest string) error {
-	absPath := getAbsSourcePath(source)
-	err := copy.Copy(absPath, dest)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
+func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
+	blueprintio := blueprintio.GetBlueprintIOLocal()
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
 
@@ -124,7 +86,7 @@ func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 			// currently assuming local or embedded source
 			resourceName := path.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
-			basePath := path.Join(blueprintName, grp.Name)
+			basePath := path.Join(blueprintPath, grp.Name)
 			var destPath string
 			switch resource.Kind {
 			case "terraform":
@@ -140,11 +102,11 @@ func copySource(blueprintName string, resourceGroups *[]config.ResourceGroup) {
 			// Check source type and copy
 			switch src := resource.Source; {
 			case resutils.IsLocalPath(src):
-				if err = copyFromPath(src, destPath); err != nil {
+				if err = blueprintio.CopyFromPath(src, destPath); err != nil {
 					log.Fatal(err)
 				}
 			case resutils.IsEmbeddedPath(src):
-				if err = os.MkdirAll(destPath, 0755); err != nil {
+				if err = blueprintio.CreateDirectory(destPath); err != nil {
 					log.Fatalf("failed to create resource path %s: %v", destPath, err)
 				}
 				if err = copyEmbedded(ResourceFS, src, destPath); err != nil {
@@ -168,14 +130,19 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig) {
-	createBlueprintDirectory(yamlConfig.BlueprintName)
-	copySource(yamlConfig.BlueprintName, &yamlConfig.ResourceGroups)
+func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
+	blueprintio := blueprintio.GetBlueprintIOLocal()
+	bpDirectoryPath := path.Join(bpDirectory, yamlConfig.BlueprintName)
+	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
+		log.Fatalf("failed to create a directory for blueprints: %v", err)
+	}
+
+	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
-			err := writer.writeResourceGroups(yamlConfig)
+			err := writer.writeResourceGroups(yamlConfig, bpDirectory)
 			if err != nil {
-				log.Fatalf("error writing resources to blueprint: %e", err)
+				log.Fatalf("error writing resources to blueprint: %v", err)
 			}
 		}
 	}
