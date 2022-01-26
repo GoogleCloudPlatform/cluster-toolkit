@@ -39,17 +39,27 @@ for the resource(s)
 for the resource(s)
 * **network_name**: The name of the network a resource will use or connect to.
 
-## List
+## Available Resources
 
 ### Compute
 
 * [**simple-instance**](./compute/simple-instance/README.md): Creates one or
 more simple VM instances.
 
+### Database
+
+* [**slurm-cloudsql-federation**](./database/slurm-cloudsql-federation/README.md):
+Creates a [Google SQL Instance](https://cloud.google.com/sql/) meant to be
+integrated with a
+[slurm controller](./third-pary/scheduler/SchedMD-slurm-on-gcp-controller/README.md).
+
 ### File System
 
 * [**filestore**](file-system/filestore/README.md): Creates a
 [filestore](https://cloud.google.com/filestore) file system
+
+* [**nfs-server**](file-system/nfs-server/README.md): Creates an NFS server that
+can be mounted on compute instances.
 
 * [**pre-existing-network-storage**](file-system/pre-existing-network-storage/README.md):
 Used when specifying a pre-existing file system to be mounted by
@@ -80,11 +90,17 @@ based on the GCP HPC VM image
 
 * [**new-project**](project/new-project/README.md): Creates a Google Cloud Projects
 
+* [**service-account**](project/service-account/README.md): Creates [service
+accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP project.
+
 * [**service-enablement**](project/service-enablement/README.md): Allows enabling various APIs for a Google Cloud Project
 
 ### Scripts
 
 * [**omnia-install**](scripts/omnia-install/README.md): Installs SLURM via omnia onto a cluster of compute VMs
+
+* [**spack-install**](scripts/spack-install/README.md): Installs spack on a VM
+instance.
 
 * [**startup-script**](scripts/startup-script/README.md): Creates a customizable
 startup script that can be fed into compute VMS
