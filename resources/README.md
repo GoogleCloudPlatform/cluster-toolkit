@@ -58,8 +58,8 @@ integrated with a
 * [**filestore**](file-system/filestore/README.md): Creates a
 [filestore](https://cloud.google.com/filestore) file system
 
-* [**nfs-server**](file-system/nfs-server/README.md): Creates an NFS server that
-can be mounted on compute instances.
+* [**nfs-server**](file-system/nfs-server/README.md): Creates a VM instance and
+configures an NFS server that can be mounted by other VM instances.
 
 * [**pre-existing-network-storage**](file-system/pre-existing-network-storage/README.md):
 Used when specifying a pre-existing file system to be mounted by
@@ -97,10 +97,11 @@ accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP project.
 
 ### Scripts
 
-* [**omnia-install**](scripts/omnia-install/README.md): Installs SLURM via omnia onto a cluster of compute VMs
+* [**omnia-install**](scripts/omnia-install/README.md): Installs SLURM via omnia
+onto a cluster of compute VMs
 
-* [**spack-install**](scripts/spack-install/README.md): Installs spack on a VM
-instance.
+* [**spack-install**](scripts/spack-install/README.md): Creates a startup script
+to install spack on an instance or the slurm controller
 
 * [**startup-script**](scripts/startup-script/README.md): Creates a customizable
 startup script that can be fed into compute VMS
