@@ -38,16 +38,15 @@ provider "google" {
 }
 
 module "ddn_exascaler" {
-  source = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=af5a5b3"
-
+  source          = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=f329c21"
   fsname          = var.fsname
   zone            = var.zone
   project         = var.project_id
   security        = var.security
   service_account = var.service_account
   waiter          = var.waiter
-  network         = var.network_self_link == null ? var.network : local.named_net
-  subnetwork      = var.subnetwork_self_link == null ? var.subnetwork : local.named_subnet
+  network         = var.network == null ? local.named_net : var.network
+  subnetwork      = var.subnetwork == null ? local.named_subnet : var.subnetwork
   boot            = var.boot
   image           = var.image
   mgs             = var.mgs

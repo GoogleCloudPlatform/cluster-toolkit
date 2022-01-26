@@ -130,15 +130,7 @@
       "name": "network",
       "type": "object({\n    routing = string\n    tier    = string\n    id      = string\n    auto    = bool\n    mtu     = number\n    new     = bool\n    nat     = bool\n  })",
       "description": "Network options",
-      "default": {
-        "auto": false,
-        "id": "projects/project-name/global/networks/network-name",
-        "mtu": 1500,
-        "nat": false,
-        "new": false,
-        "routing": "REGIONAL",
-        "tier": "STANDARD"
-      },
+      "default": null,
       "required": false
     },
     {
@@ -183,13 +175,14 @@
     },
     {
       "name": "security",
-      "type": "object({\n    admin              = string\n    public_key         = string\n    block_project_keys = bool\n    enable_local       = bool\n    enable_ssh         = bool\n    enable_http        = bool\n    ssh_source_ranges  = list(string)\n    http_source_ranges = list(string)\n  })",
+      "type": "object({\n    admin              = string\n    public_key         = string\n    block_project_keys = bool\n    enable_os_login    = bool\n    enable_local       = bool\n    enable_ssh         = bool\n    enable_http        = bool\n    ssh_source_ranges  = list(string)\n    http_source_ranges = list(string)\n  })",
       "description": "Security options",
       "default": {
         "admin": "stack",
         "block_project_keys": false,
         "enable_http": false,
         "enable_local": false,
+        "enable_os_login": true,
         "enable_ssh": false,
         "http_source_ranges": [
           "0.0.0.0/0"
@@ -215,12 +208,7 @@
       "name": "subnetwork",
       "type": "object({\n    address = string\n    private = bool\n    id      = string\n    new     = bool\n  })",
       "description": "Subnetwork properties. Ignored if subnetwork_self_link is supplied.",
-      "default": {
-        "address": "10.0.0.0/16",
-        "id": "projects/project-name/regions/region-name/subnetworks/subnetwork-name",
-        "new": false,
-        "private": true
-      },
+      "default": null,
       "required": false
     },
     {
@@ -256,7 +244,7 @@
     {
       "name": "ddn_exascaler",
       "source": "github.com/DDNStorage/exascaler-cloud-terraform//gcp",
-      "version": "af5a5b3",
+      "version": "f329c21",
       "description": null
     }
   ],

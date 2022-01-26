@@ -78,6 +78,11 @@ variable "waiter" {
 # Block project-wide public SSH keys if you want to restrict
 # deployment to only user with deployment-level public SSH key.
 # https://cloud.google.com/compute/docs/instances/adding-removing-ssh-keys
+# enable_os_login: true or false
+# Enable or disable OS Login feature.
+# Please note, enabling this option disables other security options:
+# admin, public_key and block_project_keys.
+# https://cloud.google.com/compute/docs/instances/managing-instance-access#enable_oslogin
 # enable_local: true or false, enable or disable firewall rules for local access
 # enable_ssh: true or false, enable or disable remote SSH access
 # ssh_source_ranges: source IP ranges for remote SSH access in CIDR notation
@@ -89,6 +94,7 @@ variable "security" {
     admin              = string
     public_key         = string
     block_project_keys = bool
+    enable_os_login    = bool
     enable_local       = bool
     enable_ssh         = bool
     enable_http        = bool
@@ -100,6 +106,7 @@ variable "security" {
     admin              = "stack"
     public_key         = "~/.ssh/id_rsa.pub"
     block_project_keys = false
+    enable_os_login    = true
     enable_local       = false
     enable_ssh         = false
     enable_http        = false
@@ -139,15 +146,7 @@ variable "network" {
     nat     = bool
   })
 
-  default = {
-    routing = "REGIONAL"
-    tier    = "STANDARD"
-    id      = "projects/project-name/global/networks/network-name"
-    auto    = false
-    mtu     = 1500
-    new     = false
-    nat     = false
-  }
+  default = null
 }
 
 variable "subnetwork_self_link" {
@@ -179,12 +178,7 @@ variable "subnetwork" {
     id      = string
     new     = bool
   })
-  default = {
-    address = "10.0.0.0/16"
-    private = true
-    id      = "projects/project-name/regions/region-name/subnetworks/subnetwork-name"
-    new     = false
-  }
+  default = null
 }
 # Boot disk properties
 # disk_type: pd-standard, pd-ssd or pd-balanced
