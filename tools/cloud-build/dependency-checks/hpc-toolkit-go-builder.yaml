@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+timeout: 1200s
 steps:
 - name: golang:bullseye
   entrypoint: /bin/bash
@@ -21,12 +22,11 @@ steps:
     make
     make test-engine
 
+# Test go changes without Packer or Terraform installed
 - name: gcr.io/cloud-builders/docker
   args:
   - build
   - -t
-  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
-  - --cache-from
   - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
   - -f
   - tools/cloud-build/dependency-checks/Dockerfile.precommit
@@ -41,13 +41,22 @@ steps:
     git add -u
     pre-commit run
     git reset --hard HEAD
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+  entrypoint: /bin/bash
+  env:
+  - SKIP=packer-readme,terraform-readme,terraform_fmt,terraform_validate,terraform_tflint
+  args:
+  - -c
+  - |
+    pre-commit install
+    pre-commit run --all-files
+    git reset --hard HEAD
 
+# Test Terraform changes without Packer installed
 - name: gcr.io/cloud-builders/docker
   args:
   - build
   - -t
-  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
-  - --cache-from
   - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
   - -f
   - tools/cloud-build/dependency-checks/Dockerfile.terraform
@@ -57,18 +66,28 @@ steps:
   args:
   - -c
   - |
+    make tests
     tflint --init
     echo "# TEST COMMENT" >> resources/network/vpc/main.tf
     git add -u
     pre-commit run
     git reset --hard HEAD
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
+  entrypoint: /bin/bash
+  env:
+  - SKIP=packer-readme
+  args:
+  - -c
+  - |
+    pre-commit install
+    pre-commit run --all-files
+    git reset --hard HEAD
 
+# Test Packer changes without Terraform installed
 - name: gcr.io/cloud-builders/docker
   args:
   - build
   - -t
-  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
-  - --cache-from
   - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
   - -f
   - tools/cloud-build/dependency-checks/Dockerfile.packer
@@ -78,7 +97,18 @@ steps:
   args:
   - -c
   - |
+    make
     git status
     echo "# TEST COMMENT" >> resources/packer/custom-image/image.pkr.hcl
     git add -u
     pre-commit run
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
+  entrypoint: /bin/bash
+  env:
+  - SKIP=terraform-readme,terraform_fmt,terraform_validate,terraform_tflint
+  args:
+  - -c
+  - |
+    pre-commit install
+    pre-commit run --all-files
+    git reset --hard HEAD
