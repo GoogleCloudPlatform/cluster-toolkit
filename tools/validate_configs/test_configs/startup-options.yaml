@@ -15,7 +15,7 @@
 # WARNING: This example and the omnia-install resource are still under development
 #          and experimental! This example is not yet fully supported.
 
-blueprint_name: simple_startup
+blueprint_name: startup_options
 
 vars:
   project_id: ## Set GCP Project ID Here ##
@@ -74,4 +74,14 @@ resource_groups:
       name_prefix: use-startup
       machine_type: e2-standard-4
       startup_script: $(startup.startup_script)
+
+  - source: ./resources/compute/simple-instance
+    kind: terraform
+    id: instance-metadata-startup
+    use: [network1]
+    settings:
+      name_prefix: metadata-startup
+      machine_type: e2-standard-4
+      metadata:
+        startup-script: $(startup.startup_script)
 

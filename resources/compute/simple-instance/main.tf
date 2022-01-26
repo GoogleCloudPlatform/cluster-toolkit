@@ -16,7 +16,9 @@
 
 locals {
   startup_script = var.startup_script != null ? (
-  { startup_script = var.startup_script }) : null
+  { startup-script = var.startup_script }) : {}
+  network_storage = var.network_storage != null ? (
+  { network_storage = jsonencode(var.network_storage) }) : {}
 }
 
 data "google_compute_image" "compute_image" {
@@ -70,9 +72,5 @@ resource "google_compute_instance" "compute_vm" {
     }
   }
 
-  metadata = var.network_storage == null ? var.metadata : merge(
-    {
-      network_storage = jsonencode(var.network_storage),
-      startup_script  = var.startup_script,
-  }, local.startup_script, var.metadata)
+  metadata = merge(local.network_storage, local.startup_script, var.metadata)
 }
