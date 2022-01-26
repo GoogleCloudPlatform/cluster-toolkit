@@ -15,35 +15,35 @@
  */
 
 variable "zone" {
-  description = "The GCP zone where the instance is running"
+  description = "The GCP zone where the instance is running."
   type        = string
 }
 
 variable "project_id" {
-  description = "Project in which the HPC deployment will be created"
+  description = "Project in which the HPC deployment will be created."
   type        = string
 }
 
 variable "install_dir" {
-  description = "Directory to install spack into"
+  description = "Directory to install spack into."
   type        = string
   default     = "/apps/spack"
 }
 
 variable "spack_url" {
-  description = "URL to clone the spack repo from"
+  description = "URL to clone the spack repo from."
   type        = string
   default     = "https://github.com/spack/spack"
 }
 
 variable "spack_ref" {
-  description = "Git ref to checkout for spack"
+  description = "Git ref to checkout for spack."
   type        = string
   default     = "develop"
 }
 
 variable "spack_cache_url" {
-  description = "List of buildcaches for spack"
+  description = "List of buildcaches for spack."
   type = list(object({
     mirror_name = string
     mirror_url  = string
@@ -67,7 +67,7 @@ variable "licenses" {
 }
 
 variable "packages" {
-  description = "Defines packages for spack to install (in order)"
+  description = "Defines packages for spack to install (in order)."
   default     = []
   type        = list(string)
 }

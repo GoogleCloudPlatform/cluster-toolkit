@@ -95,7 +95,7 @@ resource_groups:
       labels:
         ghpc_role: head-node
       metadata:
-        startup-script: $(startup.startup_script_content)
+        startup-script: $(startup.startup_script)
 
   - source: resources/compute/simple-instance
     kind: terraform
@@ -104,11 +104,10 @@ resource_groups:
     - network
     - homefs
     - apps
+    - startup
     settings:
       name_prefix: compute
       machine_type: c2-standard-60
       instance_count: 2
       labels:
         ghpc_role: compute
-      metadata:
-        startup-script: $(startup.startup_script_content)

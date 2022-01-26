@@ -59,7 +59,7 @@ resource_groups:
       name_prefix: workstation
       machine_type: e2-standard-8
       metadata:
-        startup-script: $(startup.startup_script_content)
+        startup-script: $(startup.startup_script)
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
