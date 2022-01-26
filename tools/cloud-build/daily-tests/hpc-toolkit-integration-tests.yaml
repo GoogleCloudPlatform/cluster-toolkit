@@ -30,7 +30,7 @@ steps:
   - |
     BUILD_ID_FULL=$BUILD_ID
     LOGIN_ID=slurm-hpc-slurm-io-$${BUILD_ID_FULL:0:6}-login0
-    cat <<EOT >> test-vars.yml
+    cat <<EOT > test-vars.yml
     build_id: ${BUILD_ID}
     project: ${PROJECT_ID}
     zone: us-central1-a
@@ -57,15 +57,16 @@ steps:
   - -c
   - |
     BUILD_ID_FULL=$BUILD_ID
-    LOGIN_ID=slurm-hpc-slurm-io-$${BUILD_ID_FULL:0:6}-login0
-    cat <<EOT >> test-vars.yml
+    DEPLOYMENT_NAME=lustre-new-vpc-$${BUILD_ID_FULL:0:6}
+    LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
+    cat <<EOT > test-vars.yml
     build_id: ${BUILD_ID}
     project: ${PROJECT_ID}
     zone: us-central1-a
     workspace: /workspace
     blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-with-new-vpc.yaml"
     blueprint_dir: blueprint-lustre-new-vcp
-    network: default
+    network: $${DEPLOYMENT_NAME}-net
     max_nodes: 5
     login_node: $${LOGIN_ID}
     partitions:
