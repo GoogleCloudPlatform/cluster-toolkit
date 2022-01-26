@@ -18,7 +18,7 @@ package reswriter
 
 import (
 	"fmt"
-	"hpc-toolkit/pkg/backend"
+	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
 	"io/ioutil"
 	"log"
@@ -603,7 +603,7 @@ func (s *MySuite) TestNumResources_PackerWriter(c *C) {
 }
 
 func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
-	backend := backend.GetBackendLocal()
+	blueprintio := blueprintio.GetBlueprintIOLocal()
 	testWriter := PackerWriter{}
 	// Empty Config
 	testWriter.writeResourceLevel(&config.YamlConfig{}, testDir)
@@ -615,15 +615,15 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 	blueprintName := "blueprints_TestWriteResourceLevel_PackerWriter"
 	testYamlConfig.BlueprintName = blueprintName
 	blueprintDir := path.Join(testDir, blueprintName)
-	if err := backend.CreateDirectory(blueprintDir); err != nil {
+	if err := blueprintio.CreateDirectory(blueprintDir); err != nil {
 		log.Fatal(err)
 	}
 	groupDir := path.Join(blueprintDir, "packerGroup")
-	if err := backend.CreateDirectory(groupDir); err != nil {
+	if err := blueprintio.CreateDirectory(groupDir); err != nil {
 		log.Fatal(err)
 	}
 	resourceDir := path.Join(groupDir, "testPackerResource")
-	if err := backend.CreateDirectory(resourceDir); err != nil {
+	if err := blueprintio.CreateDirectory(resourceDir); err != nil {
 		log.Fatal(err)
 	}
 

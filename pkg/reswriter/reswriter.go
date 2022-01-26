@@ -20,7 +20,7 @@ package reswriter
 import (
 	"embed"
 	"fmt"
-	"hpc-toolkit/pkg/backend"
+	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
 	"log"
 	"os"
@@ -78,7 +78,7 @@ func copyEmbedded(fs resutils.BaseFS, source string, dest string) error {
 }
 
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
-	backend := backend.GetBackendLocal()
+	blueprintio := blueprintio.GetBlueprintIOLocal()
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
 
@@ -102,11 +102,11 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 			// Check source type and copy
 			switch src := resource.Source; {
 			case resutils.IsLocalPath(src):
-				if err = backend.CopyFromPath(src, destPath); err != nil {
+				if err = blueprintio.CopyFromPath(src, destPath); err != nil {
 					log.Fatal(err)
 				}
 			case resutils.IsEmbeddedPath(src):
-				if err = backend.CreateDirectory(destPath); err != nil {
+				if err = blueprintio.CreateDirectory(destPath); err != nil {
 					log.Fatalf("failed to create resource path %s: %v", destPath, err)
 				}
 				if err = copyEmbedded(ResourceFS, src, destPath); err != nil {
@@ -131,9 +131,9 @@ func printInstructionsPreamble(kind string, path string) {
 
 // WriteBlueprint writes the blueprint using resources defined in config.
 func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
-	backend := backend.GetBackendLocal()
+	blueprintio := blueprintio.GetBlueprintIOLocal()
 	bpDirectoryPath := path.Join(bpDirectory, yamlConfig.BlueprintName)
-	if err := backend.CreateDirectory(bpDirectoryPath); err != nil {
+	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
 		log.Fatalf("failed to create a directory for blueprints: %v", err)
 	}
 

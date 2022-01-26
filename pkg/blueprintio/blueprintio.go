@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package backend
+package blueprintio
 
-// Backend interface for writing blueprints to a storage
-type Backend interface {
+// BlueprintIO interface for writing blueprints to a storage
+type BlueprintIO interface {
 	CreateDirectory(bpDirectoryPath string) error
 	CopyFromPath(src string, dst string) error
 }
 
-var backends = map[string]Backend{
+var blueprintios = map[string]BlueprintIO{
 	"local": new(Local),
 }
 
-// GetBackendLocal gets the instance writing blueprints to a local
-func GetBackendLocal() Backend {
-	return backends["local"]
+// GetBlueprintIOLocal gets the instance writing blueprints to a local
+func GetBlueprintIOLocal() BlueprintIO {
+	return blueprintios["local"]
 }

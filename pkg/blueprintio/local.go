@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package backend
+package blueprintio
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ func getAbsSourcePath(sourcePath string) string {
 	// Otherwise base it off of the CWD
 	cwd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("backend: %v", err)
+		log.Fatalf("blueprintio: %v", err)
 	}
 	return path.Join(cwd, sourcePath)
 }

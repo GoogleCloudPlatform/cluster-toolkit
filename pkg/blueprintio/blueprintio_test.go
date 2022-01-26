@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package backend
+package blueprintio
 
 import (
 	"fmt"
@@ -39,7 +39,7 @@ func Test(t *testing.T) {
 
 func setup() {
 	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_backend_test_%s", t.Format(time.RFC3339))
+	dirName := fmt.Sprintf("ghpc_blueprintio_test_%s", t.Format(time.RFC3339))
 	dir, err := ioutil.TempDir("", dirName)
 	if err != nil {
 		log.Fatalf("reswriter_test: %v", err)
@@ -58,22 +58,22 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func (s *MySuite) TestGetBackendLocal(c *C) {
-	backend := GetBackendLocal()
-	c.Assert(backend, Equals, backends["local"])
+func (s *MySuite) TestGetBlueprintIOLocal(c *C) {
+	blueprintio := GetBlueprintIOLocal()
+	c.Assert(blueprintio, Equals, blueprintios["local"])
 }
 
 func (s *MySuite) TestCreateDirectoryLocal(c *C) {
-	backend := GetBackendLocal()
+	blueprintio := GetBlueprintIOLocal()
 
 	// Try to create the exist directory
-	err := backend.CreateDirectory(testDir)
+	err := blueprintio.CreateDirectory(testDir)
 	expErr := "The directory already exists: .*"
 	c.Assert(err, ErrorMatches, expErr)
 
 	directoryName := "dir_TestCreateDirectoryLocal"
 	createdDir := path.Join(testDir, directoryName)
-	err = backend.CreateDirectory(createdDir)
+	err = blueprintio.CreateDirectory(createdDir)
 	c.Assert(err, IsNil)
 
 	_, err = os.Stat(createdDir)
@@ -94,24 +94,24 @@ func (s *MySuite) TestGetAbsSourcePath(c *C) {
 }
 
 func (s *MySuite) TestCopyFromPathLocal(c *C) {
-	backend := GetBackendLocal()
+	blueprintio := GetBlueprintIOLocal()
 	testSrcFilename := path.Join(testDir, "testSrc")
 	str := []byte("TestCopyFromPathLocal")
 	if err := os.WriteFile(testSrcFilename, str, 0755); err != nil {
-		log.Fatalf("backend_test: failed to create %s: %v", testSrcFilename, err)
+		log.Fatalf("blueprintio_test: failed to create %s: %v", testSrcFilename, err)
 	}
 
 	testDstFilename := path.Join(testDir, "testDst")
-	backend.CopyFromPath(testSrcFilename, testDstFilename)
+	blueprintio.CopyFromPath(testSrcFilename, testDstFilename)
 
 	src, err := ioutil.ReadFile(testSrcFilename)
 	if err != nil {
-		log.Fatalf("backend_test: failed to read %s: %v", testSrcFilename, err)
+		log.Fatalf("blueprintio_test: failed to read %s: %v", testSrcFilename, err)
 	}
 
 	dst, err := ioutil.ReadFile(testDstFilename)
 	if err != nil {
-		log.Fatalf("backend_test: failed to read %s: %v", testDstFilename, err)
+		log.Fatalf("blueprintio_test: failed to read %s: %v", testDstFilename, err)
 	}
 
 	c.Assert(string(src), Equals, string(dst))
