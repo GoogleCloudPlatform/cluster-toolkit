@@ -140,6 +140,15 @@
   ],
   "resources": [
     {
+      "type": "compute_disk",
+      "name": "boot_disk",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
       "type": "compute_instance",
       "name": "compute_vm",
       "provider": "google",

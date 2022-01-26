@@ -19,6 +19,18 @@ data "google_compute_image" "compute_image" {
   project = var.instance_image.project
 }
 
+resource "google_compute_disk" "boot_disk" {
+  count = var.instance_count
+
+  name = var.name_prefix != null ? (
+    "${var.name_prefix}-boot-disk-${count.index}") : (
+  "${var.deployment_name}-boot-disk-${count.index}")
+  image  = data.google_compute_image.compute_image.self_link
+  type   = var.disk_type
+  size   = var.disk_size_gb
+  labels = var.labels
+}
+
 resource "google_compute_instance" "compute_vm" {
   count = var.instance_count
 
@@ -31,11 +43,9 @@ resource "google_compute_instance" "compute_vm" {
   labels = var.labels
 
   boot_disk {
-    initialize_params {
-      image = data.google_compute_image.compute_image.self_link
-      type  = var.disk_type
-      size  = var.disk_size_gb
-    }
+    source      = google_compute_disk.boot_disk[count.index].self_link
+    device_name = google_compute_disk.boot_disk[count.index].name
+    auto_delete = true
   }
 
   network_interface {

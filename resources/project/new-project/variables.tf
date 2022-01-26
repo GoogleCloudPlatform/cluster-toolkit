@@ -39,3 +39,8 @@ variable "org_id" {
   description = "ID of the organization"
   type        = string
 }
+
+variable "labels" {
+  description = "Labels for the project. List key, value pairs."
+  type        = any
+}
