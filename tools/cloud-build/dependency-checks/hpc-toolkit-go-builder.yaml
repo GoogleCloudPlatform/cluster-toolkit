@@ -1,0 +1,114 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+timeout: 1200s
+steps:
+- name: golang:bullseye
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    make
+    make test-engine
+
+# Test go changes without Packer or Terraform installed
+- name: gcr.io/cloud-builders/docker
+  args:
+  - build
+  - -t
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+  - -f
+  - tools/cloud-build/dependency-checks/Dockerfile.precommit
+  - '.'
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    pre-commit install
+    echo -e "\n// TEST COMMENT" >> ghpc.go
+    git add -u
+    pre-commit run
+    git reset --hard HEAD
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+  entrypoint: /bin/bash
+  env:
+  - SKIP=packer-readme,terraform-readme,terraform_fmt,terraform_validate,terraform_tflint
+  args:
+  - -c
+  - |
+    pre-commit install
+    pre-commit run --all-files
+    git reset --hard HEAD
+
+# Test Terraform changes without Packer installed
+- name: gcr.io/cloud-builders/docker
+  args:
+  - build
+  - -t
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
+  - -f
+  - tools/cloud-build/dependency-checks/Dockerfile.terraform
+  - '.'
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    make tests
+    tflint --init
+    echo "# TEST COMMENT" >> resources/network/vpc/main.tf
+    git add -u
+    pre-commit run
+    git reset --hard HEAD
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:terraform
+  entrypoint: /bin/bash
+  env:
+  - SKIP=packer-readme
+  args:
+  - -c
+  - |
+    pre-commit install
+    pre-commit run --all-files
+    git reset --hard HEAD
+
+# Test Packer changes without Terraform installed
+- name: gcr.io/cloud-builders/docker
+  args:
+  - build
+  - -t
+  - us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
+  - -f
+  - tools/cloud-build/dependency-checks/Dockerfile.packer
+  - '.'
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    make
+    git status
+    echo "# TEST COMMENT" >> resources/packer/custom-image/image.pkr.hcl
+    git add -u
+    pre-commit run
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer
+  entrypoint: /bin/bash
+  env:
+  - SKIP=terraform-readme,terraform_fmt,terraform_validate,terraform_tflint
+  args:
+  - -c
+  - |
+    pre-commit install
+    pre-commit run --all-files
+    git reset --hard HEAD
