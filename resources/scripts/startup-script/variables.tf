@@ -26,7 +26,7 @@ variable "region" {
 
 
 variable "debug_file" {
-  description = "Path to an optional local to be written with 'startup_script_content'."
+  description = "Path to an optional local to be written with 'startup_script'."
   type        = string
   default     = null
 }

@@ -60,13 +60,12 @@ resource_groups:
     use:
     - network1
     - homefs
+    - startup
     settings:
       name_prefix: omnia-manager
       machine_type: c2-standard-60
       labels:
         ghpc_role: omnia-manager
-      metadata:
-        startup-script: $(startup.startup_script_content)
 
   - source: resources/compute/simple-instance
     kind: terraform
@@ -74,14 +73,13 @@ resource_groups:
     use:
     - network1
     - homefs
+    - startup
     settings:
       instance_count: 8
       name_prefix: omnia-compute
       machine_type: c2-standard-60
       labels:
         ghpc_role: omnia-compute
-      metadata:
-        startup-script: $(startup.startup_script_content)
 
   - source: resources/scripts/omnia-install
     kind: terraform

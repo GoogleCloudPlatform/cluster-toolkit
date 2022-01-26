@@ -107,6 +107,13 @@
       "required": false
     },
     {
+      "name": "startup_script",
+      "type": "string",
+      "description": "Startup script used on the instance",
+      "default": null,
+      "required": false
+    },
+    {
       "name": "zone",
       "type": "string",
       "description": "Compute Platform zone",

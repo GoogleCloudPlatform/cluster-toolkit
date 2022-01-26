@@ -57,10 +57,9 @@ resource_groups:
     use:
     - network1
     - homefs
+    - startup
     settings:
       name_prefix: workstation
       machine_type: e2-standard-8
-      metadata:
-        startup-script: $(startup.startup_script_content)
       labels:
         ghpc_role: workstation

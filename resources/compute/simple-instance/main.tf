@@ -14,6 +14,11 @@
  * limitations under the License.
 */
 
+locals {
+  startup_script = var.startup_script != null ? (
+  { startup_script = var.startup_script }) : null
+}
+
 data "google_compute_image" "compute_image" {
   family  = var.instance_image.family
   project = var.instance_image.project
@@ -65,5 +70,9 @@ resource "google_compute_instance" "compute_vm" {
     }
   }
 
-  metadata = var.network_storage == null ? var.metadata : merge({ network_storage = jsonencode(var.network_storage) }, var.metadata)
+  metadata = var.network_storage == null ? var.metadata : merge(
+    {
+      network_storage = jsonencode(var.network_storage),
+      startup_script  = var.startup_script,
+  }, local.startup_script, var.metadata)
 }
