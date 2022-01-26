@@ -23,10 +23,10 @@ locals {
       INSTALL_DIR = var.install_dir
       SPACK_URL   = var.spack_url
       SPACK_REF   = var.spack_ref
-      COMPILERS   = var.compilers
-      LICENSES    = var.licenses
-      PACKAGES    = var.packages
-      MIRRORS     = var.spack_cache_url
+      COMPILERS   = var.compilers == null ? [] : var.compilers
+      LICENSES    = var.licenses == null ? [] : var.licenses
+      PACKAGES    = var.packages == null ? [] : var.packages
+      MIRRORS     = var.spack_cache_url == null ? [] : var.spack_cache_url
     }
   )
 }
