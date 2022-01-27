@@ -120,7 +120,7 @@ variable "security" {
 }
 
 variable "network_self_link" {
-  description = "The self-link of the VPC network to where the system is connected.  Ignored if 'network_properties' is provided. One 'network_self_link' or 'network_properties' must be provided."
+  description = "The self-link of the VPC network to where the system is connected.  Ignored if 'network_properties' is provided. 'network_self_link' or 'network_properties' must be provided."
   type        = string
   default     = null
 }
@@ -135,7 +135,7 @@ variable "network_self_link" {
 # new: create a new network or use an existing one: true or false
 # nat: allow instances without external IP to communicate with the outside world: true or false
 variable "network_properties" {
-  description = "Network options. One 'network_self_link' or 'network_properties' must be provided."
+  description = "Network options. 'network_self_link' or 'network_properties' must be provided."
   type = object({
     routing = string
     tier    = string
@@ -150,7 +150,7 @@ variable "network_properties" {
 }
 
 variable "subnetwork_self_link" {
-  description = "The self-link of the VPC subnetwork to where the system is connected. Ignored if 'subnetwork_properties' is provided. One 'subnetwork_self_link' or 'subnetwork_properties' must be provided."
+  description = "The self-link of the VPC subnetwork to where the system is connected. Ignored if 'subnetwork_properties' is provided. 'subnetwork_self_link' or 'subnetwork_properties' must be provided."
   type        = string
   default     = null
 }
@@ -171,7 +171,7 @@ variable "subnetwork_address" {
 # id: existing subnetwork id, will be using if new is false
 # new: create a new subnetwork or use an existing one: true or false
 variable "subnetwork_properties" {
-  description = "Subnetwork properties. One 'subnetwork_self_link' or 'subnetwork_properties' must be provided."
+  description = "Subnetwork properties. 'subnetwork_self_link' or 'subnetwork_properties' must be provided."
   type = object({
     address = string
     private = bool
