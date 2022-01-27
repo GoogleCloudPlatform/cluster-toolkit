@@ -38,7 +38,7 @@ steps:
     workspace: /workspace
     blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-with-new-vpc.yaml"
     blueprint_dir: blueprint-lustre-new-vcp
-    network: $${DEPLOYMENT_NAME}-net
+    network: lustre-new-vpc
     max_nodes: 5
     login_node: $${LOGIN_ID}
     partitions:

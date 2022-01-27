@@ -29,6 +29,8 @@ resource_groups:
   - source: resources/network/vpc
     kind: terraform
     id: network1
+    settings:
+      network_name: lustre-new-vpc
 
   - source: resources/file-system/filestore
     kind: terraform
