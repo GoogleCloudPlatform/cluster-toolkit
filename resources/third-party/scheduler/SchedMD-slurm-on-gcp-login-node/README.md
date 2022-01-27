@@ -77,7 +77,7 @@ No resources.
 | <a name="input_login_instance_template"></a> [login\_instance\_template](#input\_login\_instance\_template) | Instance template to use to create controller instance | `string` | `null` | no |
 | <a name="input_login_machine_type"></a> [login\_machine\_type](#input\_login\_machine\_type) | Machine type to use for login node instances. | `string` | `"n2-standard-2"` | no |
 | <a name="input_login_node_count"></a> [login\_node\_count](#input\_login\_node\_count) | Number of login nodes in the cluster | `number` | `1` | no |
-| <a name="input_login_scopes"></a> [login\_scopes](#input\_login\_scopes) | Scopes to apply to login nodes. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/monitoring.write",<br>  "https://www.googleapis.com/auth/logging.write"<br>]</pre> | no |
+| <a name="input_login_scopes"></a> [login\_scopes](#input\_login\_scopes) | Scopes to apply to login nodes. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/monitoring.write",<br>  "https://www.googleapis.com/auth/logging.write",<br>  "https://www.googleapis.com/auth/devstorage.read_only"<br>]</pre> | no |
 | <a name="input_login_service_account"></a> [login\_service\_account](#input\_login\_service\_account) | Service Account for compute nodes. | `string` | `null` | no |
 | <a name="input_login_startup_script"></a> [login\_startup\_script](#input\_login\_startup\_script) | Custom startup script to run on the login node | `string` | `null` | no |
 | <a name="input_munge_key"></a> [munge\_key](#input\_munge\_key) | Specific munge key to use | `any` | `null` | no |

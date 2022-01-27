@@ -33,9 +33,9 @@ resource_groups:
   - source: resources/file-system/filestore
     kind: terraform
     id: homefs
+    use: [network1]
     settings:
       local_mount: /home
-      network_name: $(network1.network_name)
       labels:
         ghpc_role: storage-home
 
@@ -57,31 +57,29 @@ resource_groups:
   - source: resources/compute/simple-instance
     kind: terraform
     id: omnia_manager
+    use:
+    - network1
+    - homefs
+    - startup
     settings:
       name_prefix: omnia-manager
-      network_self_link: $(network1.network_self_link)
       machine_type: c2-standard-60
       labels:
         ghpc_role: omnia-manager
-      network_storage:
-      - $(homefs.network_storage)
-      metadata:
-        startup-script: $(startup.startup_script_content)
 
   - source: resources/compute/simple-instance
     kind: terraform
     id: omnia_compute
+    use:
+    - network1
+    - homefs
+    - startup
     settings:
       instance_count: 8
       name_prefix: omnia-compute
-      network_self_link: $(network1.network_self_link)
       machine_type: c2-standard-60
       labels:
         ghpc_role: omnia-compute
-      network_storage:
-      - $(homefs.network_storage)
-      metadata:
-        startup-script: $(startup.startup_script_content)
 
   - source: resources/scripts/omnia-install
     kind: terraform

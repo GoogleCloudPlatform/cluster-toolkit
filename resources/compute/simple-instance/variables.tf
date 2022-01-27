@@ -117,3 +117,9 @@ variable "metadata" {
   type        = map(string)
   default     = {}
 }
+
+variable "startup_script" {
+  description = "Startup script used on the instance"
+  type        = string
+  default     = null
+}

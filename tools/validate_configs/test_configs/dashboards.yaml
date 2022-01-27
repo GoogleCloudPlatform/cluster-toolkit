@@ -1,0 +1,69 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: dashboards
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: dashboards-test
+  region: europe-west4
+  zone: europe-west4-a
+
+resource_groups:
+- group: primary
+  resources:
+  - source: resources/monitoring/dashboard
+    kind: terraform
+    id: hpc_dash
+    settings:
+      widgets:
+      - |
+          {
+            "text": {
+              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "format": "MARKDOWN"
+            },
+            "title": "HPC Toolkit - TEST"
+          }
+      - |
+          {
+            "text": {
+              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "format": "MARKDOWN"
+            },
+            "title": "HPC Toolkit - TEST 2"
+          }
+  - source: resources/monitoring/dashboard
+    kind: terraform
+    id: empty_dash
+    settings:
+      base_dashboard: Empty
+      widgets:
+      - |
+          {
+            "text": {
+              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "format": "MARKDOWN"
+            },
+            "title": "HPC Toolkit - TEST"
+          }
+      - |
+          {
+            "text": {
+              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "format": "MARKDOWN"
+            },
+            "title": "HPC Toolkit - TEST 2"
+          }
+

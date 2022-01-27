@@ -1,92 +1,54 @@
-.PHONY: tests fmt vet test-engine test-resources test-examples packer \
-        packer-clean packer-check packer-docs add-google-license, \
-        check-tflint, check-pre-commit, install-deps-dev, ghpc-dev, \
-        check-deps, check-terraform-exists, check-packer-exists, \
-				check-terraform-version, check-packer-version
-RES = ./resources
-ENG = ./cmd/... ./pkg/...
-SRC = $(ENG) $(RES)/tests/...
-TF_VERSION_CHECK=$(shell expr `terraform version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 0.14)
-PK_VERSION_CHECK=$(shell expr `packer version | head -n1 | cut -f 2- -d ' ' | cut -c 2-` \>= 1.6)
-PACKER_FOLDERS=$(shell find ${RES} -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
+# PREAMBLE
+MIN_PACKER_VERSION=1.6 # for building images
+MIN_TERRAFORM_VERSION=1.0 # for deploying modules
+MIN_GOLANG_VERSION=1.16 # for building ghpc
 
-ghpc: check-deps $(shell find ./cmd ./pkg ./resources ghpc.go -type f)
+.PHONY: tests format add-google-license install-dev-deps \
+        warn-go-missing warn-terraform-missing warn-packer-missing \
+				warn-go-version warn-terraform-version warn-packer-version \
+				test-engine validate_configs packer-check \
+				terraform-format packer-format \
+        check-tflint check-pre-commit
+
+ENG = ./cmd/... ./pkg/...
+TERRAFORM_FOLDERS=$(shell find ./resources ./tools -type f -name "*.tf" -not -path '*/\.*' -printf '%h\n' | sort -u)
+PACKER_FOLDERS=$(shell find ./resources ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
+
+# RULES MEANT TO BE USED DIRECTLY
+
+ghpc: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg ghpc.go -type f)
 	$(info **************** building ghpc ************************)
 	go build ghpc.go
 
-ghpc-dev: fmt vet ghpc
+tests: warn-terraform-version warn-packer-version test-engine validate_configs packer-check
 
-tests: vet packer-check test-engine test-resources test-examples
-
-fmt:
+format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
-	go fmt $(SRC)
+	go fmt $(ENG)
 
-vet:
+install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit check-tflint
+	$(info *********** installing developer dependencies *********)
+	go install github.com/terraform-docs/terraform-docs@latest
+	go install golang.org/x/lint/golint@latest
+	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+	go install github.com/go-critic/go-critic/cmd/gocritic@latest
+	go install github.com/google/addlicense@latest
+
+ifeq (, $(shell which addlicense))
+add-google-license:
+	$(error "could not find addlicense in PATH, run: go install github.com/google/addlicense@latest")
+else
+add-google-license:
+	addlicense -c "Google LLC" -l apache .
+endif
+
+# RULES SUPPORTING THE ABOVE
+
+test-engine: warn-go-missing
 	$(info **************** vetting go code **********************)
-	go vet $(SRC)
-
-test-engine:
+	go vet $(ENG)
 	$(info **************** running ghpc unit tests **************)
 	go test -cover $(ENG) 2>&1 |  perl tools/enforce_coverage.pl
-
-test-resources:
-	$(info **************** running resources unit tests *********)
-	go test $(RES)/...
-
-test-examples: ghpc-dev
-	$(info *********** running basic integration tests ***********)
-	tools/test_examples/test_examples.sh
-
-packer: packer-clean packer-docs
-
-packer-clean:
-	$(info **************** formatting packer files **************)
-	@for folder in ${PACKER_FOLDERS}; do \
-	  echo "cleaning syntax for $${folder}";\
-		packer fmt $${folder};\
-	done
-
-packer-check:
-	$(info **************** checking packer syntax ***************)
-	@for folder in ${PACKER_FOLDERS}; do \
-	  echo "checking syntax for $${folder}"; \
-	  packer fmt -check $${folder}; \
-	done
-
-check-deps: check-terraform-exists check-terraform-version check-packer-exists check-packer-version
-
-ifeq (, $(shell which terraform))
-check-terraform-exists:
-	$(error ERROR: terraform not installed, visit https://learn.hashicorp.com/tutorials/terraform/install-cli)
-else
-check-terraform-exists:
-
-endif
-
-ifneq ("$(TF_VERSION_CHECK)", "1")
-check-terraform-version:
-	$(error ERROR: terraform version must be greater than 0.14, update at https://learn.hashicorp.com/tutorials/terraform/install-cli)
-else
-check-terraform-version:
-
-endif
-
-ifeq (, $(shell which packer))
-check-packer-exists:
-	$(error ERROR: packer not installed, visit https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
-else
-check-packer-exists:
-
-endif
-
-ifneq ("$(PK_VERSION_CHECK)", "1")
-check-packer-version:
-	$(error ERROR: packer version must be greater than 1.6.6, update at https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
-else
-check-packer-version:
-
-endif
 
 ifeq (, $(shell which pre-commit))
 check-pre-commit:
@@ -104,18 +66,126 @@ check-tflint:
 
 endif
 
-install-deps-dev: check-pre-commit check-tflint
-	$(info *********** installing developer dependencies *********)
-	go install github.com/terraform-docs/terraform-docs@latest
-	go install golang.org/x/lint/golint@latest
-	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-	go install github.com/go-critic/go-critic/cmd/gocritic@latest
-	go install github.com/google/addlicense@latest
+###################################
+# GO SECTION
+ifeq (, $(shell which go))
+## GO IS NOT PRESENT
+warn-go-missing:
+	$(error ERROR: could not find go in PATH, visit: https://go.dev/doc/install)
 
-ifeq (, $(shell which addlicense))
-add-google-license:
-	$(error "could not find addlicense in PATH, run: go install github.com/google/addlicense@latest")
+warn-go-version: warn-go-missing
+
 else
-add-google-license:
-	addlicense -c "Google LLC" -l apache .
+## GO IS PRESENT
+warn-go-missing:
+
+GO_VERSION_CHECK=$(shell expr `go version | cut -f 3 -d ' ' | cut -f 1 -d '-' | cut -c 3-` \>= $(MIN_GOLANG_VERSION))
+ifneq ("$(GO_VERSION_CHECK)", "1")
+warn-go-version:
+	$(warning WARNING: Go version must be greater than $(MIN_GOLANG_VERSION), update at  https://go.dev/doc/install)
+else
+warn-go-version:
+
 endif
+endif
+###################################
+# TERRAFORM SECTION
+ifeq (, $(shell which terraform))
+## TERRAFORM IS NOT PRESENT
+warn-terraform-missing:
+	$(warning WARNING: terraform not installed and deployments will not work in this machine, visit https://learn.hashicorp.com/tutorials/terraform/install-cli)
+
+warn-terraform-version: warn-terraform-missing
+
+terraform-format:
+	$(warning WARNING: not formatting terraform)
+
+validate_configs:
+	$(error ERROR: validate configs requires terraform)
+
+else
+## TERRAFORM IS PRESENT
+warn-terraform-missing:
+
+TF_VERSION_CHECK=$(shell expr `terraform version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= $(MIN_TERRAFORM_VERSION))
+ifneq ("$(TF_VERSION_CHECK)", "1")
+warn-terraform-version:
+	$(warning WARNING: terraform version must be greater than $(MIN_TERRAFORM_VERSION), update at https://learn.hashicorp.com/tutorials/terraform/install-cli)
+else
+warn-terraform-version:
+endif
+
+validate_configs: ghpc
+	$(info *********** running basic integration tests ***********)
+	tools/validate_configs/validate_configs.sh
+
+terraform-format:
+	$(info *********** cleaning terraform files syntax and generating terraform documentation ***********)
+	@for folder in ${TERRAFORM_FOLDERS}; do \
+	  echo "cleaning syntax for $${folder}";\
+		terraform fmt -list=true $${folder};\
+	done
+	@for folder in ${TERRAFORM_FOLDERS}; do \
+		terraform-docs markdown $${folder} --config .tfdocs-markdown.yaml;\
+		terraform-docs json $${folder} --config .tfdocs-json.yaml;\
+	done
+
+endif
+# END OF TERRAFORM SECTION
+###################################
+# PACKER SECTION
+ifeq (, $(shell which packer))
+## PACKER IS NOT PRESENT
+warn-packer-missing:
+	$(warning WARNING: packer not installed, visit https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
+
+warn-packer-version: warn-packer-missing
+
+packer-check: warn-packer-missing
+	$(warning WARNING: packer not installed, not checking packer code)
+
+packer-format: warn-packer-missing
+	$(warning WARNING: packer not installed, not formatting packer code)
+
+else
+## PACKER IS PRESENT
+warn-packer-missing:
+
+PK_VERSION_CHECK=$(shell expr `packer version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= $(MIN_PACKER_VERSION))
+ifneq ("$(PK_VERSION_CHECK)", "1")
+### WRONG PACKER VERSION, MAY ALSO MEAN THE USER HAS SOME OTHER PACKER TOOL
+warn-packer-version:
+	$(warning WARNING: packer version must be greater than $(MIN_PACKER_VERSION), update at https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
+
+packer-check: warn-packer-version
+	$(warning WARNING: wrong packer version, not checking packer code)
+
+packer-format: warn-packer-version
+	$(warning WARNING: wrong packer version, not formatting packer code)
+
+else
+### PACKER INSTALLED WITH THE RIGHT VERSION
+warn-packer-version:
+
+packer-check:
+	$(info **************** checking packer syntax ***************)
+	@for folder in ${PACKER_FOLDERS}; do \
+	  echo "checking syntax for $${folder}"; \
+	  packer fmt -check $${folder}; \
+	done
+
+packer-format:
+	$(info **************** formatting packer files and generating packer documentation **************)
+	@for folder in ${PACKER_FOLDERS}; do \
+	  echo -e "cleaning syntax for $${folder}\n";\
+		packer fmt $${folder};\
+	done
+	@for folder in ${PACKER_FOLDERS}; do \
+		terraform-docs markdown $${folder} --config .tfdocs-markdown.yaml;\
+		terraform-docs json $${folder} --config .tfdocs-json.yaml;\
+	done
+
+endif
+endif
+# END OF PACKER SECTION
+

@@ -10,10 +10,12 @@ manner. The HPC Toolkit is designed to be highly customizable and extensible,
 and intends to address the HPC deployment needs of a broad range of customers.
 
 ## Dependencies
-* [Terraform](https://www.terraform.io/downloads.html): version 0.14 or greater
-* [Packer](https://www.packer.io/downloads): version 1.6.0 or greater
-* [golang](https://golang.org/doc/install)
+* make
+* git
+* [golang](https://golang.org/doc/install): version 1.16 or greater, used to build ghpc.
   * To setup GOPATH and development environment: `export PATH=$PATH:$(go env GOPATH)/bin`
+* [Terraform](https://www.terraform.io/downloads.html): version 1.0.0 or greater, used to deploy blueprints.
+* [Packer](https://www.packer.io/downloads): version 1.6.0 or greater, used to build images.
 
 ## Build and Install
 Simply run `make` in the root directory.
@@ -34,7 +36,11 @@ config template to include your GCP project ID then run the following command:
 ```
 
 The blueprint directory, named as the `blueprint_name` field from the input
-config will be created in the same directory as ghpc.
+config will be created in the same directory as ghpc. The output directory can be specified by -o flag.
+
+```
+./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
+```
 
 To deploy the blueprint, use terraform in the resource group directory:
 ```

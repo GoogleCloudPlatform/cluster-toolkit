@@ -1,0 +1,113 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: 2-filestore-4-instances
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: 2fs-4vm
+  region: europe-west4
+  zone: europe-west4-a
+
+resource_groups:
+- group: infrastructure
+  resources:
+  - source: ./resources/network/vpc
+    kind: terraform
+    id: network
+
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: homefs
+    use: [network]
+    settings:
+      name: homefs
+      local_mount: /home
+      labels:
+        ghpc_role: storage-home
+
+  - source: ./resources/file-system/filestore
+    kind: terraform
+    id: apps
+    use: [network]
+    settings:
+      name: apps
+      local_mount: /shared
+      labels:
+        ghpc_role: storage-apps
+
+  - source: ./resources/scripts/startup-script
+    kind: terraform
+    id: startup
+    settings:
+      runners:
+        - type: shell
+          source: "modules/startup-script/examples/install_ansible.sh"
+          destination: "install_ansible.sh"
+        - type: shell
+          source: "modules/filestore/scripts/install-nfs.sh"
+          destination: "install-nfs.sh"
+        - type: "ansible-local"
+          source: "modules/startup-script/examples/mount.yaml"
+          destination: "mount.yaml"
+
+  - source: ./resources/compute/simple-instance
+    kind: terraform
+    id: license-server-1
+    use: [network]
+    settings:
+      name_prefix: ls1
+      machine_type: e2-standard-4
+      labels:
+        ghpc_role: license
+
+  - source: resources/compute/simple-instance
+    kind: terraform
+    id: license-server-2
+    use: [network]
+    settings:
+      name_prefix: ls2
+      machine_type: e2-standard-4
+      labels:
+        ghpc_role: license
+
+  - source: resources/compute/simple-instance
+    kind: terraform
+    id: head-node
+    use:
+    - network
+    - homefs
+    - apps
+    settings:
+      name_prefix: head-node
+      machine_type: c2-standard-30
+      labels:
+        ghpc_role: head-node
+      metadata:
+        startup-script: $(startup.startup_script)
+
+  - source: resources/compute/simple-instance
+    kind: terraform
+    id: compute
+    use:
+    - network
+    - homefs
+    - apps
+    - startup
+    settings:
+      name_prefix: compute
+      machine_type: c2-standard-60
+      instance_count: 2
+      labels:
+        ghpc_role: compute

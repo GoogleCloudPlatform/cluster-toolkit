@@ -42,13 +42,13 @@ variable "filestore_share_name" {
 }
 
 variable "local_mount" {
-  description = "Mountpoint for this filestore instance"
+  description = "Mountpoint for this filestore instance."
   type        = string
   default     = "/shared"
 }
 
 variable "size_gb" {
-  description = "Storage size gb"
+  description = "Storage size of the filestore instance in GB."
   type        = number
   default     = 2660
 }

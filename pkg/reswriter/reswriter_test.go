@@ -18,6 +18,7 @@ package reswriter
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
 	"io/ioutil"
 	"log"
@@ -70,7 +71,7 @@ func teardown() {
 	os.RemoveAll(testDir)
 }
 
-// Test Data Producer
+// Test Data Producers
 func getYamlConfigForTest() config.YamlConfig {
 	testResourceSource := path.Join(testDir, terraformResourceDir)
 	testResource := config.Resource{
@@ -102,6 +103,14 @@ func getYamlConfigForTest() config.YamlConfig {
 	return testYamlConfig
 }
 
+func createTestApplyFunctions(config config.YamlConfig) [][]map[string]string {
+	applyFuncs := make([][]map[string]string, len(config.ResourceGroups))
+	for iGrp, group := range config.ResourceGroups {
+		applyFuncs[iGrp] = make([]map[string]string, len(group.Resources))
+	}
+	return applyFuncs
+}
+
 // Tests
 
 // reswriter.go
@@ -126,9 +135,8 @@ func (s *MySuite) TestCopyEmbedded(c *C) {
 func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	blueprintName := "blueprints_TestWriteBlueprint"
-	blueprintDir := path.Join(testDir, blueprintName)
-	testYamlConfig.BlueprintName = blueprintDir
-	WriteBlueprint(&testYamlConfig)
+	testYamlConfig.BlueprintName = blueprintName
+	WriteBlueprint(&testYamlConfig, testDir)
 }
 
 func (s *MySuite) TestFlattenInterfaceMap(c *C) {
@@ -279,27 +287,6 @@ func (s *MySuite) TestUpdateStrings(c *C) {
 	testHandlePrimitivesHelper(
 		c, yamlConfig.ResourceGroups[0].Resources[0].Settings)
 
-}
-
-func (s *MySuite) TestCreateBlueprintDirectory(c *C) {
-	blueprintName := "blueprints_TestCreateBlueprintDirectory"
-	blueprintDir := path.Join(testDir, blueprintName)
-	createBlueprintDirectory(blueprintDir)
-	_, err := os.Stat(blueprintDir)
-	c.Assert(err, IsNil)
-}
-
-func (s *MySuite) TestGetAbsSourcePath(c *C) {
-	// Already abs path
-	gotPath := getAbsSourcePath(testDir)
-	c.Assert(gotPath, Equals, testDir)
-
-	// Relative path
-	relPath := "relative/path"
-	cwd, err := os.Getwd()
-	c.Assert(err, IsNil)
-	gotPath = getAbsSourcePath(relPath)
-	c.Assert(gotPath, Equals, path.Join(cwd, relPath))
 }
 
 // tfwriter.go
@@ -517,6 +504,23 @@ func (s *MySuite) TestWriteMain(c *C) {
 	exists, err = stringExistsInFile("a_bucket", mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
+
+	// Test with WrapSettingsWith
+	testResourceWithWrap := config.Resource{
+		ID: "test_resource_with_wrap",
+		WrapSettingsWith: map[string][]string{
+			"wrappedSetting": []string{"list(flatten(", "))"},
+		},
+		Settings: map[string]interface{}{
+			"wrappedSetting": []interface{}{"val1", "val2"},
+		},
+	}
+	testResources = append(testResources, testResourceWithWrap)
+	err = writeMain(testResources, testBackend, testMainDir)
+	c.Assert(err, IsNil)
+	exists, err = stringExistsInFile("list(flatten(", mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
 }
 
 func (s *MySuite) TestWriteVariables(c *C) {
@@ -599,26 +603,27 @@ func (s *MySuite) TestNumResources_PackerWriter(c *C) {
 }
 
 func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
+	blueprintio := blueprintio.GetBlueprintIOLocal()
 	testWriter := PackerWriter{}
 	// Empty Config
-	testWriter.writeResourceLevel(&config.YamlConfig{})
+	testWriter.writeResourceLevel(&config.YamlConfig{}, testDir)
 
 	// No Packer resources
 	testYamlConfig := getYamlConfigForTest()
-	testWriter.writeResourceLevel(&testYamlConfig)
+	testWriter.writeResourceLevel(&testYamlConfig, testDir)
 
 	blueprintName := "blueprints_TestWriteResourceLevel_PackerWriter"
+	testYamlConfig.BlueprintName = blueprintName
 	blueprintDir := path.Join(testDir, blueprintName)
-	testYamlConfig.BlueprintName = blueprintDir
-	createBlueprintDirectory(blueprintDir)
+	if err := blueprintio.CreateDirectory(blueprintDir); err != nil {
+		log.Fatal(err)
+	}
 	groupDir := path.Join(blueprintDir, "packerGroup")
-	err := os.Mkdir(groupDir, 0755)
-	if err != nil {
+	if err := blueprintio.CreateDirectory(groupDir); err != nil {
 		log.Fatal(err)
 	}
 	resourceDir := path.Join(groupDir, "testPackerResource")
-	err = os.Mkdir(resourceDir, 0755)
-	if err != nil {
+	if err := blueprintio.CreateDirectory(resourceDir); err != nil {
 		log.Fatal(err)
 	}
 
@@ -631,8 +636,8 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 			Name:      "packerGroup",
 			Resources: []config.Resource{testPackerResource},
 		})
-	testWriter.writeResourceLevel(&testYamlConfig)
-	_, err = os.Stat(path.Join(resourceDir, packerAutoVarFilename))
+	testWriter.writeResourceLevel(&testYamlConfig, testDir)
+	_, err := os.Stat(path.Join(resourceDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 

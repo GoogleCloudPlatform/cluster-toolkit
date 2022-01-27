@@ -42,8 +42,20 @@
       "description": "The URI of the VPC being created"
     },
     {
-      "name": "primary_subnetwork",
+      "name": "subnetwork",
       "description": "The subnetwork in the specified primary region"
+    },
+    {
+      "name": "subnetwork_address",
+      "description": "The subnetwork address in the specified primary region"
+    },
+    {
+      "name": "subnetwork_name",
+      "description": "The name of the subnetwork in the specified primary region"
+    },
+    {
+      "name": "subnetwork_self_link",
+      "description": "The subnetwork self-link in the specified primary region"
     }
   ],
   "providers": [

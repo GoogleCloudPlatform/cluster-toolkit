@@ -9,7 +9,14 @@ This resource creates startup scripts by chaining together a list runners. Each 
 - `source`: (Optional) A path to the file or data you want to upload. Must be defined if `content` is not. The source path is relative to the resource group directory in the blueprint. Scripts distributed as part of modules should start with modules/ followed by the name of the module used (not to be confused with the resource ID) and the path to the script. Examples shown below. To reference any other source file, an absolute path must be used.
 - `args`: (Optional) Arguments to be passed to shell scripts. This will not be used for other runner types.
 
-Runners will be uploaded to a [GCS bucket](https://cloud.google.com/storage/docs/creating-buckets). This bucket will be created by this resource and named as `${var.deployment_name}-startup-scripts-${random_id}`.  VMs using the startup script created by this resource will pull the runners content from a GCS bucket and therefore must have access to GCS.
+Runners will be uploaded to a [GCS bucket](https://cloud.google.com/storage/docs/creating-buckets).
+This bucket will be created by this resource and named as
+`${var.deployment_name}-startup-scripts-${random_id}`. VMs using the startup
+script created by this resource will pull the runners content from a GCS bucket
+and therefore must have access to GCS.
+
+To ensure access to GCS, set the following OAuth scope on the instance using
+the startup scripts: "https://www.googleapis.com/auth/devstorage.read_only".
 
 For more information on how to use startup scripts on Google Cloud Platform, please refer to [this document](https://cloud.google.com/compute/docs/instances/startup-scripts/linux).
 
@@ -110,8 +117,9 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script\_content'. | `string` | `null` | no |
+| <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script'. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. List key, value pairs. | `any` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
 | <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM.<br>    Runners can be of type ansible-local, shell or data.<br>    A runner must specify one of 'source' or 'content'.<br>    All runners must specify 'destination'. If 'destination' does not include a<br>    path, it will be copied in a temporary folder and deleted after running.<br>    Runners may also pass 'args', which will be passed as argument to shell runners only. | `list(map(string))` | `[]` | no |
 
@@ -119,5 +127,5 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_startup_script_content"></a> [startup\_script\_content](#output\_startup\_script\_content) | script to load and run all runners, as a string value. |
+| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | script to load and run all runners, as a string value. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

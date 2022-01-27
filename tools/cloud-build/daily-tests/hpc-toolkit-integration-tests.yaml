@@ -14,6 +14,41 @@
 
 timeout: 7200s
 steps:
+- name: golang
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    cd /workspace
+    make
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  args:
+  - -c
+  - |
+    BUILD_ID_FULL=$BUILD_ID
+    DEPLOYMENT_NAME=lustre-new-vpc-$${BUILD_ID_FULL:0:6}
+    LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
+    cat <<EOT > test-vars.yml
+    build_id: ${BUILD_ID}
+    project: ${PROJECT_ID}
+    zone: us-central1-a
+    workspace: /workspace
+    blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-with-new-vpc.yaml"
+    blueprint_dir: blueprint-lustre-new-vcp
+    network: lustre-new-vpc
+    max_nodes: 5
+    login_node: $${LOGIN_ID}
+    partitions:
+    - compute
+    mounts:
+    - /home
+    - /scratch
+    EOT
+    ansible-playbook tools/cloud-build/daily-tests/daily-tests.yml \
+      --user=sa_106486320838376751393 --extra-vars="@test-vars.yml"
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
   env:
@@ -23,13 +58,13 @@ steps:
   - |
     BUILD_ID_FULL=$BUILD_ID
     LOGIN_ID=slurm-hpc-slurm-io-$${BUILD_ID_FULL:0:6}-login0
-    cat <<EOT >> test-vars.yml
+    cat <<EOT > test-vars.yml
     build_id: ${BUILD_ID}
     project: ${PROJECT_ID}
     zone: us-central1-a
     workspace: /workspace
     blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io.yaml"
-    blueprint_dir: blueprint
+    blueprint_dir: blueprint-cluster-high-io
     network: default
     max_nodes: 5
     login_node: $${LOGIN_ID}
@@ -42,9 +77,3 @@ steps:
     EOT
     ansible-playbook tools/cloud-build/daily-tests/daily-tests.yml \
       --user=sa_106486320838376751393 --extra-vars="@test-vars.yml"
-
-artifacts:
-  objects:
-    location: gs://hpc-toolkit-daily-test-logs/${BUILD_ID}
-    paths:
-    - blueprint.tgz

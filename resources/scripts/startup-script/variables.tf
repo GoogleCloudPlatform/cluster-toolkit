@@ -26,9 +26,14 @@ variable "region" {
 
 
 variable "debug_file" {
-  description = "Path to an optional local to be written with 'startup_script_content'."
+  description = "Path to an optional local to be written with 'startup_script'."
   type        = string
   default     = null
+}
+
+variable "labels" {
+  description = "Labels for the created GCS bucket. List key, value pairs."
+  type        = any
 }
 
 variable "runners" {

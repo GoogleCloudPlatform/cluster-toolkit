@@ -5,7 +5,7 @@
     {
       "name": "debug_file",
       "type": "string",
-      "description": "Path to an optional local to be written with 'startup_script_content'.",
+      "description": "Path to an optional local to be written with 'startup_script'.",
       "default": null,
       "required": false
     },
@@ -13,6 +13,13 @@
       "name": "deployment_name",
       "type": "string",
       "description": "Name of the HPC deployment, used to name GCS bucket for startup scripts.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "labels",
+      "type": "any",
+      "description": "Labels for the created GCS bucket. List key, value pairs.",
       "default": null,
       "required": true
     },
@@ -34,7 +41,7 @@
   "modules": [],
   "outputs": [
     {
-      "name": "startup_script_content",
+      "name": "startup_script",
       "description": "script to load and run all runners, as a string value."
     }
   ],

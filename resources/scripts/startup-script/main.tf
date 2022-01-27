@@ -63,6 +63,7 @@ resource "google_storage_bucket" "configs_bucket" {
   uniform_bucket_level_access = true
   location                    = var.region
   storage_class               = "REGIONAL"
+  labels                      = var.labels
 }
 
 resource "google_storage_bucket_object" "scripts" {

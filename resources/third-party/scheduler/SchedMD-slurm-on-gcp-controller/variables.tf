@@ -53,7 +53,8 @@ variable "compute_node_scopes" {
   type        = list(string)
   default = [
     "https://www.googleapis.com/auth/monitoring.write",
-    "https://www.googleapis.com/auth/logging.write"
+    "https://www.googleapis.com/auth/logging.write",
+    "https://www.googleapis.com/auth/devstorage.read_only",
   ]
 }
 
@@ -117,7 +118,7 @@ variable "network_storage" {
   default = []
 }
 
-variable "partitions" {
+variable "partition" {
   description = "An array of configurations for specifying multiple machine types residing in their own Slurm partitions."
   type = list(object({
     name                 = string,
@@ -199,7 +200,10 @@ variable "shared_vpc_host_project" {
 variable "controller_scopes" {
   description = "Scopes to apply to the controller"
   type        = list(string)
-  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+  default = [
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/devstorage.read_only",
+  ]
 }
 
 variable "controller_service_account" {

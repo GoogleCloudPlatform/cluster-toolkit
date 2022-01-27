@@ -94,7 +94,7 @@ module "cloud_router" {
 
 resource "google_compute_address" "nat_ips" {
   count  = 2
-  name   = "nat-ips-${count.index}"
+  name   = "${local.network_name}-nat-ips-${count.index}"
   region = local.region
 }
 

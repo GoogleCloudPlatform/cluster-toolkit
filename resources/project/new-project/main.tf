@@ -24,4 +24,5 @@ module "project_factory" {
   org_id                  = var.org_id
   billing_account         = var.billing_account
   default_service_account = var.default_service_account
+  labels                  = var.labels
 }

@@ -1,0 +1,77 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: overwrite_labels
+
+vars:
+  project_id: test_project
+  deployment_name: test_label_merge
+  region: europe-west4
+  zone: europe-west4-a
+  labels:
+    ghpc_role: global_role
+    ghpc_blueprint: custom_blueprint
+    ghpc_deployment: custom_deployment
+
+resource_groups:
+- group: infrastructure
+  resources:
+  - source: resources/network/vpc
+    kind: terraform
+    id: network
+
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: homefs
+    use: [network]
+    settings:
+      name: homefs
+      local_mount: /home
+      size_gb: 3000
+      labels:
+        custom_label: some_value
+
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: homefs1
+    use: [network]
+    settings:
+      name: homefs
+      local_mount: /home
+      size_gb: 3000
+      labels:
+        ghpc_role: storage-home
+
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: homefs2
+    use: [network]
+    settings:
+      name: homefs
+      local_mount: /home
+      size_gb: 3000
+      labels:
+        ghpc_deployment: storage_deployment
+
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: homefs3
+    use: [network]
+    settings:
+      name: homefs
+      local_mount: /home
+      size_gb: 3000
+      labels:
+        ghpc_blueprint: storage_blueprint
+

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-output "startup_script_content" {
+output "startup_script" {
   description = "script to load and run all runners, as a string value."
   value       = local.stdlib
 }

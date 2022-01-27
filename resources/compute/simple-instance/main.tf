@@ -14,9 +14,28 @@
  * limitations under the License.
 */
 
+locals {
+  startup_script = var.startup_script != null ? (
+  { startup-script = var.startup_script }) : {}
+  network_storage = var.network_storage != null ? (
+  { network_storage = jsonencode(var.network_storage) }) : {}
+}
+
 data "google_compute_image" "compute_image" {
   family  = var.instance_image.family
   project = var.instance_image.project
+}
+
+resource "google_compute_disk" "boot_disk" {
+  count = var.instance_count
+
+  name = var.name_prefix != null ? (
+    "${var.name_prefix}-boot-disk-${count.index}") : (
+  "${var.deployment_name}-boot-disk-${count.index}")
+  image  = data.google_compute_image.compute_image.self_link
+  type   = var.disk_type
+  size   = var.disk_size_gb
+  labels = var.labels
 }
 
 resource "google_compute_instance" "compute_vm" {
@@ -31,11 +50,9 @@ resource "google_compute_instance" "compute_vm" {
   labels = var.labels
 
   boot_disk {
-    initialize_params {
-      image = data.google_compute_image.compute_image.self_link
-      type  = var.disk_type
-      size  = var.disk_size_gb
-    }
+    source      = google_compute_disk.boot_disk[count.index].self_link
+    device_name = google_compute_disk.boot_disk[count.index].name
+    auto_delete = true
   }
 
   network_interface {
@@ -55,5 +72,5 @@ resource "google_compute_instance" "compute_vm" {
     }
   }
 
-  metadata = var.network_storage == null ? var.metadata : merge({ network_storage = jsonencode(var.network_storage) }, var.metadata)
+  metadata = merge(local.network_storage, local.startup_script, var.metadata)
 }
