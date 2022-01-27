@@ -33,7 +33,7 @@
     {
       "name": "local_mount",
       "type": "string",
-      "description": "Mountpoint for this filestore instance",
+      "description": "Mountpoint for this filestore instance.",
       "default": "/shared",
       "required": false
     },
@@ -54,7 +54,7 @@
     {
       "name": "size_gb",
       "type": "number",
-      "description": "Storage size gb",
+      "description": "Storage size of the filestore instance in GB.",
       "default": 2660,
       "required": false
     },

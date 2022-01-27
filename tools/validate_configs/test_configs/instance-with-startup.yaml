@@ -58,7 +58,7 @@ resource_groups:
     settings:
       machine_type: e2-standard-8
       metadata:
-        startup-script: $(startup.startup_script_content)
+        startup-script: $(startup.startup_script)
 
   - source: ./resources/scripts/wait-for-startup
     kind: terraform

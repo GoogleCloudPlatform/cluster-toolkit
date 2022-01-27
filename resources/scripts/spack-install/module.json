@@ -12,7 +12,7 @@
     {
       "name": "install_dir",
       "type": "string",
-      "description": "Directory to install spack into",
+      "description": "Directory to install spack into.",
       "default": "/apps/spack",
       "required": false
     },
@@ -26,42 +26,42 @@
     {
       "name": "packages",
       "type": "list(string)",
-      "description": "Defines packages for spack to install (in order)",
+      "description": "Defines packages for spack to install (in order).",
       "default": [],
       "required": false
     },
     {
       "name": "project_id",
       "type": "string",
-      "description": "Project in which the HPC deployment will be created",
+      "description": "Project in which the HPC deployment will be created.",
       "default": null,
       "required": true
     },
     {
       "name": "spack_cache_url",
       "type": "list(object({\n    mirror_name = string\n    mirror_url  = string\n  }))",
-      "description": "List of buildcaches for spack",
+      "description": "List of buildcaches for spack.",
       "default": null,
       "required": false
     },
     {
       "name": "spack_ref",
       "type": "string",
-      "description": "Git ref to checkout for spack",
+      "description": "Git ref to checkout for spack.",
       "default": "develop",
       "required": false
     },
     {
       "name": "spack_url",
       "type": "string",
-      "description": "URL to clone the spack repo from",
+      "description": "URL to clone the spack repo from.",
       "default": "https://github.com/spack/spack",
       "required": false
     },
     {
       "name": "zone",
       "type": "string",
-      "description": "The GCP zone where the instance is running",
+      "description": "The GCP zone where the instance is running.",
       "default": null,
       "required": true
     }
@@ -70,11 +70,11 @@
   "outputs": [
     {
       "name": "controller_startup_script",
-      "description": "Path to the Spack installation script"
+      "description": "Path to the Spack installation script, duplicate for SLURM controller."
     },
     {
       "name": "startup_script",
-      "description": "Path to the Spack installation script"
+      "description": "Path to the Spack installation script."
     }
   ],
   "providers": [],

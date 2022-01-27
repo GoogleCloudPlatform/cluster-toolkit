@@ -15,11 +15,11 @@
  */
 
 output "startup_script" {
-  description = "Path to the Spack installation script"
+  description = "Path to the Spack installation script."
   value       = local.script_content
 }
 
 output "controller_startup_script" {
-  description = "Path to the Spack installation script"
+  description = "Path to the Spack installation script, duplicate for SLURM controller."
   value       = local.script_content
 }

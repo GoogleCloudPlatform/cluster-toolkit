@@ -65,8 +65,8 @@ resource_groups:
     - compute_partition
     settings:
       login_node_count: 1
-      controller_startup_script: $(startup.startup_script_content)
-      compute_startup_script: $(startup.startup_script_content)
+      controller_startup_script: $(startup.startup_script)
+      compute_startup_script: $(startup.startup_script)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
@@ -76,4 +76,4 @@ resource_groups:
     - homefs
     - slurm_controller
     settings:
-      login_startup_script: $(startup.startup_script_content)
+      login_startup_script: $(startup.startup_script)
