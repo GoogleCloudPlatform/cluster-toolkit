@@ -127,16 +127,16 @@
       "required": false
     },
     {
-      "name": "network",
+      "name": "network_properties",
       "type": "object({\n    routing = string\n    tier    = string\n    id      = string\n    auto    = bool\n    mtu     = number\n    new     = bool\n    nat     = bool\n  })",
-      "description": "Network options",
+      "description": "Network options. One 'network_self_link' or 'network_properties' must be provided.",
       "default": null,
       "required": false
     },
     {
       "name": "network_self_link",
       "type": "string",
-      "description": "The self-link of the VPC network to where the system is connected.",
+      "description": "The self-link of the VPC network to where the system is connected.  Ignored if 'network_properties' is provided. One 'network_self_link' or 'network_properties' must be provided.",
       "default": null,
       "required": false
     },
@@ -205,23 +205,23 @@
       "required": false
     },
     {
-      "name": "subnetwork",
-      "type": "object({\n    address = string\n    private = bool\n    id      = string\n    new     = bool\n  })",
-      "description": "Subnetwork properties. Ignored if subnetwork_self_link is supplied.",
+      "name": "subnetwork_address",
+      "type": "string",
+      "description": "The IP range of internal addresses for the subnetwork. Ignored if 'subnetwork_properties' is provided.",
       "default": null,
       "required": false
     },
     {
-      "name": "subnetwork_address",
-      "type": "string",
-      "description": "The IP range of internal addresses for the subnetwork",
+      "name": "subnetwork_properties",
+      "type": "object({\n    address = string\n    private = bool\n    id      = string\n    new     = bool\n  })",
+      "description": "Subnetwork properties. One 'subnetwork_self_link' or 'subnetwork_properties' must be provided.",
       "default": null,
       "required": false
     },
     {
       "name": "subnetwork_self_link",
       "type": "string",
-      "description": "The self-link of the VPC subnetwork to where the system is connected.",
+      "description": "The self-link of the VPC subnetwork to where the system is connected. Ignored if 'subnetwork_properties' is provided. One 'subnetwork_self_link' or 'subnetwork_properties' must be provided.",
       "default": null,
       "required": false
     },

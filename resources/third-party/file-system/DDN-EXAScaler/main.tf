@@ -14,20 +14,23 @@
  * limitations under the License.
  */
 locals {
+
+  network_id = var.network_self_link != null ? regex("https://www.googleapis.com/compute/v\\d/(.*)", var.network_self_link)[0] : null
   named_net = {
     routing = "REGIONAL"
     tier    = "STANDARD"
-    id      = regex("https://www.googleapis.com/compute/v\\d/(.*)", var.network_self_link)[0]
+    id      = local.network_id
     auto    = false
     mtu     = 1500
     new     = false
     nat     = false
   }
 
+  subnetwork_id = var.subnetwork_self_link != null ? regex("https://www.googleapis.com/compute/v\\d/(.*)", var.subnetwork_self_link)[0] : null
   named_subnet = {
     address = var.subnetwork_address
     private = true
-    id      = regex("https://www.googleapis.com/compute/v\\d/(.*)", var.subnetwork_self_link)[0]
+    id      = local.subnetwork_id
     new     = false
   }
 }
@@ -45,8 +48,8 @@ module "ddn_exascaler" {
   security        = var.security
   service_account = var.service_account
   waiter          = var.waiter
-  network         = var.network == null ? local.named_net : var.network
-  subnetwork      = var.subnetwork == null ? local.named_subnet : var.subnetwork
+  network         = var.network_properties == null ? local.named_net : var.network_properties
+  subnetwork      = var.subnetwork_properties == null ? local.named_subnet : var.subnetwork_properties
   boot            = var.boot
   image           = var.image
   mgs             = var.mgs

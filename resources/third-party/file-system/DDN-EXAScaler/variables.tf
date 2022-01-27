@@ -120,7 +120,7 @@ variable "security" {
 }
 
 variable "network_self_link" {
-  description = "The self-link of the VPC network to where the system is connected."
+  description = "The self-link of the VPC network to where the system is connected.  Ignored if 'network_properties' is provided. One 'network_self_link' or 'network_properties' must be provided."
   type        = string
   default     = null
 }
@@ -134,8 +134,8 @@ variable "network_self_link" {
 # mtu: maximum transmission unit in bytes: 1460 - 1500
 # new: create a new network or use an existing one: true or false
 # nat: allow instances without external IP to communicate with the outside world: true or false
-variable "network" {
-  description = "Network options"
+variable "network_properties" {
+  description = "Network options. One 'network_self_link' or 'network_properties' must be provided."
   type = object({
     routing = string
     tier    = string
@@ -150,13 +150,13 @@ variable "network" {
 }
 
 variable "subnetwork_self_link" {
-  description = "The self-link of the VPC subnetwork to where the system is connected."
+  description = "The self-link of the VPC subnetwork to where the system is connected. Ignored if 'subnetwork_properties' is provided. One 'subnetwork_self_link' or 'subnetwork_properties' must be provided."
   type        = string
   default     = null
 }
 
 variable "subnetwork_address" {
-  description = "The IP range of internal addresses for the subnetwork"
+  description = "The IP range of internal addresses for the subnetwork. Ignored if 'subnetwork_properties' is provided."
   type        = string
   default     = null
 }
@@ -170,8 +170,8 @@ variable "subnetwork_address" {
 # https://cloud.google.com/vpc/docs/private-access-options
 # id: existing subnetwork id, will be using if new is false
 # new: create a new subnetwork or use an existing one: true or false
-variable "subnetwork" {
-  description = "Subnetwork properties. Ignored if subnetwork_self_link is supplied."
+variable "subnetwork_properties" {
+  description = "Subnetwork properties. One 'subnetwork_self_link' or 'subnetwork_properties' must be provided."
   type = object({
     address = string
     private = bool
