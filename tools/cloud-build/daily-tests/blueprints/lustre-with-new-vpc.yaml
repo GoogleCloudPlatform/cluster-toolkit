@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hpc-cluster-high-io
+blueprint_name: lustre-new-vpc
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-io
+  deployment_name: lustre-new-vpc
   region: us-central1
   zone: us-central1-a
 
@@ -26,9 +26,11 @@ resource_groups:
     # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
     # as a prefix. To refer to a local resource, prefix with ./, ../ or /
     # Example - ./resources/network/pre-existing-vpc
-  - source: resources/network/pre-existing-vpc
+  - source: resources/network/vpc
     kind: terraform
     id: network1
+    settings:
+      network_name: lustre-new-vpc
 
   - source: resources/file-system/filestore
     kind: terraform
@@ -37,21 +39,15 @@ resource_groups:
     settings:
       local_mount: /home
 
-  - source: resources/file-system/filestore
-    kind: terraform
-    id: projectsfs
-    use: [network1]
-    settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /projects
-
-  - source: resources/third-party/file-system/DDN-EXAScaler
+  # Explicitly picking the local version of the resource
+  - source: ./resources/third-party/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
-    use: [network1]
     settings:
       local_mount: /scratch
+      network_self_link: $(network1.network_self_link)
+      subnetwork_self_link: $(network1.subnetwork_self_link)
+      subnetwork_address: $(network1.subnetwork_address)
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
@@ -60,9 +56,8 @@ resource_groups:
     - network1
     - homefs
     - scratchfs
-    - projectsfs
     settings:
-      max_node_count: 200
+      max_node_count: 2
       partition_name: compute
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
@@ -72,7 +67,6 @@ resource_groups:
     - network1
     - homefs
     - scratchfs
-    - projectsfs
     - compute_partition
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
@@ -82,7 +76,6 @@ resource_groups:
     - network1
     - homefs
     - scratchfs
-    - projectsfs
     - slurm_controller
     settings:
       login_machine_type: n2-standard-4

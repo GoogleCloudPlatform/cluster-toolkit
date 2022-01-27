@@ -14,20 +14,23 @@
  * limitations under the License.
  */
 locals {
+
+  network_id = var.network_self_link != null ? regex("https://www.googleapis.com/compute/v\\d/(.*)", var.network_self_link)[0] : null
   named_net = {
     routing = "REGIONAL"
     tier    = "STANDARD"
-    id      = regex("https://www.googleapis.com/compute/v\\d/(.*)", var.network_self_link)[0]
+    id      = local.network_id
     auto    = false
     mtu     = 1500
     new     = false
     nat     = false
   }
 
+  subnetwork_id = var.subnetwork_self_link != null ? regex("https://www.googleapis.com/compute/v\\d/(.*)", var.subnetwork_self_link)[0] : null
   named_subnet = {
     address = var.subnetwork_address
     private = true
-    id      = regex("https://www.googleapis.com/compute/v\\d/(.*)", var.subnetwork_self_link)[0]
+    id      = local.subnetwork_id
     new     = false
   }
 }
@@ -38,16 +41,15 @@ provider "google" {
 }
 
 module "ddn_exascaler" {
-  source = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=af5a5b3"
-
+  source          = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=f329c21"
   fsname          = var.fsname
   zone            = var.zone
   project         = var.project_id
   security        = var.security
   service_account = var.service_account
   waiter          = var.waiter
-  network         = var.network_self_link == null ? var.network : local.named_net
-  subnetwork      = var.subnetwork_self_link == null ? var.subnetwork : local.named_subnet
+  network         = var.network_properties == null ? local.named_net : var.network_properties
+  subnetwork      = var.subnetwork_properties == null ? local.named_subnet : var.subnetwork_properties
   boot            = var.boot
   image           = var.image
   mgs             = var.mgs

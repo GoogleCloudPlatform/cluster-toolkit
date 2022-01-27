@@ -95,12 +95,6 @@
 
     ## Cleanup and fail gracefully
     rescue:
-    - name: Tear Down Cluster
-      run_once: true
-      delegate_to: localhost
-      command:
-        cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
     - name: Delete Firewall Rule
       command:
         argv:
@@ -109,6 +103,12 @@
         - firewall-rules
         - delete
         - build-{{ build_id }}
+    - name: Tear Down Cluster
+      run_once: true
+      delegate_to: localhost
+      command:
+        cmd: terraform destroy -auto-approve
+        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
     - name: Fail Out
       fail:
         msg: "Failed while setting up test infrastructure"
@@ -134,12 +134,6 @@
 
     ## Always cleanup, even on failure
     always:
-    - name: Tear Down Cluster
-      run_once: true
-      delegate_to: localhost
-      command:
-        cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
     - name: Delete Firewall Rule
       run_once: true
       delegate_to: localhost
@@ -150,3 +144,9 @@
         - firewall-rules
         - delete
         - "build-{{ build_id }}"
+    - name: Tear Down Cluster
+      run_once: true
+      delegate_to: localhost
+      command:
+        cmd: terraform destroy -auto-approve
+        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
