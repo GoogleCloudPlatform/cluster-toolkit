@@ -18,7 +18,6 @@ package cmd
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"log"
 
 	"github.com/spf13/cobra"
 )
@@ -26,10 +25,8 @@ import (
 func init() {
 	expandCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
 		"Configuration file for the new blueprints")
-	err := expandCmd.MarkFlagRequired("config")
-	if err != nil {
-		log.Fatalf("Error in init for expand command: %v", err)
-	}
+	cobra.CheckErr(expandCmd.Flags().MarkDeprecated("config",
+		"please see the command usage for more details."))
 	expandCmd.Flags().StringVarP(&outputFilename, "out", "o", "expanded.yaml",
 		"Output file for the expanded yaml.")
 	rootCmd.AddCommand(expandCmd)
@@ -46,6 +43,15 @@ var (
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
+	if yamlFilename == "" {
+		if len(args) == 0 {
+			fmt.Println(cmd.UsageString())
+			return
+		}
+
+		yamlFilename = args[0]
+	}
+
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
 	blueprintConfig.ExpandConfig()
 	blueprintConfig.ExportYamlConfig(outputFilename)
