@@ -49,11 +49,9 @@ resource_groups:
   - source: resources/third-party/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
+    use: [network1]
     settings:
       local_mount: /scratch
-      network_self_link: $(network1.network_self_link)
-      subnetwork_self_link: $(network1.subnetwork_self_link)
-      subnetwork_address: $(network1.subnetwork_address)
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
