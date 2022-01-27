@@ -17,15 +17,24 @@ use strict;
 use warnings;
 
 my $min = 80;
-my $failed = 0;
+my $failed_coverage = 0;
+my $failed_tests = 0;
 
 while (<>){
   print $_;
   if ( $_ =~ /coverage: (\d+\.\d)%/ ) {
-    $failed++ if ($1 < $min);
+    $failed_coverage++ if ($1 < $min);
+  }
+  if ($_ =~ /\d+ passed, (\d+) FAILED/){
+    $failed_tests += $1;
   }
 }
-if ($failed > 0) {
-   print STDERR "coverage must be above $min%, $failed packages were below that.\n";
+if ($failed_tests > 0) {
+   print STDERR "$failed_tests test(s) failed.\n";
    exit 1
 }
+if ($failed_coverage > 0) {
+   print STDERR "Coverage must be above $min%, $failed_coverage packages were below that.\n";
+   exit 1
+}
+
