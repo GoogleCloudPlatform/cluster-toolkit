@@ -41,7 +41,7 @@ sudo journalctl -u google-startup-scripts.service
         source: "modules/startup-script/examples/install_ansible.sh"
         destination: "install_ansible.sh"
       - type: shell
-        source: "modules/filestore/scripts/install-nfs.sh"
+        source: "modules/startup-script/examples/install-nfs.sh"
         destination: "install-nfs.sh"
       - type: ansible-local
         destination: "modules/startup-script/examples/mount.yaml"

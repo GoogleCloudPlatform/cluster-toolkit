@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 
 if [ ! "$(which ansible-playbook)" ]; then
   if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-
-    yum -y install epel-release ansible
+    yum -y install epel-release
+    yum -y install ansible
 
   elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
     echo 'WARNING: unsupported installation in debian / ubuntu'
