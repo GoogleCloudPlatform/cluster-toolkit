@@ -18,7 +18,7 @@ vars:
   project_id: ## Set GCP Project ID Here ##
   deployment_name: lustre-new-vpc
   region: us-central1
-  zone: us-central1-a
+  zone: us-central1-c
 
 resource_groups:
 - group: primary
