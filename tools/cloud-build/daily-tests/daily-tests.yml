@@ -103,6 +103,7 @@
         - firewall-rules
         - delete
         - build-{{ build_id }}
+      ignore_errors: yes
     - name: Tear Down Cluster
       run_once: true
       delegate_to: localhost
@@ -144,6 +145,7 @@
         - firewall-rules
         - delete
         - "build-{{ build_id }}"
+      ignore_errors: yes
     - name: Tear Down Cluster
       run_once: true
       delegate_to: localhost

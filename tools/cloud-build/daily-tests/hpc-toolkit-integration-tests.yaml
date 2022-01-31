@@ -34,7 +34,7 @@ steps:
     cat <<EOT > test-vars.yml
     build_id: ${BUILD_ID}
     project: ${PROJECT_ID}
-    zone: us-central1-a
+    zone: us-central1-c
     workspace: /workspace
     blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-with-new-vpc.yaml"
     blueprint_dir: blueprint-lustre-new-vcp
@@ -61,7 +61,7 @@ steps:
     cat <<EOT > test-vars.yml
     build_id: ${BUILD_ID}
     project: ${PROJECT_ID}
-    zone: us-central1-a
+    zone: us-central1-c
     workspace: /workspace
     blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io.yaml"
     blueprint_dir: blueprint-cluster-high-io
