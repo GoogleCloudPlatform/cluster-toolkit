@@ -85,8 +85,11 @@ resource_groups:
           source: modules/startup-script/examples/hello.yaml
           destination: hello.yaml
         - type: shell
-          source: "modules/startup-script/examples/install-nfs.sh"
+          content: $(nfs.install_nfs_client)
           destination: "install-nfs.sh"
+        - type: shell
+          content: $(appsfs.install_nfs_client)
+          destination: "install-nfs-filestore.sh"
         - type: "ansible-local"
           source: "modules/startup-script/examples/mount.yaml"
           destination: "mount.yaml"

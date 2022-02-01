@@ -43,7 +43,7 @@ resource_groups:
           source: "modules/startup-script/examples/install_ansible.sh"
           destination: "tmp.sh"
         - type: shell
-          source: "modules/startup-script/examples/install-nfs.sh"
+          content: $(homefs.install_nfs_client)
           destination: "tmp.sh"
         - type: "ansible-local"
           source: "modules/startup-script/examples/mount.yaml"
