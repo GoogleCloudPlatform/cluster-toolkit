@@ -25,3 +25,8 @@ output "network_storage" {
     }
   ]
 }
+
+output "install_nfs_client" {
+  description = "Script for installing NFS client"
+  value       = file("${path.module}/scripts/install-nfs-client.sh")
+}

@@ -24,3 +24,8 @@ output "network_storage" {
     mount_options = "defaults,_netdev"
   }
 }
+
+output "install_nfs_client" {
+  description = "Script for installing NFS client"
+  value       = file("${path.module}/scripts/install-nfs-client.sh")
+}

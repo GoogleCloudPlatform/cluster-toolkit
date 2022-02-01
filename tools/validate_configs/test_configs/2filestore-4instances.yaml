@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ resource_groups:
           source: "modules/startup-script/examples/install_ansible.sh"
           destination: "install_ansible.sh"
         - type: shell
-          source: "modules/filestore/scripts/install-nfs.sh"
+          content: $(homefs.install_nfs_client)
           destination: "install-nfs.sh"
         - type: "ansible-local"
           source: "modules/startup-script/examples/mount.yaml"

@@ -72,7 +72,7 @@ Alternatively, it can be added as a startup script via:
     settings:
       runners:
         - type: shell
-          content: $(spack.install_script)
+          content: $(spack.startup_script)
           destination: "/apps/spack-install.sh"
 ```
 

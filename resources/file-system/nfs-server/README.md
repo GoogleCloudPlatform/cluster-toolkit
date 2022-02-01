@@ -84,5 +84,6 @@ No modules.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_install_nfs_client"></a> [install\_nfs\_client](#output\_install\_nfs\_client) | Script for installing NFS client |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | export of all desired folder directories |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
