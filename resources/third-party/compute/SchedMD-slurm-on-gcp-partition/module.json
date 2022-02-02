@@ -19,7 +19,7 @@
     {
       "name": "cpu_platform",
       "type": "string",
-      "description": "Minimum Intel Platform for Compute Nodes to Use",
+      "description": "The name of the minimum CPU platform that you want the instance to use.",
       "default": null,
       "required": false
     },

@@ -72,7 +72,7 @@ variable "labels" {
 }
 
 variable "cpu_platform" {
-  description = "Minimum Intel Platform for Compute Nodes to Use"
+  description = "The name of the minimum CPU platform that you want the instance to use."
   type        = string
   default     = null
 }

@@ -44,7 +44,7 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_compute_disk_size_gb"></a> [compute\_disk\_size\_gb](#input\_compute\_disk\_size\_gb) | Size of boot disk to create for the partition compute nodes | `number` | `20` | no |
 | <a name="input_compute_disk_type"></a> [compute\_disk\_type](#input\_compute\_disk\_type) | Type of boot disk to create for the partition compute nodes | `string` | `"pd-standard"` | no |
-| <a name="input_cpu_platform"></a> [cpu\_platform](#input\_cpu\_platform) | Minimum Intel Platform for Compute Nodes to Use | `string` | `null` | no |
+| <a name="input_cpu_platform"></a> [cpu\_platform](#input\_cpu\_platform) | The name of the minimum CPU platform that you want the instance to use. | `string` | `null` | no |
 | <a name="input_enable_placement"></a> [enable\_placement](#input\_enable\_placement) | Enable placement groups | `bool` | `true` | no |
 | <a name="input_exclusive"></a> [exclusive](#input\_exclusive) | Exclusive job access to nodes | `bool` | `false` | no |
 | <a name="input_gpu_count"></a> [gpu\_count](#input\_gpu\_count) | Number of GPUs attached to the partition compute instances | `number` | `0` | no |
