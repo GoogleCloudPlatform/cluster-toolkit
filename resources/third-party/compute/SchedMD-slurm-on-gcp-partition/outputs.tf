@@ -26,7 +26,7 @@ output "partition" {
     compute_disk_type : var.compute_disk_type
     compute_disk_size_gb : var.compute_disk_size_gb
     compute_labels : var.labels
-    cpu_platform : null
+    cpu_platform : var.cpu_platform
     gpu_count : var.gpu_count
     gpu_type : var.gpu_type
     network_storage : var.network_storage

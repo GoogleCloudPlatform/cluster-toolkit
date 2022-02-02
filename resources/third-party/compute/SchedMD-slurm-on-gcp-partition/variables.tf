@@ -71,6 +71,12 @@ variable "labels" {
   default     = {}
 }
 
+variable "cpu_platform" {
+  description = "The name of the minimum CPU platform that you want the instance to use."
+  type        = string
+  default     = ""
+}
+
 variable "gpu_count" {
   description = "Number of GPUs attached to the partition compute instances"
   type        = number
