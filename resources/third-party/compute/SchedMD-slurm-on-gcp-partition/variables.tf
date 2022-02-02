@@ -71,6 +71,12 @@ variable "labels" {
   default     = {}
 }
 
+variable "cpu_platform" {
+  description = "Minimum Intel Platform for Compute Nodes to Use"
+  type        = string
+  default     = null
+}
+
 variable "gpu_count" {
   description = "Number of GPUs attached to the partition compute instances"
   type        = number
@@ -106,11 +112,32 @@ variable "subnetwork_name" {
   type        = string
 }
 
+variable "exclusive" {
+  description = "Exclusive job access to nodes"
+  type        = bool
+  default     = false
+}
+
 variable "enable_placement" {
   description = "Enable placement groups"
   type        = bool
   default     = true
 }
 
+variable "regional_capacity" {
+  description = "If True, then create instances in the region that has available capacity. Specify the region in the zone field."
+  type        = bool
+  default     = false
+}
 
+variable "regional_policy" {
+  description = "locationPolicy defintion for regional bulkInsert()"
+  type        = any
+  default     = {}
+}
 
+variable "instance_template" {
+  description = "Instance template to use to create partition instances"
+  type        = string
+  default     = null
+}
