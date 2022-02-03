@@ -28,7 +28,7 @@ echo "processing resource policies for $PROJECT_ID"
 REGEX="(.*),.*\/([a-z0-9-]+)"
 
 declare -A policies
-for line in `gcloud compute resource-policies list --format='csv[no-heading](name, region)' --project ${PROJECT_ID}`; do
+for line in $(gcloud compute resource-policies list --format='csv[no-heading](name, region)' --project "${PROJECT_ID}"); do
   if [[ $line =~ $REGEX ]]; then
     policy=${BASH_REMATCH[1]}
     region=${BASH_REMATCH[2]}
@@ -40,5 +40,6 @@ for line in `gcloud compute resource-policies list --format='csv[no-heading](nam
 done
 
 for policy in "${!policies[@]}"; do
-  gcloud compute resource-policies delete $policy --project ${PROJECT_ID} --region ${policies[$policy]}
+  gcloud compute resource-policies delete "$policy" \
+    --project "${PROJECT_ID}" --region "${policies[$policy]}"
 done

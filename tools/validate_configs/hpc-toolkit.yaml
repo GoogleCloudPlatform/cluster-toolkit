@@ -18,10 +18,14 @@ steps:
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest',
   '--cache-from',
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest',
-  '.' ]
-- name: 'gcr.io/cloud-builders/docker'
-  args: [ 'run', '--entrypoint', './validate_configs.sh',
-  'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest']
+  'tools/validate_configs' ]
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest
+  entrypoint: /bin/bash
+  args:
+  - tools/validate_configs/validate_configs.sh
+# - name: 'gcr.io/cloud-builders/docker'
+#   args: [ 'run', '--entrypoint', './validate_configs.sh',
+#   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest']
 images: [
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit:latest']
 

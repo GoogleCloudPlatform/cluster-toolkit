@@ -17,16 +17,15 @@
 # Set variables to default if not already set
 EXAMPLE_YAML=${EXAMPLE_YAML:-/workspace/examples/hpc-cluster-high-io.yaml}
 PROJECT=${PROJECT:-hpc-toolkit-dev}
-BACKEND_YAML=${ROOT_DIR}/tools/cloud-build/daily-tests/gcs-backend.yaml
 BLUEPRINT_DIR=${BLUEPRINT_DIR:-blueprint}
 BUILD_ID=${BUILD_ID:-undefined-build}
 MAX_NODES=${MAX_NODES:-2}
 echo "Creating blueprint from ${EXAMPLE_YAML} in project ${PROJECT}"
 
 ## Add GCS Backend to example
-if ! grep -Fxq terraform_backend_defaults: ${EXAMPLE_YAML};
+if ! grep -Fxq terraform_backend_defaults: "${EXAMPLE_YAML}";
 then
-  cat <<EOT >> ${EXAMPLE_YAML}
+  cat <<EOT >> "${EXAMPLE_YAML}"
 
 terraform_backend_defaults:
   type: gcs
@@ -36,19 +35,20 @@ EOT
 fi
 
 ## Build ghpc
-cd $ROOT_DIR
+cd "$ROOT_DIR" || \
+  { echo "*** ERROR: failed to access root directory ${ROOT_DIR} when creating blueprint"; exit 1; }
 make
 
 ## Customize config yaml
-sed -i "s/project_id: .*/project_id: ${PROJECT_ID}/"  ${EXAMPLE_YAML} || \
+sed -i "s/project_id: .*/project_id: ${PROJECT_ID}/"  "${EXAMPLE_YAML}" || \
      { echo "could not set project_id"; exit 1; }
-sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT_DIR}/" ${EXAMPLE_YAML} || \
+sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT_DIR}/" "${EXAMPLE_YAML}" || \
      { echo "could not set blueprint_name"; exit 1; }
-sed -i "s/deployment_name: \(.*\)/deployment_name: \1-${BUILD_ID:0:6}/" ${EXAMPLE_YAML} || \
+sed -i "s/deployment_name: \(.*\)/deployment_name: \1-${BUILD_ID:0:6}/" "${EXAMPLE_YAML}" || \
      { echo "could not set deployment_name"; exit 1; }
-sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/"  ${EXAMPLE_YAML} || \
+sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/"  "${EXAMPLE_YAML}" || \
      { echo "could not set max_node_count"; exit 1; }
 
 ## Create blueprint and create artifact
-./ghpc create -c ${EXAMPLE_YAML}
-tar -czf ${BLUEPRINT_DIR}.tgz ${BLUEPRINT_DIR}
+./ghpc create -c "${EXAMPLE_YAML}"
+tar -czf "${BLUEPRINT_DIR}.tgz" "${BLUEPRINT_DIR}"
