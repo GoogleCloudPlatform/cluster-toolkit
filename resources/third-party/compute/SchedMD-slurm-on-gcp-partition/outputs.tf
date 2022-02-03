@@ -32,10 +32,10 @@ output "partition" {
     network_storage : var.network_storage
     preemptible_bursting : var.preemptible_bursting
     vpc_subnet : var.subnetwork_name
-    exclusive : false
+    exclusive : var.exclusive
     enable_placement : var.enable_placement
-    regional_capacity : false
-    regional_policy : {}
-    instance_template : null
+    regional_capacity : var.regional_capacity
+    regional_policy : var.regional_policy
+    instance_template : var.instance_template
   }
 }

@@ -20,7 +20,7 @@
       "name": "cpu_platform",
       "type": "string",
       "description": "The name of the minimum CPU platform that you want the instance to use.",
-      "default": "",
+      "default": null,
       "required": false
     },
     {
@@ -28,6 +28,13 @@
       "type": "bool",
       "description": "Enable placement groups",
       "default": true,
+      "required": false
+    },
+    {
+      "name": "exclusive",
+      "type": "bool",
+      "description": "Exclusive job access to nodes",
+      "default": false,
       "required": false
     },
     {
@@ -56,6 +63,13 @@
       "type": "bool",
       "description": "Enable hyperthreading",
       "default": false,
+      "required": false
+    },
+    {
+      "name": "instance_template",
+      "type": "string",
+      "description": "Instance template to use to create partition instances",
+      "default": null,
       "required": false
     },
     {
@@ -98,6 +112,20 @@
       "type": "string",
       "description": "Should use preemptibles to burst",
       "default": false,
+      "required": false
+    },
+    {
+      "name": "regional_capacity",
+      "type": "bool",
+      "description": "If True, then create instances in the region that has available capacity. Specify the region in the zone field.",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "regional_policy",
+      "type": "any",
+      "description": "locationPolicy defintion for regional bulkInsert()",
+      "default": {},
       "required": false
     },
     {
