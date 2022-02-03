@@ -3,6 +3,10 @@
 This resource creates a DDN EXAScaler Cloud Lustre file system using
 [exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp).
 
+By default security.public_key is set to `null`, therefore the admin user is not
+created. To ensure the admin user is created, provide a public key via the
+security setting.
+
 **Please note**: This resource's instances require access to Google APIs and therefore, instances must have public IP address or it must be used in a subnetwork where [Private Google Access](https://cloud.google.com/vpc/docs/configure-private-google-access) is enabled.
 
 **WARNING**: This is an experimental resource and is not fully supported.
