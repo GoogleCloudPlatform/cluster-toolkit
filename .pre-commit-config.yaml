@@ -68,3 +68,8 @@ repos:
         # MD041 - First line in file should be a top level header
         # MD046 - Code block style
         args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046", scan]
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.7.2
+    hooks:
+    - id: shellcheck
+      exclude: ".*tpl"

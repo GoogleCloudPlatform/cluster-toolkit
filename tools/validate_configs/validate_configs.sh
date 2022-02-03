@@ -18,26 +18,27 @@ set -e
 run_test(){
   example=$1
   tmpdir="$(mktemp -d)"
-  exampleFile=$(basename $example)
-  BLUEPRINT="${exampleFile%.yaml}-$(basename ${tmpdir##*.})"
+  exampleFile=$(basename "$example")
+  BLUEPRINT="${exampleFile%.yaml}-$(basename "${tmpdir##*.}")"
 
   echo "testing ${example} in ${tmpdir}"
-  cp ${example} "${tmpdir}/"
+  cp "${example}" "${tmpdir}/"
   cd "${tmpdir}"
-  sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" ${exampleFile} || \
+  sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" "${exampleFile}" || \
     { echo "*** ERROR: could not set blueprint_name in ${example}"; exit 1; }
 
   PROJECT="invalid-project"
 
-  sed -i "s/project_id: .*/project_id: ${PROJECT}/" ${exampleFile} || \
+  sed -i "s/project_id: .*/project_id: ${PROJECT}/" "${exampleFile}" || \
     { echo "*** ERROR: could not set project_id in ${example}"; exit 1; }
-  cd ${cwd}
-  ./ghpc create ${tmpdir}/${exampleFile} >/dev/null || { echo "*** ERROR: error creating blueprint with ghpc for ${exampleFile}"; exit 1; }
-  mv ${BLUEPRINT} ${tmpdir}
-  cd ${tmpdir}/${BLUEPRINT} || { echo "*** ERROR: can't cd into the blueprint folder ${BLUEPRINT}"; exit 1; }
-  for folder in `ls`;
+  cd "${cwd}"
+  ./ghpc create "${tmpdir}"/"${exampleFile}" >/dev/null || \
+    { echo "*** ERROR: error creating blueprint with ghpc for ${exampleFile}"; exit 1; }
+  mv "${BLUEPRINT}" "${tmpdir}"
+  cd "${tmpdir}"/"${BLUEPRINT}" || { echo "*** ERROR: can't cd into the blueprint folder ${BLUEPRINT}"; exit 1; }
+  for folder in ./*;
   do
-    cd $folder
+    cd "$folder"
     if [ -f 'main.tf' ];
     then
       tfpw=$(pwd)
@@ -51,9 +52,9 @@ run_test(){
     cd .. # back to blueprint folder
   done
   cd ..
-  rm -rf ${BLUEPRINT} || { echo "*** ERROR: could not remove blueprint folder from $(pwd)"; exit 1; }
-  cd ${cwd}
-  rm -r ${tmpdir}
+  rm -rf "${BLUEPRINT}" || { echo "*** ERROR: could not remove blueprint folder from $(pwd)"; exit 1; }
+  cd "${cwd}"
+  rm -r "${tmpdir}"
 }
 
 check_background(){
@@ -72,16 +73,16 @@ for example in $CONFIGS
 do
   JNUM=$(jobs | wc -l)
   # echo "$JNUM jobs running"
-  if [ $JNUM -lt $NPROCS ]
+  if [ "$JNUM" -lt "$NPROCS" ]
   then
-    run_test $example &
+    run_test "$example" &
   else
     # echo "Reached max number of parallel tests (${JNUM}). Waiting for one to finish."
     check_background
   fi
 done
 JNUM=$(jobs | wc -l)
-while [ $JNUM -gt 0 ]; do
+while [ "$JNUM" -gt 0 ]; do
   check_background
   JNUM=$(jobs | wc -l)
 done
