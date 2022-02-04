@@ -15,7 +15,7 @@
 blueprint_name: hpc-cluster-project
 
 vars:
-  project_id:
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm-project
   region: europe-west4
   zone: europe-west4-a
