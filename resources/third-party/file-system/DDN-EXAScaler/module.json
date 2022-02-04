@@ -187,7 +187,7 @@
         "http_source_ranges": [
           "0.0.0.0/0"
         ],
-        "public_key": "~/.ssh/id_rsa.pub",
+        "public_key": null,
         "ssh_source_ranges": [
           "0.0.0.0/0"
         ]
