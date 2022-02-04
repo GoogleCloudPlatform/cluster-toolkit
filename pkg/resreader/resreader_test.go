@@ -141,9 +141,15 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Resource Source
-	badSource := "github.com/GoogleCloudPlatform/hpc-toolkit/resources"
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
 	_, err = getHCLInfo(badSource)
 	expectedErr = "invalid source .*"
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Invalid GitHub repository - path does not exists
+	badGitRepo := "git@github.com:does/not/exist.git"
+	_, err = getHCLInfo(badGitRepo)
+	expectedErr = "failed to clone GitHub resource .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
 

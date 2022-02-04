@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/google/go-cmp v0.5.6 // indirect
+	github.com/hashicorp/go-getter v1.5.11
 	github.com/hashicorp/hcl/v2 v2.10.1
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20210625153042-09f34846faab
 	github.com/kr/pretty v0.2.1 // indirect

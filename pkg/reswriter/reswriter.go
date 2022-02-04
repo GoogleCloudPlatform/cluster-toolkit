@@ -112,6 +112,10 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 				if err = copyEmbedded(ResourceFS, src, destPath); err != nil {
 					log.Fatal(err)
 				}
+			case resutils.IsGitHubPath(src):
+				if err = resutils.CopyGitHubResources(src, destPath); err != nil {
+					log.Fatalf("failed to git clone from source %s to dest %s because %v", src, destPath, err)
+				}
 			default:
 				log.Fatalf("resource %s source (%s) not valid, should begin with /, ./, ../ or resources/",
 					resource.ID, resource.Source)

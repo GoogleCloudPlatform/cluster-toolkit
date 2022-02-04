@@ -68,6 +68,19 @@ func getHCLInfo(source string) (ResourceInfo, error) {
 			return ret, err
 		}
 		module, _ = tfconfig.LoadModule(resDir)
+	case resutils.IsGitHubPath(source):
+		resDir, err := ioutil.TempDir("", "tfconfig-module-*")
+		defer os.RemoveAll(resDir)
+		if err != nil {
+			return ret, err
+		}
+
+		if err != resutils.CopyGitHubResources(source, resDir) {
+			err = fmt.Errorf("failed to clone GitHub resource at %s to tmp dir: %v",
+				source, err)
+			return ret, err
+		}
+		module, _ = tfconfig.LoadModule(resDir)
 	default:
 		return ret, fmt.Errorf(
 			"invalid source (%s), only local and embedded sources are supported",

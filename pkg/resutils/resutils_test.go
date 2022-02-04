@@ -108,6 +108,34 @@ func (s *MySuite) TestCopyDirFromResources(c *C) {
 	c.Assert(err, ErrorMatches, "*file exists")
 }
 
+func (s *MySuite) TestCopyGitHubResources(c *C) {
+	// Setup
+	destDir := path.Join(testDir, "TestCloneGitHubRepository")
+	if err := os.Mkdir(destDir, 0755); err != nil {
+		log.Fatal(err)
+	}
+
+	// Success via SSH
+	destDirForSSH := path.Join(destDir, "ssh")
+	err := CopyGitHubResources("git@github.com:google/google.github.io.git//_layouts", destDirForSSH)
+	c.Assert(err, IsNil)
+	fInfo, err := os.Stat(path.Join(destDirForSSH, "redirect.html"))
+	c.Assert(err, IsNil)
+	c.Assert(fInfo.Name(), Equals, "redirect.html")
+	c.Assert(fInfo.Size() > 0, Equals, true)
+	c.Assert(fInfo.IsDir(), Equals, false)
+
+	// Success via HTTPS
+	destDirForHTTPS := path.Join(destDir, "https")
+	err = CopyGitHubResources("github.com/google/google.github.io//_layouts", destDirForHTTPS)
+	c.Assert(err, IsNil)
+	fInfo, err = os.Stat(path.Join(destDirForSSH, "redirect.html"))
+	c.Assert(err, IsNil)
+	c.Assert(fInfo.Name(), Equals, "redirect.html")
+	c.Assert(fInfo.Size() > 0, Equals, true)
+	c.Assert(fInfo.IsDir(), Equals, false)
+}
+
 func (s *MySuite) TestIsEmbeddedPath(c *C) {
 	// True: Is an embedded path
 	ret := IsEmbeddedPath("resources/anything/else")
@@ -146,4 +174,24 @@ func (s *MySuite) TestIsLocalPath(c *C) {
 	// False, other
 	ret = IsLocalPath("github.com/resources")
 	c.Assert(ret, Equals, false)
+}
+
+func (s *MySuite) TestIsGitHubRepository(c *C) {
+	// False: Is an embedded path
+	ret := IsGitHubPath("resources/anything/else")
+	c.Assert(ret, Equals, false)
+
+	// False: Local path
+	ret = IsGitHubPath("./anything/else")
+	c.Assert(ret, Equals, false)
+
+	ret = IsGitHubPath("./resources")
+	c.Assert(ret, Equals, false)
+
+	ret = IsGitHubPath("../resources/")
+	c.Assert(ret, Equals, false)
+
+	// True, other
+	ret = IsGitHubPath("github.com/resources")
+	c.Assert(ret, Equals, true)
 }

@@ -15,11 +15,25 @@
 package resutils
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/hashicorp/go-getter"
 )
+
+var goGetterDetectors = []getter.Detector{
+	new(getter.GitHubDetector),
+	new(getter.GitDetector),
+}
+
+var goGetterGetters = map[string]getter.Getter{
+	"git": new(getter.GitGetter),
+}
+
+var goGetterDecompressors = map[string]getter.Decompressor{}
 
 // IsLocalPath checks if a source path is a local FS path
 func IsLocalPath(source string) bool {
@@ -31,6 +45,11 @@ func IsLocalPath(source string) bool {
 // IsEmbeddedPath checks if a source path points to an embedded resources
 func IsEmbeddedPath(source string) bool {
 	return strings.HasPrefix(source, "resources/")
+}
+
+// IsGitHubPath checks if a source path points to GitHub
+func IsGitHubPath(source string) bool {
+	return strings.HasPrefix(source, "github.com") || strings.HasPrefix(source, "git@github.com")
 }
 
 // BaseFS is an extension of the io.fs interface with the functionality needed
@@ -72,4 +91,22 @@ func CopyDirFromResources(fs BaseFS, source string, dest string) error {
 		}
 	}
 	return nil
+}
+
+// CopyGitHubResources copies resources from GitHub to a local path
+func CopyGitHubResources(source string, dest string) error {
+	client := getter.Client{
+		Src: source,
+		Dst: dest,
+		Pwd: dest,
+
+		Mode: getter.ClientModeDir,
+
+		Detectors:     goGetterDetectors,
+		Decompressors: goGetterDecompressors,
+		Getters:       goGetterGetters,
+		Ctx:           context.Background(),
+	}
+	err := client.Get()
+	return err
 }
