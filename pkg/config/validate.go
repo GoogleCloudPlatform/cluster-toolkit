@@ -23,6 +23,7 @@ import (
 
 	"hpc-toolkit/pkg/resreader"
 	"hpc-toolkit/pkg/sourcereader"
+	"hpc-toolkit/pkg/validators"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -30,6 +31,9 @@ import (
 
 // validate is the top-level function for running the validation suite.
 func (bc BlueprintConfig) validate() {
+	if err := bc.validateValidators(); err != nil {
+		log.Fatal(err)
+	}
 	if err := bc.validateVars(); err != nil {
 		log.Fatal(err)
 	}
@@ -39,6 +43,25 @@ func (bc BlueprintConfig) validate() {
 	if err := bc.validateResourceSettings(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// performs validation of global variables
+// TODO: does not yet substitute/resolve variable values properly!
+func (bc BlueprintConfig) validateValidators() error {
+	if err := testProjectExists(bc.Config.Validators.TestProjectExists); err != nil {
+		return err
+	}
+	if err := testRegionExists(bc.Config.Validators.TestRegionExists); err != nil {
+		return err
+	}
+	if err := testZoneExists(bc.Config.Validators.TestZoneExists); err != nil {
+		return err
+	}
+	if err := testZoneInRegion(bc.Config.Validators.TestZoneInRegion); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // validateVars checks the global variables for viable types
@@ -144,6 +167,41 @@ func (bc BlueprintConfig) validateResourceSettings() error {
 				errStr := "found an issue while validating settings for resource at %s"
 				return errors.Wrapf(err, errStr, res.Source)
 			}
+		}
+	}
+	return nil
+}
+func testProjectExists(projectIds []string) error {
+	for _, projectID := range projectIds {
+		if err := validators.TestProjectExists(projectID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func testRegionExists(regions []string) error {
+	for _, region := range regions {
+		if err := validators.TestRegionExists(region); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func testZoneExists(zones []string) error {
+	for _, zone := range zones {
+		if err := validators.TestZoneExists(zone); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func testZoneInRegion(zoneRegionPairs []ZoneRegion) error {
+	for _, zoneRegionPair := range zoneRegionPairs {
+		if err := validators.TestZoneInRegion(zoneRegionPair.Zone, zoneRegionPair.Region); err != nil {
+			return err
 		}
 	}
 	return nil
