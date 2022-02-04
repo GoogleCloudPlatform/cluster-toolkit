@@ -115,21 +115,11 @@ func (s *MySuite) TestCopyGitHubResources(c *C) {
 		log.Fatal(err)
 	}
 
-	// Success via SSH
-	destDirForSSH := path.Join(destDir, "ssh")
-	err := CopyGitHubResources("git@github.com:google/google.github.io.git//_layouts", destDirForSSH)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(destDirForSSH, "redirect.html"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "redirect.html")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-
 	// Success via HTTPS
 	destDirForHTTPS := path.Join(destDir, "https")
-	err = CopyGitHubResources("github.com/google/google.github.io//_layouts", destDirForHTTPS)
+	err := CopyGitHubResources("github.com/google/google.github.io//_layouts", destDirForHTTPS)
 	c.Assert(err, IsNil)
-	fInfo, err = os.Stat(path.Join(destDirForSSH, "redirect.html"))
+	fInfo, err := os.Stat(path.Join(destDirForHTTPS, "redirect.html"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "redirect.html")
 	c.Assert(fInfo.Size() > 0, Equals, true)
