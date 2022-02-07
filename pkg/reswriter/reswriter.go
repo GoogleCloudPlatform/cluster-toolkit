@@ -22,22 +22,16 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/sourcereader"
 	"log"
 	"os"
 	"path"
-
-	"hpc-toolkit/pkg/resutils"
 )
 
 const (
 	beginLiteralExp string = `^\(\(.*$`
 	fullLiteralExp  string = `^\(\((.*)\)\)$`
 )
-
-// ResourceFS contains embedded resources (./resources) for use in building
-// blueprints. The main package creates and injects the resources directory as
-// hpc-toolkit/resources are not accessible at the package level.
-var ResourceFS embed.FS
 
 // ResWriter interface for writing resources to a blueprint
 type ResWriter interface {
@@ -73,17 +67,10 @@ func getTemplate(filename string) string {
 	return string(tmplText)
 }
 
-func copyEmbedded(fs resutils.BaseFS, source string, dest string) error {
-	return resutils.CopyDirFromResources(fs, source, dest)
-}
-
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
-	blueprintio := blueprintio.GetBlueprintIOLocal()
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
-
 			/* Copy source files */
-			// currently assuming local or embedded source
 			resourceName := path.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
 			basePath := path.Join(blueprintPath, grp.Name)
@@ -99,26 +86,9 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 				continue
 			}
 
-			// Check source type and copy
-			switch src := resource.Source; {
-			case resutils.IsLocalPath(src):
-				if err = blueprintio.CopyFromPath(src, destPath); err != nil {
-					log.Fatal(err)
-				}
-			case resutils.IsEmbeddedPath(src):
-				if err = blueprintio.CreateDirectory(destPath); err != nil {
-					log.Fatalf("failed to create resource path %s: %v", destPath, err)
-				}
-				if err = copyEmbedded(ResourceFS, src, destPath); err != nil {
-					log.Fatal(err)
-				}
-			case resutils.IsGitHubPath(src):
-				if err = resutils.CopyGitHubResources(src, destPath); err != nil {
-					log.Fatalf("failed to git clone from source %s to dest %s because %v", src, destPath, err)
-				}
-			default:
-				log.Fatalf("resource %s source (%s) not valid, should begin with /, ./, ../ or resources/",
-					resource.ID, resource.Source)
+			reader := sourcereader.Factory(resource.Source)
+			if err := reader.GetResource(resource.Source, destPath); err != nil {
+				log.Fatalf("failed to get resource from %s to %s: %v", resource.Source, destPath, err)
 			}
 
 			/* Create resource level files */

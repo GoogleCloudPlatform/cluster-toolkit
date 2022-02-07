@@ -1,4 +1,4 @@
-// Copyright 2021 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package resutils
+package sourcereader
 
 import (
 	"fmt"
@@ -20,14 +20,23 @@ import (
 	"log"
 	"os"
 	"path"
+	"reflect"
 	"testing"
 	"time"
 
-	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 )
 
-var testDir string
+var (
+	testDir      string
+	terraformDir string
+	packerDir    string
+)
+
+const (
+	pkrKindString = "packer"
+	tfKindString  = "terraform"
+)
 
 // Setup GoCheck
 type MySuite struct{}
@@ -40,10 +49,10 @@ func Test(t *testing.T) {
 
 func setup() {
 	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_reswriter_test_%s", t.Format(time.RFC3339))
+	dirName := fmt.Sprintf("ghpc_sourcereader_test_%s", t.Format(time.RFC3339))
 	dir, err := ioutil.TempDir("", dirName)
 	if err != nil {
-		log.Fatalf("reswriter_test: %v", err)
+		log.Fatalf("sourcereader_test: %v", err)
 	}
 	testDir = dir
 }
@@ -54,76 +63,10 @@ func teardown() {
 
 func TestMain(m *testing.M) {
 	setup()
+	createTmpResource()
 	code := m.Run()
 	teardown()
 	os.Exit(code)
-}
-
-// Tests
-func getTestFS() afero.IOFS {
-	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("resources/network/vpc", 0755)
-	afero.WriteFile(
-		aferoFS, "resources/network/vpc/main.tf", []byte("test string"), 0644)
-	return afero.NewIOFS(aferoFS)
-}
-
-func (s *MySuite) TestCopyDirFromResources(c *C) {
-	// Setup
-	testResFS := getTestFS()
-	copyDir := path.Join(testDir, "TestCopyDirFromResources")
-	if err := os.Mkdir(copyDir, 0755); err != nil {
-		log.Fatal(err)
-	}
-
-	// Success
-	err := CopyDirFromResources(testResFS, "resources/network/vpc", copyDir)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(copyDir, "main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-
-	// Success: copy files AND dirs
-	err = CopyDirFromResources(testResFS, "resources/network/", copyDir)
-	c.Assert(err, IsNil)
-	fInfo, err = os.Stat(path.Join(copyDir, "vpc/main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(path.Join(copyDir, "vpc"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "vpc")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, true)
-
-	// Invalid path
-	err = CopyDirFromResources(testResFS, "not/valid", copyDir)
-	c.Assert(err, ErrorMatches, "*file does not exist")
-
-	// Failure: File Already Exists
-	err = CopyDirFromResources(testResFS, "resources/network/", copyDir)
-	c.Assert(err, ErrorMatches, "*file exists")
-}
-
-func (s *MySuite) TestCopyGitHubResources(c *C) {
-	// Setup
-	destDir := path.Join(testDir, "TestCloneGitHubRepository")
-	if err := os.Mkdir(destDir, 0755); err != nil {
-		log.Fatal(err)
-	}
-
-	// Success via HTTPS
-	destDirForHTTPS := path.Join(destDir, "https")
-	err := CopyGitHubResources("github.com/google/google.github.io//_layouts", destDirForHTTPS)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(destDirForHTTPS, "redirect.html"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "redirect.html")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
 }
 
 func (s *MySuite) TestIsEmbeddedPath(c *C) {
@@ -184,4 +127,34 @@ func (s *MySuite) TestIsGitHubRepository(c *C) {
 	// True, other
 	ret = IsGitHubPath("github.com/resources")
 	c.Assert(ret, Equals, true)
+}
+
+func (s *MySuite) TestFactory(c *C) {
+	// Local resources
+	locSrcReader := Factory("./resources/anything/else")
+	c.Assert(reflect.TypeOf(locSrcReader), Equals, reflect.TypeOf(LocalSourceReader{}))
+
+	// Embedded resources
+	embSrcReader := Factory("resources/anything/else")
+	c.Assert(reflect.TypeOf(embSrcReader), Equals, reflect.TypeOf(EmbeddedSourceReader{}))
+
+	// GitHub resources
+	ghSrcString := Factory("github.com/resources")
+	c.Assert(reflect.TypeOf(ghSrcString), Equals, reflect.TypeOf(GitHubSourceReader{}))
+}
+
+func (s *MySuite) TestCopyFromPath(c *C) {
+	dstPath := path.Join(testDir, "TestCopyFromPath_Dst")
+
+	err := copyFromPath(terraformDir, dstPath)
+	c.Assert(err, IsNil)
+	fInfo, err := os.Stat(path.Join(dstPath, "main.tf"))
+	c.Assert(err, IsNil)
+	c.Assert(fInfo.Name(), Equals, "main.tf")
+	c.Assert(fInfo.Size() > 0, Equals, true)
+	c.Assert(fInfo.IsDir(), Equals, false)
+
+	// Invalid: Specify the same destination path again
+	err = copyFromPath(terraformDir, dstPath)
+	c.Assert(err, ErrorMatches, "The directory already exists: .*")
 }

@@ -22,6 +22,7 @@ import (
 	"regexp"
 
 	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/sourcereader"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -133,8 +134,8 @@ func validateSettings(
 func (bc BlueprintConfig) validateResourceSettings() error {
 	for _, grp := range bc.Config.ResourceGroups {
 		for _, res := range grp.Resources {
-			reader := resreader.Factory(res.Kind)
-			info, err := reader.GetInfo(res.Source)
+			reader := sourcereader.Factory(res.Source)
+			info, err := reader.GetResourceInfo(res.Source, res.Kind)
 			if err != nil {
 				errStr := "failed to get info for resource at %s while validating resource settings"
 				return errors.Wrapf(err, errStr, res.Source)

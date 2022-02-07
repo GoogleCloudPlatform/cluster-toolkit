@@ -23,6 +23,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/sourcereader"
 )
 
 const expectedVarFormat = "$(vars.var_name) or $(resource_id.var_name)"
@@ -225,8 +226,8 @@ func createResourceInfo(
 	resInfo := make(map[string]resreader.ResourceInfo)
 	for _, res := range resourceGroup.Resources {
 		if _, exists := resInfo[res.Source]; !exists {
-			reader := resreader.Factory(res.Kind)
-			ri, err := reader.GetInfo(res.Source)
+			reader := sourcereader.Factory(res.Source)
+			ri, err := reader.GetResourceInfo(res.Source, res.Kind)
 			if err != nil {
 				log.Fatalf(
 					"failed to get info for resource at %s while setting bc.ResourcesInfo: %e",
