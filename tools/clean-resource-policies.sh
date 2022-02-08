@@ -19,8 +19,8 @@ set -e
 
 PROJECT_ID=${PROJECT_ID:-$(gcloud config get-value project)}
 if [ -z "$PROJECT_ID" ]; then
-  echo "PROJECT_ID must be defined"
-  exit 1
+	echo "PROJECT_ID must be defined"
+	exit 1
 fi
 echo "processing resource policies for $PROJECT_ID"
 # expecting results in the following format:
@@ -29,17 +29,17 @@ REGEX="(.*),.*\/([a-z0-9-]+)"
 
 declare -A policies
 for line in $(gcloud compute resource-policies list --format='csv[no-heading](name, region)' --project "${PROJECT_ID}"); do
-  if [[ $line =~ $REGEX ]]; then
-    policy=${BASH_REMATCH[1]}
-    region=${BASH_REMATCH[2]}
-    policies[$policy]=$region
-    echo "found ${policy} in ${region}"
-  else
-    echo "not a match: $line"
-  fi
+	if [[ $line =~ $REGEX ]]; then
+		policy=${BASH_REMATCH[1]}
+		region=${BASH_REMATCH[2]}
+		policies[$policy]=$region
+		echo "found ${policy} in ${region}"
+	else
+		echo "not a match: $line"
+	fi
 done
 
 for policy in "${!policies[@]}"; do
-  gcloud compute resource-policies delete "$policy" \
-    --project "${PROJECT_ID}" --region "${policies[$policy]}"
+	gcloud compute resource-policies delete "$policy" \
+		--project "${PROJECT_ID}" --region "${policies[$policy]}"
 done

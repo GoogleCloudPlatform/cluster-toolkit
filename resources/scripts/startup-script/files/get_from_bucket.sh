@@ -25,37 +25,37 @@
 
 # This code originated from: https://github.com/terraform-google-modules/terraform-google-startup-scripts?ref=v1.0.0
 stdlib::get_from_bucket() {
-  local OPTIND opt url fname dir="${VARDIR:-/var/lib/startup}"
-  while getopts ":u:f:d:" opt; do
-    case "${opt}" in
-    u) url="${OPTARG}" ;;
-    f) fname="${OPTARG}" ;;
-    d) dir="${OPTARG}" ;;
-    :)
-      stdlib::mandatory_argument -n stdlib::get_from_bucket -f "$OPTARG"
-      return "${E_MISSING_MANDATORY_ARG}"
-      ;;
-    *)
-      stdlib::error 'Usage: stdlib::get_from_bucket -u <url> -f <file name> -d <directory>'
-      stdlib::info 'For example: stdlib::get_from_bucket -u gs://mybucket/foo.tgz -d /var/tmp'
-      return "${E_UNKNOWN_ARG}"
-      ;;
-    esac
-  done
-  # Trivially compute the filename from the URL if unspecified.
-  if [[ -z "${fname}" ]]; then
-    fname=${url##*/}
-    stdlib::debug "Computed filename='${fname}' given URL."
-  fi
-  [[ -d "${dir}" ]] || mkdir "${dir}"
-  local attempt=1
-  local max_attempts=10
-  while [[ $attempt -lt $max_attempts ]]; do
-    if stdlib::cmd gsutil -q cp "${url}" "${dir}/${fname}"; then
-      break
-    else
-      stdlib::error "gsutil reported non-zero exit code fetching ${url}.  Retrying (${attempt}/${max_attempts})"
-      ((attempt++))
-    fi
-  done
+	local OPTIND opt url fname dir="${VARDIR:-/var/lib/startup}"
+	while getopts ":u:f:d:" opt; do
+		case "${opt}" in
+		u) url="${OPTARG}" ;;
+		f) fname="${OPTARG}" ;;
+		d) dir="${OPTARG}" ;;
+		:)
+			stdlib::mandatory_argument -n stdlib::get_from_bucket -f "$OPTARG"
+			return "${E_MISSING_MANDATORY_ARG}"
+			;;
+		*)
+			stdlib::error 'Usage: stdlib::get_from_bucket -u <url> -f <file name> -d <directory>'
+			stdlib::info 'For example: stdlib::get_from_bucket -u gs://mybucket/foo.tgz -d /var/tmp'
+			return "${E_UNKNOWN_ARG}"
+			;;
+		esac
+	done
+	# Trivially compute the filename from the URL if unspecified.
+	if [[ -z ${fname} ]]; then
+		fname=${url##*/}
+		stdlib::debug "Computed filename='${fname}' given URL."
+	fi
+	[[ -d ${dir} ]] || mkdir "${dir}"
+	local attempt=1
+	local max_attempts=10
+	while [[ $attempt -lt $max_attempts ]]; do
+		if stdlib::cmd gsutil -q cp "${url}" "${dir}/${fname}"; then
+			break
+		else
+			stdlib::error "gsutil reported non-zero exit code fetching ${url}.  Retrying (${attempt}/${max_attempts})"
+			((attempt++))
+		fi
+	done
 }

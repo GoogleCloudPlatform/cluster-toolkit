@@ -70,3 +70,8 @@ repos:
   hooks:
   - id: yamllint
     args: [-c=.yamllint]
+- repo: https://github.com/scop/pre-commit-shfmt
+  rev: v3.4.2-1
+  hooks:
+  - id: shfmt
+    exclude: ".*tpl"

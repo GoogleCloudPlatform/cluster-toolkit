@@ -13,33 +13,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if [ -z "${INSTANCE_NAME}" ]; then echo "INSTANCE_NAME is unset"; exit 1; fi
-if [ -z "${ZONE}" ]; then echo "ZONE is unset"; exit 1; fi
-if [ -z "${PROJECT_ID}" ]; then echo "PROJECT_ID is unset"; exit 1; fi
+if [ -z "${INSTANCE_NAME}" ]; then
+	echo "INSTANCE_NAME is unset"
+	exit 1
+fi
+if [ -z "${ZONE}" ]; then
+	echo "ZONE is unset"
+	exit 1
+fi
+if [ -z "${PROJECT_ID}" ]; then
+	echo "PROJECT_ID is unset"
+	exit 1
+fi
 
 tries=0
-until [ $tries -ge 120 ]
-do
-  GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
-  FINISH_LINE="startup-script exit status"
-  STATUS_LINE=$(${GCLOUD} 2>/dev/null| grep "${FINISH_LINE}")
-  STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/'<<< "${STATUS_LINE}" | uniq)
-  if [ -n "${STATUS}" ]; then break; fi
-  echo "could not detect end of startup script. Sleeping."
-  sleep 5
-  (( tries++ ))
+until [ $tries -ge 120 ]; do
+	GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
+	FINISH_LINE="startup-script exit status"
+	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep "${FINISH_LINE}")
+	STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${STATUS_LINE}" | uniq)
+	if [ -n "${STATUS}" ]; then break; fi
+	echo "could not detect end of startup script. Sleeping."
+	sleep 5
+	((tries++))
 done
 
-if [ "${STATUS}" == 0 ]
-then
-  echo "startup-script finished successfully"
-elif [ "${STATUS}" == 1 ]
-then
-  echo "startup-script finished with errors, to inspect the startup script output, please run:"
-  echo "${GCLOUD}"
+if [ "${STATUS}" == 0 ]; then
+	echo "startup-script finished successfully"
+elif [ "${STATUS}" == 1 ]; then
+	echo "startup-script finished with errors, to inspect the startup script output, please run:"
+	echo "${GCLOUD}"
 else
-  echo "invalid return status '${STATUS}'"
-  exit 1
+	echo "invalid return status '${STATUS}'"
+	exit 1
 fi
 
 exit "${STATUS}"
