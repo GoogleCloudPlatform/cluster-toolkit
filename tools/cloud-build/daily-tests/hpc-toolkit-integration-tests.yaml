@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 timeout: 7200s
 steps:
 - name: golang
@@ -21,7 +23,8 @@ steps:
   - |
     cd /workspace
     make
-- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+- name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
@@ -49,7 +52,8 @@ steps:
     EOT
     ansible-playbook tools/cloud-build/daily-tests/daily-tests.yml \
       --user=sa_106486320838376751393 --extra-vars="@test-vars.yml"
-- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+- name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"

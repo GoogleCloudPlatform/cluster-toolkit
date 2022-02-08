@@ -14,50 +14,59 @@
 
 ---
 repos:
-  - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.52.0
-    hooks:
-      - id: terraform_fmt
-      - id: terraform_tflint
-        args:
-          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
-      - id: terraform_validate
-  - repo: local
-    hooks:
-      - id: terraform-readme
-        name: terraform-readme
-        entry: tools/autodoc/terraform_docs.sh
-        language: script
-        types: ['terraform']
-        exclude: \.terraform\/.*$
-        pass_filenames: true
-        require_serial: true
-      - id: packer-readme
-        name: packer-readme
-        entry: tools/autodoc/terraform_docs.sh
-        language: script
-        files: ^.*\.pkr\.hcl$
-        pass_filenames: true
-        require_serial: true
-  - repo: https://github.com/dnephin/pre-commit-golang
-    rev: v0.4.0
-    hooks:
-      - id: go-fmt
-      - id: go-vet
-      - id: go-lint
-      - id: go-imports
-      - id: go-cyclo
-        args: [-over=15]
-      - id: go-unit-tests
-      - id: go-build
-      - id: go-mod-tidy
-  - repo: https://github.com/tekwizely/pre-commit-golang
-    rev: v0.8.3
-    hooks:
-      - id: go-critic
-        args: [-disable, "#experimental,sloppyTypeAssert"]
-  - repo: https://github.com/koalaman/shellcheck-precommit
-    rev: v0.7.2
-    hooks:
-    - id: shellcheck
-      exclude: ".*tpl"
+- repo: https://github.com/antonbabenko/pre-commit-terraform
+  rev: v1.52.0
+  hooks:
+  - id: terraform_fmt
+  - id: terraform_tflint
+    args:
+    - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+  - id: terraform_validate
+- repo: local
+  hooks:
+  - id: terraform-readme
+    name: terraform-readme
+    entry: tools/autodoc/terraform_docs.sh
+    language: script
+    types: ['terraform']
+    exclude: \.terraform\/.*$
+    pass_filenames: true
+    require_serial: true
+  - id: packer-readme
+    name: packer-readme
+    entry: tools/autodoc/terraform_docs.sh
+    language: script
+    files: ^.*\.pkr\.hcl$
+    pass_filenames: true
+    require_serial: true
+- repo: https://github.com/dnephin/pre-commit-golang
+  rev: v0.4.0
+  hooks:
+  - id: go-fmt
+  - id: go-vet
+  - id: go-lint
+  - id: go-imports
+  - id: go-cyclo
+    args: [-over=15]
+  - id: go-unit-tests
+  - id: go-build
+  - id: go-mod-tidy
+- repo: https://github.com/tekwizely/pre-commit-golang
+  rev: v0.8.3
+  hooks:
+  - id: go-critic
+    args: [-disable, "#experimental,sloppyTypeAssert"]
+- repo: https://github.com/koalaman/shellcheck-precommit
+  rev: v0.7.2
+  hooks:
+  - id: shellcheck
+    exclude: ".*tpl"
+- repo: https://github.com/ansible-community/ansible-lint.git
+  rev: v5.3.2  # https://github.com/ansible-community/ansible-lint/releases/
+  hooks:
+  - id: ansible-lint
+- repo: https://github.com/adrienverge/yamllint.git
+  rev: v1.17.0
+  hooks:
+  - id: yamllint
+    args: [-c=.yamllint]

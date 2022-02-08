@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: hpc-cluster-small
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm-small
   region: europe-west4
   zone: europe-west4-a
@@ -23,9 +25,9 @@ vars:
 resource_groups:
 - group: primary
   resources:
-    # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-    # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-    # Example - ./resources/network/vpc
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
   - source: resources/network/vpc
     kind: terraform
     id: network1
@@ -42,9 +44,9 @@ resource_groups:
     id: startup
     settings:
       runners:
-        - type: shell
-          source: "modules/startup-script/examples/install_ansible.sh"
-          destination: install_ansible.sh
+      - type: shell
+        source: "modules/startup-script/examples/install_ansible.sh"
+        destination: install_ansible.sh
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform

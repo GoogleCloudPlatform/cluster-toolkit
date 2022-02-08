@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: rocky-linux
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: rocky-linux
   region: us-central1
   zone: us-central1-a
@@ -50,52 +52,54 @@ resource_groups:
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.0
       spack_cache_url:
-       - mirror_name: 'gcs_cache'
-         mirror_url: gs://example-buildcache/linux-centos7
+      - mirror_name: 'gcs_cache'
+        mirror_url: gs://example-buildcache/linux-centos7
       compilers:
-        - gcc@10.3.0 target=x86_64
+      - gcc@10.3.0 target=x86_64
       packages:
-        - cmake%gcc@10.3.0 target=x86_64
-        - intel-mkl%gcc@10.3.0 target=skylake
-        - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
-        - fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5 target=x86_64
+      - cmake%gcc@10.3.0 target=x86_64
+      - intel-mkl%gcc@10.3.0 target=skylake
+      - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
+      - >-
+        fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5
+        target=x86_64
 
   - source: ./resources/scripts/startup-script
     kind: terraform
     id: startup
     settings:
       runners:
-        - type: shell
-          source: "modules/startup-script/examples/hello.sh"
-          destination: "hello.sh"
-        - type: data
-          source: /tmp/foo.tgz
-          destination: /tmp/foo.tgz
-        - type: shell
-          destination: "decompress.sh"
-          content: |
-            #!/bin/sh
-            echo $2
-            tar zxvf /tmp/$1 -C /
-          args: "foo.tgz 'Expanding the file'"
-        - type: shell
-          source: modules/startup-script/examples/install_ansible.sh
-          destination: install_ansible.sh
-        - type: "ansible-local"
-          source: modules/startup-script/examples/hello.yaml
-          destination: hello.yaml
-        - type: shell
-          content: $(nfs.install_nfs_client)
-          destination: "install-nfs.sh"
-        - type: shell
-          content: $(appsfs.install_nfs_client)
-          destination: "install-nfs-filestore.sh"
-        - type: "ansible-local"
-          source: "modules/startup-script/examples/mount.yaml"
-          destination: "mount.yaml"
-        - type: shell
-          content: $(spack.startup_script)
-          destination: "/apps/spack-install.sh"
+      - type: shell
+        source: "modules/startup-script/examples/hello.sh"
+        destination: "hello.sh"
+      - type: data
+        source: /tmp/foo.tgz
+        destination: /tmp/foo.tgz
+      - type: shell
+        destination: "decompress.sh"
+        content: |
+          #!/bin/sh
+          echo $2
+          tar zxvf /tmp/$1 -C /
+        args: "foo.tgz 'Expanding the file'"
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - type: "ansible-local"
+        source: modules/startup-script/examples/hello.yaml
+        destination: hello.yaml
+      - type: shell
+        content: $(nfs.install_nfs_client)
+        destination: "install-nfs.sh"
+      - type: shell
+        content: $(appsfs.install_nfs_client)
+        destination: "install-nfs-filestore.sh"
+      - type: "ansible-local"
+        source: "modules/startup-script/examples/mount.yaml"
+        destination: "mount.yaml"
+      - type: shell
+        content: $(spack.startup_script)
+        destination: "/apps/spack-install.sh"
 
   - source: ./resources/compute/simple-instance
     kind: terraform

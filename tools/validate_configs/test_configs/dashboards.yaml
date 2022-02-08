@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: dashboards
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: dashboards-test
   region: europe-west4
   zone: europe-west4-a
@@ -53,7 +55,7 @@ resource_groups:
       - |
           {
             "text": {
-              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "content":"Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
               "format": "MARKDOWN"
             },
             "title": "HPC Toolkit - TEST"
@@ -66,4 +68,3 @@ resource_groups:
             },
             "title": "HPC Toolkit - TEST 2"
           }
-

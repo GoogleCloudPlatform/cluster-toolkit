@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   args:
@@ -44,4 +46,3 @@ steps:
 timeout: "1200s"
 options:
   machineType: N1_HIGHCPU_8
-

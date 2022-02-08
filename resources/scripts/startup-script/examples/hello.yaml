@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 - name: Hello World
   hosts: localhost
   tasks:
-    - name: Create a file called '/tmp/hello-playbook.txt'
-      copy:
-        content: Hello World
-        dest: /tmp/hello-playbook.txt
+  - name: Create a file called '/tmp/hello-playbook.txt'
+    copy:
+      content: Hello World
+      dest: /tmp/hello-playbook.txt
