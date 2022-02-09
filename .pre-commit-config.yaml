@@ -56,11 +56,6 @@ repos:
   hooks:
   - id: go-critic
     args: [-disable, "#experimental,sloppyTypeAssert"]
-- repo: https://github.com/koalaman/shellcheck-precommit
-  rev: v0.7.2
-  hooks:
-  - id: shellcheck
-    exclude: ".*tpl"
 - repo: https://github.com/ansible-community/ansible-lint.git
   rev: v5.3.2  # https://github.com/ansible-community/ansible-lint/releases/
   hooks:
@@ -70,8 +65,12 @@ repos:
   hooks:
   - id: yamllint
     args: [-c=.yamllint]
-- repo: https://github.com/scop/pre-commit-shfmt
-  rev: v3.4.2-1
+- repo: https://github.com/jumanjihouse/pre-commit-hooks
+  rev: "2.1.5"  # or specific git tag
   hooks:
+  - id: markdownlint # Configure in .mdlrc
+  - id: script-must-have-extension
+  - id: shellcheck
+    exclude: ".*tpl"
   - id: shfmt
     exclude: ".*tpl"
