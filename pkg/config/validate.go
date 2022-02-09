@@ -220,7 +220,7 @@ func testZoneExists(zones []string) error {
 	return nil
 }
 
-func testZoneInRegion(zoneRegionPairs []ZoneRegion) error {
+func testZoneInRegion(zoneRegionPairs []zoneRegion) error {
 	for _, zoneRegionPair := range zoneRegionPairs {
 		if err := validators.TestZoneInRegion(zoneRegionPair.Zone, zoneRegionPair.Region); err != nil {
 			return err
