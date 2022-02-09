@@ -52,7 +52,7 @@ vars:
   labels:
     global_label: label_value
 
-# Many resources can be added from local directories.
+# Many resources can be added from local and remote directories.
 resource_groups:
 - group: groupName
   resources:
@@ -75,6 +75,12 @@ resource_groups:
 
   # Embedded resource (part of the toolkit), prefixed with resources/
   - source: resources/role/resource-name
+
+  # GitHub resource over SSH, prefixed with git@github.com
+  - source: git@github.com:org/repo.git//resources/role/resource-name
+
+  # GitHub resource over HTTPS, prefixed with github.com
+  - source: github.com/org/repo//resources/role/resource-name
 ```
 
 ## Variables
