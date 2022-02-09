@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,21 +12,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: hpc-cluster-high-io
+blueprint_name: hpc-cluster-project
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-io
-  region: us-central1
-  zone: us-central1-c
+  deployment_name: hpc-slurm-project
+  region: europe-west4
+  zone: europe-west4-a
+  slurm_sa: slurm-sa
 
 resource_groups:
+- group: onboarding
+  resources:
+  - source: ./resources/project/new-project
+    kind: terraform
+    id: project
+    settings:
+      project_id: $(vars.project_id)
+      folder_id: 334688113020 # random number
+      billing_account: "111110-M2N704-854685" # random billing number
+      org_id: 123456789 # random org id
+
+  - source: resources/project/service-enablement
+    kind: terraform
+    id: enable-apis
+    use: [project]
+    settings:
+      gcp_service_list: [
+      "file.googleapis.com",
+      "compute.googleapis.com"
+      ]
+
 - group: primary
   resources:
     # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
     # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-    # Example - ./resources/network/pre-existing-vpc
-  - source: resources/network/pre-existing-vpc
+    # Example - ./resources/network/vpc
+  - source: resources/network/vpc
     kind: terraform
     id: network1
 
@@ -37,33 +59,17 @@ resource_groups:
     settings:
       local_mount: /home
 
-  - source: resources/file-system/filestore
-    kind: terraform
-    id: projectsfs
-    use: [network1]
-    settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /projects
-
-  - source: resources/third-party/file-system/DDN-EXAScaler
-    kind: terraform
-    id: scratchfs
-    use: [network1]
-    settings:
-      local_mount: /scratch
-
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
     - network1
     - homefs
-    - scratchfs
-    - projectsfs
     settings:
-      max_node_count: 200
       partition_name: compute
+      machine_type: n1-standard-2
+      enable_placement: false
+      max_node_count: 20
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
@@ -71,9 +77,9 @@ resource_groups:
     use:
     - network1
     - homefs
-    - scratchfs
-    - projectsfs
     - compute_partition
+    settings:
+      login_node_count: 1
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
@@ -81,8 +87,4 @@ resource_groups:
     use:
     - network1
     - homefs
-    - scratchfs
-    - projectsfs
     - slurm_controller
-    settings:
-      login_machine_type: n2-standard-4

@@ -59,7 +59,7 @@ resource "google_compute_instance" "compute_instance" {
   }
 
   metadata                = var.metadata
-  metadata_startup_script = templatefile("${path.module}/scripts/install-nfs.sh", { local_mounts = var.local_mounts })
+  metadata_startup_script = templatefile("${path.module}/scripts/install-nfs-server.sh.tpl", { local_mounts = var.local_mounts })
 
   labels = var.labels
 }

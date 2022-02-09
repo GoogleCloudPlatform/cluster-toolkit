@@ -69,6 +69,10 @@
   "modules": [],
   "outputs": [
     {
+      "name": "install_nfs_client",
+      "description": "Script for installing NFS client"
+    },
+    {
       "name": "network_storage",
       "description": "Describes a filestore instance."
     }

@@ -53,6 +53,9 @@ resource_groups:
     - network1
     - homefs
     settings:
+      enable_placement: false
+      machine_type: n2-standard-4
+      cpu_platform: Intel Ice Lake
       partition_name: compute
       max_node_count: 20
 

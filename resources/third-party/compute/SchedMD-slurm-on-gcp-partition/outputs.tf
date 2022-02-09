@@ -26,16 +26,16 @@ output "partition" {
     compute_disk_type : var.compute_disk_type
     compute_disk_size_gb : var.compute_disk_size_gb
     compute_labels : var.labels
-    cpu_platform : null
+    cpu_platform : var.cpu_platform
     gpu_count : var.gpu_count
     gpu_type : var.gpu_type
     network_storage : var.network_storage
     preemptible_bursting : var.preemptible_bursting
     vpc_subnet : var.subnetwork_name
-    exclusive : false
+    exclusive : var.exclusive
     enable_placement : var.enable_placement
-    regional_capacity : false
-    regional_policy : {}
-    instance_template : null
+    regional_capacity : var.regional_capacity
+    regional_policy : var.regional_policy
+    instance_template : var.instance_template
   }
 }

@@ -104,7 +104,7 @@ variable "security" {
 
   default = {
     admin              = "stack"
-    public_key         = "~/.ssh/id_rsa.pub"
+    public_key         = null
     block_project_keys = false
     enable_os_login    = true
     enable_local       = false

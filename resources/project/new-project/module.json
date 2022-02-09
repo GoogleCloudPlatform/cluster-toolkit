@@ -3,11 +3,143 @@
   "footer": "",
   "inputs": [
     {
+      "name": "activate_api_identities",
+      "type": "list(object({\n    api   = string\n    roles = list(string)\n  }))",
+      "description": "    The list of service identities (Google Managed service account for the API) to force-create for the project (e.g. in order to grant additional roles).\n    APIs in this list will automatically be appended to `activate_apis`.\n    Not including the API in this list will follow the default behaviour for identity creation (which is usually when the first resource using the API is created).\n    Any roles (e.g. service agent role) must be explicitly listed. See https://cloud.google.com/iam/docs/understanding-roles#service-agent-roles-roles for a list of related roles.\n",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "activate_apis",
+      "type": "list(string)",
+      "description": "The list of apis to activate within the project",
+      "default": [
+        "compute.googleapis.com"
+      ],
+      "required": false
+    },
+    {
+      "name": "auto_create_network",
+      "type": "bool",
+      "description": "Create the default network",
+      "default": false,
+      "required": false
+    },
+    {
       "name": "billing_account",
       "type": "string",
-      "description": "The ID of the billing account to associate projects with.",
+      "description": "The ID of the billing account to associate this project with",
       "default": null,
       "required": true
+    },
+    {
+      "name": "bucket_force_destroy",
+      "type": "bool",
+      "description": "Force the deletion of all objects within the GCS bucket when deleting the bucket (optional)",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "bucket_labels",
+      "type": "map(string)",
+      "description": " A map of key/value label pairs to assign to the bucket (optional)",
+      "default": {},
+      "required": false
+    },
+    {
+      "name": "bucket_location",
+      "type": "string",
+      "description": "The location for a GCS bucket to create (optional)",
+      "default": "US",
+      "required": false
+    },
+    {
+      "name": "bucket_name",
+      "type": "string",
+      "description": "A name for a GCS bucket to create (in the bucket_project project), useful for Terraform state (optional)",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "bucket_project",
+      "type": "string",
+      "description": "A project to create a GCS bucket (bucket_name) in, useful for Terraform state (optional)",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "bucket_ula",
+      "type": "bool",
+      "description": "Enable Uniform Bucket Level Access",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "bucket_versioning",
+      "type": "bool",
+      "description": "Enable versioning for a GCS bucket to create (optional)",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "budget_alert_pubsub_topic",
+      "type": "string",
+      "description": "The name of the Cloud Pub/Sub topic where budget related messages will be published, in the form of `projects/{project_id}/topics/{topic_id}`",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "budget_alert_spent_percents",
+      "type": "list(number)",
+      "description": "A list of percentages of the budget to alert on when threshold is exceeded",
+      "default": [
+        0.5,
+        0.7,
+        1
+      ],
+      "required": false
+    },
+    {
+      "name": "budget_amount",
+      "type": "number",
+      "description": "The amount to use for a budget alert",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "budget_display_name",
+      "type": "string",
+      "description": "The display name of the budget. If not set defaults to `Budget For \u003cprojects[0]|All Projects\u003e` ",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "budget_monitoring_notification_channels",
+      "type": "list(string)",
+      "description": "A list of monitoring notification channels in the form `[projects/{project_id}/notificationChannels/{channel_id}]`. A maximum of 5 channels are allowed.",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "consumer_quotas",
+      "type": "list(object({\n    service = string,\n    metric  = string,\n    limit   = string,\n    value   = string,\n  }))",
+      "description": "The quotas configuration you want to override for the project.",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "create_project_sa",
+      "type": "bool",
+      "description": "Whether the default service account for the project shall be created",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "default_network_tier",
+      "type": "string",
+      "description": "Default Network Service Tier for resources created in this project. If unset, the value will not be modified. See https://cloud.google.com/network-tiers/docs/using-network-service-tiers and https://cloud.google.com/network-tiers.",
+      "default": "",
+      "required": false
     },
     {
       "name": "default_service_account",
@@ -17,43 +149,245 @@
       "required": false
     },
     {
+      "name": "disable_dependent_services",
+      "type": "bool",
+      "description": "Whether services that are enabled and which depend on this service should also be disabled when this service is destroyed.",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "disable_services_on_destroy",
+      "type": "bool",
+      "description": "Whether project services will be disabled when the resources are destroyed",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "domain",
+      "type": "string",
+      "description": "The domain name (optional).",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "enable_shared_vpc_host_project",
+      "type": "bool",
+      "description": "If this project is a shared VPC host project. If true, you must *not* set svpc_host_project_id variable. Default is false.",
+      "default": false,
+      "required": false
+    },
+    {
       "name": "folder_id",
       "type": "string",
-      "description": "ID of the Folder",
-      "default": null,
-      "required": true
+      "description": "The ID of a folder to host this project",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "grant_services_network_role",
+      "type": "bool",
+      "description": "Whether or not to grant service agents the network roles on the host project",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "grant_services_security_admin_role",
+      "type": "bool",
+      "description": "Whether or not to grant Kubernetes Engine Service Agent the Security Admin role on the host project so it can manage firewall rules",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "group_name",
+      "type": "string",
+      "description": "A group to control the project by being assigned group_role (defaults to project editor)",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "group_role",
+      "type": "string",
+      "description": "The role to give the controlling group (group_name) over the project (defaults to project editor)",
+      "default": "roles/editor",
+      "required": false
     },
     {
       "name": "labels",
-      "type": "any",
-      "description": "Labels for the project. List key, value pairs.",
+      "type": "map(string)",
+      "description": "Map of labels for project",
+      "default": {},
+      "required": false
+    },
+    {
+      "name": "lien",
+      "type": "bool",
+      "description": "Add a lien on the project to prevent accidental deletion",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "description": "The name for the project",
       "default": null,
-      "required": true
+      "required": false
     },
     {
       "name": "org_id",
       "type": "string",
-      "description": "ID of the organization",
+      "description": "The organization ID.",
       "default": null,
       "required": true
     },
     {
       "name": "project_id",
       "type": "string",
-      "description": "ID of the Project",
+      "description": "The ID to give the project. If not provided, the `name` will be used.",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "project_sa_name",
+      "type": "string",
+      "description": "Default service account name for the project.",
+      "default": "project-service-account",
+      "required": false
+    },
+    {
+      "name": "random_project_id",
+      "type": "bool",
+      "description": "Adds a suffix of 4 random characters to the `project_id`",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "sa_role",
+      "type": "string",
+      "description": "A role to give the default Service Account for the project (defaults to none)",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "shared_vpc_subnets",
+      "type": "list(string)",
+      "description": "List of subnets fully qualified subnet IDs (ie. projects/$project_id/regions/$region/subnetworks/$subnet_id)",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "svpc_host_project_id",
+      "type": "string",
+      "description": "The ID of the host project which hosts the shared VPC",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "usage_bucket_name",
+      "type": "string",
+      "description": "Name of a GCS bucket to store GCE usage reports in (optional)",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "usage_bucket_prefix",
+      "type": "string",
+      "description": "Prefix in the GCS bucket to store GCE usage reports in (optional)",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "vpc_service_control_attach_enabled",
+      "type": "bool",
+      "description": "Whether the project will be attached to a VPC Service Control Perimeter",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "vpc_service_control_perimeter_name",
+      "type": "string",
+      "description": "The name of a VPC Service Control Perimeter to add the created project to",
       "default": null,
-      "required": true
+      "required": false
     }
   ],
   "modules": [
     {
       "name": "project_factory",
       "source": "terraform-google-modules/project-factory/google",
-      "version": "~\u003e 10.1",
+      "version": "~\u003e 11.3",
       "description": null
     }
   ],
-  "outputs": [],
+  "outputs": [
+    {
+      "name": "api_s_account",
+      "description": "API service account email"
+    },
+    {
+      "name": "api_s_account_fmt",
+      "description": "API service account email formatted for terraform use"
+    },
+    {
+      "name": "budget_name",
+      "description": "The name of the budget if created"
+    },
+    {
+      "name": "domain",
+      "description": "The organization's domain"
+    },
+    {
+      "name": "enabled_api_identities",
+      "description": "Enabled API identities in the project"
+    },
+    {
+      "name": "enabled_apis",
+      "description": "Enabled APIs in the project"
+    },
+    {
+      "name": "group_email",
+      "description": "The email of the G Suite group with group_name"
+    },
+    {
+      "name": "project_bucket_self_link",
+      "description": "Project's bucket selfLink"
+    },
+    {
+      "name": "project_bucket_url",
+      "description": "Project's bucket url"
+    },
+    {
+      "name": "project_id",
+      "description": "ID of the project that was created"
+    },
+    {
+      "name": "project_name",
+      "description": "Name of the project that was created"
+    },
+    {
+      "name": "project_number",
+      "description": "Number of the project that was created"
+    },
+    {
+      "name": "service_account_display_name",
+      "description": "The display name of the default service account"
+    },
+    {
+      "name": "service_account_email",
+      "description": "The email of the default service account"
+    },
+    {
+      "name": "service_account_id",
+      "description": "The id of the default service account"
+    },
+    {
+      "name": "service_account_name",
+      "description": "The fully-qualified name of the default service account"
+    },
+    {
+      "name": "service_account_unique_id",
+      "description": "The unique id of the default service account"
+    }
+  ],
   "providers": [],
   "requirements": [
     {
