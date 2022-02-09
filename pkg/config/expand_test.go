@@ -350,14 +350,14 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 		Source: "./resource/testpath",
 	}
 	testYamlConfig := YamlConfig{
-		Vars: make(map[string]interface{}),
-		ResourceGroups: []ResourceGroup{
-			ResourceGroup{
-				Resources: []Resource{
-					testResource,
-				},
-			},
-		},
+		BlueprintName: "",
+		Vars:          make(map[string]interface{}),
+		ResourceGroups: []ResourceGroup{{
+			Name:             "",
+			TerraformBackend: TerraformBackend{},
+			Resources:        []Resource{testResource},
+		}},
+		TerraformBackendDefaults: TerraformBackend{},
 	}
 	testVarContext := varContext{
 		yamlConfig: testYamlConfig,

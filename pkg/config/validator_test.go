@@ -65,18 +65,15 @@ func (s *MySuite) TestValidateResouceSettings(c *C) {
 		"test_variable": "test_value",
 	}
 	testResourceGroup := ResourceGroup{
-		Resources: []Resource{
-			Resource{
-				Kind:     "terraform",
-				Source:   testSource,
-				Settings: testSettings,
-			},
-		},
+		Name:             "",
+		TerraformBackend: TerraformBackend{},
+		Resources:        []Resource{{Kind: "terraform", Source: testSource, Settings: testSettings}},
 	}
 	bc := BlueprintConfig{
-		Config: YamlConfig{
-			ResourceGroups: []ResourceGroup{testResourceGroup},
-		},
+		Config:          YamlConfig{ResourceGroups: []ResourceGroup{testResourceGroup}},
+		ResourcesInfo:   map[string]map[string]resreader.ResourceInfo{},
+		ResourceToGroup: map[string]int{},
+		expanded:        false,
 	}
 	bc.validateResourceSettings()
 }
@@ -97,7 +94,7 @@ func (s *MySuite) TestValidateSettings(c *C) {
 
 	// Succeeds: One required, setting exists
 	info.Inputs = []resreader.VarInfo{
-		resreader.VarInfo{Name: "TestSetting", Required: true},
+		{Name: "TestSetting", Required: true},
 	}
 	err = validateSettings(res, info)
 	c.Assert(err, IsNil)

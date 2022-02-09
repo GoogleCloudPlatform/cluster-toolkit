@@ -14,15 +14,56 @@
  * limitations under the License.
 */
 
+locals {
+  name = var.name != null ? var.name : var.project_id
+}
+
 module "project_factory" {
   source  = "terraform-google-modules/project-factory/google"
-  version = "~> 10.1"
+  version = "~> 11.3"
 
-  name                    = var.project_id
-  random_project_id       = true
-  folder_id               = var.folder_id
-  org_id                  = var.org_id
-  billing_account         = var.billing_account
-  default_service_account = var.default_service_account
-  labels                  = var.labels
+  random_project_id                       = var.random_project_id
+  org_id                                  = var.org_id
+  domain                                  = var.domain
+  name                                    = local.name
+  project_id                              = var.project_id
+  svpc_host_project_id                    = var.svpc_host_project_id
+  enable_shared_vpc_host_project          = var.enable_shared_vpc_host_project
+  billing_account                         = var.billing_account
+  folder_id                               = var.folder_id
+  group_name                              = var.group_name
+  group_role                              = var.group_role
+  create_project_sa                       = var.create_project_sa
+  project_sa_name                         = var.project_sa_name
+  sa_role                                 = var.sa_role
+  activate_apis                           = var.activate_apis
+  activate_api_identities                 = var.activate_api_identities
+  usage_bucket_name                       = var.usage_bucket_name
+  usage_bucket_prefix                     = var.usage_bucket_prefix
+  shared_vpc_subnets                      = var.shared_vpc_subnets
+  labels                                  = var.labels
+  bucket_project                          = var.bucket_project
+  bucket_name                             = var.bucket_name
+  bucket_location                         = var.bucket_location
+  bucket_versioning                       = var.bucket_versioning
+  bucket_labels                           = var.bucket_labels
+  bucket_force_destroy                    = var.bucket_force_destroy
+  bucket_ula                              = var.bucket_ula
+  auto_create_network                     = var.auto_create_network
+  lien                                    = var.lien
+  disable_services_on_destroy             = var.disable_services_on_destroy
+  default_service_account                 = var.default_service_account
+  disable_dependent_services              = var.disable_dependent_services
+  budget_amount                           = var.budget_amount
+  budget_display_name                     = var.budget_display_name
+  budget_alert_pubsub_topic               = var.budget_alert_pubsub_topic
+  budget_monitoring_notification_channels = var.budget_monitoring_notification_channels
+  budget_alert_spent_percents             = var.budget_alert_spent_percents
+  vpc_service_control_attach_enabled      = var.vpc_service_control_attach_enabled
+  vpc_service_control_perimeter_name      = var.vpc_service_control_perimeter_name
+  grant_services_security_admin_role      = var.grant_services_security_admin_role
+  grant_services_network_role             = var.grant_services_network_role
+  consumer_quotas                         = var.consumer_quotas
+  default_network_tier                    = var.default_network_tier
+
 }
