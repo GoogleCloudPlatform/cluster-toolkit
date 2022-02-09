@@ -32,7 +32,6 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
-	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 )
 
@@ -114,24 +113,6 @@ func createTestApplyFunctions(config config.YamlConfig) [][]map[string]string {
 // Tests
 
 // reswriter.go
-func getTestFS() afero.IOFS {
-	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("resources/network/vpc", 0755)
-	afero.WriteFile(
-		aferoFS, "resources/network/vpc/main.tf", []byte("test string"), 0644)
-	return afero.NewIOFS(aferoFS)
-}
-
-func (s *MySuite) TestCopyEmbedded(c *C) {
-	testFS := getTestFS()
-	dest := path.Join(testDir, "TestCopyEmbedded")
-	if err := os.Mkdir(dest, 0755); err != nil {
-		log.Fatal(err)
-	}
-	err := copyEmbedded(testFS, "resources/network/vpc", dest)
-	c.Assert(err, IsNil)
-}
-
 func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	blueprintName := "blueprints_TestWriteBlueprint"

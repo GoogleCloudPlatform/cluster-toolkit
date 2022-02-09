@@ -18,8 +18,7 @@ package main
 import (
 	"embed"
 	"hpc-toolkit/cmd"
-	"hpc-toolkit/pkg/resreader"
-	"hpc-toolkit/pkg/reswriter"
+	"hpc-toolkit/pkg/sourcereader"
 	"os"
 )
 
@@ -27,8 +26,7 @@ import (
 var resourceFS embed.FS
 
 func main() {
-	reswriter.ResourceFS = resourceFS
-	resreader.ResourceFS = resourceFS
+	sourcereader.ResourceFS = resourceFS
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

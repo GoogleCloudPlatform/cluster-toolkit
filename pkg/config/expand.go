@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 
 	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/sourcereader"
 )
 
 const (
@@ -392,8 +393,8 @@ func expandSimpleVariable(
 			context.varString)
 	}
 	refRes := refGrp.Resources[refResIndex]
-	reader := resreader.Factory(refRes.Kind)
-	resInfo, err := reader.GetInfo(refRes.Source)
+	reader := sourcereader.Factory(refRes.Source)
+	resInfo, err := reader.GetResourceInfo(refRes.Source, refRes.Kind)
 	if err != nil {
 		log.Fatalf(
 			"failed to get info for resource at %s while expanding variables: %e",

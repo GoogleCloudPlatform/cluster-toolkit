@@ -92,26 +92,6 @@ func getTestFS() afero.IOFS {
 	return afero.NewIOFS(aferoFS)
 }
 
-func (s *MySuite) TestCopyFSToTempDir(c *C) {
-	// Setup
-	testResFS := getTestFS()
-
-	// Success
-	testDir, err := copyFSToTempDir(testResFS, "resources/")
-	defer os.RemoveAll(testDir)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(testDir, "network/vpc/main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(path.Join(testDir, "network/vpc"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "vpc")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, true)
-}
-
 func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
@@ -132,18 +112,6 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	}
 	_, err = getHCLInfo(pathToEmptyDir)
 	expectedErr = "Source is not a terraform or packer module: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: No embedded resource
-	badEmbeddedRes := "resources/does/not/exist"
-	_, err = getHCLInfo(badEmbeddedRes)
-	expectedErr = "failed to copy embedded resource at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: Unsupported Resource Source
-	badSource := "github.com/GoogleCloudPlatform/hpc-toolkit/resources"
-	_, err = getHCLInfo(badSource)
-	expectedErr = "invalid source .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
 

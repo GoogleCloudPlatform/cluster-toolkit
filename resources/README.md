@@ -1,11 +1,10 @@
 # Resources
 
-This directory contains a set of resources built for the HPC Toolkit. These
-resources can be used to define components of an HPC cluster.
+This directory contains a set of resources built for the HPC Toolkit. These resources can be used to define components of an HPC cluster.
 
 ## Referring to resources
 
-There are two ways of referring to resources from a configuration YAML: using an embedded resource or a local resource.
+There are some ways of referring to resources from a configuration YAML as below.
 
 Embedded resources are embedded in the ghpc binary during compilation and cannot be edited. To refer to embedded resources, set the source path to `resources/<resource path>`. The paths match the resources in the repository at compilation time. For instance, the following code is using the embedded pre-existing-vpc resource.
 
@@ -19,6 +18,22 @@ Local resources point to a resource in the file system and can easily be edited.
 
 ```
   - source: ./resources/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+```
+
+GitHub resources point to a resource in GitHub. To use a GitHub resource, set the source to a path starting with `github.com` (over HTTPS) or `git@github.com` (over SSH). For instance, the following codes are using the GitHub pre-existing-vpc resource.
+
+Get resource from GitHub over SSH:
+```
+  - source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//resources/network/vpc
+    kind: terraform
+    id: network1
+```
+
+Get resource from GitHub over HTTPS:
+```
+  - source: github.com/GoogleCloudPlatform/hpc-toolkit//resources/network/vpc
     kind: terraform
     id: network1
 ```
