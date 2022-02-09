@@ -72,15 +72,12 @@ resource_groups:
 		"deployment_name": "deployment_name",
 	}
 	expectedSimpleYamlConfig YamlConfig = YamlConfig{
-		BlueprintName: "simple",
-		Vars: map[string]interface{}{
-			"labels": defaultLabels,
-		},
-		ResourceGroups: []ResourceGroup{
-			ResourceGroup{
-				Name:      "ResourceGroup1",
-				Resources: testResources,
-			},
+		BlueprintName:  "simple",
+		Vars:           map[string]interface{}{"labels": defaultLabels},
+		ResourceGroups: []ResourceGroup{{Name: "ResourceGroup1", TerraformBackend: TerraformBackend{}, Resources: testResources}},
+		TerraformBackendDefaults: TerraformBackend{
+			Type:          "",
+			Configuration: map[string]interface{}{},
 		},
 	}
 	// For expand.go
@@ -194,7 +191,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 			Configuration: map[string]interface{}{},
 		},
 		ResourceGroups: []ResourceGroup{
-			ResourceGroup{
+			{
 				Name: "group1",
 				TerraformBackend: TerraformBackend{
 					Type:          "",
@@ -208,7 +205,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	return BlueprintConfig{
 		Config: testYamlConfig,
 		ResourcesInfo: map[string]map[string]resreader.ResourceInfo{
-			"group1": map[string]resreader.ResourceInfo{
+			"group1": {
 				testResourceSource:           testResourceInfo,
 				testResourceSourceWithLabels: testResourceInfo,
 			},
@@ -221,7 +218,7 @@ func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
 	testResourceGroup := ResourceGroup{
 		Name: "primary",
 		Resources: []Resource{
-			Resource{
+			{
 				ID:       "TestResource",
 				Kind:     "terraform",
 				Source:   testResourceSource,
@@ -263,7 +260,7 @@ func (s *MySuite) TestGetResouceByID(c *C) {
 	c.Assert(got, DeepEquals, Resource{})
 
 	// No Match
-	rg.Resources = []Resource{Resource{ID: "NoMatch"}}
+	rg.Resources = []Resource{{ID: "NoMatch"}}
 	got = rg.getResourceByID(testID)
 	c.Assert(got, DeepEquals, Resource{})
 
@@ -295,7 +292,7 @@ func (s *MySuite) TestHasKind(c *C) {
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One packer kind
-	rg.Resources = []Resource{Resource{Kind: "packer"}}
+	rg.Resources = []Resource{{Kind: "packer"}}
 	c.Assert(rg.HasKind("terraform"), Equals, false)
 	c.Assert(rg.HasKind("packer"), Equals, true)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
