@@ -1,4 +1,5 @@
 ## Description
+
 This resource creates a slurm controller node via the SchedMD/slurm-gcp
 [controller](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
 module.
@@ -8,7 +9,8 @@ This will not work in conjuntion with the [startup_script](../../../scripts/star
 resource.
 
 ### Example
-```
+
+```yaml
 - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
   kind: terraform
   id: slurm_controller
@@ -22,12 +24,14 @@ resource.
     partitions:
     - $(compute_partition.partition)
 ```
+
 This creates a controller node connected to the primary subnetwork with 1 login
 node (defined elsewhere). The controller will also have the homefs file system
 mounted and manage one partition. For more context see the
 [hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml).
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

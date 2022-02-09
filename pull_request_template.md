@@ -1,4 +1,4 @@
-### Submission Checklist:
+### Submission Checklist
 
 * [ ] Have you installed and run this change against pre-commit? `pre-commit
   install`
@@ -9,4 +9,3 @@
 * [ ] Have you updated any application documentation such as READMEs and user
   guides?
 * [ ] Have you followed the guidelines in our Contributing document?
-

@@ -7,7 +7,11 @@ By default security.public_key is set to `null`, therefore the admin user is not
 created. To ensure the admin user is created, provide a public key via the
 security setting.
 
-**Please note**: This resource's instances require access to Google APIs and therefore, instances must have public IP address or it must be used in a subnetwork where [Private Google Access](https://cloud.google.com/vpc/docs/configure-private-google-access) is enabled.
+**Please note**: This resource's instances require access to Google APIs and
+therefore, instances must have public IP address or it must be used in a
+subnetwork where
+[Private Google Access](https://cloud.google.com/vpc/docs/configure-private-google-access)
+is enabled.
 
 **WARNING**: This is an experimental resource and is not fully supported.
 
@@ -15,6 +19,7 @@ security setting.
 section of the [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

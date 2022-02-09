@@ -1,4 +1,5 @@
 ## Description
+
 This resource will install [DellHPC Omnia](https://github.com/dellhpc/omnia)
 onto a cluster supporting a slurm controller and compute nodes. To see a full
 example using omnia-install, see the
@@ -10,12 +11,15 @@ runs `gcloud compute ssh` and `gcloud compute scp` on the machine creating the
 deployment (i.e. where you run `terraform apply`).
 
 ### Additional Dependencies
+
 **The following apply on the machine where `terraform apply` is called**
+
 * [gcloud](https://cloud.google.com/sdk/gcloud)
 * [python3](https://www.python.org/download/releases/3.0/)
 * [jinja2](https://palletsprojects.com/p/jinja/) python package
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

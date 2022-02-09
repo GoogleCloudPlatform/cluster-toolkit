@@ -1,8 +1,10 @@
 ## Description
+
 This resource creates one or more simple [compute VM instances](https://cloud.google.com/compute/docs/instances).
 
 ### Example
-```
+
+```yaml
 - source: ./resources/compute/simple-instance
   kind: terraform
   id: compute
@@ -14,11 +16,13 @@ This resource creates one or more simple [compute VM instances](https://cloud.go
     network_storage:
     - $(homefs.network_storage)
 ```
+
 This creates a cluster of 8 compute VMs named `compute-[0-7]` on the network
 defined by the `network1` resource. The VMs are of type c2-standard-60 and mount
 the `homefs` file system resource.
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 
