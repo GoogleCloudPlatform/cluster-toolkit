@@ -21,12 +21,14 @@ import (
 	"strings"
 )
 
+const (
+	local = iota
+	embedded
+	github
+)
+
 // SourceReader interface for reading resources from a source
 type SourceReader interface {
-	// ValidateResource runs a basic validation that the resource exists and contains the expected directories and files.
-	// This may need to use resreader to validate for the specific kind.
-	ValidateResource(resPath string, kind string) error
-
 	// GetResourceInfo would leverage resreader.GetInfo for the given kind.
 	// GetResourceInfo would operate over the source without creating a local copy.
 	// This would be very dependent on the kind of resource.
@@ -36,10 +38,10 @@ type SourceReader interface {
 	GetResource(resPath string, copyPath string) error
 }
 
-var readers = map[string]SourceReader{
-	"local":    LocalSourceReader{},
-	"embedded": EmbeddedSourceReader{},
-	"github":   GitHubSourceReader{},
+var readers = map[int]SourceReader{
+	local:    LocalSourceReader{},
+	embedded: EmbeddedSourceReader{},
+	github:   GitHubSourceReader{},
 }
 
 // IsLocalPath checks if a source path is a local FS path
@@ -63,11 +65,11 @@ func IsGitHubPath(source string) bool {
 func Factory(resPath string) SourceReader {
 	switch {
 	case IsLocalPath(resPath):
-		return readers["local"]
+		return readers[local]
 	case IsEmbeddedPath(resPath):
-		return readers["embedded"]
+		return readers[embedded]
 	case IsGitHubPath(resPath):
-		return readers["github"]
+		return readers[github]
 	default:
 		log.Fatalf("Source (%s) not valid, should begin with /, ./, ../, resources/, git@ or github.com",
 			resPath)

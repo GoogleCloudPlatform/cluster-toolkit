@@ -93,26 +93,6 @@ func createTmpResource() {
 	}
 }
 
-func (s *MySuite) TestValidateResource_Local(c *C) {
-	reader := LocalSourceReader{}
-
-	// Invalid source path - points to directory with no .tf files
-	pathToEmptyDir := path.Join(testDir, "emptyDir")
-	err := os.Mkdir(pathToEmptyDir, 0755)
-	if err != nil {
-		log.Fatal("TestValidateResource_Local: Failed to create test directory.")
-	}
-	err = reader.ValidateResource(pathToEmptyDir, tfKindString)
-	expectedErr := "failed to get info using tfconfig for terraform resource at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
-	err = reader.ValidateResource(badSource, tfKindString)
-	expectedErr = "Source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-}
-
 func (s *MySuite) TestGetResourceInfo_Local(c *C) {
 	reader := LocalSourceReader{}
 

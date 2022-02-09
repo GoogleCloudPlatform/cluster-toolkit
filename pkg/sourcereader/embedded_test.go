@@ -118,27 +118,6 @@ func (s *MySuite) TestCopyFSToTempDir(c *C) {
 	c.Assert(fInfo.IsDir(), Equals, true)
 }
 
-func (s *MySuite) TestValidateResource_Embedded(c *C) {
-	ResourceFS = getTestFS()
-	reader := EmbeddedSourceReader{}
-
-	// Invalid: No embedded resource
-	badEmbeddedRes := "resources/does/not/exist"
-	err := reader.ValidateResource(badEmbeddedRes, tfKindString)
-	expectedErr := "failed to copy embedded resource at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
-	err = reader.ValidateResource(badSource, tfKindString)
-	expectedErr = "Source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Success
-	err = reader.ValidateResource("resources/network/vpc", tfKindString)
-	c.Assert(err, IsNil)
-}
-
 func (s *MySuite) TestGetResourceInfo_Embedded(c *C) {
 	ResourceFS = getTestFS()
 	reader := EmbeddedSourceReader{}

@@ -31,29 +31,13 @@ func (s *MySuite) TestCopyGitHubResources(c *C) {
 
 	// Success via HTTPS
 	destDirForHTTPS := path.Join(destDir, "https")
-	err := copyGitHubResources("github.com/google/google.github.io//_layouts", destDirForHTTPS)
+	err := copyGitHubResources("github.com/terraform-google-modules/terraform-google-project-factory//helpers", destDirForHTTPS)
 	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(destDirForHTTPS, "redirect.html"))
+	fInfo, err := os.Stat(path.Join(destDirForHTTPS, "terraform_validate"))
 	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "redirect.html")
+	c.Assert(fInfo.Name(), Equals, "terraform_validate")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
-}
-
-func (s *MySuite) TestValidateResource_GitHub(c *C) {
-	reader := GitHubSourceReader{}
-
-	// Invalid GitHub repository - path does not exists
-	badGitRepo := "github.com:not/exist.git"
-	err := reader.ValidateResource(badGitRepo, tfKindString)
-	expectedErr := "failed to clone GitHub resource at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
-	err = reader.ValidateResource(badSource, tfKindString)
-	expectedErr = "Source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
 }
 
 func (s *MySuite) TestGetResourceInfo_GitHub(c *C) {

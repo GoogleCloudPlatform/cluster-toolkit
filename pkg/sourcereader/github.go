@@ -55,28 +55,6 @@ func copyGitHubResources(srcPath string, destPath string) error {
 	return err
 }
 
-// ValidateResource runs a basic validation that the GitHub resource exists and contains the expected directories and files
-func (r GitHubSourceReader) ValidateResource(resPath string, kind string) error {
-	if !IsGitHubPath(resPath) {
-		return fmt.Errorf("Source is not valid: %s", resPath)
-	}
-
-	resDir, err := ioutil.TempDir("", "git-module-*")
-	defer os.RemoveAll(resDir)
-	if err != nil {
-		return err
-	}
-
-	if err := copyGitHubResources(resPath, resDir); err != nil {
-		return fmt.Errorf("failed to clone GitHub resource at %s to tmp dir %s: %v",
-			resPath, resDir, err)
-	}
-
-	reader := resreader.Factory(kind)
-	_, err = reader.GetInfo(resDir)
-	return err
-}
-
 // GetResourceInfo gets resreader.ResourceInfo for the given kind from the GitHub source
 func (r GitHubSourceReader) GetResourceInfo(resPath string, kind string) (resreader.ResourceInfo, error) {
 	if !IsGitHubPath(resPath) {

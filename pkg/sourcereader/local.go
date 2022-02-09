@@ -23,17 +23,6 @@ import (
 // LocalSourceReader reads resources from a local directory
 type LocalSourceReader struct{}
 
-// ValidateResource runs a basic validation that the local resource exists and contains the expected directories and files
-func (r LocalSourceReader) ValidateResource(resPath string, kind string) error {
-	if !IsLocalPath(resPath) {
-		return fmt.Errorf("Source is not valid: %s", resPath)
-	}
-
-	reader := resreader.Factory(kind)
-	_, err := reader.GetInfo(resPath)
-	return err
-}
-
 // GetResourceInfo gets resreader.ResourceInfo for the given kind from the local source
 func (r LocalSourceReader) GetResourceInfo(resPath string, kind string) (resreader.ResourceInfo, error) {
 	if !IsLocalPath(resPath) {

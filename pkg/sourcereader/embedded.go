@@ -84,24 +84,6 @@ func copyFSToTempDir(fs BaseFS, modulePath string) (string, error) {
 	return tmpDir, err
 }
 
-// ValidateResource runs a basic validation that the embedded resource exists and contains the expected directories and files
-func (r EmbeddedSourceReader) ValidateResource(resPath string, kind string) error {
-	if !IsEmbeddedPath(resPath) {
-		return fmt.Errorf("Source is not valid: %s", resPath)
-	}
-
-	resDir, err := copyFSToTempDir(ResourceFS, resPath)
-	defer os.RemoveAll(resDir)
-	if err != nil {
-		return fmt.Errorf("failed to copy embedded resource at %s to tmp dir %s: %v",
-			resPath, resDir, err)
-	}
-
-	reader := resreader.Factory(kind)
-	_, err = reader.GetInfo(resDir)
-	return err
-}
-
 // GetResourceInfo gets resreader.ResourceInfo for the given kind from the embedded source
 func (r EmbeddedSourceReader) GetResourceInfo(resPath string, kind string) (resreader.ResourceInfo, error) {
 	if !IsEmbeddedPath(resPath) {

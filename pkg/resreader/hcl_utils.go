@@ -21,7 +21,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
 
-// getHCIInfo is wrapped by SourceReader interface which supports multiple sources and stores remote resources locally,
+// getHCLInfo is wrapped by SourceReader interface which supports multiple sources and stores remote resources locally,
 // so the given source parameter to getHCLInfo is only a local path.
 func getHCLInfo(source string) (ResourceInfo, error) {
 	ret := ResourceInfo{}
