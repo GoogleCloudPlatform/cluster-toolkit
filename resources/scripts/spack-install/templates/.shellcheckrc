@@ -9,3 +9,7 @@ disable=SC2086
 # Disabled because it misinterprets template loop iterator as a bash variable
 # https://github.com/koalaman/shellcheck/wiki/SC2154
 disable=SC2154
+
+# Disabled because paths will not be known until runtime (and will not be local)
+# https://github.com/koalaman/shellcheck/wiki/SC1090
+disable=SC1090
