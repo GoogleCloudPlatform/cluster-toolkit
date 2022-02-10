@@ -105,8 +105,20 @@ Variables in a ghpc config YAML can refer to global variables or the outputs of
 other resources. For global and resource variables, the syntax is as follows:
 
 ```yaml
-$(vars.zone)
-$(resID.name)
+vars:
+  zone: us-central1-a
+
+resource_groups:
+  - group: primary
+     resources:
+       - source: path/to/resource/1
+         id: resource1
+         ...
+       - source: path/to/resource/2
+         ...
+         settings:
+            key1: $(vars.zone)
+            key2: $(resource1.name)
 ```
 
 The variable is referred to by the source, either vars for global or the
