@@ -214,13 +214,18 @@ func getValidators() map[string]func([]interface{}) error {
 func testProjectExists(projectIds []interface{}) error {
 	var errored bool
 	for _, projectID := range projectIds {
-		if err := validators.TestProjectExists(projectID.(string)); err != nil {
+		if projectIDS, ok := projectID.(string); !ok {
+			errored = true
+			log.Printf("%s is not a valid string for project testing", projectID)
+		} else if err := validators.TestProjectExists(projectIDS); err != nil {
 			errored = true
 			log.Print(err)
+		} else {
+			log.Printf("%s is a valid project", projectIDS)
 		}
 	}
 	if errored {
-		errStr := "at least one of %s are not valid project IDs"
+		errStr := "at least one of %s failed to be validated project IDs"
 		return fmt.Errorf(errStr, projectIds)
 	}
 	return nil
@@ -229,14 +234,14 @@ func testProjectExists(projectIds []interface{}) error {
 func testRegionExists(regions []interface{}) error {
 	var errored bool
 	for _, region := range regions {
-		if regionS, ok := region.(string); ok {
-			if err := validators.TestRegionExists(regionS); err != nil {
-				errored = true
-				log.Print(err)
-			}
-		} else {
+		if regionS, ok := region.(string); !ok {
 			errored = true
 			log.Printf("%s is not a valid string for region testing", region)
+		} else if err := validators.TestRegionExists(regionS); err != nil {
+			errored = true
+			log.Print(err)
+		} else {
+			log.Printf("%s is a valid region", region)
 		}
 	}
 	if errored {
@@ -249,9 +254,14 @@ func testRegionExists(regions []interface{}) error {
 func testZoneExists(zones []interface{}) error {
 	var errored bool
 	for _, zone := range zones {
-		if err := validators.TestZoneExists(zone.(string)); err != nil {
+		if zoneS, ok := zone.(string); !ok {
+			errored = true
+			log.Printf("%s is not a valid string for zone testing", zone)
+		} else if err := validators.TestZoneExists(zoneS); err != nil {
 			errored = true
 			log.Print(err)
+		} else {
+			log.Printf("%s is a valid zone", zone)
 		}
 	}
 	if errored {
@@ -264,11 +274,23 @@ func testZoneExists(zones []interface{}) error {
 func testZoneInRegion(zoneRegionPairs []interface{}) error {
 	var errored bool
 	for _, zoneRegionInterface := range zoneRegionPairs {
-		zoneRegionPair := zoneRegionInterface.([]interface{})
-		if err := validators.TestZoneInRegion(zoneRegionPair[0].(string),
-			zoneRegionPair[1].(string)); err != nil {
+		if zoneRegionPair, ok := zoneRegionInterface.([]interface{}); !ok {
+			errored = true
+			log.Printf("%s is not a valid array for zone/region testing", zoneRegionPair)
+		} else if len(zoneRegionPair) != 2 {
+			errored = true
+			log.Printf("%s must be an array of length 2 (zone, region)", zoneRegionPair)
+		} else if zone, ok := zoneRegionPair[0].(string); !ok {
+			errored = true
+			log.Printf("%s is not a string", zoneRegionPair[0])
+		} else if region, ok := zoneRegionPair[1].(string); !ok {
+			errored = true
+			log.Printf("%s is not a string", zoneRegionPair[1])
+		} else if err := validators.TestZoneInRegion(zone, region); err != nil {
 			errored = true
 			log.Print(err)
+		} else {
+			log.Printf("zone %s found in region %s", zone, region)
 		}
 	}
 	if errored {
