@@ -15,26 +15,25 @@
 
 # This code contains minor changes from the original: https://github.com/terraform-google-modules/terraform-google-startup-scripts?ref=v1.0.0
 
-
 stdlib::main() {
-  DELETE_AT_EXIT="$(mktemp -d)"
-  readonly DELETE_AT_EXIT
+	DELETE_AT_EXIT="$(mktemp -d)"
+	readonly DELETE_AT_EXIT
 
-  # Initialize state required by other functions, e.g. debug()
-  stdlib::init
-  stdlib::debug "Loaded startup-script-stdlib as an executable."
+	# Initialize state required by other functions, e.g. debug()
+	stdlib::init
+	stdlib::debug "Loaded startup-script-stdlib as an executable."
 
-  stdlib::load_config_values
+	stdlib::load_config_values
 
-  stdlib::load_runners
+	stdlib::load_runners
 }
 
 # if script is being executed and not sourced.
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  stdlib::finish() {
-    [[ -d "${DELETE_AT_EXIT:-}" ]] && rm -rf "${DELETE_AT_EXIT}"
-  }
-  trap stdlib::finish EXIT
+if [[ ${BASH_SOURCE[0]} == "${0}" ]]; then
+	stdlib::finish() {
+		[[ -d ${DELETE_AT_EXIT:-} ]] && rm -rf "${DELETE_AT_EXIT}"
+	}
+	trap stdlib::finish EXIT
 
-  stdlib::main "$@"
+	stdlib::main "$@"
 fi

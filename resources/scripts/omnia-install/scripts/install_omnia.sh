@@ -20,18 +20,18 @@ sleep 60
 
 echo "Creating inventory..."
 mkdir -p "${RUNNER_DIR}/ghpc-install/data"
-python3 "${RUNNER_DIR}/create_inventory.py"     \
-  --deployment_name "${DEPLOYMENT_NAME}"        \
-  --template "${RUNNER_DIR}/inventory.tmpl"     \
-  --outfile "${RUNNER_DIR}/ghpc-install/data/inventory" \
-  --project "${PROJECT_ID}" \
-  --zone "${ZONE}"
+python3 "${RUNNER_DIR}/create_inventory.py" \
+	--deployment_name "${DEPLOYMENT_NAME}" \
+	--template "${RUNNER_DIR}/inventory.tmpl" \
+	--outfile "${RUNNER_DIR}/ghpc-install/data/inventory" \
+	--project "${PROJECT_ID}" \
+	--zone "${ZONE}"
 
 echo "Copying runner data to Omnia Manager..."
 gcloud compute scp --project "${PROJECT_ID}" --zone "${ZONE}" \
-  --recurse "${RUNNER_DIR}/ghpc-install" "${MANAGER_NODE}":
+	--recurse "${RUNNER_DIR}/ghpc-install" "${MANAGER_NODE}":
 
 echo "Applying the Omnia runner..."
 gcloud compute ssh \
-  --project "${PROJECT_ID}" --zone "${ZONE}" "${MANAGER_NODE}" \
-  -- "cd ~/ghpc-install/scripts; source install_omnia.sh"
+	--project "${PROJECT_ID}" --zone "${ZONE}" "${MANAGER_NODE}" \
+	-- "cd ~/ghpc-install/scripts; source install_omnia.sh"

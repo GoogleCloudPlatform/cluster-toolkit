@@ -82,3 +82,8 @@ repos:
     # MD041 - First line in file should be a top level header
     # MD046 - Code block style
     args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046", scan]
+- repo: https://github.com/scop/pre-commit-shfmt
+  rev: v3.4.2-1
+  hooks:
+  - id: shfmt
+    exclude: ".*tpl"

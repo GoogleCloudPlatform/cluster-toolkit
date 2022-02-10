@@ -31,76 +31,76 @@ readonly E_MISSING_MANDATORY_ARG=9
 readonly E_UNKNOWN_ARG=10
 
 stdlib::debug() {
-  [[ -z "${DEBUG:-}" ]] && return 0
-  local ds msg
-  msg="$*"
-  logger -p "${SYSLOG_DEBUG_PRIORITY}" -t "${PROG}[$$]" -- "${msg}"
-  [[ -n "${QUIET:-}" ]] && return 0
-  ds="$(date +"${DATE_FMT}") "
-  echo -e "${BLUE}${ds}Debug [$$]: ${msg}${NC}" >&2
+	[[ -z ${DEBUG:-} ]] && return 0
+	local ds msg
+	msg="$*"
+	logger -p "${SYSLOG_DEBUG_PRIORITY}" -t "${PROG}[$$]" -- "${msg}"
+	[[ -n ${QUIET:-} ]] && return 0
+	ds="$(date +"${DATE_FMT}") "
+	echo -e "${BLUE}${ds}Debug [$$]: ${msg}${NC}" >&2
 }
 
 stdlib::info() {
-  local ds msg
-  msg="$*"
-  logger -p "${SYSLOG_INFO_PRIORITY}" -t "${PROG}[$$]" -- "${msg}"
-  [[ -n "${QUIET:-}" ]] && return 0
-  ds="$(date +"${DATE_FMT}") "
-  echo -e "${GREEN}${ds}Info [$$]: ${msg}${NC}" >&2
+	local ds msg
+	msg="$*"
+	logger -p "${SYSLOG_INFO_PRIORITY}" -t "${PROG}[$$]" -- "${msg}"
+	[[ -n ${QUIET:-} ]] && return 0
+	ds="$(date +"${DATE_FMT}") "
+	echo -e "${GREEN}${ds}Info [$$]: ${msg}${NC}" >&2
 }
 
 stdlib::error() {
-  local ds msg
-  msg="$*"
-  ds="$(date +"${DATE_FMT}") "
-  logger -p "${SYSLOG_ERROR_PRIORITY}" -t "${PROG}[$$]" -- "${msg}"
-  echo -e "${RED}${ds}Error [$$]: ${msg}${NC}" >&2
+	local ds msg
+	msg="$*"
+	ds="$(date +"${DATE_FMT}") "
+	logger -p "${SYSLOG_ERROR_PRIORITY}" -t "${PROG}[$$]" -- "${msg}"
+	echo -e "${RED}${ds}Error [$$]: ${msg}${NC}" >&2
 }
 
 # The main initialization function of this library.  This should be kept to the
 # minimum amount of work required for all functions to operate cleanly.
 stdlib::init() {
-  if [[ ${STARTUP_SCRIPT_STDLIB_INITIALIZED} -gt 0 ]]; then
-    stdlib::info 'stdlib::init()'" already initialized, no action taken."
-    return 0
-  fi
-  ((STARTUP_SCRIPT_STDLIB_INITIALIZED++)) || true
-  stdlib::init_global_vars
-  stdlib::init_directories
-  stdlib::debug "stdlib::init(): startup-script-stdlib.sh initialized and ready"
+	if [[ ${STARTUP_SCRIPT_STDLIB_INITIALIZED} -gt 0 ]]; then
+		stdlib::info 'stdlib::init()'" already initialized, no action taken."
+		return 0
+	fi
+	((STARTUP_SCRIPT_STDLIB_INITIALIZED++)) || true
+	stdlib::init_global_vars
+	stdlib::init_directories
+	stdlib::debug "stdlib::init(): startup-script-stdlib.sh initialized and ready"
 }
 
 # Initialize global variables.
 stdlib::init_global_vars() {
-  # The program name, used for logging.
-  readonly PROG="${PROG:-startup-script-stdlib}"
-  # Date format used for stderr logging.  Passed to date + command.
-  readonly DATE_FMT="${DATE_FMT:-"%a %b %d %H:%M:%S %z %Y"}"
-  # var directory
-  readonly VARDIR="${VARDIR:-/var/lib/startup}"
-  # Override this with file://localhost/tmp/foo/bar in spec test context
-  readonly METADATA_BASE="${METADATA_BASE:-http://metadata.google.internal}"
+	# The program name, used for logging.
+	readonly PROG="${PROG:-startup-script-stdlib}"
+	# Date format used for stderr logging.  Passed to date + command.
+	readonly DATE_FMT="${DATE_FMT:-"%a %b %d %H:%M:%S %z %Y"}"
+	# var directory
+	readonly VARDIR="${VARDIR:-/var/lib/startup}"
+	# Override this with file://localhost/tmp/foo/bar in spec test context
+	readonly METADATA_BASE="${METADATA_BASE:-http://metadata.google.internal}"
 
-  # Color variables
-  if [[ -n "${COLOR:-}" ]]; then
-    readonly NC='\033[0m'        # no color
-    readonly RED='\033[0;31m'    # error
-    readonly GREEN='\033[0;32m'  # info
-    readonly BLUE='\033[0;34m'   # debug
-  else
-    readonly NC=''
-    readonly RED=''
-    readonly GREEN=''
-    readonly BLUE=''
-  fi
+	# Color variables
+	if [[ -n ${COLOR:-} ]]; then
+		readonly NC='\033[0m'       # no color
+		readonly RED='\033[0;31m'   # error
+		readonly GREEN='\033[0;32m' # info
+		readonly BLUE='\033[0;34m'  # debug
+	else
+		readonly NC=''
+		readonly RED=''
+		readonly GREEN=''
+		readonly BLUE=''
+	fi
 
-  return 0
+	return 0
 }
 
 stdlib::init_directories() {
-  if ! [[ -e "${VARDIR}" ]]; then
-    install -d -m 0755 -o 0 -g 0 "${VARDIR}"
-  fi
+	if ! [[ -e ${VARDIR} ]]; then
+		install -d -m 0755 -o 0 -g 0 "${VARDIR}"
+	fi
 }
 
 ##
@@ -112,98 +112,98 @@ stdlib::init_directories() {
 # If the requested key does not exist, the error code will be 22 and zero bytes
 # written to STDOUT.
 stdlib::metadata_get() {
-  local OPTIND opt key outfile
-  local metadata="${METADATA_BASE%/}/computeMetadata/v1"
-  local exit_code
-  while getopts ":k:o:" opt; do
-    case "${opt}" in
-    k) key="${OPTARG}" ;;
-    o) outfile="${OPTARG}" ;;
-    :)
-      stdlib::error "Invalid option: -${OPTARG} requires an argument"
-      stdlib::metadata_get_usage
-      return "${E_MISSING_MANDATORY_ARG}"
-      ;;
-    *)
-      stdlib::error "Unknown option: -${opt}"
-      stdlib::metadata_get_usage
-      return "${E_UNKNOWN_ARG}"
-      ;;
-    esac
-  done
-  local url="${metadata}/${key#/}"
+	local OPTIND opt key outfile
+	local metadata="${METADATA_BASE%/}/computeMetadata/v1"
+	local exit_code
+	while getopts ":k:o:" opt; do
+		case "${opt}" in
+		k) key="${OPTARG}" ;;
+		o) outfile="${OPTARG}" ;;
+		:)
+			stdlib::error "Invalid option: -${OPTARG} requires an argument"
+			stdlib::metadata_get_usage
+			return "${E_MISSING_MANDATORY_ARG}"
+			;;
+		*)
+			stdlib::error "Unknown option: -${opt}"
+			stdlib::metadata_get_usage
+			return "${E_UNKNOWN_ARG}"
+			;;
+		esac
+	done
+	local url="${metadata}/${key#/}"
 
-  stdlib::debug "Getting metadata resource url=${url}"
-  if [[ -z "${outfile:-}" ]]; then
-    curl --location --silent --connect-timeout 1 --fail \
-      -H 'Metadata-Flavor: Google' "$url" 2>/dev/null
-    exit_code=$?
-  else
-    stdlib::cmd curl --location \
-      --silent \
-      --connect-timeout 1 \
-      --fail \
-      --output "${outfile}" \
-      -H 'Metadata-Flavor: Google' \
-      "$url"
-    exit_code=$?
-  fi
-  case "${exit_code}" in
-    22 | 37)
-      stdlib::debug "curl exit_code=${exit_code} for url=${url}" \
-        "(Does not exist)"
-      ;;
-  esac
-  return "${exit_code}"
+	stdlib::debug "Getting metadata resource url=${url}"
+	if [[ -z ${outfile:-} ]]; then
+		curl --location --silent --connect-timeout 1 --fail \
+			-H 'Metadata-Flavor: Google' "$url" 2>/dev/null
+		exit_code=$?
+	else
+		stdlib::cmd curl --location \
+			--silent \
+			--connect-timeout 1 \
+			--fail \
+			--output "${outfile}" \
+			-H 'Metadata-Flavor: Google' \
+			"$url"
+		exit_code=$?
+	fi
+	case "${exit_code}" in
+	22 | 37)
+		stdlib::debug "curl exit_code=${exit_code} for url=${url}" \
+			"(Does not exist)"
+		;;
+	esac
+	return "${exit_code}"
 }
 
 stdlib::metadata_get_usage() {
-  stdlib::info 'Usage: stdlib::metadata_get -k <key>'
-  stdlib::info 'For example: stdlib::metadata_get -k instance/attributes/startup-config'
+	stdlib::info 'Usage: stdlib::metadata_get -k <key>'
+	stdlib::info 'For example: stdlib::metadata_get -k instance/attributes/startup-config'
 }
 
 # Load configuration values in the spirit of /etc/sysconfig defaults, but from
 # metadata instead of the filesystem.
 stdlib::load_config_values() {
-  local config_file
-  local key="instance/attributes/startup-script-config"
-  # shellcheck disable=SC2119
-  config_file="$(stdlib::mktemp)"
-  stdlib::metadata_get -k "${key}" -o "${config_file}"
-  local status=$?
-  case "$status" in
-    0)
-      stdlib::debug "SUCCESS: Configuration data sourced from $key"
-      ;;
-    22 | 37)
-      stdlib::debug "no configuration data loaded from $key"
-      ;;
-    *)
-      stdlib::error "metadata_get -k $key returned unknown status=${status}"
-      ;;
-  esac
-  # shellcheck source=/dev/null
-  source "${config_file}"
+	local config_file
+	local key="instance/attributes/startup-script-config"
+	# shellcheck disable=SC2119
+	config_file="$(stdlib::mktemp)"
+	stdlib::metadata_get -k "${key}" -o "${config_file}"
+	local status=$?
+	case "$status" in
+	0)
+		stdlib::debug "SUCCESS: Configuration data sourced from $key"
+		;;
+	22 | 37)
+		stdlib::debug "no configuration data loaded from $key"
+		;;
+	*)
+		stdlib::error "metadata_get -k $key returned unknown status=${status}"
+		;;
+	esac
+	# shellcheck source=/dev/null
+	source "${config_file}"
 }
 
 # Run a command logging the entry and exit.  Intended for system level commands
 # and operational debugging.  Not intended for use with redirection.  This is
 # not named run() because bats uses a run() function.
 stdlib::cmd() {
-  local exit_code argv=("$@")
-  stdlib::debug "BEGIN: stdlib::cmd() command=[${argv[*]}]"
-  "${argv[@]}"
-  exit_code=$?
-  stdlib::debug "END: stdlib::cmd() command=[${argv[*]}] exit_code=${exit_code}"
-  return $exit_code
+	local exit_code argv=("$@")
+	stdlib::debug "BEGIN: stdlib::cmd() command=[${argv[*]}]"
+	"${argv[@]}"
+	exit_code=$?
+	stdlib::debug "END: stdlib::cmd() command=[${argv[*]}] exit_code=${exit_code}"
+	return $exit_code
 }
 
 # Run a command successfully or exit the program with an error.
 stdlib::run_or_die() {
-  if ! stdlib::cmd "$@"; then
-    stdlib::error "stdlib::run_or_die(): exiting with exit code ${E_RUN_OR_DIE}."
-    exit "${E_RUN_OR_DIE}"
-  fi
+	if ! stdlib::cmd "$@"; then
+		stdlib::error "stdlib::run_or_die(): exiting with exit code ${E_RUN_OR_DIE}."
+		exit "${E_RUN_OR_DIE}"
+	fi
 }
 
 # Intended to take advantage of automatic cleanup of startup script library
@@ -211,26 +211,26 @@ stdlib::run_or_die() {
 # would cause the children to have their TMPDIR deleted out from under them.
 # shellcheck disable=SC2120
 stdlib::mktemp() {
-  TMPDIR="${DELETE_AT_EXIT:-${TMPDIR}}" mktemp "$@"
+	TMPDIR="${DELETE_AT_EXIT:-${TMPDIR}}" mktemp "$@"
 }
 
 # Return a nice error message if a mandatory argument is missing.
 stdlib::mandatory_argument() {
-  local OPTIND opt name flag
-  while getopts ":n:f:" opt; do
-    case "$opt" in
-    n) name="${OPTARG}" ;;
-    f) flag="${OPTARG}" ;;
-    :)
-      stdlib::error "Invalid argument: -${OPTARG} requires an argument to stdlib::mandatory_argument()"
-      return "${E_MISSING_MANDATORY_ARG}"
-      ;;
-    *)
-      stdlib::error "Unknown argument: -${OPTARG}"
-      stdlib::info "Usage: stdlib::mandatory_argument -n <name> -f <flag>"
-      return "${E_UNKNOWN_ARG}"
-      ;;
-    esac
-  done
-  stdlib::error "Invalid argument: -${flag} requires an argument to ${name}()."
+	local OPTIND opt name flag
+	while getopts ":n:f:" opt; do
+		case "$opt" in
+		n) name="${OPTARG}" ;;
+		f) flag="${OPTARG}" ;;
+		:)
+			stdlib::error "Invalid argument: -${OPTARG} requires an argument to stdlib::mandatory_argument()"
+			return "${E_MISSING_MANDATORY_ARG}"
+			;;
+		*)
+			stdlib::error "Unknown argument: -${OPTARG}"
+			stdlib::info "Usage: stdlib::mandatory_argument -n <name> -f <flag>"
+			return "${E_UNKNOWN_ARG}"
+			;;
+		esac
+	done
+	stdlib::error "Invalid argument: -${flag} requires an argument to ${name}()."
 }
