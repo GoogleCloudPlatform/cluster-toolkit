@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: new_project
 
 resource_groups:
@@ -22,7 +24,6 @@ resource_groups:
     id: project
     settings:
       project_id: test_project
-      folder_id: 334688113020 # random number
-      billing_account: "111110-M2N704-854685" # random billing number
-      org_id: 123456789 # random org id
-
+      folder_id: 334688113020  # random number
+      billing_account: "111110-M2N704-854685"  # random billing number
+      org_id: 123456789  # random org id

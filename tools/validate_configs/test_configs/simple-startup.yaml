@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: simple_startup
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: simple-startup
   region: us-central1
   zone: us-central1-a
@@ -32,19 +34,19 @@ resource_groups:
     id: startup
     settings:
       runners:
-        - type: shell
-          source: "modules/startup-script/examples/hello.sh"
-          destination: "hello.sh"
-        - type: data
-          source: /tmp/foo.tgz
-          destination: /tmp/foo.tgz
-        - type: shell
-          destination: "decompress.sh"
-          content: |
-            #!/bin/sh
-            echo $2
-            tar zxvf /tmp/$1 -C /
-          args: "foo.tgz 'Expanding the file'"
+      - type: shell
+        source: "modules/startup-script/examples/hello.sh"
+        destination: "hello.sh"
+      - type: data
+        source: /tmp/foo.tgz
+        destination: /tmp/foo.tgz
+      - type: shell
+        destination: "decompress.sh"
+        content: |
+          #!/bin/sh
+          echo $2
+          tar zxvf /tmp/$1 -C /
+        args: "foo.tgz 'Expanding the file'"
 
   - source: ./resources/compute/simple-instance
     kind: terraform

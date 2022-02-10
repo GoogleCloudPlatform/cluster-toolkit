@@ -12,20 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 - name: Update image and add EPEL, Google Cloud Logging/Monitoring
   hosts: all
-  become: yes
+  become: true
   tags: install
   roles:
-    - role: google-cloud-ops-agents-ansible
-      vars:
-        agent_type: ops-agent
+  - role: google-cloud-ops-agents-ansible
+    vars:
+      agent_type: ops-agent
   tasks:
-    - name: Upgrade all packages
-      yum:
-        name: '*'
-        state: latest
-    - name: add EPEL
-      yum:
-        name:
-          - epel-release
+  - name: Upgrade all packages
+    yum:
+      name: '*'
+      state: latest
+  - name: add EPEL
+    yum:
+      name:
+      - epel-release

@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: 2-filestore-4-instances
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: 2fs-4vm
   region: europe-west4
   zone: europe-west4-a
@@ -52,15 +54,15 @@ resource_groups:
     id: startup
     settings:
       runners:
-        - type: shell
-          source: "modules/startup-script/examples/install_ansible.sh"
-          destination: "install_ansible.sh"
-        - type: shell
-          content: $(homefs.install_nfs_client)
-          destination: "install-nfs.sh"
-        - type: "ansible-local"
-          source: "modules/startup-script/examples/mount.yaml"
-          destination: "mount.yaml"
+      - type: shell
+        source: "modules/startup-script/examples/install_ansible.sh"
+        destination: "install_ansible.sh"
+      - type: shell
+        content: $(homefs.install_nfs_client)
+        destination: "install-nfs.sh"
+      - type: "ansible-local"
+        source: "modules/startup-script/examples/mount.yaml"
+        destination: "mount.yaml"
 
   - source: ./resources/compute/simple-instance
     kind: terraform

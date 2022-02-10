@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: pre-existing-fs
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: pre-fs-slurm
   region: europe-west4
   zone: europe-west4-a
@@ -41,9 +43,9 @@ resource_groups:
     kind: terraform
     id: homefs
     settings:
-      server_ip: "" # for now, must be completed manually in compute/main.tf
+      server_ip: ""  # for now, must be completed manually in compute/main.tf
       remote_mount: nfsshare
-      local_mount: $(vars.local_mount) # automatic, added here for clarity
+      local_mount: $(vars.local_mount)  # automatic, added here for clarity
       fs_type: nfs
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
