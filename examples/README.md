@@ -1,9 +1,10 @@
-
 # Example Configs
+
 This directory contains a set of example YAML files that can be fed into gHPC
 to create a blueprint.
 
 ## Instructions
+
 Ensure your project_id is set and other deployment variables such as zone and
 region are set correctly under `vars` before creating and deploying an example
 config.
@@ -12,6 +13,7 @@ Please note that global variables defined under `vars` are automatically
 passed to resources if the resources have an input that matches the variable name.
 
 ## Config Descriptions
+
 **hpc-cluster-small.yaml**: Creates a basic auto-scaling SLURM cluster with a
 single SLURM patition and mostly default settings. The blueprint also creates a
 new VPC network, and a filestore instance mounted to `/home`.
@@ -21,18 +23,27 @@ for higher performance. It connects to the default VPC of the project and
 creates two partitions and a login node.
 
 File systems:
-* The homefs mounted at `/home` is a default "PREMIUM" tier filestore with 2.5TiB of capacity
+
+* The homefs mounted at `/home` is a default "PREMIUM" tier filestore with
+  2.5TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a [DDN Exascaler Lustre](../resources/third-party/file-system/DDN-EXAScaler/README.md) file
-system designed for high IO performance. The capacity is ~10TiB.
+  instance with 10TiB of capacity.
+* The scratchfs is mounted at `/scratch` and is a
+  [DDN Exascaler Lustre](../resources/third-party/file-system/DDN-EXAScaler/README.md)
+  file system designed for high IO performance. The capacity is ~10TiB.
 
 ### Experimental
-**omnia-cluster-simple.yaml**: Creates a simple omnia cluster, with an omnia-manager node and 8 omnia-compute nodes, on the pre-existing default network. Omnia will be automatically installed after the nodes are provisioned. All nodes mount a filestore instance on `/home`.
+
+**omnia-cluster-simple.yaml**: Creates a simple omnia cluster, with an
+omnia-manager node and 8 omnia-compute nodes, on the pre-existing default
+network. Omnia will be automatically installed after the nodes are provisioned.
+All nodes mount a filestore instance on `/home`.
 
 ## Config Schema
+
 A user defined config should follow the following schema:
-```
+
+```yaml
 # Required: Name your blueprint, this will also be the name of the directory
 # the blueprint created in.
 blueprint_name: MyBlueprintName
@@ -84,24 +95,41 @@ resource_groups:
 ```
 
 ## Variables
+
 Variables can be used to refer both to values defined elsewhere in the config
 and to the output and structure of other resources.
 
 ### Config Variables
+
 Variables in a ghpc config YAML can refer to global variables or the outputs of
 other resources. For global and resource variables, the syntax is as follows:
+
+```yaml
+vars:
+  zone: us-central1-a
+
+resource_groups:
+  - group: primary
+     resources:
+       - source: path/to/resource/1
+         id: resource1
+         ...
+       - source: path/to/resource/2
+         ...
+         settings:
+            key1: $(vars.zone)
+            key2: $(resource1.name)
 ```
-$(vars.zone)
-$(resID.name)
-```
+
 The variable is referred to by the source, either vars for global or the
 resource ID for resource variables, followed by the name of the value being
 referenced. The entire variable is then wrapped in “$()”.
 
 Currently, references to variable attributes and string operations with
 variables are not supported.
-f
+
 ### Literal Variables
+
 Formally passthrough variables.
 
 Literal variables are not interpreted by `ghpc` directly, but rather for the
@@ -116,9 +144,11 @@ of the underlying resource. For example, take the
 DDN-EXAScaler resource requires a subnetwork self link, which is not currently
 an output of either network resource, therefore it is necessary to refer to the
 primary network self link through terraform itself:
-```
+
+```yaml
 subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
 ```
+
 Here the network1 module is referenced, the terraform module name is the same
 as the ID in the `ghpc` config. From the module we can refer to it's underlying
 variables as deep as we need, in this case the self_link for it's
@@ -133,7 +163,9 @@ before creating a blueprint making debugging quicker and easier.
 
 ## Resources
 
-Resources are the building blocks of an HPC environment. They can be composed to create complex deployments using the config YAML.
-Several resources are provided by default in the [resources](../resources/README.md) folder.
+Resources are the building blocks of an HPC environment. They can be composed to
+create complex deployments using the config YAML. Several resources are provided
+by default in the [resources](../resources/README.md) folder.
 
-To learn more about how to refer to a resource in a YAML, please consult the [resources README file.](../resources/README.md)
+To learn more about how to refer to a resource in a YAML, please consult the
+[resources README file.](../resources/README.md)

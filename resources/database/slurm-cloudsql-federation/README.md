@@ -1,8 +1,13 @@
 ## Description
-terraform-google-sql makes it easy to create Google CloudSQL instance and implement high availability settings. This module is meant for use with Terraform 0.13+ and tested using Terraform 1.0+. The cloudsql created here is used to integrate with the slurm cluster to enable accounting data storage.
+
+terraform-google-sql makes it easy to create Google CloudSQL instance and
+implement high availability settings. This module is meant for use with
+Terraform 0.13+ and tested using Terraform 1.0+. The cloudsql created here is
+used to integrate with the slurm cluster to enable accounting data storage.
 
 ### Example
-```
+
+```yaml
 - source: ./resources/database/cloudsql-federation
   kind: terraform
   id: project
@@ -12,7 +17,10 @@ terraform-google-sql makes it easy to create Google CloudSQL instance and implem
     network: $(network1.network_name)
     nat_ips: $(network1.nat_ips)
 ```
-This creates a cloud sql instance, including a database, user that would allow the slurm cluster to use as an external DB. In addition, it will allow BigQuery to run federated query through it.
+
+This creates a cloud sql instance, including a database, user that would allow
+the slurm cluster to use as an external DB. In addition, it will allow BigQuery
+to run federated query through it.
 
 ## License
 

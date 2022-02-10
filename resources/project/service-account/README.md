@@ -1,9 +1,10 @@
 ## Description
+
 Allows creation of service accounts for a Google Cloud Platform project.
 
-
 ### Example
-```
+
+```yaml
 - source: ./resources/service-account
   kind: terraform
   id: service_acct
@@ -15,11 +16,13 @@ Allows creation of service accounts for a Google Cloud Platform project.
     "roles/storage.objectViewer",
   ]
 ```
+
 This creates a service account in GCP project "project_id" with the name
 "instance_acct". It will have the two roles "viewer" and
 "storage.objectViewer".
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2022 Google LLC
 

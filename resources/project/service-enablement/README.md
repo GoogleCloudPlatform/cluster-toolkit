@@ -1,9 +1,10 @@
 ## Description
+
 Allows management of multiple API services for a Google Cloud Platform project.
 
-
 ### Example
-```
+
+```yaml
 - source: ./resources/service-enablement
   kind: terraform
   id: services-api
@@ -13,9 +14,11 @@ Allows management of multiple API services for a Google Cloud Platform project.
     "compute.googleapis.com"
   ]
 ```
-This allows the project to enable both the filestore API as well as the compute API. 
+
+This allows the project to enable both the filestore API as well as the compute API.
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

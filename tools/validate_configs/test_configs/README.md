@@ -1,11 +1,13 @@
 
 # Integration Test Configs
+
 This directory contains a set of test YAML files that can be fed into gHPC
 to create a blueprint. These configs are used to run integration tests against
 `ghpc`. These configs can also be used independently and locally to verify a
 local `ghpc` build.
 
 ## Config Descriptions
+
 **hpc-cluster-simple.yaml**: Creates a simple cluster with a single compute VM,
 filestore as a /home directory and a network. This has been used as a demo
 config when presenting the toolkit.

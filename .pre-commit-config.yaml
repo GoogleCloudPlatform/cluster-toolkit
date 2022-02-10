@@ -56,3 +56,15 @@ repos:
     hooks:
       - id: go-critic
         args: [-disable, "#experimental,sloppyTypeAssert"]
+  - repo: https://github.com/jackdewinter/pymarkdown
+    rev: v0.9.5
+    hooks:
+      - id: pymarkdown
+        # Rules at https://github.com/jackdewinter/pymarkdown/tree/main/docs/rules
+        # MD013 - Line length
+        # MD022 - Headers should be surrounded by blank lines
+        # MD033 - Inline HTML
+        # MD034 - Bare URL used
+        # MD041 - First line in file should be a top level header
+        # MD046 - Code block style
+        args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046", scan]
