@@ -15,7 +15,11 @@
 # Getting Terraform and Packer
 FROM golang:bullseye
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
-    apt-get -y update && apt-get -y install software-properties-common keychain dnsutils && \
+    apt-get -y update && apt-get -y install \
+    software-properties-common \
+    keychain \
+    dnsutils \
+    shellcheck && \
     apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
     apt-get -y update && apt-get install -y unzip python3-pip terraform packer && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
@@ -33,7 +37,8 @@ RUN go install github.com/terraform-docs/terraform-docs@latest      && \
     go install golang.org/x/lint/golint@latest                      && \
     go install github.com/fzipp/gocyclo/cmd/gocyclo@latest          && \
     go install github.com/go-critic/go-critic/cmd/gocritic@latest   && \
-    go install github.com/google/addlicense@latest
+    go install github.com/google/addlicense@latest                  && \
+    go install mvdan.cc/sh/v3/cmd/shfmt@latest
 
 # Setting GHPC dependencies
 WORKDIR /ghpc-tmp
