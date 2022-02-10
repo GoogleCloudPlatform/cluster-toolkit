@@ -48,19 +48,28 @@ func (bc BlueprintConfig) validate() {
 // performs validation of global variables
 // TODO: does not yet substitute/resolve variable values properly!
 func (bc BlueprintConfig) validateValidators() error {
+	var errored bool
 	if err := testProjectExists(bc.Config.Validators.TestProjectExists); err != nil {
-		return err
+		errored = true
+		log.Print(err)
 	}
 	if err := testRegionExists(bc.Config.Validators.TestRegionExists); err != nil {
-		return err
+		errored = true
+		log.Print(err)
 	}
 	if err := testZoneExists(bc.Config.Validators.TestZoneExists); err != nil {
-		return err
+		errored = true
+		log.Print(err)
 	}
 	if err := testZoneInRegion(bc.Config.Validators.TestZoneInRegion); err != nil {
-		return err
+		errored = true
+		log.Print(err)
 	}
 
+	if errored {
+		log.Print("please confirm existence of resources and that credentials being used have access")
+		return fmt.Errorf("at least one validator failed")
+	}
 	return nil
 }
 
@@ -172,37 +181,61 @@ func (bc BlueprintConfig) validateResourceSettings() error {
 	return nil
 }
 func testProjectExists(projectIds []string) error {
+	var errored bool
 	for _, projectID := range projectIds {
 		if err := validators.TestProjectExists(projectID); err != nil {
-			return err
+			errored = true
+			log.Print(err)
 		}
+	}
+	if errored {
+		errStr := "at least one of %s are not valid project IDs"
+		return fmt.Errorf(errStr, projectIds)
 	}
 	return nil
 }
 
 func testRegionExists(regions []string) error {
+	var errored bool
 	for _, region := range regions {
 		if err := validators.TestRegionExists(region); err != nil {
-			return err
+			errored = true
+			log.Print(err)
 		}
+	}
+	if errored {
+		errStr := "at least one of %s failed to be validated regions"
+		return fmt.Errorf(errStr, regions)
 	}
 	return nil
 }
 
 func testZoneExists(zones []string) error {
+	var errored bool
 	for _, zone := range zones {
 		if err := validators.TestZoneExists(zone); err != nil {
-			return err
+			errored = true
+			log.Print(err)
 		}
+	}
+	if errored {
+		errStr := "at least one of %s failed to be validated zones"
+		return fmt.Errorf(errStr, zones)
 	}
 	return nil
 }
 
 func testZoneInRegion(zoneRegionPairs []zoneRegion) error {
+	var errored bool
 	for _, zoneRegionPair := range zoneRegionPairs {
 		if err := validators.TestZoneInRegion(zoneRegionPair.Zone, zoneRegionPair.Region); err != nil {
-			return err
+			errored = true
+			log.Print(err)
 		}
+	}
+	if errored {
+		errStr := "at least one of the zones failed to be found within the specified region"
+		return fmt.Errorf(errStr)
 	}
 	return nil
 }
