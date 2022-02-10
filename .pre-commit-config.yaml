@@ -68,7 +68,6 @@ repos:
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
   rev: "2.1.5"  # or specific git tag
   hooks:
-  - id: markdownlint # Configure in .mdlrc
   - id: script-must-have-extension
   - id: shellcheck
     exclude: ".*tpl"
