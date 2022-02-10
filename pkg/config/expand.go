@@ -573,6 +573,21 @@ func (bc *BlueprintConfig) expandVariables() {
 			}
 		}
 	}
+	// starting point for where global variable substitution will occur
+	// for validator, args := range bc.Config.Validators {
+	// 	context := varContext{
+	// 		groupIndex: iGrp,
+	// 		resIndex:   iRes,
+	// 		yamlConfig: bc.Config,
+	// 	}
+	// 	err := updateVariables(
+	// 		context,
+	// 		bc.Config.Validators[validator],
+	// 		bc.ResourceToGroup)
+	// 	if err != nil {
+	// 		log.Fatalf("expandVariables: %v", err)
+	// 	}
+	// }
 }
 
 func getDefaultValidators() map[string][]interface{} {
