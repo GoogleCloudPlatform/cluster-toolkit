@@ -212,6 +212,8 @@ func getValidators() map[string]func([]interface{}) error {
 	return allValidators
 }
 
+// this function could probably be re-written with a generic conversion
+// of projectIds []interface{} to type []string
 func testProjectExists(projectIds []interface{}) error {
 	var errored bool
 	for _, projectID := range projectIds {
@@ -232,6 +234,8 @@ func testProjectExists(projectIds []interface{}) error {
 	return nil
 }
 
+// this function could probably be re-written with a generic conversion
+// of regions []interface{} to type []string
 func testRegionExists(regions []interface{}) error {
 	var errored bool
 	for _, region := range regions {
@@ -252,6 +256,8 @@ func testRegionExists(regions []interface{}) error {
 	return nil
 }
 
+// this function could probably be re-written with a generic conversion
+// of zones []interface{} to type []string
 func testZoneExists(zones []interface{}) error {
 	var errored bool
 	for _, zone := range zones {
