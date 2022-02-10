@@ -82,6 +82,5 @@ repos:
   hooks:
   - id: script-must-have-extension
   - id: shellcheck
-    exclude: ".*tpl"
   - id: shfmt
     exclude: ".*tpl"
