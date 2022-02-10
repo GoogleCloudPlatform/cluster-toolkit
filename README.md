@@ -22,29 +22,89 @@ and intends to address the HPC deployment needs of a broad range of customers.
 * [Packer](https://www.packer.io/downloads): version 1.6.0 or greater, used to
   build images.
 
-## Build and Install
+## Installation
 
-Simply run `make` in the root directory.
+These instructions assume you are using
+[Cloud Shell](https://cloud.google.com/shell) which comes with the above
+dependencies pre-installed (minus Packer which is not needed for inital usage).
+
+To use the HPC-Toolkit, you must clone the project from GitHub and build the
+`ghpc` binary.
+
+You must first set up Cloud Shell to authenticate with GitHub. We will use an
+SSH key.
+
+> **_NOTE:_** You can skip this step if you have previously set up cloud shell
+> with GitHub.  
+> **_NOTE:_** You can find much more detailed instructions for this step in the
+> [GitHub docs](https://docs.github.com/en/authentication/connecting-to-github-with-ssh).  
+> **_NOTE:_** This step is only required during the private review of the
+> HPC-Toolkit.
+
+```shell
+# On Cloud Shell
+ssh-keygen -t ed25519 -C "your_email@example.com"  # follow prompts
+cat ~/.ssh/id_ed25519.pub                          # copy output
+```
+
+Use the output to add your Cloud Shell SSH key to GitHub by pasting your key [here](https://github.com/settings/ssh/new).
+
+Next you will clone the HPC-Toolkit repo from GitHub.
+
+```shell
+git clone git@github.com:GoogleCloudPlatform/hpc-toolkit.git
+```
+
+Finally you build the toolkit.
+
+```shell
+cd hpc-toolkit && make
+```
+
+You should now have a binary named `ghpc` in the project root directory.
 
 ## Basic Usage
 
 To create a blueprint, an input YAML file needs to be written or adapted from
-the examples under [examples](examples/). A good starting point is
-[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) which creates
-a blueprint for a new network, a filestore instance and a slurm login node and
-controller. More information on the example configs can be found in the
-[README.md](examples/README.md) of the [examples](examples/) directory.
+one of the [examples](examples/).
 
-In order to create a blueprint using `ghpc`, first ensure you've updated your
-config template to include your GCP project ID then run the following command:
+ These instructions will use
+[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml), which is a
+good starting point and creates a blueprint containing:
+
+* a new network
+* a filestore instance
+* a slurm login node
+* a slurm controller
+
+> **_NOTE:_** More information on the example configs can be found in
+> [examples/README.md](examples/README.md).
+
+These instructions assume you are using
+[Cloud Shell](https://cloud.google.com/shell) in the context of the GCP project
+you wish to deploy in, and that you are in the root directory of the hpc-toolkit
+repo cloned during [installation](#installation).
+
+The [examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) file must
+be updated to point to your GCP project ID. You can either edit the file
+manually or run the following command.
+
+```shell
+sed -i \
+  "s/## Set GCP Project ID Here ##/$GOOGLE_CLOUD_PROJECT/g" \
+  examples/hpc-cluster-small.yaml
+```
+
+Now you can run `ghpc` with the following command:
 
 ```shell
 ./ghpc create examples/hpc-cluster-small.yaml
 ```
 
-The blueprint directory, named as the `blueprint_name` field from the input
-config will be created in the same directory as ghpc. The output directory can
-be specified by -o flag.
+By default, the blueprint directory will be created in the same directory as the
+`ghpc` binary and will have the name specified by the `blueprint_name` field
+from the input config. Optionally, the output directory can be specified with
+the `-o` flag as shown in the following example.
 
 ```shell
 ./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
@@ -57,6 +117,12 @@ cd hpc-cluster-small/primary # From hpc-cluster-small.yaml example
 terraform init
 terraform apply
 ```
+
+> **_NOTE:_** Cloud Shell times out after 20 minutes of inactivity. This example
+> deploys in about 5 minutes but for more complex deployments it may be
+> nessassary to deploy (`terraform apply`) from a cloud VM. The same process
+> above can be used, although [dependencies](#dependencies) will need to be
+> installed first.
 
 ## MacOS details
 
