@@ -40,6 +40,10 @@ func (bc *BlueprintConfig) expand() {
 	bc.addSettingsToResources()
 	if err := bc.expandBackends(); err != nil {
 		log.Fatalf("failed to apply default backend to resource groups: %v", err)
+
+	if err := bc.combineValidators(); err != nil {
+		log.Fatalf(
+			"failed to update validators when expanding the config: %v", err)
 	}
 
 	if err := bc.combineLabels(); err != nil {
@@ -569,4 +573,31 @@ func (bc *BlueprintConfig) expandVariables() {
 			}
 		}
 	}
+}
+
+func getDefaultValidators() map[string][]interface{} {
+	defaultValidators := map[string][]interface{}{
+		"test_project_exists": {"$(vars.project_id)"},
+		"test_region_exists":  {"$(vars.region)"},
+		"test_zone_exists":    {"$(vars.zone)"},
+		"test_zone_in_region": {[]interface{}{"$(vars.zone)", "$(vars.region)"}},
+	}
+	return defaultValidators
+}
+
+// merge default validators into those specified explicitly by the YAML
+func (bc *BlueprintConfig) combineValidators() error {
+	defaultValidators := getDefaultValidators()
+	if bc.Config.Validators == nil {
+		bc.Config.Validators = defaultValidators
+		return nil
+	}
+
+	for validator, args := range defaultValidators {
+		if _, ok := bc.Config.Validators[validator]; !ok {
+			bc.Config.Validators[validator] = args
+		}
+	}
+
+	return nil
 }

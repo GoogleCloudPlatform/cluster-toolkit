@@ -185,7 +185,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	}
 	testYamlConfig := YamlConfig{
 		BlueprintName: "simple",
-		Validators:    map[string][]interface{}{},
+		Validators:    getDefaultValidators(),
 		Vars:          map[string]interface{}{},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",

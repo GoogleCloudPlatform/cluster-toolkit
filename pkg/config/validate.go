@@ -32,7 +32,8 @@ import (
 // validate is the top-level function for running the validation suite.
 func (bc BlueprintConfig) validate() {
 	if err := bc.validateValidators(); err != nil {
-		log.Fatal(err)
+		// for now, warn that validators have failed
+		log.Print(err)
 	}
 	if err := bc.validateVars(); err != nil {
 		log.Fatal(err)
