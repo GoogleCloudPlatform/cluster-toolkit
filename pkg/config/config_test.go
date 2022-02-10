@@ -185,13 +185,8 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	}
 	testYamlConfig := YamlConfig{
 		BlueprintName: "simple",
-		Validators: validatorConfig{
-			TestProjectExists: []string{},
-			TestRegionExists:  []string{},
-			TestZoneExists:    []string{},
-			TestZoneInRegion:  []zoneRegion{},
-		},
-		Vars: map[string]interface{}{},
+		Validators:    map[string][]interface{}{},
+		Vars:          map[string]interface{}{},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
 			Configuration: map[string]interface{}{},

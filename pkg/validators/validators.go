@@ -16,29 +16,24 @@ package validators
 
 import (
 	"fmt"
-	"log"
 )
 
 // TestProjectExists whether projectID exists / is accessible with credentials
 func TestProjectExists(projectID string) error {
-	// log.Printf("UNIMPLEMENTED: check existence of %s", projectID)
 	return fmt.Errorf("UNIMPLEMENTED: check existence of %s", projectID)
 }
 
 // TestRegionExists whether region exists / is accessible with credentials
 func TestRegionExists(region string) error {
-	log.Printf("UNIMPLEMENTED: check existence of %s", region)
-	return nil
+	return fmt.Errorf("UNIMPLEMENTED: check existence of %s", region)
 }
 
 // TestZoneExists whether zone exists / is accessible with credentials
 func TestZoneExists(zone string) error {
-	log.Printf("UNIMPLEMENTED: check existence of %s", zone)
-	return nil
+	return fmt.Errorf("UNIMPLEMENTED: check existence of %s", zone)
 }
 
 // TestZoneInRegion whether zone is in region
 func TestZoneInRegion(zone string, region string) error {
-	log.Printf("UNIMPLEMENTED: test if %s in %s", zone, region)
-	return nil
+	return fmt.Errorf("UNIMPLEMENTED: test if %s in %s", zone, region)
 }

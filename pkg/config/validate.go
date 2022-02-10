@@ -49,21 +49,19 @@ func (bc BlueprintConfig) validate() {
 // TODO: does not yet substitute/resolve variable values properly!
 func (bc BlueprintConfig) validateValidators() error {
 	var errored bool
-	if err := testProjectExists(bc.Config.Validators.TestProjectExists); err != nil {
-		errored = true
-		log.Print(err)
-	}
-	if err := testRegionExists(bc.Config.Validators.TestRegionExists); err != nil {
-		errored = true
-		log.Print(err)
-	}
-	if err := testZoneExists(bc.Config.Validators.TestZoneExists); err != nil {
-		errored = true
-		log.Print(err)
-	}
-	if err := testZoneInRegion(bc.Config.Validators.TestZoneInRegion); err != nil {
-		errored = true
-		log.Print(err)
+	allValidators := getValidators()
+
+	for validator, args := range bc.Config.Validators {
+		if f, ok := allValidators[validator]; ok {
+			val := f(args)
+			if val != nil {
+				errored = true
+				log.Print(val)
+			}
+		} else {
+			errored = true
+			log.Printf("%s is not an implemented validator", validator)
+		}
 	}
 
 	if errored {
@@ -202,10 +200,21 @@ func (bc BlueprintConfig) validateResourceSettings() error {
 	}
 	return nil
 }
-func testProjectExists(projectIds []string) error {
+
+func getValidators() map[string]func([]interface{}) error {
+	allValidators := map[string]func([]interface{}) error{
+		"test_project_exists": testProjectExists,
+		"test_region_exists":  testRegionExists,
+		"test_zone_exists":    testZoneExists,
+		"test_zone_in_region": testZoneInRegion,
+	}
+	return allValidators
+}
+
+func testProjectExists(projectIds []interface{}) error {
 	var errored bool
 	for _, projectID := range projectIds {
-		if err := validators.TestProjectExists(projectID); err != nil {
+		if err := validators.TestProjectExists(projectID.(string)); err != nil {
 			errored = true
 			log.Print(err)
 		}
@@ -217,12 +226,17 @@ func testProjectExists(projectIds []string) error {
 	return nil
 }
 
-func testRegionExists(regions []string) error {
+func testRegionExists(regions []interface{}) error {
 	var errored bool
 	for _, region := range regions {
-		if err := validators.TestRegionExists(region); err != nil {
+		if regionS, ok := region.(string); ok {
+			if err := validators.TestRegionExists(regionS); err != nil {
+				errored = true
+				log.Print(err)
+			}
+		} else {
 			errored = true
-			log.Print(err)
+			log.Printf("%s is not a valid string for region testing", region)
 		}
 	}
 	if errored {
@@ -232,10 +246,10 @@ func testRegionExists(regions []string) error {
 	return nil
 }
 
-func testZoneExists(zones []string) error {
+func testZoneExists(zones []interface{}) error {
 	var errored bool
 	for _, zone := range zones {
-		if err := validators.TestZoneExists(zone); err != nil {
+		if err := validators.TestZoneExists(zone.(string)); err != nil {
 			errored = true
 			log.Print(err)
 		}
@@ -247,10 +261,12 @@ func testZoneExists(zones []string) error {
 	return nil
 }
 
-func testZoneInRegion(zoneRegionPairs []zoneRegion) error {
+func testZoneInRegion(zoneRegionPairs []interface{}) error {
 	var errored bool
-	for _, zoneRegionPair := range zoneRegionPairs {
-		if err := validators.TestZoneInRegion(zoneRegionPair.Zone, zoneRegionPair.Region); err != nil {
+	for _, zoneRegionInterface := range zoneRegionPairs {
+		zoneRegionPair := zoneRegionInterface.([]interface{})
+		if err := validators.TestZoneInRegion(zoneRegionPair[0].(string),
+			zoneRegionPair[1].(string)); err != nil {
 			errored = true
 			log.Print(err)
 		}

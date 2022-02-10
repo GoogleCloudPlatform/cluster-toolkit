@@ -122,23 +122,10 @@ func (r *Resource) createWrapSettingsWith() {
 	}
 }
 
-type zoneRegion struct {
-	Zone   string
-	Region string
-}
-
-// Defines the set of global variable validators
-type validatorConfig struct {
-	TestProjectExists []string     `yaml:"test_project_exists"`
-	TestRegionExists  []string     `yaml:"test_region_exists"`
-	TestZoneExists    []string     `yaml:"test_zone_exists"`
-	TestZoneInRegion  []zoneRegion `yaml:"test_zone_in_region"`
-}
-
 // YamlConfig stores the contents on the User YAML
 type YamlConfig struct {
 	BlueprintName            string `yaml:"blueprint_name"`
-	Validators               validatorConfig
+	Validators               map[string][]interface{}
 	Vars                     map[string]interface{}
 	ResourceGroups           []ResourceGroup  `yaml:"resource_groups"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`
