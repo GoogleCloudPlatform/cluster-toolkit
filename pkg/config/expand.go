@@ -27,11 +27,12 @@ import (
 )
 
 const (
-	blueprintLabel    string = "ghpc_blueprint"
-	deploymentLabel   string = "ghpc_deployment"
-	roleLabel         string = "ghpc_role"
-	simpleVariableExp string = `^\$\((.*)\)$`
-	anyVariableExp    string = `\$\((.*)\)`
+	blueprintLabel          string = "ghpc_blueprint"
+	deploymentLabel         string = "ghpc_deployment"
+	roleLabel               string = "ghpc_role"
+	simpleGlobalVariableExp string = `^\$\(vars\.(.*)\)$`
+	simpleVariableExp       string = `^\$\((.*)\)$`
+	anyVariableExp          string = `\$\((.*)\)`
 )
 
 // expand expands variables and strings in the yaml config. Used directly by
@@ -340,6 +341,45 @@ func applyGlobalVarsInGroup(
 	return nil
 }
 
+func applyGlobalVarsInValidator(validator *validatorConfig, globalVars map[string]interface{}) error {
+	newValue, err := resolveGlobalStringVariable(validator.ProjectID, globalVars)
+	if err == nil {
+		validator.ProjectID = newValue
+	}
+	newValue, err = resolveGlobalStringVariable(validator.Region, globalVars)
+	if err == nil {
+		validator.Region = newValue
+	}
+	newValue, err = resolveGlobalStringVariable(validator.Zone, globalVars)
+	if err == nil {
+		validator.Zone = newValue
+	}
+	return nil
+}
+
+// this function resolves global string variables to their actual value
+func resolveGlobalStringVariable(variableExp string, globalVars map[string]interface{}) (string, error) {
+	if !isSimpleGlobalVariable(variableExp) {
+		return "", fmt.Errorf("%s is not a global variable expression", variableExp)
+	}
+
+	re := regexp.MustCompile(simpleGlobalVariableExp)
+	contents := re.FindStringSubmatch(variableExp)
+	if len(contents) != 2 { // Should always be (match, contents) here
+		err := fmt.Errorf("%s %s, failed to extract contents: %v",
+			errorMessages["invalidVar"], variableExp, contents)
+		return "", err
+	}
+
+	globalVarName := contents[1]
+	// this step combines checking for existence of variable and type conversion to string
+	if resolvedValue, ok := globalVars[globalVarName].(string); ok {
+		return resolvedValue, nil
+	}
+
+	return "", fmt.Errorf("%s was not specified as a global variable", globalVarName)
+}
+
 func updateGlobalVarTypes(vars map[string]interface{}) error {
 	for k, v := range vars {
 		val, err := updateVariableType(v, varContext{}, make(map[string]int))
@@ -362,6 +402,14 @@ func (bc *BlueprintConfig) applyGlobalVariables() error {
 	for _, grp := range bc.Config.ResourceGroups {
 		err := applyGlobalVarsInGroup(
 			grp, bc.ResourcesInfo[grp.Name], bc.Config.Vars)
+		if err != nil {
+			return err
+		}
+	}
+
+	for idx := range bc.Config.Validators {
+		err := applyGlobalVarsInValidator(
+			&bc.Config.Validators[idx], bc.Config.Vars)
 		if err != nil {
 			return err
 		}
@@ -463,6 +511,14 @@ func expandVariable(
 }
 
 // isSimpleVariable checks if the entire string is just a single variable
+func isSimpleGlobalVariable(str string) bool {
+	matched, err := regexp.MatchString(simpleGlobalVariableExp, str)
+	if err != nil {
+		log.Fatalf("isSimpleGlobalVariable(%s): %v", str, err)
+	}
+	return matched
+}
+
 func isSimpleVariable(str string) bool {
 	matched, err := regexp.MatchString(simpleVariableExp, str)
 	if err != nil {
@@ -573,25 +629,31 @@ func (bc *BlueprintConfig) expandVariables() {
 			}
 		}
 	}
-	// starting point for where global variable substitution will occur
-	// for validator, args := range bc.Config.Validators {
-	// 	context := varContext{
-	// 		groupIndex: iGrp,
-	// 		resIndex:   iRes,
-	// 		yamlConfig: bc.Config,
-	// 	}
-	// 	err := updateVariables(
-	// 		context,
-	// 		bc.Config.Validators[validator],
-	// 		bc.ResourceToGroup)
-	// 	if err != nil {
-	// 		log.Fatalf("expandVariables: %v", err)
-	// 	}
-	// }
 }
 
 func getDefaultValidators() []validatorConfig {
-	return []validatorConfig{}
+	return []validatorConfig{
+		{
+			Validator: "test_project_exists",
+			ProjectID: "$(vars.project_id)",
+		},
+		{
+			Validator: "test_region_exists",
+			ProjectID: "$(vars.project_id)",
+			Region:    "$(vars.region)",
+		},
+		{
+			Validator: "test_zone_exists",
+			ProjectID: "$(vars.project_id)",
+			Zone:      "$(vars.zone)",
+		},
+		{
+			Validator: "test_zone_in_region",
+			ProjectID: "$(vars.project_id)",
+			Zone:      "$(vars.zone)",
+			Region:    "$(vars.region)",
+		},
+	}
 }
 
 // merge default validators into those specified explicitly by the YAML
@@ -599,7 +661,9 @@ func (bc *BlueprintConfig) combineValidators() error {
 	defaultValidators := getDefaultValidators()
 
 	// strictly speaking appending the defaults isn't really right, but we'll do it for now
-	bc.Config.Validators = append(bc.Config.Validators, defaultValidators...)
+	if bc.Config.Validators == nil {
+		bc.Config.Validators = defaultValidators
+	}
 
 	return nil
 }

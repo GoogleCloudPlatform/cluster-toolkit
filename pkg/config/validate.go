@@ -53,7 +53,6 @@ func (bc BlueprintConfig) validateValidators() error {
 	allValidators := getValidators()
 
 	for _, validator := range bc.Config.Validators {
-		log.Println(validator.Region)
 		if f, ok := allValidators[validator.Validator]; ok {
 			val := f(validator)
 			if val != nil {
@@ -62,7 +61,7 @@ func (bc BlueprintConfig) validateValidators() error {
 			}
 		} else {
 			errored = true
-			log.Printf("%s is not an implemented validator", validator)
+			log.Printf("%s is not an implemented validator", validator.Validator)
 		}
 	}
 
