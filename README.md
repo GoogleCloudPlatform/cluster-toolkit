@@ -10,41 +10,90 @@ networking, storage, etc) following Google Cloud best-practices, in a repeatable
 manner. The HPC Toolkit is designed to be highly customizable and extensible,
 and intends to address the HPC deployment needs of a broad range of customers.
 
-## Dependencies
+## Installation
 
-* make
-* git
-* [golang](https://golang.org/doc/install): version 1.16 or greater, used to
-  build ghpc.
-  * To setup GOPATH and development environment: `export PATH=$PATH:$(go env GOPATH)/bin`
-* [Terraform](https://www.terraform.io/downloads.html): version 1.0.0 or
-  greater, used to deploy blueprints.
-* [Packer](https://www.packer.io/downloads): version 1.6.0 or greater, used to
-  build images.
+These instructions assume you are using
+[Cloud Shell](https://cloud.google.com/shell) which comes with the above
+dependencies pre-installed (minus Packer which is not needed for this example).
 
-## Build and Install
+To use the HPC-Toolkit, you must clone the project from GitHub and build the
+`ghpc` binary.
 
-Simply run `make` in the root directory.
+You must first set up Cloud Shell to authenticate with GitHub. We will use an
+SSH key.
+
+> **_NOTE:_** You can skip this step if you have previously set up cloud shell
+> with GitHub.  
+> **_NOTE:_** You can find much more detailed instructions for this step in the
+> [GitHub docs](https://docs.github.com/en/authentication/connecting-to-github-with-ssh).  
+> **_NOTE:_** This step is only required during the private preview of the
+> HPC-Toolkit.
+
+```shell
+# On Cloud Shell
+ssh-keygen -t ed25519 -C "your_email@example.com"  # follow prompts
+cat ~/.ssh/id_ed25519.pub                          # copy output
+```
+
+Use the output to add your Cloud Shell SSH key to GitHub by pasting your key [here](https://github.com/settings/ssh/new).
+
+Next you will clone the HPC-Toolkit repo from GitHub.
+
+```shell
+git clone git@github.com:GoogleCloudPlatform/hpc-toolkit.git
+```
+
+Finally you build the toolkit.
+
+```shell
+cd hpc-toolkit && make
+```
+
+You should now have a binary named `ghpc` in the project root directory.
+Optionally, you can run `./ghpc --version` to verify the build.
 
 ## Basic Usage
 
 To create a blueprint, an input YAML file needs to be written or adapted from
-the examples under [examples](examples/). A good starting point is
-[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) which creates
-a blueprint for a new network, a filestore instance and a slurm login node and
-controller. More information on the example configs can be found in the
-[README.md](examples/README.md) of the [examples](examples/) directory.
+one of the [examples](examples/).
 
-In order to create a blueprint using `ghpc`, first ensure you've updated your
-config template to include your GCP project ID then run the following command:
+These instructions will use
+[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml), which is a
+good starting point and creates a blueprint containing:
+
+* a new network
+* a filestore instance
+* a slurm login node
+* a slurm controller
+
+> **_NOTE:_** More information on the example configs can be found in
+> [examples/README.md](examples/README.md).
+
+These instructions assume you are using
+[Cloud Shell](https://cloud.google.com/shell) in the context of the GCP project
+you wish to deploy in, and that you are in the root directory of the hpc-toolkit
+repo cloned during [installation](#installation).
+
+The [examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) file must
+be updated to point to your GCP project ID. You can either edit the file
+manually or run the following command.
+
+```shell
+sed -i \
+  "s/## Set GCP Project ID Here ##/$GOOGLE_CLOUD_PROJECT/g" \
+  examples/hpc-cluster-small.yaml
+```
+
+Now you can run `ghpc` with the following command:
 
 ```shell
 ./ghpc create examples/hpc-cluster-small.yaml
 ```
 
-The blueprint directory, named as the `blueprint_name` field from the input
-config will be created in the same directory as ghpc. The output directory can
-be specified by -o flag.
+By default, the blueprint directory will be created in the same directory as the
+`ghpc` binary and will have the name specified by the `blueprint_name` field
+from the input config. Optionally, the output directory can be specified with
+the `-o` flag as shown in the following example.
 
 ```shell
 ./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
@@ -58,7 +107,61 @@ terraform init
 terraform apply
 ```
 
-## MacOS details
+> **_NOTE:_** Cloud Shell times out after 20 minutes of inactivity. This example
+> deploys in about 5 minutes but for more complex deployments it may be
+> necessary to deploy (`terraform apply`) from a cloud VM. The same process
+> above can be used, although [dependencies](#dependencies) will need to be
+> installed first.
+
+This example does not contain any Packer-based resources but for completeness,
+you can use the following command to deploy a Packer-based resource group:
+
+```shell
+cd <blueprint-directory>/<packer-group>/<custom-vm-image>
+packer build .
+```
+
+## Inspecting the Blueprint
+
+The blueprint is created in the directory matching the provided blueprint_name
+variable in the config. Within this directory are all the resources needed to
+create a deployment. The blueprint directory will contain subdirectories
+representing the resource groups defined in the config YAML. Most example
+configurations contain a single resource group.
+
+From the [example above](#basic-usage) we get the following blueprint:
+
+```text
+hpc-cluster-small/
+  primary/
+    main.tf
+    variables.tf
+    terraform.tfvars
+    modules/
+      filestore/
+      SchedMD-slurm-on-gcp-controller/
+      SchedMD-slurm-on-gcp-login-node/
+      SchedMD-slurm-on-gcp-partition/
+      vpc/
+```
+
+## Dependencies
+
+Much of the HPC Toolkit blueprint is built using Terraform and Packer, and
+therefore they must be available in the same machine calling the toolkit. In
+addition, building the HPC Toolkit from source requires git, make, and Go to be
+installed.
+
+List of dependencies:
+
+* Terraform: version>=1.0.0 - [install instructions](https://www.terraform.io/downloads.html)
+* Packer: version>=1.6.0 - [install instructions](https://www.packer.io/downloads)
+* golang: version>=1.16 - [install instructions](https://golang.org/doc/install)
+  * To setup GOPATH and development environment: `export PATH=$PATH:$(go env GOPATH)/bin`
+* make
+* git
+
+## MacOS Details
 
 * Install GNU `findutils` with Homebrew or Conda
   * `brew install findutils` (and follow instructions for modifying `PATH`)
@@ -68,42 +171,37 @@ terraform apply
 
 ## Development
 
+The following setup is in addition to the [dependencies](#dependencies) needed
+to build and run HPC-Toolkit.
+
 Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
 this repository to ensure that all Terraform and golang modules are validated
-and properly documented before pushing code changes.
-[pre-commit](https://pre-commit.com/) can be installed using standard package
-managers, more details can be found at [the pre-commit website](https://pre-commit.com/).
+and properly documented before pushing code changes. The pre-commits configured
+in the HPC Toolkit have a set of dependencies that need to be installed before
+successfully passing.
 
-The pre-commits configured in the HPC Toolkit have a set of
-dependencies that need to be installed before successfully passing all
-pre-commits. TFLint and ShellCheck must be installed manually, the instructions
-can be found
-[here for tflint](https://github.com/terraform-linters/tflint#installation).
-and [here for shellcheck](https://github.com/koalaman/shellcheck#installing)
-The other dependencies can be installed by running the following command in the
-root directory:
+1. Install pre-commit using the instructions from [the pre-commit website](https://pre-commit.com/).
+1. Install TFLint using the instructions from
+   [the TFLint documentation](https://github.com/terraform-linters/tflint#installation).
+1. Install ShellCheck using the instructions from
+   [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)
+1. The other dev dependencies can be installed by running the following command
+   in the project root directory:
 
-```shell
-make install-deps-dev
-```
+    ```shell
+    make install-dev-deps
+    ```
 
-pre-commit is enabled on a repo-by-repo basis by switching to the root
-directory of the repo and running:
+1. Pre-commit is enabled on a repo-by-repo basis by running the following command
+   in the project root directory:
 
-```shell
-pre-commit install
-```
+    ```shell
+    pre-commit install
+    ```
 
-During development, to re-build the ghpc binary run the following command:
+Now pre-commit is configured to automatically run before you commit.
 
-```shell
-make ghpc-dev
-```
-
-which in addition to building the binary will also run go fmt and vet against
-the codebase.
-
-### Packer
+### Packer Documentation
 
 Auto-generated READMEs are created for Packer resources similar to Terraform
 resources. These docs are generated as part of a pre-commit hook (packer-readme)
