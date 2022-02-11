@@ -15,25 +15,102 @@
 package validators
 
 import (
+	"context"
 	"fmt"
+
+	compute "cloud.google.com/go/compute/apiv1"
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
+	resourcemanagerpb "google.golang.org/genproto/googleapis/cloud/resourcemanager/v3"
 )
 
 // TestProjectExists whether projectID exists / is accessible with credentials
 func TestProjectExists(projectID string) error {
-	return fmt.Errorf("UNIMPLEMENTED: check existence of %s", projectID)
+	ctx := context.Background()
+	c, err := resourcemanager.NewProjectsClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	req := &resourcemanagerpb.GetProjectRequest{
+		Name: "projects/" + projectID,
+	}
+
+	resp, err := c.GetProject(ctx, req)
+	if err != nil {
+		return err
+	}
+	// TODO: Use resp.
+	_ = resp
+
+	return nil
 }
 
 // TestRegionExists whether region exists / is accessible with credentials
 func TestRegionExists(region string) error {
-	return fmt.Errorf("UNIMPLEMENTED: check existence of %s", region)
+	ctx := context.Background()
+	c, err := compute.NewRegionsRESTClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	req := &computepb.GetRegionRequest{
+		Project: "",
+		Region:  region,
+	}
+	resp, err := c.Get(ctx, req)
+	if err != nil {
+		return err
+	}
+	// TODO: Use resp.
+	_ = resp
+	return nil
 }
 
 // TestZoneExists whether zone exists / is accessible with credentials
 func TestZoneExists(zone string) error {
-	return fmt.Errorf("UNIMPLEMENTED: check existence of %s", zone)
+	ctx := context.Background()
+	c, err := compute.NewZonesRESTClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	req := &computepb.GetZoneRequest{
+		Project: "",
+		Zone:    zone,
+	}
+	resp, err := c.Get(ctx, req)
+	if err != nil {
+		return err
+	}
+	_ = resp
+
+	return nil
 }
 
 // TestZoneInRegion whether zone is in region
 func TestZoneInRegion(zone string, region string) error {
-	return fmt.Errorf("UNIMPLEMENTED: test if %s in %s", zone, region)
+	ctx := context.Background()
+	c, err := compute.NewZonesRESTClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	req := &computepb.GetZoneRequest{
+		Project: "",
+		Zone:    zone,
+	}
+	resp, err := c.Get(ctx, req)
+	if err != nil {
+		return err
+	}
+	if *resp.Region != region {
+		return fmt.Errorf("zone %s is not in region %s", zone, region)
+	}
+
+	return nil
 }
