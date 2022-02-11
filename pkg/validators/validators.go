@@ -47,12 +47,11 @@ func TestProjectExists(projectID string) error {
 	return nil
 }
 
-// TestRegionExists whether region exists / is accessible with credentials
-func TestRegionExists(region string) error {
+func getRegion(region string) (*computepb.Region, error) {
 	ctx := context.Background()
 	c, err := compute.NewRegionsRESTClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer c.Close()
 
@@ -62,19 +61,26 @@ func TestRegionExists(region string) error {
 	}
 	resp, err := c.Get(ctx, req)
 	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// TestRegionExists whether region exists / is accessible with credentials
+func TestRegionExists(region string) error {
+	_, err := getRegion(region)
+	if err != nil {
 		return err
 	}
-	// TODO: Use resp.
-	_ = resp
 	return nil
 }
 
-// TestZoneExists whether zone exists / is accessible with credentials
-func TestZoneExists(zone string) error {
+func getZone(zone string) (*computepb.Zone, error) {
 	ctx := context.Background()
 	c, err := compute.NewZonesRESTClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer c.Close()
 
@@ -84,32 +90,34 @@ func TestZoneExists(zone string) error {
 	}
 	resp, err := c.Get(ctx, req)
 	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// TestZoneExists whether zone exists / is accessible with credentials
+func TestZoneExists(zone string) error {
+	_, err := getZone(zone)
+	if err != nil {
 		return err
 	}
-	_ = resp
-
 	return nil
 }
 
 // TestZoneInRegion whether zone is in region
 func TestZoneInRegion(zone string, region string) error {
-	ctx := context.Background()
-	c, err := compute.NewZonesRESTClient(ctx)
+	regionObject, err := getRegion(region)
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	zoneObject, err := getZone(zone)
+	if err != nil {
+		return err
+	}
 
-	req := &computepb.GetZoneRequest{
-		Project: "",
-		Zone:    zone,
-	}
-	resp, err := c.Get(ctx, req)
-	if err != nil {
-		return err
-	}
-	if *resp.Region != region {
-		return fmt.Errorf("zone %s is not in region %s", zone, region)
+	if *zoneObject.Region != *regionObject.SelfLink {
+		return fmt.Errorf("zone %s is not region %s", zone, region)
 	}
 
 	return nil
