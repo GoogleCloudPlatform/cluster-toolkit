@@ -52,9 +52,10 @@ func (bc BlueprintConfig) validateValidators() error {
 	var errored bool
 	allValidators := getValidators()
 
-	for validator, args := range bc.Config.Validators {
-		if f, ok := allValidators[validator]; ok {
-			val := f(args)
+	for _, validator := range bc.Config.Validators {
+		log.Println(validator.Region)
+		if f, ok := allValidators[validator.Validator]; ok {
+			val := f(validator)
 			if val != nil {
 				errored = true
 				log.Print(val)
@@ -202,8 +203,8 @@ func (bc BlueprintConfig) validateResourceSettings() error {
 	return nil
 }
 
-func getValidators() map[string]func([]interface{}) error {
-	allValidators := map[string]func([]interface{}) error{
+func getValidators() map[string]func(validatorConfig) error {
+	allValidators := map[string]func(validatorConfig) error{
 		"test_project_exists": testProjectExists,
 		"test_region_exists":  testRegionExists,
 		"test_zone_exists":    testZoneExists,
@@ -212,101 +213,34 @@ func getValidators() map[string]func([]interface{}) error {
 	return allValidators
 }
 
-func interfaceSliceToStringSlice(islice []interface{}) ([]string, error) {
-	var stringSlice []string
-
-	for _, element := range islice {
-		if s, ok := element.(string); ok {
-			stringSlice = append(stringSlice, s)
-		} else {
-			return nil, fmt.Errorf("%s is not a valid string", element)
-		}
+func testProjectExists(validator validatorConfig) error {
+	err := validators.TestProjectExists(validator.ProjectID)
+	if err == nil {
+		log.Printf("projectID %s exists", validator.ProjectID)
 	}
-	return stringSlice, nil
+	return err
 }
 
-func interfaceSliceToSliceOfStringSlices(islice []interface{}) ([][]string, error) {
-	var sliceOfStringSlice [][]string
-	for _, isliceInterface := range islice {
-		if isliceInterfaceSlice, ok := isliceInterface.([]interface{}); ok {
-			stringSlice, err := interfaceSliceToStringSlice(isliceInterfaceSlice)
-			if err != nil {
-				return nil, err
-			}
-			sliceOfStringSlice = append(sliceOfStringSlice, stringSlice)
-		} else {
-			return nil, fmt.Errorf("%s is not a slice", isliceInterfaceSlice)
-		}
+func testRegionExists(validator validatorConfig) error {
+	err := validators.TestRegionExists(validator.ProjectID, validator.Region)
+	if err == nil {
+		log.Printf("region %s exists", validator.Region)
 	}
-
-	return sliceOfStringSlice, nil
+	return err
 }
 
-func testStringExists(testValues []string, f func(string) error) error {
-	var errored bool
-	for _, value := range testValues {
-		if err := f(value); err != nil {
-			errored = true
-			log.Print(err)
-		} else {
-			log.Printf("%s is valid", value)
-		}
+func testZoneExists(validator validatorConfig) error {
+	err := validators.TestZoneExists(validator.ProjectID, validator.Zone)
+	if err == nil {
+		log.Printf("zone %s exists", validator.Zone)
 	}
-	if errored {
-		errStr := "at least one of %s failed to be validated"
-		return fmt.Errorf(errStr, testValues)
-	}
-	return nil
+	return err
 }
 
-func testProjectExists(projectIds []interface{}) error {
-	projectStrings, err := interfaceSliceToStringSlice(projectIds)
-	if err != nil {
-		return err
+func testZoneInRegion(validator validatorConfig) error {
+	err := validators.TestZoneInRegion(validator.ProjectID, validator.Zone, validator.Region)
+	if err == nil {
+		log.Printf("zone %s is in region %s", validator.Zone, validator.Region)
 	}
-	return testStringExists(projectStrings, validators.TestProjectExists)
-}
-
-func testRegionExists(regions []interface{}) error {
-	regionStrings, err := interfaceSliceToStringSlice(regions)
-	if err != nil {
-		return err
-	}
-	return testStringExists(regionStrings, validators.TestRegionExists)
-}
-
-func testZoneExists(zones []interface{}) error {
-	zoneStrings, err := interfaceSliceToStringSlice(zones)
-	if err != nil {
-		return err
-	}
-	return testStringExists(zoneStrings, validators.TestZoneExists)
-}
-
-func testZoneInRegion(zoneRegionPairs []interface{}) error {
-	zoneRegionStrings, err := interfaceSliceToSliceOfStringSlices(zoneRegionPairs)
-	if err != nil {
-		return err
-	}
-	var errored bool
-	for _, zoneRegion := range zoneRegionStrings {
-		if len(zoneRegion) != 2 {
-			errored = true
-			log.Printf("%s must be of length 2 (zone, region)", zoneRegion)
-			continue
-		}
-		zone := zoneRegion[0]
-		region := zoneRegion[1]
-		if err := validators.TestZoneInRegion(zone, region); err != nil {
-			errored = true
-			log.Print(err)
-		} else {
-			log.Printf("zone %s is in region %s", zone, region)
-		}
-	}
-	if errored {
-		errStr := "at least one of %s failed to be validated"
-		return fmt.Errorf(errStr, zoneRegionStrings)
-	}
-	return nil
+	return err
 }

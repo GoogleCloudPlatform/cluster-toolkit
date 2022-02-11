@@ -590,29 +590,16 @@ func (bc *BlueprintConfig) expandVariables() {
 	// }
 }
 
-func getDefaultValidators() map[string][]interface{} {
-	defaultValidators := map[string][]interface{}{
-		"test_project_exists": {"$(vars.project_id)"},
-		"test_region_exists":  {"$(vars.region)"},
-		"test_zone_exists":    {"$(vars.zone)"},
-		"test_zone_in_region": {[]interface{}{"$(vars.zone)", "$(vars.region)"}},
-	}
-	return defaultValidators
+func getDefaultValidators() []validatorConfig {
+	return []validatorConfig{}
 }
 
 // merge default validators into those specified explicitly by the YAML
 func (bc *BlueprintConfig) combineValidators() error {
 	defaultValidators := getDefaultValidators()
-	if bc.Config.Validators == nil {
-		bc.Config.Validators = defaultValidators
-		return nil
-	}
 
-	for validator, args := range defaultValidators {
-		if _, ok := bc.Config.Validators[validator]; !ok {
-			bc.Config.Validators[validator] = args
-		}
-	}
+	// strictly speaking appending the defaults isn't really right, but we'll do it for now
+	bc.Config.Validators = append(bc.Config.Validators, defaultValidators...)
 
 	return nil
 }

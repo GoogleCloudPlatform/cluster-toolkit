@@ -122,10 +122,17 @@ func (r *Resource) createWrapSettingsWith() {
 	}
 }
 
+type validatorConfig struct {
+	Validator string
+	ProjectID string `yaml:"project_id"`
+	Region    string `yaml:",omitempty"`
+	Zone      string `yaml:",omitempty"`
+}
+
 // YamlConfig stores the contents on the User YAML
 type YamlConfig struct {
 	BlueprintName            string `yaml:"blueprint_name"`
-	Validators               map[string][]interface{}
+	Validators               []validatorConfig
 	Vars                     map[string]interface{}
 	ResourceGroups           []ResourceGroup  `yaml:"resource_groups"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`

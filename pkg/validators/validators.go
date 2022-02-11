@@ -47,7 +47,7 @@ func TestProjectExists(projectID string) error {
 	return nil
 }
 
-func getRegion(region string) (*computepb.Region, error) {
+func getRegion(projectID, region string) (*computepb.Region, error) {
 	ctx := context.Background()
 	c, err := compute.NewRegionsRESTClient(ctx)
 	if err != nil {
@@ -56,7 +56,7 @@ func getRegion(region string) (*computepb.Region, error) {
 	defer c.Close()
 
 	req := &computepb.GetRegionRequest{
-		Project: "",
+		Project: projectID,
 		Region:  region,
 	}
 	resp, err := c.Get(ctx, req)
@@ -68,15 +68,15 @@ func getRegion(region string) (*computepb.Region, error) {
 }
 
 // TestRegionExists whether region exists / is accessible with credentials
-func TestRegionExists(region string) error {
-	_, err := getRegion(region)
+func TestRegionExists(projectID string, region string) error {
+	_, err := getRegion(projectID, region)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func getZone(zone string) (*computepb.Zone, error) {
+func getZone(projectID, zone string) (*computepb.Zone, error) {
 	ctx := context.Background()
 	c, err := compute.NewZonesRESTClient(ctx)
 	if err != nil {
@@ -85,7 +85,7 @@ func getZone(zone string) (*computepb.Zone, error) {
 	defer c.Close()
 
 	req := &computepb.GetZoneRequest{
-		Project: "",
+		Project: projectID,
 		Zone:    zone,
 	}
 	resp, err := c.Get(ctx, req)
@@ -97,8 +97,8 @@ func getZone(zone string) (*computepb.Zone, error) {
 }
 
 // TestZoneExists whether zone exists / is accessible with credentials
-func TestZoneExists(zone string) error {
-	_, err := getZone(zone)
+func TestZoneExists(projectID string, zone string) error {
+	_, err := getZone(projectID, zone)
 	if err != nil {
 		return err
 	}
@@ -106,12 +106,12 @@ func TestZoneExists(zone string) error {
 }
 
 // TestZoneInRegion whether zone is in region
-func TestZoneInRegion(zone string, region string) error {
-	regionObject, err := getRegion(region)
+func TestZoneInRegion(projectID string, zone string, region string) error {
+	regionObject, err := getRegion(projectID, region)
 	if err != nil {
 		return err
 	}
-	zoneObject, err := getZone(zone)
+	zoneObject, err := getZone(projectID, zone)
 	if err != nil {
 		return err
 	}
