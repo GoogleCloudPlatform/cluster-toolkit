@@ -134,40 +134,35 @@ terraform apply
 
 ## Development
 
+The folling setup is in addition to the [dependencies](#dependencies) needed to
+build and run HPC-Toolkit.
+
 Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
 this repository to ensure that all Terraform and golang modules are validated
-and properly documented before pushing code changes.
-[pre-commit](https://pre-commit.com/) can be installed using standard package
-managers, more details can be found at [the pre-commit website](https://pre-commit.com/).
+and properly documented before pushing code changes. The pre-commits configured
+in the HPC Toolkit have a set of dependencies that need to be installed before
+successfully passing.
 
-The pre-commits configured in the HPC Toolkit have a set of
-dependencies that need to be installed before successfully passing all
-pre-commits. TFLint and ShellCheck must be installed manually, the instructions
-can be found
-[here for tflint](https://github.com/terraform-linters/tflint#installation).
-and [here for shellcheck](https://github.com/koalaman/shellcheck#installing)
-The other dependencies can be installed by running the following command in the
-root directory:
+1. Install pre-commit using the instructions from [the pre-commit website](https://pre-commit.com/).
+1. Install TFLint using the instructions from
+   [the TFLint documentation](https://github.com/terraform-linters/tflint#installation).
+1. Install ShellCheck using the instructions from
+   [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)
+1. The other dev dependencies can be installed by running the following command
+   in the project root directory:
 
-```shell
-make install-deps-dev
-```
+    ```shell
+    make install-dev-deps
+    ```
 
-pre-commit is enabled on a repo-by-repo basis by switching to the root
-directory of the repo and running:
+1. Pre-commit is enabled on a repo-by-repo basis by running the following command
+   in the project root directory:
 
-```shell
-pre-commit install
-```
+    ```shell
+    pre-commit install
+    ```
 
-During development, to re-build the ghpc binary run the following command:
-
-```shell
-make ghpc-dev
-```
-
-which in addition to building the binary will also run go fmt and vet against
-the codebase.
+Now pre-commit is configured to automatically run before you commit.
 
 ### Packer
 
