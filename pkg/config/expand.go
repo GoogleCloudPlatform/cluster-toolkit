@@ -340,7 +340,7 @@ func updateGlobalVarTypes(vars map[string]interface{}) error {
 	for k, v := range vars {
 		val, err := updateVariableType(v, varContext{}, make(map[string]int))
 		if err != nil {
-			return fmt.Errorf("error setting type for global variabl %s: %v", k, err)
+			return fmt.Errorf("error setting type for global variable %s: %v", k, err)
 		}
 		vars[k] = val
 	}
