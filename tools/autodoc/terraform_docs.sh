@@ -13,17 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 index=0
 declare -a paths
 for file in "$@"; do
-    paths[index]=$(dirname $file)
-    ((index += 1))
+	paths[index]=$(dirname "$file")
+	((index += 1))
 done
 
 uniq_paths=$(echo "${paths[@]}" | tr ' ' '\n' | sort -u)
 
 for path in $uniq_paths; do
-    terraform-docs markdown --config .tfdocs-markdown.yaml ${path}
-    terraform-docs json --config .tfdocs-json.yaml ${path}
+	terraform-docs markdown --config .tfdocs-markdown.yaml "${path}"
+	terraform-docs json --config .tfdocs-json.yaml "${path}"
 done

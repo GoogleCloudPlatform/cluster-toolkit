@@ -21,7 +21,7 @@ if [ ! -d ${INSTALL_DIR} ]; then
      DEPS="$DEPS git"
   fi
 
-  if [ ! -z $DEPS ]; then
+  if [ -n "$DEPS" ]; then
     echo "$PREFIX Installing dependencies"
     if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
       yum -y install $DEPS

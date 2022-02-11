@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: hpc-slurm
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm
   region: europe-west4
   zone: europe-west4-a
@@ -39,15 +41,15 @@ resource_groups:
     id: startup
     settings:
       runners:
-        - type: shell
-          source: "modules/startup-script/examples/install_ansible.sh"
-          destination: "tmp.sh"
-        - type: shell
-          content: $(homefs.install_nfs_client)
-          destination: "tmp.sh"
-        - type: "ansible-local"
-          source: "modules/startup-script/examples/mount.yaml"
-          destination: "tmp.sh"
+      - type: shell
+        source: "modules/startup-script/examples/install_ansible.sh"
+        destination: "tmp.sh"
+      - type: shell
+        content: $(homefs.install_nfs_client)
+        destination: "tmp.sh"
+      - type: "ansible-local"
+        source: "modules/startup-script/examples/mount.yaml"
+        destination: "tmp.sh"
 
   - source: resources/compute/simple-instance
     kind: terraform

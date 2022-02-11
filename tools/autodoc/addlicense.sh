@@ -14,7 +14,7 @@
 # limitations under the License.
 
 if [ ! "$(which addlicense)" ]; then
-  go install github.com/google/addlicense@latest
+	go install github.com/google/addlicense@latest
 fi
 
 addlicense -c "Google LLC" -l apache "$@"

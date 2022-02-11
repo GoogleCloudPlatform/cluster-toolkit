@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: overwrite_labels
 
 vars:
@@ -74,4 +76,3 @@ resource_groups:
       size_gb: 3000
       labels:
         ghpc_blueprint: storage_blueprint
-

@@ -13,21 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 if [ ! "$(which ansible-playbook)" ]; then
-  if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-    yum -y install epel-release
-    yum -y install ansible
+	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
+		yum -y install epel-release
+		yum -y install ansible
 
-  elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
-    echo 'WARNING: unsupported installation in debian / ubuntu'
-    apt update
-    apt install -y software-properties-common
-    add-apt-repository --yes --update ppa:ansible/ansible
-    apt install -y ansible
+	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
+		echo 'WARNING: unsupported installation in debian / ubuntu'
+		apt update
+		apt install -y software-properties-common
+		add-apt-repository --yes --update ppa:ansible/ansible
+		apt install -y ansible
 
-  else
-    echo 'Unsupported distribution'
-    exit 1
-  fi
+	else
+		echo 'Unsupported distribution'
+		exit 1
+	fi
 fi

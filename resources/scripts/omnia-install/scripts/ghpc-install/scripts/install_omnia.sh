@@ -13,10 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 ## Install dependendencies
 sudo yum install -y ansible
 
 ## Run scripts
 ansible-playbook install_omnia.yml -i ../data/inventory
-

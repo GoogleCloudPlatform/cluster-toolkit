@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 - name: "Setup Integration tests for HPC toolkit"
   hosts: localhost
   vars:
@@ -54,11 +56,15 @@
     - name: Get login IP
       become: false
       register: login_ip
-      command: gcloud compute instances describe --zone={{ zone }} {{ login_node }} --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+      command: >-
+        gcloud compute instances describe --zone={{ zone }} {{ login_node }}
+        --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
-      shell: dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | awk -F'"' '{print $2}'
+      shell: >-
+        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
+         awk -F'"' '{print $2}'
       register: build_ip
     - name: Create firewall rule
       command:
@@ -103,7 +109,7 @@
         - firewall-rules
         - delete
         - build-{{ build_id }}
-      ignore_errors: yes
+      ignore_errors: true
     - name: Tear Down Cluster
       run_once: true
       delegate_to: localhost
@@ -117,7 +123,7 @@
 
 - name: Run Integration Tests
   hosts: remote_host
-  gather_facts: no
+  gather_facts: false
   tasks:
   - name: Slurm Test Block
     vars:
@@ -145,7 +151,7 @@
         - firewall-rules
         - delete
         - "build-{{ build_id }}"
-      ignore_errors: yes
+      ignore_errors: true
     - name: Tear Down Cluster
       run_once: true
       delegate_to: localhost
