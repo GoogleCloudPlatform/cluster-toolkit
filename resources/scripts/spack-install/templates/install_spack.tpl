@@ -36,17 +36,19 @@ if [ ! -d ${INSTALL_DIR} ]; then
 
   # Install google-cloud-storage
   echo "$PREFIX Installing Google Cloud Storage via pip3..."
-  pip3 install google-cloud-storage &> /dev/null
+  pip3 install google-cloud-storage > ${LOG_FILE} 2>&1
 
   # Install spack
   echo "$PREFIX Installing spack from ${SPACK_URL}..."
-  mkdir -p ${INSTALL_DIR} &> /dev/null
-  chmod a+rwx ${INSTALL_DIR} &> /dev/null
-  chmod a+s ${INSTALL_DIR} &> /dev/null
-  cd ${INSTALL_DIR} &> /dev/null
-  git clone ${SPACK_URL} . &> /dev/null
+  {
+  mkdir -p ${INSTALL_DIR};
+  chmod a+rwx ${INSTALL_DIR};
+  chmod a+s ${INSTALL_DIR};
+  cd ${INSTALL_DIR};
+  git clone ${SPACK_URL} .
+  } &>> ${LOG_FILE}
   echo "$PREFIX Checking out ${SPACK_REF}..."
-  git checkout ${SPACK_REF} &> /dev/null
+  git checkout ${SPACK_REF} >> ${LOG_FILE} 2>&1
 
   # Configure module names
   cat <<EOF >> ${INSTALL_DIR}/etc/spack/modules.yaml
@@ -69,38 +71,62 @@ modules:
       all:               '{name}/{version}-{compiler.name}-{compiler.version}'
 EOF
 
-  chmod a+r ${INSTALL_DIR}/etc/spack/modules.yaml &> /dev/null
-
-  source ${INSTALL_DIR}/share/spack/setup-env.sh &> /dev/null
-  spack compiler find --scope site &> /dev/null
+  {
+  chmod a+r ${INSTALL_DIR}/etc/spack/modules.yaml;
+  source ${INSTALL_DIR}/share/spack/setup-env.sh;
+  spack compiler find --scope site
+  } &>> ${LOG_FILE} 2>&1
 
   echo "$PREFIX Setting up spack mirrors..."
   %{for m in MIRRORS ~}
-  spack mirror add --scope site ${m.mirror_name} ${m.mirror_url} &> /dev/null
+  spack mirror add --scope site ${m.mirror_name} ${m.mirror_url} >> ${LOG_FILE} 2>&1
   %{endfor ~}
 
-  spack buildcache keys --install --trust &> /dev/null
+  spack buildcache keys --install --trust >> ${LOG_FILE} 2>&1
 else
-  source ${INSTALL_DIR}/share/spack/setup-env.sh &> /dev/null
+  source ${INSTALL_DIR}/share/spack/setup-env.sh >> ${LOG_FILE} 2>&1
 fi
 
 echo "$PREFIX Installing licenses..."
 %{for lic in LICENSES ~}
-gsutil cp ${lic.source} ${lic.dest} &> /dev/null
+gsutil cp ${lic.source} ${lic.dest} >> ${LOG_FILE} 2>&1
 %{endfor ~}
-
 
 echo "$PREFIX Installing compilers..."
 %{for c in COMPILERS ~}
-spack install ${c} &> /dev/null
-spack load ${c} &> /dev/null
+{
+spack install ${c};
+spack load ${c};
+} &>> ${LOG_FILE}
 %{endfor ~}
 
-spack compiler find --scope site &> /dev/null
+spack compiler find --scope site >> ${LOG_FILE} 2>&1
 
-echo "$PREFIX Installing software stack..."
+echo "$PREFIX Installing root spack specs..."
 %{for p in PACKAGES ~}
-spack install ${p} &> /dev/null
+spack install ${p} >> ${LOG_FILE} 2>&1
+%{endfor ~}
+
+echo "$PREFIX Configuring spack environments"
+%{for e in ENVIRONMENTS ~}
+
+{
+spack env create ${e.name};
+spack env activate ${e.name};
+} &>> ${LOG_FILE}
+
+echo "$PREFIX    Configuring spack environment ${e.name}"
+%{for p in e.packages ~}
+spack add ${p} >> ${LOG_FILE} 2>&1
+%{endfor ~}
+
+echo "$PREFIX    Concretizing spack environment ${e.name}"
+spack concretize >> ${LOG_FILE} 2>&1
+echo "$PREFIX    Installing packages for spack environment ${e.name}"
+spack install >> ${LOG_FILE} 2>&1
+
+spack env deactivate >> ${LOG_FILE} 2>&1
+
 %{endfor ~}
 
 echo "$PREFIX Setup complete..."

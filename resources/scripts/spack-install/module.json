@@ -10,6 +10,13 @@
       "required": false
     },
     {
+      "name": "environments",
+      "type": "list(object({\n    name     = string\n    packages = list(string)\n  }))",
+      "description": "Defines a spack environment to configure.",
+      "default": null,
+      "required": false
+    },
+    {
       "name": "install_dir",
       "type": "string",
       "description": "Directory to install spack into.",
@@ -24,9 +31,16 @@
       "required": false
     },
     {
+      "name": "log_file",
+      "type": "string",
+      "description": "Defines the logfile that script output will be written to",
+      "default": "/dev/null",
+      "required": false
+    },
+    {
       "name": "packages",
       "type": "list(string)",
-      "description": "Defines packages for spack to install (in order).",
+      "description": "Defines root packages for spack to install (in order).",
       "default": [],
       "required": false
     },
