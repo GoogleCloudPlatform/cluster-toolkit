@@ -212,7 +212,7 @@ func getValidators() map[string]func([]interface{}) error {
 	return allValidators
 }
 
-func interfaceSliceToArraySlice(islice []interface{}) ([]string, error) {
+func interfaceSliceToStringSlice(islice []interface{}) ([]string, error) {
 	var stringSlice []string
 
 	for _, element := range islice {
@@ -223,6 +223,23 @@ func interfaceSliceToArraySlice(islice []interface{}) ([]string, error) {
 		}
 	}
 	return stringSlice, nil
+}
+
+func interfaceSliceToSliceOfStringSlices(islice []interface{}) ([][]string, error) {
+	var sliceOfStringSlice [][]string
+	for _, isliceInterface := range islice {
+		if isliceInterfaceSlice, ok := isliceInterface.([]interface{}); ok {
+			zoneRegionSlice, err := interfaceSliceToStringSlice(isliceInterfaceSlice)
+			if err != nil {
+				return nil, err
+			}
+			sliceOfStringSlice = append(sliceOfStringSlice, zoneRegionSlice)
+		} else {
+			return nil, fmt.Errorf("%s is not a slice", isliceInterfaceSlice)
+		}
+	}
+
+	return sliceOfStringSlice, nil
 }
 
 func testStringExists(testValues []string, f func(string) error) error {
@@ -243,7 +260,7 @@ func testStringExists(testValues []string, f func(string) error) error {
 }
 
 func testProjectExists(projectIds []interface{}) error {
-	projectStrings, err := interfaceSliceToArraySlice(projectIds)
+	projectStrings, err := interfaceSliceToStringSlice(projectIds)
 	if err != nil {
 		return err
 	}
@@ -251,7 +268,7 @@ func testProjectExists(projectIds []interface{}) error {
 }
 
 func testRegionExists(regions []interface{}) error {
-	regionStrings, err := interfaceSliceToArraySlice(regions)
+	regionStrings, err := interfaceSliceToStringSlice(regions)
 	if err != nil {
 		return err
 	}
@@ -259,7 +276,7 @@ func testRegionExists(regions []interface{}) error {
 }
 
 func testZoneExists(zones []interface{}) error {
-	zoneStrings, err := interfaceSliceToArraySlice(zones)
+	zoneStrings, err := interfaceSliceToStringSlice(zones)
 	if err != nil {
 		return err
 	}
@@ -267,30 +284,29 @@ func testZoneExists(zones []interface{}) error {
 }
 
 func testZoneInRegion(zoneRegionPairs []interface{}) error {
+	zoneRegionStrings, err := interfaceSliceToSliceOfStringSlices(zoneRegionPairs)
+	if err != nil {
+		return err
+	}
 	var errored bool
-	for _, zoneRegionInterface := range zoneRegionPairs {
-		if zoneRegionPair, ok := zoneRegionInterface.([]interface{}); !ok {
+	for _, zoneRegion := range zoneRegionStrings {
+		if len(zoneRegion) != 2 {
 			errored = true
-			log.Printf("%s is not a valid array for zone/region testing", zoneRegionPair)
-		} else if len(zoneRegionPair) != 2 {
-			errored = true
-			log.Printf("%s must be an array of length 2 (zone, region)", zoneRegionPair)
-		} else if zone, ok := zoneRegionPair[0].(string); !ok {
-			errored = true
-			log.Printf("%s is not a string", zoneRegionPair[0])
-		} else if region, ok := zoneRegionPair[1].(string); !ok {
-			errored = true
-			log.Printf("%s is not a string", zoneRegionPair[1])
-		} else if err := validators.TestZoneInRegion(zone, region); err != nil {
+			log.Printf("%s is not of length 2", zoneRegion)
+			continue
+		}
+		zone := zoneRegion[0]
+		region := zoneRegion[1]
+		if err := validators.TestZoneInRegion(zone, region); err != nil {
 			errored = true
 			log.Print(err)
 		} else {
-			log.Printf("zone %s found in region %s", zone, region)
+			log.Printf("zone %s is in region %s", zone, region)
 		}
 	}
 	if errored {
-		errStr := "at least one of the zones failed to be found within the specified region"
-		return fmt.Errorf(errStr)
+		errStr := "at least one of %s failed to be validated"
+		return fmt.Errorf(errStr, zoneRegionStrings)
 	}
 	return nil
 }
