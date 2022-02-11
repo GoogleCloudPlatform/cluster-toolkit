@@ -212,70 +212,58 @@ func getValidators() map[string]func([]interface{}) error {
 	return allValidators
 }
 
-// this function could probably be re-written with a generic conversion
-// of projectIds []interface{} to type []string
+func interfaceSliceToArraySlice(islice []interface{}) ([]string, error) {
+	var stringSlice []string
+
+	for _, element := range islice {
+		if s, ok := element.(string); ok {
+			stringSlice = append(stringSlice, s)
+		} else {
+			return nil, fmt.Errorf("%s is not a valid string", element)
+		}
+	}
+	return stringSlice, nil
+}
+
+func testStringExists(testValues []string, f func(string) error) error {
+	var errored bool
+	for _, value := range testValues {
+		if err := f(value); err != nil {
+			errored = true
+			log.Print(err)
+		} else {
+			log.Printf("%s is valid", value)
+		}
+	}
+	if errored {
+		errStr := "at least one of %s failed to be validated"
+		return fmt.Errorf(errStr, testValues)
+	}
+	return nil
+}
+
 func testProjectExists(projectIds []interface{}) error {
-	var errored bool
-	for _, projectID := range projectIds {
-		if projectIDS, ok := projectID.(string); !ok {
-			errored = true
-			log.Printf("%s is not a valid string for project testing", projectID)
-		} else if err := validators.TestProjectExists(projectIDS); err != nil {
-			errored = true
-			log.Print(err)
-		} else {
-			log.Printf("%s is a valid project", projectIDS)
-		}
+	projectStrings, err := interfaceSliceToArraySlice(projectIds)
+	if err != nil {
+		return err
 	}
-	if errored {
-		errStr := "at least one of %s failed to be validated project IDs"
-		return fmt.Errorf(errStr, projectIds)
-	}
-	return nil
+	return testStringExists(projectStrings, validators.TestProjectExists)
 }
 
-// this function could probably be re-written with a generic conversion
-// of regions []interface{} to type []string
 func testRegionExists(regions []interface{}) error {
-	var errored bool
-	for _, region := range regions {
-		if regionS, ok := region.(string); !ok {
-			errored = true
-			log.Printf("%s is not a valid string for region testing", region)
-		} else if err := validators.TestRegionExists(regionS); err != nil {
-			errored = true
-			log.Print(err)
-		} else {
-			log.Printf("%s is a valid region", region)
-		}
+	regionStrings, err := interfaceSliceToArraySlice(regions)
+	if err != nil {
+		return err
 	}
-	if errored {
-		errStr := "at least one of %s failed to be validated regions"
-		return fmt.Errorf(errStr, regions)
-	}
-	return nil
+	return testStringExists(regionStrings, validators.TestRegionExists)
 }
 
-// this function could probably be re-written with a generic conversion
-// of zones []interface{} to type []string
 func testZoneExists(zones []interface{}) error {
-	var errored bool
-	for _, zone := range zones {
-		if zoneS, ok := zone.(string); !ok {
-			errored = true
-			log.Printf("%s is not a valid string for zone testing", zone)
-		} else if err := validators.TestZoneExists(zoneS); err != nil {
-			errored = true
-			log.Print(err)
-		} else {
-			log.Printf("%s is a valid zone", zone)
-		}
+	zoneStrings, err := interfaceSliceToArraySlice(zones)
+	if err != nil {
+		return err
 	}
-	if errored {
-		errStr := "at least one of %s failed to be validated zones"
-		return fmt.Errorf(errStr, zones)
-	}
-	return nil
+	return testStringExists(zoneStrings, validators.TestZoneExists)
 }
 
 func testZoneInRegion(zoneRegionPairs []interface{}) error {
