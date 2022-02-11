@@ -26,6 +26,42 @@ func (s *MySuite) TestExpand(c *C) {
 	bc.expand()
 }
 
+func (s *MySuite) TestExpandBackends(c *C) {
+	bc := getBlueprintConfigForTest()
+
+	// Simple test: Does Nothing
+	err := bc.expandBackends()
+	c.Assert(err, IsNil)
+
+	tfBackend := &TerraformBackend{
+		Type:          "gcs",
+		Configuration: make(map[string]interface{}),
+	}
+	bc.Config.TerraformBackendDefaults = *tfBackend
+	err = bc.expandBackends()
+	c.Assert(err, IsNil)
+	grp := bc.Config.ResourceGroups[0]
+	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
+	gotPrefix := grp.TerraformBackend.Configuration["prefix"]
+	expPrefix := fmt.Sprintf("%s/%s", bc.Config.BlueprintName, grp.Name)
+	c.Assert(gotPrefix, Equals, expPrefix)
+
+	// Add a new resource group, ensure each group name is included
+	newGroup := ResourceGroup{
+		Name: "group2",
+	}
+	bc.Config.ResourceGroups = append(bc.Config.ResourceGroups, newGroup)
+	bc.Config.Vars["deployment_name"] = "testDeployment"
+	err = bc.expandBackends()
+	c.Assert(err, IsNil)
+	newGrp := bc.Config.ResourceGroups[1]
+	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
+	gotPrefix = newGrp.TerraformBackend.Configuration["prefix"]
+	expPrefix = fmt.Sprintf("%s/%s/%s", bc.Config.BlueprintName,
+		bc.Config.Vars["deployment_name"], newGrp.Name)
+	c.Assert(gotPrefix, Equals, expPrefix)
+}
+
 func (s *MySuite) TestGetResourceVarName(c *C) {
 	resID := "resID"
 	varName := "varName"
