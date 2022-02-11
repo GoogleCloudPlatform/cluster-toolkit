@@ -177,30 +177,6 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 		yamlConfig.Vars = make(map[string]interface{})
 	}
 
-	// 1. DEFAULT: use TerraformBackend configuration (if supplied) in each
-	//    resource group
-	// 2. If top-level TerraformBackendDefaults is defined, insert that
-	//    backend into resource groups which have no explicit
-	//    TerraformBackend
-	// 3. In all cases, add a prefix for GCS backends if one is not defined
-	if yamlConfig.TerraformBackendDefaults.Type != "" {
-		for i, grp := range yamlConfig.ResourceGroups {
-			if grp.TerraformBackend.Type == "" {
-				grp.TerraformBackend = yamlConfig.TerraformBackendDefaults
-			}
-			if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration["prefix"] == nil {
-				DeploymentName := yamlConfig.Vars["deployment_name"]
-				prefix := yamlConfig.BlueprintName
-				if DeploymentName != nil {
-					prefix += "/" + DeploymentName.(string)
-				}
-				prefix += "/" + grp.Name
-				grp.TerraformBackend.Configuration["prefix"] = prefix
-			}
-			yamlConfig.ResourceGroups[i].TerraformBackend = grp.TerraformBackend
-		}
-	}
-
 	return yamlConfig
 }
 

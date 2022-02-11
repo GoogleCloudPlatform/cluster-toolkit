@@ -23,6 +23,12 @@ vars:
   zone: europe-west4-a
   slurm_sa: slurm-sa
 
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: a_bucket
+    impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
+
 resource_groups:
 - group: onboarding
   resources:
