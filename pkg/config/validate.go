@@ -229,11 +229,11 @@ func interfaceSliceToSliceOfStringSlices(islice []interface{}) ([][]string, erro
 	var sliceOfStringSlice [][]string
 	for _, isliceInterface := range islice {
 		if isliceInterfaceSlice, ok := isliceInterface.([]interface{}); ok {
-			zoneRegionSlice, err := interfaceSliceToStringSlice(isliceInterfaceSlice)
+			stringSlice, err := interfaceSliceToStringSlice(isliceInterfaceSlice)
 			if err != nil {
 				return nil, err
 			}
-			sliceOfStringSlice = append(sliceOfStringSlice, zoneRegionSlice)
+			sliceOfStringSlice = append(sliceOfStringSlice, stringSlice)
 		} else {
 			return nil, fmt.Errorf("%s is not a slice", isliceInterfaceSlice)
 		}
@@ -292,7 +292,7 @@ func testZoneInRegion(zoneRegionPairs []interface{}) error {
 	for _, zoneRegion := range zoneRegionStrings {
 		if len(zoneRegion) != 2 {
 			errored = true
-			log.Printf("%s is not of length 2", zoneRegion)
+			log.Printf("%s must be of length 2 (zone, region)", zoneRegion)
 			continue
 		}
 		zone := zoneRegion[0]
