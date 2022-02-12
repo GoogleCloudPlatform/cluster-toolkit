@@ -98,6 +98,7 @@ type Resource struct {
 	ResourceName     string
 	Use              []string
 	WrapSettingsWith map[string][]string
+	Outputs          []string `yaml:"outputs,omitempty"`
 	Settings         map[string]interface{}
 }
 
