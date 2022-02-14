@@ -25,9 +25,13 @@ variable "deployment_name" {
 }
 
 variable "base_dashboard" {
-  description = "Baseline dashboard template, select from HPC or Emtpy"
+  description = "Baseline dashboard template, select from HPC or Empty"
   type        = string
   default     = "HPC"
+  validation {
+    condition     = contains(["HPC", "Empty"], var.base_dashboard)
+    error_message = "Must set var.base_dashboard to either \"HPC\" or \"Empty\"."
+  }
 }
 
 variable "title" {

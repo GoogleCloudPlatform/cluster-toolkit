@@ -5,7 +5,7 @@
     {
       "name": "base_dashboard",
       "type": "string",
-      "description": "Baseline dashboard template, select from HPC or Emtpy",
+      "description": "Baseline dashboard template, select from HPC or Empty",
       "default": "HPC",
       "required": false
     },
