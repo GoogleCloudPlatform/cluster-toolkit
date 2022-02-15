@@ -25,27 +25,32 @@ output "network_self_link" {
 
 }
 
+output "subnetworks" {
+  description = "All subnetwork resources created by this module"
+  value       = module.vpc.subnets
+}
+
 output "subnetwork" {
-  description = "The subnetwork in the specified primary region"
-  value       = data.google_compute_subnetwork.primary_subnetwork
+  description = "The primary subnetwork object created by the input variable primary_subnetwork"
+  value       = local.primary_subnetwork
 }
 
 output "subnetwork_name" {
-  description = "The name of the subnetwork in the specified primary region"
-  value       = data.google_compute_subnetwork.primary_subnetwork.name
+  description = "The name of the primary subnetwork"
+  value       = local.primary_subnetwork_name
 }
 
 output "subnetwork_self_link" {
-  description = "The subnetwork self-link in the specified primary region"
-  value       = data.google_compute_subnetwork.primary_subnetwork.self_link
+  description = "The self-link to the primary subnetwork"
+  value       = local.primary_subnetwork_self_link
 }
 
 output "subnetwork_address" {
-  description = "The subnetwork address in the specified primary region"
-  value       = data.google_compute_subnetwork.primary_subnetwork.ip_cidr_range
+  description = "The address range of the primary subnetwork"
+  value       = local.primary_subnetwork_ip_cidr_range
 }
 
 output "nat_ips" {
   description = "the external IPs assigned to the NAT"
-  value       = google_compute_address.nat_ips.*.address
+  value       = flatten([for ipmod in module.nat_ip_addresses : ipmod.addresses])
 }
