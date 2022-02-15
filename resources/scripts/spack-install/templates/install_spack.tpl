@@ -14,7 +14,7 @@ if [ ! -d ${INSTALL_DIR} ]; then
 
   DEPS=""
   if [ ! "$(which pip3)" ]; then
-      DEPS="$DEPS pip3"
+      DEPS="$DEPS python3-pip"
   fi
 
   if [ ! "$(which git)" ]; then

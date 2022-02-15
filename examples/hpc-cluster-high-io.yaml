@@ -17,10 +17,20 @@
 blueprint_name: hpc-cluster-high-io
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-io
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hpc-high-io
   region: us-central1
   zone: us-central1-c
+
+# The following commented block will use a GCS bucket to store and manage the
+# terraform state. Add your own bucket name and (optionally) a service account
+# in the configuration. If not set, the terraform state will be stored locally
+# within the generated blueprint.
+# terraform_backend_defaults:
+#   type: gcs
+#   configuration:
+#     bucket: a_bucket
+#     impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
 
 resource_groups:
 - group: primary
