@@ -18,15 +18,17 @@ locals {
   script_content = templatefile(
     "${path.module}/templates/install_spack.tpl",
     {
-      ZONE        = var.zone
-      PROJECT_ID  = var.project_id
-      INSTALL_DIR = var.install_dir
-      SPACK_URL   = var.spack_url
-      SPACK_REF   = var.spack_ref
-      COMPILERS   = var.compilers == null ? [] : var.compilers
-      LICENSES    = var.licenses == null ? [] : var.licenses
-      PACKAGES    = var.packages == null ? [] : var.packages
-      MIRRORS     = var.spack_cache_url == null ? [] : var.spack_cache_url
+      ZONE         = var.zone
+      PROJECT_ID   = var.project_id
+      INSTALL_DIR  = var.install_dir
+      SPACK_URL    = var.spack_url
+      SPACK_REF    = var.spack_ref
+      COMPILERS    = var.compilers == null ? [] : var.compilers
+      LICENSES     = var.licenses == null ? [] : var.licenses
+      PACKAGES     = var.packages == null ? [] : var.packages
+      ENVIRONMENTS = var.environments == null ? [] : var.environments
+      MIRRORS      = var.spack_cache_url == null ? [] : var.spack_cache_url
+      LOG_FILE     = var.log_file == null ? "/dev/null" : var.log_file
     }
   )
 }

@@ -67,8 +67,22 @@ variable "licenses" {
 }
 
 variable "packages" {
-  description = "Defines packages for spack to install (in order)."
+  description = "Defines root packages for spack to install (in order)."
   default     = []
   type        = list(string)
 }
 
+variable "environments" {
+  description = "Defines a spack environment to configure."
+  default     = null
+  type = list(object({
+    name     = string
+    packages = list(string)
+  }))
+}
+
+variable "log_file" {
+  description = "Defines the logfile that script output will be written to"
+  default     = "/dev/null"
+  type        = string
+}

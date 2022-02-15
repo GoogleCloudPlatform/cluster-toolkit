@@ -39,12 +39,15 @@ As an example, the below is a possible definition of a spack installation.
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.0
       spack_cache_url:
-       - mirror_name: 'gcs_cache'
-         mirror_url: gs://example-buildcache/linux-centos7
+      - mirror_name: 'gcs_cache'
+        mirror_url: gs://example-buildcache/linux-centos7
       compilers:
-        - gcc@10.3.0 target=x86_64
+      - gcc@10.3.0 target=x86_64
       packages:
-        - cmake%gcc@10.3.0 target=x86_64
+      - cmake%gcc@10.3.0 target=x86_64
+      environments:
+      - name: main-env
+        packages:
         - intel-mkl%gcc@10.3.0 target=skylake
         - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
         - fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5 target=x86_64
@@ -74,9 +77,9 @@ Alternatively, it can be added as a startup script via:
     id: startup
     settings:
       runners:
-        - type: shell
-          content: $(spack.startup_script)
-          destination: "/apps/spack-install.sh"
+      - type: shell
+        content: $(spack.startup_script)
+        destination: "/apps/spack-install.sh"
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -117,9 +120,11 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | Defines compilers for spack to install before installing packages. | `list(string)` | `[]` | no |
+| <a name="input_environments"></a> [environments](#input\_environments) | Defines a spack environment to configure. | <pre>list(object({<br>    name     = string<br>    packages = list(string)<br>  }))</pre> | `null` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory to install spack into. | `string` | `"/apps/spack"` | no |
 | <a name="input_licenses"></a> [licenses](#input\_licenses) | List of software licenses to install within spack. | <pre>list(object({<br>    source = string<br>    dest   = string<br>  }))</pre> | `null` | no |
-| <a name="input_packages"></a> [packages](#input\_packages) | Defines packages for spack to install (in order). | `list(string)` | `[]` | no |
+| <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Defines the logfile that script output will be written to | `string` | `"/dev/null"` | no |
+| <a name="input_packages"></a> [packages](#input\_packages) | Defines root packages for spack to install (in order). | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | List of buildcaches for spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
 | <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"develop"` | no |
