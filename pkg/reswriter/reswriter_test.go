@@ -504,6 +504,37 @@ func (s *MySuite) TestWriteMain(c *C) {
 	c.Assert(exists, Equals, true)
 }
 
+func (s *MySuite) TestWriteOutputs(c *C) {
+	// Setup
+	testOutputsDir := path.Join(testDir, "TestWriteOutputs")
+	outputsFilePath := path.Join(testOutputsDir, "outputs.tf")
+	if err := os.Mkdir(testOutputsDir, 0755); err != nil {
+		log.Fatal("Failed to create test directory for creating outputs.tf file")
+	}
+
+	// Simple success, no resources
+	testResources := []config.Resource{}
+	err := writeOutputs(testResources, testOutputsDir)
+	c.Assert(err, IsNil)
+
+	// Failure: Bad path
+	err = writeOutputs(testResources, "not/a/real/path")
+	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
+
+	// Success: Outputs added
+	outputList := []string{"output1", "output2"}
+	resourceWithOutputs := config.Resource{Outputs: outputList, ID: "testRes"}
+	testResources = []config.Resource{resourceWithOutputs}
+	err = writeOutputs(testResources, testOutputsDir)
+	c.Assert(err, IsNil)
+	exists, err := stringExistsInFile(outputList[0], outputsFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+	exists, err = stringExistsInFile(outputList[1], outputsFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+}
+
 func (s *MySuite) TestWriteVariables(c *C) {
 	// Setup
 	testVarDir := path.Join(testDir, "TestWriteVariables")

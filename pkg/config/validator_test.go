@@ -132,3 +132,31 @@ func (s *MySuite) TestValidateResource(c *C) {
 	err = validateResource(testResource)
 	c.Assert(err, IsNil)
 }
+
+func (s *MySuite) TestValidateOutputs(c *C) {
+	// Simple case, no outputs in either
+	testRes := Resource{ID: "testRes"}
+	testInfo := resreader.ResourceInfo{Outputs: []resreader.VarInfo{}}
+	err := validateOutputs(testRes, testInfo)
+	c.Assert(err, IsNil)
+
+	// Output in varInfo, nothing in resource
+	matchingName := "match"
+	testVarInfo := resreader.VarInfo{Name: matchingName}
+	testInfo.Outputs = append(testInfo.Outputs, testVarInfo)
+	err = validateOutputs(testRes, testInfo)
+	c.Assert(err, IsNil)
+
+	// Output matches between varInfo and resource
+	testRes.Outputs = []string{matchingName}
+	err = validateOutputs(testRes, testInfo)
+	c.Assert(err, IsNil)
+
+	// Addition output found in resources, not in varinfo
+	missingName := "missing"
+	testRes.Outputs = append(testRes.Outputs, missingName)
+	err = validateOutputs(testRes, testInfo)
+	c.Assert(err, Not(IsNil))
+	expErr := fmt.Sprintf("%s.*", errorMessages["invalidOutput"])
+	c.Assert(err, ErrorMatches, expErr)
+}

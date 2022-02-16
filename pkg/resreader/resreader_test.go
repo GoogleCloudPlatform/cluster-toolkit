@@ -76,6 +76,21 @@ func (s *MySuite) TestIsValidKind(c *C) {
 	c.Assert(IsValidKind(""), Equals, false)
 }
 
+func (s *MySuite) TestGetOutputsAsMap(c *C) {
+	// Simple: empty outputs
+	resInfo := ResourceInfo{}
+	outputMap := resInfo.GetOutputsAsMap()
+	c.Assert(len(outputMap), Equals, 0)
+
+	testDescription := "This is a test description"
+	testName := "testName"
+	varInfo := VarInfo{Name: testName, Description: testDescription}
+	resInfo.Outputs = []VarInfo{varInfo}
+	outputMap = resInfo.GetOutputsAsMap()
+	c.Assert(len(outputMap), Equals, 1)
+	c.Assert(outputMap[testName].Description, Equals, testDescription)
+}
+
 func (s *MySuite) TestFactory(c *C) {
 	pkrReader := Factory(pkrKindString)
 	c.Assert(reflect.TypeOf(pkrReader), Equals, reflect.TypeOf(PackerReader{}))
