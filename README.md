@@ -102,7 +102,9 @@ the `-o` flag as shown in the following example.
 To deploy the blueprint, use terraform in the resource group directory:
 
 > **_NOTE:_** Before you run this for the first time you may need to enable some
-> APIs. See [Enable GCP APIs](#enable-gcp-apis).
+> APIs and possibly request additional quotas. See
+> [Enable GCP APIs](#enable-gcp-apis) and
+> [Small Example Quotas](examples/README.md#hpc-cluster-smallyaml).
 
 ```shell
 cd hpc-cluster-small/primary # From hpc-cluster-small.yaml example
@@ -152,6 +154,18 @@ List of APIs to enable ([instructions](https://cloud.google.com/apis/docs/gettin
 * Compute Engine API
 * Cloud Filestore API
 * Cloud Runtime Configuration API - _needed for `high-io` example_
+
+## GCP Quotas
+
+You may need to request additional quota to be able to deploy and use your HPC
+cluster. For example, by default the `SchedMD-slurm-on-gcp-partition` resource
+uses `c2-standard-60` VMs for compute nodes. Default quota for C2 CPUs may be as
+low as 8, which would prevent even a single node from being started.
+
+Required quotas will be based on your custom HPC configuration. Minimum quotas
+have been [documented](examples/README.md#example-configs) for the provided examples.
+
+Quotas can be inspected and requested at `IAM & Admin` > `Quotas`.
 
 ## Inspecting the Blueprint
 
