@@ -49,6 +49,8 @@
         chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
       args:
         creates: "{{ workspace }}/{{ blueprint_dir }}/.terraform"
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
       with_items:
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
@@ -116,6 +118,8 @@
     - name: Tear Down Cluster
       run_once: true
       delegate_to: localhost
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve
         chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
@@ -174,6 +178,8 @@
     - name: Tear Down Cluster
       run_once: true
       delegate_to: localhost
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve
         chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
