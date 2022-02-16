@@ -53,6 +53,7 @@ var errorMessages = map[string]string{
 	"duplicateID":     "resource IDs must be unique",
 	"emptyGroupName":  "group name must be set for each resource group",
 	"illegalChars":    "invalid character(s) found in group name",
+	"invalidOutput":   "requested output was not found in the resource",
 }
 
 // ResourceGroup defines a group of Resource that are all executed together
@@ -98,6 +99,7 @@ type Resource struct {
 	ResourceName     string
 	Use              []string
 	WrapSettingsWith map[string][]string
+	Outputs          []string `yaml:"outputs,omitempty"`
 	Settings         map[string]interface{}
 }
 

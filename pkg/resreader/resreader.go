@@ -36,6 +36,15 @@ type ResourceInfo struct {
 	Outputs []VarInfo
 }
 
+// GetOutputsAsMap returns the outputs list as a map for quicker access
+func (ri ResourceInfo) GetOutputsAsMap() map[string]VarInfo {
+	outputsMap := make(map[string]VarInfo)
+	for _, output := range ri.Outputs {
+		outputsMap[output.Name] = output
+	}
+	return outputsMap
+}
+
 // ResReader is a resource reader interface
 type ResReader interface {
 	GetInfo(path string) (ResourceInfo, error)

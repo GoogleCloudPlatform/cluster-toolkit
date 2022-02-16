@@ -25,6 +25,12 @@ import (
 	"hpc-toolkit/pkg/config"
 )
 
+// interfaceStruct is a struct wrapper for converting interface data structures
+// to yaml flow style: one line wrapped in {} for maps and [] for lists.
+type interfaceStruct struct {
+	Elem interface{} `yaml:",flow"`
+}
+
 func getType(obj interface{}) string {
 	// This does not handle variables with arbitrary types
 	str, ok := obj.(string)
