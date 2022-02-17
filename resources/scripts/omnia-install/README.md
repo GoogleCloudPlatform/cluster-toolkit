@@ -40,13 +40,10 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
-| Name | Version |
-|------|---------|
-| <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
+No providers.
 
 ## Modules
 
@@ -54,21 +51,22 @@ No modules.
 
 ## Resources
 
-| Name | Type |
-|------|------|
-| [null_resource.omnia_install](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+No resources.
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_depends"></a> [depends](#input\_depends) | Allows to add explicit dependencies | `list(any)` | `null` | no |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used to name the cluster | `string` | n/a | yes |
-| <a name="input_manager_node"></a> [manager\_node](#input\_manager\_node) | Name of the Omnia manager node | `string` | n/a | yes |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the Omnia cluster has been created | `string` | n/a | yes |
-| <a name="input_zone"></a> [zone](#input\_zone) | The GCP zone where the Omnia cluster is running | `string` | n/a | yes |
+| <a name="input_compute_ips"></a> [compute\_ips](#input\_compute\_ips) | IPs of the Omnia compute nodes | `list(string)` | n/a | yes |
+| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Path where omnia will be installed | `string` | `"/apps"` | no |
+| <a name="input_manager_ips"></a> [manager\_ips](#input\_manager\_ips) | IPs of the Omnia manager nodes | `list(string)` | n/a | yes |
+| <a name="input_omnia_username"></a> [omnia\_username](#input\_omnia\_username) | Name of the user that installs omnia | `string` | `"omnia"` | no |
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+|------|-------------|
+| <a name="output_add_omnia_user_script"></a> [add\_omnia\_user\_script](#output\_add\_omnia\_user\_script) | An ansible script that adds the user that install omnia |
+| <a name="output_inventory_file"></a> [inventory\_file](#output\_inventory\_file) | The inventory file for the omnia cluster |
+| <a name="output_runners"></a> [runners](#output\_runners) | The runners to setup and install omnia on the manager |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

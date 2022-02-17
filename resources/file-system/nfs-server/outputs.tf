@@ -30,3 +30,8 @@ output "install_nfs_client" {
   description = "Script for installing NFS client"
   value       = file("${path.module}/scripts/install-nfs-client.sh")
 }
+
+output "runners" {
+  description = "Runners to install and mount file-systems using startup-scripts"
+  value       = local.runners
+}

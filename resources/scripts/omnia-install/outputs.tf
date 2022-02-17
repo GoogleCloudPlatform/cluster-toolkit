@@ -14,3 +14,17 @@
  * limitations under the License.
  */
 
+output "inventory_file" {
+  description = "The inventory file for the omnia cluster"
+  value       = local.inventory
+}
+
+output "add_omnia_user_script" {
+  description = "An ansible script that adds the user that install omnia"
+  value       = local.add_user_file
+}
+
+output "runners" {
+  description = "The runners to setup and install omnia on the manager"
+  value       = local.startup_runners
+}

@@ -14,28 +14,24 @@
  * limitations under the License.
  */
 
-variable "depends" {
-  description = "Allows to add explicit dependencies"
-  default     = null
-  type        = list(any)
+variable "manager_ips" {
+  description = "IPs of the Omnia manager nodes"
+  type        = list(string)
 }
 
-variable "deployment_name" {
-  description = "Name of the deployment, used to name the cluster"
+variable "compute_ips" {
+  description = "IPs of the Omnia compute nodes"
+  type        = list(string)
+}
+
+variable "install_dir" {
+  description = "Path where omnia will be installed"
+  default     = "/apps"
   type        = string
 }
 
-variable "manager_node" {
-  description = "Name of the Omnia manager node"
-  type        = string
-}
-
-variable "zone" {
-  description = "The GCP zone where the Omnia cluster is running"
-  type        = string
-}
-
-variable "project_id" {
-  description = "Project in which the Omnia cluster has been created"
+variable "omnia_username" {
+  description = "Name of the user that installs omnia"
+  default     = "omnia"
   type        = string
 }

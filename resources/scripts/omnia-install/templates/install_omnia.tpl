@@ -13,30 +13,38 @@
 # limitations under the License.
 
 ---
+## TODO Make this into a templatefile - add variables via terraform. Same with add_omnia_user
 
 - name: Creates SSH Keys to communicate between hosts
   hosts: localhost
   vars:
-    pub_key_path: ~/.ssh
+    pub_key_path: /home/omnia/.ssh
     pub_key_file: "{{pub_key_path}}/id_rsa"
     auth_key_file: "{{pub_key_path}}/authorized_keys"
+    username: ${username}
   tasks:
   - name: "Create {{pub_key_path}} folder"
     file:
       path: "{{pub_key_path}}"
       state: directory
       mode: 0700
+      owner: "{{username}}"
   - name: Create keys
     openssh_keypair:
       path: "{{pub_key_file}}"
+      owner: "{{username}}"
   - name: Copy public key to authorized keys
     copy:
       src: "{{pub_key_file}}.pub"
       dest: "{{auth_key_file}}"
+      owner: "{{username}}"
       mode: 0644
 
 - name: install_deps
   hosts: localhost
+  vars:
+    username: ${username}
+  become_user: "{{ username }}"
   tasks:
   - name: Install git and epel-release
     package:
@@ -47,6 +55,10 @@
 
 - name: setup_omnia
   hosts: localhost
+  vars:
+    install_dir: ${install_dir}
+    repo_name: omnia
+    omnia_dir: "{{ install_dir }}/omnia"
   tasks:
   - name: Unmask and restart firewalld
     become: true
@@ -54,29 +66,38 @@
   - name: Git checkout
     git:
       repo: 'https://github.com/dellhpc/omnia.git'
-      dest: ../omnia
+      dest: "{{ omnia_dir }}/{{ repo_name }}"
       version: release-1.0
       update: false
-  - name: Copy file with owner and permissions
+  - name: Copy inventory file with owner and permissions
     copy:
-      src: ../data/inventory
-      dest: ../omnia/inventory
+      src: "{{ omnia_dir }}/inventory"
+      dest: "{{ omnia_dir }}/{{ repo_name }}/inventory"
       mode: 0644
   - name: Update omnia.yml setting become to yes
     replace:
-      path: ../omnia/omnia.yml
+      path: "{{ omnia_dir }}/{{ repo_name }}/omnia.yml"
       regexp: '- name(.*)'
       replace: '- name\1\n  become: yes'
 
 - name: run_omnia  # Look into import_playbook here
   hosts: localhost
+  vars:
+    install_dir: ${install_dir}
+    username: ${username}
+    omnia_dir: "{{ install_dir }}/omnia"
+  become_user: "{{ username }}"
+  remote_user: "{{ username }}"
   tasks:
   - name: Run omnia
     shell: |
-      ansible-playbook omnia.yml -i inventory \
+      ansible-playbook omnia.yml \
+        --private-key /home/{{ username }}/.ssh/id_rsa \
+        --inventory inventory \
+        --user "{{ username }}" \
         --e "ansible_python_interpreter=/usr/bin/python2" \
         --skip-tags "kubernetes"
     args:
-      chdir: ../omnia
+      chdir: "{{ omnia_dir }}/omnia"
     environment:
       ANSIBLE_HOST_KEY_CHECKING: False

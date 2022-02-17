@@ -14,19 +14,45 @@
  * limitations under the License.
  */
 
-resource "null_resource" "omnia_install" {
-  depends_on = [var.depends]
-  triggers = {
-    "dependencies" = jsonencode(var.depends),
-    "manager"      = var.manager_node
-  }
-  provisioner "local-exec" {
-    command = "sh ${path.module}/scripts/install_omnia.sh"
-    environment = {
-      DEPLOYMENT_NAME = var.deployment_name
-      MANAGER_NODE    = var.manager_node
-      ZONE            = var.zone
-      PROJECT_ID      = var.project_id
+locals {
+  inventory = templatefile(
+    "${path.module}/templates/inventory.tpl",
+    {
+      omnia_manager = var.manager_ips
+      omnia_compute = var.compute_ips
     }
-  }
+  )
+  add_user_file = templatefile(
+    "${path.module}/templates/add_omnia_user.tpl",
+    { username = var.omnia_username }
+  )
+  install_file = templatefile(
+    "${path.module}/templates/install_omnia.tpl",
+    {
+      username    = var.omnia_username
+      install_dir = var.install_dir
+    }
+  )
+  startup_runners = [
+    {
+      "type"        = "shell"
+      "content"     = "mkdir ${var.install_dir}/omnia"
+      "destination" = "mkdir-omnia.sh"
+    },
+    {
+      "type"        = "data"
+      "content"     = local.inventory
+      "destination" = "${var.install_dir}/omnia/inventory"
+    },
+    {
+      "type"        = "ansible-local"
+      "content"     = local.add_user_file
+      "destination" = "add_omnia_user.yml"
+    },
+    {
+      "type"        = "ansible-local"
+      "content"     = local.install_file
+      "destination" = "install_omnia.yml"
+    }
+  ]
 }

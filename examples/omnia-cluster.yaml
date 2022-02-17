@@ -1,0 +1,92 @@
+---
+
+blueprint_name: omnia_cluster
+
+vars:
+  project_id: gcp-rescale-perf ## Set GCP Project ID Here ##
+  deployment_name: omnia-cluster
+  zone: us-central1-a
+  region: us-central1
+
+resource_groups:
+- group: primary
+  resources:
+
+  ## Network
+  - source: resources/network/vpc
+    kind: terraform
+    id: network
+
+  ## File Systems
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: appsfs
+    use: [network]
+    settings:
+      local_mount: "/apps"
+
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: homefs
+    use: [network]
+    settings:
+      local_mount: "/home"
+
+  ## Installation Scripts
+  - source: resources/scripts/omnia-install
+    kind: terraform
+    id: omnia
+    outputs: [inventory_file]
+    settings:
+      manager_ips: [localhost]
+      compute_ips: $(compute.internal_ip)
+
+  - source: resources/scripts/startup-script
+    kind: terraform
+    id: startup-manager
+    use:
+    - homefs
+    - omnia
+
+  - source: resources/scripts/startup-script
+    kind: terraform
+    id: startup-compute
+    settings:
+      runners:
+      - type: shell
+        source: "modules/startup-script/examples/install_ansible.sh"
+        destination: "install_ansible.sh"
+      - type: shell
+        content: $(homefs.install_nfs_client)
+        destination: "install-nfs.sh"
+      - type: ansible-local
+        source: "modules/startup-script/examples/mount.yaml"
+        destination: "mount.yaml"
+      - type: ansible-local
+        content: $(omnia.add_omnia_user_script)
+        destination: add_omnia_user.yml
+
+  ## Compute
+  - source: resources/compute/simple-instance
+    kind: terraform
+    id: manager
+    use:
+    - network
+    - appsfs
+    - homefs
+    - startup-manager
+    settings:
+      name_prefix: omnia-manager
+      machine_type: n2-standard-4
+
+  - source: resources/compute/simple-instance
+    kind: terraform
+    id: compute
+    use:
+    - network
+    - appsfs
+    - homefs
+    - startup-compute
+    settings:
+      name_prefix: omnia-compute
+      instance_count: 2
