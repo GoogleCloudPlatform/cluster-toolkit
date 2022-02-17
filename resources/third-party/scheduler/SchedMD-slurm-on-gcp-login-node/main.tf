@@ -15,7 +15,7 @@
  */
 
 module "slurm_cluster_login_node" {
-  source            = "github.com/SchedMD/slurm-gcp//tf/modules/login/?ref=v4.1.3"
+  source            = "github.com/SchedMD/slurm-gcp//tf/modules/login/?ref=v4.1.5"
   boot_disk_size    = var.boot_disk_size
   boot_disk_type    = var.boot_disk_type
   image             = var.login_image

@@ -59,7 +59,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_cluster_login_node"></a> [slurm\_cluster\_login\_node](#module\_slurm\_cluster\_login\_node) | github.com/SchedMD/slurm-gcp//tf/modules/login/ | v4.1.3 |
+| <a name="module_slurm_cluster_login_node"></a> [slurm\_cluster\_login\_node](#module\_slurm\_cluster\_login\_node) | github.com/SchedMD/slurm-gcp//tf/modules/login/ | v4.1.5 |
 
 ## Resources
 

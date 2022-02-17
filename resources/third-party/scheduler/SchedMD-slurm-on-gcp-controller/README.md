@@ -61,7 +61,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.1.3 |
+| <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.1.5 |
 
 ## Resources
 
