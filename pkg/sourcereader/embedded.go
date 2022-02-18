@@ -20,7 +20,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 )
 
 // ResourceFS contains embedded resources (./resources) for use in building
@@ -46,8 +46,8 @@ func copyDirFromResources(fs BaseFS, source string, dest string) error {
 	}
 	for _, dirEntry := range dirEntries {
 		entryName := dirEntry.Name()
-		entrySource := path.Join(source, entryName)
-		entryDest := path.Join(dest, entryName)
+		entrySource := filepath.Join(source, entryName)
+		entryDest := filepath.Join(dest, entryName)
 		if dirEntry.IsDir() {
 			if err := os.Mkdir(entryDest, 0755); err != nil {
 				return err

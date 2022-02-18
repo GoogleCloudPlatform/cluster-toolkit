@@ -17,7 +17,7 @@ package sourcereader
 import (
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 
 	. "gopkg.in/check.v1"
 )
@@ -27,14 +27,14 @@ func createTmpResource() {
 	var err error
 
 	// Create terraform resource dir
-	terraformDir = path.Join(testDir, "terraformResource")
+	terraformDir = filepath.Join(testDir, "terraformResource")
 	err = os.Mkdir(terraformDir, 0755)
 	if err != nil {
 		log.Fatalf("error creating test terraform resource dir: %e", err)
 	}
 
 	// main.tf file
-	mainFile, err := os.Create(path.Join(terraformDir, "main.tf"))
+	mainFile, err := os.Create(filepath.Join(terraformDir, "main.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create main.tf: %v", err)
 	}
@@ -44,7 +44,7 @@ func createTmpResource() {
 	}
 
 	// variables.tf file
-	varFile, err := os.Create(path.Join(terraformDir, "variables.tf"))
+	varFile, err := os.Create(filepath.Join(terraformDir, "variables.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create variables.tf: %v", err)
 	}
@@ -55,7 +55,7 @@ func createTmpResource() {
 	}
 
 	// outputs.tf file
-	outFile, err := os.Create(path.Join(terraformDir, "outputs.tf"))
+	outFile, err := os.Create(filepath.Join(terraformDir, "outputs.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create outputs.tf: %v", err)
 	}
@@ -65,14 +65,14 @@ func createTmpResource() {
 	}
 
 	// Create packer resource dir
-	packerDir = path.Join(testDir, "packerResource")
+	packerDir = filepath.Join(testDir, "packerResource")
 	err = os.Mkdir(packerDir, 0755)
 	if err != nil {
 		log.Fatalf("error creating test packer resource dir: %e", err)
 	}
 
 	// main.pkr.hcl file
-	mainFile, err = os.Create(path.Join(packerDir, "main.pkr.hcl"))
+	mainFile, err = os.Create(filepath.Join(packerDir, "main.pkr.hcl"))
 	if err != nil {
 		log.Fatalf("Failed to create main.pkr.hcl: %v", err)
 	}
@@ -82,7 +82,7 @@ func createTmpResource() {
 	}
 
 	// variables.pkr.hcl file
-	varFile, err = os.Create(path.Join(packerDir, "variables.pkr.hcl"))
+	varFile, err = os.Create(filepath.Join(packerDir, "variables.pkr.hcl"))
 	if err != nil {
 		log.Fatalf("Failed to create variables.pkr.hcl: %v", err)
 	}
@@ -119,7 +119,7 @@ func (s *MySuite) TestGetResource_Local(c *C) {
 	reader := LocalSourceReader{}
 
 	// Success
-	dest := path.Join(testDir, "TestGetResource_Local")
+	dest := filepath.Join(testDir, "TestGetResource_Local")
 	err := reader.GetResource(terraformDir, dest)
 	c.Assert(err, IsNil)
 
@@ -129,7 +129,7 @@ func (s *MySuite) TestGetResource_Local(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Success
-	fInfo, err := os.Stat(path.Join(dest, "main.tf"))
+	fInfo, err := os.Stat(filepath.Join(dest, "main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
 	c.Assert(fInfo.Size() > 0, Equals, true)

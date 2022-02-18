@@ -20,7 +20,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -117,12 +117,12 @@ func setup() {
 	if err != nil {
 		log.Fatalf("failed to create temp dir for config tests: %e", err)
 	}
-	resourceDir := path.Join(tmpTestDir, "resource")
+	resourceDir := filepath.Join(tmpTestDir, "resource")
 	err = os.Mkdir(resourceDir, 0755)
 	if err != nil {
 		log.Fatalf("failed to create test resource dir: %v", err)
 	}
-	varFile, err := os.Create(path.Join(resourceDir, "variables.tf"))
+	varFile, err := os.Create(filepath.Join(resourceDir, "variables.tf"))
 	if err != nil {
 		log.Fatalf("failed to create variables.tf in test resource dir: %v", err)
 	}
@@ -214,7 +214,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 }
 
 func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
-	testResourceSource := path.Join(tmpTestDir, "resource")
+	testResourceSource := filepath.Join(tmpTestDir, "resource")
 	testResourceGroup := ResourceGroup{
 		Name: "primary",
 		Resources: []Resource{
@@ -314,7 +314,7 @@ func (s *MySuite) TestCheckResourceAndGroupNames(c *C) {
 
 func (s *MySuite) TestNewBlueprint(c *C) {
 	bc := getBlueprintConfigForTest()
-	outFile := path.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
+	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
 	bc.ExportYamlConfig(outFile)
 	newBC := NewBlueprintConfig(outFile)
 	c.Assert(bc.Config, DeepEquals, newBC.Config)
@@ -342,7 +342,7 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 
 	// Write file
 	outFilename := "out_TestExportYamlConfig.yaml"
-	outFile := path.Join(tmpTestDir, outFilename)
+	outFile := filepath.Join(tmpTestDir, outFilename)
 	bc.ExportYamlConfig(outFile)
 	fileInfo, err := os.Stat(outFile)
 	c.Assert(err, IsNil)

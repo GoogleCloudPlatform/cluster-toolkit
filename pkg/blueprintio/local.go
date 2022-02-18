@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/otiai10/copy"
@@ -44,7 +44,7 @@ func getAbsSourcePath(sourcePath string) string {
 	if err != nil {
 		log.Fatalf("blueprintio: %v", err)
 	}
-	return path.Join(cwd, sourcePath)
+	return filepath.Join(cwd, sourcePath)
 }
 
 // CreateDirectory creates the directory

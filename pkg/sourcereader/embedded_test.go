@@ -17,7 +17,7 @@ package sourcereader
 import (
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 
 	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
@@ -61,7 +61,7 @@ func getTestFS() afero.IOFS {
 func (s *MySuite) TestCopyDirFromResources(c *C) {
 	// Setup
 	testResFS := getTestFS()
-	copyDir := path.Join(testDir, "TestCopyDirFromResources")
+	copyDir := filepath.Join(testDir, "TestCopyDirFromResources")
 	if err := os.Mkdir(copyDir, 0755); err != nil {
 		log.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func (s *MySuite) TestCopyDirFromResources(c *C) {
 	// Success
 	err := copyDirFromResources(testResFS, "resources/network/vpc", copyDir)
 	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(copyDir, "main.tf"))
+	fInfo, err := os.Stat(filepath.Join(copyDir, "main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
 	c.Assert(fInfo.Size() > 0, Equals, true)
@@ -78,12 +78,12 @@ func (s *MySuite) TestCopyDirFromResources(c *C) {
 	// Success: copy files AND dirs
 	err = copyDirFromResources(testResFS, "resources/network/", copyDir)
 	c.Assert(err, IsNil)
-	fInfo, err = os.Stat(path.Join(copyDir, "vpc/main.tf"))
+	fInfo, err = os.Stat(filepath.Join(copyDir, "vpc/main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(path.Join(copyDir, "vpc"))
+	fInfo, err = os.Stat(filepath.Join(copyDir, "vpc"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "vpc")
 	c.Assert(fInfo.Size() > 0, Equals, true)
@@ -106,12 +106,12 @@ func (s *MySuite) TestCopyFSToTempDir(c *C) {
 	testDir, err := copyFSToTempDir(testResFS, "resources/")
 	defer os.RemoveAll(testDir)
 	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(testDir, "network/vpc/main.tf"))
+	fInfo, err := os.Stat(filepath.Join(testDir, "network/vpc/main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(path.Join(testDir, "network/vpc"))
+	fInfo, err = os.Stat(filepath.Join(testDir, "network/vpc"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "vpc")
 	c.Assert(fInfo.Size() > 0, Equals, true)
@@ -146,7 +146,7 @@ func (s *MySuite) TestGetResource_Embedded(c *C) {
 	reader := EmbeddedSourceReader{}
 
 	// Success
-	dest := path.Join(testDir, "TestGetResource_Embedded")
+	dest := filepath.Join(testDir, "TestGetResource_Embedded")
 	err := reader.GetResource("resources/network", dest)
 	c.Assert(err, IsNil)
 
@@ -156,12 +156,12 @@ func (s *MySuite) TestGetResource_Embedded(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Success
-	fInfo, err := os.Stat(path.Join(dest, "vpc/main.tf"))
+	fInfo, err := os.Stat(filepath.Join(dest, "vpc/main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(path.Join(dest, "vpc"))
+	fInfo, err = os.Stat(filepath.Join(dest, "vpc"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "vpc")
 	c.Assert(fInfo.Size() > 0, Equals, true)

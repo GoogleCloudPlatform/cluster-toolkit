@@ -19,7 +19,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -144,11 +144,11 @@ func (s *MySuite) TestFactory(c *C) {
 }
 
 func (s *MySuite) TestCopyFromPath(c *C) {
-	dstPath := path.Join(testDir, "TestCopyFromPath_Dst")
+	dstPath := filepath.Join(testDir, "TestCopyFromPath_Dst")
 
 	err := copyFromPath(terraformDir, dstPath)
 	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(dstPath, "main.tf"))
+	fInfo, err := os.Stat(filepath.Join(dstPath, "main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
 	c.Assert(fInfo.Size() > 0, Equals, true)

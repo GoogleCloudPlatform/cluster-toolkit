@@ -17,23 +17,23 @@ package sourcereader
 import (
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 
 	. "gopkg.in/check.v1"
 )
 
 func (s *MySuite) TestCopyGitHubResources(c *C) {
 	// Setup
-	destDir := path.Join(testDir, "TestCopyGitHubRepository")
+	destDir := filepath.Join(testDir, "TestCopyGitHubRepository")
 	if err := os.Mkdir(destDir, 0755); err != nil {
 		log.Fatal(err)
 	}
 
 	// Success via HTTPS
-	destDirForHTTPS := path.Join(destDir, "https")
+	destDirForHTTPS := filepath.Join(destDir, "https")
 	err := copyGitHubResources("github.com/terraform-google-modules/terraform-google-project-factory//helpers", destDirForHTTPS)
 	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(destDirForHTTPS, "terraform_validate"))
+	fInfo, err := os.Stat(filepath.Join(destDirForHTTPS, "terraform_validate"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "terraform_validate")
 	c.Assert(fInfo.Size() > 0, Equals, true)
