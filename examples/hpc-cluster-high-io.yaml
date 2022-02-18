@@ -17,7 +17,7 @@
 blueprint_name: hpc-cluster-high-io
 
 vars:
-  project_id:  ## Set GCP Project ID Here ##
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm-io
   region: us-central1
   zone: us-central1-c
@@ -57,6 +57,21 @@ resource_groups:
 
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
+    id: low_cost_partition
+    use:
+    - network1
+    - homefs
+    - scratchfs
+    - projectsfs
+    settings:
+      partition_name: low_cost
+      max_node_count: 10
+      enable_placement: false
+      machine_type: n2-standard-4
+
+  # This compute_partition is far more performant than low_cost_partition.
+  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
     id: compute_partition
     use:
     - network1
@@ -75,6 +90,7 @@ resource_groups:
     - homefs
     - scratchfs
     - projectsfs
+    - low_cost_partition  # low cost partition will be default as it is listed first
     - compute_partition
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node

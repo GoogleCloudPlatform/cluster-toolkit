@@ -101,11 +101,31 @@ the `-o` flag as shown in the following example.
 
 To deploy the blueprint, use terraform in the resource group directory:
 
+> **_NOTE:_** Before you run this for the first time you may need to enable some
+> APIs. See [Enable GCP APIs](#enable-gcp-apis).
+
 ```shell
 cd hpc-cluster-small/primary # From hpc-cluster-small.yaml example
 terraform init
 terraform apply
 ```
+
+Once the blueprint has successfully been deployed, take the following steps to run a job:
+
+* First navigate to `Compute Engine` > `VM instances` in the Google Cloud Console.
+* Next click on the `SSH` button associated with the `slurm-hpc-small-login0` instance.
+* Finally run the `hostname` command on 3 nodes by running the following command in the shell popup:
+
+```shell
+$ srun -N 3 hostname
+slurm-hpc-slurm-small-debug-0-0
+slurm-hpc-slurm-small-debug-0-1
+slurm-hpc-slurm-small-debug-0-2
+```
+
+By default, this runs the job on the `debug` partition. See details in
+[examples/](examples/README.md#compute-partition) for how to run on the more
+performant `compute` partition.  
 
 > **_NOTE:_** Cloud Shell times out after 20 minutes of inactivity. This example
 > deploys in about 5 minutes but for more complex deployments it may be
@@ -120,6 +140,18 @@ you can use the following command to deploy a Packer-based resource group:
 cd <blueprint-directory>/<packer-group>/<custom-vm-image>
 packer build .
 ```
+
+## Enable GCP APIs
+
+In a new GCP project there are several apis that must be enabled to deploy your
+HPC cluster. These will be caught when you perform `terraform apply` but you can
+save time by enabling them upfront.
+
+List of APIs to enable ([instructions](https://cloud.google.com/apis/docs/getting-started#enabling_apis)):
+
+* Compute Engine API
+* Cloud Filestore API
+* Cloud Runtime Configuration API - _needed for `high-io` example_
 
 ## Inspecting the Blueprint
 

@@ -14,13 +14,31 @@ passed to resources if the resources have an input that matches the variable nam
 
 ## Config Descriptions
 
-**hpc-cluster-small.yaml**: Creates a basic auto-scaling SLURM cluster with a
-single SLURM patition and mostly default settings. The blueprint also creates a
-new VPC network, and a filestore instance mounted to `/home`.
+### hpc-cluster-small.yaml
 
-**hpc-cluster-high-io.yaml**: Creates a slurm cluster with tiered file systems
-for higher performance. It connects to the default VPC of the project and
-creates two partitions and a login node.
+Creates a basic auto-scaling SLURM cluster with mostly default settings. The
+blueprint also creates a new VPC network, and a filestore instance mounted to
+`/home`.
+
+There are 2 partitions in this example: `debug` and `compute`. The `debug`
+partition uses `n2-standard-2` VMs, which should work out of the box without
+needing to request additional quota. The purpose of the `debug` partition is to
+make sure that first time users are not immediately blocked by quota
+limitations.
+
+#### Compute Partition
+
+There is a `compute` partition that achieves higher performance. Any
+performance analysis should be done on the `compute` partition. By default it
+uses `c2-standard-60` VMs with placement groups enabled. You may need to request
+additional quota for `C2 CPUs` in the region you are deploying in. You can
+select the compute partition using the `srun -p compute` argument.
+
+### hpc-cluster-high-io.yaml
+
+Creates a slurm cluster with tiered file systems for higher performance. It
+connects to the default VPC of the project and creates two partitions and a
+login node.
 
 File systems:
 
@@ -31,6 +49,14 @@ File systems:
 * The scratchfs is mounted at `/scratch` and is a
   [DDN Exascaler Lustre](../resources/third-party/file-system/DDN-EXAScaler/README.md)
   file system designed for high IO performance. The capacity is ~10TiB.
+
+There are two partitions in this example: `low_cost` and `compute`. The
+`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
+debugging and workloads that do not require high performance.
+
+Similar to the small example, there is a
+[compute partition](#compute-partition) that should be used for any performance
+analysis.
 
 ### Experimental
 

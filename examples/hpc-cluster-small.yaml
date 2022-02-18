@@ -39,6 +39,20 @@ resource_groups:
     settings:
       local_mount: /home
 
+  # This debug_partition will work out of the box without requesting additional GCP quota.
+  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    id: debug_partition
+    use:
+    - network1
+    - homefs
+    settings:
+      partition_name: debug
+      max_node_count: 4
+      enable_placement: false
+      machine_type: n2-standard-2
+
+  # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
@@ -55,6 +69,7 @@ resource_groups:
     use:
     - network1
     - homefs
+    - debug_partition  # debug partition will be default as it is listed first
     - compute_partition
     settings:
       login_node_count: 1

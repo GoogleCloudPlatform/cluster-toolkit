@@ -1,2 +1,4 @@
 ghpc
 .DS_Store
+# workspace level vscode settings
+.vscode/
