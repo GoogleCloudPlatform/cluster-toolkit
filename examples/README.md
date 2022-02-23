@@ -34,6 +34,18 @@ uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `srun -p compute` argument.
 
+Quota required for this example:
+
+* Cloud Filestore API: Basic SSD (Premium) capacity (GB) per region: **2660 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~10 GB**
+* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: C2 CPUs: **60/node** up to 1200 - _only needed for
+  `compute` partition_
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
 ### hpc-cluster-high-io.yaml
 
 Creates a slurm cluster with tiered file systems for higher performance. It
@@ -57,6 +69,20 @@ debugging and workloads that do not require high performance.
 Similar to the small example, there is a
 [compute partition](#compute-partition) that should be used for any performance
 analysis.
+
+Quota required for this example:
+
+* Cloud Filestore API: Basic SSD (Premium) capacity (GB) per region: **2660 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10240 GiB** - _min
+  quota request is 61440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14000 GB**
+* Compute Engine API: N2 CPUs: **158**
+* Compute Engine API: C2 CPUs: **60/node** up to 12,000 - _only needed for
+  `compute` partition_
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
 
 ### Experimental
 
