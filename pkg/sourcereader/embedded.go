@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -46,7 +47,10 @@ func copyDirFromResources(fs BaseFS, source string, dest string) error {
 	}
 	for _, dirEntry := range dirEntries {
 		entryName := dirEntry.Name()
-		entrySource := filepath.Join(source, entryName)
+		// path package (not path/filepath) should be used for embedded source
+		// as the path separator is a forward slash, even on Windows systems.
+		// https://pkg.go.dev/embed#hdr-Directives
+		entrySource := path.Join(source, entryName)
 		entryDest := filepath.Join(dest, entryName)
 		if dirEntry.IsDir() {
 			if err := os.Mkdir(entryDest, 0755); err != nil {
