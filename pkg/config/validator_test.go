@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"hpc-toolkit/pkg/resreader"
@@ -60,7 +60,7 @@ func (s *MySuite) TestValidateVars(c *C) {
 }
 
 func (s *MySuite) TestValidateResouceSettings(c *C) {
-	testSource := path.Join(tmpTestDir, "resource")
+	testSource := filepath.Join(tmpTestDir, "resource")
 	testSettings := map[string]interface{}{
 		"test_variable": "test_value",
 	}

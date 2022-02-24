@@ -25,7 +25,7 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 )
 
 const (
@@ -71,15 +71,15 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
 			/* Copy source files */
-			resourceName := path.Base(resource.Source)
+			resourceName := filepath.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
-			basePath := path.Join(blueprintPath, grp.Name)
+			basePath := filepath.Join(blueprintPath, grp.Name)
 			var destPath string
 			switch resource.Kind {
 			case "terraform":
-				destPath = path.Join(basePath, "modules", resourceName)
+				destPath = filepath.Join(basePath, "modules", resourceName)
 			case "packer":
-				destPath = path.Join(basePath, resource.ID)
+				destPath = filepath.Join(basePath, resource.ID)
 			}
 			_, err := os.Stat(destPath)
 			if err == nil {
@@ -106,7 +106,7 @@ func printInstructionsPreamble(kind string, path string) {
 // WriteBlueprint writes the blueprint using resources defined in config.
 func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
 	blueprintio := blueprintio.GetBlueprintIOLocal()
-	bpDirectoryPath := path.Join(bpDirectory, yamlConfig.BlueprintName)
+	bpDirectoryPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName)
 	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
 		log.Fatalf("failed to create a directory for blueprints: %v", err)
 	}

@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -106,7 +106,7 @@ func writeOutputs(
 	dst string,
 ) error {
 	// Create file
-	outputsPath := path.Join(dst, "outputs.tf")
+	outputsPath := filepath.Join(dst, "outputs.tf")
 	if err := createBaseFile(outputsPath); err != nil {
 		return fmt.Errorf("error creating outputs.tf file: %v", err)
 	}
@@ -143,7 +143,7 @@ func writeOutputs(
 
 func writeTfvars(vars map[string]cty.Value, dst string) error {
 	// Create file
-	tfvarsPath := path.Join(dst, "terraform.tfvars")
+	tfvarsPath := filepath.Join(dst, "terraform.tfvars")
 	if err := createBaseFile(tfvarsPath); err != nil {
 		return fmt.Errorf("error creating terraform.tfvars file: %v", err)
 	}
@@ -197,7 +197,7 @@ func getTypeTokens(ctyVal cty.Value) hclwrite.Tokens {
 
 func writeVariables(vars map[string]cty.Value, dst string) error {
 	// Create file
-	variablesPath := path.Join(dst, "variables.tf")
+	variablesPath := filepath.Join(dst, "variables.tf")
 	if err := createBaseFile(variablesPath); err != nil {
 		return fmt.Errorf("error creating variables.tf file: %v", err)
 	}
@@ -234,7 +234,7 @@ func writeMain(
 	dst string,
 ) error {
 	// Create file
-	mainPath := path.Join(dst, "main.tf")
+	mainPath := filepath.Join(dst, "main.tf")
 	if err := createBaseFile(mainPath); err != nil {
 		return fmt.Errorf("error creating main.tf file: %v", err)
 	}
@@ -342,7 +342,7 @@ func simpleTokenFromString(str string) hclwrite.Token {
 
 func writeProviders(vars map[string]cty.Value, dst string) error {
 	// Create file
-	providersPath := path.Join(dst, "providers.tf")
+	providersPath := filepath.Join(dst, "providers.tf")
 	if err := createBaseFile(providersPath); err != nil {
 		return fmt.Errorf("error creating providers.tf file: %v", err)
 	}
@@ -382,7 +382,7 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 
 func writeVersions(dst string) error {
 	// Create file
-	versionsPath := path.Join(dst, "versions.tf")
+	versionsPath := filepath.Join(dst, "versions.tf")
 	if err := createBaseFile(versionsPath); err != nil {
 		return fmt.Errorf("error creating versions.tf file: %v", err)
 	}
@@ -415,7 +415,7 @@ func (w TFWriter) writeResourceGroups(
 		if !resGroup.HasKind("terraform") {
 			continue
 		}
-		writePath := path.Join(bpDirectory, bpName, resGroup.Name)
+		writePath := filepath.Join(bpDirectory, bpName, resGroup.Name)
 
 		// Write main.tf file
 		if err := writeMain(

@@ -19,7 +19,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -72,7 +72,7 @@ func (s *MySuite) TestCreateDirectoryLocal(c *C) {
 	c.Assert(err, ErrorMatches, expErr)
 
 	directoryName := "dir_TestCreateDirectoryLocal"
-	createdDir := path.Join(testDir, directoryName)
+	createdDir := filepath.Join(testDir, directoryName)
 	err = blueprintio.CreateDirectory(createdDir)
 	c.Assert(err, IsNil)
 
@@ -90,18 +90,18 @@ func (s *MySuite) TestGetAbsSourcePath(c *C) {
 	cwd, err := os.Getwd()
 	c.Assert(err, IsNil)
 	gotPath = getAbsSourcePath(relPath)
-	c.Assert(gotPath, Equals, path.Join(cwd, relPath))
+	c.Assert(gotPath, Equals, filepath.Join(cwd, relPath))
 }
 
 func (s *MySuite) TestCopyFromPathLocal(c *C) {
 	blueprintio := GetBlueprintIOLocal()
-	testSrcFilename := path.Join(testDir, "testSrc")
+	testSrcFilename := filepath.Join(testDir, "testSrc")
 	str := []byte("TestCopyFromPathLocal")
 	if err := os.WriteFile(testSrcFilename, str, 0755); err != nil {
 		log.Fatalf("blueprintio_test: failed to create %s: %v", testSrcFilename, err)
 	}
 
-	testDstFilename := path.Join(testDir, "testDst")
+	testDstFilename := filepath.Join(testDir, "testDst")
 	blueprintio.CopyFromPath(testSrcFilename, testDstFilename)
 
 	src, err := ioutil.ReadFile(testSrcFilename)
@@ -119,12 +119,12 @@ func (s *MySuite) TestCopyFromPathLocal(c *C) {
 
 func (s *MySuite) TestMkdirWrapper(c *C) {
 	// Success
-	testMkdirWrapperDir := path.Join(testDir, "testMkdirWrapperDir")
+	testMkdirWrapperDir := filepath.Join(testDir, "testMkdirWrapperDir")
 	err := mkdirWrapper(testMkdirWrapperDir)
 	c.Assert(err, IsNil)
 
 	// Failure: Path is not a directory
-	badMkdirWrapperDir := path.Join(testDir, "NotADir")
+	badMkdirWrapperDir := filepath.Join(testDir, "NotADir")
 	_, err = os.Create(badMkdirWrapperDir)
 	c.Assert(err, IsNil)
 	err = mkdirWrapper(badMkdirWrapperDir)

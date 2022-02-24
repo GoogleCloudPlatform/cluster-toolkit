@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 )
 
 // ResourceFS contains embedded resources (./resources) for use in building
@@ -46,8 +47,11 @@ func copyDirFromResources(fs BaseFS, source string, dest string) error {
 	}
 	for _, dirEntry := range dirEntries {
 		entryName := dirEntry.Name()
+		// path package (not path/filepath) should be used for embedded source
+		// as the path separator is a forward slash, even on Windows systems.
+		// https://pkg.go.dev/embed#hdr-Directives
 		entrySource := path.Join(source, entryName)
-		entryDest := path.Join(dest, entryName)
+		entryDest := filepath.Join(dest, entryName)
 		if dirEntry.IsDir() {
 			if err := os.Mkdir(entryDest, 0755); err != nil {
 				return err
