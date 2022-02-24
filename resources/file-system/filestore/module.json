@@ -52,6 +52,13 @@
       "required": true
     },
     {
+      "name": "project_id",
+      "type": "string",
+      "description": "ID of project in which Filestore instance will be created.",
+      "default": null,
+      "required": true
+    },
+    {
       "name": "size_gb",
       "type": "number",
       "description": "Storage size of the filestore instance in GB.",

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
@@ -22,6 +23,7 @@ locals {
 }
 
 resource "google_filestore_instance" "filestore_instance" {
+  project    = var.project_id
   provider   = google-beta
   depends_on = [var.network_name]
 
