@@ -167,6 +167,75 @@ have been [documented](examples/README.md#example-configs) for the provided exam
 
 Quotas can be inspected and requested at `IAM & Admin` > `Quotas`.
 
+## Troubleshooting
+
+### Failure to Create Auto Scale Nodes (Slurm)
+
+If your deployment succeeds but your jobs fail with the following error:
+
+```shell
+$ srun -N 6 -p compute hostname
+srun: PrologSlurmctld failed, job killed
+srun: Force Terminated job 2
+srun: error: Job allocation 2 has been revoked
+```
+
+Possible causes could be [insufficient quota](#insufficient-quota) or
+[placement groups](#placement-groups). Also see the
+[Slurm user guide](https://docs.google.com/document/u/1/d/e/2PACX-1vS0I0IcgVvby98Rdo91nUjd7E9u83oIMCM4arne-9_IdBg6BdV1lBpUcSje_PyHcbAaErC1rY7p4u1g/pub).
+
+#### Insufficient Quota
+
+It may be that you have sufficient quota to deploy your cluster but insufficient
+quota to bring up the compute nodes.
+
+You can confirm this by SSHing into the `controller` VM and checking the
+`resume.log` file:
+
+```shell
+$ cat /var/log/slurm/resume.log
+...
+resume.py ERROR: ... "Quota 'C2_CPUS' exceeded. Limit: 300.0 in region europe-west4.". Details: "[{'message': "Quota 'C2_CPUS' exceeded. Limit: 300.0 in region europe-west4.", 'domain': 'usageLimits', 'reason': 'quotaExceeded'}]">
+```
+
+The solution here is to [request more of the specified quota](#gcp-quotas),
+`C2 CPUs` in the example above. Alternatively, you could switch the partition's
+[machine_type](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/resources/third-party/compute/SchedMD-slurm-on-gcp-partition#input_machine_type)
+, to one which has sufficient quota.
+
+#### Placement Groups
+
+By default, placement groups (also called affinity groups) are enabled on the
+compute partition. This places VMs close to each other to achieve lower network
+latency. If it is not possible to provide the requested number of VMs in the
+same placement group, the job may fail to run.
+
+Again, you can confirm this by SSHing into the `controller` VM and checking the
+`resume.log` file:
+
+```shell
+$ cat /var/log/slurm/resume.log
+...
+resume.py ERROR: group operation failed: Requested minimum count of 6 VMs could not be created.
+```
+
+One way to resolve this is to set
+[enable_placement](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/resources/third-party/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement)
+to `false` on the partition in question.
+
+### Terraform Deployment
+
+When `terraform apply` fails, Terraform generally provides a useful error
+message. Here are some common reasons for the deployment to fail:
+
+* **GCP Access:** The credentials being used to call `terraform apply` do not
+  have access to the GCP project. This can be fixed by granting access in
+  `IAM & Admin`.
+* **Disabled APIs:** The GCP project must have the proper APIs enabled. See
+  [Enable GCP APIs](#enable-gcp-apis).
+* **Insufficient Quota:** The GCP project does not have enough quota to
+  provision the requested resources. See [GCP Quotas](#gcp-quotas).
+
 ## Inspecting the Blueprint
 
 The blueprint is created in the directory matching the provided blueprint_name
