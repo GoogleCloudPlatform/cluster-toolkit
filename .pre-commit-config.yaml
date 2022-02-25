@@ -15,7 +15,7 @@
 ---
 repos:
 - repo: https://github.com/antonbabenko/pre-commit-terraform
-  rev: v1.52.0
+  rev: v1.64.0
   hooks:
   - id: terraform_fmt
   - id: terraform_tflint
@@ -40,7 +40,7 @@ repos:
     pass_filenames: true
     require_serial: true
 - repo: https://github.com/dnephin/pre-commit-golang
-  rev: v0.4.0
+  rev: v0.5.0
   hooks:
   - id: go-fmt
   - id: go-vet
@@ -52,16 +52,16 @@ repos:
   - id: go-build
   - id: go-mod-tidy
 - repo: https://github.com/tekwizely/pre-commit-golang
-  rev: v0.8.3
+  rev: v1.0.0-beta.5
   hooks:
   - id: go-critic
     args: [-disable, "#experimental,sloppyTypeAssert"]
 - repo: https://github.com/ansible-community/ansible-lint.git
-  rev: v5.3.2  # https://github.com/ansible-community/ansible-lint/releases/
+  rev: v5.4.0  # https://github.com/ansible-community/ansible-lint/releases/
   hooks:
   - id: ansible-lint
 - repo: https://github.com/adrienverge/yamllint.git
-  rev: v1.17.0
+  rev: v1.26.3
   hooks:
   - id: yamllint
     args: [-c=.yamllint]
@@ -78,7 +78,7 @@ repos:
     # MD046 - Code block style
     args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046", scan]
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
-  rev: "2.1.5"  # or specific git tag
+  rev: "2.1.6"  # or specific git tag
   hooks:
   - id: script-must-have-extension
   - id: shellcheck
