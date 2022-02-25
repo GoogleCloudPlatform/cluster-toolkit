@@ -59,6 +59,12 @@
       command: >-
         gcloud compute instances describe --zone={{ zone }} {{ login_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+    - name: Get Controller IP
+      become: false
+      register: controller_ip
+      command: >-
+        gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
+        --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
@@ -138,6 +144,22 @@
       vars:
         mounts: "{{ mounts }}"
         partitions: "{{ partitions }}"
+
+    rescue:
+    - name: Recover Resume Logs
+      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      command: cat /var/log/slurm/resume.log
+      register: resume_output
+      ignore_errors: true
+    - debug:
+        var: resume_output.stdout_lines
+
+    - name: Recover Suspend Logs
+      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      command: cat /var/log/slurm/suspend.log
+      register: suspend_output
+    - debug:
+        var: suspend_output.stdout_lines
 
     ## Always cleanup, even on failure
     always:
