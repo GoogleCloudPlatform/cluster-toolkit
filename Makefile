@@ -34,6 +34,7 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	go install github.com/go-critic/go-critic/cmd/gocritic@latest
 	go install github.com/google/addlicense@latest
 	go install mvdan.cc/sh/v3/cmd/shfmt@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 
 ifeq (, $(shell which addlicense))
 add-google-license:
