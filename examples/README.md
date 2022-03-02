@@ -14,6 +14,10 @@ passed to resources if the resources have an input that matches the variable nam
 
 ## Config Descriptions
 
+### hpc-cluster-small-amd.yaml
+This example is identical to [the Intel example below](#hpc-cluster-small-intelyaml)
+with the exception that it uses the AMD C2D machine family to provision VMs.
+
 ### hpc-cluster-small-intel.yaml
 
 Creates a basic auto-scaling SLURM cluster with mostly default settings. The
@@ -45,6 +49,11 @@ Quota required for this example:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
+
+### hpc-cluster-high-io-amd.yaml
+This example is identical to [the Intel example
+below](#hpc-cluster-high-io-intelyaml)
+with the exception that it uses the AMD C2D machine family to provision VMs.
 
 ### hpc-cluster-high-io-intel.yaml
 
