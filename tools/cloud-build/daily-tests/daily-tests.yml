@@ -160,6 +160,8 @@
       register: suspend_output
     - debug:
         var: suspend_output.stdout_lines
+    - fail:
+        msg: "Propagating failure after retrieving logs."
 
     ## Always cleanup, even on failure
     always:
