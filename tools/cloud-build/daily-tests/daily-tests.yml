@@ -44,7 +44,6 @@
   - name: Create Infrastructure and test
     block:
     - name: Create Cluster with Terraform
-      become: false
       command:
         cmd: "{{ item }}"
         chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
@@ -54,10 +53,14 @@
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
     - name: Get login IP
-      become: false
       register: login_ip
       command: >-
         gcloud compute instances describe --zone={{ zone }} {{ login_node }}
+        --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+    - name: Get Controller IP
+      register: controller_ip
+      command: >-
+        gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
 
     ## Setup firewall for cloud build
@@ -141,6 +144,22 @@
 
     ## Always cleanup, even on failure
     always:
+    - name: Recover Resume Logs
+      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      command: cat /var/log/slurm/resume.log
+      register: resume_output
+      ignore_errors: true
+    - debug:
+        var: resume_output.stdout_lines
+
+    - name: Recover Suspend Logs
+      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      command: cat /var/log/slurm/suspend.log
+      register: suspend_output
+      ignore_errors: true
+    - debug:
+        var: suspend_output.stdout_lines
+
     - name: Delete Firewall Rule
       run_once: true
       delegate_to: localhost
