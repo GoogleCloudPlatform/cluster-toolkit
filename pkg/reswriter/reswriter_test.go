@@ -23,7 +23,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +32,6 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
-	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 )
 
@@ -61,7 +60,7 @@ func setup() {
 
 	// Create dummy resource in testDir
 	terraformResourceDir = "tfResource"
-	err = os.Mkdir(path.Join(testDir, terraformResourceDir), 0755)
+	err = os.Mkdir(filepath.Join(testDir, terraformResourceDir), 0755)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,14 +72,14 @@ func teardown() {
 
 // Test Data Producers
 func getYamlConfigForTest() config.YamlConfig {
-	testResourceSource := path.Join(testDir, terraformResourceDir)
+	testResourceSource := filepath.Join(testDir, terraformResourceDir)
 	testResource := config.Resource{
 		Source:   testResourceSource,
 		Kind:     "terraform",
 		ID:       "testResource",
 		Settings: make(map[string]interface{}),
 	}
-	testResourceSourceWithLabels := path.Join(testDir, terraformResourceDir)
+	testResourceSourceWithLabels := filepath.Join(testDir, terraformResourceDir)
 	testResourceWithLabels := config.Resource{
 		Source: testResourceSourceWithLabels,
 		ID:     "testResourceWithLabels",
@@ -114,24 +113,6 @@ func createTestApplyFunctions(config config.YamlConfig) [][]map[string]string {
 // Tests
 
 // reswriter.go
-func getTestFS() afero.IOFS {
-	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("resources/network/vpc", 0755)
-	afero.WriteFile(
-		aferoFS, "resources/network/vpc/main.tf", []byte("test string"), 0644)
-	return afero.NewIOFS(aferoFS)
-}
-
-func (s *MySuite) TestCopyEmbedded(c *C) {
-	testFS := getTestFS()
-	dest := path.Join(testDir, "TestCopyEmbedded")
-	if err := os.Mkdir(dest, 0755); err != nil {
-		log.Fatal(err)
-	}
-	err := copyEmbedded(testFS, "resources/network/vpc", dest)
-	c.Assert(err, IsNil)
-}
-
 func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	blueprintName := "blueprints_TestWriteBlueprint"
@@ -378,7 +359,7 @@ func (s *MySuite) TestSimpleTokenFromString(c *C) {
 func (s *MySuite) TestCreateBaseFile(c *C) {
 	// Success
 	baseFilename := "main.tf_TestCreateBaseFile"
-	goodPath := path.Join(testDir, baseFilename)
+	goodPath := filepath.Join(testDir, baseFilename)
 	err := createBaseFile(goodPath)
 	c.Assert(err, IsNil)
 	fi, err := os.Stat(goodPath)
@@ -391,7 +372,7 @@ func (s *MySuite) TestCreateBaseFile(c *C) {
 		Equals, true)
 
 	// Error: not a correct path
-	fakePath := path.Join("not/a/real/dir", "main.tf_TestCreateBaseFile")
+	fakePath := filepath.Join("not/a/real/dir", "main.tf_TestCreateBaseFile")
 	err = createBaseFile(fakePath)
 	c.Assert(err, ErrorMatches, ".* no such file or directory")
 }
@@ -399,7 +380,7 @@ func (s *MySuite) TestCreateBaseFile(c *C) {
 func (s *MySuite) TestAppendHCLToFile(c *C) {
 	// Setup
 	testFilename := "main.tf_TestAppendHCLToFile"
-	testPath := path.Join(testDir, testFilename)
+	testPath := filepath.Join(testDir, testFilename)
 	_, err := os.Create(testPath)
 	c.Assert(err, IsNil)
 	hclFile := hclwrite.NewEmptyFile()
@@ -454,8 +435,8 @@ func (s *MySuite) TestGetType(c *C) {
 
 func (s *MySuite) TestWriteMain(c *C) {
 	// Setup
-	testMainDir := path.Join(testDir, "TestWriteMain")
-	mainFilePath := path.Join(testMainDir, "main.tf")
+	testMainDir := filepath.Join(testDir, "TestWriteMain")
+	mainFilePath := filepath.Join(testMainDir, "main.tf")
 	if err := os.Mkdir(testMainDir, 0755); err != nil {
 		log.Fatal("Failed to create test dir for creating main.tf file")
 	}
@@ -523,10 +504,41 @@ func (s *MySuite) TestWriteMain(c *C) {
 	c.Assert(exists, Equals, true)
 }
 
+func (s *MySuite) TestWriteOutputs(c *C) {
+	// Setup
+	testOutputsDir := filepath.Join(testDir, "TestWriteOutputs")
+	outputsFilePath := filepath.Join(testOutputsDir, "outputs.tf")
+	if err := os.Mkdir(testOutputsDir, 0755); err != nil {
+		log.Fatal("Failed to create test directory for creating outputs.tf file")
+	}
+
+	// Simple success, no resources
+	testResources := []config.Resource{}
+	err := writeOutputs(testResources, testOutputsDir)
+	c.Assert(err, IsNil)
+
+	// Failure: Bad path
+	err = writeOutputs(testResources, "not/a/real/path")
+	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
+
+	// Success: Outputs added
+	outputList := []string{"output1", "output2"}
+	resourceWithOutputs := config.Resource{Outputs: outputList, ID: "testRes"}
+	testResources = []config.Resource{resourceWithOutputs}
+	err = writeOutputs(testResources, testOutputsDir)
+	c.Assert(err, IsNil)
+	exists, err := stringExistsInFile(outputList[0], outputsFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+	exists, err = stringExistsInFile(outputList[1], outputsFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+}
+
 func (s *MySuite) TestWriteVariables(c *C) {
 	// Setup
-	testVarDir := path.Join(testDir, "TestWriteVariables")
-	varsFilePath := path.Join(testVarDir, "variables.tf")
+	testVarDir := filepath.Join(testDir, "TestWriteVariables")
+	varsFilePath := filepath.Join(testVarDir, "variables.tf")
 	if err := os.Mkdir(testVarDir, 0755); err != nil {
 		log.Fatal("Failed to create test directory for creating variables.tf file")
 	}
@@ -558,8 +570,8 @@ func (s *MySuite) TestWriteVariables(c *C) {
 
 func (s *MySuite) TestWriteProviders(c *C) {
 	// Setup
-	testProvDir := path.Join(testDir, "TestWriteProviders")
-	provFilePath := path.Join(testProvDir, "providers.tf")
+	testProvDir := filepath.Join(testDir, "TestWriteProviders")
+	provFilePath := filepath.Join(testProvDir, "providers.tf")
 	if err := os.Mkdir(testProvDir, 0755); err != nil {
 		log.Fatal("Failed to create test directory for creating providers.tf file")
 	}
@@ -614,15 +626,15 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 
 	blueprintName := "blueprints_TestWriteResourceLevel_PackerWriter"
 	testYamlConfig.BlueprintName = blueprintName
-	blueprintDir := path.Join(testDir, blueprintName)
+	blueprintDir := filepath.Join(testDir, blueprintName)
 	if err := blueprintio.CreateDirectory(blueprintDir); err != nil {
 		log.Fatal(err)
 	}
-	groupDir := path.Join(blueprintDir, "packerGroup")
+	groupDir := filepath.Join(blueprintDir, "packerGroup")
 	if err := blueprintio.CreateDirectory(groupDir); err != nil {
 		log.Fatal(err)
 	}
-	resourceDir := path.Join(groupDir, "testPackerResource")
+	resourceDir := filepath.Join(groupDir, "testPackerResource")
 	if err := blueprintio.CreateDirectory(resourceDir); err != nil {
 		log.Fatal(err)
 	}
@@ -637,7 +649,7 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 			Resources: []config.Resource{testPackerResource},
 		})
 	testWriter.writeResourceLevel(&testYamlConfig, testDir)
-	_, err := os.Stat(path.Join(resourceDir, packerAutoVarFilename))
+	_, err := os.Stat(filepath.Join(resourceDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 

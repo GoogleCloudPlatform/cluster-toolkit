@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,24 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-RUNNER_DIR=$(dirname $0)
+RUNNER_DIR=$(dirname "$0")
 
 echo "Pausing for startup script to finish..."
 sleep 60
 
 echo "Creating inventory..."
-mkdir -p ${RUNNER_DIR}/ghpc-install/data
-python3 ${RUNNER_DIR}/create_inventory.py     \
-  --deployment_name ${DEPLOYMENT_NAME}        \
-  --template ${RUNNER_DIR}/inventory.tmpl     \
-  --outfile ${RUNNER_DIR}/ghpc-install/data/inventory \
-  --project ${PROJECT_ID} \
-  --zone ${ZONE}
+mkdir -p "${RUNNER_DIR}/ghpc-install/data"
+python3 "${RUNNER_DIR}/create_inventory.py" \
+	--deployment_name "${DEPLOYMENT_NAME}" \
+	--template "${RUNNER_DIR}/inventory.tmpl" \
+	--outfile "${RUNNER_DIR}/ghpc-install/data/inventory" \
+	--project "${PROJECT_ID}" \
+	--zone "${ZONE}"
 
 echo "Copying runner data to Omnia Manager..."
-gcloud compute scp --project ${PROJECT_ID} --zone ${ZONE} \
-  --recurse ${RUNNER_DIR}/ghpc-install ${MANAGER_NODE}:
+gcloud compute scp --project "${PROJECT_ID}" --zone "${ZONE}" \
+	--recurse "${RUNNER_DIR}/ghpc-install" "${MANAGER_NODE}":
 
 echo "Applying the Omnia runner..."
-gcloud compute ssh --project ${PROJECT_ID} --zone ${ZONE} ${MANAGER_NODE} \
-  -- "cd ~/ghpc-install/scripts; source install_omnia.sh"
+gcloud compute ssh \
+	--project "${PROJECT_ID}" --zone "${ZONE}" "${MANAGER_NODE}" \
+	-- "cd ~/ghpc-install/scripts; source install_omnia.sh"

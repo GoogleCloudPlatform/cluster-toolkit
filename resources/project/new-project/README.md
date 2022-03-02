@@ -1,10 +1,14 @@
 ## Description
-This module allows you to create opinionated Google Cloud Platform projects. It creates projects and configures aspects like Shared VPC connectivity, IAM access, Service Accounts, and API enablement to follow best practices.
+
+This module allows you to create opinionated Google Cloud Platform projects. It
+creates projects and configures aspects like Shared VPC connectivity, IAM
+access, Service Accounts, and API enablement to follow best practices.
 
 This module is meant for use with Terraform 0.13.
 
 ### Example
-```
+
+```yaml
 - source: ./resources/project/new-project
   kind: terraform
   id: project
@@ -14,9 +18,13 @@ This module is meant for use with Terraform 0.13.
     billing_account: "111110-M2N704-854685" # random billing number
     org_id: 123456789 # random org id
 ```
-This creates a new project with pre-defined project ID, a designated folder and organization and associated billing account which will be used to pay for services consumed.
+
+This creates a new project with pre-defined project ID, a designated folder and
+organization and associated billing account which will be used to pay for
+services consumed.
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

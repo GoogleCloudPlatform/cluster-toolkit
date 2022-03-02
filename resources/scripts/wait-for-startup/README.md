@@ -1,4 +1,5 @@
 ## Description
+
 This resource will insert a dependency on the completion of the startup script
 for a compute VM and report back if it fails. This can be useful when running
 post-boot installation scripts that require the startup script to finish setting
@@ -7,11 +8,13 @@ up a node.
 **Warning**: this resource is experimental and not fully supported.
 
 ### Additional Dependencies
-* [**gcloud**](https://cloud.google.com/sdk/gcloud) must be present in the path of
-the machine where `terraform apply` is run
+
+* [**gcloud**](https://cloud.google.com/sdk/gcloud) must be present in the path
+  of the machine where `terraform apply` is run
 
 ### Example
-```
+
+```yaml
 - source: ./resources/scripts/wait-for-startup
   kind: terraform
   id: wait
@@ -20,6 +23,7 @@ the machine where `terraform apply` is run
 ```
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 

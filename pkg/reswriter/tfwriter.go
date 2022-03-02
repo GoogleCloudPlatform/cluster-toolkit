@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -35,12 +35,6 @@ import (
 // TFWriter writes terraform to the blueprint folder
 type TFWriter struct {
 	numResources int
-}
-
-// interfaceStruct is a struct wrapper for converting interface data structures
-// to yaml flow style: one line wrapped in {} for maps and [] for lists.
-type interfaceStruct struct {
-	Elem interface{} `yaml:",flow"`
 }
 
 // GetNumResources getter for resource count
@@ -82,27 +76,74 @@ func appendHCLToFile(path string, hclBytes []byte) error {
 	return nil
 }
 
-func convertToCty(iMap map[string]interface{}) (map[string]cty.Value, error) {
-	cMap := make(map[string]cty.Value)
+func convertToCty(val interface{}) (cty.Value, error) {
+	// Convert to JSON bytes
+	jsonBytes, err := json.Marshal(val)
+	if err != nil {
+		return cty.Value{}, err
+	}
 
+	// Unmarshal JSON into cty
+	simpleJSON := ctyJson.SimpleJSONValue{}
+	simpleJSON.UnmarshalJSON(jsonBytes)
+	return simpleJSON.Value, nil
+}
+
+func convertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) {
+	cMap := make(map[string]cty.Value)
 	for k, v := range iMap {
-		// Convert to JSON bytes
-		jsonBytes, err := json.Marshal(v)
+		convertedVal, err := convertToCty(v)
 		if err != nil {
 			return cMap, err
 		}
-
-		// Unmarshal JSON into cty
-		simpleJSON := ctyJson.SimpleJSONValue{}
-		simpleJSON.UnmarshalJSON(jsonBytes)
-		cMap[k] = simpleJSON.Value
+		cMap[k] = convertedVal
 	}
 	return cMap, nil
 }
 
+func writeOutputs(
+	resources []config.Resource,
+	dst string,
+) error {
+	// Create file
+	outputsPath := filepath.Join(dst, "outputs.tf")
+	if err := createBaseFile(outputsPath); err != nil {
+		return fmt.Errorf("error creating outputs.tf file: %v", err)
+	}
+
+	// Create hcl body
+	hclFile := hclwrite.NewEmptyFile()
+	hclBody := hclFile.Body()
+
+	// Add all outputs from each resource
+	for _, res := range resources {
+		for _, output := range res.Outputs {
+			// Create output block
+			outputName := fmt.Sprintf("%s_%s", output, res.ID)
+			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
+			blockBody := hclBlock.Body()
+
+			// Add attributes (description, value)
+			desc := fmt.Sprintf("Generated output from resource '%s'", res.ID)
+			blockBody.SetAttributeValue("description", cty.StringVal(desc))
+			value := fmt.Sprintf("((module.%s.%s))", res.ID, output)
+			blockBody.SetAttributeValue("value", cty.StringVal(value))
+			hclBody.AppendNewline()
+		}
+	}
+
+	// Write file
+	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	err := appendHCLToFile(outputsPath, hclBytes)
+	if err != nil {
+		return fmt.Errorf("error writing HCL to outputs.tf file: %v", err)
+	}
+	return nil
+}
+
 func writeTfvars(vars map[string]cty.Value, dst string) error {
 	// Create file
-	tfvarsPath := path.Join(dst, "terraform.tfvars")
+	tfvarsPath := filepath.Join(dst, "terraform.tfvars")
 	if err := createBaseFile(tfvarsPath); err != nil {
 		return fmt.Errorf("error creating terraform.tfvars file: %v", err)
 	}
@@ -156,7 +197,7 @@ func getTypeTokens(ctyVal cty.Value) hclwrite.Tokens {
 
 func writeVariables(vars map[string]cty.Value, dst string) error {
 	// Create file
-	variablesPath := path.Join(dst, "variables.tf")
+	variablesPath := filepath.Join(dst, "variables.tf")
 	if err := createBaseFile(variablesPath); err != nil {
 		return fmt.Errorf("error creating variables.tf file: %v", err)
 	}
@@ -193,7 +234,7 @@ func writeMain(
 	dst string,
 ) error {
 	// Create file
-	mainPath := path.Join(dst, "main.tf")
+	mainPath := filepath.Join(dst, "main.tf")
 	if err := createBaseFile(mainPath); err != nil {
 		return fmt.Errorf("error creating main.tf file: %v", err)
 	}
@@ -204,7 +245,7 @@ func writeMain(
 
 	// Write Terraform backend if needed
 	if tfBackend.Type != "" {
-		tfConfig, err := convertToCty(tfBackend.Configuration)
+		tfConfig, err := convertMapToCty(tfBackend.Configuration)
 		if err != nil {
 			errString := "error converting terraform backend configuration to cty when writing main.tf: %v"
 			return fmt.Errorf(errString, err)
@@ -221,7 +262,7 @@ func writeMain(
 	// For each resource:
 	for _, res := range resources {
 		// Convert settings to cty.Value
-		ctySettings, err := convertToCty(res.Settings)
+		ctySettings, err := convertMapToCty(res.Settings)
 		if err != nil {
 			return fmt.Errorf(
 				"error converting setting in resource %s to cty when writing main.tf: %v",
@@ -301,7 +342,7 @@ func simpleTokenFromString(str string) hclwrite.Token {
 
 func writeProviders(vars map[string]cty.Value, dst string) error {
 	// Create file
-	providersPath := path.Join(dst, "providers.tf")
+	providersPath := filepath.Join(dst, "providers.tf")
 	if err := createBaseFile(providersPath); err != nil {
 		return fmt.Errorf("error creating providers.tf file: %v", err)
 	}
@@ -341,7 +382,7 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 
 func writeVersions(dst string) error {
 	// Create file
-	versionsPath := path.Join(dst, "versions.tf")
+	versionsPath := filepath.Join(dst, "versions.tf")
 	if err := createBaseFile(versionsPath); err != nil {
 		return fmt.Errorf("error creating versions.tf file: %v", err)
 	}
@@ -360,9 +401,12 @@ func printTerraformInstructions(grpPath string) {
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
-func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig, bpDirectory string) error {
+func (w TFWriter) writeResourceGroups(
+	yamlConfig *config.YamlConfig,
+	bpDirectory string,
+) error {
 	bpName := yamlConfig.BlueprintName
-	ctyVars, err := convertToCty(yamlConfig.Vars)
+	ctyVars, err := convertMapToCty(yamlConfig.Vars)
 	if err != nil {
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %v", err)
@@ -371,7 +415,7 @@ func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig, bpDirectory
 		if !resGroup.HasKind("terraform") {
 			continue
 		}
-		writePath := path.Join(bpDirectory, bpName, resGroup.Name)
+		writePath := filepath.Join(bpDirectory, bpName, resGroup.Name)
 
 		// Write main.tf file
 		if err := writeMain(
@@ -385,6 +429,13 @@ func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig, bpDirectory
 		if err := writeVariables(ctyVars, writePath); err != nil {
 			return fmt.Errorf(
 				"error writing variables.tf file for resource group %s: %v",
+				resGroup.Name, err)
+		}
+
+		// Write outputs.tf file
+		if err := writeOutputs(resGroup.Resources, writePath); err != nil {
+			return fmt.Errorf(
+				"error writing outputs.tf file for resource group %s: %v",
 				resGroup.Name, err)
 		}
 
@@ -409,12 +460,6 @@ func (w TFWriter) writeResourceGroups(yamlConfig *config.YamlConfig, bpDirectory
 				resGroup.Name, err)
 		}
 
-		// License only file, outputs.tf
-		if err = createBaseFile(path.Join(writePath, "outputs.tf")); err != nil {
-			return fmt.Errorf(
-				"error creating outputs.tf file for resource group %s: %v",
-				resGroup.Name, err)
-		}
 		printTerraformInstructions(writePath)
 	}
 	return nil

@@ -59,7 +59,6 @@ variable "sql_username" {
   description = "Username for the SQL database"
   type        = string
   default     = "slurm"
-
 }
 
 variable "sql_password" {

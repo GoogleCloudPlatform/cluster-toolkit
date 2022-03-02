@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# WARNING: This example and the omnia-install resource are still under development
-#          and experimental! This example is not yet fully supported.
+---
 
 blueprint_name: startup_options
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: simple-options
   region: us-central1
   zone: us-central1-a
@@ -35,19 +34,19 @@ resource_groups:
     id: startup
     settings:
       runners:
-        - type: shell
-          source: "modules/startup-script/examples/hello.sh"
-          destination: "hello.sh"
-        - type: data
-          source: /tmp/foo.tgz
-          destination: /tmp/foo.tgz
-        - type: shell
-          destination: "decompress.sh"
-          content: |
-            #!/bin/sh
-            echo $2
-            tar zxvf /tmp/$1 -C /
-          args: "foo.tgz 'Expanding the file'"
+      - type: shell
+        source: "modules/startup-script/examples/hello.sh"
+        destination: "hello.sh"
+      - type: data
+        source: /tmp/foo.tgz
+        destination: /tmp/foo.tgz
+      - type: shell
+        destination: "decompress.sh"
+        content: |
+          #!/bin/sh
+          echo $2
+          tar zxvf /tmp/$1 -C /
+        args: "foo.tgz 'Expanding the file'"
 
   - source: ./resources/compute/simple-instance
     kind: terraform
@@ -84,4 +83,3 @@ resource_groups:
       machine_type: e2-standard-4
       metadata:
         startup-script: $(startup.startup_script)
-

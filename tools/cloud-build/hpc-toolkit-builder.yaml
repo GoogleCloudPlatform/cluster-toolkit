@@ -12,14 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  args: [ 'build', '-t',
-  'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder:latest',
-  '--cache-from',
-  'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder:latest',
-  '-f', 'tools/cloud-build/Dockerfile',
-  '.' ]
+  args:
+  - 'build'
+  - '-t'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder:latest'
+  - '--cache-from'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder:latest'
+  - '-f'
+  - 'tools/cloud-build/Dockerfile'
+  - '.'
 - name: 'gcr.io/cloud-builders/docker'
   args:
   - 'run'
@@ -53,4 +58,3 @@ images: [
 timeout: "1200s"
 options:
   machineType: N1_HIGHCPU_8
-

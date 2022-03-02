@@ -22,22 +22,16 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/sourcereader"
 	"log"
 	"os"
-	"path"
-
-	"hpc-toolkit/pkg/resutils"
+	"path/filepath"
 )
 
 const (
 	beginLiteralExp string = `^\(\(.*$`
 	fullLiteralExp  string = `^\(\((.*)\)\)$`
 )
-
-// ResourceFS contains embedded resources (./resources) for use in building
-// blueprints. The main package creates and injects the resources directory as
-// hpc-toolkit/resources are not accessible at the package level.
-var ResourceFS embed.FS
 
 // ResWriter interface for writing resources to a blueprint
 type ResWriter interface {
@@ -73,48 +67,28 @@ func getTemplate(filename string) string {
 	return string(tmplText)
 }
 
-func copyEmbedded(fs resutils.BaseFS, source string, dest string) error {
-	return resutils.CopyDirFromResources(fs, source, dest)
-}
-
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
-	blueprintio := blueprintio.GetBlueprintIOLocal()
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
-
 			/* Copy source files */
-			// currently assuming local or embedded source
-			resourceName := path.Base(resource.Source)
+			resourceName := filepath.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
-			basePath := path.Join(blueprintPath, grp.Name)
+			basePath := filepath.Join(blueprintPath, grp.Name)
 			var destPath string
 			switch resource.Kind {
 			case "terraform":
-				destPath = path.Join(basePath, "modules", resourceName)
+				destPath = filepath.Join(basePath, "modules", resourceName)
 			case "packer":
-				destPath = path.Join(basePath, resource.ID)
+				destPath = filepath.Join(basePath, resource.ID)
 			}
 			_, err := os.Stat(destPath)
 			if err == nil {
 				continue
 			}
 
-			// Check source type and copy
-			switch src := resource.Source; {
-			case resutils.IsLocalPath(src):
-				if err = blueprintio.CopyFromPath(src, destPath); err != nil {
-					log.Fatal(err)
-				}
-			case resutils.IsEmbeddedPath(src):
-				if err = blueprintio.CreateDirectory(destPath); err != nil {
-					log.Fatalf("failed to create resource path %s: %v", destPath, err)
-				}
-				if err = copyEmbedded(ResourceFS, src, destPath); err != nil {
-					log.Fatal(err)
-				}
-			default:
-				log.Fatalf("resource %s source (%s) not valid, should begin with /, ./, ../ or resources/",
-					resource.ID, resource.Source)
+			reader := sourcereader.Factory(resource.Source)
+			if err := reader.GetResource(resource.Source, destPath); err != nil {
+				log.Fatalf("failed to get resource from %s to %s: %v", resource.Source, destPath, err)
 			}
 
 			/* Create resource level files */
@@ -132,7 +106,7 @@ func printInstructionsPreamble(kind string, path string) {
 // WriteBlueprint writes the blueprint using resources defined in config.
 func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
 	blueprintio := blueprintio.GetBlueprintIOLocal()
-	bpDirectoryPath := path.Join(bpDirectory, yamlConfig.BlueprintName)
+	bpDirectoryPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName)
 	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
 		log.Fatalf("failed to create a directory for blueprints: %v", err)
 	}

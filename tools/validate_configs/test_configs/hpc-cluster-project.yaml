@@ -12,14 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: hpc-cluster-project
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm-project
   region: europe-west4
   zone: europe-west4-a
   slurm_sa: slurm-sa
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: a_bucket
+    impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
 
 resource_groups:
 - group: onboarding
@@ -29,25 +37,24 @@ resource_groups:
     id: project
     settings:
       project_id: $(vars.project_id)
-      folder_id: 334688113020 # random number
-      billing_account: "111110-M2N704-854685" # random billing number
-      org_id: 123456789 # random org id
+      folder_id: 334688113020  # random number
+      billing_account: "111110-M2N704-854685"  # random billing number
+      org_id: 123456789  # random org id
 
   - source: resources/project/service-enablement
     kind: terraform
     id: enable-apis
     use: [project]
     settings:
-      gcp_service_list: [
-      "file.googleapis.com",
-      "compute.googleapis.com"
-      ]
+      gcp_service_list:
+      - "file.googleapis.com"
+      - "compute.googleapis.com"
 
 - group: primary
   resources:
-    # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-    # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-    # Example - ./resources/network/vpc
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
   - source: resources/network/vpc
     kind: terraform
     id: network1

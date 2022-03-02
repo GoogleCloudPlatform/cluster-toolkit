@@ -18,14 +18,8 @@
 package resreader
 
 import (
-	"embed"
 	"log"
 )
-
-// ResourceFS contains embedded resources (./resources) for use in building
-// blueprints. The main package creates and injects the resources directory as
-// hpc-toolkit/resources are not accessible at the package level.
-var ResourceFS embed.FS
 
 // VarInfo stores information about a resource's input or output variables
 type VarInfo struct {
@@ -40,6 +34,15 @@ type VarInfo struct {
 type ResourceInfo struct {
 	Inputs  []VarInfo
 	Outputs []VarInfo
+}
+
+// GetOutputsAsMap returns the outputs list as a map for quicker access
+func (ri ResourceInfo) GetOutputsAsMap() map[string]VarInfo {
+	outputsMap := make(map[string]VarInfo)
+	for _, output := range ri.Outputs {
+		outputsMap[output.Name] = output
+	}
+	return outputsMap
 }
 
 // ResReader is a resource reader interface

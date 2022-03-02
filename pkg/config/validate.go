@@ -22,6 +22,7 @@ import (
 	"regexp"
 
 	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/sourcereader"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -89,11 +90,33 @@ func hasIllegalChars(name string) bool {
 	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
 }
 
+func validateOutputs(res Resource, resInfo resreader.ResourceInfo) error {
+
+	// Only get the map if needed
+	var outputsMap map[string]resreader.VarInfo
+	if len(res.Outputs) > 0 {
+		outputsMap = resInfo.GetOutputsAsMap()
+	}
+
+	// Ensure output exists in the underlying resource
+	for _, output := range res.Outputs {
+		if _, ok := outputsMap[output]; !ok {
+			return fmt.Errorf("%s, resource: %s output: %s",
+				errorMessages["invalidOutput"], res.ID, output)
+		}
+	}
+	return nil
+}
+
 // validateResources ensures parameters set in resources are set correctly.
 func (bc BlueprintConfig) validateResources() error {
 	for _, grp := range bc.Config.ResourceGroups {
 		for _, res := range grp.Resources {
 			if err := validateResource(res); err != nil {
+				return err
+			}
+			resInfo := bc.ResourcesInfo[grp.Name][res.Source]
+			if err := validateOutputs(res, resInfo); err != nil {
 				return err
 			}
 		}
@@ -133,8 +156,8 @@ func validateSettings(
 func (bc BlueprintConfig) validateResourceSettings() error {
 	for _, grp := range bc.Config.ResourceGroups {
 		for _, res := range grp.Resources {
-			reader := resreader.Factory(res.Kind)
-			info, err := reader.GetInfo(res.Source)
+			reader := sourcereader.Factory(res.Source)
+			info, err := reader.GetResourceInfo(res.Source, res.Kind)
 			if err != nil {
 				errStr := "failed to get info for resource at %s while validating resource settings"
 				return errors.Wrapf(err, errStr, res.Source)

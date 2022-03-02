@@ -18,7 +18,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -76,6 +76,21 @@ func (s *MySuite) TestIsValidKind(c *C) {
 	c.Assert(IsValidKind(""), Equals, false)
 }
 
+func (s *MySuite) TestGetOutputsAsMap(c *C) {
+	// Simple: empty outputs
+	resInfo := ResourceInfo{}
+	outputMap := resInfo.GetOutputsAsMap()
+	c.Assert(len(outputMap), Equals, 0)
+
+	testDescription := "This is a test description"
+	testName := "testName"
+	varInfo := VarInfo{Name: testName, Description: testDescription}
+	resInfo.Outputs = []VarInfo{varInfo}
+	outputMap = resInfo.GetOutputsAsMap()
+	c.Assert(len(outputMap), Equals, 1)
+	c.Assert(outputMap[testName].Description, Equals, testDescription)
+}
+
 func (s *MySuite) TestFactory(c *C) {
 	pkrReader := Factory(pkrKindString)
 	c.Assert(reflect.TypeOf(pkrReader), Equals, reflect.TypeOf(PackerReader{}))
@@ -92,26 +107,6 @@ func getTestFS() afero.IOFS {
 	return afero.NewIOFS(aferoFS)
 }
 
-func (s *MySuite) TestCopyFSToTempDir(c *C) {
-	// Setup
-	testResFS := getTestFS()
-
-	// Success
-	testDir, err := copyFSToTempDir(testResFS, "resources/")
-	defer os.RemoveAll(testDir)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(path.Join(testDir, "network/vpc/main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(path.Join(testDir, "network/vpc"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "vpc")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, true)
-}
-
 func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
@@ -119,31 +114,19 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	expectedErr := "Source to resource does not exist: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 	// Invalid source path - points to a file
-	pathToFile := path.Join(terraformDir, "main.tf")
+	pathToFile := filepath.Join(terraformDir, "main.tf")
 	_, err = getHCLInfo(pathToFile)
 	expectedErr = "Source of resource must be a directory: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid source path - points to directory with no .tf files
-	pathToEmptyDir := path.Join(packerDir, "emptyDir")
+	pathToEmptyDir := filepath.Join(packerDir, "emptyDir")
 	err = os.Mkdir(pathToEmptyDir, 0755)
 	if err != nil {
 		log.Fatal("TestGetHCLInfo: Failed to create test directory.")
 	}
 	_, err = getHCLInfo(pathToEmptyDir)
 	expectedErr = "Source is not a terraform or packer module: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: No embedded resource
-	badEmbeddedRes := "resources/does/not/exist"
-	_, err = getHCLInfo(badEmbeddedRes)
-	expectedErr = "failed to copy embedded resource at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: Unsupported Resource Source
-	badSource := "github.com/GoogleCloudPlatform/hpc-toolkit/resources"
-	_, err = getHCLInfo(badSource)
-	expectedErr = "invalid source .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
 
@@ -190,14 +173,14 @@ func createTmpResource() {
 	}
 
 	// Create terraform resource dir
-	terraformDir = path.Join(tmpResourceDir, "terraformResource")
+	terraformDir = filepath.Join(tmpResourceDir, "terraformResource")
 	err = os.Mkdir(terraformDir, 0755)
 	if err != nil {
 		log.Fatalf("error creating test terraform resource dir: %e", err)
 	}
 
 	// main.tf file
-	mainFile, err := os.Create(path.Join(terraformDir, "main.tf"))
+	mainFile, err := os.Create(filepath.Join(terraformDir, "main.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create main.tf: %v", err)
 	}
@@ -207,7 +190,7 @@ func createTmpResource() {
 	}
 
 	// variables.tf file
-	varFile, err := os.Create(path.Join(terraformDir, "variables.tf"))
+	varFile, err := os.Create(filepath.Join(terraformDir, "variables.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create variables.tf: %v", err)
 	}
@@ -218,7 +201,7 @@ func createTmpResource() {
 	}
 
 	// outputs.tf file
-	outFile, err := os.Create(path.Join(terraformDir, "outputs.tf"))
+	outFile, err := os.Create(filepath.Join(terraformDir, "outputs.tf"))
 	if err != nil {
 		log.Fatalf("Failed to create outputs.tf: %v", err)
 	}
@@ -228,14 +211,14 @@ func createTmpResource() {
 	}
 
 	// Create packer resource dir
-	packerDir = path.Join(tmpResourceDir, "packerResource")
+	packerDir = filepath.Join(tmpResourceDir, "packerResource")
 	err = os.Mkdir(packerDir, 0755)
 	if err != nil {
 		log.Fatalf("error creating test packer resource dir: %e", err)
 	}
 
 	// main.pkr.hcl file
-	mainFile, err = os.Create(path.Join(packerDir, "main.pkr.hcl"))
+	mainFile, err = os.Create(filepath.Join(packerDir, "main.pkr.hcl"))
 	if err != nil {
 		log.Fatalf("Failed to create main.pkr.hcl: %v", err)
 	}
@@ -245,7 +228,7 @@ func createTmpResource() {
 	}
 
 	// variables.pkr.hcl file
-	varFile, err = os.Create(path.Join(packerDir, "variables.pkr.hcl"))
+	varFile, err = os.Create(filepath.Join(packerDir, "variables.pkr.hcl"))
 	if err != nil {
 		log.Fatalf("Failed to create variables.pkr.hcl: %v", err)
 	}

@@ -19,7 +19,7 @@ package reswriter
 import (
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"text/template"
 
 	"hpc-toolkit/pkg/config"
@@ -56,12 +56,12 @@ func printPackerInstructions(grpPath string) {
 // writeResourceLevel writes any needed files to the resource layer
 func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig, bpDirectory string) error {
 	for _, grp := range yamlConfig.ResourceGroups {
-		groupPath := path.Join(bpDirectory, yamlConfig.BlueprintName, grp.Name)
+		groupPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName, grp.Name)
 		for _, res := range grp.Resources {
 			if res.Kind != "packer" {
 				continue
 			}
-			resPath := path.Join(groupPath, res.ID)
+			resPath := filepath.Join(groupPath, res.ID)
 			err := writePackerAutoVariables(packerAutoVarFilename, res, resPath)
 			if err != nil {
 				return err
@@ -91,7 +91,7 @@ func writePackerAutoVariables(
 			"failed to parse the %s template", tmplFilename)
 	}
 
-	outputPath := path.Join(destPath, tmplFilename)
+	outputPath := filepath.Join(destPath, tmplFilename)
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf(

@@ -49,3 +49,19 @@ rule "terraform_required_providers" {
 rule "terraform_unused_required_providers" {
   enabled = true
 }
+rule "terraform_deprecated_interpolation" {
+  enabled = true
+}
+rule "terraform_module_pinned_source" {
+  enabled = true
+}
+rule "terraform_module_version" {
+  enabled = true
+}
+rule "terraform_workspace_remote" {
+  enabled = true
+}
+// Disable because many of our resources do not have nor need main.tf files
+rule "terraform_standard_module_structure" {
+  enabled = false
+}

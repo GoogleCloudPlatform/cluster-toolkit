@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 blueprint_name: hpc-cluster-high-io-remote-state
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm-io
   region: us-central1
   zone: us-central1-a

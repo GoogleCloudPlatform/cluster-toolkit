@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+
 - name: Mounts the file systems specified in the metadata network_storage key
   hosts: localhost
-  become: yes
+  become: true
   vars:
     meta_key: "network_storage"
     url: "http://metadata.google.internal/computeMetadata/v1/instance/attributes"
@@ -31,7 +33,7 @@
       src: "{{item.server_ip}}:/{{item.remote_mount}}"
       path: "{{item.local_mount}}"
       opts: "{{item.mount_options}}"
-      boot: yes
+      boot: true
       fstype: "{{item.fs_type}}"
       state: "mounted"
     loop: "{{storage.json}}"

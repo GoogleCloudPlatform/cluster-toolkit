@@ -1,10 +1,12 @@
 ## Description
+
 This resource creates a [filestore](https://cloud.google.com/filestore)
 instance. Filestore is a high performance network file system that can be
 mounted to one or more compute VMs.
 
 ### Example - PREMIUM tier
-```
+
+```yaml
 - source: ./resources/file-system/filestore
   kind: terraform
   id: homefs
@@ -13,13 +15,15 @@ mounted to one or more compute VMs.
     network_name: $(network1.network_name)
     size_gb: 2660
 ```
+
 This creates a filestore instance with the resource ID of `homefs` that will be
 mounted at `/home` and is connected to the network defined in the `network1`
 resource. `size_gb` is set to the minimum for the default "PREMIUM" tier,
 2.5TiB.
 
 ### Example - High Scale
-```
+
+```yaml
 - source: ./resources/file-system/filestore
   kind: terraform
   id: highscale
@@ -29,10 +33,12 @@ resource. `size_gb` is set to the minimum for the default "PREMIUM" tier,
     local_mount: /projects
     network_name: $(network1.network_name)
 ```
+
 This creates a high scale filestore instance that will be mounted at
 `/projects` and has the minimum capacity for a high scale SDD instance of 10TiB.
 
 ## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2021 Google LLC
 
@@ -85,6 +91,7 @@ No modules.
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this filestore instance. | `string` | `"/shared"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the GCE VPC network to which the instance is connected. | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Filestore instance will be created. | `string` | n/a | yes |
 | <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the filestore instance in GB. | `number` | `2660` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | The name of the Filestore zone of the instance. | `string` | n/a | yes |
 

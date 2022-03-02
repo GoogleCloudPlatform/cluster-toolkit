@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 
 	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/sourcereader"
 )
 
 const (
@@ -37,6 +38,10 @@ const (
 // ExpandConfig for the create and expand commands.
 func (bc *BlueprintConfig) expand() {
 	bc.addSettingsToResources()
+	if err := bc.expandBackends(); err != nil {
+		log.Fatalf("failed to apply default backend to resource groups: %v", err)
+	}
+
 	if err := bc.combineLabels(); err != nil {
 		log.Fatalf(
 			"failed to update resources labels when expanding the config: %v", err)
@@ -64,6 +69,38 @@ func (bc *BlueprintConfig) addSettingsToResources() {
 			}
 		}
 	}
+}
+
+func (bc *BlueprintConfig) expandBackends() error {
+	// 1. DEFAULT: use TerraformBackend configuration (if supplied) in each
+	//    resource group
+	// 2. If top-level TerraformBackendDefaults is defined, insert that
+	//    backend into resource groups which have no explicit
+	//    TerraformBackend
+	// 3. In all cases, add a prefix for GCS backends if one is not defined
+	yamlConfig := &bc.Config
+	if yamlConfig.TerraformBackendDefaults.Type != "" {
+		for i := range yamlConfig.ResourceGroups {
+			grp := &yamlConfig.ResourceGroups[i]
+			if grp.TerraformBackend.Type == "" {
+				grp.TerraformBackend.Type = yamlConfig.TerraformBackendDefaults.Type
+				grp.TerraformBackend.Configuration = make(map[string]interface{})
+				for k, v := range yamlConfig.TerraformBackendDefaults.Configuration {
+					grp.TerraformBackend.Configuration[k] = v
+				}
+			}
+			if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration["prefix"] == nil {
+				DeploymentName := yamlConfig.Vars["deployment_name"]
+				prefix := yamlConfig.BlueprintName
+				if DeploymentName != nil {
+					prefix += "/" + DeploymentName.(string)
+				}
+				prefix += "/" + grp.Name
+				grp.TerraformBackend.Configuration["prefix"] = prefix
+			}
+		}
+	}
+	return nil
 }
 
 func getResourceVarName(resID string, varName string) string {
@@ -303,7 +340,7 @@ func updateGlobalVarTypes(vars map[string]interface{}) error {
 	for k, v := range vars {
 		val, err := updateVariableType(v, varContext{}, make(map[string]int))
 		if err != nil {
-			return fmt.Errorf("error setting type for global variabl %s: %v", k, err)
+			return fmt.Errorf("error setting type for global variable %s: %v", k, err)
 		}
 		vars[k] = val
 	}
@@ -392,8 +429,8 @@ func expandSimpleVariable(
 			context.varString)
 	}
 	refRes := refGrp.Resources[refResIndex]
-	reader := resreader.Factory(refRes.Kind)
-	resInfo, err := reader.GetInfo(refRes.Source)
+	reader := sourcereader.Factory(refRes.Source)
+	resInfo, err := reader.GetResourceInfo(refRes.Source, refRes.Kind)
 	if err != nil {
 		log.Fatalf(
 			"failed to get info for resource at %s while expanding variables: %e",

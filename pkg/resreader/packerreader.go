@@ -22,7 +22,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 )
 
@@ -56,7 +55,7 @@ func getHCLFiles(dir string) []string {
 			continue
 		}
 		if filepath.Ext(f.Name()) == ".hcl" {
-			hclFiles = append(hclFiles, path.Join(dir, f.Name()))
+			hclFiles = append(hclFiles, filepath.Join(dir, f.Name()))
 		}
 	}
 	return hclFiles
@@ -82,7 +81,7 @@ func copyHCLFilesToTmp(dir string) (string, []string, error) {
 		defer hclFile.Close()
 
 		// Create a file to copy to
-		destPath := path.Join(tmpDir, path.Base(hclFilename))
+		destPath := filepath.Join(tmpDir, filepath.Base(hclFilename))
 		destination, err := os.Create(destPath)
 		if err != nil {
 			return "", hclFiles, fmt.Errorf(

@@ -23,6 +23,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/sourcereader"
 )
 
 const expectedVarFormat = "$(vars.var_name) or $(resource_id.var_name)"
@@ -52,6 +53,7 @@ var errorMessages = map[string]string{
 	"duplicateID":     "resource IDs must be unique",
 	"emptyGroupName":  "group name must be set for each resource group",
 	"illegalChars":    "invalid character(s) found in group name",
+	"invalidOutput":   "requested output was not found in the resource",
 }
 
 // ResourceGroup defines a group of Resource that are all executed together
@@ -97,6 +99,7 @@ type Resource struct {
 	ResourceName     string
 	Use              []string
 	WrapSettingsWith map[string][]string
+	Outputs          []string `yaml:"outputs,omitempty"`
 	Settings         map[string]interface{}
 }
 
@@ -176,30 +179,6 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 		yamlConfig.Vars = make(map[string]interface{})
 	}
 
-	// 1. DEFAULT: use TerraformBackend configuration (if supplied) in each
-	//    resource group
-	// 2. If top-level TerraformBackendDefaults is defined, insert that
-	//    backend into resource groups which have no explicit
-	//    TerraformBackend
-	// 3. In all cases, add a prefix for GCS backends if one is not defined
-	if yamlConfig.TerraformBackendDefaults.Type != "" {
-		for i, grp := range yamlConfig.ResourceGroups {
-			if grp.TerraformBackend.Type == "" {
-				grp.TerraformBackend = yamlConfig.TerraformBackendDefaults
-			}
-			if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration["prefix"] == nil {
-				DeploymentName := yamlConfig.Vars["deployment_name"]
-				prefix := yamlConfig.BlueprintName
-				if DeploymentName != nil {
-					prefix += "/" + DeploymentName.(string)
-				}
-				prefix += "/" + grp.Name
-				grp.TerraformBackend.Configuration["prefix"] = prefix
-			}
-			yamlConfig.ResourceGroups[i].TerraformBackend = grp.TerraformBackend
-		}
-	}
-
 	return yamlConfig
 }
 
@@ -225,8 +204,8 @@ func createResourceInfo(
 	resInfo := make(map[string]resreader.ResourceInfo)
 	for _, res := range resourceGroup.Resources {
 		if _, exists := resInfo[res.Source]; !exists {
-			reader := resreader.Factory(res.Kind)
-			ri, err := reader.GetInfo(res.Source)
+			reader := sourcereader.Factory(res.Source)
+			ri, err := reader.GetResourceInfo(res.Source, res.Kind)
 			if err != nil {
 				log.Fatalf(
 					"failed to get info for resource at %s while setting bc.ResourcesInfo: %e",

@@ -1,10 +1,15 @@
 ## Description
 
-This resource creates a Network File Sharing (NFS) disk to share directories and files  with other clients over a network via the [Compute Disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk )   to be mounted upon a google compute engine instance created through the [Compute Instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance ).   
+This resource creates a Network File Sharing (NFS) disk to share directories and
+files with other clients over a network via the
+[Compute Disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk
+) to be mounted upon a google compute engine instance created through the
+[Compute Instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance
+).
 
 ### Example
 
-```
+```yaml
 - source: resources/file-system/nfs-server
   kind: terraform
   id: homefs
@@ -14,7 +19,8 @@ This resource creates a Network File Sharing (NFS) disk to share directories and
       ghpc_role: storage-home
 ```
 
-This creates a NFS on a virtual machine which allow other VMs to mount the volume as an external file system.
+This creates a NFS on a virtual machine which allow other VMs to mount the
+volume as an external file system.
 
 ## License
 

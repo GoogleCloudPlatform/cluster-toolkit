@@ -26,13 +26,15 @@ format: warn-go-version warn-terraform-version warn-packer-version terraform-for
 	$(info **************** formatting go code *******************)
 	go fmt $(ENG)
 
-install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit check-tflint
+install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit check-tflint check-shellcheck
 	$(info *********** installing developer dependencies *********)
 	go install github.com/terraform-docs/terraform-docs@latest
 	go install golang.org/x/lint/golint@latest
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 	go install github.com/go-critic/go-critic/cmd/gocritic@latest
 	go install github.com/google/addlicense@latest
+	go install mvdan.cc/sh/v3/cmd/shfmt@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 
 ifeq (, $(shell which addlicense))
 add-google-license:
@@ -63,6 +65,14 @@ check-tflint:
 	$(info WARNING: tflint not installed, visit https://github.com/terraform-linters/tflint#installation for installation instructions.)
 else
 check-tflint:
+
+endif
+
+ifeq (, $(shell which shellcheck))
+check-shellcheck:
+	$(info WARNING: shellcheck not installed, visit https://github.com/koalaman/shellcheck#installing for installation instructions.)
+else
+check-shellcheck:
 
 endif
 
