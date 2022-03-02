@@ -26,7 +26,7 @@ resource.
 This creates a Slurm login node connected to the primary subnet of network1 with
 the homefs filesystem mounted and connecting to `slurm_controller` as the
 slurm controller node. For more context see the
-[hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml)
+[hpc-cluster-small-intel example](../../../../examples/hpc-cluster-small-intel.yaml)
 
 ## License
 

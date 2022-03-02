@@ -5,7 +5,7 @@ to create a blueprint.
 
 ## Instructions
 
-Ensure your project_id is set and other deployment variables such as zone and
+Ensure your project\_id is set and other deployment variables such as zone and
 region are set correctly under `vars` before creating and deploying an example
 config.
 
@@ -14,7 +14,7 @@ passed to resources if the resources have an input that matches the variable nam
 
 ## Config Descriptions
 
-### hpc-cluster-small.yaml
+### hpc-cluster-small-intel.yaml
 
 Creates a basic auto-scaling SLURM cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
@@ -46,7 +46,7 @@ Quota required for this example:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### hpc-cluster-high-io.yaml
+### hpc-cluster-high-io-intel.yaml
 
 Creates a slurm cluster with tiered file systems for higher performance. It
 connects to the default VPC of the project and creates two partitions and a
@@ -192,7 +192,7 @@ something that exists.
 
 Literal variables are occasionally needed when referring to the data structure
 of the underlying resource. For example, take the
-[hpc-cluster-high-io.yaml](./hpc-cluster-high-io.yaml) example config. The
+[hpc-cluster-high-io-intel.yaml](./hpc-cluster-high-io-intel.yaml) example config. The
 DDN-EXAScaler resource requires a subnetwork self link, which is not currently
 an output of either network resource, therefore it is necessary to refer to the
 primary network self link through terraform itself:

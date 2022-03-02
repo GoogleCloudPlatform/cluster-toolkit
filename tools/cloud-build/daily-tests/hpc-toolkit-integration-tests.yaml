@@ -67,7 +67,7 @@ steps:
     project: ${PROJECT_ID}
     zone: us-central1-c
     workspace: /workspace
-    blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io.yaml"
+    blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io-intel.yaml"
     blueprint_dir: blueprint-cluster-high-io
     network: default
     max_nodes: 5

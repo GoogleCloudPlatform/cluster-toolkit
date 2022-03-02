@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # Set variables to default if not already set
-EXAMPLE_YAML=${EXAMPLE_YAML:-/workspace/examples/hpc-cluster-high-io.yaml}
+EXAMPLE_YAML=${EXAMPLE_YAML:-/workspace/examples/hpc-cluster-high-io-intel.yaml}
 PROJECT=${PROJECT:-hpc-toolkit-dev}
 BLUEPRINT_DIR=${BLUEPRINT_DIR:-blueprint}
 BUILD_ID=${BUILD_ID:-undefined-build}

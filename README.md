@@ -58,7 +58,7 @@ To create a blueprint, an input YAML file needs to be written or adapted from
 one of the [examples](examples/).
 
 These instructions will use
-[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml), which is a
+[examples/hpc-cluster-small-intel.yaml](examples/hpc-cluster-small-intel.yaml), which is a
 good starting point and creates a blueprint containing:
 
 * a new network
@@ -74,20 +74,20 @@ These instructions assume you are using
 you wish to deploy in, and that you are in the root directory of the hpc-toolkit
 repo cloned during [installation](#installation).
 
-The [examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) file must
+The [examples/hpc-cluster-small-intel.yaml](examples/hpc-cluster-small-intel.yaml) file must
 be updated to point to your GCP project ID. You can either edit the file
 manually or run the following command.
 
 ```shell
 sed -i \
   "s/## Set GCP Project ID Here ##/$GOOGLE_CLOUD_PROJECT/g" \
-  examples/hpc-cluster-small.yaml
+  examples/hpc-cluster-small-intel.yaml
 ```
 
 Now you can run `ghpc` with the following command:
 
 ```shell
-./ghpc create examples/hpc-cluster-small.yaml
+./ghpc create examples/hpc-cluster-small-intel.yaml
 ```
 
 By default, the blueprint directory will be created in the same directory as the
@@ -96,7 +96,7 @@ from the input config. Optionally, the output directory can be specified with
 the `-o` flag as shown in the following example.
 
 ```shell
-./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
+./ghpc create examples/hpc-cluster-small-intel.yaml -o blueprints/
 ```
 
 To deploy the blueprint, use terraform in the resource group directory:
@@ -104,10 +104,10 @@ To deploy the blueprint, use terraform in the resource group directory:
 > **_NOTE:_** Before you run this for the first time you may need to enable some
 > APIs and possibly request additional quotas. See
 > [Enable GCP APIs](#enable-gcp-apis) and
-> [Small Example Quotas](examples/README.md#hpc-cluster-smallyaml).
+> [Small Example Quotas](examples/README.md#hpc-cluster-small-intelyaml).
 
 ```shell
-cd hpc-cluster-small/primary # From hpc-cluster-small.yaml example
+cd hpc-cluster-small-intel/primary # From hpc-cluster-small-intel.yaml example
 terraform init
 terraform apply
 ```
@@ -247,7 +247,7 @@ configurations contain a single resource group.
 From the [example above](#basic-usage) we get the following blueprint:
 
 ```text
-hpc-cluster-small/
+hpc-cluster-small-intel/
   primary/
     main.tf
     variables.tf

@@ -28,7 +28,7 @@ resource.
 This creates a controller node connected to the primary subnetwork with 1 login
 node (defined elsewhere). The controller will also have the homefs file system
 mounted and manage one partition. For more context see the
-[hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml).
+[hpc-cluster-small-intel example](../../../../examples/hpc-cluster-small-intel.yaml).
 
 ## License
 
