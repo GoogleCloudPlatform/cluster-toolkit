@@ -1,0 +1,54 @@
+---
+- name: Create Spack Directory
+  file:
+    path: "{{ spack_dir }}"
+    owner: root
+    group: root
+    state: directory
+    mode: 0755
+
+- name: Clone Spack
+  git:
+    repo: https://github.com/spack/spack.git
+    dest: "{{ spack_dir }}"
+    version: v0.17.1
+    depth: 1
+
+- name: Apply Global Spack configurations
+  command: "{{ spack_dir }}/bin/spack config --scope site add config:db_lock_timeout:30"
+
+
+- name: Init Spack DB
+  command: "{{ spack_dir }}/bin/spack reindex"
+  
+- name: Determine Slurm version
+  shell: "/usr/local/bin/scontrol --version | awk '{print $2}' | tr '.' '-'"
+  register: slurm_version_cmd
+- set_fact:
+    slurm_version={{ slurm_version_cmd.stdout }}
+- name: Write Slurm Package file
+  copy:
+    dest: /tmp/spack_pkg.yml
+    content: |
+      packages:
+        slurm:
+          externals:
+          - spec: slurm@{{ slurm_version_cmd.stdout }}
+            prefix: /usr/local
+          buildable: false
+- name: Spack import Slurm
+  command: "{{ spack_dir }}/bin/spack config --scope site add -f /tmp/spack_pkg.yml"
+- name: Remove temporary file
+  file:
+    path: /tmp/spack_pkg.yml
+    state: absent
+
+- name: Set MPI provider preferences
+  command: "{{ spack_dir }}/bin/spack config --scope site add 'packages:all:providers:mpi:[intel-mpi,intel-oneapi-mpi,openmpi,mpich]'"
+
+- name: Set OpenMPI default options
+  command: "{{ spack_dir }}/bin/spack config --scope site add packages:openmpi:variants:'+pmi +legacylaunchers schedulers=slurm fabrics=auto'"
+
+- name: Set MPICH default options
+  command: "{{ spack_dir }}/bin/spack config --scope site add packages:mpich:variants:'+slurm netmod=tcp'"
+

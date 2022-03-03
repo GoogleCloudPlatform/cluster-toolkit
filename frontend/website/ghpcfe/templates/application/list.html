@@ -1,0 +1,91 @@
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if loading == 1 %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <h2>Application List</h2>
+  {% if application_list %}
+  <div class="table-responsive" style="min-height:20em;">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Version</th>
+        <th scope="col">Spack Specs</th>
+        <th scope="col">Compiler</th>
+        <th scope="col">MPI</th>
+        <th scope="col">File System</th>
+        <th scope="col">Architecture</th>
+        <th scope="col">Status</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for application in application_list %}
+      <tr>
+        <th>{{ application.id }}</th>
+        <td><a href="{% url 'application-detail' application.id %}">{{ application.name }}</a></td>
+        <td>{{ application.version }}</td>
+        <td>{{ application.spack_spec }}</td>
+        <td>{{ application.compiler }}</td>
+        <td>{{ application.mpi }}</td>
+        <td><img src="/static/img/GCP_logo.png" style="width:32px;height:32px;"> {{ application.install_loc.filesystem.name }}</td>
+        <td>{{ application.installed_architecture }}</td>        
+        <td>
+          {% if application.status == "p" or application.status == "q" or application.status == "i" %}
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          {% endif %}
+          {% if application.status == "n" %}
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+          {% endif %}
+          {% if application.status == "r" %}
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+          {% endif %}
+          {% if application.status == "e" %}
+          <img src="/static/img/status-error.png" style="width:32px;height:20px;">
+          {% endif %}
+          {% if application.status == "x" %}
+          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+          {% endif %}
+          {% for key, value in status_messages.items %}
+            {% if application.status == key %}
+              {{ value }}
+            {% endif %}
+          {% endfor %}
+        </td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-detail' application.id %}">Detail</a>
+              {% if application.status == 'n' %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-delete' application.id %}">Delete</a>
+              {% endif %}
+              {% if application.status == 'n' and application.spack_name and application.cluster.status == 'r' %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-spack-install' application.id %}">Spack Install</a>
+              {% elif application.status == 'r' and application.cluster.status == 'r' %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-create' application.id %}">New Job</a>
+              {% endif %}
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p>No application has been set up yet. Create one from the <a href="{% url 'clusters' %}">Clusters</a> page!</p>
+  {% endif %}
+
+  <br/>
+  {# <a href="{% url 'application-create' %}" class="btn btn-primary">New application</a> #}
+  {# <a href="{% url 'application-create-spack' %}" class="btn btn-primary">New Spack application</a> #}
+{% endblock %}

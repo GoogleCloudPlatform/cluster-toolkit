@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% block title %}<title>Multi-platform HPC Application System</title>{% endblock %}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% block meta %}{% endblock %}
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l" crossorigin="anonymous">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-Piv4xVNRyMGpqkS2by6br4gNJ7DXjqk09RmUpJ8jgGtD7zP9yug3goQfGII0yAns" crossorigin="anonymous"></script>
+  
+  <!-- Add additional CSS in static file -->
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+
+  {% block extrameta %}{% endblock %}
+</head>
+
+<body style="font-family: 'Poppins', sans-serif;">
+
+  <nav class="navbar navbar-expand-sm" style="background-color: #306dc1;">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="{% url 'index' %}" style="color: white;">
+        <img src="/static/img/white-hamburger.png" width="24">&nbsp;&nbsp;Google HPC Application System
+      </a>
+
+      <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbar-list-4" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      </button>
+      <div class="collapse navbar-collapse align-items-center" id="navbar-list-4">
+        <ul class="navbar-nav ml-auto align-items-center">
+          <li>
+            <span style="color: white;">
+            {% if user.is_authenticated %}
+            Logged in as {{ user.get_username }}
+            {% else %}
+            <a href="{% url 'login'%}?next={{ request.path }}" style="color: white;">Login</a>
+            {% endif %}
+            &nbsp;</span>
+          </li>
+          <li class="nav-item dropdown">
+
+            <a class="nav-link dropdown-toggle" href="{% url 'login'%}?next={{ request.path }}" id="navbarDropdownMenuLink" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+            {% if user.is_authenticated %}
+            <img src="{{ user.get_avatar_url }}" width="32" style="border-radius: 50%;">
+            {% else %}
+            <img src="/static/img/unknown_user.png" width="32" style="border-radius: 50%;">
+            {% endif %}
+            </a>
+
+            {% if user.is_authenticated %}
+            <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdownMenuLink">
+
+              <a class="dropdown-item" href="{% url 'account' %}">Edit Account</a>
+              <a class="dropdown-item" href="{% url 'logout' %}?next={% url 'index' %}">Log Out</a>
+              {% if user.is_superuser %}
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="{% url 'admin:index' %}" target="_blank">Admin</a>
+              {% endif %}
+            </div>
+            {% endif %}
+
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+
+  <div class="container-fluid">
+    <div class="row" style="background-color: #fbfbfb;">
+      <div class="col-sm-2 text-white" style="background-color: #306dc1; flex: 1;">
+        <nav class="navbar">
+          <ul class="navbar-nav">
+            <li id="navtab-home" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'index' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-home.png" width="24">Home</a>
+            </li>
+            <li id="navtab-credential" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'credentials' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-credential.png" width="24">Credentials</a>
+            </li>
+            <li id="navtab-cluster" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'clusters' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-cluster.png" width="24">Clusters</a>
+            </li>
+            <li id="navtab-vpc" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'vpcs' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-network.png" width="24">Networks</a>
+            </li>
+            <li id="navtab-fs" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'filesystems' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-filesystem.png" width="24">Filesystems</a>
+            </li>
+            <li id="navtab-application" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'applications' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-application.png" width="24">Applications</a>
+            </li>
+            <li id="navtab-job" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'jobs' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-job.png" width="24">Jobs</a>
+            </li>
+            <li id="navtab-workbench" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'workbench' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/workbench-white.png" width="24">Workbench</a>
+            </li>
+            <li id="navtab-benchmark" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'benchmarks' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-benchmark.png" width="24">Benchmarks</a>
+            </li>
+          </ul>
+        </nav>  
+      </div>
+      <div class="col-sm-10 mt-3" style="min-height:100vh; flex:1;">
+          {% block content %}{% endblock %}
+      </div>
+    </div>
+
+    <div class="row" >
+       <div class="col-1 fixed-bottom mb-5 ml-5">
+          <img src="/static/img/white-servers.png" width="128">
+        </div>
+    </div>
+  </div>
+
+  <script language="javascript">
+$(document).ready(function(){
+    activaTab("navtab-{{ navtab }}");
+});
+
+function activaTab(tab){
+    document.getElementById(tab).className += ' active';
+};
+  </script>
+
+  {% block tailscript %}{% endblock %}
+
+</body>
+</html>

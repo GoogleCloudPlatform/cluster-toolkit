@@ -1,0 +1,57 @@
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if object.status == "p" or object.status == "q" or object.status == "d" or object.status == "r" or object.status == "u"%}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <h2>Job Detail</h2>
+  <p><b>Job ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Application:</b> <a href="{% url 'application-detail' object.application.id %}">{{ object.application.name }}</a></p>
+  <p><b>Cluster:</b> {{ object.application.cluster.name }} 
+    <img src="/static/img/GCP_logo.png" style="width:32px;height:32px;">
+     </p>
+  <p><b>Instance Type:</b> {{ object.instance_type.name }}</p> 
+  <hr>
+  <p style="text-decoration: underline; font-size: large;">Job Parameters</p>
+  <p><b>Submitted:</b> {{ object.date_time_submission }}</p>
+  <p><b>Number of Nodes:</b> {{ object.number_of_nodes }}</p>
+  <p><b>Ranks per Node:</b> {{ object.ranks_per_node }}</p>
+  <p><b>Threads per Rank:</b> {{ object.threads_per_rank }}</p>
+  <p><b>Wall-clock Time Limit:</b> {{ object.wall_clock_time_limit }} minute(s)</p>
+  <hr>
+  <p style="text-decoration: underline; font-size: large;">Job Status</p>
+  {% if object.status == "c" %}
+  <p class="text-success">{{ object.get_status_display }}</p>
+    <p><b>Runtime:</b> {{ object.runtime }} seconds (as reported by the job scheduler)</p>
+    <p><b>Key performance indicator:</b> {{ object.result_value }} {{ object.result_unit }}</p>
+  {% elif object.status == "e" %}
+    <p class="text-danger">{{ object.get_status_display }}</p>
+  {% else %}
+    <p class="text-warning">
+      {% if object.status == "p" or object.status == "q" or object.status == "d" or object.status == "r" or object.status == "u" %}
+      <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+      {% endif %}
+      {{ object.get_status_display }}
+    </p>
+  {% endif %}  
+
+  {% if object.status == "c" or object.status == "e" %}
+    {% if job.application.cluster.status == "r" %} 
+    <a href="{% url 'job-rerun' object.id %}" class="btn btn-primary">Run again</a>
+    {% endif %}
+  {% endif %}
+
+  {% if object.status == "n" %}
+    <a href="{% url 'job-update' object.id %}" class="btn btn-primary">Edit</a>
+    <a href="{% url 'job-delete' object.id %}" class="btn btn-primary">Delete</a>
+  {% endif %}
+
+  {% if object.status == "c" or object.status == "e" %}
+    <a href="{% url 'job-log' job.id %}" class="btn btn-primary">View Logs</a>
+  {% endif %}
+
+{% endblock %}

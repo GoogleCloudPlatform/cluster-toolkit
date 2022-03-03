@@ -1,0 +1,35 @@
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+{% endblock %}
+
+{% block content %}
+  <h2>Select a Cluster</h2>  
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+
+  <form action="" method="post">
+    {% csrf_token %}
+
+    <p>
+    There are multiple clusters configured for which this application
+    ({{ application.name }}) is valid.  Please select which cluster to use.
+
+    <div class="form-group">
+      <label for="id_cluster">Cluster:</label>
+      <select name="cluster" class="form-control" required id="id_cluster">
+        <option value="" selected>--------</option>
+    {% for cluster in cluster_list %}
+        <option value="{{ cluster.id }}" >{{ cluster.name }}</option>
+    {% endfor %}
+      </select>
+      <small class="form-text text-muted">Select Cluster</small>
+    </div>
+
+    <br/>  
+    <input type="submit" value="Next" class="btn btn-primary"/>
+  </form>
+
+{% endblock %}

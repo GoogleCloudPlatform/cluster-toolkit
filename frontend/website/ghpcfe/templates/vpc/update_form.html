@@ -1,0 +1,72 @@
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+<script>
+function selectRegion() {
+    {% autoescape off %}
+    var regionInfo = {{ region_info }};
+    {% endautoescape %}
+    region = document.getElementById("id_cloud_region");
+    zone = document.getElementById("id_cloud_zone");
+    zone.disabled = false;
+    $("#id_cloud_zone").find('option').remove().end();
+    regionInfo[region.value].forEach(z => zone.options.add(new Option(z, z)));
+}
+</script>
+{% endblock %}
+
+
+{% block content %}
+  <h2>Update VPC</h2>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+
+  <form action="" method="post">
+    {% csrf_token %}
+
+    <input type="hidden" name="cloud_credential" class="form-control" id="id_cloud_credential" value="{{ form.cloud_credential.value }}">
+    <div class="form-group">
+      {{ form.name.label_tag }}
+      {{ form.name.errors }}
+      {{ form.name }}
+        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.cloud_credential.label_tag }}
+      {{ form.cloud_credential.errors }}
+      {{ form.cloud_credential }}
+        <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.cloud_region.label_tag }}
+      {{ form.cloud_region.errors }}
+        <select name="cloud_region" class="form-control" id="id_cloud_region" onChange="selectRegion()" {% if object.cloud_state != 'nm' %}readonly{% endif %}>
+        <option value="">---------</option>
+        {% for region in valid_regions %}
+          <option value="{{ region }}" {% if object.cloud_region == region %}selected{% endif %}>{{ region }}</option>
+        {% endfor %}
+        </select>
+        <small class="form-text text-muted">{{ form.cloud_region.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.cloud_zone.label_tag }}
+      {{ form.cloud_zone.errors }}
+        <select name="cloud_zone" class="form-control" id="id_cloud_zone" {% if object.cloud_state != 'nm' %}readonly{% endif %}>
+          {% for key, value in region_dict.items %}
+             {% if key == object.cloud_region %}
+                {% for v in value %}
+                  <option value="{{ v }}" {% if object.cloud_zone == v %}selected{% endif %}>{{ v }}</option> 
+                {% endfor %}
+             {% endif %}
+          {% endfor %}
+        </select>
+        <small class="form-text text-muted">{{ form.cloud_zone.help_text }}</small>
+    </div>
+
+    <br/>
+    <input type="submit" value="Save" class="btn btn-primary"/>
+  </form>
+
+{% endblock %}

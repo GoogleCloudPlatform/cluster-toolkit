@@ -1,0 +1,233 @@
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
+<script>
+function setLimits() {
+    var limits = {
+        {% for partition in cluster.partitions.all %}
+        {{ partition.id }}: {
+            "name": "{{ partition.name }}",
+            "instance_type": "{{ partition.machine_type.name }}",
+            "vcpu": {{ partition.machine_type.num_vCPU }},
+            "nodes": {{ partition.max_node_count }},
+            },
+        {% endfor %}
+    };
+
+    limit = limits[document.getElementById("id_partition").value];
+    nNodes = document.getElementById("id_number_of_nodes");
+    nNodes.max = limit["nodes"];
+    ranksPer = document.getElementById("id_ranks_per_node");
+    ranksPer.max = limit["vcpu"];
+    ranksPer.value = limit["vcpu"];
+};
+
+
+function updateRunScriptSelection(val) {
+    if ( val == 'url') {
+        document.getElementById("url").checked = true;
+        document.getElementById("raw").checked = false;
+        document.getElementById("id_run_script").disabled = false;
+        document.getElementById("id_run_script_raw").disabled = true;
+        document.getElementById("run_script_url").style.display = 'block';
+        document.getElementById("run_script_raw").style.display = 'none';
+    } else {
+        document.getElementById("url").checked = false;
+        document.getElementById("raw").checked = true;
+        document.getElementById("id_run_script").disabled = true;
+        document.getElementById("id_run_script_raw").disabled = false;
+        document.getElementById("run_script_url").style.display = 'none';
+        document.getElementById("run_script_raw").style.display = 'block';
+    }
+}
+
+$(function() {
+    $('input:radio[name="script_type"]').change(function() {
+        updateRunScriptSelection($(this).val());
+    });
+});
+
+var priceCache = {};
+function updatePricing() {
+    partition_id = document.getElementById("id_partition").value;
+    nNodes = document.getElementById("id_number_of_nodes").value;
+    if (!priceCache[partition_id]) {
+        priceCache[partition_id] = $.ajax({
+            url: "{% url 'api-pricing-list' %}" + partition_id,
+            type: "GET",
+            dataType: "json",
+            headers: {'X-CSRFToken': $.cookie("csrftoken")}
+            });
+    }
+    priceCache[partition_id].done(function(data) {
+        hourly_price = data["price"] * nNodes;
+        fmt_price = new Intl.NumberFormat('en-US', {style: "currency", currency: data["currency"]}).format(hourly_price);
+        priceDiv = document.getElementById("id_pricing");
+        priceDiv.innerHTML = "<p>Estimated cost:  "+fmt_price+" per hour.</p>";
+        document.getElementById("id_cost").value = fmt_price;
+    });
+    priceCache[partition_id].fail(function(data) {
+        priceDiv = document.getElementById("id_pricing");
+        priceDiv.innerHTML = "<p>Unable to retrieve pricing information for estimated price.</p>";
+    });
+}
+
+
+function instance_count_change() {
+    updatePricing();
+}
+
+function change_partition() {
+    setLimits();
+    updatePricing();
+}
+
+function initPage() {
+    document.getElementById("id_number_of_nodes").oninput = instance_count_change;
+    document.getElementById("id_partition").onselect = change_partition;
+    updateRunScriptSelection("{{ run_script_type }}");
+    updatePricing();
+}
+
+window.onload=initPage;
+</script>
+{% endblock %}
+
+{% block content %}
+
+  <h2>Rerun: {{ application.name }} - {{ application.version }} on {{ cluster.name }}</h2>
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+
+  <form action="" method="post">
+    {% csrf_token %}
+
+    <input type="hidden" name="application" class="form-control" id="id_application" value="{{ application.id }}">
+    <input type="hidden" name="cost" class="form-control" id="id_cost">
+
+    <div class="form-group">
+      {{ form.name.errors }}
+      {{ form.name.label_tag }}
+      {{ form.name }}
+      {% if form.name.help_text %}
+        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.cluster.errors }}
+      {{ form.cluster.label_tag }}
+      {{ form.cluster }}
+      {% if form.cluster.help_text %}
+        <small class="form-text text-muted">{{ form.cluster.help_text }}</small>
+      {% endif %}
+      <input type="hidden" name="cluster" class="form-control" id="id_cluster" value="{{ cluster.id }}">
+    </div>
+    <div class="form-group">
+      {{ form.partition.errors }}
+      {{ form.partition.label_tag }}
+      <select name="partition" class="form-control" required id="id_partition">
+      {% for partition in cluster.partitions.all %}
+        <option value="{{partition.id}}">{{partition.name}} - {{partition.max_node_count}} of {{ partition.machine_type.name}}</option>
+      {% endfor %}
+      </select>
+      {% if form.partition.help_text %}
+        <small class="form-text text-muted">{{ form.partiion.help_text }}</small>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.number_of_nodes.errors }}
+      {{ form.number_of_nodes.label_tag }}
+      {{ form.number_of_nodes }}
+      {% if form.number_of_nodes.help_text %}
+        <small class="form-text text-muted">{{ form.number_of_nodes.help_text }}</small>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.ranks_per_node.errors }}
+      {{ form.ranks_per_node.label_tag }}
+      {{ form.ranks_per_node }}
+      {% if form.ranks_per_node.help_text %}
+        <small class="form-text text-muted">{{ form.ranks_per_node.help_text }}</small>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.threads_per_rank.errors }}
+      {{ form.threads_per_rank.label_tag }}
+      {{ form.threads_per_rank }}
+      {% if form.threads_per_rank.help_text %}
+        <small class="form-text text-muted">{{ form.threads_per_rank.help_text }}</small>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.wall_clock_time_limit.errors }}
+      {{ form.wall_clock_time_limit.label_tag }}
+      {{ form.wall_clock_time_limit }}
+      {% if form.wall_clock_time_limit.help_text %}
+        <small class="form-text text-muted">{{ form.wall_clock_time_limit.help_text }}</small>
+      {% endif %}
+    </div>
+
+    <hr>
+    <h3>Application Details</h3>
+    <div class="form-group">
+      {{ form.run_script.errors }}
+      {{ form.run_script.label_tag }}
+      <div>
+      <input type="radio" name="script_type" id="url" value="url" checked="checked" /><label for="url">URL to script</label>
+      <input type="radio" name="script_type" id="raw" value="raw"><label for="raw" />Inline Script</label>
+      </div>
+
+      <div id="run_script_url">
+      <input type="url" name="run_script" class="form-control" maxlength="200" required id="id_run_script" {% if run_script_type == 'url' and form.run_script.value %}value="{{form.run_script.value}}"{%endif%}>
+      <small class="form-text text-muted">The URL to the job script (a shell script or a tarball containing run.sh)</small>
+      </div>
+      <div id="run_script_raw">
+      <textarea name="run_script" cols="40" rows="10" class="form-control" maxlength="8190" id="id_run_script_raw">{%if run_script_type == 'raw' and form.run_script.value %}{{form.run_script.value}}{%else%}#!/bin/bash
+
+{%endif%}</textarea>
+      <small class="form-text text-muted">Inline shell script, beginning with #!</small>
+      </div>
+    </div>
+    <div class="form-group">
+      {{ form.input_data.errors }}
+      {{ form.input_data.label_tag }}
+      {{ form.input_data }}
+      {% if form.input_data.help_text %}
+        <small class="form-text text-muted">{{ form.input_data.help_text }}</small>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.result_data.errors }}
+      {{ form.result_data.label_tag }}
+      {{ form.result_data }}
+      {% if form.result_data.help_text %}
+        <small class="form-text text-muted">{{ form.result_data.help_text }}</small>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.cleanup_choice.errors }}
+      {{ form.cleanup_choice.label_tag }}
+      {{ form.cleanup_choice }}
+      {% if form.cleanup_choice.help_text %}
+        <small class="form-text text-muted">{{ form.cleanup_choice.help_text }}</small>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.benchmark.errors }}
+      {{ form.benchmark.label_tag }}
+      {{ form.benchmark }}
+      {% if form.benchmark.help_text %}
+        <small class="form-text text-muted">{{ form.benchmark.help_text }}</small>
+      {% endif %}
+    </div>
+
+    <hr>
+    <div id="id_pricing">
+    </div>
+    <input type="submit" value="Launch" class="btn btn-primary"/>
+  </form>
+
+{% endblock %}

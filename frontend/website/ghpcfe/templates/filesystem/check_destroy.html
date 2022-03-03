@@ -1,0 +1,40 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Destroy cluster</h2>
+
+  <form method="get" action="{% url 'backend-filesystem-destroy' filesystem.id %}">
+
+    <br/>
+
+    <div class="alert alert-danger">You are going to destroy Filesystem <strong>{{ filesystem.name }}</strong>.
+      Please note that this action cannot be undone.
+    </div>
+    
+    <hr>
+    <p style="text-decoration: underline; font-size: large;">Active uses</p>
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <tr>
+        <th>Cluster Name</th>
+        <th>Mount Path</th>
+        <th>Status</th>
+      </tr>
+    {% for mount in mounts %}
+      <tr>
+        <td>{{ mount.cluster.name }} </td>
+        <td>{{ mount.mount_path }}</td>
+        <td>{{ mount.cluster.get_status_display }} </td>
+      </tr>
+    {% endfor %}
+    </table>
+    </div>
+
+
+    <hr>
+    <p>Are you sure you want to continue?</p>
+    <input type="submit" value="Confirm" class="btn btn-danger">
+    <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>    
+  </form>
+
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Delete job record</h2>
+
+  <form method="post">
+    {% csrf_token %}
+    <br/>
+    <p>Are you sure you want to delete job record <b>"{{ object.name }}"</b>?</p>
+    <div class="form-group form-check">
+    <input type="checkbox" class="form-check-input" id="deleteFiles">
+    <label class="form-check-label" for="deleteFiles">Also delete job files on the cluster.</label>
+    </div>
+    <input type="submit" value="Confirm" class="btn btn-danger">
+    <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>    
+  </form>
+
+{% endblock %}

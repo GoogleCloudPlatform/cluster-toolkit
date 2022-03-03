@@ -1,0 +1,12 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Cluster Cost Detail</h2>
+
+  <p><b>Cluster ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Cloud Name:</b> {{ object.internal_name }}</p>
+
+  <a href="{% url 'cluster-detail' object.id %}" class="btn btn-primary">Cluster Detail</a>
+
+{% endblock %}

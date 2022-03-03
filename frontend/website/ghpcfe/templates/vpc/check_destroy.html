@@ -1,0 +1,19 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Destroy cluster</h2>
+
+  <form method="get" action="{% url 'backend-destroy-vpc' virtualnetwork.id %}">
+
+    <br/>
+
+    <div class="alert alert-danger">You are going to destroy VPC <strong>{{ virtualnetwork.name }}</strong>.
+    </div>
+
+    <hr>
+    <p>Are you sure you want to continue?</p>
+    <input type="submit" value="Confirm" class="btn btn-danger">
+    <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>    
+  </form>
+
+{% endblock %}

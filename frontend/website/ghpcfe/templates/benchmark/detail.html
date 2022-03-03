@@ -1,0 +1,50 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Benchmark Detail</h2>
+  <p><b>Benchmark ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Description:</b> {{ object.description }}</p>
+
+  <div class="table-responsive">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th scope="col">Submitted at</th>
+        <th scope="col">Cluster</th>
+        <th scope="col">Instance Type</th>
+        <th scope="col"># nodes</th>
+        <th scope="col">Ranks / node</th>
+        <th scope="col">Threads / rank</th>
+        <th scope="col">KPI</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for job in jobs %}
+      <tr>
+        <td>{{ job.date_time_submission }}</td>
+        <td><img src="/static/img/GCP_logo.png" style="width:32px;height:32px;"> {{ job.application.cluster.name }}</td>
+        <td>{{ job.instance_type }}</td>
+        <td>{{ job.number_of_nodes }}</td>
+        <td>{{ job.ranks_per_node }}</td>
+        <td>{{ job.threads_per_rank }}</td>
+        <td>{{ job.result_value }}</td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-detail' job.id %}">Job Detail</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-rerun' job.id %}">Run again</a>
+	    </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+{% endblock %}

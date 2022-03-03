@@ -1,0 +1,40 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Update VPC Subnets</h2>
+
+  <p><b>VPC ID:</b> {{ vpc.id }} </p>
+  <p><b>Name:</b> {{ vpc.name }} </p>
+  <p><b>Zone:</b> {{ vpc.cloud_zone }} </p>
+  <p><b>Status:</b> {{ vpc.get_cloud_state_display }} </p>
+
+  <hr>
+  <p style="text-decoration: underline; font-size: large;">Subnets</p>
+  <form id="form-container" method="POST">
+    {% csrf_token %}
+    {{ virtual_subnets_formset.management_form }}
+
+    {% for form in virtual_subnets_formset %}
+        {% if form.errors %}
+	   <div class="alert alert-danger">
+             {{ form.errors.as_text }}
+	   </div>  
+	   {% endif %}
+       <div >
+
+         {{ form.cloudresource_ptr }}
+         <div class="input-group" style="align-items: center; line-height: 2.4;">
+         {% for field in form.visible_fields  %}   
+         {{ field.label_tag }}&nbsp;&nbsp;{{ field }}
+         <span class="input-group-addon">&nbsp;&nbsp;&nbsp;</span>
+         {% endfor %}
+        </div>
+
+       </div>
+       {% endfor %}
+       <br/>
+       <button type="submit" class="btn btn-primary">Save</button>
+       <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>
+  </form>
+
+{% endblock %}

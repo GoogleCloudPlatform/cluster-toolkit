@@ -1,0 +1,32 @@
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+{% endblock %}
+
+{% block content %}
+  <h2>Select a Filesystem Implementation</h2>  
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+
+  <form action="" method="post">
+    {% csrf_token %}
+
+    <input type="hidden" name="credential" class="form-control" id="id_credential" value="{{ form.cloud_credential.value }}">
+    <div class="form-group">
+      <label for="id_fs_impl">Implementation Type:</label>
+      <select name="fs_impl" class="form-control" required id="id_fs_impl">
+        <option value="" selected>--------</option>
+    {% for impl in impl_list %}
+        <option value="{{ impl.0 }}" >{{ impl.1 }}</option>
+    {% endfor %}
+      </select>
+      <small class="form-text text-muted">Select Implementation</small>
+    </div>
+
+    <br/>  
+    <input type="submit" value="Next" class="btn btn-primary"/>
+  </form>
+
+{% endblock %}

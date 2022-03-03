@@ -1,0 +1,76 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Create a new application</h2>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+
+  <form action="" method="post">
+    {% csrf_token %}
+
+    <div class="form-group">
+      {{ form.cluster.errors }}
+      {{ form.cluster.label_tag }}
+      {{ form.cluster }}
+      {# We're explicit here, because 'select' can't be 'readonly', only    #}
+      {# 'disabled'                                                         #}
+      {# And 'disabled' HTML elements aren't sent with form data.  We we    #}
+      {#   augment with a hidden field                                      #}
+      <input type="hidden" name="cluster" class="form-control" id="id_cluster" value="{{ cluster.id }}">
+    </div>
+    <div class="form-group">
+      {{ form.name.errors }}
+      {{ form.name.label_tag }}
+      {{ form.name }}
+        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.version.errors }}
+      {{ form.version.label_tag }}
+      {{ form.version }}
+        <small class="form-text text-muted">{{ form.version.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.description.errors }}
+      {{ form.description.label_tag }}
+      {{ form.description }}
+        <small class="form-text text-muted">{{ form.description.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.load_command.errors }}
+      {{ form.load_command.label_tag }}
+      {{ form.load_command }}
+        <small class="form-text text-muted">{{ form.load_command.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.instance_type.errors }}
+      {{ form.instance_type.label_tag }}
+        <select name="instance_type" class="form-control" required id="id_instance_type" multiple>
+      {% for family in cluster.instance_types.all %}
+        <option value="{{ family.id }}" {% if family.id in form.instance_type.value %} selected {% endif %} >{{ family.name }}</option>
+      {% endfor %}
+        </select>
+        <small class="form-text text-muted">{{ form.instance_type.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.installed_architecture.errors }}
+      {{ form.installed_architecture.label_tag }}
+        <select name="installed_architecture" class="form-control" maxlength="32" id="id_installed_architecture">
+          <option value='' selected>Any Architecture</option>
+          {% for family, values in archs.items %}
+            <optgroup label="{{ family }}">
+              {% for a in values %}
+              <option value="{{ a }}">{{ a }}</option>
+              {% endfor %}
+            </optgroup>
+          {% endfor %}
+        </select>
+        <small class="form-text text-muted">{{ form.installed_architecture.help_text }}</small>
+    </div>
+
+    <input type="submit" value="Save" class="btn btn-primary"/>
+  </form>
+
+{% endblock %}

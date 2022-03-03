@@ -1,0 +1,21 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Destroy workbench</h2>
+
+  <form method="get" action="{% url 'backend-destroy-workbench' workbench.id %}">
+
+    <br/>
+
+    <div class="alert alert-danger">You are going to destroy workbench <strong>{{ workbench.name }}</strong>
+      on <strong>{{ workbench.cloud_provider }}</strong>. Please note that this action cannot 
+      be undone. This workbench will be terminated and cannot be restarted.
+    </div>
+    
+    <hr>
+    <p>Are you sure you want to continue?</p>
+    <input type="submit" value="Confirm" class="btn btn-danger">
+    <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>    
+  </form>
+
+{% endblock %}

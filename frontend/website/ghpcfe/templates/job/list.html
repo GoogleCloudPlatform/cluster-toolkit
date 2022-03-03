@@ -1,0 +1,81 @@
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if loading == 1 %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+  <h2>Job List</h2>
+  {% if job_list %}
+  <div class="table-responsive" style="min-height:20em;">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Submited at</th>
+        <th scope="col">Cluster</th>
+        <th scope="col">Application</th>
+        <th scope="col">Instance Type</th>
+        <th scope="col"># nodes</th>
+        <th scope="col">Ranks / node</th>
+        <th scope="col">Threads / rank</th>
+        <th scope="col">Status</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for job in job_list %}
+      <tr>
+        <th>{{ job.id }}</th>
+        <td><a href="{% url 'job-detail' job.id %}">{{ job.name }}</a></td>
+        <td>{{ job.date_time_submission }}</td>
+        <td><img src="/static/img/GCP_logo.png" style="width:32px;height:32px;"> {{ job.application.cluster.name }}</td>
+        <td><a href="{% url 'application-detail' job.application.id %}">{{ job.application.name }}</a></td>
+        <td>{{ job.partition.machine_type }}</td>
+        <td>{{ job.number_of_nodes }}</td>
+        <td>{{ job.ranks_per_node }}</td>
+        <td>{{ job.threads_per_rank }}</td>
+        <td>
+          {% if job.status == "p" or job.status == "q" or job.status == "d" or job.status == "r" or job.status == "u" %}
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          {% endif %}
+          {% if job.status == "e" %}
+          <img src="/static/img/status-error.png" style="width:32px;height:20px;">
+          {% endif %}
+          {% if job.status == "c" %}
+          <img src="/static/img/status-completed.png" style="width:22px;height:32px;">
+          {% endif %}
+          {% if job.status == "n" %}
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+          {% endif %}
+          {{ job.get_status_display }}
+        </td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-detail' job.id %}">Detail</a>
+              {% if job.application.cluster.status == "r" %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-rerun' job.id %}">Run again</a>
+              {% endif %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-delete' job.id %}">Delete</a>
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p>No Jobs has been set up yet. Create one from the Application Page!</p>
+  {% endif %}
+
+  <br/>
+{% endblock %}
