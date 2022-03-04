@@ -110,56 +110,12 @@ module "pubsub" {
 }
 
 
-resource "google_compute_network" "hosting-vpc" {
-
-    project = var.project_id
-    name = "${var.deployment_name}-network"
-    auto_create_subnetworks = false
-
-}
-
-
-resource "google_compute_subnetwork" "hosting-subnetwork" {
-
-    name = "${var.deployment_name}-subnetwork"
-    ip_cidr_range = "10.2.0.0/28"
+module "network" {
+    count = length(trimspace(var.subnet)) > 0 ? 0 : 1
+    source = "./network"
+    project_id = var.project_id
     region = var.region
-    network = google_compute_network.hosting-vpc.name
-
-}
-
-
-resource "google_compute_firewall" "allow-http-rule" {
-
-  project     = var.project_id
-  name        = "${var.deployment_name}-allow-http"
-  network     = google_compute_network.hosting-vpc.name
-
-  allow {
-    protocol  = "tcp"
-    ports     = ["80"]
-  }
-
-  source_tags = ["http-server"]
-  source_ranges = ["0.0.0.0/0"]
-
-}
-
-
-resource "google_compute_firewall" "allow-https-rule" {
-
-  project     = var.project_id
-  name        = "${var.deployment_name}-allow-https"
-  network     = google_compute_network.hosting-vpc.name
-
-  allow {
-    protocol  = "tcp"
-    ports     = ["443"]
-  }
-
-  source_tags = ["https-server"]
-  source_ranges = ["0.0.0.0/0"]
-
+    deployment_name = var.deployment_name
 }
 
 
@@ -169,7 +125,7 @@ resource "google_compute_instance" "server_vm" {
     machine_type = var.server_instance_type
     zone = var.zone
 
-    hostname = var.webserver_hostname != "" ? var.webserver_hostname : null
+    hostname = length(trimspace(var.webserver_hostname)) > 0 ? var.webserver_hostname : null
     
     metadata = {
         startup-script-url = "${module.control_bucket.bucket.url}/webserver/startup.sh",
@@ -197,7 +153,7 @@ resource "google_compute_instance" "server_vm" {
     }
 
     labels = local.labels
-    tags = ["http-server", "https-server"]
+    tags = ["http-server", "https-server", "ssh-server"]
 
     boot_disk {
         initialize_params {
@@ -208,9 +164,11 @@ resource "google_compute_instance" "server_vm" {
     }
 
     network_interface {
-        subnetwork = google_compute_subnetwork.hosting-subnetwork.name
+        subnetwork = length(trimspace(var.subnet)) > 0 ? var.subnet : module.network[0].subnet_name
         access_config {
+            nat_ip = length(trimspace(var.static_ip)) > 0 ? var.static_ip : null
         }
     }
 
 }
+

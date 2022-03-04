@@ -64,6 +64,11 @@ region=${zone%-*}
 read -p "Deployment name [lower-case letters, numbers, no spaces]: " deployment_name
 
 echo ""
+echo "Please enter an existing GCP Subnet in which to place the webserver"
+echo "or leave blank (hit enter) to have one created for you"
+read -p "  GCP Subnet Name: " subnet_name
+
+echo ""
 echo "Please select deployment method of server software:"
 echo "  1) Use a copy of the code from this computer"
 echo "  2) Clone the git repo when server deploys"
@@ -91,6 +96,19 @@ echo "If you specify a DNS hostname, the server will attempt to acquire a TLS"
 echo "Certificate from LetsEncrypt.  If no hostname is specified, the server"
 echo "will use standard, unencrypted HTTP.  This is NOT RECOMMENDED."
 read -p "  Please enter the DNS hostname of the new webserver, or just hit enter for none: " hostname
+
+echo ""
+echo "Do you have a static IP address to assign to the webserver?"
+echo "If so, we will assign this IP address, otherwise, we will automatically"
+echo "create an ephemeral public IP address."
+echo "You can create a static IP address with the command:"
+echo "  $ gcloud compute addresses create <NAME> --project${project_id} --region=${region}"
+echo "  $ gcloud compute addresses describe <NAME> --project${project_id} --region=${region} | grep 'address:'"
+echo ""
+echo "If you have set a hostname above, it is recommended that you use a static"
+echo "IP addresses, and set the DNS record for the hostname to point at this"
+echo "static address."
+read -p "  Enter static IP address, or just press [Enter] for none:  " ip_address
 
 # Collect Django admin user information
 echo ""
@@ -120,6 +138,7 @@ django_su_email    = "${django_superuser_email}"
 django_su_password = "${django_superuser_password}"
 
 deployment_mode = "${deployment}"
+subnet = "${subnet_name}"
 
 extra_labels = {
     creator = "${USER}"
@@ -129,6 +148,10 @@ extra_labels = {
 if [ -n "${hostname}" ]
 then
     echo "webserver_hostname = \"${hostname}\"" >> terraform.tfvars
+fi
+if [ -n "${ip_address}" ]
+then
+    echo "static_ip = \"${ip_address}\"" >> terraform.tfvars
 fi
 
 if [ "${deployment}" == "git" ]; then

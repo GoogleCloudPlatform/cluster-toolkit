@@ -10,6 +10,16 @@ variable "zone" {
     type = string
 }
 
+variable "subnet" {
+    type = string
+    default = ""
+}
+
+variable "static_ip" {
+    type = string
+    default = ""
+}
+
 variable "deployment_name" {
     description = "Base \"name\" for the deployment."
     type        = string
