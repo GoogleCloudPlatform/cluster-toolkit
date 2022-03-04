@@ -1,0 +1,119 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: spack-build
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: spack
+  region: us-central1
+  zone: us-central1-a
+
+resource_groups:
+- group: primary
+  resources:
+  - source: resources/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: appsfs
+    use: [network1]
+    settings:
+      local_mount: /apps
+
+  - source: resources/scripts/spack-install
+    kind: terraform
+    id: spack
+    settings:
+      install_dir: /apps/spack
+      spack_url: https://github.com/spack/spack
+      spack_ref: v0.17.1
+      log_file: /var/log/spack.log
+      compilers:
+      - gcc@10.3.0 target=x86_64
+      packages:
+      - cmake%gcc@10.3.0 target=x86_64
+      - intel-mkl%gcc@10.3.0 target=cascadelake
+      - git%gcc@10.3.0 target=x86_64
+      - intel-mpi@2018.4.274%gcc@10.3.0 target=cascadelake
+      # Uncomment and update the name and path to add a shared or personal Spack
+      # cache location to speed up future deployments.
+      # spack_cache_url:
+      #  - mirror_name: gcs_cache
+      #    mirror_url: gs://bucket-name/...
+
+  - source: resources/scripts/startup-script
+    kind: terraform
+    id: spack-startup
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - type: shell
+        content: $(appsfs.install_nfs_client)
+        destination: install-nfs.sh
+      - type: ansible-local
+        source: modules/startup-script/examples/mount.yaml
+        destination: "mount.yaml"
+      - type: ansible-local
+        source: modules/spack-install/scripts/install_spack_deps.yml
+        destination: install_spack_deps.yml
+      - type: shell
+        content: $(spack.startup_script)
+        destination: install_spack.sh
+      - type: shell
+        destination: shutdown.sh
+        content: shutdown -h
+
+  - source: resources/compute/simple-instance
+    kind: terraform
+    id: spack-build
+    use:
+    - network1
+    - appsfs
+    - spack-startup
+    settings:
+      name_prefix: spack-builder
+      machine_type: n2-standard-8
+
+  - source: resources/scripts/startup-script
+    kind: terraform
+    id: mount-startup
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - type: shell
+        content: $(appsfs.install_nfs_client)
+        destination: install-nfs.sh
+      - type: ansible-local
+        source: modules/startup-script/examples/mount.yaml
+        destination: "mount.yaml"
+
+  - source: resources/compute/simple-instance
+    kind: terraform
+    id: workstation
+    use:
+    - network1
+    - appsfs
+    - mount-startup
+    settings:
+      name_prefix: workstation
+      machine_type: n2-standard-8

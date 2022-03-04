@@ -17,8 +17,8 @@
 blueprint_name: hpc-cluster-high-io
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-io
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hpc-high-io
   region: us-central1
   zone: us-central1-c
 

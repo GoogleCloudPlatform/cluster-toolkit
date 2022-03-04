@@ -77,6 +77,9 @@ Alternatively, it can be added as a startup script via:
     id: startup
     settings:
       runners:
+      - type: ansible-local
+        source: modules/spack-install/scripts/install_spack_deps.yml
+        destination: install_spack_deps.yml
       - type: shell
         content: $(spack.startup_script)
         destination: "/apps/spack-install.sh"

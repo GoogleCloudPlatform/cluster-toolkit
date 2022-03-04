@@ -12,6 +12,23 @@ config.
 Please note that global variables defined under `vars` are automatically
 passed to resources if the resources have an input that matches the variable name.
 
+### (Optional) Setting up a remote terraform state
+
+The following commented block will setup a GCS bucket to store and manage the
+terraform state. Add your own bucket name and (optionally) a service account
+in the configuration. If not set, the terraform state will be stored locally
+within the generated blueprint.
+
+Add this block to the top-level of your input YAML:
+
+```yaml
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: a_bucket
+    impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
+```
+
 ## Config Descriptions
 
 ### hpc-cluster-small.yaml
@@ -84,9 +101,25 @@ Quota required for this example:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
+### spack-build.yaml
+
+Creates a [Spack](../resources/scripts/spack-install/README.md)
+build VM and a workstation for testing and validating a spack build. The build
+VM will install spack as configured in the spack-install resource in a shared
+location (/apps), then shutdown. Spack supports HPC software package
+installation and management. This build leverages the startup-script resource
+and can be applied in any cluster by using the output of spack-install or
+startup-script resources.
+
+Note: Installing spack compilers and libraries in this example can take 1-2
+hours to run on startup. To decrease this time in future deployments, consider
+including a spack build cache as described in the comments of the example.
+
 ### Experimental
 
-**omnia-cluster-simple.yaml**: Creates a simple omnia cluster, with an
+#### omnia-cluster-simple.yaml
+
+Creates a simple omnia cluster, with an
 omnia-manager node and 8 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
