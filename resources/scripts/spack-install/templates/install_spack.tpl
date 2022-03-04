@@ -12,49 +12,6 @@ fi
 # Only install and configure spack if ${INSTALL_DIR} doesn't exist
 if [ ! -d ${INSTALL_DIR} ]; then
 
-  has_python3_pip () {
-    HAS_PYTHON_PIP=""
-    if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-      HAS_PYTHON_PIP=$(yum list available | grep "^python3-pip")
-    elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
-      HAS_PYTHON_PIP=$(apt-cache search --names-only '^python3-pip$')
-    else
-      echo "$PREFIX Unsupported distribution"
-      exit 1
-    fi
-    [[ -n "$${HAS_PYTHON_PIP}" ]]
-  }
-
-  DEPS=""
-  if [ ! "$(which pip3)" ]; then
-    if has_python3_pip; then
-      DEPS="$DEPS python3-pip"
-    else
-      DEPS="$DEPS pip3"
-    fi
-  fi
-
-  if [ ! "$(which git)" ]; then
-    DEPS="$DEPS git"
-  fi
-
-  if [ -n "$DEPS" ]; then
-    echo "$PREFIX Installing dependencies"
-    if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-      yum -y install $DEPS
-    elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
-      echo "$PREFIX WARNING: unsupported installation in debian / ubuntu"
-      apt install -y $DEPS
-    else
-      echo "$PREFIX Unsupported distribution"
-      exit 1
-    fi
-  fi
-
-  # Install google-cloud-storage
-  echo "$PREFIX Installing Google Cloud Storage via pip3..."
-  pip3 install google-cloud-storage > ${LOG_FILE} 2>&1
-
   # Install spack
   echo "$PREFIX Installing spack from ${SPACK_URL}..."
   {

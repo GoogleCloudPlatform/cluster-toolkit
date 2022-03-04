@@ -22,16 +22,6 @@ vars:
   region: us-central1
   zone: us-central1-a
 
-# The following commented block will use a GCS bucket to store and manage the
-# terraform state. Add your own bucket name and (optionally) a service account
-# in the configuration. If not set, the terraform state will be stored locally
-# within the generated blueprint.
-# terraform_backend_defaults:
-#   type: gcs
-#   configuration:
-#     bucket: a_bucket
-#     impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
-
 resource_groups:
 - group: primary
   resources:
@@ -81,6 +71,9 @@ resource_groups:
       - type: ansible-local
         source: modules/startup-script/examples/mount.yaml
         destination: "mount.yaml"
+      - type: ansible-local
+        source: modules/spack-install/scripts/install_spack_deps.yml
+        destination: install_spack_deps.yml
       - type: shell
         content: $(spack.startup_script)
         destination: install_spack.sh
