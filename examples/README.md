@@ -14,10 +14,10 @@ passed to resources if the resources have an input that matches the variable nam
 
 ### (Optional) Setting up a remote terraform state
 
-The following commented block will setup a GCS bucket to store and manage the
-terraform state. Add your own bucket name and (optionally) a service account
-in the configuration. If not set, the terraform state will be stored locally
-within the generated blueprint.
+The following block will configure terraform to point to an existing GCS bucket
+to store and manage the terraform state. Add your own bucket name and
+(optionally) a service account in the configuration. If not set, the terraform
+state will be stored locally within the generated blueprint.
 
 Add this block to the top-level of your input YAML:
 
