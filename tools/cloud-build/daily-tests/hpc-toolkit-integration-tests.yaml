@@ -63,7 +63,7 @@ steps:
   - -c
   - |
     BUILD_ID_FULL=$BUILD_ID
-    DEPLOYMENT_NAME=hpc-slurm-io-$${BUILD_ID_FULL:0:6}
+    DEPLOYMENT_NAME=hpc-high-io-$${BUILD_ID_FULL:0:6}
     LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
     CONTROLLER_ID=slurm-$${DEPLOYMENT_NAME}-controller
     cat <<EOT > test-vars.yml
