@@ -116,13 +116,12 @@
 <script language="javascript">
 function filterTable() {
     var toggle = document.getElementById("id_show_destroyed").checked;
-    console.log(toggle);
     $.cookie("cluster_list_show_destroyed", toggle, {path: "{% url 'clusters' %};SameSite=Strict", expires: 10});
     var table = document.getElementById("id_cluster_table");
     var tr = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
 
     for ( i = 0 ; i < tr.length; i++ ) {
-        var td = tr[i].getElementsByTagName("td")[5];
+        var td = tr[i].getElementsByTagName("td")[4];
         var tdText = td.textContent || td.innerText;
         if ( toggle || tdText.indexOf("has been deleted") == -1 ) {
             tr[i].style.display = "";
