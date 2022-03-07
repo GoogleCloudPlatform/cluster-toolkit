@@ -52,7 +52,7 @@ cd hpc-toolkit && make
 You should now have a binary named `ghpc` in the project root directory.
 Optionally, you can run `./ghpc --version` to verify the build.
 
-## Basic Usage
+## Creating HPC Blueprints
 
 To create a blueprint, an input YAML file needs to be written or adapted from
 one of the [examples](examples/).
@@ -99,19 +99,89 @@ the `-o` flag as shown in the following example.
 ./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
 ```
 
-To deploy the blueprint, use terraform in the resource group directory:
+## Deploying HPC Blueprints
+
+Blueprints are a set of resource groups each composed of Packer templates and
+Terraform modules. The process for deploying Terraform modules is documented
+below.
 
 > **_NOTE:_** Before you run this for the first time you may need to enable some
 > APIs and possibly request additional quotas. See
 > [Enable GCP APIs](#enable-gcp-apis) and
 > [Small Example Quotas](examples/README.md#hpc-cluster-smallyaml).
 
+### Supplying cloud credentials to Terraform
+
+Terraform can discover credentials for authenticating to Google Clould Platform
+in several ways. We will summarize Terraform's documentation for using
+[gcloud][terraform-auth-gcloud] from your workstation and for automatically
+finding credentials in cloud environments. We do **not** recommend following
+Hashicorp's instructions for downloading
+[service account keys][terraform-auth-sa-key].
+
+[terraform-auth-gcloud]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/guides/getting_started#configuring-the-provider
+[terraform-auth-sa-key]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/guides/getting_started#adding-credentials
+
+### Cloud credentials on your workstation
+
+You can generate cloud credentials associated with your Google Cloud account
+using the following command:
+
 ```shell
-cd hpc-cluster-small/primary # From hpc-cluster-small.yaml example
+gcloud auth application-default login
+```
+
+You will be prompted to open your web browser and authenticate to Google Cloud
+and make your account accessible from the command-line. Once this command
+completes, Terraform will automatically use your "Application Default
+Credentials."
+
+If you receive failure messages containing "quota project" you should change the
+quota project associated with your Application Default Credentials with the
+following command and provide your current project ID as the argument:
+
+```shell
+gcloud auth application-default set-quota-project ${PROJECT-ID}
+```
+
+### Cloud credentials in virtualized cloud environments
+
+In virtualized settings, the cloud credentials of accounts can be attached
+directly to the execution environment. For example: a VM or a container can
+have [service accounts][https://cloud.google.com/iam/docs/service-accounts]
+attached to them. The Google [Cloud Shell][cloud-shell] is an interactive
+command line environment which inherits the credentials of the user logged in
+to the Google Cloud Console.
+
+[cloud-shell]: https://console.cloud.google.com/home/dashboard?cloudshell=true
+[cloud-shell-limitations]: https://cloud.google.com/shell/docs/quotas-limits#limitations_and_restrictions
+
+Many of the above examples are easily executed within a Cloud Shell environment.
+Be aware that Cloud Shell has [several limitations][cloud-shell-limitations],
+in particular an inactivity timeout that will close running shells after 20
+minutes. Please consider it only for small blueprints that are quickly
+deployed.
+
+### Running Terraform
+
+After successfully running `ghpc create`, a short message displaying how to
+proceed is displayed. For the `hpc-cluster-small` example, the message will
+appear similar to:
+
+```shell
+cd hpc-cluster-small/primary
 terraform init
 terraform apply
 ```
 
+If the `apply` is successful, a message similar to the following will be
+displayed:
+
+```shell
+Apply complete! Resources: 20 added, 0 changed, 0 destroyed.
+```
+
+### Testing your cluster
 Once the blueprint has successfully been deployed, take the following steps to run a job:
 
 * First navigate to `Compute Engine` > `VM instances` in the Google Cloud Console.
