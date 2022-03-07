@@ -283,7 +283,7 @@ class ClusterUpdateView(UpdateView):
             if not formset.is_valid():
                 for error in formset.errors:
                     form.add_error(None, error)
-                return self.form_invalid()
+                return self.form_invalid(form)
 
         with transaction.atomic():
             self.object = form.save()

@@ -31,9 +31,6 @@ window.onload=initPage;
 {% block content %}
   <h2>Update cluster</h2>  
 
-  {% if form.non_field_errors %}
-  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
-  {% endif %}
 {% if form.errors %}
 {% for field in form %}
 {% for error in field.errors %}
