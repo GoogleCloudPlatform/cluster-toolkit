@@ -157,7 +157,7 @@ class BackendCreateWorkbench(BackendAsyncView):
 
 
     def cmd(self, task_id, token, workbench, creds):
-        from cluster_manager.create_workbench import create_workbench
+        from ..cluster_manager.create_workbench import create_workbench
         create_workbench(workbench, token, credentials=creds)
 
     async def get(self, request, pk):
