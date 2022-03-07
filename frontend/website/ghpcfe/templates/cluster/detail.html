@@ -19,7 +19,7 @@
     <p><b>Zone:</b> {{ object.cloud_zone }}</p>
     <p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
     <p><b>Controller node IP:</b> {{ object.controller_node.public_ip }}</p>
-    <p><b>Login nodes:</b> {{ object.num_login_nodes }}{% if object.login_nodes.count %}: {% for login in object.login_nodes.all %}{{ login.public_ip }}, {% endfor %}{% endif %}</p>
+    <p><b>Login nodes:</b> {{ object.num_login_nodes }}{% if object.login_nodes.count %}: {% for login in object.login_nodes.all %}{{ login.public_ip }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p>
     <p>
       <b>Status:</b>
       {% if cluster.status == "c" or cluster.status == "i" or cluster.status  == "t"  %}
