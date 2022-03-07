@@ -124,8 +124,8 @@ Hashicorp's instructions for downloading
 
 ### Cloud credentials on your workstation
 
-You can generate cloud credentials attached to your Google Cloud account at the
-command using the following command:
+You can generate cloud credentials associated with your Google Cloud account
+using the following command:
 
 ```shell
 gcloud auth application-default login
