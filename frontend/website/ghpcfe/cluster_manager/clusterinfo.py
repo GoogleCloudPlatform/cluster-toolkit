@@ -276,6 +276,7 @@ resource_groups:
     kind: terraform
     id: slurm_login
     settings:
+      login_node_count: {self.cluster.num_login_nodes}
       subnetwork_name: {self.cluster.subnet.cloud_id}
       login_service_account: $(hpc_service_account.email)
       login_scopes:
