@@ -67,7 +67,6 @@ ClusterInfo object - represent a cluster
         self.cluster = cluster
         self.cluster_dir = self.config["baseDir"] / 'clusters' / f'cluster_{self.cluster.id}'
 
-
     def prepare(self, credentials):
         self._create_cluster_dir()
         self._set_credentials(credentials)
@@ -213,11 +212,11 @@ ClusterInfo object - represent a cluster
         startup_bucket = self.config["server"]["gcs_bucket"]
         with ymlFile.open('w') as f:
             f.write(f"""
-blueprint_name: {self.cluster.name}
+blueprint_name: {self.cluster.cloud_id}
 
 vars:
   project_id: {project_id}
-  deployment_name: {self.cluster.name}
+  deployment_name: {self.cluster.cloud_id}
   region: {self.cluster.cloud_region}
   zone: {self.cluster.cloud_zone}
 
@@ -566,6 +565,5 @@ resource_groups:
 
 
     def get_terraform_dir(self):
-        return self.cluster_dir / self.cluster.name / 'primary'
-
+        return self.cluster_dir / self.cluster.cloud_id / 'primary'
 

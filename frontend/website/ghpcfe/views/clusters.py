@@ -148,7 +148,9 @@ class ClusterCreateView2(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.owner = self.request.user
-        self.object.cloud_id = self.object.name
+        import secrets
+        unique_str = secrets.token_hex(4)
+        self.object.cloud_id = self.object.name + "-" + unique_str
         self.object.cloud_region = self.object.subnet.cloud_region
         shared_fs = Filesystem(**{
             "name": f"{self.object.name}-sharedfs",
@@ -572,7 +574,6 @@ class BackendSyncCluster(LoginRequiredMixin, generic.View):
         return HttpResponseRedirect(reverse('cluster-detail', kwargs={'pk':pk}))
 
 
-
 class BackendAuthUserGCP(BackendAsyncView):
 
     @sync_to_async
@@ -668,8 +669,6 @@ class BackendAuthUserGCP2(LoginRequiredMixin, generic.View):
             logger.error("Missing POST data", exc_info=ke)
             return HttpResponseNotFound()
         return JsonResponse({})
-
-
 
 
 class AuthUserGCP(LoginRequiredMixin, generic.View):
