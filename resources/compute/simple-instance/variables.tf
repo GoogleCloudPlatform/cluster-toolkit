@@ -107,6 +107,12 @@ variable "network_self_link" {
   default     = "default"
 }
 
+variable "subnetwork_self_link" {
+  description = "The self link of the subnetwork to attach the VM."
+  type        = string
+  default     = null
+}
+
 variable "zone" {
   description = "Compute Platform zone"
   type        = string

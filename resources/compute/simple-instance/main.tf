@@ -61,7 +61,8 @@ resource "google_compute_instance" "compute_vm" {
       content {}
     }
 
-    network = var.network_self_link
+    network    = var.network_self_link
+    subnetwork = var.subnetwork_self_link
   }
 
   dynamic "service_account" {
