@@ -120,7 +120,7 @@ read -p "  supply this user's email address: " django_superuser_email
 # Collect deployment files
 if [ "${deployment}" == "tarball" ] ;
 then
-    tar -cz -f tf/deployment.tar.gz --exclude=tf/ ../../hpc-toolkit 2>/dev/null
+    tar -cz -f tf/deployment.tar.gz --exclude=tf ../../hpc-toolkit #2>/dev/null
 fi
 
 cd tf
