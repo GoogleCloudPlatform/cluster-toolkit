@@ -17,7 +17,7 @@
 blueprint_name: omnia_cluster
 
 vars:
-  project_id: gcp-rescale-perf ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: omnia-cluster
   zone: us-central1-a
   region: us-central1

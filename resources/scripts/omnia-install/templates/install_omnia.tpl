@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,10 +18,10 @@
 - name: Creates SSH Keys to communicate between hosts
   hosts: localhost
   vars:
-    pub_key_path: /home/omnia/.ssh
+    username: ${username}
+    pub_key_path: /home/{{ username }}/.ssh
     pub_key_file: "{{pub_key_path}}/id_rsa"
     auth_key_file: "{{pub_key_path}}/authorized_keys"
-    username: ${username}
   tasks:
   - name: "Create {{pub_key_path}} folder"
     file:
