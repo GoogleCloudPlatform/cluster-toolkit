@@ -278,7 +278,8 @@ class ClusterUpdateView(UpdateView):
         context = self.get_context_data()
         mountpoints = context['mountpoints_formset']
         partitions = context['cluster_partitions_formset']
-        self.object.cloud_id = self.object.name
+        suffix = self.object.cloud_id.split('-')[-1]
+        self.object.cloud_id = self.object.name + '-' + suffix
 
         # Verify formset validity (suprised there's not another method to do this)
         for formset in [mountpoints, partitions]:
