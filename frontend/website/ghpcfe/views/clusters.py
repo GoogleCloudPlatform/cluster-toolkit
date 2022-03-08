@@ -181,7 +181,7 @@ class ClusterCreateView2(LoginRequiredMixin, CreateView):
             "max_node_count": 4,   # TODO:  Config parameter?
             })
         self.object.save()
-        messages.success(self.request, "A record for this cluster has been created. Click the 'Edit' button to customise it.")
+        messages.success(self.request, "A record for this cluster has been created. Click the 'Edit' button to customise it and click 'Create' button to provision the cluster.")
         return HttpResponseRedirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
