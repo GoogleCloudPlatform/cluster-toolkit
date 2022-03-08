@@ -1,20 +1,5 @@
 {% extends "base_generic.html" %}
 
-{% block extrameta %}
-<script>
-function selectRegion() {
-    {% autoescape off %}
-    var regionInfo = {{ region_info }};
-    {% endautoescape %}
-    region = document.getElementById("id_cloud_region");
-    zone = document.getElementById("id_cloud_zone");
-    zone.disabled = false;
-    $("#id_cloud_zone").find('option').remove().end();
-    regionInfo[region.value].forEach(z => zone.options.add(new Option(z, z)));
-}
-</script>
-{% endblock %}
-
 
 {% block content %}
   <h2>Create a new VPC</h2>  
@@ -43,20 +28,8 @@ function selectRegion() {
     <div class="form-group">
       {{ form.cloud_region.label_tag }}
       {{ form.cloud_region.errors }}
-        <select name="cloud_region" class="form-control" id="id_cloud_region" onChange="selectRegion()">
-        <option value="">---------</option>
-        {% for region in valid_regions %}
-          <option value="{{region}}">{{region}}</option>
-        {% endfor %}
-        </select>
+      {{ form.cloud_region }}
         <small class="form-text text-muted">{{ form.cloud_region.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.cloud_zone.label_tag }}
-      {{ form.cloud_zone.errors }}
-        <select name="cloud_zone" class="form-control" id="id_cloud_zone" disabled >
-        </select>
-        <small class="form-text text-muted">{{ form.cloud_zone.help_text }}</small>
     </div>
 
     <br/>

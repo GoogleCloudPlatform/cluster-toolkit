@@ -130,10 +130,10 @@ class VPCCreateView2(LoginRequiredMixin, CreateView):
     template_name = 'vpc/create_form.html'
     form_class = VPCForm
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs['cloud_credential'] = self.cloud_credential
-        return kwargs
+    def get_initial(self):
+        return {'cloud_credential': self.cloud_credential,
+                'regions': cloud_info.get_region_zone_info("GCP", self.cloud_credential.detail).keys()
+                }
 
     def get(self, request, *args, **kwargs):
         self.cloud_credential = get_object_or_404(Credential, pk=kwargs['credential'])
@@ -152,10 +152,6 @@ class VPCCreateView2(LoginRequiredMixin, CreateView):
     def get_context_data(self, **kwargs):
         """ Perform extra query to populate instance types data """
         context = super().get_context_data(**kwargs)
-        region_info = cloud_info.get_region_zone_info("GCP", self.cloud_credential.detail)
-        context['valid_regions'] = region_info.keys()
-        import json
-        context['region_info'] = json.dumps(region_info)
         context['navtab'] = 'vpc'
         return context
 
@@ -232,12 +228,6 @@ class VPCUpdateView(UpdateView):
     def get_context_data(self, **kwargs):
         """ Perform extra query to populate instance types data """
         context = super().get_context_data(**kwargs)
-        creds = self.object.cloud_credential
-        region_info = cloud_info.get_region_zone_info("GCP", creds.detail)
-        context['valid_regions'] = region_info.keys()
-        import json
-        context['region_info'] = json.dumps(region_info)
-        context['region_dict'] = dict(region_info)
         context['navtab'] = 'vpc'
         return context
 
@@ -296,20 +286,19 @@ class VirtualSubnetView(generic.TemplateView):
 
     template_name = 'vpc/virtual_subnet.html'
 
-    def getFormSet(self):
-        #def formfield_cb(f, **kwargs):
-        #    field = f.formfield(**kwargs)
-        #    if f.name == 'instance_type':
-        #        field.queryset = MachineType.objects.order_by('name')
-        #    return field
-        # FormSet to bulk add/edit these instance types for each cluster
+    def getFormSet(self, region_info):
+        def formfield_cb(f, **kwargs):
+            if f.name == 'cloud_region':
+                kwargs['widget'].choices = [(x, x) for x in region_info]
+            field = f.formfield(**kwargs)
+            return field
         return inlineformset_factory(
                     VirtualNetwork,
                     VirtualSubnet,
                     form=VirtualSubnetForm,
                     fk_name='vpc',
-                    #formfield_callback=formfield_cb,
-                    fields=('name', 'cidr'),
+                    formfield_callback=formfield_cb,
+                    fields=('name', 'cidr', 'cloud_region'),
                     can_delete=True,
                     extra=1
                     )
@@ -317,7 +306,8 @@ class VirtualSubnetView(generic.TemplateView):
     def get(self, *args, **kwargs):
         vpc = VirtualNetwork.objects.get(pk=kwargs['vpc_id'])
         qset = VirtualSubnet.objects.filter(vpc=vpc)
-        formset = self.getFormSet()(queryset=qset, instance=vpc)
+        region_list = list(cloud_info.get_region_zone_info("GCP", vpc.cloud_credential.detail).keys())
+        formset = self.getFormSet(region_list)(queryset=qset, instance=vpc, initial=[{'cloud_region': vpc.cloud_region}])
         return self.render_to_response({
             'virtual_subnets_formset': formset,
             'vpc': vpc,
@@ -326,13 +316,12 @@ class VirtualSubnetView(generic.TemplateView):
     def post(self, *args, **kwargs):
         from ..cluster_manager.vpc import create_subnet, delete_subnet
         vpc = VirtualNetwork.objects.get(pk=kwargs['vpc_id'])
-        formset = self.getFormSet()(data=self.request.POST, instance=vpc)
+        region_list = cloud_info.get_region_zone_info("GCP", vpc.cloud_credential.detail).keys()
+        formset = self.getFormSet(region_list)(data=self.request.POST, instance=vpc)
         if formset.is_valid():
             formset.save(commit=False)
             for obj in formset.new_objects:
                 obj.cloud_credential = vpc.cloud_credential
-                obj.cloud_region = vpc.cloud_region
-                obj.cloud_zone = vpc.cloud_zone
                 obj.save()
                 create_subnet(obj)
             for obj,field in formset.changed_objects:

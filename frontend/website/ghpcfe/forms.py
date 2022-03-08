@@ -22,6 +22,9 @@ from .cluster_manager import validate_credential, cloud_info
 from .models import *
 import json
 
+import logging
+logger = logging.getLogger(__name__)
+
 class UserCreationForm(UserCreationForm):
     """ Custom UserCreationForm """
 
@@ -368,27 +371,19 @@ class BenchmarkForm(forms.ModelForm):
 
 class VPCForm(forms.ModelForm):
     """ Custom form for VPC model implementing option filtering """
-
-    def clean(self):
-        super().clean()
-        # TODO - validate 'region' and 'zone'
-
     def __init__(self, *args, **kwargs):
-        if 'cloud_credential' in kwargs:
-            cloud_credential = kwargs.pop('cloud_credential')
-            kwargs['initial']['cloud_credential'] = cloud_credential
         super().__init__(*args, **kwargs)
+        self.fields['cloud_region'].widget.choices = [(x, x) for x in kwargs['initial']['regions']]
 
     class Meta:
         model = VirtualNetwork
 
-        fields = ('name', 'cloud_credential', 'cloud_region', 'cloud_zone')
+        fields = ('name', 'cloud_credential', 'cloud_region')
 
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'cloud_credential': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
             'cloud_region': forms.Select(attrs={'class': 'form-control'}),
-            'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
+            'cloud_credential': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
         }
 
 
@@ -422,11 +417,12 @@ class VirtualSubnetForm(forms.ModelForm):
     class Meta:
         model = VirtualSubnet
 
-        fields = ('name', 'cidr')
-        #widgets = {
-        #    #'instance_type': forms.Select(attrs={'class': 'form-control'}),
-        #    'max_vCPU': forms.NumberInput(attrs={'min': '1'}),
-        #}
+        fields = ('name', 'cidr', 'cloud_region')
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'cidr': forms.TextInput(attrs={'class': 'form-control'}),
+            'cloud_region': forms.Select(attrs={'class': 'form-control'}),
+        }
 
 
 class FilestoreForm(forms.ModelForm):

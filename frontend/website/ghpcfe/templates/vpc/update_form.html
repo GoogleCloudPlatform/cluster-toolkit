@@ -1,18 +1,6 @@
 {% extends "base_generic.html" %}
 
 {% block extrameta %}
-<script>
-function selectRegion() {
-    {% autoescape off %}
-    var regionInfo = {{ region_info }};
-    {% endautoescape %}
-    region = document.getElementById("id_cloud_region");
-    zone = document.getElementById("id_cloud_zone");
-    zone.disabled = false;
-    $("#id_cloud_zone").find('option').remove().end();
-    regionInfo[region.value].forEach(z => zone.options.add(new Option(z, z)));
-}
-</script>
 {% endblock %}
 
 
@@ -38,31 +26,6 @@ function selectRegion() {
       {{ form.cloud_credential.errors }}
       {{ form.cloud_credential }}
         <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.cloud_region.label_tag }}
-      {{ form.cloud_region.errors }}
-        <select name="cloud_region" class="form-control" id="id_cloud_region" onChange="selectRegion()" {% if object.cloud_state != 'nm' %}readonly{% endif %}>
-        <option value="">---------</option>
-        {% for region in valid_regions %}
-          <option value="{{ region }}" {% if object.cloud_region == region %}selected{% endif %}>{{ region }}</option>
-        {% endfor %}
-        </select>
-        <small class="form-text text-muted">{{ form.cloud_region.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.cloud_zone.label_tag }}
-      {{ form.cloud_zone.errors }}
-        <select name="cloud_zone" class="form-control" id="id_cloud_zone" {% if object.cloud_state != 'nm' %}readonly{% endif %}>
-          {% for key, value in region_dict.items %}
-             {% if key == object.cloud_region %}
-                {% for v in value %}
-                  <option value="{{ v }}" {% if object.cloud_zone == v %}selected{% endif %}>{{ v }}</option> 
-                {% endfor %}
-             {% endif %}
-          {% endfor %}
-        </select>
-        <small class="form-text text-muted">{{ form.cloud_zone.help_text }}</small>
     </div>
 
     <br/>
