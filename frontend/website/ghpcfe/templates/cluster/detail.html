@@ -23,7 +23,10 @@
     <p>
       <b>Status:</b>
       {% if cluster.status == "c" or cluster.status == "i" or cluster.status  == "t"  %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+         <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+      {% endif %}
+      {% if object.status == "r" %}
+         <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
       {% endif %}
       {{ object.get_status_display }}
     </p>
