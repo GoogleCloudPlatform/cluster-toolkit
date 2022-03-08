@@ -22,6 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import render, redirect, get_object_or_404
+from django.db.models import Q
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponseRedirect, JsonResponse, \
@@ -79,7 +80,7 @@ class GCPFilestoreFilesystemUpdateView(UpdateView):
 
     def get_context_data(self, **kwargs):
         """ Perform extra query to populate instance types data """
-        subnet_regions = {sn.id: sn.cloud_region for sn in VirtualSubnet.objects.filter(cloud_credential=self.get_object().cloud_credential).all()}
+        subnet_regions = {sn.id: sn.cloud_region for sn in VirtualSubnet.objects.filter(cloud_credential=self.get_object().cloud_credential).filter(Q(cloud_state="i") | Q(cloud_state="m")).all()}
 
         context = super().get_context_data(**kwargs)
 
@@ -99,7 +100,7 @@ class GCPFilestoreFilesystemCreateView(LoginRequiredMixin, generic.CreateView):
         context = super().get_context_data(**kwargs)
 
         self.region_info = cloud_info.get_region_zone_info("GCP", self.cloud_credential.detail)
-        subnet_regions = {sn.id: sn.cloud_region for sn in VirtualSubnet.objects.filter(cloud_credential=self.cloud_credential).all()}
+        subnet_regions = {sn.id: sn.cloud_region for sn in VirtualSubnet.objects.filter(cloud_credential=self.cloud_credential).filter(Q(cloud_state="i") | Q(cloud_state="m")).all()}
 
         context['subnet_regions'] = json.dumps(subnet_regions)
         context['region_info'] = json.dumps(self.region_info)

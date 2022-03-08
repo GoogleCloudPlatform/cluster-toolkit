@@ -15,7 +15,16 @@
 from django.db.models.signals import *
 from django.dispatch import receiver
 from .models import Cluster, Filesystem, FilesystemExport, MountPoint
+from .models import VirtualNetwork, VirtualSubnet
 
+
+@receiver(pre_save, sender=VirtualNetwork)
+def sync_VN_subnet_state(sender, **kwargs):
+    vpc = kwargs['instance']
+    for sn in vpc.subnets.all():
+        sn.cloud_state = vpc.cloud_state
+        sn.save()
+    
 
 
 @receiver(post_delete, sender=Cluster)

@@ -16,6 +16,7 @@
 
 from django import forms
 from django.forms import ValidationError, modelformset_factory, inlineformset_factory
+from django.db.models import Q
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.utils.safestring import mark_safe
 from .cluster_manager import validate_credential, cloud_info
@@ -100,7 +101,7 @@ class ClusterForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         credential = self._get_creds(kwargs)
 
-        self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential)
+        self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential).filter(Q(cloud_state="i")|Q(cloud_state="m"))
         if zone_choices:
             # We set this on the widget, because we will be changing the
             # widget's field in the template via javascript
@@ -183,7 +184,7 @@ class WorkbenchForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if not has_creds:
             credential = self.instance.cloud_credential
-        self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential)
+        self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential).filter(Q(cloud_state="i")|Q(cloud_state="m"))
         self.workbench_zones = cloud_info.get_gcp_workbench_region_zone_info(credential.detail)
         if 'n' not in self.instance.cloud_state:
             #Need to disable certain widgets
@@ -457,7 +458,7 @@ class FilestoreForm(forms.ModelForm):
 
         creds = self._get_creds(kwargs)
 
-        self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=creds)
+        self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=creds).filter(Q(cloud_state="i")|Q(cloud_state="m"))
         if zone_choices:
             # We set this on the widget, because we will be changing the
             # widget's field in the template via javascript
