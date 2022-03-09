@@ -41,3 +41,7 @@
 - name: Test partitions with hostname
   command: srun -N 2 --partition {{ item }} hostname
   loop: "{{ partitions }}"
+
+- name: Stall for 45 minutes to conflict with other test
+  command: srun -N 2 --partition {{ item }} sleep 2700
+  loop: "{{ partitions }}"
