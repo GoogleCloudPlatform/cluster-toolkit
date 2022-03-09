@@ -32,8 +32,7 @@ steps:
   - -c
   - |
     BUILD_ID_FULL=$BUILD_ID
-    BRANCH_NAME=$BRANCH_NAME
-    DEPLOYMENT_NAME=lustre-new-vpc-$${BRANCH_NAME:0:10}-$${BUILD_ID_FULL:0:6}
+    DEPLOYMENT_NAME=lustre-new-vpc-$${BUILD_ID_FULL:0:6}
     LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
     CONTROLLER_ID=slurm-$${DEPLOYMENT_NAME}-controller
     cat <<EOT > test-vars.yml
@@ -64,8 +63,7 @@ steps:
   - -c
   - |
     BUILD_ID_FULL=$BUILD_ID
-    BRANCH_NAME=$BRANCH_NAME
-    DEPLOYMENT_NAME=hpc-high-io-$${BRANCH_NAME:0:10}-$${BUILD_ID_FULL:0:6}
+    DEPLOYMENT_NAME=hpc-high-io-$${BUILD_ID_FULL:0:6}
     LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
     CONTROLLER_ID=slurm-$${DEPLOYMENT_NAME}-controller
     cat <<EOT > test-vars.yml
