@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: omnia_cluster
+blueprint_name: omnia-cluster
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
@@ -55,6 +55,9 @@ resource_groups:
       manager_ips: [localhost]
       compute_ips: $(compute.internal_ip)
 
+  # The runners for this startup-script are provided in the homefs and omnia
+  # resources via the use field. Each has an output named "runners" and ghpc
+  # concatenates them in the order provided for this startup-script resource.
   - source: resources/scripts/startup-script
     kind: terraform
     id: startup-manager

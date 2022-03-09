@@ -13,7 +13,6 @@
 # limitations under the License.
 
 ---
-## TODO Make this into a templatefile - add variables via terraform. Same with add_omnia_user
 
 - name: Creates SSH Keys to communicate between hosts
   hosts: localhost
