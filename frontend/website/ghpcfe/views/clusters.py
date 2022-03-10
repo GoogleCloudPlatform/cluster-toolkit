@@ -385,7 +385,6 @@ class ClusterLogFileView(StreamingFileView):
         return self._create_FileInfoObject(entry, *extraArgs)
 
 
-
 class ClusterLogView(generic.DetailView):
     """ View to diplay cluster log files """
 
@@ -459,6 +458,9 @@ class InstancePricingViewSet(viewsets.ViewSet):
                                                 instance_type.name)
         return JsonResponse({"instance": instance_type.name, "price": price, "currency": "USD"}) #TODO: Currency
 
+    def list(self, request):
+        return JsonResponse({})
+
 
 # Other supporting views
 
@@ -470,7 +472,6 @@ class BackendCreateCluster(BackendAsyncView):
         cluster = Cluster.objects.get(pk=cluster_id)
         creds = cluster.cloud_credential.detail
         return (cluster, creds)
-
 
     def cmd(self, task_id, token, cluster, creds):
         ci = ClusterInfo(cluster)
@@ -495,11 +496,9 @@ class BackendUpdateClusterTerraform(BackendAsyncView):
         cluster = Cluster.objects.get(pk=cluster_id)
         return (cluster,)
 
-
     def cmd(self, task_id, token, cluster):
         ci = ClusterInfo(cluster)
         ci.update()
-
 
     async def get(self, request, pk):
         """ this will invoke the background tasks and return immediately """
@@ -521,11 +520,9 @@ class BackendStartCluster(BackendAsyncView):
         cluster = Cluster.objects.get(pk=cluster_id)
         return (cluster,)
 
-
     def cmd(self, task_id, token, cluster):
         ci = ClusterInfo(cluster)
         ci.start_cluster()
-
 
     async def get(self, request, pk):
         """ this will invoke the background tasks and return immediately """
