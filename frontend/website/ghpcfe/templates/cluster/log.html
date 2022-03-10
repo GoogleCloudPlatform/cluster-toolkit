@@ -25,31 +25,30 @@ window.onload=function(event) {
 {% endblock %}
 
 {% block content %}
-  <h2>Cluster Detail</h2>
+  <h2>Cluster Log</h2>
   {% if messages %}
     {% for message in messages %}
       <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
     {% endfor %}
   {% endif %}
-    <p><b>Cluster ID:</b> {{ object.id }}</p>
-    <p><b>Name:</b> {{ object.name }}</p>
-    <p><b>Cloud Name:</b> {{ object.internal_name }}</p>
-    <p><b>Region:</b> {{ object.cloud_region }}</p>
-    <p><b>Zone:</b> {{ object.cloud_zone }}</p>
-    <p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
-    <p>
-      <b>Status:</b>
-      {% if cluster.status == "c" or cluster.status == "i" or cluster.status  == "t" %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
-      {% endif %}
-      {{ object.get_status_display }}
-    </p>
+  <p><b>Cluster ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Cloud Name:</b> {{ object.internal_name }}</p>
+  <p><b>Region:</b> {{ object.cloud_region }}</p>
+  <p><b>Zone:</b> {{ object.cloud_zone }}</p>
+  <p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
+  <p><b>Status:</b>
+    {% if cluster.status == "c" or cluster.status == "i" or cluster.status  == "t" %}
+        <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+    {% endif %}
+    {{ object.get_status_display }}
+  </p>
 
-    <p>
+  <p>
     <a href="{% url 'backend-sync-cluster' object.id %}">Sync Cluster</a> to get most recent logs.
-    </p>
+  </p>
 
-    <hr>
+  <hr>
     {% for logfile in log_files %}
     <div>
       <h5>{{ logfile.title }}</h5>
@@ -57,4 +56,7 @@ window.onload=function(event) {
     </div>
     {% endfor %}
 
+  <br/>
+  <a href="{% url 'cluster-detail' cluster.id %}" class="btn btn-primary">Cluster Detail</a>
+  <br/><br/>
 {% endblock %}
