@@ -91,17 +91,18 @@ then
     printf "Adding deployment keys..\n"
     mkdir -p /opt/gcluster/.ssh
 
-    echo "$DEPLOY_KEY1" > /opt/gcluster/.ssh/gcluster-ghdeploy-20211109
-    sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-ghdeploy-20211109
-    chmod 700 /opt/gcluster/.ssh/ghpc-ghdeploy-20211109
+    echo "$DEPLOY_KEY1" > /opt/gcluster/.ssh/gcluster-deploykey
+    sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-deploykey
     cat >> /opt/gcluster/.ssh/config <<+
 
 host github.com
         hostname github.com
-        IdentityFile ~/.ssh/ghpc-ghdeploy-20211109
+        IdentityFile ~/.ssh/gcluster-deploykey
         StrictHostKeyChecking=accept-new
 +
-    chown -R /opt/gcluster/.ssh
+    chmod 700 /opt/gcluster/.ssh
+    chmod 600 /opt/gcluster/.ssh/*
+    chown gcluster -R /opt/gcluster/.ssh
 
     fetch_hpc_toolkit="git clone -b \"${repo_branch}\" git@github.com:${repo_fork}/hpc-toolkit.git"
 
