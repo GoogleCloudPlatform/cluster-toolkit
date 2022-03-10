@@ -50,7 +50,8 @@ resource "google_compute_instance" "compute_instance" {
   }
 
   network_interface {
-    network = var.network_name
+    network    = var.network_self_link
+    subnetwork = var.subnetwork_self_link
   }
 
   service_account {
