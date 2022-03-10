@@ -52,7 +52,7 @@ variable "primary_subnetwork" {
   description = <<EOT
   Primary (default) subnetwork in which to create resources.
 
-  name           (string, required, Name of subnet)
+  name           (string, required, Name of subnet; defaults to "var.deployment_name-primary-subnet")
   region         (string, ignored, will be replaced by var.region)
   new_bits       (number, required, Additional CIDR bits beyond var.network_address_range)
   private_access (bool, optional, Enable Private Access on subnetwork)
@@ -64,7 +64,7 @@ variable "primary_subnetwork" {
   EOT
   type        = map(string)
   default = {
-    name           = "primary-subnetwork"
+    name           = null
     description    = "Primary Subnetwork"
     new_bits       = 15
     private_access = true

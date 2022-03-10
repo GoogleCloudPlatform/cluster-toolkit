@@ -21,7 +21,7 @@ locals {
   regions = distinct([for subnet in local.all_subnets : subnet.subnet_region])
 
   primary_subnet = {
-    subnet_name           = var.primary_subnetwork.name
+    subnet_name           = var.primary_subnetwork.name == null ? "${var.deployment_name}-primary-subnet" : var.primary_subnetwork.name
     subnet_ip             = local.cidr_blocks[0]
     subnet_region         = var.region
     subnet_private_access = lookup(var.primary_subnetwork, "private_access", false)
