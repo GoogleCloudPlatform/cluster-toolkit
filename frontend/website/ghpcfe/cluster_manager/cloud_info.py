@@ -405,3 +405,22 @@ def get_gcp_workbench_region_zone_info(credentials, service="notebooks", api_ver
     locations = [x['locationId'] for x in result['locations']]
     return locations
 
+def get_gcp_filestores(credentials):
+    """Returns an array of Filestore instance informations
+    [
+      {'creatTime': ...,
+       'fileShares': [{'capacityGb': '2660', 'name': 'data'}],
+       'name': 'projects/<project>/locations/<zone>/instances/<name>',
+       'networks': [{'ipAddresses': ['10.241.201.242'], 'modes': ['MODE_IPV4'], 'network': '<network-name>', 'reservedIpRange': '10.241.201.240/29'}],
+       'state': 'READY',
+       'tier': 'PREMIUM'
+      },
+      ...
+    ]
+    """
+    (project, client) = _get_gcp_client(credentials, "file", "v1");
+    request = client.projects().locations().instances().list(parent=f"projects/{project}/locations/-")
+    result = request.execute()
+    return result['instances']
+
+

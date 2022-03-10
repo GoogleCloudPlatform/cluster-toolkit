@@ -21,6 +21,7 @@ from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.utils.safestring import mark_safe
 from .cluster_manager import validate_credential, cloud_info
 from .models import *
+import itertools
 import json
 
 import logging
@@ -457,8 +458,10 @@ class FilestoreForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         creds = self._get_creds(kwargs)
+        self.fields['vpc'].queryset = VirtualNetwork.objects.filter(cloud_credential=creds).filter(Q(cloud_state="i")|Q(cloud_state="m"))
+        region_info = cloud_info.get_region_zone_info("GCP", creds.detail)
+        self.fields['cloud_zone'].widget.choices = [(r, [(z, z) for z in rz]) for r,rz in region_info.items()]
 
-        self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=creds).filter(Q(cloud_state="i")|Q(cloud_state="m"))
         if zone_choices:
             # We set this on the widget, because we will be changing the
             # widget's field in the template via javascript
@@ -466,7 +469,7 @@ class FilestoreForm(forms.ModelForm):
 
         if 'n' not in self.instance.cloud_state:
             # Need to disable certain widgets
-            self.fields['subnet'].disabled = True
+            self.fields['vpc'].disabled = True
             self.fields['cloud_zone'].disabled = True
             self.fields['share_name'].disabled = True
             self.fields['performance_tier'].disabled = True
@@ -474,13 +477,13 @@ class FilestoreForm(forms.ModelForm):
     class Meta:
         model = GCPFilestoreFilesystem
 
-        fields = ('name', 'subnet', 'cloud_zone', 'cloud_credential', 'capacity', 'performance_tier')
+        fields = ('name', 'vpc', 'cloud_zone', 'cloud_credential', 'capacity', 'performance_tier')
 
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'cloud_credential': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
-            'subnet': forms.Select(attrs={'class': 'form-control'}), 
-            'capacity': forms.NumberInput(attrs={'min': 1024, 'default':1024}),
+            'vpc': forms.Select(attrs={'class': 'form-control'}), 
+            'capacity': forms.NumberInput(attrs={'min': 2660, 'default':2660}),
             'share_name': forms.TextInput(attrs={'class': 'form-control'}),
             'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
         }
