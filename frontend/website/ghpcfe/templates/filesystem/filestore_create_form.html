@@ -1,30 +1,6 @@
 {% extends "base_generic.html" %}
 
 {% block extrameta %}
-<script>
-function subnetSelected() {
-    {% autoescape off %}
-    var subnet_map = {{ subnet_regions }};
-    var region_info = {{ region_info }};
-    {% endautoescape %}
-    subnet_element = document.getElementById("id_subnet");
-    zone_element = document.getElementById("id_cloud_zone");
-    zone_element.disabled = false;
-    $("#id_cloud_zone").find('option').remove().end();
-    region_info[subnet_map[subnet_element.value]].forEach(function (item) {
-      var el = document.createElement("option");
-      el.text = item;
-      el.setAttribute("value", item) 
-      zone_element.appendChild(el);
-    });
-}
-
-function initPage() {
-    document.getElementById("id_subnet").onchange = subnetSelected;
-}
-
-window.onload=initPage;
-</script>
 {% endblock %}
 
 
@@ -54,10 +30,10 @@ window.onload=initPage;
         <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
     </div>
     <div class="form-group">
-      {{ form.subnet.errors }}
-      {{ form.subnet.label_tag }}
-      {{ form.subnet }}
-        <small class="form-text text-muted">{{ form.subnet.help_text }}</small>
+      {{ form.vpc.errors }}
+      {{ form.vpc.label_tag }}
+      {{ form.vpc }}
+        <small class="form-text text-muted">{{ form.vpc.help_text }}</small>
     </div>
     <div class="form-group">
       {{ form.cloud_zone.errors }}

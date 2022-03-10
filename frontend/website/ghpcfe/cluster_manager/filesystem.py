@@ -51,7 +51,7 @@ resource_groups:
     id: {fs.name}
     settings:
       filestore_share_name: {export_name[1:]}
-      network_name: {fs.subnet.vpc.cloud_id}
+      network_name: {fs.vpc.cloud_id}
       zone: {fs.cloud_zone}
       size_gb: {fs.capacity}
       filestore_tier: {fs.get_performance_tier_display()}
@@ -85,7 +85,7 @@ def create_filesystem(fs: Filesystem) -> None:
 
 
 def _run_ghpc(tgtDir: Path) -> None:
-    ghpc_path = utils.load_config()["baseDir"] / 'dependencies' / 'hpc-toolkit' / 'ghpc'
+    ghpc_path = utils.load_config()["baseDir"].parent / 'ghpc'
 
     try:
         logger.info("Invoking ghpc create")

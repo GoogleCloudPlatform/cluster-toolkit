@@ -215,7 +215,7 @@ class ClusterUpdateView(UpdateView):
                 fsquery = Filesystem.objects    \
                             .exclude(impl_type=FilesystemImpl.BUILT_IN) \
                             .filter(cloud_state__in=['m', 'i']) \
-                            .filter(subnet__vpc=cluster.subnet.vpc).values_list('pk', flat=True)
+                            .filter(vpc=cluster.subnet.vpc).values_list('pk', flat=True)
                 # Add back our cluster's filesystem
                 fsystems = list(fsquery) + [cluster.shared_fs.id]
                 field.queryset = FilesystemExport.objects.filter(filesystem__in=fsystems)
@@ -286,8 +286,7 @@ class ClusterUpdateView(UpdateView):
         # Verify formset validity (suprised there's not another method to do this)
         for formset in [mountpoints, partitions]:
             if not formset.is_valid():
-                for error in formset.errors:
-                    form.add_error(None, error)
+                form.add_error(None, "Error in form below")
                 return self.form_invalid(form)
 
         with transaction.atomic():
@@ -300,6 +299,12 @@ class ClusterUpdateView(UpdateView):
         if (self.object.status == 'r'):
             msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Sync Cluster' button to apply changes."
         messages.success(self.request, msg)
+
+        # Be kind... Check filesystems to verify all in the same zone as us.
+        for mp in self.object.mount_points.exclude(export__filesystem__impl_type=FilesystemImpl.BUILT_IN):
+            if mp.export.filesystem.cloud_zone != self.object.cloud_zone:
+                messages.warning(self.request, f"Possibly expensive: Filesystem {mp.export.filesystem.name} is in a different zone ({mp.export.filesystem.cloud_zone}) than the cluster!")
+
         return super().form_valid(form)
 
 
