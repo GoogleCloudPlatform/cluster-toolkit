@@ -97,15 +97,14 @@
 <script language="javascript">
 function filterTable() {
     var toggle = document.getElementById("id_show_destroyed").checked;
-    console.log(toggle);
     $.cookie("vpc_list_show_destroyed", toggle, {path: "{% url 'vpcs' %};SameSite=Strict", expires: 10});
     var table = document.getElementById("id_vpc_table");
     var tr = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
 
     for ( i = 0 ; i < tr.length; i++ ) {
-        var td = tr[i].getElementsByTagName("td")[3];
+        var td = tr[i].getElementsByTagName("td")[2];
         var tdText = td.textContent || td.innerText;
-        if ( toggle || tdText.indexOf("has been deleted") == -1 ) {
+        if ( toggle || tdText.indexOf("Destroyed") == -1 ) {
             tr[i].style.display = "";
         } else {
             tr[i].style.display = "none";

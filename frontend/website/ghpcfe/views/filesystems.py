@@ -191,6 +191,8 @@ class BackendCreateFilesystem(BackendAsyncView):
         return (fs,)
 
     def cmd(self, task_id, token, fs):
+        fs.cloud_state = 'cm'
+        fs.save()
         cm_fs.create_filesystem(fs)
 
     async def get(self, request, pk):

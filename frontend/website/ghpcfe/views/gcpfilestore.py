@@ -61,31 +61,26 @@ class GCPFilestoreFilesystemUpdateView(UpdateView):
     template_name = 'filesystem/filestore_update_form.html'
     form_class = FilestoreForm
 
-    def _get_region_info(self):
-        if not hasattr(self, 'region_info'):
-            self.region_info = cloud_info.get_region_zone_info("GCP", self.get_object().cloud_credential.detail)
-        return self.region_info
-
     def get_success_url(self):
         return reverse('backend-filesystem-update-files', kwargs={'pk': self.object.pk})
 
     def get_initial(self):
-        return {'share_name': self.get_object().exports.all()[0].export_name}
+        return {'share_name': self.get_object().exports.first().export_name}
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs['zone_choices'] = [(x,x) for x in self._get_region_info()[self.get_object().cloud_region]]
-        return kwargs
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.cloud_region = self.object.cloud_zone.rsplit('-', 1)[0]
+        self.object.impl_type = FilesystemImpl.GCPFILESTORE
+        self.object.save()
 
+        export = self.object.exports.first()
+        export.export_name = form.data['share_name']
+        export.save()
+
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
-        """ Perform extra query to populate instance types data """
-        subnet_regions = {sn.id: sn.cloud_region for sn in VirtualSubnet.objects.filter(cloud_credential=self.get_object().cloud_credential).filter(Q(cloud_state="i") | Q(cloud_state="m")).all()}
-
         context = super().get_context_data(**kwargs)
-
-        context['subnet_regions'] = json.dumps(subnet_regions)
-        context['region_info'] = json.dumps(self._get_region_info())
         context['navtab'] = 'fs'
         return context
 
@@ -98,12 +93,6 @@ class GCPFilestoreFilesystemCreateView(LoginRequiredMixin, generic.CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-
-        self.region_info = cloud_info.get_region_zone_info("GCP", self.cloud_credential.detail)
-        subnet_regions = {sn.id: sn.cloud_region for sn in VirtualSubnet.objects.filter(cloud_credential=self.cloud_credential).filter(Q(cloud_state="i") | Q(cloud_state="m")).all()}
-
-        context['subnet_regions'] = json.dumps(subnet_regions)
-        context['region_info'] = json.dumps(self.region_info)
         context['navtab'] = 'fs'
         return context
 
@@ -120,7 +109,7 @@ class GCPFilestoreFilesystemCreateView(LoginRequiredMixin, generic.CreateView):
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
-        self.object.cloud_region = self.object.subnet.cloud_region;
+        self.object.cloud_region = self.object.cloud_zone.rsplit('-', 1)[0]
         self.object.impl_type = FilesystemImpl.GCPFILESTORE
         self.object.save()
 

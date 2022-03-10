@@ -27,7 +27,7 @@
         <th scope="col">Name</th>
         <th scope="col">Type</th>
         <th scope="col">Cloud ID</th>
-        <th scope="col">Region</th>
+        <th scope="col">Zone</th>
         <th scope="col">Status</th>
         <th scope="col">Actions</th>
       </tr>
@@ -39,7 +39,7 @@
         <td><a href="{% url 'fs-detail' fs.id %}">{{ fs.name }}</a></td>
         <td>{{ fs.get_impl_type_display }}</td>
         <td>{{ fs.cloud_id }}</td>
-        <td>{{ fs.cloud_region }}</td>
+        <td>{{ fs.cloud_zone }}</td>
         <td>
           {% if "c" in fs.cloud_state == "c" %}
           <img src="/static/img/loading.gif" style="width:32px;height:32px;">

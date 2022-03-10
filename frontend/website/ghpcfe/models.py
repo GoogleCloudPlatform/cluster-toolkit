@@ -298,8 +298,16 @@ class Filesystem(CloudResource):
     subnet = models.ForeignKey(
         VirtualSubnet,
         related_name = 'filesystems',
-        help_text = 'Subnet within which the cluster resides',
+        help_text = 'Subnet within which the Filesystem resides (if any)',
         on_delete = models.RESTRICT,
+        null = True,
+    )
+    vpc = models.ForeignKey(
+        VirtualNetwork,
+        related_name = 'filesystems',
+        help_text = 'Network within which the Filesystem resides',
+        on_delete = models.SET_NULL,
+        null = True,
     )
     impl_type = models.PositiveIntegerField(
         choices = FilesystemImpl.choices,
@@ -903,7 +911,7 @@ class GCPFilestoreFilesystem(Filesystem):
     )
     capacity = models.PositiveIntegerField(
         validators = [MinValueValidator(1024)],
-        help_text = 'Capacity (in GB) of the filesystem (min of 1024)',
+        help_text = 'Capacity (in GB) of the filesystem (min of 2660)',
         default = 1024
     )
 
