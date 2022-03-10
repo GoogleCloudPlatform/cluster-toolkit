@@ -1,0 +1,3 @@
+# the last match wins, so this sets default ownership of files to the HPC
+# Toolkit team and can be overridden for 3rd party contributions below
+* @GoogleCloudPlatform/hpc-toolkit
