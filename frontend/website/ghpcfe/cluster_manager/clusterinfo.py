@@ -201,7 +201,7 @@ ClusterInfo object - represent a cluster
         controller_uses = self._yaml_refs_to_uses(["hpc_network"] + partitions_references + filesystems_references)
         login_uses = self._yaml_refs_to_uses(["hpc_network"] + filesystems_references + ["slurm_controller"])
 
-        controller_sa = f"{self.cluster.cloud_id}-service-acct"
+        controller_sa = f"{self.cluster.cloud_id}-sa"
         # TODO: Determine if these all should be different, and if so, add to resource to be created
         # Note though, that at the moment, GHPC won't let us unpack output
         # variables, so we can't index properly.
