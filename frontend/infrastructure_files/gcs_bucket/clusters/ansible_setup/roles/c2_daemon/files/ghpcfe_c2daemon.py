@@ -75,7 +75,7 @@ def cb_sync(message):
     except Exception as ex:
         logger.error("Failed to upload log files", exc_info=ex)
     logger.info(f"Sync Done")
-    
+
     ackid = message.get('ackid', None)
     if ackid:
         logger.info(f"Sending ACK")
@@ -233,6 +233,12 @@ def cb_spack_install(message):
     while state in ["RUNNING"]:
         time.sleep(30)
         state = _slurm_get_job_state(jobid)
+        try:
+            _upload_log_files({
+                f"installs/{appid}/stdout": f"/opt/cluster/installs/{appid}/{app_name}.out",
+                f"installs/{appid}/stderr": f"/opt/cluster/installs/{appid}/{app_name}.err"})
+        except Exception as ex:
+            logger.error("Failed to upload log files", exc_info=ex)
     logger.info(f"Job Done with result {state}")
     status = 'r' if state in ["COMPLETED", "COMPLETING"] else 'e'
     final_update = {'ackid': ackid, 'app_id': appid, 'status': status}
@@ -268,7 +274,7 @@ def _verify_oslogin_user(login_uid):
             for acct in profile['posixAccounts']:
                 if acct['primary'] or len(profile['posixAccounts'])==1:
                     _oslogin_cache[uid] = (acct['username'], int(acct['uid']), int(acct['gid']), acct['homeDirectory'])
-    
+
     return _oslogin_cache[login_uid]
 
 def _verify_params(message, keys):
@@ -347,7 +353,7 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
             if archive:
                 execute = "# Find and execute most top-level 'run.sh' we can find\n"
                 execute += "$(find . -maxdepth 3 -name run.sh | awk '{print length, $0}' | sort -n  | cut -d' ' -f2- | head -n1)"
-            
+
         return f"""
 {fetch}
 {extract}
@@ -516,7 +522,7 @@ def cb_run_job(message):
             kpi_info = json.load(kp)
             response.update(kpi_info)
 
-    logger.info(f"Uploading Log files.") 
+    logger.info(f"Uploading Log files.")
     try:
         _upload_log_files({
             f"jobs/{jobid}/{scriptPath.name}": scriptPath.as_posix(),
@@ -697,4 +703,3 @@ if __name__ == "__main__":
     send_message('CLUSTER_STATUS', {
         'message': "Cluster C2 Daemon stopping",
     })
-
