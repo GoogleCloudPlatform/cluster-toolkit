@@ -38,7 +38,8 @@
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
       BLUEPRINT_DIR: "{{ blueprint_dir }}"
-      BUILD_ID: "{{ build_id }}"
+      DEPLOYMENT_NAME: "{{ deployment_name }}"
+      NETWORK: "{{ network }}"
     args:
       creates: "{{ workspace }}/{{ blueprint_dir }}.tgz"
   - name: Create Infrastructure and test
@@ -77,7 +78,7 @@
         - --project={{ project }}
         - firewall-rules
         - create
-        - "build-{{ build_id }}"
+        - "{{ deployment_name }}"
         - --direction=INGRESS
         - --priority=1000
         - --network={{ network }}
@@ -111,7 +112,7 @@
         - compute
         - firewall-rules
         - delete
-        - build-{{ build_id }}
+        - "{{ deployment_name }}"
       ignore_errors: true
     - name: Tear Down Cluster
       run_once: true
@@ -169,7 +170,7 @@
         - compute
         - firewall-rules
         - delete
-        - "build-{{ build_id }}"
+        - "{{ deployment_name }}"
       ignore_errors: true
     - name: Tear Down Cluster
       run_once: true
