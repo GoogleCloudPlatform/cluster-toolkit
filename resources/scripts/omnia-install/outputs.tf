@@ -24,7 +24,22 @@ output "add_omnia_user_script" {
   value       = local.add_user_file
 }
 
-output "runners" {
-  description = "The runners to setup and install omnia on the manager"
-  value       = local.startup_runners
+output "create_omnia_install_dir_runner" {
+  description = "Runner to create the omnia installation directory using startup-scripts"
+  value       = local.create_omnia_install_dir_runner
+}
+
+output "inventory_data_runner" {
+  description = "Runner to copy the inventory to the omnia manager using startup-scripts"
+  value       = local.inventory_data_runner
+}
+
+output "add_omnia_user_runner" {
+  description = "Runner to create the omnia user using startup-scripts"
+  value       = local.add_omnia_user_runner
+}
+
+output "install_omnia_runner" {
+  description = "Runner to install Omnia using startup-scripts"
+  value       = local.install_omnia_runner
 }

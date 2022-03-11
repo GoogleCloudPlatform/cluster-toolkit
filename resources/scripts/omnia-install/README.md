@@ -66,7 +66,10 @@ No resources.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_add_omnia_user_runner"></a> [add\_omnia\_user\_runner](#output\_add\_omnia\_user\_runner) | Runner to create the omnia user using startup-scripts |
 | <a name="output_add_omnia_user_script"></a> [add\_omnia\_user\_script](#output\_add\_omnia\_user\_script) | An ansible script that adds the user that install omnia |
+| <a name="output_create_omnia_install_dir_runner"></a> [create\_omnia\_install\_dir\_runner](#output\_create\_omnia\_install\_dir\_runner) | Runner to create the omnia installation directory using startup-scripts |
+| <a name="output_install_omnia_runner"></a> [install\_omnia\_runner](#output\_install\_omnia\_runner) | Runner to install Omnia using startup-scripts |
+| <a name="output_inventory_data_runner"></a> [inventory\_data\_runner](#output\_inventory\_data\_runner) | Runner to copy the inventory to the omnia manager using startup-scripts |
 | <a name="output_inventory_file"></a> [inventory\_file](#output\_inventory\_file) | The inventory file for the omnia cluster |
-| <a name="output_runners"></a> [runners](#output\_runners) | The runners to setup and install omnia on the manager |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

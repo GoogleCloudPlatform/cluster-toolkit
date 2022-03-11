@@ -61,9 +61,17 @@ resource_groups:
   - source: resources/scripts/startup-script
     kind: terraform
     id: startup-manager
-    use:
-    - homefs
-    - omnia
+    settings:
+      runners:
+      - type: shell
+        source: "modules/startup-script/examples/install_ansible.sh"
+        destination: "install_ansible.sh"
+      - $(homefs.install_nfs_client_runner)
+      - $(homefs.mount_runner)
+      - $(omnia.add_omnia_user_runner)
+      - $(omnia.create_omnia_install_dir_runner)
+      - $(omnia.inventory_data_runner)
+      - $(omnia.install_omnia_runner)
 
   - source: resources/scripts/startup-script
     kind: terraform
@@ -73,15 +81,9 @@ resource_groups:
       - type: shell
         source: "modules/startup-script/examples/install_ansible.sh"
         destination: "install_ansible.sh"
-      - type: shell
-        content: $(homefs.install_nfs_client)
-        destination: "install-nfs.sh"
-      - type: ansible-local
-        source: "modules/startup-script/examples/mount.yaml"
-        destination: "mount.yaml"
-      - type: ansible-local
-        content: $(omnia.add_omnia_user_script)
-        destination: add_omnia_user.yml
+      - $(homefs.install_nfs_client_runner)
+      - $(homefs.mount_runner)
+      - $(omnia.add_omnia_user_runner)
 
   ## Compute
   - source: resources/compute/simple-instance

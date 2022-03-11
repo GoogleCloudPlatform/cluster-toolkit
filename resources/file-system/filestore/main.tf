@@ -20,23 +20,16 @@ resource "random_id" "resource_name_suffix" {
 
 locals {
   timeouts = var.filestore_tier == "HIGH_SCALE_SSD" ? [1] : []
-  runners = [
-    {
-      "type"        = "shell"
-      "source"      = "modules/startup-script/examples/install_ansible.sh"
-      "destination" = "install_ansible.sh"
-    },
-    {
-      "type"        = "shell"
-      "content"     = "${path.module}/scripts/install-nfs-client"
-      "destination" = "install-nfs.sh"
-    },
-    {
-      "type"        = "ansible-local"
-      "source"      = "modules/startup-script/examples/mount.yaml"
-      "destination" = "mount.yaml"
-    }
-  ]
+  install_nfs_client_runner = {
+    "type"        = "shell"
+    "content"     = "${path.module}/scripts/install-nfs-client.sh"
+    "destination" = "install-nfs.sh"
+  }
+  mount_runner = {
+    "type"        = "ansible-local"
+    "source"      = "${path.module}/scripts/mount.yaml"
+    "destination" = "mount.yaml"
+  }
 }
 
 resource "google_filestore_instance" "filestore_instance" {

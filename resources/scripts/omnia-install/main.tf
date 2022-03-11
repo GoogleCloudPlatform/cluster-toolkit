@@ -33,26 +33,24 @@ locals {
       install_dir = var.install_dir
     }
   )
-  startup_runners = [
-    {
-      "type"        = "shell"
-      "content"     = "mkdir ${var.install_dir}/omnia"
-      "destination" = "mkdir-omnia.sh"
-    },
-    {
-      "type"        = "data"
-      "content"     = local.inventory
-      "destination" = "${var.install_dir}/omnia/inventory"
-    },
-    {
-      "type"        = "ansible-local"
-      "content"     = local.add_user_file
-      "destination" = "add_omnia_user.yml"
-    },
-    {
-      "type"        = "ansible-local"
-      "content"     = local.install_file
-      "destination" = "install_omnia.yml"
-    }
-  ]
+  create_omnia_install_dir_runner = {
+    "type"        = "shell"
+    "content"     = "mkdir ${var.install_dir}/omnia"
+    "destination" = "mkdir-omnia.sh"
+  }
+  inventory_data_runner = {
+    "type"        = "data"
+    "content"     = local.inventory
+    "destination" = "${var.install_dir}/omnia/inventory"
+  }
+  add_omnia_user_runner = {
+    "type"        = "ansible-local"
+    "content"     = local.add_user_file
+    "destination" = "add_omnia_user.yml"
+  }
+  install_omnia_runner = {
+    "type"        = "ansible-local"
+    "content"     = local.install_file
+    "destination" = "install_omnia.yml"
+  }
 }
