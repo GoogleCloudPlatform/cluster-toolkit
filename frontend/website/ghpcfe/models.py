@@ -570,7 +570,7 @@ class ClusterPartition(models.Model):
 
     @property
     def vCPU_per_node(self):
-        return machine_type.num_vCPU // (1 if self.enable_hyperthreads else 2)
+        return self.machine_type.num_vCPU // (1 if self.enable_hyperthreads else 2)
 
 
     def __str__(self):
