@@ -293,23 +293,23 @@ def cb_spack_install(message):
     send_message('ACK', final_update)
 
 
-def _install_submit_job(app_id, partition, app_name, spec, **message):
+def _install_submit_job(app_id, partition, name, **message):
     build_dir = Path('/opt/cluster/installs') / str(app_id)
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    outfile = build_dir / f"{app_name}.out"
-    errfile = build_dir / f"{app_name}.err"
+    outfile = build_dir / f"{name}.out"
+    errfile = build_dir / f"{name}.err"
 
     install_script = _make_run_script(build_dir, 0, 0, message['install_script'])
-    if not run_script:
-        return (None, run_script, "Job not in recognized format")
+    if not install_script:
+        return (None, install_script, "Job not in recognized format")
 
     script = build_dir / 'install_submit.sh'
     with script.open('w') as fp:
         fp.write(f"""#!/bin/bash
 #SBATCH --partition={partition}
 #SBATCH --nodes=1
-#SBATCH --job-name={app_name}-install
+#SBATCH --job-name={name}-install
 #SBATCH --output={outfile.as_posix()}
 #SBATCH --error={errfile.as_posix()}
 
@@ -336,19 +336,22 @@ exec {install_script}
 @cb_in_thread
 def cb_install_app(message):
     logger.info(f"Starting install of application!")
-    appid = message.get('app_id', None)
+    appid = message['app_id']
+    app_name = message['name']
     response = {'ackid': message['ackid'], 'app_id': appid, 'status': 'e'}
 
-    (jobid, outfile, errfile) = _install_submit_job(appid, message['partition'], app_name, message['spec'])
+    (jobid, outfile, errfile) = _install_submit_job(**message)
     if not jobid:
         # There was an error - stdout, stderr in outfile, errfile
         logger.error("Failed to run batch submission")
         _upload_log_blobs({f"installs/{appid}/stdout": outfile,
                           f"installs/{appid}/stderr": errfile})
-        send_message('ACK', {'ackid': ackid, 'app_id': appid, 'jobid': jobid, 'status': 'e'})
+        response['status'] = 'e'
+        send_message('ACK', response)
         return
     logger.info(f"Job Queued")
-    send_message('UPDATE', {'ackid': ackid, 'app_id': appid, 'jobid': jobid, 'status': 'q'})
+    response['status'] = 'q'
+    send_message('UPDATE', response)
 
     state = "PENDING"
     while state in ["PENDING", "CONFIGURING"]:
@@ -356,13 +359,14 @@ def cb_install_app(message):
         state = _slurm_get_job_state(jobid)
     if state == "RUNNING":
         logger.info(f"Job Running")
-        send_message('UPDATE', {'ackid': ackid, 'app_id': appid, 'jobid': jobid, 'status': 'i'})
+        response['status'] = 'i'
+        send_message('UPDATE', response)
     while state in ["RUNNING"]:
         time.sleep(30)
         state = _slurm_get_job_state(jobid)
     logger.info(f"Job Done with result {state}")
     status = 'r' if state in ["COMPLETED", "COMPLETING"] else 'e'
-    final_update = {'ackid': ackid, 'app_id': appid, 'status': status}
+    response['status'] = status
     if status == 'r':
         # Application installed.  Install Module file if appropriate
         if message.get('module_name', '') and message.get('module_script', ''):
@@ -371,14 +375,14 @@ def cb_install_app(message):
             with fullModulePath.open('w') as fp:
                 fp.write(message['module_script'])
 
-    logger.info(f"Uploading Log files. [Spack state: {final_update['status']}]")
+    logger.info(f"Uploading Log files. [Spack state: {response['status']}]")
     try:
         _upload_log_files({
             f"installs/{appid}/stdout": f"/opt/cluster/installs/{appid}/{app_name}.out",
             f"installs/{appid}/stderr": f"/opt/cluster/installs/{appid}/{app_name}.err"})
     except Exception as ex:
         logger.error("Failed to upload log files", exc_info=ex)
-    send_message('ACK', final_update)
+    send_message('ACK', response)
 
 
 

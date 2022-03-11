@@ -301,11 +301,39 @@ class ApplicationForm(forms.ModelForm):
                 raise ValidationError('Install instance architecture does not match run instance types')
 
 
+class CustomInstallationApplicationForm(forms.ModelForm):
+
+    install_loc = forms.CharField(widget=forms.TextInput(
+                        attrs={'class': 'form-control'}),
+                        help_text='Path where application will be installed.')
+
+    class Meta:
+        model = CustomInstallationApplication
+
+        fields = ('cluster', 'name', 'version', 'description', 'install_partition', 'install_script', 'module_name', 'module_script')
+
+        widgets = {
+            'cluster': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'version': forms.TextInput(attrs={'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'class': 'form-control'}),
+            'install_partition': forms.Select(attrs={'class': 'form-control'}),
+            'install_script': forms.URLInput(attrs={'class': 'form-control'}),
+            'module_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'module_script': forms.Textarea(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        cluster = kwargs['initial']['cluster']
+        self.fields['install_partition'].queryset = cluster.partitions
+
+
 class SpackApplicationForm(forms.ModelForm):
     """ Custom form for application model """
 
     class Meta:
-        model = Application
+        model = SpackApplication
 
         fields = ('cluster', 'spack_name', 'name', 'version', 'spack_spec', 'description', 'install_partition')
 

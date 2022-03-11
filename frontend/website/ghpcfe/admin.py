@@ -96,7 +96,12 @@ class ClusterAdmin(admin.ModelAdmin):
 
 class ApplicationAdmin(admin.ModelAdmin):
     """ Custom ModelAdmin for Application model """
+    list_display = ('id', 'name', 'install_loc', 'compiler', 'mpi', 'status')
+
+class SpackApplicationAdmin(admin.ModelAdmin):
+    """ Custom ModelAdmin for Application model """
     list_display = ('id', 'name', 'spack_spec', 'install_loc', 'compiler', 'mpi', 'status')
+
 
 
 class JobAdmin(admin.ModelAdmin):
@@ -109,6 +114,8 @@ class JobAdmin(admin.ModelAdmin):
 
 # Register your models here.
 admin.site.register(Application, ApplicationAdmin)
+admin.site.register(SpackApplication, SpackApplicationAdmin)
+admin.site.register(CustomInstallationApplication)
 admin.site.register(ApplicationInstallationLocation)
 admin.site.register(VirtualNetwork, VirtualNetworkAdmin)
 admin.site.register(VirtualSubnet, VirtualSubnetAdmin)
@@ -123,6 +130,7 @@ admin.site.register(Benchmark)
 admin.site.register(Role)
 admin.site.register(User, UserAdmin)
 admin.site.register(Filesystem, FilesystemAdmin)
+admin.site.register(GCPFilestoreFilesystem)
 admin.site.register(FilesystemExport)
 admin.site.register(MountPoint)
 admin.site.register(Workbench)

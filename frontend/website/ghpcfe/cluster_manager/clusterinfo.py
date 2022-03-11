@@ -562,6 +562,26 @@ resource_groups:
             self.cluster.spack_install.save()
         self.cluster.save()
 
+    def get_app_install_loc(self, install_path):
+        my_mp = None
+        for mp in self.cluster.mount_points.order_by('mount_order'):
+            if install_path.startswith(mp.mount_path):
+                my_mp = mp
+
+        if not my_mp:
+            logger.warning(f"Unable to find a mount_point matching path {install_path}")
+            return None
+
+        partial_path = install_path[len(my_mp.mount_path)+1:]
+        possible_apps = ApplicationInstallationLocation.objects.filter(fs_export=my_mp.export).filter(path=partial_path)
+        if possible_apps:
+            return possible_apps[0]
+        else:
+            # Need to create a new entry
+            install_loc = ApplicationInstallationLocation(fs_export=my_mp.export, path=partial_path)
+            install_loc.save()
+            return install_loc
+
 
 
     def get_terraform_dir(self):

@@ -632,24 +632,6 @@ class Application(models.Model):
         blank = True,
         null = True,
     )
-    spack_name = models.CharField(
-        max_length = 30,
-        help_text = 'Name of the application in Spack',
-        blank = True,
-        null = True,
-    )
-    spack_spec = models.CharField(
-        max_length = 200,
-        help_text = 'Spack spec that refers to this particular build configuration',
-        blank = True,
-        null = True,
-    )
-    spack_hash = models.CharField(
-        max_length=32,
-        help_text = 'Hash of the Spack installation of the application package',
-        blank = True,
-        null = True,
-    )
     installed_architecture = models.CharField(
         max_length = 128,
         help_text = 'CPU architecture of installed package',
@@ -696,6 +678,51 @@ class Application(models.Model):
         return f'{self.name} - {self.get_status_display()}'
 
 
+class CustomInstallationApplication(Application):
+    install_script = models.CharField(
+        max_length = 8192,
+        help_text= \
+            'The URL to a an installation script, or the raw script',
+    )
+
+    module_name = models.CharField(
+        max_length = 128,
+        help_text = 'name of module file to install, and load',
+        blank = True,
+        null = True,
+    )
+
+    module_script = models.CharField(
+        max_length = 8192,
+        help_text = 'environment modules file to install to load application',
+        blank = True,
+        null = True,
+    )
+
+
+class SpackApplication(Application):
+    spack_name = models.CharField(
+        max_length = 30,
+        help_text = 'Name of the application in Spack',
+        blank = True,
+        null = True,
+    )
+    spack_spec = models.CharField(
+        max_length = 200,
+        help_text = 'Spack spec that refers to this particular build configuration',
+        blank = True,
+        null = True,
+    )
+    spack_hash = models.CharField(
+        max_length=32,
+        help_text = 'Hash of the Spack installation of the application package',
+        blank = True,
+        null = True,
+    )
+
+
+
+
 class Benchmark(models.Model):
     """ Model representing a benchmark """
 
@@ -711,7 +738,6 @@ class Benchmark(models.Model):
     def __str__(self):
         """String for representing the Benchmark object."""
         return self.name
-
 
 class Job(models.Model):
     """ Model representing a single run of an application """
