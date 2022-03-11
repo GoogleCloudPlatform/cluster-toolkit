@@ -19,8 +19,8 @@ gsutil -m cp -r gs://${BUCKET}/clusters/ansible_setup /tmp
 cd /tmp/ansible_setup
 
 # Set up facts file
-mkdir facts.d
-cat > facts.d/ghpcfe.fact <<EOF
+mkdir -p /etc/ansible/facts.d
+cat > /etc/ansible/facts.d/ghpcfe.fact <<EOF
 [config]
 cluster_id=${CLUSTER_ID}
 cluster_bucket=${BUCKET}

@@ -1,6 +1,5 @@
 ---
   - name: "Compute Node Setup"
-    fact_path: ./facts.d
     hosts: localhost
     connection: local
     vars_files:
