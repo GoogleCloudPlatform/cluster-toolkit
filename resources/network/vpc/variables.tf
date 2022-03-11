@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "network_name" {
-  description = "The name of the network to be created (defaults to \"var.deployment_name-net\")"
+  description = "The name of the network to be created (defaults to \"{deployment_name}-net\")"
   type        = string
   default     = null
 }
@@ -52,7 +52,7 @@ variable "primary_subnetwork" {
   description = <<EOT
   Primary (default) subnetwork in which to create resources.
 
-  name           (string, required, Name of subnet; defaults to "var.deployment_name-primary-subnet")
+  name           (string, required, Name of subnet; if set to null, is replaced by "{deployment_name}-primary-subnet")
   region         (string, ignored, will be replaced by var.region)
   new_bits       (number, required, Additional CIDR bits beyond var.network_address_range)
   private_access (bool, optional, Enable Private Access on subnetwork)
