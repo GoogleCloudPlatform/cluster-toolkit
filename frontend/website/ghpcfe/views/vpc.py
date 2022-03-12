@@ -83,13 +83,13 @@ class VPCDetailView(LoginRequiredMixin, generic.DetailView):
                 used_in_clusters.append(c)
 
         for fs in Filesystem.objects.all():
-            if vpc == fs.subnet.vpc:#
+            if vpc == fs.vpc:
                 used_in_filesystems.append(fs)
 
         for wb in Workbench.objects.all():
             if vpc == wb.subnet.vpc:
                 used_in_workbenches.append(wb)
-        
+
         context['used_in_clusters'] = used_in_clusters
         context['used_in_filesystems'] = used_in_filesystems
         context['used_in_workbenches'] = used_in_workbenches
@@ -420,7 +420,7 @@ class BackendDestroyVPC(BackendAsyncView):
                 vpc.save()
             except:
                 messages.add_message(self.request, messages.ERROR, 'Can not destroy VPC. Unknown error')
-        
+
     async def get(self, request, pk):
         """ this will invoke the background tasks and return immediately """
         # Mixins don't yet work with Async views
