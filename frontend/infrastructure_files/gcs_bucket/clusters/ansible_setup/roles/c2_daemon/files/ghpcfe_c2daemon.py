@@ -411,7 +411,15 @@ def _verify_oslogin_user(login_uid):
             for acct in profile['posixAccounts']:
                 if acct['primary'] or len(profile['posixAccounts'])==1:
                     _oslogin_cache[uid] = (acct['username'], int(acct['uid']), int(acct['gid']), acct['homeDirectory'])
-
+                    # Check to see if Homedir exists, and create if not
+                    homedirPath = Path(acct['homeDirectory'])
+                    if not homedirPath.is_dir():
+                        logger.info(f"Creating HomeDir for user {acct['username']} at {acct['homeDirectory']}")
+                        try:
+                            subprocess.run(["mkhomedir_helper", acct['username']])
+                        except Exception as ex:
+                            logger.error("Error creating homedir", exc_info=ex)
+    
     return _oslogin_cache[login_uid]
 
 def _verify_params(message, keys):

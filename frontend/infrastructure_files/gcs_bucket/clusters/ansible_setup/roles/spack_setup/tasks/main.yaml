@@ -28,3 +28,8 @@
     owner: root
     mode: 0755
     force: no
+
+- name: Add Enviornment Modules
+  yum:
+    name:
+      - environment-modules
