@@ -90,7 +90,7 @@ class User(AbstractUser):
             return True
         else:
             return False
-    
+
     def has_normaluser_role(self):
         if self.roles.filter(id=2).exists():
             return True
@@ -116,6 +116,17 @@ def user_post_save(sender, instance=None, created=False, **kwargs):
         # by default set new user to 'ordinary user'
         if instance.id > 1:
             instance.roles.set([Role.NORMALUSER])
+
+
+class AuthorisedUser(models.Model):
+    """ Model to hold users allowed to access this system """
+    pattern = models.CharField(
+        max_length = 60,
+        help_text = 'Enter a domain name to authorise a group of users or an email address to authorise an individual user',
+    )
+
+    def __str__(self):
+        return self.pattern
 
 
 class Credential(models.Model):
@@ -237,7 +248,7 @@ class VirtualNetwork(CloudResource):
             if self == wb.subnet.vpc:
                 #print(vpc)
                 return True
-        
+
         for cluster in Cluster.objects.all():
             if self == cluster.subnet.vpc:
                 return True
@@ -575,8 +586,6 @@ class ClusterPartition(models.Model):
 
     def __str__(self):
         return self.name
-
-
 
 
 class ApplicationInstallationLocation(models.Model):
