@@ -15,6 +15,8 @@
  */
 
 locals {
+  install_dir = var.install_dir != "" ? var.install_dir : "/home/${var.omnia_username}"
+  nodecount   = length(var.compute_ips) + length(var.manager_ips)
   inventory = templatefile(
     "${path.module}/templates/inventory.tpl",
     {
@@ -22,31 +24,32 @@ locals {
       omnia_compute = var.compute_ips
     }
   )
-  add_user_file = templatefile(
-    "${path.module}/templates/add_omnia_user.tpl",
-    { username = var.omnia_username }
+  setup_omnia_node_file = templatefile(
+    "${path.module}/templates/setup_omnia_node.tpl",
+    {
+      username    = var.omnia_username
+      install_dir = local.install_dir
+    }
   )
   install_file = templatefile(
     "${path.module}/templates/install_omnia.tpl",
     {
-      username    = var.omnia_username
-      install_dir = var.install_dir
+      username      = var.omnia_username
+      install_dir   = local.install_dir
+      omnia_compute = var.compute_ips
+      nodecount     = local.nodecount
     }
   )
-  create_omnia_install_dir_runner = {
-    "type"        = "shell"
-    "content"     = "mkdir ${var.install_dir}/omnia"
-    "destination" = "mkdir-omnia.sh"
-  }
-  inventory_data_runner = {
+  inventory_path = "${local.install_dir}/inventory"
+  copy_inventory_runner = {
     "type"        = "data"
     "content"     = local.inventory
-    "destination" = "${var.install_dir}/omnia/inventory"
+    "destination" = local.inventory_path
   }
-  add_omnia_user_runner = {
+  setup_omnia_node_runner = {
     "type"        = "ansible-local"
-    "content"     = local.add_user_file
-    "destination" = "add_omnia_user.yml"
+    "content"     = local.setup_omnia_node_file
+    "destination" = "setup_omnia_node.yml"
   }
   install_omnia_runner = {
     "type"        = "ansible-local"

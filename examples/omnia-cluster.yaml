@@ -34,13 +34,6 @@ resource_groups:
   ## File Systems
   - source: resources/file-system/filestore
     kind: terraform
-    id: appsfs
-    use: [network]
-    settings:
-      local_mount: "/apps"
-
-  - source: resources/file-system/filestore
-    kind: terraform
     id: homefs
     use: [network]
     settings:
@@ -50,14 +43,11 @@ resource_groups:
   - source: resources/scripts/omnia-install
     kind: terraform
     id: omnia
-    outputs: [inventory_file]
+    outputs: [inventory_file, omnia_user_warning]
     settings:
       manager_ips: [localhost]
       compute_ips: $(compute.internal_ip)
 
-  # The runners for this startup-script are provided in the homefs and omnia
-  # resources via the use field. Each has an output named "runners" and ghpc
-  # concatenates them in the order provided for this startup-script resource.
   - source: resources/scripts/startup-script
     kind: terraform
     id: startup-manager
@@ -68,9 +58,8 @@ resource_groups:
         destination: "install_ansible.sh"
       - $(homefs.install_nfs_client_runner)
       - $(homefs.mount_runner)
-      - $(omnia.add_omnia_user_runner)
-      - $(omnia.create_omnia_install_dir_runner)
-      - $(omnia.inventory_data_runner)
+      - $(omnia.setup_omnia_node_runner)
+      - $(omnia.copy_inventory_runner)
       - $(omnia.install_omnia_runner)
 
   - source: resources/scripts/startup-script
@@ -83,7 +72,7 @@ resource_groups:
         destination: "install_ansible.sh"
       - $(homefs.install_nfs_client_runner)
       - $(homefs.mount_runner)
-      - $(omnia.add_omnia_user_runner)
+      - $(omnia.setup_omnia_node_runner)
 
   ## Compute
   - source: resources/compute/simple-instance
@@ -91,7 +80,6 @@ resource_groups:
     id: manager
     use:
     - network
-    - appsfs
     - homefs
     - startup-manager
     settings:
@@ -103,7 +91,6 @@ resource_groups:
     id: compute
     use:
     - network
-    - appsfs
     - homefs
     - startup-compute
     settings:

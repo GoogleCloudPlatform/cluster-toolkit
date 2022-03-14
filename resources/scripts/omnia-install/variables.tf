@@ -25,8 +25,8 @@ variable "compute_ips" {
 }
 
 variable "install_dir" {
-  description = "Path where omnia will be installed"
-  default     = "/apps"
+  description = "Path where omnia will be installed, defaults to omnia user home directory (/home/omnia)"
+  default     = ""
   type        = string
 }
 

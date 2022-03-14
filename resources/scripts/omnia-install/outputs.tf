@@ -19,27 +19,27 @@ output "inventory_file" {
   value       = local.inventory
 }
 
-output "add_omnia_user_script" {
+output "setup_omnia_node_script" {
   description = "An ansible script that adds the user that install omnia"
-  value       = local.add_user_file
+  value       = local.setup_omnia_node_file
 }
 
-output "create_omnia_install_dir_runner" {
-  description = "Runner to create the omnia installation directory using startup-scripts"
-  value       = local.create_omnia_install_dir_runner
-}
-
-output "inventory_data_runner" {
+output "copy_inventory_runner" {
   description = "Runner to copy the inventory to the omnia manager using startup-scripts"
-  value       = local.inventory_data_runner
+  value       = local.copy_inventory_runner
 }
 
-output "add_omnia_user_runner" {
+output "setup_omnia_node_runner" {
   description = "Runner to create the omnia user using startup-scripts"
-  value       = local.add_omnia_user_runner
+  value       = local.setup_omnia_node_runner
 }
 
 output "install_omnia_runner" {
   description = "Runner to install Omnia using startup-scripts"
   value       = local.install_omnia_runner
+}
+
+output "omnia_user_warning" {
+  description = "Warn developers that the omnia user was created with sudo permissions"
+  value       = "WARNING: A new user named 'omnia' was created with sudo permissions. Remove user from all Omnia nodes if this is not desired."
 }

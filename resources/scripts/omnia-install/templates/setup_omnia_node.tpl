@@ -13,7 +13,6 @@
 # limitations under the License.
 
 ---
-
 - name: Create Omnia User
   hosts: localhost
   vars:
@@ -28,3 +27,21 @@
       state: present
       regexp: '^%%{{ username }}'
       line: '%%{{ username }} ALL=(ALL) NOPASSWD: ALL'
+
+- name: Set Status file
+  hosts: localhost
+  vars:
+    install_dir: ${install_dir}
+    state_dir: "{{ install_dir }}/state"
+  tasks:
+  - name: Get hostname
+    command: hostname
+    register: machine_hostname
+  - name: Create state dir if not already created
+    file:
+      path: "{{ state_dir }}"
+      state: directory
+  - name: Create file
+    file:
+      path: "{{ state_dir }}/{{ machine_hostname.stdout }}"
+      state: touch

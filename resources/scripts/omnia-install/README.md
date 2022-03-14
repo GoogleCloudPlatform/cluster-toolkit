@@ -3,20 +3,11 @@
 This resource will install [DellHPC Omnia](https://github.com/dellhpc/omnia)
 onto a cluster supporting a slurm controller and compute nodes. To see a full
 example using omnia-install, see the
-[omnia-cluster-simple example](../../../examples/omnia-cluster-simple.yaml).
+[omnia-cluster example](../../../examples/omnia-cluster.yaml).
 
-**Warning**: This resource is still under development and not fully supported.
-Some steps in the installation have addition dependencies listed below. This
-runs `gcloud compute ssh` and `gcloud compute scp` on the machine creating the
-deployment (i.e. where you run `terraform apply`).
-
-### Additional Dependencies
-
-**The following apply on the machine where `terraform apply` is called**
-
-* [gcloud](https://cloud.google.com/sdk/gcloud)
-* [python3](https://www.python.org/download/releases/3.0/)
-* [jinja2](https://palletsprojects.com/p/jinja/) python package
+**Warning**: This resource will create a maintenence user named "omnia" by
+default which has sudo permissions. If you do not wish this to be the case,
+remove this user and/or it's permissions from each node.
 
 ## License
 
@@ -58,7 +49,7 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_compute_ips"></a> [compute\_ips](#input\_compute\_ips) | IPs of the Omnia compute nodes | `list(string)` | n/a | yes |
-| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Path where omnia will be installed | `string` | `"/apps"` | no |
+| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Path where omnia will be installed, defaults to omnia user home directory (/home/omnia) | `string` | `""` | no |
 | <a name="input_manager_ips"></a> [manager\_ips](#input\_manager\_ips) | IPs of the Omnia manager nodes | `list(string)` | n/a | yes |
 | <a name="input_omnia_username"></a> [omnia\_username](#input\_omnia\_username) | Name of the user that installs omnia | `string` | `"omnia"` | no |
 
@@ -66,10 +57,10 @@ No resources.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_add_omnia_user_runner"></a> [add\_omnia\_user\_runner](#output\_add\_omnia\_user\_runner) | Runner to create the omnia user using startup-scripts |
-| <a name="output_add_omnia_user_script"></a> [add\_omnia\_user\_script](#output\_add\_omnia\_user\_script) | An ansible script that adds the user that install omnia |
-| <a name="output_create_omnia_install_dir_runner"></a> [create\_omnia\_install\_dir\_runner](#output\_create\_omnia\_install\_dir\_runner) | Runner to create the omnia installation directory using startup-scripts |
+| <a name="output_copy_inventory_runner"></a> [copy\_inventory\_runner](#output\_copy\_inventory\_runner) | Runner to copy the inventory to the omnia manager using startup-scripts |
 | <a name="output_install_omnia_runner"></a> [install\_omnia\_runner](#output\_install\_omnia\_runner) | Runner to install Omnia using startup-scripts |
-| <a name="output_inventory_data_runner"></a> [inventory\_data\_runner](#output\_inventory\_data\_runner) | Runner to copy the inventory to the omnia manager using startup-scripts |
 | <a name="output_inventory_file"></a> [inventory\_file](#output\_inventory\_file) | The inventory file for the omnia cluster |
+| <a name="output_omnia_user_warning"></a> [omnia\_user\_warning](#output\_omnia\_user\_warning) | Warn developers that the omnia user was created with sudo permissions |
+| <a name="output_setup_omnia_node_runner"></a> [setup\_omnia\_node\_runner](#output\_setup\_omnia\_node\_runner) | Runner to create the omnia user using startup-scripts |
+| <a name="output_setup_omnia_node_script"></a> [setup\_omnia\_node\_script](#output\_setup\_omnia\_node\_script) | An ansible script that adds the user that install omnia |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
