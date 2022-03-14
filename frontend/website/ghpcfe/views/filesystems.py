@@ -35,9 +35,10 @@ from ..models import Credential, Filesystem, FilesystemImpl, FILESYSTEM_IMPL_INF
     MountPoint, FilesystemExport
 from ..cluster_manager import cloud_info, filesystem as cm_fs
 from ..views.asyncview import BackendAsyncView
+from ..permissions import SuperUserRequiredMixin
 
 
-class FilesystemListView(generic.ListView):
+class FilesystemListView(SuperUserRequiredMixin, generic.ListView):
     """ Custom ListView for Cluster model """
     model = Filesystem
     template_name = 'filesystem/list.html'
@@ -57,7 +58,7 @@ class FilesystemListView(generic.ListView):
         return context
 
 
-class FilesystemCreateView1(LoginRequiredMixin, generic.ListView):
+class FilesystemCreateView1(SuperUserRequiredMixin, generic.ListView):
     """ Custom view for the first step of Filesystem creation """
     model = Credential
     template_name = 'credential/select_form.html'
@@ -71,7 +72,7 @@ class FilesystemCreateView1(LoginRequiredMixin, generic.ListView):
         return HttpResponseRedirect(reverse('fs-create2', kwargs={'credential': request.POST["credential"]}))
 
 
-class FilesystemCreateView2(LoginRequiredMixin, generic.TemplateView):
+class FilesystemCreateView2(SuperUserRequiredMixin, generic.TemplateView):
     """ Custom view for the first step of Filesystem creation """
     template_name = 'filesystem/impl_select_form.html'
 
@@ -95,7 +96,7 @@ class FilesystemCreateView2(LoginRequiredMixin, generic.TemplateView):
         return HttpResponseRedirect(reverse(tgt, kwargs={'credential': credential}))
 
 
-class FilesystemRedirectView(LoginRequiredMixin, generic.RedirectView):
+class FilesystemRedirectView(SuperUserRequiredMixin, generic.RedirectView):
     permanent = False
     query_string = True
 
@@ -108,7 +109,7 @@ class FilesystemRedirectView(LoginRequiredMixin, generic.RedirectView):
         return super().get_redirect_url(*args, **kwargs)
 
 
-class FilesystemDeleteView(DeleteView):
+class FilesystemDeleteView(SuperUserRequiredMixin, DeleteView):
     """ Custom DeleteView for Filesystem model """
 
     model = Filesystem
@@ -135,7 +136,7 @@ class FilesystemDeleteView(DeleteView):
         return reverse('filesystems')
 
 
-class FilesystemDestroyView(generic.DetailView):
+class FilesystemDestroyView(SuperUserRequiredMixin, generic.DetailView):
     """ Custom View to confirm filesystem destroy """
 
     model = Filesystem
@@ -154,6 +155,8 @@ class FilesystemDestroyView(generic.DetailView):
         context['navtab'] = 'fs'
         return context
 
+
+# Other supporting views
 
 class BackendDestroyFilesystem(BackendAsyncView):
     """ A view to make async call to destroy a filesystem """

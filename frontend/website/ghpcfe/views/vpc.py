@@ -36,6 +36,7 @@ from ..forms import VPCForm, VPCImportForm, VirtualSubnetForm
 from ..cluster_manager import cloud_info
 from ..views.asyncview import BackendAsyncView
 from ..serializers import VirtualNetworkSerializer, VirtualSubnetSerializer
+from ..permissions import SuperUserRequiredMixin
 from collections import defaultdict
 import json
 
@@ -43,7 +44,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # list view
-class VPCListView(generic.ListView):
+class VPCListView(SuperUserRequiredMixin, generic.ListView):
     """ Custom ListView for VirtualNetwork model """
     model = VirtualNetwork
     template_name = 'vpc/list.html'
@@ -61,7 +62,7 @@ class VPCListView(generic.ListView):
 
 
 # detail view
-class VPCDetailView(LoginRequiredMixin, generic.DetailView):
+class VPCDetailView(SuperUserRequiredMixin, generic.DetailView):
     """ Custom DetailView for Virtual Network model """
     model = VirtualNetwork
     template_name = 'vpc/detail.html'
@@ -96,7 +97,7 @@ class VPCDetailView(LoginRequiredMixin, generic.DetailView):
         return context
 
 
-class VPCCreateView1(LoginRequiredMixin, generic.ListView):
+class VPCCreateView1(SuperUserRequiredMixin, generic.ListView):
     """ Custom view for the first step of VPC creation """
     model = Credential
     template_name = 'credential/select_form.html'
@@ -110,7 +111,7 @@ class VPCCreateView1(LoginRequiredMixin, generic.ListView):
         return HttpResponseRedirect(reverse('vpc-create2', kwargs={'credential': request.POST["credential"]}))
 
 
-class VPCImportView1(LoginRequiredMixin, generic.ListView):
+class VPCImportView1(SuperUserRequiredMixin, generic.ListView):
     """ Custom view for the first step of VPC import """
     model = Credential
     template_name = 'credential/select_form.html'
@@ -124,7 +125,7 @@ class VPCImportView1(LoginRequiredMixin, generic.ListView):
         return HttpResponseRedirect(reverse('vpc-import2', kwargs={'credential': request.POST["credential"]}))
 
 
-class VPCCreateView2(LoginRequiredMixin, CreateView):
+class VPCCreateView2(SuperUserRequiredMixin, CreateView):
     """ Custom CreateView for VirtualNetwork model """
 
     template_name = 'vpc/create_form.html'
@@ -160,7 +161,7 @@ class VPCCreateView2(LoginRequiredMixin, CreateView):
         return reverse('backend-create-vpc', kwargs={'pk': self.object.pk})
 
 
-class VPCImportView2(LoginRequiredMixin, CreateView):
+class VPCImportView2(SuperUserRequiredMixin, CreateView):
     """ Custom CreateView for importing externally created VPC """
 
     template_name = 'vpc/import_form.html'
@@ -215,7 +216,7 @@ class VPCImportView2(LoginRequiredMixin, CreateView):
         return reverse('vpcs')
 
 
-class VPCUpdateView(UpdateView):
+class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
     """ Custom UpdateView for VirtualNetwork model """
 
     model = VirtualNetwork
@@ -237,7 +238,7 @@ class VPCUpdateView(UpdateView):
         return reverse('vpc-detail', kwargs={'pk': self.object.pk})
 
 
-class VPCDeleteView(DeleteView):
+class VPCDeleteView(SuperUserRequiredMixin, DeleteView):
     """ Custom DeleteView for VirtualNetwork model """
 
     model = VirtualNetwork
@@ -267,7 +268,7 @@ class VPCDeleteView(DeleteView):
         return reverse('vpcs')
 
 
-class VPCDestroyView(generic.DetailView):
+class VPCDestroyView(SuperUserRequiredMixin, generic.DetailView):
     """ Custom View to confirm VirtualNetwork destroy """
 
     model = VirtualNetwork
@@ -281,7 +282,7 @@ class VPCDestroyView(generic.DetailView):
         return context
 
 
-class VirtualSubnetView(generic.TemplateView):
+class VirtualSubnetView(SuperUserRequiredMixin, generic.TemplateView):
     """ Custom view for bulk processing subnets for a VPC """
 
     template_name = 'vpc/virtual_subnet.html'
