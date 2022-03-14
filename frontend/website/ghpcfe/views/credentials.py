@@ -28,11 +28,11 @@ from rest_framework import status
 from ..models import Credential
 from ..forms import CredentialForm
 from ..serializers import CredentialSerializer
-from ..permissions import CredentialPermission
+from ..permissions import CredentialPermission, SuperUserRequiredMixin
 from ..cluster_manager import validate_credential
 import json
 
-class CredentialListView(LoginRequiredMixin, generic.ListView):
+class CredentialListView(SuperUserRequiredMixin, generic.ListView):
     """ Custom ListView for Credential model """
     model = Credential
     template_name = 'credential/list.html'
@@ -43,7 +43,7 @@ class CredentialListView(LoginRequiredMixin, generic.ListView):
         return context
 
 
-class CredentialDetailView(LoginRequiredMixin, generic.DetailView):
+class CredentialDetailView(SuperUserRequiredMixin, generic.DetailView):
     """ Custom DetailView for Credential model """
     model = Credential
     template_name = 'credential/detail.html'
@@ -54,7 +54,7 @@ class CredentialDetailView(LoginRequiredMixin, generic.DetailView):
         return context
 
 
-class CredentialCreateView(LoginRequiredMixin, CreateView):
+class CredentialCreateView(SuperUserRequiredMixin, CreateView):
     """ Custom CreateView for Credential model """
 
     success_url = reverse_lazy('credentials')
@@ -74,7 +74,7 @@ class CredentialCreateView(LoginRequiredMixin, CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class CredentialUpdateView(LoginRequiredMixin, UpdateView):
+class CredentialUpdateView(SuperUserRequiredMixin, UpdateView):
     """ Custom UpdateView for Credential model """
 
     model = Credential
@@ -93,7 +93,7 @@ class CredentialUpdateView(LoginRequiredMixin, UpdateView):
         return initial
 
 
-class CredentialDeleteView(LoginRequiredMixin, DeleteView):
+class CredentialDeleteView(SuperUserRequiredMixin, DeleteView):
     """ Custom DeleteView for Credential model """
 
     model = Credential
