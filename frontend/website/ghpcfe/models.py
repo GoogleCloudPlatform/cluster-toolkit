@@ -18,11 +18,12 @@ import itertools
 import json
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
+from django.core.validators import RegexValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
-from django.core.validators import RegexValidator
 from rest_framework.authtoken.models import Token
 from allauth.socialaccount.models import SocialAccount
 
@@ -118,11 +119,24 @@ def user_post_save(sender, instance=None, created=False, **kwargs):
             instance.roles.set([Role.NORMALUSER])
 
 
+def validate_domain_or_email(value):
+    tmp = value
+    if value.startswith('@'):
+        tmp = 'dummy' + tmp
+    import re
+    regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    if not re.fullmatch(regex, tmp):
+        raise ValidationError(
+            "Input must be a valid email address for an individual user, or a domain name prepended with @ for a group of users.",
+            params={"value": value}
+        )
+
 class AuthorisedUser(models.Model):
     """ Model to hold users allowed to access this system """
     pattern = models.CharField(
         max_length = 60,
-        help_text = 'Enter a domain name to authorise a group of users or an email address to authorise an individual user',
+        help_text = 'Enter a domain name starting with @ to authorise a group of users or an email address to authorise an individual user',
+        validators=[validate_domain_or_email],
     )
 
     def __str__(self):
