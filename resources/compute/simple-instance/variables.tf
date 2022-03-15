@@ -129,3 +129,22 @@ variable "startup_script" {
   type        = string
   default     = null
 }
+
+variable "guest_accelerator" {
+  description = "List of the type and count of accelerator cards attached to the instance."
+  type = list(object({
+    type  = string,
+    count = number
+  }))
+  default = []
+}
+
+variable "on_host_maintenance" {
+  description = "Describes maintenance behavior for the instance."
+  type        = string
+  default     = "MIGRATE"
+  validation {
+    condition     = contains(["MIGRATE", "TERMINATE"], var.on_host_maintenance)
+    error_message = "The on_host_maintenance must be set to MIGRATE or TERMINATE."
+  }
+}

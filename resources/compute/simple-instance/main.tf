@@ -73,5 +73,10 @@ resource "google_compute_instance" "compute_vm" {
     }
   }
 
+  guest_accelerator = var.guest_accelerator
+  scheduling {
+    on_host_maintenance = var.on_host_maintenance
+  }
+
   metadata = merge(local.network_storage, local.startup_script, var.metadata)
 }
