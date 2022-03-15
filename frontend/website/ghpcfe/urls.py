@@ -31,7 +31,7 @@ from .views.gcpfilestore import *
 from .views.asyncview import RunningTasksViewSet
 from django.conf.urls import handler403
 
-handler403 = 'ghpcfe.views.custom_error_403'
+handler403 = 'ghpcfe.views.error_pages.custom_error_403'
 
 urlpatterns = [
     path('', views.index, name='index'),

@@ -32,7 +32,7 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
             if u.email == entry.pattern: # exact email address match
                 ret = True
                 break
-            if entry.pattern in u.email: # domain name match
+            if u.email.endswith('@'+entry.pattern): # domain name match
                 ret = True
                 break
         if ret:
