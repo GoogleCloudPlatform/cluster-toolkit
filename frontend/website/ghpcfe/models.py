@@ -301,6 +301,7 @@ class Filesystem(CloudResource):
         help_text = 'Subnet within which the Filesystem resides (if any)',
         on_delete = models.RESTRICT,
         null = True,
+        blank = True,
     )
     vpc = models.ForeignKey(
         VirtualNetwork,
