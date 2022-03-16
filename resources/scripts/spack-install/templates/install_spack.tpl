@@ -67,6 +67,7 @@ echo "$PREFIX Installing compilers..."
 {
 spack install ${c};
 spack load ${c};
+spack clean -s
 } &>> ${LOG_FILE}
 %{endfor ~}
 
@@ -75,6 +76,7 @@ spack compiler find --scope site >> ${LOG_FILE} 2>&1
 echo "$PREFIX Installing root spack specs..."
 %{for p in PACKAGES ~}
 spack install ${p} >> ${LOG_FILE} 2>&1
+spack clean -s
 %{endfor ~}
 
 echo "$PREFIX Configuring spack environments"
@@ -96,6 +98,7 @@ echo "$PREFIX    Installing packages for spack environment ${e.name}"
 spack install >> ${LOG_FILE} 2>&1
 
 spack env deactivate >> ${LOG_FILE} 2>&1
+spack clean -s
 
 %{endfor ~}
 
