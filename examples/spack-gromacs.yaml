@@ -44,13 +44,32 @@ resource_groups:
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
+      configs:
+      - type: 'file'
+        scope: site'
+        value: |
+          modules:
+            tcl:
+              hash_length: 0
+              whitelist:
+                - gcc
+              blacklist:
+                - '%gcc@4.8.5'
+              all:
+                conflict:
+                  - '{name}'
+                filter:
+                  environment_blacklist:
+                    - "C_INCLUDE_PATH"
+                    - "CPLUS_INCLUDE_PATH"
+                    - "LIBRARY_PATH"
+              projections:
+                all: '{name}/{version}-{compiler.name}-{compiler.version}'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
-      - cmake%gcc@10.3.0 target=x86_64
-      - intel-mkl%gcc@10.3.0 target=cascadelake
-      - git%gcc@10.3.0 target=x86_64
-      - intel-mpi@2018.4.274%gcc@10.3.0 target=cascadelake
+      - intel-mpi@2018.4.274%gcc@10.3.0
+      - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
       # Uncomment and update the name and path to add a shared or personal Spack
       # cache location to speed up future deployments.
       # spack_cache_url:
