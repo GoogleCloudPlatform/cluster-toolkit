@@ -27,9 +27,9 @@ resource "google_filestore_instance" "filestore_instance" {
   provider   = google-beta
   depends_on = [var.network_name]
 
-  name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
-  zone = var.zone
-  tier = var.filestore_tier
+  name     = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  location = var.filestore_tier == "ENTERPRISE" ? var.region : var.zone
+  tier     = var.filestore_tier
 
   file_shares {
     capacity_gb = var.size_gb
