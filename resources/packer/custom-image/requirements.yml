@@ -1,4 +1,3 @@
-#!/bin/sh
 # Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if ! command -v ansible-playbook >/dev/null 2>&1; then
-	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-		yum -y install epel-release
-		yum -y install ansible
-
-	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
-		echo 'WARNING: unsupported installation of ansible in debian / ubuntu'
-		apt update
-		apt install -y ansible
-	else
-		echo 'Unsupported distribution'
-		exit 1
-	fi
-fi
+---
+roles:
+- name: googlecloudplatform.google_cloud_ops_agents
