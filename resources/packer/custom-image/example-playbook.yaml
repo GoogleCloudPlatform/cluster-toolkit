@@ -19,14 +19,10 @@
   become: true
   tags: install
   roles:
-  - role: google-cloud-ops-agents-ansible
+  - role: googlecloudplatform.google_cloud_ops_agents
     vars:
       agent_type: ops-agent
   tasks:
-  - name: Upgrade all packages
-    yum:
-      name: '*'
-      state: latest
   - name: add EPEL
     yum:
       name:
