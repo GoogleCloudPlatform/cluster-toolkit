@@ -34,7 +34,7 @@ resource "google_compute_disk" "attached_disk" {
 }
 
 resource "google_compute_instance" "compute_instance" {
-  name         = "${var.deployment_name}-nfs-instance"
+  name         = "${local.name}-nfs-instance"
   zone         = var.zone
   machine_type = var.machine_type
 
