@@ -42,7 +42,7 @@ As an example, the below is a possible definition of a spack installation.
       - mirror_name: 'gcs_cache'
         mirror_url: gs://example-buildcache/linux-centos7
       configs:
-      - type: 'singleton'
+      - type: 'single-config'
         value: 'config:build_tree:/apps/spack/build_stage'
         scope: 'site'
       - type: 'file'
