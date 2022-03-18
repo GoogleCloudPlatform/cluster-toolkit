@@ -31,7 +31,7 @@ if [ ! -d ${INSTALL_DIR} ]; then
 
   echo "$PREFIX Configuring spack..."
   %{for c in CONFIGS ~}
-    %{if c.type == "singleton" ~}
+    %{if c.type == "single-config" ~}
       spack config --scope=${c.scope} add "${c.value}" >> ${LOG_FILE} 2>&1
     %{endif ~}
 

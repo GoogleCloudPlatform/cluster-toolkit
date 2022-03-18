@@ -147,7 +147,7 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | Defines compilers for spack to install before installing packages. | `list(string)` | `[]` | no |
-| <a name="input_configs"></a> [configs](#input\_configs) | List of configuration options to set within spack.<br>    Configs can be of type 'singleton' or 'file'.<br>    A singleton config must specify a value, and a<br>    file config must specify both content and a destination.<br>    Additionally, all configs must specify a scope. | `list(map(any))` | `[]` | no |
+| <a name="input_configs"></a> [configs](#input\_configs) | List of configuration options to set within spack.<br>    Configs can be of type 'single-config' or 'file'.<br>    All configs must specify a value, and a<br>    a scope. | `list(map(any))` | `[]` | no |
 | <a name="input_environments"></a> [environments](#input\_environments) | Defines a spack environment to configure. | <pre>list(object({<br>    name     = string<br>    packages = list(string)<br>  }))</pre> | `null` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory to install spack into. | `string` | `"/apps/spack"` | no |
 | <a name="input_licenses"></a> [licenses](#input\_licenses) | List of software licenses to install within spack. | <pre>list(object({<br>    source = string<br>    dest   = string<br>  }))</pre> | `null` | no |
