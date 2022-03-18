@@ -5,9 +5,9 @@ onto a cluster supporting a slurm controller and compute nodes. To see a full
 example using omnia-install, see the
 [omnia-cluster example](../../../examples/omnia-cluster.yaml).
 
-**Warning**: This resource will create a maintenence user named "omnia" by
-default which has sudo permissions. If you do not wish this to be the case,
-remove this user and/or it's permissions from each node.
+**Warning**: This resource will create a user named "omnia" by default which has
+sudo permissions. You may want to remove this user and/or it's permissions from
+each node.
 
 ## License
 
@@ -49,7 +49,7 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_compute_ips"></a> [compute\_ips](#input\_compute\_ips) | IPs of the Omnia compute nodes | `list(string)` | n/a | yes |
-| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Path where omnia will be installed, defaults to omnia user home directory (/home/omnia) | `string` | `""` | no |
+| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Path where omnia will be installed, defaults to omnia user home directory (/home/omnia).<br>If specifying this path, please make sure it is on a shared file system, accessible by all omnia nodes. | `string` | `""` | no |
 | <a name="input_manager_ips"></a> [manager\_ips](#input\_manager\_ips) | IPs of the Omnia manager nodes | `list(string)` | n/a | yes |
 | <a name="input_omnia_username"></a> [omnia\_username](#input\_omnia\_username) | Name of the user that installs omnia | `string` | `"omnia"` | no |
 

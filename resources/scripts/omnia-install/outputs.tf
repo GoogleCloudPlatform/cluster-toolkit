@@ -41,5 +41,5 @@ output "install_omnia_runner" {
 
 output "omnia_user_warning" {
   description = "Warn developers that the omnia user was created with sudo permissions"
-  value       = "WARNING: A new user named 'omnia' was created with sudo permissions. Remove user from all Omnia nodes if this is not desired."
+  value       = "WARNING: A new user named '${var.omnia_username}' was created with sudo permissions. Remove user from all Omnia nodes if this is not desired."
 }

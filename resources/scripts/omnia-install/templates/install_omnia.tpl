@@ -90,7 +90,7 @@
     shell: |
       files=$(ls {{ state_dir }} | wc -l)
       if [ $files -eq ${nodecount} ]; then exit 0; fi
-      echo "Waiting for ${nodecount} to be ready, found $${files} ready"
+      echo "Waiting for ${nodecount} nodes to be ready, found $${files} nodes ready"
       exit 1
     delay: 2
     retries: 300

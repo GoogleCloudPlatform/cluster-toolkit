@@ -25,7 +25,10 @@ variable "compute_ips" {
 }
 
 variable "install_dir" {
-  description = "Path where omnia will be installed, defaults to omnia user home directory (/home/omnia)"
+  description = <<EOT
+Path where omnia will be installed, defaults to omnia user home directory (/home/omnia).
+If specifying this path, please make sure it is on a shared file system, accessible by all omnia nodes.
+EOT
   default     = ""
   type        = string
 }
