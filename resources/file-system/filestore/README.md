@@ -101,5 +101,7 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_install_nfs_client"></a> [install\_nfs\_client](#output\_install\_nfs\_client) | Script for installing NFS client |
+| <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using startup-scripts |
+| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using startup-scripts |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a filestore instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

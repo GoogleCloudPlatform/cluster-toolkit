@@ -115,12 +115,10 @@ Note: Installing spack compilers and libraries in this example can take 1-2
 hours to run on startup. To decrease this time in future deployments, consider
 including a spack build cache as described in the comments of the example.
 
-### Experimental
-
-#### omnia-cluster-simple.yaml
+### omnia-cluster.yaml
 
 Creates a simple omnia cluster, with an
-omnia-manager node and 8 omnia-compute nodes, on the pre-existing default
+omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
 

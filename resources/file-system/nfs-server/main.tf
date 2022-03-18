@@ -20,6 +20,16 @@ resource "random_id" "resource_name_suffix" {
 
 locals {
   name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  install_nfs_client_runner = {
+    "type"        = "shell"
+    "content"     = "${path.module}/scripts/install-nfs-client.sh"
+    "destination" = "install-nfs.sh"
+  }
+  mount_runner = {
+    "type"        = "ansible-local"
+    "source"      = "${path.module}/scripts/mount.yaml"
+    "destination" = "mount.yaml"
+  }
 }
 
 data "google_compute_default_service_account" "default" {}
