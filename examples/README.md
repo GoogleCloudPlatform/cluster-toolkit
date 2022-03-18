@@ -101,14 +101,15 @@ Quota required for this example:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### spack-build.yaml
+### spack-gromacs.yaml
 
-Creates a [Spack](../resources/scripts/spack-install/README.md)
-build VM and a workstation for testing and validating a spack build. The build
-VM will install spack as configured in the spack-install resource in a shared
-location (/apps), then shutdown. Spack supports HPC software package
-installation and management. This build leverages the startup-script resource
-and can be applied in any cluster by using the output of spack-install or
+Spack is a HPC software package manager. This example creates a
+[Spack](../resources/scripts/spack-install/README.md) build VM and a
+workstation for testing and validating a spack build. The build VM will install
+and configure spack, and install gromacs with spack (as configured in the
+spack-install resource). This happens in a shared location (/apps). Then the
+build VM will shutdown. This build leverages the startup-script resource and
+can be applied in any cluster by using the output of spack-install or
 startup-script resources.
 
 Note: Installing spack compilers and libraries in this example can take 1-2

@@ -41,6 +41,30 @@ As an example, the below is a possible definition of a spack installation.
       spack_cache_url:
       - mirror_name: 'gcs_cache'
         mirror_url: gs://example-buildcache/linux-centos7
+      configs:
+      - type: 'single-config'
+        value: 'config:build_tree:/apps/spack/build_stage'
+        scope: 'site'
+      - type: 'file'
+        scope: 'site'
+        value: |
+          modules:
+            tcl:
+              hash_length: 0
+              whitelist:
+                - gcc
+              blacklist:
+                - '%gcc@4.8.5'
+              all:
+                conflict:
+                  - '{name}'
+                filter:
+                  environment_blacklist:
+                    - "C_INCLUDE_PATH"
+                    - "CPLUS_INCLUDE_PATH"
+                    - "LIBRARY_PATH"
+              projections:
+                all: '{name}/{version}-{compiler.name}-{compiler.version}'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
@@ -123,6 +147,7 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | Defines compilers for spack to install before installing packages. | `list(string)` | `[]` | no |
+| <a name="input_configs"></a> [configs](#input\_configs) | List of configuration options to set within spack.<br>    Configs can be of type 'single-config' or 'file'.<br>    All configs must specify a value, and a<br>    a scope. | `list(map(any))` | `[]` | no |
 | <a name="input_environments"></a> [environments](#input\_environments) | Defines a spack environment to configure. | <pre>list(object({<br>    name     = string<br>    packages = list(string)<br>  }))</pre> | `null` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory to install spack into. | `string` | `"/apps/spack"` | no |
 | <a name="input_licenses"></a> [licenses](#input\_licenses) | List of software licenses to install within spack. | <pre>list(object({<br>    source = string<br>    dest   = string<br>  }))</pre> | `null` | no |

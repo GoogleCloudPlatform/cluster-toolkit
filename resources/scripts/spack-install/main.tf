@@ -24,6 +24,7 @@ locals {
       SPACK_URL    = var.spack_url
       SPACK_REF    = var.spack_ref
       COMPILERS    = var.compilers == null ? [] : var.compilers
+      CONFIGS      = var.configs == null ? [] : var.configs
       LICENSES     = var.licenses == null ? [] : var.licenses
       PACKAGES     = var.packages == null ? [] : var.packages
       ENVIRONMENTS = var.environments == null ? [] : var.environments

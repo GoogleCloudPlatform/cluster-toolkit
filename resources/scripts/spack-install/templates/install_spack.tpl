@@ -24,32 +24,28 @@ if [ ! -d ${INSTALL_DIR} ]; then
   echo "$PREFIX Checking out ${SPACK_REF}..."
   git checkout ${SPACK_REF} >> ${LOG_FILE} 2>&1
 
-  # Configure module names
-  cat <<EOF >> ${INSTALL_DIR}/etc/spack/modules.yaml
-modules:
-  tcl:
-    hash_length: 0
-    whitelist:
-      -  gcc
-    blacklist:
-      -  '%gcc@7.5.0'
-    all:
-      conflict:
-        - '{name}'
-      filter:
-        environment_blacklist:
-          - "C_INCLUDE_PATH"
-          - "CPLUS_INCLUDE_PATH"
-          - "LIBRARY_PATH"
-    projections:
-      all:               '{name}/{version}-{compiler.name}-{compiler.version}'
-EOF
-
   {
-  chmod a+r ${INSTALL_DIR}/etc/spack/modules.yaml;
   source ${INSTALL_DIR}/share/spack/setup-env.sh;
   spack compiler find --scope site
   } &>> ${LOG_FILE} 2>&1
+
+  echo "$PREFIX Configuring spack..."
+  %{for c in CONFIGS ~}
+    %{if c.type == "single-config" ~}
+      spack config --scope=${c.scope} add "${c.value}" >> ${LOG_FILE} 2>&1
+    %{endif ~}
+
+    %{if c.type == "file" ~}
+      {
+      cat <<EOF > ${INSTALL_DIR}/spack_conf.yaml
+${c.value}
+EOF
+
+      spack config --scope=${c.scope} add -f ${INSTALL_DIR}/spack_conf.yaml
+      rm -f ${INSTALL_DIR}/spack_conf.yaml
+      } &>> ${LOG_FILE} 2>&1
+    %{endif ~}
+  %{endfor ~}
 
   echo "$PREFIX Setting up spack mirrors..."
   %{for m in MIRRORS ~}
@@ -71,6 +67,7 @@ echo "$PREFIX Installing compilers..."
 {
 spack install ${c};
 spack load ${c};
+spack clean -s
 } &>> ${LOG_FILE}
 %{endfor ~}
 
@@ -79,6 +76,7 @@ spack compiler find --scope site >> ${LOG_FILE} 2>&1
 echo "$PREFIX Installing root spack specs..."
 %{for p in PACKAGES ~}
 spack install ${p} >> ${LOG_FILE} 2>&1
+spack clean -s
 %{endfor ~}
 
 echo "$PREFIX Configuring spack environments"
@@ -100,6 +98,7 @@ echo "$PREFIX    Installing packages for spack environment ${e.name}"
 spack install >> ${LOG_FILE} 2>&1
 
 spack env deactivate >> ${LOG_FILE} 2>&1
+spack clean -s
 
 %{endfor ~}
 
