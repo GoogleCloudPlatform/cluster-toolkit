@@ -142,27 +142,8 @@ func writeOutputs(
 }
 
 func writeTfvars(vars map[string]cty.Value, dst string) error {
-	// Create file
 	tfvarsPath := filepath.Join(dst, "terraform.tfvars")
-	if err := createBaseFile(tfvarsPath); err != nil {
-		return fmt.Errorf("error creating terraform.tfvars file: %v", err)
-	}
-
-	// Create hcl body
-	hclFile := hclwrite.NewEmptyFile()
-	hclBody := hclFile.Body()
-
-	// for each variable
-	for k, v := range vars {
-		// Write attribute
-		hclBody.SetAttributeValue(k, v)
-	}
-
-	// Write file
-	err := appendHCLToFile(tfvarsPath, hclFile.Bytes())
-	if err != nil {
-		return fmt.Errorf("error writing HCL to terraform.tfvars file: %v", err)
-	}
+	err := writeHclAttributes(vars, tfvarsPath)
 	return err
 }
 

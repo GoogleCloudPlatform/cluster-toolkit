@@ -18,7 +18,6 @@
 package reswriter
 
 import (
-	"embed"
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
@@ -26,6 +25,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/zclconf/go-cty/cty"
 )
 
 const (
@@ -45,9 +47,6 @@ var kinds = map[string]ResWriter{
 	"packer":    new(PackerWriter),
 }
 
-//go:embed *.tmpl
-var templatesFS embed.FS
-
 func factory(kind string) ResWriter {
 	writer, exists := kinds[kind]
 	if !exists {
@@ -56,15 +55,6 @@ func factory(kind string) ResWriter {
 				"kind must be in (terraform, blueprint-controller).", kind)
 	}
 	return writer
-}
-
-func getTemplate(filename string) string {
-	// Create path to template from the embedded template FS
-	tmplText, err := templatesFS.ReadFile(filename)
-	if err != nil {
-		log.Fatalf("reswriter: %v", err)
-	}
-	return string(tmplText)
 }
 
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
@@ -120,4 +110,27 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
 			}
 		}
 	}
+}
+
+func writeHclAttributes(vars map[string]cty.Value, dst string) error {
+	if err := createBaseFile(dst); err != nil {
+		return fmt.Errorf("error creating variables file %v: %v", filepath.Base(dst), err)
+	}
+
+	// Create hcl body
+	hclFile := hclwrite.NewEmptyFile()
+	hclBody := hclFile.Body()
+
+	// for each variable
+	for k, v := range vars {
+		// Write attribute
+		hclBody.SetAttributeValue(k, v)
+	}
+
+	// Write file
+	err := appendHCLToFile(dst, hclFile.Bytes())
+	if err != nil {
+		return fmt.Errorf("error writing HCL to %v: %v", filepath.Base(dst), err)
+	}
+	return err
 }

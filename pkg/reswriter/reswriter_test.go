@@ -653,13 +653,12 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestWritePackerAutoVariables(c *C) {
-	// The happy path is tested outside of this funcation already
-
-	// Bad tmplFilename
+func (s *MySuite) TestWritePackerAutovars(c *C) {
+	testWriter := PackerWriter{}
 	badDestPath := "not/a/real/path"
-	err := writePackerAutoVariables(
-		packerAutoVarFilename, config.Resource{}, badDestPath)
+	testYamlConfig := getYamlConfigForTest()
+	ctyVars, err := convertMapToCty(testYamlConfig.Vars)
+	err = testWriter.writePackerAutovars(ctyVars, badDestPath)
 	expErr := "failed to create packer file .*"
 	c.Assert(err, ErrorMatches, expErr)
 }
