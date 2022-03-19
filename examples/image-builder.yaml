@@ -1,0 +1,31 @@
+---
+blueprint_name: image-builder
+
+vars:
+  project_id: ## Set Project ID here ##
+  deployment_name: image-builder-001
+  region: us-central1
+  zone: us-central1-c
+
+resource_groups:
+- group: network
+  resources:
+  - source: resources/network/vpc
+    kind: terraform
+    id: network1
+    outputs:
+    - subnetwork_name
+- group: image-builder
+  resources:
+  - source: resources/packer/custom-image
+    kind: packer
+    id: custom-image-001
+    settings:
+      subnetwork: "## Set Subnetwork here ##"
+      use_iap: true
+      omit_external_ip: true
+      disk_size: 100
+      ansible_playbooks:
+      - playbook_file: ./example-playbook.yaml
+        galaxy_file: null
+        extra_arguments: ["-vv"]
