@@ -43,7 +43,6 @@ func (w *PackerWriter) addNumResources(value int) {
 // writing to the blueprint directory
 func (w PackerWriter) prepareToWrite(yamlConfig *config.YamlConfig) {
 	updateStringsInConfig(yamlConfig, "packer")
-	flattenToHCLStrings(yamlConfig, "packer")
 }
 
 func printPackerInstructions(grpPath string) {
@@ -61,6 +60,15 @@ func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig, bpDirect
 				continue
 			}
 			ctyVars, err := convertMapToCty(res.Settings)
+			// this behavior ALWAYS overrides a setting whether it
+			// is pointing to `var.global_var` or explicitly set!
+			// should resolve it!
+			for key := range ctyVars {
+				if globalValue, ok := yamlConfig.Vars[key]; ok {
+					ctyGlobalValue, _ := convertToCty(globalValue)
+					ctyVars[key] = ctyGlobalValue
+				}
+			}
 			if err != nil {
 				return fmt.Errorf(
 					"error converting global vars to cty for writing: %v", err)
