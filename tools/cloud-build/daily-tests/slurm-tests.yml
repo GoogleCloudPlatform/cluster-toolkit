@@ -35,9 +35,9 @@
   loop: "{{ stat_mounts.results }}"
 
 - name: Test Mounts on partitions
-  command: srun -N 1 ls -laF {{ mounts | join(' ') }}
+  shell: srun -N 1 ls -laF {{ mounts | join(' ') }} && sleep 120
   loop: "{{ partitions }}"
 
 - name: Test partitions with hostname
-  command: srun -N 2 --partition {{ item }} hostname
+  shell: srun -N 2 --partition {{ item }} hostname && sleep 120
   loop: "{{ partitions }}"
