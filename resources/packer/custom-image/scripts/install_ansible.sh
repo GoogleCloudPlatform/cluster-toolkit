@@ -13,6 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+apt_wait() {
+	while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+		echo "Sleeping for dpkg lock"
+		sleep 3
+	done
+	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+		echo "Sleeping for apt lists lock"
+		sleep 3
+	done
+	if [ -f /var/log/unattended-upgrades/unattended-upgrades.log ]; then
+		echo "Sleeping until unattended-upgrades finishes"
+		while fuser /var/log/unattended-upgrades/unattended-upgrades.log >/dev/null 2>&1; do
+			sleep 3
+		done
+	fi
+}
+
 if ! command -v ansible-playbook >/dev/null 2>&1; then
 	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
 		yum -y install epel-release
@@ -20,8 +37,9 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
 
 	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
 		echo 'WARNING: unsupported installation of ansible in debian / ubuntu'
-		apt update
-		apt install -y ansible
+		apt_wait
+		apt-get update
+		DEBIAN_FRONTEND=noninteractive apt-get install -y ansible
 	else
 		echo 'Unsupported distribution'
 		exit 1
