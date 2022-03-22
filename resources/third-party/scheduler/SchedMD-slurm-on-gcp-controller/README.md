@@ -4,6 +4,8 @@ This resource creates a slurm controller node via the SchedMD/slurm-gcp
 [controller](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
 module.
 
+More information about Slurm On GCP can be found at the [project's GitHub page](https://github.com/SchedMD/slurm-gcp) and in the [Slurm on Google Cloud User Guide](https://goo.gle/slurm-gcp-user-guide).
+
 ### Example
 
 ```yaml
