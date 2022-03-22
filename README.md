@@ -112,7 +112,7 @@ below.
 
 ### Supplying cloud credentials to Terraform
 
-Terraform can discover credentials for authenticating to Google Clould Platform
+Terraform can discover credentials for authenticating to Google Cloud Platform
 in several ways. We will summarize Terraform's documentation for using
 [gcloud][terraform-auth-gcloud] from your workstation and for automatically
 finding credentials in cloud environments. We do **not** recommend following
