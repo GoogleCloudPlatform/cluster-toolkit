@@ -37,6 +37,9 @@ from .asyncview import BackendAsyncView
 from rest_framework.authtoken.models import Token
 from .view_utils import GCSFile, StreamingFileView
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class ApplicationListView(generic.ListView):
     """ Custom ListView for Application model """
@@ -70,11 +73,12 @@ class ApplicationDetailView(generic.DetailView):
     model = Application
     template_name = 'application/detail.html'
 
-    def get_template_name(self):
-        if isinstance(self.get_object(), SpackApplication):
-            return ["application/spack_detail.hml"]
+    def get_template_names(self):
+        logger.info(f"ApplicationDetailView:  Object type: {type(self.get_object())}")
+        if hasattr(self.get_object(), 'spackapplication'):
+            return ["application/spack_detail.html"]
         else:
-            return super().get_template_name()
+            return super().get_template_names()
 
 
     def get_context_data(self, **kwargs):
