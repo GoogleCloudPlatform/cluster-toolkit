@@ -20,6 +20,16 @@ resource "random_id" "resource_name_suffix" {
 
 locals {
   timeouts = var.filestore_tier == "HIGH_SCALE_SSD" ? [1] : []
+  install_nfs_client_runner = {
+    "type"        = "shell"
+    "content"     = "${path.module}/scripts/install-nfs-client.sh"
+    "destination" = "install-nfs.sh"
+  }
+  mount_runner = {
+    "type"        = "ansible-local"
+    "source"      = "${path.module}/scripts/mount.yaml"
+    "destination" = "mount.yaml"
+  }
 }
 
 resource "google_filestore_instance" "filestore_instance" {
@@ -27,9 +37,9 @@ resource "google_filestore_instance" "filestore_instance" {
   provider   = google-beta
   depends_on = [var.network_name]
 
-  name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
-  zone = var.zone
-  tier = var.filestore_tier
+  name     = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  location = var.filestore_tier == "ENTERPRISE" ? var.region : var.zone
+  tier     = var.filestore_tier
 
   file_shares {
     capacity_gb = var.size_gb

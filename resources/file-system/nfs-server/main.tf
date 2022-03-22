@@ -20,6 +20,16 @@ resource "random_id" "resource_name_suffix" {
 
 locals {
   name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  install_nfs_client_runner = {
+    "type"        = "shell"
+    "content"     = "${path.module}/scripts/install-nfs-client.sh"
+    "destination" = "install-nfs.sh"
+  }
+  mount_runner = {
+    "type"        = "ansible-local"
+    "source"      = "${path.module}/scripts/mount.yaml"
+    "destination" = "mount.yaml"
+  }
 }
 
 data "google_compute_default_service_account" "default" {}
@@ -34,7 +44,7 @@ resource "google_compute_disk" "attached_disk" {
 }
 
 resource "google_compute_instance" "compute_instance" {
-  name         = "${var.deployment_name}-nfs-instance"
+  name         = "${local.name}-nfs-instance"
   zone         = var.zone
   machine_type = var.machine_type
 
@@ -50,7 +60,8 @@ resource "google_compute_instance" "compute_instance" {
   }
 
   network_interface {
-    network = var.network_name
+    network    = var.network_self_link
+    subnetwork = var.subnetwork_self_link
   }
 
   service_account {

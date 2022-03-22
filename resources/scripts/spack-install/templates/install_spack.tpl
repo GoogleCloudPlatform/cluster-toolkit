@@ -12,32 +12,6 @@ fi
 # Only install and configure spack if ${INSTALL_DIR} doesn't exist
 if [ ! -d ${INSTALL_DIR} ]; then
 
-  DEPS=""
-  if [ ! "$(which pip3)" ]; then
-      DEPS="$DEPS pip3"
-  fi
-
-  if [ ! "$(which git)" ]; then
-     DEPS="$DEPS git"
-  fi
-
-  if [ -n "$DEPS" ]; then
-    echo "$PREFIX Installing dependencies"
-    if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-      yum -y install $DEPS
-    elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
-      echo "$PREFIX WARNING: unsupported installation in debian / ubuntu"
-      apt install -y $DEPS
-    else
-      echo "$PREFIX Unsupported distribution"
-      exit 1
-    fi
-  fi
-
-  # Install google-cloud-storage
-  echo "$PREFIX Installing Google Cloud Storage via pip3..."
-  pip3 install google-cloud-storage > ${LOG_FILE} 2>&1
-
   # Install spack
   echo "$PREFIX Installing spack from ${SPACK_URL}..."
   {
@@ -50,32 +24,28 @@ if [ ! -d ${INSTALL_DIR} ]; then
   echo "$PREFIX Checking out ${SPACK_REF}..."
   git checkout ${SPACK_REF} >> ${LOG_FILE} 2>&1
 
-  # Configure module names
-  cat <<EOF >> ${INSTALL_DIR}/etc/spack/modules.yaml
-modules:
-  tcl:
-    hash_length: 0
-    whitelist:
-      -  gcc
-    blacklist:
-      -  '%gcc@7.5.0'
-    all:
-      conflict:
-        - '{name}'
-      filter:
-        environment_blacklist:
-          - "C_INCLUDE_PATH"
-          - "CPLUS_INCLUDE_PATH"
-          - "LIBRARY_PATH"
-    projections:
-      all:               '{name}/{version}-{compiler.name}-{compiler.version}'
-EOF
-
   {
-  chmod a+r ${INSTALL_DIR}/etc/spack/modules.yaml;
   source ${INSTALL_DIR}/share/spack/setup-env.sh;
   spack compiler find --scope site
   } &>> ${LOG_FILE} 2>&1
+
+  echo "$PREFIX Configuring spack..."
+  %{for c in CONFIGS ~}
+    %{if c.type == "single-config" ~}
+      spack config --scope=${c.scope} add "${c.value}" >> ${LOG_FILE} 2>&1
+    %{endif ~}
+
+    %{if c.type == "file" ~}
+      {
+      cat <<EOF > ${INSTALL_DIR}/spack_conf.yaml
+${c.value}
+EOF
+
+      spack config --scope=${c.scope} add -f ${INSTALL_DIR}/spack_conf.yaml
+      rm -f ${INSTALL_DIR}/spack_conf.yaml
+      } &>> ${LOG_FILE} 2>&1
+    %{endif ~}
+  %{endfor ~}
 
   echo "$PREFIX Setting up spack mirrors..."
   %{for m in MIRRORS ~}
@@ -97,6 +67,7 @@ echo "$PREFIX Installing compilers..."
 {
 spack install ${c};
 spack load ${c};
+spack clean -s
 } &>> ${LOG_FILE}
 %{endfor ~}
 
@@ -105,6 +76,7 @@ spack compiler find --scope site >> ${LOG_FILE} 2>&1
 echo "$PREFIX Installing root spack specs..."
 %{for p in PACKAGES ~}
 spack install ${p} >> ${LOG_FILE} 2>&1
+spack clean -s
 %{endfor ~}
 
 echo "$PREFIX Configuring spack environments"
@@ -126,6 +98,7 @@ echo "$PREFIX    Installing packages for spack environment ${e.name}"
 spack install >> ${LOG_FILE} 2>&1
 
 spack env deactivate >> ${LOG_FILE} 2>&1
+spack clean -s
 
 %{endfor ~}
 

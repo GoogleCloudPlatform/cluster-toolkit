@@ -14,33 +14,32 @@
 
 ---
 
-blueprint_name: custom-vm-image
+blueprint_name: gpu-vm
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm1
-  region: europe-west4
-  zone: europe-west4-a
+  deployment_name: gpu-vm
+  region: us-central1
+  zone: us-central1-c
 
 resource_groups:
-- group: network
+- group: primary
   resources:
-  - source: resources/network/vpc
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
+  - source: resources/network/pre-existing-vpc
     kind: terraform
     id: network1
+
+  - source: ./resources/compute/simple-instance
+    kind: terraform
+    id: workstation
+    use:
+    - network1
     settings:
-      network_name: $(vars.deployment_name)
-- group: packer
-  resources:
-  - source: resources/packer/custom-image
-    kind: packer
-    id: my-custom-image
-    settings:
-      subnetwork: "subnet-central1"
-      use_iap: true
-      omit_external_ip: true
-      disk_size: 100
-      ansible_playbooks:
-      - playbook_file: ./example-playbook.yml
-        galaxy_file: ./requirements.yml
-        extra_arguments: ["-vv"]
+      machine_type: n1-standard-32
+      on_host_maintenance: TERMINATE
+      guest_accelerator:
+      - type: nvidia-tesla-t4
+        count: 1

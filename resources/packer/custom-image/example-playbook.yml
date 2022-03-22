@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-## Install dependendencies
-sudo yum install -y ansible
+---
 
-## Run scripts
-ansible-playbook install_omnia.yml -i ../data/inventory
+- name: Update image and add EPEL, Google Cloud Logging/Monitoring
+  hosts: all
+  become: true
+  tags: install
+  roles:
+  - role: googlecloudplatform.google_cloud_ops_agents
+    vars:
+      agent_type: ops-agent
+  tasks:
+  - name: add EPEL
+    yum:
+      name:
+      - epel-release

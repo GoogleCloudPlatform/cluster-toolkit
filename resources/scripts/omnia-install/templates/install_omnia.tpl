@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@
 - name: Creates SSH Keys to communicate between hosts
   hosts: localhost
   vars:
-    pub_key_path: ~/.ssh
+    username: ${username}
+    pub_key_path: "/home/{{ username }}/.ssh"
     pub_key_file: "{{pub_key_path}}/id_rsa"
     auth_key_file: "{{pub_key_path}}/authorized_keys"
   tasks:
@@ -26,16 +27,19 @@
       path: "{{pub_key_path}}"
       state: directory
       mode: 0700
+      owner: "{{username}}"
   - name: Create keys
     openssh_keypair:
       path: "{{pub_key_file}}"
+      owner: "{{username}}"
   - name: Copy public key to authorized keys
     copy:
       src: "{{pub_key_file}}.pub"
       dest: "{{auth_key_file}}"
+      owner: "{{username}}"
       mode: 0644
 
-- name: install_deps
+- name: Install necessary dependencies
   hosts: localhost
   tasks:
   - name: Install git and epel-release
@@ -45,8 +49,11 @@
       - epel-release
       state: latest
 
-- name: setup_omnia
+- name: Prepare the system for Omnia installation
   hosts: localhost
+  vars:
+    install_dir: ${install_dir}
+    omnia_dir: "{{ install_dir }}/omnia"
   tasks:
   - name: Unmask and restart firewalld
     become: true
@@ -54,29 +61,48 @@
   - name: Git checkout
     git:
       repo: 'https://github.com/dellhpc/omnia.git'
-      dest: ../omnia
+      dest: "{{ omnia_dir }}"
       version: release-1.0
       update: false
-  - name: Copy file with owner and permissions
+  - name: Copy inventory file with owner and permissions
     copy:
-      src: ../data/inventory
-      dest: ../omnia/inventory
+      src: "{{ install_dir }}/inventory"
+      dest: "{{ omnia_dir }}/inventory"
       mode: 0644
   - name: Update omnia.yml setting become to yes
     replace:
-      path: ../omnia/omnia.yml
+      path: "{{ omnia_dir }}/omnia.yml"
       regexp: '- name(.*)'
       replace: '- name\1\n  become: yes'
 
-- name: run_omnia  # Look into import_playbook here
+- name: Run the Omnia installation once all nodes are ready
   hosts: localhost
+  vars:
+    nodecount: ${nodecount}
+    install_dir: ${install_dir}
+    username: ${username}
+    omnia_dir: "{{ install_dir }}/omnia"
+    state_dir: "{{ install_dir }}/state"
+  become_user: "{{ username }}"
+  remote_user: "{{ username }}"
   tasks:
+  - name: Wait for nodes to setup
+    shell: |
+      files=$(ls {{ state_dir }} | wc -l)
+      if [ $files -eq ${nodecount} ]; then exit 0; fi
+      echo "Waiting for ${nodecount} nodes to be ready, found $${files} nodes ready"
+      exit 1
+    delay: 2
+    retries: 300
   - name: Run omnia
     shell: |
-      ansible-playbook omnia.yml -i inventory \
+      ansible-playbook omnia.yml \
+        --private-key /home/{{ username }}/.ssh/id_rsa \
+        --inventory inventory \
+        --user "{{ username }}" \
         --e "ansible_python_interpreter=/usr/bin/python2" \
         --skip-tags "kubernetes"
     args:
-      chdir: ../omnia
+      chdir: "{{ omnia_dir }}"
     environment:
       ANSIBLE_HOST_KEY_CHECKING: False

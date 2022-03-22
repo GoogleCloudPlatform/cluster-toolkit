@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,21 +13,5 @@
 # limitations under the License.
 
 ---
-
-- name: Update image and add EPEL, Google Cloud Logging/Monitoring
-  hosts: all
-  become: true
-  tags: install
-  roles:
-  - role: google-cloud-ops-agents-ansible
-    vars:
-      agent_type: ops-agent
-  tasks:
-  - name: Upgrade all packages
-    yum:
-      name: '*'
-      state: latest
-  - name: add EPEL
-    yum:
-      name:
-      - epel-release
+roles:
+- name: googlecloudplatform.google_cloud_ops_agents

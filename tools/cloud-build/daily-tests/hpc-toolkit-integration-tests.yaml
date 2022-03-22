@@ -28,22 +28,25 @@ steps:
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   args:
   - -c
   - |
     BUILD_ID_FULL=$BUILD_ID
     DEPLOYMENT_NAME=lustre-new-vpc-$${BUILD_ID_FULL:0:6}
     LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
+    CONTROLLER_ID=slurm-$${DEPLOYMENT_NAME}-controller
     cat <<EOT > test-vars.yml
-    build_id: ${BUILD_ID}
+    deployment_name: $${DEPLOYMENT_NAME}
     project: ${PROJECT_ID}
     zone: us-central1-c
     workspace: /workspace
     blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-with-new-vpc.yaml"
     blueprint_dir: blueprint-lustre-new-vcp
-    network: lustre-new-vpc
+    network: $${DEPLOYMENT_NAME}
     max_nodes: 5
     login_node: $${LOGIN_ID}
+    controller_node: $${CONTROLLER_ID}
     partitions:
     - compute
     mounts:
@@ -57,13 +60,16 @@ steps:
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   args:
   - -c
   - |
     BUILD_ID_FULL=$BUILD_ID
-    LOGIN_ID=slurm-hpc-slurm-io-$${BUILD_ID_FULL:0:6}-login0
+    DEPLOYMENT_NAME=hpc-high-io-$${BUILD_ID_FULL:0:6}
+    LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
+    CONTROLLER_ID=slurm-$${DEPLOYMENT_NAME}-controller
     cat <<EOT > test-vars.yml
-    build_id: ${BUILD_ID}
+    deployment_name: $${DEPLOYMENT_NAME}
     project: ${PROJECT_ID}
     zone: us-central1-c
     workspace: /workspace
@@ -72,6 +78,7 @@ steps:
     network: default
     max_nodes: 5
     login_node: $${LOGIN_ID}
+    controller_node: $${CONTROLLER_ID}
     partitions:
     - compute
     mounts:

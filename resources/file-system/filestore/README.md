@@ -59,14 +59,14 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 3.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.4 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | ~> 3.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.4 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -92,13 +92,16 @@ No modules.
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the GCE VPC network to which the instance is connected. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Filestore instance will be created. | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | Location for Filestore instances at Enterprise tier. | `string` | n/a | yes |
 | <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the filestore instance in GB. | `number` | `2660` | no |
-| <a name="input_zone"></a> [zone](#input\_zone) | The name of the Filestore zone of the instance. | `string` | n/a | yes |
+| <a name="input_zone"></a> [zone](#input\_zone) | Location for Filestore instances below Enterprise tier. | `string` | n/a | yes |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
 | <a name="output_install_nfs_client"></a> [install\_nfs\_client](#output\_install\_nfs\_client) | Script for installing NFS client |
+| <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using startup-scripts |
+| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using startup-scripts |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a filestore instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

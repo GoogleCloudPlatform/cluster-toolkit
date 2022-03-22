@@ -61,7 +61,8 @@ resource "google_compute_instance" "compute_vm" {
       content {}
     }
 
-    network = var.network_self_link
+    network    = var.network_self_link
+    subnetwork = var.subnetwork_self_link
   }
 
   dynamic "service_account" {
@@ -70,6 +71,11 @@ resource "google_compute_instance" "compute_vm" {
       email  = lookup(service_account.value, "email", null)
       scopes = lookup(service_account.value, "scopes", null)
     }
+  }
+
+  guest_accelerator = var.guest_accelerator
+  scheduling {
+    on_host_maintenance = var.on_host_maintenance
   }
 
   metadata = merge(local.network_storage, local.startup_script, var.metadata)
