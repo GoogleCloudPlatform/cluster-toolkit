@@ -45,8 +45,8 @@ resource_groups:
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
       configs:
-      - type: 'file'
-        scope: site'
+      - type: file
+        scope: site
         value: |
           modules:
             tcl:
