@@ -45,4 +45,4 @@ steps:
     time SKIP=go-unit-tests pre-commit run --all-files
 timeout: "1200s"
 options:
-  machineType: N1_HIGHCPU_8
+  machineType: N1_HIGHCPU_32
