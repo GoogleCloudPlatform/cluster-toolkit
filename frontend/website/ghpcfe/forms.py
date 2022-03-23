@@ -270,18 +270,24 @@ class ApplicationEditForm(forms.ModelForm):
 
 class ApplicationForm(forms.ModelForm):
     """ Custom form for application model """
+    installation_path = forms.CharField(widget=forms.TextInput(
+                        attrs={'class': 'form-control'}),
+                        help_text='Path where application was installed.')
 
     class Meta:
         model = Application
 
-        fields = ('install_loc', 'name', 'version', 'description', 'load_command')
+        fields = ('cluster', 'name', 'version', 'description', 'load_command', 'installed_architecture', 'compiler', 'mpi')
 
         widgets = {
-            'install_loc': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
+            'cluster': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'version': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control'}),
             'load_command': forms.TextInput(attrs={'class': 'form-control'}),
+            'installed_architecture': forms.TextInput(attrs={'class': 'form-control'}),
+            'compiler': forms.TextInput(attrs={'class': 'form-control'}),
+            'mpi': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -289,16 +295,6 @@ class ApplicationForm(forms.ModelForm):
 
     def clean(self):
         super().clean()
-
-        # Validate selected instance types with each other, and 'install instance'
-        common_arch = cloud_info.get_common_arch([x.cpu_arch for x in self.cleaned_data['instance_type']])
-        if not common_arch:
-            raise ValidationError('Instance Types have incompatible architectures.')
-
-        if self.cleaned_data['installed_architecture']:
-            tgt = self.cleaned_data['installed_architecture']
-            if cloud_info.get_common_arch([tgt, common_arch]) != tgt:
-                raise ValidationError('Install instance architecture does not match run instance types')
 
 
 class CustomInstallationApplicationForm(forms.ModelForm):

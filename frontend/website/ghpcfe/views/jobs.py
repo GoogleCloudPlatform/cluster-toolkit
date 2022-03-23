@@ -82,7 +82,11 @@ class JobCreateView(LoginRequiredMixin, generic.ListView):
     def get_queryset(self):
         # Select clusters which are valid for this application
         app = get_object_or_404(Application, pk=self.kwargs['app'])
-        return app.install_loc.clusters_using.all()
+        if app.install_loc:
+            return app.install_loc.clusters_using.all()
+        else:
+            # QuerySet of just our cluster
+            return Cluster.objects.filter(id=app.cluster.id)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

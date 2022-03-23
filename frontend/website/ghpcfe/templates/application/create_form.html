@@ -39,38 +39,51 @@
         <small class="form-text text-muted">{{ form.description.help_text }}</small>
     </div>
     <div class="form-group">
+      {{ form.installation_path.errors }}
+      {{ form.installation_path.label_tag }}
+      {{ form.installation_path }}
+        <small class="form-text text-muted">{{ form.installation_path.help_text }}</small>
+    </div>
+    <div class="form-group">
       {{ form.load_command.errors }}
       {{ form.load_command.label_tag }}
       {{ form.load_command }}
         <small class="form-text text-muted">{{ form.load_command.help_text }}</small>
     </div>
-    <div class="form-group">
-      {{ form.instance_type.errors }}
-      {{ form.instance_type.label_tag }}
-        <select name="instance_type" class="form-control" required id="id_instance_type" multiple>
-      {% for family in cluster.instance_types.all %}
-        <option value="{{ family.id }}" {% if family.id in form.instance_type.value %} selected {% endif %} >{{ family.name }}</option>
-      {% endfor %}
-        </select>
-        <small class="form-text text-muted">{{ form.instance_type.help_text }}</small>
-    </div>
+    <div>
+    <p id="adv" class="btn btn-secondary">Additional Fields...</p>
+    <div id="advanced-group" style="display: none;">
     <div class="form-group">
       {{ form.installed_architecture.errors }}
       {{ form.installed_architecture.label_tag }}
-        <select name="installed_architecture" class="form-control" maxlength="32" id="id_installed_architecture">
-          <option value='' selected>Any Architecture</option>
-          {% for family, values in archs.items %}
-            <optgroup label="{{ family }}">
-              {% for a in values %}
-              <option value="{{ a }}">{{ a }}</option>
-              {% endfor %}
-            </optgroup>
-          {% endfor %}
-        </select>
+      {{ form.installed_architecture }}
         <small class="form-text text-muted">{{ form.installed_architecture.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.compiler.errors }}
+      {{ form.compiler.label_tag }}
+      {{ form.compiler }}
+        <small class="form-text text-muted">{{ form.compiler.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.mpi.errors }}
+      {{ form.mpi.label_tag }}
+      {{ form.mpi }}
+        <small class="form-text text-muted">{{ form.mpi.help_text }}</small>
+    </div>
+    </div>
     </div>
 
     <input type="submit" value="Save" class="btn btn-primary"/>
   </form>
 
+{% endblock %}
+{% block tailscript %}
+<script type="text/javascript">
+$('#adv').click(function() {
+    console.log("Hi");
+    $('#advanced-group').toggle();
+    $('#adv').toggle();
+});
+</script>
 {% endblock %}

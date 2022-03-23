@@ -624,6 +624,8 @@ class Application(models.Model):
         ApplicationInstallationLocation,
         help_text = 'Location of the application installation',
         on_delete = models.CASCADE,
+        blank = True,
+        null = True,
     )
     install_partition = models.ForeignKey(
         ClusterPartition,

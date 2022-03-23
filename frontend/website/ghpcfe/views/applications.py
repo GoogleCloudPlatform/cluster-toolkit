@@ -107,8 +107,9 @@ class ApplicationCreateView(generic.CreateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.status = 'r'
+        ci = ClusterInfo(self.object.cluster)
+        self.object.install_loc = ci.get_app_install_loc(form.cleaned_data['installation_path'])
         self.object.save()
-        form.save_m2m()
         return HttpResponseRedirect(self.get_success_url())
 
 
