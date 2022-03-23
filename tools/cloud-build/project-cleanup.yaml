@@ -15,6 +15,25 @@
 ---
 
 steps:
+
+# See https://cloud.google.com/filestore/docs/troubleshooting#api_cannot_be_disabled
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: gcloud
+  args:
+  - services
+  - disable
+  - --project=${PROJECT_ID}
+  - --force
+  - file.googleapis.com
+
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: gcloud
+  args:
+  - services
+  - enable
+  - --project=${PROJECT_ID}
+  - file.googleapis.com
+
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
   env:
