@@ -96,3 +96,13 @@ resource_groups:
     settings:
       name_prefix: omnia-compute
       instance_count: 2
+
+  # This resource simply makes terraform wait until the startup script is complete
+  - source: resources/scripts/wait-for-startup
+    kind: terraform
+    id: wait
+    use:
+    - network
+    settings:
+      instance_name: ((module.manager.name[0]))
+      retries: 200

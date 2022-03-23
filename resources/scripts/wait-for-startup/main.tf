@@ -16,11 +16,12 @@
 
 resource "null_resource" "wait_for_startup" {
   provisioner "local-exec" {
-    command = "${path.module}/scripts/wait-for-startup-status.sh"
+    command = "/bin/bash ${path.module}/scripts/wait-for-startup-status.sh"
     environment = {
       INSTANCE_NAME = var.instance_name
       ZONE          = var.zone
       PROJECT_ID    = var.project_id
+      RETRIES       = var.retries
     }
   }
 }

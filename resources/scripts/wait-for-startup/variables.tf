@@ -28,3 +28,9 @@ variable "project_id" {
   description = "Project in which the HPC deployment will be created"
   type        = string
 }
+
+variable "retries" {
+  description = "Number of retries (each retry sleeps for 5s) before timeout"
+  type        = number
+  default     = 120
+}

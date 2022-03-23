@@ -68,6 +68,7 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_instance_name"></a> [instance\_name](#input\_instance\_name) | Name of the instance we are waiting for | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
+| <a name="input_retries"></a> [retries](#input\_retries) | Number of retries (each retry sleeps for 5s) before timeout | `number` | `120` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | The GCP zone where the instance is running | `string` | n/a | yes |
 
 ## Outputs
