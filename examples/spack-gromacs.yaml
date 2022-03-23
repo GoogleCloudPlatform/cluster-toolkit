@@ -81,6 +81,9 @@ resource_groups:
       - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
       # Uncomment and update the name and path to add a shared or personal Spack
       # cache location to speed up future deployments.
+      # spack_cache_url:
+      #  - mirror_name: gcs_cache
+      #    mirror_url: gs://bucket-name/...
 
   - source: resources/scripts/startup-script
     kind: terraform
