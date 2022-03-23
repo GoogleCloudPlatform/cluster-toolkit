@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """ workbench.py """
-
+import json
 from asgiref.sync import sync_to_async
 
 from django.shortcuts import get_object_or_404
@@ -24,9 +24,10 @@ from django.urls import reverse
 from django.views import generic
 from django.views.generic.edit import CreateView, DeleteView
 from django.contrib import messages
-from ..models import Credential, Workbench
+from django.db.models import Q
+from ..models import Credential, Workbench, VirtualSubnet
 from ..forms import WorkbenchForm
-from ..cluster_manager import workbenchinfo
+from ..cluster_manager import cloud_info, workbenchinfo
 from .asyncview import BackendAsyncView
 
 
@@ -111,6 +112,10 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
     def get_context_data(self, **kwargs):
         """ Perform extra query to populate instance types data """
         context = super().get_context_data(**kwargs)
+        region_info = cloud_info.get_region_zone_info("GCP", self.cloud_credential.detail)
+        subnet_regions = {sn.id: sn.cloud_region for sn in VirtualSubnet.objects.filter(cloud_credential=self.cloud_credential).filter(Q(cloud_state="i") | Q(cloud_state="m")).all()}
+        context['subnet_regions'] = json.dumps(subnet_regions)
+        context['region_info'] = json.dumps(region_info)
         context['navtab'] = 'Workbench'
         return context
 
