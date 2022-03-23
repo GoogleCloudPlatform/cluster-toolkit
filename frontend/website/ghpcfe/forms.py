@@ -171,10 +171,9 @@ class WorkbenchForm(forms.ModelForm):
         #     raise forms.ValidationError(mark_safe(validation_error_message))
 
         #validate user has an email address that we can pass to GCP 
-        users = cleaned_data.get("trusted_users")
-        for user in users:
-            if not user.email:
-                raise forms.ValidationError("Trusted User has no email address")
+        user = cleaned_data.get("trusted_users")
+        if not user.email:
+            raise forms.ValidationError("User has no email address")
 
     def __init__(self, user, *args, **kwargs):
         has_creds = 'cloud_credential' in kwargs
@@ -253,6 +252,7 @@ class WorkbenchForm(forms.ModelForm):
             'subnet': forms.Select(attrs={'class': 'form-control'}),
             'machine_type': forms.Select(attrs={'class': 'form-control'}),
             'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
+            'trusted_users': forms.Select(attrs={'class': 'form-control'}),
         }
 
 class ApplicationEditForm(forms.ModelForm):

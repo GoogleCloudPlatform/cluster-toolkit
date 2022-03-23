@@ -74,15 +74,9 @@ class WorkbenchInfo:
 
         # Cloud-specific Terraform changes
         project = json.loads(self.workbench.cloud_credential.detail)["project_id"]
-
-        users = self.workbench.trusted_users.all()
-        trusted_user_tfvalue = ""
-        i = 0
-        for user in users:
-            if i != 0:
-                trusted_user_tfvalue = trusted_user_tfvalue + ","
-            i = 1
-            trusted_user_tfvalue = trusted_user_tfvalue + "\"user:" + user.email + "\""
+        print(self.config["server"]["gcs_bucket"])
+        user = self.workbench.trusted_users
+        trusted_user_tfvalue = "\"user:" + user.email + "\""
 
         csp_info = f"""
 region = "{region}"
@@ -95,6 +89,10 @@ boot_disk_type = "{self.workbench.boot_disk_type}"
 boot_disk_size_gb = "{self.workbench.boot_disk_capacity}"
 trusted_users = [{trusted_user_tfvalue}]
 image_family = "{self.workbench.image_family}"
+
+owner_id = ["{user.email}"]
+wb_startup_script_name   = "workbench/workbench_{self.workbench.id}_startup_script"
+wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 """
 #        pkeys_str = b"\n".join(self._get_ssh_keys()).decode('utf-8')
         tfvars = self.workbench_dir / 'terraform' / self.cloud_dir / 'terraform.tfvars'
