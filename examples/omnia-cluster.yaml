@@ -19,7 +19,7 @@ blueprint_name: omnia-cluster
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: omnia-cluster
-  zone: us-central1-a
+  zone: us-central1-c
   region: us-central1
 
 resource_groups:
