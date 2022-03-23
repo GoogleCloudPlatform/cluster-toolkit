@@ -1,0 +1,27 @@
+---
+- name: Add Enviornment Modules
+  yum:
+    name:
+      - environment-modules
+
+- name: Create Modules directory
+  file:
+    path: /opt/cluster/modulefiles
+    state: directory
+    mode: '0755'
+
+- name: Use Modules
+  copy:
+    dest: /etc/profile.d/zz-modules.sh
+    content: |
+      module use /opt/cluster/modulefiles
+    owner: root
+    mode: 0755
+    force: no
+
+- name: Enable su to OS Login
+  lineinfile:
+    path: /etc/pam.d/su
+    line: session    [success=ok default=ignore] pam_mkhomedir.so
+    state: present
+    insertafter: EOF

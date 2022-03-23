@@ -22,14 +22,10 @@
 
 - name: Add Spack to default shells
   copy:
-    dest: /etc/profile.d/95-spack.sh
+    dest: /etc/profile.d/zx-spack.sh
     content: |
       . {{ spack_dir }}/share/spack/setup-env.sh
     owner: root
     mode: 0755
     force: no
 
-- name: Add Enviornment Modules
-  yum:
-    name:
-      - environment-modules

@@ -5,21 +5,6 @@
     name: pip
     state: latest
 
-- name: Create Modules directory
-  file:
-    path: /opt/cluster/modulefiles
-    state: directory
-    mode: '0755'
-
-- name: Use Modules
-  copy:
-    dest: /etc/profile.d/99-modules.sh
-    content: |
-      module use /opt/cluster/modulefiles
-    owner: root
-    mode: 0755
-    force: no
-
 - name: Install FE C&C Dependencies
   pip:
     executable: pip3
@@ -28,13 +13,6 @@
       - pexpect
       - google-cloud-storage
       - google-cloud-pubsub
-
-- name: Enable su to OS Login
-  lineinfile:
-    path: /etc/pam.d/su
-    line: session    [success=ok default=ignore] pam_mkhomedir.so
-    state: present
-    insertafter: EOF
 
 - name: Install FE C&C Daemon
   copy:
