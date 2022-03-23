@@ -105,4 +105,3 @@ resource_groups:
     - network
     settings:
       instance_name: ((module.manager.name[0]))
-      retries: 200

@@ -27,6 +27,7 @@ post_deploy_tests:
 - test-mounts-and-partitions.yml
 partitions:
 - compute
+- low_cost
 mounts:
 - /home
 - /scratch

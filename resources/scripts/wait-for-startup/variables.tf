@@ -29,8 +29,8 @@ variable "project_id" {
   type        = string
 }
 
-variable "retries" {
-  description = "Number of retries (each retry sleeps for 5s) before timeout"
+variable "timeout" {
+  description = "Timeout in seconds"
   type        = number
-  default     = 120
+  default     = 1200
 }
