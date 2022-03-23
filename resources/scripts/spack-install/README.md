@@ -26,6 +26,10 @@ additional packages, but cannot be used to uninstall packages from the VM.
 **Please note**: Currently, license installation is performed by copying a
 license file from a GCS bucket to a specific directory on the target VM.
 
+**Please note**: When populating a buildcache with packages, the VM this
+spack resource is running on requires the following scope:
+https://www.googleapis.com/auth/devstorage.read_write
+
 ## Example
 
 As an example, the below is a possible definition of a spack installation.
@@ -43,8 +47,14 @@ As an example, the below is a possible definition of a spack installation.
         mirror_url: gs://example-buildcache/linux-centos7
       configs:
       - type: 'single-config'
-        value: 'config:build_tree:/apps/spack/build_stage'
+        value: 'config:install_tree:/apps/spack/opt'
         scope: 'site'
+      - type: 'file'
+        scope: 'site'
+        value: |
+          config:
+            build_stage:
+              - /apps/spack/stage
       - type: 'file'
         scope: 'site'
         value: |
@@ -146,9 +156,11 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_caches_to_populate"></a> [caches\_to\_populate](#input\_caches\_to\_populate) | Defines caches which will be populated with the installed packages.<br>  Each cache must specify a type (either directory, or mirror).<br>  Each cache must also specify a path. For directory caches, this path<br>  must be on a local file system (i.e. file:///path/to/cache). For<br>  mirror paths, this can be any valid URL that spack accepts.<br><br>  NOTE: GPG Keys should be installed before trying to populate a cache<br>  with packages.<br><br>  NOTE: The gpg\_keys variable can be used to install existing GPG keys<br>  and create new GPG keys, both of which are acceptable for populating a<br>  cache. | `list(map(any))` | `[]` | no |
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | Defines compilers for spack to install before installing packages. | `list(string)` | `[]` | no |
 | <a name="input_configs"></a> [configs](#input\_configs) | List of configuration options to set within spack.<br>    Configs can be of type 'single-config' or 'file'.<br>    All configs must specify a value, and a<br>    a scope. | `list(map(any))` | `[]` | no |
 | <a name="input_environments"></a> [environments](#input\_environments) | Defines a spack environment to configure. | <pre>list(object({<br>    name     = string<br>    packages = list(string)<br>  }))</pre> | `null` | no |
+| <a name="input_gpg_keys"></a> [gpg\_keys](#input\_gpg\_keys) | GPG Keys to trust within spack.<br>  Each key must define a type. Valid types are 'file' and 'new'.<br>  Keys of type 'file' must define a path to the key that<br>  should be trusted.<br>  Keys of type 'new' must define a 'name' and 'email' to create<br>  the key with. | `list(map(any))` | `[]` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory to install spack into. | `string` | `"/apps/spack"` | no |
 | <a name="input_licenses"></a> [licenses](#input\_licenses) | List of software licenses to install within spack. | <pre>list(object({<br>    source = string<br>    dest   = string<br>  }))</pre> | `null` | no |
 | <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Defines the logfile that script output will be written to | `string` | `"/dev/null"` | no |
