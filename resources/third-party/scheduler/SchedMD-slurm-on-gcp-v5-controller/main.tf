@@ -37,7 +37,7 @@ module "slurm_controller_instance" {
   epilog_d              = var.epilog_d
   login_network_storage = var.login_network_storage
   network_storage       = var.network_storage
-  partitions            = var.partitions
+  partitions            = var.partition
   prolog_d              = var.prolog_d
   slurmdbd_conf_tpl     = var.slurmdbd_conf_tpl
   slurm_conf_tpl        = var.slurm_conf_tpl

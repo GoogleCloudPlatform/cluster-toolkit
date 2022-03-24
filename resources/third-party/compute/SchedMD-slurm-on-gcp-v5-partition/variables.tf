@@ -12,6 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+variable "deployment_name" {
+  description = "Name of the deployment, used to name the cluster"
+  type        = string
+}
 
 variable "partition_name" {
   description = "The name of the slurm partition"
