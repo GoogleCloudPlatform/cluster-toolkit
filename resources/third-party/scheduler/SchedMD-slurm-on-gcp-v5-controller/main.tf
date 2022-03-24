@@ -15,7 +15,7 @@
 */
 
 module "slurm_controller_instance" {
-  source = "git::https://{USERNAME}:{DEPLOY_TOKEN}@gitlab.com/SchedMD/slurm-gcp.git//terraform/modules/slurm_controller_instance?ref=dev-v5"
+  source = "git::https://gitlab.com/SchedMD/slurm-gcp.git//terraform/modules/slurm_controller_instance?ref=dev-v5"
 
   count = 1
 
@@ -44,7 +44,7 @@ module "slurm_controller_instance" {
 }
 
 module "slurm_controller_template" {
-  source = "git::https://{USERNAME}:{DEPLOY_TOKEN}@gitlab.com/SchedMD/slurm-gcp.git//terraform/modules/slurm_instance_template?ref=dev-v5"
+  source = "git::https://gitlab.com/SchedMD/slurm-gcp.git//terraform/modules/slurm_instance_template?ref=dev-v5"
 
   count = 1
 

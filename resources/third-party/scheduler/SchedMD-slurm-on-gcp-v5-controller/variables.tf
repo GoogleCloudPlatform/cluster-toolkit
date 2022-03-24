@@ -13,16 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-variable "deploy_username" {
-  type        = string
-  description = "Username for deploy key"
-}
-
-variable "deploy_key" {
-  type        = string
-  description = "Deploy key"
-}
-
 ###########
 # GENERAL #
 ###########
@@ -295,7 +285,7 @@ EOD
   default = []
 }
 
-variable "partitions" {
+variable "partition" {
   description = "Cluster partitions as a list."
   type = list(object({
     compute_list = list(string)
@@ -327,7 +317,7 @@ variable "partitions" {
 
   validation {
     condition = alltrue([
-      for x in var.partitions[*].partition : can(regex("(^[a-z][a-z0-9]*$)", x.partition_name))
+      for x in var.partition[*].partition : can(regex("(^[a-z][a-z0-9]*$)", x.partition_name))
     ])
     error_message = "Items 'partition_name' must be a match of regex '(^[a-z][a-z0-9]*$)'."
   }
