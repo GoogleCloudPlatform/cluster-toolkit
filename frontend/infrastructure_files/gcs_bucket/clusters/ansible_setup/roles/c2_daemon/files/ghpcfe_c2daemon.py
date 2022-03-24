@@ -6,7 +6,7 @@ from google.cloud import storage as gcs
 
 import requests
 import asyncio
-import json, yaml, os, shutil, pwd, grp
+import json, yaml, os, sys, shutil, pwd, grp
 from functools import wraps
 import time, subprocess, pexpect
 from pathlib import Path
@@ -19,7 +19,8 @@ logger.setLevel(logging.DEBUG)
 # Send to syslog somehow
 logger.addHandler(logging.handlers.SysLogHandler(address='/dev/log'))
 
-
+# Set this to non-zero from a callback to cause us to exit
+exit_code = 0
 
 # Set the env var for testing
 with open(os.environ.get('GHPCFE_CFG', '/usr/local/etc/ghpcfe_c2.yaml'), 'r') as cfg:
@@ -56,11 +57,46 @@ def cb_in_thread(func):
     return wrapper
 
 
+
+def _download_gcs_directory(blob_path: str, tgtDir: Path) -> None:
+    client = gcs.Client()
+    gcs_bucket = client.bucket(cluster_bucket)
+    for blob in client.list_blobs(gcs_bucket, prefix=blob_path):
+        local_filename = tgtDir / blob.name[len(blob_path)+1:]
+        logger.debug(f"Attempting to download {blob.name} from {cluster_bucket} to {local_filename.as_posix()}")
+        local_filename.parent.mkdir(parents=True, exist_ok=True)
+        blob.download_to_filename(local_filename.as_posix())
+
+
+def _rerun_ansible():
+    # Download ansible repo from GCS  (Can't just point at it)
+    _download_gcs_directory(f"clusters/ansible_setup", Path("/tmp/ansible_setup"))
+    
+    logger.info("Downloaded Ansible Repo.  Beginning playbook")
+    try:
+        with open("/tmp/ansible_setup/hosts", "w") as fp:
+            import socket
+            fp.write(f"{socket.gethostname()}\n")
+        with open("/tmp/ansible.log", "w") as ansible_log:
+            proc = subprocess.run(["ansible-playbook", "./controller.yaml"], check=True,
+                        cwd="/tmp/ansible_setup",
+                        stdout=ansible_log, stderr=subprocess.STDOUT)
+    except Exception as ex:
+        logger.error("Ansible threw an error", exc_info=ex)
+        raise
+    finally:
+        logger.info("Uploading ansible log file")
+        _upload_log_files({"controller_logs/tmp/ansible.log": "/tmp/ansible.log"})
+
+
+
 # Action functions
 
-@cb_in_thread
+# @cb_in_thread
 def cb_sync(message):
     logger.info(f"Starting sync:  Message: {message}")
+    ackid = message.get('ackid', None)
+    response = {'ackid': ackid}
     # Syncing we do these days....
     # Upload latest copies of system logs
     try:
@@ -74,14 +110,24 @@ def cb_sync(message):
         _upload_log_files({f"controller_logs{f}": f for f in log_files})
     except Exception as ex:
         logger.error("Failed to upload log files", exc_info=ex)
-    logger.info(f"Sync Done")
+        response['message'] = str(ex)
 
-    ackid = message.get('ackid', None)
-    if ackid:
-        logger.info(f"Sending ACK")
-        send_message('ACK', {'ackid': ackid})
+    # Download & run latest ansible config
+    try:
+        response['status'] = 'e'  # Suggest we're in an error'd state
+        _rerun_ansible()
+        response['status'] = 'r'  # Suggest we're in an error'd state
+    except Exception as ex:
+        logger.error("Failed to download & run ansible", exc_info=ex)
+        response['message'] = str(ex)
     else:
-        logger.info(f"No ackid found")
+        # Restart Daemon if ansible run was successful
+        logger.info("Sending ACK and Attempting to restart c2 daemon")
+        response['status'] = 'i'
+        global exit_code
+        exit_code = 123  # Magic code for systemctl to restart us
+    finally:
+        send_message('ACK', response)
 
 
 def _upload_log_blobs(log_dict):
@@ -204,7 +250,6 @@ def _spack_confirm_install(app_name, log_file):
     return results
 
 
-
 @cb_in_thread
 def cb_spack_install(message):
     logger.info(f"Starting Spack Install:  Message: {message}")
@@ -244,7 +289,7 @@ def cb_spack_install(message):
     final_update = {'ackid': ackid, 'app_id': appid, 'status': status}
     if status == 'r':
         final_update.update(_spack_confirm_install(app_name, f"/opt/cluster/installs/{appid}/{app_name}.out"))
-    logger.info(f"Uploading Log files. [Spack state: {final_update['status']}]")
+    logger.info(f"Uploading Log files. [job state: {final_update['status']}]")
     try:
         _upload_log_files({
             f"installs/{appid}/stdout": f"/opt/cluster/installs/{appid}/{app_name}.out",
@@ -252,6 +297,98 @@ def cb_spack_install(message):
     except Exception as ex:
         logger.error("Failed to upload log files", exc_info=ex)
     send_message('ACK', final_update)
+
+
+def _install_submit_job(app_id, partition, name, **message):
+    build_dir = Path('/opt/cluster/installs') / str(app_id)
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    outfile = build_dir / f"{name}.out"
+    errfile = build_dir / f"{name}.err"
+
+    install_script = _make_run_script(build_dir, 0, 0, message['install_script'])
+    if not install_script:
+        return (None, install_script, "Job not in recognized format")
+
+    script = build_dir / 'install_submit.sh'
+    with script.open('w') as fp:
+        fp.write(f"""#!/bin/bash
+#SBATCH --partition={partition}
+#SBATCH --nodes=1
+#SBATCH --job-name={name}-install
+#SBATCH --output={outfile.as_posix()}
+#SBATCH --error={errfile.as_posix()}
+
+cd {build_dir.as_posix()}
+
+exec {install_script}
+""")
+
+    # Submit job
+    try:
+        proc = subprocess.run(["sbatch", script.as_posix()],
+                cwd=build_dir, check=True, encoding='utf-8',
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if "Submitted batch job" in proc.stdout:
+            jobid = int(proc.stdout.split()[-1])
+            return (jobid, outfile, errfile)
+        else:
+            return (None, proc.stdout, proc.stderr)
+    except subprocess.CalledProcessError  as ex:
+        logger.error("sbatch exception", exc_info=ex)
+        return (None, ex.stdout, ex.stderr)
+
+
+@cb_in_thread
+def cb_install_app(message):
+    logger.info(f"Starting install of application!")
+    appid = message['app_id']
+    app_name = message['name']
+    response = {'ackid': message['ackid'], 'app_id': appid, 'status': 'e'}
+
+    (jobid, outfile, errfile) = _install_submit_job(**message)
+    if not jobid:
+        # There was an error - stdout, stderr in outfile, errfile
+        logger.error("Failed to run batch submission")
+        _upload_log_blobs({f"installs/{appid}/stdout": outfile,
+                          f"installs/{appid}/stderr": errfile})
+        response['status'] = 'e'
+        send_message('ACK', response)
+        return
+    logger.info(f"Job Queued")
+    response['status'] = 'q'
+    send_message('UPDATE', response)
+
+    state = "PENDING"
+    while state in ["PENDING", "CONFIGURING"]:
+        time.sleep(30)
+        state = _slurm_get_job_state(jobid)
+    if state == "RUNNING":
+        logger.info(f"Job Running")
+        response['status'] = 'i'
+        send_message('UPDATE', response)
+    while state in ["RUNNING"]:
+        time.sleep(30)
+        state = _slurm_get_job_state(jobid)
+    logger.info(f"Job Done with result {state}")
+    status = 'r' if state in ["COMPLETED", "COMPLETING"] else 'e'
+    response['status'] = status
+    if status == 'r':
+        # Application installed.  Install Module file if appropriate
+        if message.get('module_name', '') and message.get('module_script', ''):
+            fullModulePath = Path('/opt/cluster/modulefiles') / message['module_name']
+            fullModulePath.parent.mkdir(parents=True, exist_ok=True)
+            with fullModulePath.open('w') as fp:
+                fp.write(message['module_script'])
+
+    logger.info(f"Uploading Log files. [Spack state: {response['status']}]")
+    try:
+        _upload_log_files({
+            f"installs/{appid}/stdout": f"/opt/cluster/installs/{appid}/{app_name}.out",
+            f"installs/{appid}/stderr": f"/opt/cluster/installs/{appid}/{app_name}.err"})
+    except Exception as ex:
+        logger.error("Failed to upload log files", exc_info=ex)
+    send_message('ACK', response)
 
 
 
@@ -274,7 +411,15 @@ def _verify_oslogin_user(login_uid):
             for acct in profile['posixAccounts']:
                 if acct['primary'] or len(profile['posixAccounts'])==1:
                     _oslogin_cache[uid] = (acct['username'], int(acct['uid']), int(acct['gid']), acct['homeDirectory'])
-
+                    # Check to see if Homedir exists, and create if not
+                    homedirPath = Path(acct['homeDirectory'])
+                    if not homedirPath.is_dir():
+                        logger.info(f"Creating HomeDir for user {acct['username']} at {acct['homeDirectory']}")
+                        try:
+                            subprocess.run(["mkhomedir_helper", acct['username']])
+                        except Exception as ex:
+                            logger.error("Error creating homedir", exc_info=ex)
+    
     return _oslogin_cache[login_uid]
 
 def _verify_params(message, keys):
@@ -660,6 +805,7 @@ callback_map = {
     'SYNC': cb_sync,
     'UPDATE': cb_update,
     'SPACK_INSTALL': cb_spack_install,
+    'INSTALL_APPLICATION': cb_install_app,
     'RUN_JOB': cb_run_job,
     'REGISTER_USER_GCS': cb_register_user_gcs,
 }
@@ -691,15 +837,24 @@ if __name__ == "__main__":
         try:
             # When `timeout` is not set, result() will block indefinitely,
             # unless an exception is encountered first.
-            streaming_pull_future.result()
+            while exit_code == 0:
+                try:
+                    streaming_pull_future.result(timeout=10)
+                except TimeoutError:
+                    pass
+            logger.info(f"Exit Code set to {exit_code}.  Terminating")
 
         except Exception as exc:
-            logger.error('Received exception. Shutting down.', exc_info=exc)
-            streaming_pull_future.cancel()  # Trigger the shutdown.
-            streaming_pull_future.result()  # Block until the shutdown is complete.
+            logger.error('Streaming Pull Received exception. Shutting down.', exc_info=exc)
+            exit_code = 1
 
-    thread_pool.shutdown()
+        streaming_pull_future.cancel()  # Trigger the shutdown.
+        #streaming_pull_future.result()  # Wait for finish
+
+    thread_pool.shutdown(wait=True)
 
     send_message('CLUSTER_STATUS', {
         'message': "Cluster C2 Daemon stopping",
     })
+
+    sys.exit(exit_code)

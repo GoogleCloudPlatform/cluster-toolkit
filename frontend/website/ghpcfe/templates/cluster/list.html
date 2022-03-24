@@ -87,6 +87,7 @@
               {% if cluster.status == "r" %}
               <div class="dropdown-divider"></div>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-sync-cluster' cluster.id %}">Sync Cluster</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create-install' cluster.id %}">Install Application</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create-spack-cluster' cluster.id %}">Install Spack Application</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create' cluster.id %}">Add Manually-configured Application</a>
               {% endif %}

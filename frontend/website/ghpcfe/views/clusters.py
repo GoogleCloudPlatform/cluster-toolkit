@@ -358,6 +358,7 @@ class ClusterLogFileView(StreamingFileView):
     valid_logs = [
         {"title": "Terraform Log", "type": TerraformLogFile, "args": ("apply",)},
         {"title": "Startup Log", "type": GCSFile, "args": (bucket, "tmp/setup.log")},
+        {"title": "Ansible Sync Log", "type": GCSFile, "args": (bucket, "tmp/ansible.log")},
         {"title": "System Log", "type": GCSFile, "args": (bucket, "var/log/messages")},
         {"title": "Slurm slurmctld.log", "type": GCSFile, "args": (bucket, "var/log/slurm/slurmctld.log")},
         {"title": "Slurm resume.log",    "type": GCSFile, "args": (bucket, "var/log/slurm/resume.log")},
@@ -567,7 +568,7 @@ class BackendSyncCluster(LoginRequiredMixin, generic.View):
             if message.get('cluster_id') != pk:
                 logger.error(f"Cluster ID Mis-match to Callback!  Expected {pk}, Received {message.get('cluster_id')}")
             cluster = Cluster.objects.get(pk=pk)
-            cluster.status = 'r'
+            cluster.status = message.get('status', 'r')
             cluster.save()
             return True
 

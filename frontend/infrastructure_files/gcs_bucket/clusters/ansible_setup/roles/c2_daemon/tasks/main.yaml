@@ -14,13 +14,6 @@
       - google-cloud-storage
       - google-cloud-pubsub
 
-- name: Enable su to OS Login
-  lineinfile:
-    path: /etc/pam.d/su
-    line: session    [success=ok default=ignore] pam_mkhomedir.so
-    state: present
-    insertafter: EOF
-
 - name: Install FE C&C Daemon
   copy:
     src: ghpcfe_c2daemon.py

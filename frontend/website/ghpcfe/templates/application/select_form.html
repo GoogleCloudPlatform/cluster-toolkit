@@ -1,0 +1,42 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Create an application</h2>
+
+  <hr>
+  <p>Three types of applications are supported:</p>
+  <ul>
+    <li><b>Spack applications</b>: use the Spack package management system to install commonly used and mostly open-source applications.</li>
+    <li><b>Custom applications</b>: for applications not yet supported by Spack, e.g. in-house applications or those Spack fails to build, use custom scripts to install them.</li>
+    <li><b>Pre-installed applications</b>: if applications have to be manually installed on clusters (e.g. commercial applications with complex set-up), register them with the system.</li>
+  </ul>
+  <hr>
+
+  <form action="" method="post">
+    {% csrf_token %}
+    <div class="form-group">
+      <label for="id_cluster">Cluster:</label>
+      <select name="cluster" class="form-control" required id="id_cluster">
+        <option value="" selected>--------</option>
+    {% for cluster in cluster_list %}
+        <option value="{{ cluster.id }}" >{{ cluster.name }}</option>
+    {% endfor %}
+      </select>
+      <small class="form-text text-muted">Select a cluster to install this application</small>
+    </div>
+    <div class="form-group">
+      <label for="id_cluster">Application Type:</label>
+      <br/>
+      <input type="radio" id="type1" name="application-type" value="spack" required>
+      <label for="type1">Spack application</label>
+      <input type="radio" id="type2" name="application-type" value="custom">
+      <label for="type2">Custom application</label>
+      <input type="radio" id="type3" name="application-type" value="installed">
+      <label for="type3">Pre-installed application</label>
+      <small class="form-text text-muted">Which type of application to set up?</small>
+    </div>
+    <br/>  
+    <input type="submit" value="Next" class="btn btn-primary"/>
+  </form>
+
+{% endblock %}

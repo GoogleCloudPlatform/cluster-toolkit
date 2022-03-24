@@ -201,7 +201,7 @@ ClusterInfo object - represent a cluster
         controller_uses = self._yaml_refs_to_uses(["hpc_network"] + partitions_references + filesystems_references)
         login_uses = self._yaml_refs_to_uses(["hpc_network"] + filesystems_references + ["slurm_controller"])
 
-        controller_sa = f"{self.cluster.cloud_id}-service-acct"
+        controller_sa = f"{self.cluster.cloud_id}-sa"
         # TODO: Determine if these all should be different, and if so, add to resource to be created
         # Note though, that at the moment, GHPC won't let us unpack output
         # variables, so we can't index properly.
@@ -561,6 +561,26 @@ resource_groups:
             self.cluster.spack_install = ApplicationInstallationLocation(fs_export=spack_mp.export, path=partial_path)
             self.cluster.spack_install.save()
         self.cluster.save()
+
+    def get_app_install_loc(self, install_path):
+        my_mp = None
+        for mp in self.cluster.mount_points.order_by('mount_order'):
+            if install_path.startswith(mp.mount_path):
+                my_mp = mp
+
+        if not my_mp:
+            logger.warning(f"Unable to find a mount_point matching path {install_path}")
+            return None
+
+        partial_path = install_path[len(my_mp.mount_path)+1:]
+        possible_apps = ApplicationInstallationLocation.objects.filter(fs_export=my_mp.export).filter(path=partial_path)
+        if possible_apps:
+            return possible_apps[0]
+        else:
+            # Need to create a new entry
+            install_loc = ApplicationInstallationLocation(fs_export=my_mp.export, path=partial_path)
+            install_loc.save()
+            return install_loc
 
 
 

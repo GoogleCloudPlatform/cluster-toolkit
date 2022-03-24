@@ -26,13 +26,19 @@ from django.urls import reverse, reverse_lazy
 from django.views import generic
 from django.contrib import messages
 from django.shortcuts import get_object_or_404
-from ..models import Application, Cluster
+from ..models import Application, SpackApplication, \
+    CustomInstallationApplication, Cluster
 from ..serializers import ApplicationSerializer
-from ..forms import ApplicationForm, SpackApplicationForm, ApplicationEditForm
+from ..forms import ApplicationForm, SpackApplicationForm, \
+    CustomInstallationApplicationForm, ApplicationEditForm
 from ..cluster_manager import spack, cloud_info, c2, utils
+from ..cluster_manager.clusterinfo import ClusterInfo
 from .asyncview import BackendAsyncView
 from rest_framework.authtoken.models import Token
 from .view_utils import GCSFile, StreamingFileView
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 class ApplicationListView(generic.ListView):
@@ -67,10 +73,37 @@ class ApplicationDetailView(generic.DetailView):
     model = Application
     template_name = 'application/detail.html'
 
+    def get_template_names(self):
+        logger.info(f"ApplicationDetailView:  Object type: {type(self.get_object())}")
+        if hasattr(self.get_object(), 'spackapplication'):
+            return ["application/spack_detail.html"]
+        else:
+            return super().get_template_names()
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'application'
         return context
+
+
+class ApplicationCreateSelectView(generic.ListView):
+    """ Custom view to select application install types """
+    model = Cluster
+    template_name = 'application/select_form.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'application'
+        return context
+
+    def post(self, request):
+        if request.POST["application-type"] == "spack":
+            type = 'application-create-spack-cluster'
+        elif request.POST["application-type"] == "custom":
+            type = 'application-create-install'
+        elif request.POST["application-type"] == "installed":
+            type = 'application-create'
+        return HttpResponseRedirect(reverse(type, kwargs={'cluster': request.POST["cluster"]}))
 
 
 class ApplicationCreateView(generic.CreateView):
@@ -80,15 +113,6 @@ class ApplicationCreateView(generic.CreateView):
     template_name = 'application/create_form.html'
     form_class = ApplicationForm
 
-    def get_cluster_architectures(self, cluster):
-        from collections import defaultdict
-        archs = defaultdict(set)
-        for part in cluster.partitions.all():
-            archs[cloud_info.get_arch_family(part.machine_type.cpu_arch)].update(cloud_info.get_arch_ancestry(instance.cpu_arch))
-
-        for k,v in archs.items():
-            archs[k] = cloud_info.sort_architectures(v)
-        return dict(archs)
 
     def get_initial(self):
         return {'cluster': Cluster.objects.get(pk=self.kwargs['cluster'])}
@@ -96,14 +120,44 @@ class ApplicationCreateView(generic.CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['cluster'] = Cluster.objects.get(pk=self.kwargs['cluster'])
-        context['archs'] = self.get_cluster_architectures(context['cluster'])
         context['navtab'] = 'application'
         return context
+
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.status = 'r'
+        ci = ClusterInfo(self.object.cluster)
+        self.object.install_loc = ci.get_app_install_loc(form.cleaned_data['installation_path'])
         self.object.save()
-        form.save_m2m()
+        return HttpResponseRedirect(self.get_success_url())
+
+
+class CustomInstallationApplicationCreateView(generic.CreateView):
+
+    template_name = 'application/custom_install_create_form.html'
+    form_class = CustomInstallationApplicationForm
+
+    def get_initial(self):
+        return {'cluster': Cluster.objects.get(pk=self.kwargs['cluster'])}
+
+    def get_context_data(self, **kwargs):
+        """ Perform extra query to populate instance types data """
+        context = super().get_context_data(**kwargs)
+        context['cluster'] = Cluster.objects.get(pk=self.kwargs['cluster'])
+        context['navtab'] = 'application'
+        return context
+
+    def get_success_url(self):
+        return reverse('application-detail', kwargs={'pk': self.object.pk})
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        ci = ClusterInfo(self.object.cluster)
+        self.object.install_loc = ci.get_app_install_loc(form.cleaned_data['install_loc'])
+        if form.cleaned_data['module_name']:
+            self.object.load_command = f"module load {module_name}"
+        self.object.save()
+        messages.success(self.request, f'Application "{self.object.name}" created in database. Click "Install" button below to actually install it on cluster.')
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -169,7 +223,6 @@ class ApplicationDeleteView(generic.DeleteView):
         return context
 
 
-
 class ApplicationLogFileView(StreamingFileView):
     bucket = utils.load_config()['server']['gcs_bucket']
     valid_logs = [
@@ -229,10 +282,44 @@ class SpackPackageViewSet(viewsets.ViewSet):
 
 # Other supporting views
 
+class BackendCustomAppInstall(LoginRequiredMixin, generic.View):
+    def get(self, request, pk):
+        app = get_object_or_404(CustomInstallationApplication, pk=pk)
+        app.status = 'p'
+        app.save()
+        cluster_id = app.cluster.id
+
+        def response(message):
+            if message.get('cluster_id') != cluster_id:
+                logger.error(f"Cluster ID Mis-match to Callback!  Expected {pk}, Received {message.get('cluster_id')}")
+            if message.get('app_id') != pk:
+                logger.error(f"Application ID Mis-match to Callback!  Expected {pk}, Received {message.get('app_id')}")
+
+            if 'log_message' in message:
+                logger.info(f"Install log message:  {message['log_message']}")
+
+            app = Application.objects.get(pk=pk)
+            app.status = message['status']
+            if message['status'] == 'r':
+                # App was installed.  Should have more attributes to set
+                pass
+            app.save()
+
+        c2.send_command(cluster_id, 'INSTALL_APPLICATION', onResponse=response, data={
+            'app_id': app.id,
+            'name': app.name,
+            'install_script': app.install_script,
+            'module_name': app.module_name,
+            'module_script': app.module_script,
+            'partition': app.install_partition.name,
+        })
+
+        return HttpResponseRedirect(reverse('application-detail', kwargs={'pk': pk}))
+
 class BackendSpackInstall(LoginRequiredMixin, generic.View):
 
     def get(self, request, pk):
-        app = get_object_or_404(Application, pk=pk)
+        app = get_object_or_404(SpackApplication, pk=pk)
         app.status = 'p'
         app.save()
         cluster_id = app.cluster.id

@@ -22,9 +22,10 @@
 
 - name: Add Spack to default shells
   copy:
-    dest: /etc/profile.d/99-spack.sh
+    dest: /etc/profile.d/zx-spack.sh
     content: |
       . {{ spack_dir }}/share/spack/setup-env.sh
     owner: root
     mode: 0755
     force: no
+

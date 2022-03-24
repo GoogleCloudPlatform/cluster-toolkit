@@ -29,6 +29,10 @@
   <p><b>Load Command:</b> {{ object.load_command }}</p>
   <p><b>Installed CPU Arcitecture:</b> {{ object.installed_architecture }}</p>
   <hr>
+  <p style="text-decoration: underline; font-size: large;">Spack detail</p>
+  <p><b>Spack Name:</b> {{ object.spack_name }}   [<a href="https://spack.readthedocs.io/en/latest/package_list.html#{{ object.spack_name }}" target="_blank">Spack pacakge document</a>]</p>
+  <p><b>Spack Spec:</b> {{ object.spack_spec }}</p>
+  <p><b>Spack Hash:</b> {{ object.spack_hash }}</p>
   <p><b>Compiler:</b> {{ object.compiler }}</p>
   <p><b>MPI Library:</b> {{ object.mpi }}</p>
 
@@ -39,7 +43,7 @@
   {% if object.status == "n" %} 
   <a href="{% url 'application-update' application.id %}" class="btn btn-primary">Edit</a>
   <a href="{% url 'application-delete' application.id %}" class="btn btn-primary">Delete</a>  
-  <a href="{% url 'backend-custom-app-install' application.id %}" class="btn btn-primary">Install</a>
+  <a href="{% url 'backend-spack-install' application.id %}" class="btn btn-primary">Spack install</a>
   {% endif %}
   {% if object.status == "r" %}
   <a href="{% url 'job-create' application.id %}" class="btn btn-primary">New Job</a>
