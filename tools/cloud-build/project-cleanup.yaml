@@ -15,6 +15,33 @@
 ---
 
 steps:
+
+# See https://cloud.google.com/filestore/docs/troubleshooting#api_cannot_be_disabled
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    curl -X POST \
+    "https://serviceusage.googleapis.com/v1/projects/${PROJECT_ID}/services/file.googleapis.com:disable" \
+    --header "Content-Type: application/json" \
+    --header "Authorization: Bearer "$(gcloud auth print-access-token) \
+    --data '{"checkIfServiceHasUsage": "SKIP", "disableDependentServices": false}'
+
+# previous call is async, give time for it to resolve
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: sleep
+  args:
+  - "60"
+
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: gcloud
+  args:
+  - services
+  - enable
+  - --project=${PROJECT_ID}
+  - file.googleapis.com
+
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
   env:
