@@ -106,13 +106,30 @@ Quota required for this example:
 Spack is a HPC software package manager. This example creates a small slurm
 cluster with software installed with
 [Spack](../resources/scripts/spack-install/README.md) The controller will
-install and configure spack, and install gromacs with spack. Spack is installed
-in a shared location (/apps) via filestore. This build leverages the
-startup-script resource and can be applied in any cluster by using the output of
-spack-install or startup-script resources.
+install and configure spack, and install [gromacs](https://www.gromacs.org/)
+using spack. Spack is installed in a shared location (/apps) via filestore. This
+build leverages the startup-script resource and can be applied in any cluster by
+using the output of spack-install or startup-script resources.
+
+The installation will occur as part of the slurm startup-script, a warning
+message will be displayed upon SSHing to the login or controller node indicating
+that configuration is still active. To track the status of the overall
+startup script, run the following command on the controller:
+
+```shell
+tail -f /var/log/messages
+```
+
+Spack specific installation logs will be sent to the spack_log as configured in
+your YAML, by default /var/log/spack.log in the controller.
+
+```shell
+tail -f /var/log/spack.log
+```
 
 Once Slurm and spack installation is complete, the following command can be run
-to setup the spack environment:
+to setup the spack environment from any machine that has mounted appfs,
+including the controller, login and compute nodes of the slurm cluster:
 
 ```shell
 source /apps/spack/share/spack/setup-env.sh
