@@ -58,8 +58,10 @@ urlpatterns += [
     path('vpc/import2/?credential=<int:credential>', VPCImportView2.as_view(), name='vpc-import2'),
     path('cluster/create/', ClusterCreateView1.as_view(), name='cluster-create'),
     path('cluster/create2/?credential=<int:credential>', ClusterCreateView2.as_view(), name='cluster-create2'),
+    path('application/create1', ApplicationCreateSelectView.as_view(), name='application-create-select'),
     path('application/create/<int:cluster>', ApplicationCreateView.as_view(), name='application-create'),
-    path('application/create_install/<int:cluster>', CustomInstallationApplicationCreateView.as_view(), name='application-create-install'),
+    path('application/create_install/<int:cluster>', CustomInstallationApplicationCreateView.as_view(), \
+        name='application-create-install'),
     path('application/create_spack/<int:cluster>', SpackApplicationCreateView.as_view(), \
         name='application-create-spack-cluster'),
     path('job/create/<int:app>', JobCreateView.as_view(), name='job-create'),
@@ -144,7 +146,7 @@ urlpatterns += [
 # Views for backend functions
 
 urlpatterns += [
-    path('backend/vpc-create/<int:pk>', BackendCreateVPC.as_view(), 
+    path('backend/vpc-create/<int:pk>', BackendCreateVPC.as_view(), \
         name='backend-create-vpc'),
     path('backend/vpc-start/<int:pk>', BackendStartVPC.as_view(), \
         name='backend-start-vpc'),

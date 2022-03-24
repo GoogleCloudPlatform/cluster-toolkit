@@ -80,11 +80,30 @@ class ApplicationDetailView(generic.DetailView):
         else:
             return super().get_template_names()
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'application'
+        return context
+
+
+class ApplicationCreateSelectView(generic.ListView):
+    """ Custom view to select application install types """
+    model = Cluster
+    template_name = 'application/select_form.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'application'
         return context
+
+    def post(self, request):
+        if request.POST["application-type"] == "spack":
+            type = 'application-create-spack-cluster'
+        elif request.POST["application-type"] == "custom":
+            type = 'application-create-install'
+        elif request.POST["application-type"] == "installed":
+            type = 'application-create'
+        return HttpResponseRedirect(reverse(type, kwargs={'cluster': request.POST["cluster"]}))
 
 
 class ApplicationCreateView(generic.CreateView):
@@ -202,7 +221,6 @@ class ApplicationDeleteView(generic.DeleteView):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'application'
         return context
-
 
 
 class ApplicationLogFileView(StreamingFileView):
