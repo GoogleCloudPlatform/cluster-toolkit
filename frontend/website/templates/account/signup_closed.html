@@ -1,0 +1,12 @@
+{% extends "account/base.html" %}
+
+{% load i18n %}
+
+{% block head_title %}{% trans "Account Not Authorised" %}{% endblock %}
+
+{% block content %}
+<h1>{% trans "Account Not Authorised" %}</h1>
+
+<p>We are sorry, but your Google account {{ user_display }} is not authorised to use this system.</p> 
+<p>If you believe this is an error, please contact your administrator for permission.</p>
+{% endblock %}

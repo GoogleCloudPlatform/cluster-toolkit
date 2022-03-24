@@ -138,7 +138,7 @@ LOGIN_REDIRECT_URL = '/'
 # Allow debugging of emails from console, remove after email server set-up
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# Enable authentication on APIs 
+# Enable authentication on APIs
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
@@ -162,6 +162,8 @@ SOCIALACCOUNT_PROVIDERS = {
         }
     }
 }
+ACCOUNT_ADAPTER = 'ghpcfe.adapters.CustomAccountAdapter'
+SOCIALACCOUNT_ADAPTER = 'ghpcfe.adapters.CustomSocialAccountAdapter'
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 #STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'

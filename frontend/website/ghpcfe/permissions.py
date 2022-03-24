@@ -14,6 +14,8 @@
 
 from rest_framework import permissions
 from .models import Role
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+
 
 class CredentialPermission(permissions.BasePermission):
 
@@ -24,3 +26,9 @@ class CredentialPermission(permissions.BasePermission):
         if Role.CLUSTERADMIN in [x.id for x in request.user.roles.all()]:
             permission = True
         return permission
+
+
+class SuperUserRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+
+    def test_func(self):
+        return self.request.user.is_superuser

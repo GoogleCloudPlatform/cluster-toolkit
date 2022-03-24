@@ -135,5 +135,4 @@ admin.site.register(FilesystemExport)
 admin.site.register(MountPoint)
 admin.site.register(Workbench)
 admin.site.register(WorkbenchPreset)
-
-
+admin.site.register(AuthorisedUser)
