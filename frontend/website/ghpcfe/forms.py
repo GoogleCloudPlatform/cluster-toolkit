@@ -175,6 +175,13 @@ class WorkbenchForm(forms.ModelForm):
         if not user.email:
             raise forms.ValidationError("User has no email address")
 
+        #check user is associated with a social login account
+        try:
+            if user.socialaccount_set.first().uid:
+                pass
+        except:
+            raise forms.ValidationError("User not associated with a required Social ID ")
+
     def __init__(self, user, *args, **kwargs):
         has_creds = 'cloud_credential' in kwargs
         if has_creds:
