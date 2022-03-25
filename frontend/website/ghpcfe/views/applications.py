@@ -91,6 +91,10 @@ class ApplicationCreateSelectView(generic.ListView):
     model = Cluster
     template_name = 'application/select_form.html'
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.filter(status='r')
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'application'
