@@ -311,9 +311,41 @@ message. Here are some common reasons for the deployment to fail:
   [this doc](https://cloud.google.com/filestore/docs/troubleshooting#api_cannot_be_disabled)
   for the solution.
 
+### Failure to Destroy VPC Network
+
+If `terraform destroy` fails with an error such as the following:
+
+```text
+│ Error: Error when reading or editing Subnetwork: googleapi: Error 400: The subnetwork resource 'projects/<project_name>/regions/<region>/subnetworks/<subnetwork_name>' is already being used by 'projects/<project_name>/zones/<zone>/instances/<instance_name>', resourceInUseByAnotherResource
+```
+
+or
+
+```text
+│ Error: Error waiting for Deleting Network: The network resource 'projects/<project_name>/global/networks/<vpc_network_name>' is already being used by 'projects/<project_name>/global/firewalls/<firewall_rule_name>'
+```
+
+These errors indicate that the VPC network cannot be destroyed because resources
+were added outside of Terraform and that those resources depend upon the
+network. These resources should be deleted manually. The first message indicates
+that a new VM has been added to a subnetwork within the VPC network. The second
+message indicates that a new firewall rule has been added to the VPC network.
+If your error message does not look like these, examine it carefully to identify
+the type of resouce to delete and its unique name. In the two messages above,
+the resource names appear toward the end of the error message. The following
+links will take you directly to the areas within the Cloud Console for managing
+VMs and Firewall rules. Make certain that your project ID is selected in the
+drop-down menu at the top-left.
+
+* [Cloud Console: Manage VM instances][cc-vms]
+* [Cloud Console: Manage Firewall Rules][cc-firewall]
+
+[cc-vms]: https://console.cloud.google.com/compute/instances
+[cc-firewall]:  https://console.cloud.google.com/networking/firewalls/list
+
 ## Inspecting the Blueprint
 
-The blueprint is created in the directory matching the provided blueprint_name
+The blueprint is created in the directory matching the provided blueprint\_name
 variable in the config. Within this directory are all the resources needed to
 create a deployment. The blueprint directory will contain subdirectories
 representing the resource groups defined in the config YAML. Most example
