@@ -397,9 +397,12 @@ class BenchmarkForm(forms.ModelForm):
 
 class VPCForm(forms.ModelForm):
     """ Custom form for VPC model implementing option filtering """
+    subnets = forms.MultipleChoiceField(widget=forms.SelectMultiple(attrs={'class': 'form-control'}), help_text="Available Subnets")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['cloud_region'].widget.choices = [(x, x) for x in kwargs['initial']['regions']]
+        self.fields['subnets'].choices = kwargs['initial'].get('available_subnets', [])
 
     class Meta:
         model = VirtualNetwork
