@@ -12,8 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
+variable "project_id" {
+  description = "Project in which the HPC deployment will be created"
+  type        = string
+}
+
 variable "deployment_name" {
   description = "Name of the deployment, used to name the cluster"
+  type        = string
+}
+
+variable "region" {
+  description = "The default region for Cloud resources"
   type        = string
 }
 
