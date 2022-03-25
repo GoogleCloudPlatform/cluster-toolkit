@@ -34,71 +34,69 @@
     </thead>
     <tbody> 
     {% for workbench in workbench_list %}
-      {% for wbuser in workbench.list_trusted_users %}
-        {% if wbuser == request.user or admin %}
-          <tr>
-            <th>{{ workbench.id }}</th>
-            <td><a href="{% url 'workbench-detail' workbench.id %}">{{ workbench.name }}</a></td>
-            <td><a href="{% url 'workbench-detail' workbench.id %}">{{ workbench.internal_name }}</a></td>
-            <td>{{ workbench.cloud_zone }}</td>
-            <td>
-              {% if workbench.status == "c" or workbench.status == "i" or workbench.status == "t" %}
-              <img src="/static/img/loading.gif" style="width:32px;height:32px;">
-              {% endif %}
-              {% if workbench.status == "r" %}
-              <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
-              {% endif %}
-              {% if workbench.status == "n" %}
-              <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
-              {% endif %}
-              {% if workbench.status == "d" %}
-              <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
-              {% endif %}
-              {% if workbench.status == "s" %}
-              <img src="/static/img/status-paused.png" style="width:32px;height:32px;">
-              {% endif %}
-              {{ workbench.get_status_display }}
-            </td>
-            <td>
-              <div class="dropdown">
-                <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  Actions
-                </button>
-                <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                  {% if viewer or normaluser or admin %}
-                    <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-detail' workbench.id  %}">Detail</a>
-                  {% endif %}
-                  {% if workbench.status == "d" or workbench.status == "n" %}
-                    {% if normaluser or admin %}
-                      <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-delete' workbench.id  %}">Delete</a>
-                    {% endif %}
-                  {% endif %}
-                  {% if workbench.status == "n" %}
-                    {% if normaluser or admin %}
-                      {% if not workbench.status == "d" %}
-                        <div class="dropdown-divider"></div>
-                      {% endif %}
-                      <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-start-workbench' workbench.id %}">Start Workbench</a>
-                    {% endif %}
-                  {% endif %}
+      {% if workbench.list_trusted_users == request.user or admin %}
+        <tr>
+          <th>{{ workbench.id }}</th>
+          <td><a href="{% url 'workbench-detail' workbench.id %}">{{ workbench.name }}</a></td>
+          <td><a href="{% url 'workbench-detail' workbench.id %}">{{ workbench.internal_name }}</a></td>
+          <td>{{ workbench.cloud_zone }}</td>
+          <td>
+            {% if workbench.status == "c" or workbench.status == "i" or workbench.status == "t" %}
+            <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+            {% endif %}
+            {% if workbench.status == "r" %}
+            <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+            {% endif %}
+            {% if workbench.status == "n" %}
+            <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+            {% endif %}
+            {% if workbench.status == "d" %}
+            <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+            {% endif %}
+            {% if workbench.status == "s" %}
+            <img src="/static/img/status-paused.png" style="width:32px;height:32px;">
+            {% endif %}
+            {{ workbench.get_status_display }}
+          </td>
+          <td>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                Actions
+              </button>
+              <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                {% if viewer or normaluser or admin %}
+                  <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-detail' workbench.id  %}">Detail</a>
+                {% endif %}
+                {% if workbench.status == "d" or workbench.status == "n" %}
                   {% if normaluser or admin %}
-                    {% if workbench.status == "r" or workbench.status == "i" or workbench.status == "s"  %}
-                      <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-destroy' workbench.id %}">Destroy</a>
-                    {% endif %}
+                    <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-delete' workbench.id  %}">Delete</a>
                   {% endif %}
-                  {% if workbench.status == "r" %}
-                    {% if viewer or normaluser or admin %}
+                {% endif %}
+                {% if workbench.status == "n" %}
+                  {% if normaluser or admin %}
+                    {% if not workbench.status == "d" %}
                       <div class="dropdown-divider"></div>
-                      <a class="dropdown-item btn btn-sm btn-secondary" href="https://{{ workbench.proxy_uri }}" target="_blank">Open JupyterLab </a>
                     {% endif %}
+                    <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-start-workbench' workbench.id %}">Start Workbench</a>
                   {% endif %}
-                </div>
+                {% endif %}
+                {% if normaluser or admin %}
+                  {% if workbench.status == "r" or workbench.status == "i" or workbench.status == "s"  %}
+                    <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-destroy' workbench.id %}">Destroy</a>
+                  {% endif %}
+                {% endif %}
+                {% if workbench.status == "r" %}
+                  {% if viewer or normaluser or admin %}
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item btn btn-sm btn-secondary" href="https://{{ workbench.proxy_uri }}" target="_blank">Open JupyterLab </a>
+                  {% endif %}
+                {% endif %}
               </div>
-            </td>
-          </tr>
-        {% endif %}
-      {% endfor %}
-      
+            </div>
+          </td>
+        </tr>
+      {% endif %}
+  
     {% endfor %}
     </tbody>
   </table>

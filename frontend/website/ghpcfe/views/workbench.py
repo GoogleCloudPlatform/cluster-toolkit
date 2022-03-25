@@ -27,7 +27,8 @@ from django.contrib import messages
 from django.db.models import Q
 from ..models import Credential, Workbench, VirtualSubnet
 from ..forms import WorkbenchForm
-from ..cluster_manager import cloud_info, workbenchinfo
+from ..cluster_manager import cloud_info
+from ..cluster_manager import workbenchinfo
 from .asyncview import BackendAsyncView
 
 
@@ -185,7 +186,7 @@ class BackendStartWorkbench(BackendAsyncView):
 
 
     def cmd(self, task_id, token, workbench):
-        from cluster_manager.start_workbench import start_workbench
+        from ..cluster_manager.start_workbench import start_workbench
         start_workbench(workbench, token)
 
 
@@ -208,7 +209,7 @@ class BackendDestroyWorkbench(BackendAsyncView):
         return (workbench,)
 
     def cmd(self, task_id, token, workbench):
-        from cluster_manager.destroy_workbench import destroy_workbench
+        from ..cluster_manager.destroy_workbench import destroy_workbench
         destroy_workbench(workbench, token)
 
     async def get(self, request, pk):

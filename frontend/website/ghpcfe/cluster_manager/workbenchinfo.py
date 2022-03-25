@@ -70,11 +70,8 @@ class WorkbenchInfo:
 
     def copy_startup_script(self):
         user = self.workbench.trusted_users
-        #should I be using user.socialaccount_set.first().uid???
-        #unix_id = "2463351398"
-        user_name = "108747005119467080398"
         unix_username = ""
-
+        
         # setup metadata query to get user profiles
         metadata_url = "http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024"
         metadata_headers = {'Metadata-Flavor': 'Google'}
@@ -85,7 +82,7 @@ class WorkbenchInfo:
         #for each user profile
         for profile in resp['loginProfiles']:
             #if profile "name" matches the user ID then save unix username for the startup script
-            if profile['name'] == user_name:
+            if profile['name'] == user.socialaccount_set.first().uid:
                 # TODO: Should also check login authorization
                 for acct in profile['posixAccounts']:
                    unix_username = acct['username']
@@ -144,10 +141,8 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
     def initialize_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
         try:
-            print("Invoking Terraform Init")
             utils.run_terraform(tfDir / self.cloud_dir, "init")
             utils.run_terraform(tfDir / self.cloud_dir, "validate")
-            print("Invoking Terraform Plan")
             utils.run_terraform(tfDir / self.cloud_dir, "plan")
         except subprocess.CalledProcessError as cpe:
             if cpe.stdout:
@@ -160,7 +155,6 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
     def run_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
         try:
-            print("Invoking Terraform Apply")
             (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply")
             # Look for Management Public IP in terraform.tfstate
             stateFile = tfDir / self.cloud_dir / 'terraform.tfstate'
