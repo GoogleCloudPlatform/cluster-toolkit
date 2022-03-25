@@ -311,6 +311,16 @@ message. Here are some common reasons for the deployment to fail:
   [this doc](https://cloud.google.com/filestore/docs/troubleshooting#api_cannot_be_disabled)
   for the solution.
 
+### Failure to Destroy VPC Network
+
+If your `terraform destroy` fails with the following error:
+
+```text
+Error: Error waiting for Deleting Network: The network resource 'projects/<project_name>/global/networks/<vpc_network_name>' is already being used by 'projects/<project_name>/global/firewalls/<firewall_name>'
+```
+
+Possible causes could be that the resources which belong to the VPC network were not created by Terraform, rather they may have been created by the Organization Policy Service or some other mechanism. They can be imported to the TF state by `terraform import`. For more details, see [Importing resources not created by Terraform](#importing-resources-not-created-by-terraform).
+
 ## Inspecting the Blueprint
 
 The blueprint is created in the directory matching the provided blueprint_name
@@ -333,6 +343,22 @@ hpc-cluster-small/
       SchedMD-slurm-on-gcp-login-node/
       SchedMD-slurm-on-gcp-partition/
       vpc/
+```
+
+## Importing resources not created by Terraform
+
+Manual operations and the [Organization Policy Service](https://cloud.google.com/resource-manager/docs/organization-policy/overview) can create infrastructure around our deployments, such as firewall rules on our VPC, that are not included in the TF state. In order to manage the resources by Terraform, `terraform import` can be used.
+
+For example, the following command imports the firewall resource which was not created by Terraform. <firewall_rule> depends on your environment.
+
+```shell
+$ cd <blueprint-directory>
+$ terraform import google_compute_firewall.<firewall_rule> <firewall_rule>
+...
+Import successful!
+
+The resources that were imported are shown above. These resources are now in
+your Terraform state and will henceforth be managed by Terraform.
 ```
 
 ## Dependencies
