@@ -46,6 +46,17 @@ class ApplicationListView(generic.ListView):
     model = Application
     template_name = 'application/list.html'
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        for item in qs:
+            type = 'pre-installed'
+            if hasattr(item, 'spackapplication'):
+                type = 'spack'
+            elif hasattr(item, 'custominstallationapplication'):
+                type = 'custom'
+            item.type = type
+        return qs
+
     def get_context_data(self, *args, **kwargs):
         loading = 0
         for application in Application.objects.all():
