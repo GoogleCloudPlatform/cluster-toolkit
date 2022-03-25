@@ -77,10 +77,27 @@ run_test() {
 }
 
 check_background() {
-	if ! wait -n; then
-		wait
-		echo "*** ERROR: a test failed. Exiting with status 1."
-		exit 1
+	# "wait -n" was introduced in bash 4.3; support CentOS 7: 4.2 and MacOS: 3.2!
+	if [[ "${BASH_VERSINFO[0]}" -ge 5 || "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -ge 3 ]]; then
+		if ! wait -n; then
+			wait
+			echo "*** ERROR: a test failed. Exiting with status 1."
+			exit 1
+
+		fi
+	else
+		failed=0
+		for pid in "${pids[@]}"; do
+			if ! wait "$pid"; then
+				failed=1
+			fi
+		done
+		pids=()
+
+		if [[ $failed -eq 1 ]]; then
+			echo "*** ERROR: a test failed. Exiting with status 1."
+			exit 1
+		fi
 	fi
 }
 
@@ -88,11 +105,13 @@ CONFIGS=$(find examples/ tools/validate_configs/test_configs/ -name "*.yaml" -ty
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
+pids=()
 for example in $CONFIGS; do
 	JNUM=$(jobs | wc -l)
 	# echo "$JNUM jobs running"
 	if [ "$JNUM" -lt "$NPROCS" ]; then
 		run_test "$example" &
+		pids+=("$!")
 	else
 		# echo "Reached max number of parallel tests (${JNUM}). Waiting for one to finish."
 		check_background
