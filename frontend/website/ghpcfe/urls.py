@@ -115,6 +115,7 @@ urlpatterns += [
     path('filesystem/edit/<int:pk>', FilesystemRedirectView.as_view(target='update'), name = 'fs-update'),
     path('filesystem/destroy/<int:pk>', FilesystemDestroyView.as_view(), name='fs-destroy'),
     path('filesystem/delete/<int:pk>', FilesystemDeleteView.as_view(), name = 'fs-delete'),
+    path('filesystem/log/<int:pk>', FilesystemTFLogView.as_view(), name='fs-log'),
     path('backend/filesystem/create-files/<int:pk>', BackendCreateFilesystem.as_view(), name='backend-filesystem-create-files'),
     path('backend/filesystem/update-files/<int:pk>', BackendUpdateFilesystem.as_view(), name='backend-filesystem-update-files'),
     path('backend/filesystem/start/<int:pk>', BackendStartFilesystem.as_view(), name='backend-filesystem-start'),
