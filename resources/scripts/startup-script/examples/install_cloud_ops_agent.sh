@@ -73,10 +73,10 @@ handle_redhat() {
 }
 
 main() {
-	if [ -f /etc/debian_version ]; then
-		handle_debian
-	elif [ -f /etc/redhat-release ]; then
+	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
 		handle_redhat
+	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
+		handle_debian
 	else
 		fail "Unsupported platform."
 	fi
