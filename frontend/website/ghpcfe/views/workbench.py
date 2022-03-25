@@ -103,7 +103,6 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
         self.object = form.save(commit=False)
         self.object.owner = self.request.user
         self.object.cloud_region = self.object.subnet.cloud_region;
-        self.object.cloud_zone = self.object.subnet.cloud_zone;
         self.object.save()
         form.save_m2m()
         messages.success(self.request, "A record for this workbench has been created. Click the 'Edit' button to customise it.")

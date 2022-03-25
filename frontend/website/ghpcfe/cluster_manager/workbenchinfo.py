@@ -28,6 +28,7 @@ import os, shutil, sys
 import subprocess
 import json
 import os.path as path
+import requests
 from datetime import datetime
 from datetime import timedelta
 
@@ -47,6 +48,7 @@ class WorkbenchInfo:
 
         self.set_credentials(credentials)
         self.copy_terraform()
+        self.copy_startup_script()
         self.prepare_terraform_vars()
 
     def get_credentials_file(self):
@@ -66,6 +68,41 @@ class WorkbenchInfo:
         #shutil.copytree(self.config["baseDir"] / 'infrastructure_files' / 'workbench_tf' / 'common-files' , tfDir / 'common-files' )
         return tfDir
 
+    def copy_startup_script(self):
+        user = self.workbench.trusted_users
+        #should I be using user.socialaccount_set.first().uid???
+        #unix_id = "2463351398"
+        user_name = "108747005119467080398"
+        unix_username = ""
+
+        # setup metadata query to get user profiles
+        metadata_url = "http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024"
+        metadata_headers = {'Metadata-Flavor': 'Google'}
+        # TODO - wrap in a loop with page Tokens
+        req = requests.get(metadata_url, headers=metadata_headers)
+        resp = json.loads(req.text)
+        
+        #for each user profile
+        for profile in resp['loginProfiles']:
+            #if profile "name" matches the user ID then save unix username for the startup script
+            if profile['name'] == user_name:
+                # TODO: Should also check login authorization
+                for acct in profile['posixAccounts']:
+                   unix_username = acct['username']
+
+        startup_script_vars = f"""
+USER="{unix_username}"
+"""
+
+        startup_script = self.workbench_dir / 'startup_script.sh'
+        with startup_script.open('w') as f:
+            f.write(f"""#!/bin/bash
+{startup_script_vars}
+""")
+            with open(self.config["baseDir"] / 'infrastructure_files' / 'gcs_bucket' / 'workbench' / 'startup_script_template.sh') as infile:
+                for line in infile:
+                    f.write(line)
+
     def prepare_terraform_vars(self):
         region = self.workbench.cloud_region
         zone = self.workbench.cloud_zone
@@ -74,7 +111,6 @@ class WorkbenchInfo:
 
         # Cloud-specific Terraform changes
         project = json.loads(self.workbench.cloud_credential.detail)["project_id"]
-        print(self.config["server"]["gcs_bucket"])
         user = self.workbench.trusted_users
         trusted_user_tfvalue = "\"user:" + user.email + "\""
 

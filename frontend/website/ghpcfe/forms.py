@@ -187,9 +187,6 @@ class WorkbenchForm(forms.ModelForm):
         if 'zone_choices' in kwargs:
             zone_choices = kwargs.pop('zone_choices')
 
-        print(self.fields['subnet'])
-        print(zone_choices)
-
         self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential).filter(Q(cloud_state="i")|Q(cloud_state="m"))
         if zone_choices:
             # We set this on the widget, because we will be changing the
