@@ -4,6 +4,30 @@
   {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" %}
   <meta http-equiv="refresh" content="15" />
   {% endif %}
+  {% if object.status == "c" or object.status == "t" %}
+  {# aka, if Terraform running, let's show the TF log #}
+  <script>
+window.onload=function(event) {
+		var xhr_ = new XMLHttpRequest();
+		xhr_.open("GET", "{% url 'cluster-log-file' cluster.id 0 %}", true);
+		xhr_.onprogress = function() {
+            $('#id_log_1').append(xhr_.responseText);
+            $('#id_log_1').scrollTop($('#id_log_1')[0].scrollHeight);
+        }
+		xhr_.onload = function() {
+            $('#id_log_1').val(xhr_.responseText);
+            $('#id_log_1').scrollTop($('#id_log_1')[0].scrollHeight);
+        }
+		xhr_.send()
+}
+  </script>
+  <style>
+.log-file {
+    white-space: pre;
+    font-family: monospace;
+}
+  </style>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -100,8 +124,16 @@
     <a href="{% url 'application-create-install' object.id %}" class="btn btn-primary">Install Application</a>
     <a href="{% url 'application-create-spack-cluster' object.id %}" class="btn btn-primary">Install Spack Application</a>
     {% endif %}
-    {% if object.status == "r" or object.status == "i" %}
+    {% if object.status != "n" %}
     <a href="{% url 'cluster-log' cluster.id %}" class="btn btn-primary">View Logs</a>
+    {% endif %}
+
+    {% if object.status == "c" or object.status == "t" %}
+    {# aka, if Terraform running, let's show the TF log #}
+    <hr>
+    <div><h5>Terraform progress...</h5>
+        <textarea class="log-file form-control" id="id_log_1" rows=10 disabled readonly></textarea>
+    </div>
     {% endif %}
 
 {% endblock %}

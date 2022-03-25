@@ -43,23 +43,28 @@ class LocalFile():
 
 
 class TerraformLogFile(LocalFile):
-    def __init__(self, command_name, prefix):
-        self.command_name = command_name
+    def __init__(self, prefix):
         self.prefix = Path(prefix)
-        super().__init__(f"terraform_{command_name}.log")
+        super().__init__(f"terraform.log")
 
     def set_prefix(self, prefix):
         self.prefix = Path(prefix)
 
     def get_file(self):
-        tf_log = self.prefix / f'terraform_{self.command_name}_log.stderr'
-        if not tf_log.exists() or tf_log.stat().st_size == 0:
-            tf_log = self.prefix / f'terraform_{self.command_name}_log.stdout'
-        logger.debug(f"Decided on TF file {tf_log.as_posix()} {'does' if tf_log.exists() else 'does not'} exist")
+        for phase in ['destroy', 'apply', 'init']:
+            tf_log = self.prefix / f'terraform_{phase}_log.stderr'
+
+            if (not tf_log.exists()) or tf_log.stat().st_size == 0:
+                tf_log = self.prefix / f'terraform_{phase}_log.stdout'
+
+            if tf_log.exists():
+                break
+        
+        logger.info(f"Decided on TF file {tf_log.as_posix()} {'does' if tf_log.exists() else 'does not'} exist")
         return tf_log
 
     def get_filename(self):
-        return f"terraform_{self.command_name}.log"
+        return f"terraform.log"
 
 
 

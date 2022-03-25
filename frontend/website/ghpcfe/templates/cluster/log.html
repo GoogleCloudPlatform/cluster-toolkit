@@ -10,7 +10,14 @@ window.onload=function(event) {
 	{
 		var xhr_{{logfile.id}} = new XMLHttpRequest();
 		xhr_{{logfile.id}}.open("GET", "{% url 'cluster-log-file' cluster.id logfile.id %}", true);
-		xhr_{{logfile.id}}.onprogress = function() { $('#id_log_{{ logfile.id }}').append(xhr_{{logfile.id}}.responseText); }
+		xhr_{{logfile.id}}.onprogress = function() {
+            $('#id_log_{{ logfile.id }}').append(xhr_{{logfile.id}}.responseText);
+            $('#id_log_{{logfile.id }}').scrollTop($('#id_log_{{ logfile.id }}')[0].scrollHeight);
+        }
+		xhr_{{logfile.id}}.onload = function() {
+            $('#id_log_{{ logfile.id }}').val(xhr_{{logfile.id}}.responseText);
+            $('#id_log_{{logfile.id }}').scrollTop($('#id_log_{{ logfile.id }}')[0].scrollHeight);
+        }
 		xhr_{{logfile.id}}.send()
 	}
     {% endfor %}
