@@ -40,9 +40,22 @@ resource_groups:
     settings:
       local_mounts: [/home]
 
+  - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-v5-partition
+    kind: terraform
+    id: compute-partition
+    use: [network1]
+    settings:
+      partition_name: debug
+      max_node_count: 4
+      enable_placement: false
+      machine_type: n2-standard-2
+
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-v5-controller
     kind: terraform
     id: slurm-contoller
-    use: [network1]
+    use: [network1, compute-partition]
     settings:
       slurm_cluster_name: testcluster
+      source_image_family: null
+      source_image_project: "hpc-toolkit-dev"
+      source_image: "schedmd-v5-slurm-21-08-4-hpc-centos-7-1648163377"

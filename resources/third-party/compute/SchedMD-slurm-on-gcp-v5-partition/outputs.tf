@@ -41,9 +41,9 @@
 # }
 
 output "partition" {
-  value       = module.slurm_partition.partition
-}
-
-output "compute_list" {
-  value       = module.slurm_partition.compute_list
+  value = {
+    compute_list = module.slurm_partition.compute_list
+    partition    = module.slurm_partition.partition
+    sa_node_map  = module.slurm_partition.sa_node_map
+  }
 }

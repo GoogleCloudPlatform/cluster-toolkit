@@ -37,8 +37,8 @@ locals {
       }
       shielded_instance_config = null
       source_image_family      = null
-      source_image_project     = null
-      source_image             = null
+      source_image_project     = "hpc-toolkit-dev"
+      source_image             = "schedmd-v5-slurm-21-08-4-hpc-centos-7-1648163377"
       tags                     = []
 
       # Template By Source
@@ -54,6 +54,7 @@ locals {
 module "slurm_partition" {
   source = "git::https://gitlab.com/SchedMD/slurm-gcp.git//terraform/modules/slurm_partition?ref=dev-v5"
 
+  # TODO: this next one does not like '-'
   slurm_cluster_name      = var.deployment_name
   partition_nodes         = local.partition_nodes
   enable_job_exclusive    = var.exclusive
@@ -63,9 +64,6 @@ module "slurm_partition" {
   project_id              = var.project_id
   region                  = var.region
   slurm_cluster_id        = "placeholder"
-  subnetwork_project      = var.subnetwork_project
-  subnetwork              = var.subnetwork
-  zone_policy_allow       = var.zone_policy_allow
-  zone_policy_deny        = var.zone_policy_deny
+  subnetwork              = "default"
 }
 
