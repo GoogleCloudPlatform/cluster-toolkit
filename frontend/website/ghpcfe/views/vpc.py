@@ -80,15 +80,15 @@ class VPCDetailView(SuperUserRequiredMixin, generic.DetailView):
         used_in_workbenches = []
 
         for c in Cluster.objects.all():
-            if vpc == c.subnet.vpc:
+            if vpc == c.subnet.vpc and c.status in ['c', 'i', 'r', 's', 't']:
                 used_in_clusters.append(c)
 
         for fs in Filesystem.objects.all():
-            if vpc == fs.vpc:
+            if vpc == fs.vpc and fs.cloud_state in ['cm', 'm', 'dm']:
                 used_in_filesystems.append(fs)
 
         for wb in Workbench.objects.all():
-            if vpc == wb.subnet.vpc:
+            if vpc == wb.subnet.vpc and wb.status in ['c', 'i', 'r', 's', 't']:
                 used_in_workbenches.append(wb)
 
         context['used_in_clusters'] = used_in_clusters
