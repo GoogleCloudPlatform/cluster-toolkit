@@ -54,8 +54,11 @@ resource_groups:
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
       configs:
+      - type: single-config
+        scope: defaults
+        value: "config:build_stage:/apps/spack/spack-stage"
       - type: file
-        scope: site
+        scope: defaults
         value: |
           modules:
             tcl:
@@ -119,7 +122,6 @@ resource_groups:
     - compute_partition
     settings:
       login_node_count: 1
-      controller_startup_script: $(spack-startup.startup_script)
 
   - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
@@ -129,3 +131,5 @@ resource_groups:
     - homefs
     - appsfs
     - slurm_controller
+    settings:
+      login_startup_script: $(spack-startup.startup_script)

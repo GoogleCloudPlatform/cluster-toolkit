@@ -102,5 +102,8 @@ spack clean -s
 
 %{endfor ~}
 
+echo "source /apps/spack/share/spack/setup-env.sh" >> /etc/profile.d/spack.sh
+chmod a+rx /etc/profile.d/spack.sh
+
 echo "$PREFIX Setup complete..."
 exit 0

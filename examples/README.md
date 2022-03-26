@@ -112,24 +112,24 @@ build leverages the startup-script resource and can be applied in any cluster by
 using the output of spack-install or startup-script resources.
 
 The installation will occur as part of the slurm startup-script, a warning
-message will be displayed upon SSHing to the login or controller node indicating
+message will be displayed upon SSHing to the login node indicating
 that configuration is still active. To track the status of the overall
-startup script, run the following command on the controller:
+startup script, run the following command on the login node:
 
 ```shell
 tail -f /var/log/messages
 ```
 
 Spack specific installation logs will be sent to the spack_log as configured in
-your YAML, by default /var/log/spack.log in the controller.
+your YAML, by default /var/log/spack.log in the login node.
 
 ```shell
 tail -f /var/log/spack.log
 ```
 
-Once Slurm and spack installation is complete, the following command can be run
-to setup the spack environment from any machine that has mounted appfs,
-including the controller, login and compute nodes of the slurm cluster:
+Once Slurm and spack installation is complete, spack will available on the login
+node. To setup spack in the controller or compute nodes, the following command
+can be run:
 
 ```shell
 source /apps/spack/share/spack/setup-env.sh
