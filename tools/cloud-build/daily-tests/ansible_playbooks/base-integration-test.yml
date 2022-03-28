@@ -138,6 +138,8 @@
       include_tasks: "{{ test }}"
       run_once: true
       vars:
+        remote_node: "{{ remote_node }}"
+        deployment_name: "{{ deployment_name }}"
         mounts: "{{ mounts }}"
         partitions: "{{ partitions }}"
       loop: "{{ post_deploy_tests }}"
