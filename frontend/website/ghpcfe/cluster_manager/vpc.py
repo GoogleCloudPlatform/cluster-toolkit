@@ -46,9 +46,9 @@ def create_vpc(vpc: VirtualNetwork) -> None:
 region = "{vpc.cloud_region}"
 zone = "{vpc.cloud_zone}"
 project = "{project_id}"
-credentials = "cloud_credentials"
 """)
 
+    extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': Path(tgtDir / 'cloud_credentials').as_posix()}
     if not vpc.is_managed:
         # If VPC is not managed by us, don't create it, use a TF data provider
         mainTF = tgtDir / 'main.tf'
@@ -56,8 +56,8 @@ credentials = "cloud_credentials"
         generate_vpc_tf_datablock(vpc, tgtDir)
     try:
         utils.run_terraform(tgtDir, "init")
-        utils.run_terraform(tgtDir, "validate")
-        utils.run_terraform(tgtDir, "plan")
+        utils.run_terraform(tgtDir, "validate", extraEnv=extraEnv)
+        utils.run_terraform(tgtDir, "plan", extraEnv=extraEnv)
     except subprocess.CalledProcessError as cpe:
         logger.error("Terraform exec failed", exc_info=cpe)
         if cpe.stdout:
@@ -71,7 +71,8 @@ def start_vpc(vpc: VirtualNetwork) -> None:
     """Effectively, just 'terraform apply'"""
     tgtDir = _tf_dir_for_vpc(vpc.id)
     try:
-        utils.run_terraform(tgtDir, "apply")
+        extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': Path(tgtDir / 'cloud_credentials').as_posix()}
+        utils.run_terraform(tgtDir, "apply", extraEnv=extraEnv)
         stateFile = tgtDir / 'terraform.tfstate'
         with stateFile.open('r') as statefp:
             state = json.load(statefp)
@@ -94,7 +95,8 @@ def start_vpc(vpc: VirtualNetwork) -> None:
 
 def destroy_vpc(vpc: VirtualNetwork) -> None:
     tgtDir = _tf_dir_for_vpc(vpc.id)
-    utils.run_terraform(tgtDir, "destroy")
+    extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': Path(tgtDir / 'cloud_credentials').as_posix()}
+    utils.run_terraform(tgtDir, "destroy", extraEnv=extraEnv)
     vpc.cloud_state = 'xm'
     vpc.save()
 

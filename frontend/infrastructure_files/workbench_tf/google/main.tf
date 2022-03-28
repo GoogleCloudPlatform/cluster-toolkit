@@ -17,21 +17,21 @@
 locals {
   random_id = var.random_id != null ? var.random_id : random_id.default.hex
   project = (var.create_project
-    ? try(module.project_radlab_ds_analytics.0, null)
-    : try(data.google_project.existing_project.0, null)
+    ? try(module.project_radlab_ds_analytics[0], null)
+    : try(data.google_project.existing_project[0], null)
   )
   region = join("-", [split("-", var.zone)[0], split("-", var.zone)[1]])
 
   network = (
     var.create_network
-    ? try(module.vpc_ai_notebook.0.network.network, null)
-    : try(data.google_compute_network.default.0, null)
+    ? try(module.vpc_ai_notebook[0].network.network, null)
+    : try(data.google_compute_network.default[0], null)
   )
 
   subnet = (
     var.create_network
-    ? try(module.vpc_ai_notebook.0.subnets["${local.region}/${var.subnet_name}"], null)
-    : try(data.google_compute_subnetwork.default.0, null)
+    ? try(module.vpc_ai_notebook[0].subnets["${local.region}/${var.subnet_name}"], null)
+    : try(data.google_compute_subnetwork.default[0], null)
   )
 
   notebook_sa_project_roles = [
