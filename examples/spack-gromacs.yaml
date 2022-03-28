@@ -20,7 +20,7 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: spack-gromacs
   region: us-central1
-  zone: us-central1-a
+  zone: us-central1-c
 
 resource_groups:
 - group: primary
@@ -85,8 +85,8 @@ resource_groups:
       # Uncomment and update the name and path to add a shared or personal Spack
       # cache location to speed up future deployments.
       # spack_cache_url:
-      #  - mirror_name: gcs_cache
-      #    mirror_url: gs://bucket-name/...
+      # - mirror_name: gcs_cache
+      #   mirror_url: gs://bucket-name/...
 
   - source: resources/scripts/startup-script
     kind: terraform

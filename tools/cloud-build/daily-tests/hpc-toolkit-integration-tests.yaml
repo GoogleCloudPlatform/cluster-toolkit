@@ -15,7 +15,12 @@
 ---
 
 timeout: 10800s
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/spack_cache_url/versions/1
+    env: SPACK_CACHE
 steps:
+## Test simple golang build
 - name: golang
   entrypoint: /bin/bash
   args:
@@ -23,6 +28,8 @@ steps:
   - |
     cd /workspace
     make
+
+## Test Omnia Example
 - name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
@@ -37,7 +44,10 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/omnia.yml"
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/spack-gromacs.yml"
+
+## Test DDN Lustre with new VPC
 - name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
@@ -53,6 +63,31 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/lustre-new-vpc.yml"
+
+## Test Spack Gromacs Example
+- name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  secretEnv: ['SPACK_CACHE']
+  args:
+  - -c
+  - |
+    set -x -e
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+
+    sed -i "s/# spack_cache_url:/spack_cache_url:/" examples/spack-gromacs.yaml
+    sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" examples/spack-gromacs.yaml
+    sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE//\//\\\/}/" examples/spack-gromacs.yaml
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/spack-gromacs.yml"
+
+## Test Slurm High IO Example
 - name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
