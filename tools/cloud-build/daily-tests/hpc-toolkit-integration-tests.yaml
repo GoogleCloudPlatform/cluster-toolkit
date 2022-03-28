@@ -14,7 +14,7 @@
 
 ---
 
-timeout: 7200s
+timeout: 10800s
 steps:
 - name: golang
   entrypoint: /bin/bash
@@ -32,29 +32,12 @@ steps:
   args:
   - -c
   - |
+    set -x -e
     BUILD_ID_FULL=$BUILD_ID
-    DEPLOYMENT_NAME=lustre-new-vpc-$${BUILD_ID_FULL:0:6}
-    LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
-    CONTROLLER_ID=slurm-$${DEPLOYMENT_NAME}-controller
-    cat <<EOT > test-vars.yml
-    deployment_name: $${DEPLOYMENT_NAME}
-    project: ${PROJECT_ID}
-    zone: us-central1-c
-    workspace: /workspace
-    blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-with-new-vpc.yaml"
-    blueprint_dir: blueprint-lustre-new-vcp
-    network: $${DEPLOYMENT_NAME}
-    max_nodes: 5
-    login_node: $${LOGIN_ID}
-    controller_node: $${CONTROLLER_ID}
-    partitions:
-    - compute
-    mounts:
-    - /home
-    - /scratch
-    EOT
-    ansible-playbook tools/cloud-build/daily-tests/daily-tests.yml \
-      --user=sa_106486320838376751393 --extra-vars="@test-vars.yml"
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/omnia.yml"
 - name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
@@ -64,27 +47,24 @@ steps:
   args:
   - -c
   - |
+    set -x -e
     BUILD_ID_FULL=$BUILD_ID
-    DEPLOYMENT_NAME=hpc-high-io-$${BUILD_ID_FULL:0:6}
-    LOGIN_ID=slurm-$${DEPLOYMENT_NAME}-login0
-    CONTROLLER_ID=slurm-$${DEPLOYMENT_NAME}-controller
-    cat <<EOT > test-vars.yml
-    deployment_name: $${DEPLOYMENT_NAME}
-    project: ${PROJECT_ID}
-    zone: us-central1-c
-    workspace: /workspace
-    blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io.yaml"
-    blueprint_dir: blueprint-cluster-high-io
-    network: default
-    max_nodes: 5
-    login_node: $${LOGIN_ID}
-    controller_node: $${CONTROLLER_ID}
-    partitions:
-    - compute
-    mounts:
-    - /home
-    - /scratch
-    - /projects
-    EOT
-    ansible-playbook tools/cloud-build/daily-tests/daily-tests.yml \
-      --user=sa_106486320838376751393 --extra-vars="@test-vars.yml"
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/lustre-new-vpc.yml"
+- name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-high-io.yml"

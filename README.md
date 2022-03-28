@@ -112,7 +112,7 @@ below.
 
 ### Supplying cloud credentials to Terraform
 
-Terraform can discover credentials for authenticating to Google Clould Platform
+Terraform can discover credentials for authenticating to Google Cloud Platform
 in several ways. We will summarize Terraform's documentation for using
 [gcloud][terraform-auth-gcloud] from your workstation and for automatically
 finding credentials in cloud environments. We do **not** recommend following
@@ -305,6 +305,11 @@ message. Here are some common reasons for the deployment to fail:
   [Enable GCP APIs](#enable-gcp-apis).
 * **Insufficient Quota:** The GCP project does not have enough quota to
   provision the requested resources. See [GCP Quotas](#gcp-quotas).
+* **Filestore resource limit:** When regularly deploying filestore instances
+  with a new vpc you may see an error during deployment such as:
+  `System limit for internal resources has been reached`. See
+  [this doc](https://cloud.google.com/filestore/docs/troubleshooting#api_cannot_be_disabled)
+  for the solution.
 
 ## Inspecting the Blueprint
 

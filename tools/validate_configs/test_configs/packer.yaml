@@ -37,5 +37,10 @@ resource_groups:
     id: my-custom-image
     settings:
       subnetwork: "subnet-central1"
-      ansible_playbook_files:
-      - ./example.yaml
+      use_iap: true
+      omit_external_ip: true
+      disk_size: 100
+      ansible_playbooks:
+      - playbook_file: ./example-playbook.yml
+        galaxy_file: ./requirements.yml
+        extra_arguments: ["-vv"]

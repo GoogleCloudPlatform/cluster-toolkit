@@ -33,7 +33,6 @@
   - name: Create blueprint
     command: "{{ scripts_dir }}/create_blueprint.sh"
     environment:
-      MAX_NODES: "{{ max_nodes }}"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
@@ -55,15 +54,10 @@
       with_items:
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
-    - name: Get login IP
-      register: login_ip
+    - name: Get remote IP
+      register: remote_ip
       command: >-
-        gcloud compute instances describe --zone={{ zone }} {{ login_node }}
-        --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
-    - name: Get Controller IP
-      register: controller_ip
-      command: >-
-        gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
+        gcloud compute instances describe --zone={{ zone }} {{ remote_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
 
     ## Setup firewall for cloud build
@@ -98,9 +92,9 @@
         - --ttl
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
-    - name: Add Login node as host
+    - name: Add Remote node as host
       add_host:
-        hostname: "{{ login_ip.stdout }}"
+        hostname: "{{ remote_ip.stdout }}"
         groups: [remote_host]
     - name: Wait for cluster
       wait_for_connection:
@@ -133,7 +127,7 @@
   hosts: remote_host
   gather_facts: false
   tasks:
-  - name: Slurm Test Block
+  - name: Remote Test Block
     vars:
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     block:
@@ -141,30 +135,17 @@
       pause:
         minutes: 2
     - name: Run Integration tests for HPC toolkit
-      include_tasks: slurm-tests.yml
+      include_tasks: "{{ test }}"
       run_once: true
       vars:
         mounts: "{{ mounts }}"
         partitions: "{{ partitions }}"
+      loop: "{{ post_deploy_tests }}"
+      loop_control:
+        loop_var: test
 
     ## Always cleanup, even on failure
     always:
-    - name: Recover Resume Logs
-      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
-      command: cat /var/log/slurm/resume.log
-      register: resume_output
-      ignore_errors: true
-    - debug:
-        var: resume_output.stdout_lines
-
-    - name: Recover Suspend Logs
-      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
-      command: cat /var/log/slurm/suspend.log
-      register: suspend_output
-      ignore_errors: true
-    - debug:
-        var: suspend_output.stdout_lines
-
     - name: Delete Firewall Rule
       run_once: true
       delegate_to: localhost

@@ -55,6 +55,6 @@ steps:
     SKIP=go-unit-tests pre-commit run --all-files
 images: [
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder']
-timeout: "1200s"
+timeout: "1500s"
 options:
   machineType: N1_HIGHCPU_8
