@@ -176,5 +176,7 @@ No resources.
 | Name | Description |
 |------|-------------|
 | <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Path to the Spack installation script, duplicate for SLURM controller. |
+| <a name="output_install_spack_deps_runner"></a> [install\_spack\_deps\_runner](#output\_install\_spack\_deps\_runner) | Runner to install dependencies for spack using startup-scripts, requires ansible. |
+| <a name="output_install_spack_runner"></a> [install\_spack\_runner](#output\_install\_spack\_runner) | Runner to install Spack using startup-scripts |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Path to the Spack installation script. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

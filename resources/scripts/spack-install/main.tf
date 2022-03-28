@@ -34,4 +34,14 @@ locals {
       LOG_FILE           = var.log_file == null ? "/dev/null" : var.log_file
     }
   )
+  install_spack_deps_runner = {
+    "type"        = "ansible-local"
+    "source"      = "${path.module}/scripts/install_spack_deps.yml"
+    "destination" = "install_spack_deps.yml"
+  }
+  install_spack_runner = {
+    "type"        = "shell"
+    "content"     = local.script_content
+    "destination" = "install_spack.sh"
+  }
 }
