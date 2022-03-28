@@ -117,19 +117,19 @@ that configuration is still active. To track the status of the overall
 startup script, run the following command on the login node:
 
 ```shell
-tail -f /var/log/messages
+sudo tail -f /var/log/messages
 ```
 
 Spack specific installation logs will be sent to the spack_log as configured in
 your YAML, by default /var/log/spack.log in the login node.
 
 ```shell
-tail -f /var/log/spack.log
+sudo tail -f /var/log/spack.log
 ```
 
 Once Slurm and spack installation is complete, spack will available on the login
-node. To setup spack in the controller or compute nodes, the following command
-can be run:
+node. To use spack in the controller or compute nodes, the following command
+must be run first:
 
 ```shell
 source /apps/spack/share/spack/setup-env.sh
