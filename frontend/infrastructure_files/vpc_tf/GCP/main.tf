@@ -57,7 +57,9 @@ resource "google_compute_firewall" "firewall_internal" {
   name          = "${local.vpc_key}-firewall-internal"
   network       = google_compute_network.network.name
   project       = var.project
-  source_ranges = ["10.0.0.0/8"]
+  source_ranges = ["10.0.0.0/8",
+                   "172.16.0.0/12",
+                   "192.168.0.0/16"]
   allow {
     protocol = "tcp"
     ports    = ["0-65535"]
