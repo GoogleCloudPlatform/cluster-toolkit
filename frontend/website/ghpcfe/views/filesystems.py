@@ -35,6 +35,7 @@ from ..models import Credential, Filesystem, FilesystemImpl, FILESYSTEM_IMPL_INF
     MountPoint, FilesystemExport
 from ..cluster_manager import cloud_info, filesystem as cm_fs
 from ..views.asyncview import BackendAsyncView
+from ..forms import FilesystemImportForm
 from ..permissions import SuperUserRequiredMixin
 
 
@@ -95,7 +96,6 @@ class FilesystemCreateView2(SuperUserRequiredMixin, generic.TemplateView):
 
         return HttpResponseRedirect(reverse(tgt, kwargs={'credential': credential}))
 
-
 class FilesystemRedirectView(SuperUserRequiredMixin, generic.RedirectView):
     permanent = False
     query_string = True
@@ -155,6 +155,79 @@ class FilesystemDestroyView(SuperUserRequiredMixin, generic.DetailView):
         context['navtab'] = 'fs'
         return context
 
+
+class FilesystemImportView(SuperUserRequiredMixin, CreateView):
+    template_name = 'filesystem/import_form.html'
+    form_class = FilesystemImportForm
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'fs'
+        return context
+
+    def get_initial(self):
+        return {'cloud_credential': self.cloud_credential}
+
+    def get(self, request, credential, *args, **kwargs):
+        self.cloud_credential = get_object_or_404(Credential, pk=credential)
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        self.cloud_credential = get_object_or_404(Credential, pk=kwargs['credential'])
+        return super().post(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.cloud_state = 'i'
+        self.object.cloud_credential = self.cloud_credential
+        self.object.impl_type = FilesystemImpl.IMPORTED
+        self.object.save()
+
+        export = FilesystemExport(filesystem=self.object, export_name=form.data['share_name'])
+        export.save()
+
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('fs-detail', kwargs={'pk': self.object.pk})
+
+
+class FilesystemImportUpdateView(SuperUserRequiredMixin, UpdateView):
+    model = Filesystem
+    template_name = 'filesystem/import_update.html'
+    form_class = FilesystemImportForm
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'fs'
+        return context
+
+    def get_initial(self):
+        return {'share_name': self.object.exports.first().export_name}
+
+
+    def form_valid(self, form):
+        self.object = form.save()
+
+        export = self.object.exports.first()
+        export.export_name=form.data['share_name']
+        export.save()
+
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('fs-detail', kwargs={'pk': self.object.pk})
+
+class FilesystemImportDetailView(SuperUserRequiredMixin, generic.DetailView):
+    model = Filesystem
+    template_name = 'filesystem/import_detail.html'
+
+    def get_context_data(self, **kwargs):
+        """ Perform extra query to populate instance types data """
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'fs'
+        context['exports'] = FilesystemExport.objects.filter(filesystem=self.kwargs['pk'])
+        return context
 
 # Other supporting views
 

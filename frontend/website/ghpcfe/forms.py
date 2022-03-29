@@ -472,6 +472,50 @@ class VirtualSubnetForm(forms.ModelForm):
             'cloud_region': forms.Select(attrs={'class': 'form-control'}),
         }
 
+class FilesystemImportForm(forms.ModelForm):
+
+    share_name = forms.CharField(label='Export Name',
+                    help_text='Mount point from this filesystem (ie:  /shared)',
+                    widget=forms.TextInput(attrs={'class': 'form-control'}),
+                    validators=[
+                        RegexValidator(
+                            regex='^/[-a-zA-Z0-9_]{1,63}',
+                            message="Share must start with a '/' and be no more than 64 characters long, with no spaces"),
+                        ]
+                    )
+
+    class Meta:
+        model = Filesystem
+        fields = ('name', 'vpc', 'cloud_zone', 'hostname_or_ip', 'fstype')
+
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'cloud_credential': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
+            'vpc': forms.Select(attrs={'class': 'form-control'}), 
+            'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
+            'hostname_or_ip': forms.TextInput(attrs={'class': 'form-control'}),
+            'fstype': forms.Select(attrs={'class': 'form-control'}),
+        }
+
+    def _get_creds(self, kwargs):
+        # We do this, because on Create views, there isn't an instance, so we
+        # set the creds via the 'initial' data field.  On Updates, there is 
+        # an object, so pull from there
+        if 'cloud_credential' in kwargs['initial']:
+            creds = kwargs['initial']['cloud_credential']
+        else:
+            creds = self.instance.cloud_credential
+        return creds
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        creds = self._get_creds(kwargs)
+        self.fields['vpc'].queryset = VirtualNetwork.objects.filter(cloud_credential=creds).filter(Q(cloud_state="i")|Q(cloud_state="m"))
+        region_info = cloud_info.get_region_zone_info("GCP", creds.detail)
+        self.fields['cloud_zone'].widget.choices = [(r, [(z, z) for z in rz]) for r,rz in region_info.items()]
+
+
 
 class FilestoreForm(forms.ModelForm):
     """ Custom form for GCP Filestoremodel implementing option filtering """
