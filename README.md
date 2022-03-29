@@ -405,6 +405,11 @@ successfully passing.
 1. Install pre-commit using the instructions from [the pre-commit website](https://pre-commit.com/).
 1. Install TFLint using the instructions from
    [the TFLint documentation](https://github.com/terraform-linters/tflint#installation).
+   * Note: The version of TFLint must be compatible with the Google plugin
+     version identified in [tflint.hcl](.tflint.hcl). Versions of the plugin
+     `>=0.16.0` should use `tflint>=0.35.0` and versions of the plugin
+     `<=0.15.0` should preferably use `tflint==0.34.1`. These versions are
+     readily available via GitHub or package managers.
 1. Install ShellCheck using the instructions from
    [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)
 1. The other dev dependencies can be installed by running the following command
