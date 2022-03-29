@@ -167,15 +167,21 @@ class WorkbenchForm(forms.ModelForm):
         cleaned_data = super().clean()
         subnet = cleaned_data.get("subnet")
 
-        if subnet.cloud_zone not in self.workbench_zones:
-            validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_zone + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
-            raise forms.ValidationError(mark_safe(validation_error_message))
+        # if subnet.cloud_zone not in self.workbench_zones:
+        #     validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_zone + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
+        #     raise forms.ValidationError(mark_safe(validation_error_message))
 
         #validate user has an email address that we can pass to GCP 
-        users = cleaned_data.get("trusted_users")
-        for user in users:
-            if not user.email:
-                raise forms.ValidationError("Trusted User has no email address")
+        user = cleaned_data.get("trusted_users")
+        if not user.email:
+            raise forms.ValidationError("User has no email address")
+
+        #check user is associated with a social login account
+        try:
+            if user.socialaccount_set.first().uid:
+                pass
+        except:
+            raise forms.ValidationError("User not associated with a required Social ID ")
 
     def __init__(self, user, *args, **kwargs):
         has_creds = 'cloud_credential' in kwargs
@@ -185,7 +191,21 @@ class WorkbenchForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if not has_creds:
             credential = self.instance.cloud_credential
+        zone_choices = None
+        if 'zone_choices' in kwargs:
+            zone_choices = kwargs.pop('zone_choices')
+
         self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential).filter(Q(cloud_state="i")|Q(cloud_state="m"))
+        if zone_choices:
+            # We set this on the widget, because we will be changing the
+            # widget's field in the template via javascript
+            self.fields['cloud_zone'].widget.choices = zone_choices
+
+        if 'n' not in self.instance.cloud_state:
+            # Need to disable certain widgets
+            self.fields['subnet'].disabled = True
+            self.fields['cloud_zone'].disabled = True
+
         self.workbench_zones = cloud_info.get_gcp_workbench_region_zone_info(credential.detail)
         if 'n' not in self.instance.cloud_state:
             #Need to disable certain widgets
@@ -229,13 +249,15 @@ class WorkbenchForm(forms.ModelForm):
     class Meta:
         model = Workbench
 
-        fields = ('name', 'subnet', 'cloud_credential', 'trusted_users', 'machine_type', 'boot_disk_type', 'boot_disk_capacity', 'image_family')
+        fields = ('name', 'subnet', 'cloud_zone', 'cloud_credential', 'trusted_users', 'machine_type', 'boot_disk_type', 'boot_disk_capacity', 'image_family')
 
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'cloud_credential': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
             'subnet': forms.Select(attrs={'class': 'form-control'}),
             'machine_type': forms.Select(attrs={'class': 'form-control'}),
+            'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
+            'trusted_users': forms.Select(attrs={'class': 'form-control'}),
         }
 
 class ApplicationEditForm(forms.ModelForm):

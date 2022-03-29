@@ -1091,9 +1091,10 @@ class Workbench(CloudResource):
         blank = True,
         null = True
     )
-    trusted_users = models.ManyToManyField(
+    trusted_users = models.ForeignKey(
         User,
-        help_text = 'Select other users authorised to use this cluster',
+        help_text = 'Select primary user authorised to use this workbench',
+        on_delete = models.RESTRICT
     )
     WORKBENCH_IMAGEFAMILIES = (
         ('common-cpu-notebooks', 'Base Python 3 (with Intel MKL)'),
