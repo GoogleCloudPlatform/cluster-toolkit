@@ -107,15 +107,6 @@ func getResourceVarName(resID string, varName string) string {
 	return fmt.Sprintf("$(%s.%s)", resID, varName)
 }
 
-func stringSliceContains(slice []string, value string) bool {
-	for _, elem := range slice {
-		if elem == value {
-			return true
-		}
-	}
-	return false
-}
-
 func getResourceInputMap(inputs []resreader.VarInfo) map[string]string {
 	resInputs := make(map[string]string)
 	for _, input := range inputs {

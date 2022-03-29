@@ -103,17 +103,6 @@ type Resource struct {
 	Settings         map[string]interface{}
 }
 
-// getSetSettings returns a slice of explicitly set settings at a given point.
-func (r Resource) getSetSettings() []string {
-	setSettings := make([]string, len(r.Settings))
-	i := 0
-	for setting := range r.Settings {
-		setSettings[i] = setting
-		i++
-	}
-	return setSettings
-}
-
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
 // a new map is created.
 func (r *Resource) createWrapSettingsWith() {
