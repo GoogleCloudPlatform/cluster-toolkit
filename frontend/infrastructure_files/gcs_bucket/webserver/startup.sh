@@ -129,6 +129,8 @@ sudo su - gcluster -c /bin/bash <<EOF
   mkdir dependencies
   pushd dependencies
   git clone -b v0.17.1 --depth 1 https://github.com/spack/spack.git
+  printf "\npre-generating Spack package list\n"
+  ./spack/bin/spack list > /dev/null
   popd
 
   printf "\nDownloading ghpc dependencies...\n"
