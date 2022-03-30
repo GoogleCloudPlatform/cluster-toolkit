@@ -38,6 +38,16 @@ func (s *MySuite) TestCopyGitHubResources(c *C) {
 	c.Assert(fInfo.Name(), Equals, "terraform_validate")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
+
+	// Success via HTTPS (Root directory)
+	destDirForHTTPSRootDir := filepath.Join(destDir, "https-rootdir")
+	err = copyGitHubResources("github.com/terraform-google-modules/terraform-google-service-accounts.git?ref=v4.1.1", destDirForHTTPSRootDir)
+	c.Assert(err, IsNil)
+	fInfo, err = os.Stat(filepath.Join(destDirForHTTPSRootDir, "main.tf"))
+	c.Assert(err, IsNil)
+	c.Assert(fInfo.Name(), Equals, "main.tf")
+	c.Assert(fInfo.Size() > 0, Equals, true)
+	c.Assert(fInfo.IsDir(), Equals, false)
 }
 
 func (s *MySuite) TestGetResourceInfo_GitHub(c *C) {

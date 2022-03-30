@@ -30,6 +30,7 @@ import (
 	ctyJson "github.com/zclconf/go-cty/cty/json"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/sourcereader"
 )
 
 // TFWriter writes terraform to the blueprint folder
@@ -274,7 +275,13 @@ func writeMain(
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
-		moduleSource := cty.StringVal(fmt.Sprintf("./modules/%s", res.ResourceName))
+		var moduleSource cty.Value
+		if sourcereader.IsGitHubPath(res.Source) {
+			moduleSource = cty.StringVal(res.Source)
+		} else {
+			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", res.ResourceName))
+		}
+
 		moduleBody.SetAttributeValue("source", moduleSource)
 
 		// For each Setting

@@ -70,6 +70,10 @@ func getTemplate(filename string) string {
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
+			if sourcereader.IsGitHubPath(resource.Source) {
+				continue
+			}
+
 			/* Copy source files */
 			resourceName := filepath.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
