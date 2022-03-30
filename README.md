@@ -23,9 +23,9 @@ You must first set up Cloud Shell to authenticate with GitHub. We will use an
 SSH key.
 
 > **_NOTE:_** You can skip this step if you have previously set up cloud shell
-> with GitHub.  
+> with GitHub.
 > **_NOTE:_** You can find much more detailed instructions for this step in the
-> [GitHub docs](https://docs.github.com/en/authentication/connecting-to-github-with-ssh).  
+> [GitHub docs](https://docs.github.com/en/authentication/connecting-to-github-with-ssh).
 > **_NOTE:_** This step is only required during the private preview of the
 > HPC-Toolkit.
 
@@ -197,7 +197,7 @@ slurm-hpc-slurm-small-debug-0-2
 
 By default, this runs the job on the `debug` partition. See details in
 [examples/](examples/README.md#compute-partition) for how to run on the more
-performant `compute` partition.  
+performant `compute` partition.
 
 > **_NOTE:_** Cloud Shell times out after 20 minutes of inactivity. This example
 > deploys in about 5 minutes but for more complex deployments it may be
@@ -310,6 +310,12 @@ message. Here are some common reasons for the deployment to fail:
   `System limit for internal resources has been reached`. See
   [this doc](https://cloud.google.com/filestore/docs/troubleshooting#api_cannot_be_disabled)
   for the solution.
+* **Required permission not found:**
+  * Example: `Required 'compute.projects.get' permission for 'projects/... forbidden`
+  * Credentials may not be set, or are not set correctly. Please follow
+    instructions at [Cloud credentials on your workstation](#cloud-credentials-on-your-workstation).
+  * Ensure proper permissions are set in the cloud console
+    [IAM section](https://console.cloud.google.com/iam-admin/iam).
 
 ### Failure to Destroy VPC Network
 
