@@ -28,8 +28,3 @@ output "notebooks_instance_names" {
   description = "Notebook Instance Names"
   value       = join(", ", google_notebooks_instance.ai_notebook[*].name)
 }
-
-output "user_scripts_bucket_uri" {
-  description = "User Script Bucket URI"
-  value       = google_storage_bucket.user_scripts_bucket.self_link
-}

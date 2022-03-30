@@ -157,3 +157,21 @@ variable "project" {
   type        = string
   default     = ""
 }
+
+variable "owner_id" {
+  description = "Billing Account associated to the GCP Resources"
+  type        = list
+  default     = [""]
+}
+
+variable "wb_startup_script_name" {
+  description = "Name & Path for the wb startup script file when uploaded to GCP cloud storage"
+  type        = string
+  default     = ""
+}
+
+variable "wb_startup_script_bucket" {
+  description = "Name for the bucket where the workbench startup script is stored. "
+  type        = string
+  default     = ""
+}

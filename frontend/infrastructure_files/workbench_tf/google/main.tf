@@ -53,6 +53,12 @@ resource "random_id" "default" {
   byte_length = 2
 }
 
+resource "google_storage_bucket_object" "startup_script" {
+  name   = var.wb_startup_script_name
+  source = "../../startup_script.sh"
+  bucket = var.wb_startup_script_bucket
+}
+
 #####################
 # ANALYTICS PROJECT #
 #####################
@@ -161,18 +167,6 @@ resource "google_service_account_iam_member" "sa_ai_notebook_user_iam" {
   service_account_id = google_service_account.sa_p_notebook.id
 }
 
-resource "google_project_iam_binding" "ai_notebook_user_role1" {
-  project = local.project.project_id
-  members = var.trusted_users
-  role    = "roles/notebooks.admin"
-}
-
-resource "google_project_iam_binding" "ai_notebook_user_role2" {
-  project = local.project.project_id
-  members = var.trusted_users
-  role    = "roles/viewer"
-}
-
 resource "google_notebooks_instance" "ai_notebook" {
   count        = var.notebook_count
   project      = local.project.project_id
@@ -185,7 +179,7 @@ resource "google_notebooks_instance" "ai_notebook" {
     image_family = var.image_family
   }
 
-  service_account = google_service_account.sa_p_notebook.email
+  instance_owners = var.owner_id
 
   install_gpu_driver = false
   boot_disk_type     = var.boot_disk_type
@@ -197,7 +191,7 @@ resource "google_notebooks_instance" "ai_notebook" {
   network = local.network.self_link
   subnet  = local.subnet.self_link
 
-  post_startup_script = "https://github.com/GoogleCloudPlatform/rad-lab/blob/main/modules/data_science/scripts/build/samplenotebook.sh"
+  post_startup_script = format("gs://%s/%s", var.wb_startup_script_bucket, var.wb_startup_script_name)
 
   labels = {
     module = "data-science"
@@ -208,25 +202,5 @@ resource "google_notebooks_instance" "ai_notebook" {
     proxy-mode = "mail"
   }
   depends_on = [time_sleep.wait_120_seconds]
-}
 
-resource "google_storage_bucket" "user_scripts_bucket" {
-  project                     = local.project.project_id
-  name                        = join("", ["user-scripts-notebooks-instance-", local.random_id])
-  location                    = "US"
-  force_destroy               = true
-  uniform_bucket_level_access = true
-
-  cors {
-    origin          = ["http://user-scripts"]
-    method          = ["GET", "HEAD", "PUT", "POST", "DELETE"]
-    response_header = ["*"]
-    max_age_seconds = 3600
-  }
-}
-
-resource "google_storage_bucket_iam_binding" "binding" {
-  bucket  = google_storage_bucket.user_scripts_bucket.name
-  role    = "roles/storage.admin"
-  members = var.trusted_users
 }

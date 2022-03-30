@@ -1,0 +1,42 @@
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if "c" in object.cloud_state or "t" in object.cloud_state or "d" in object.cloud_state %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <h2>GCP Filestore Filesystem</h2>
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+    <p><b>ID:</b> {{ object.id }}</p>
+    <p><b>Name:</b> {{ object.name }}</p>
+    <p><b>Zone:</b> {{ object.cloud_zone }}</p>
+    <p><b>Status:</b> {{ object.get_cloud_state_display }}</p>
+    <p><b>Type:</b> {{ object.get_impl_type_display }}</p>
+
+    <hr>
+    <p style="text-decoration: underline; font-size: large;">Exports</p>
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <tr>
+        <th>Export Name</th>
+        <th>Mount Target</th>
+      </tr>
+      {% for export in exports %}
+      <tr>
+        <td>{{ export.export_name }}</td>
+        <td><code>{{ export.source_string }}</code></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+
+    <a href="{% url 'import-fs-update' object.id %}" class="btn btn-primary">Edit</a>
+    <a href="{% url 'fs-delete' object.id %}" class="btn btn-primary">Delete</a>
+
+{% endblock %}

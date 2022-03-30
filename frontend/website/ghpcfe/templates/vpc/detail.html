@@ -112,7 +112,9 @@
     {% if "c" not in object.cloud_state %}
     <a href="{% url 'vpc-update' object.id %}" class="btn btn-primary">Edit</a>
     {% endif %}
+    {% if "i" not in object.cloud_state %}
     <a href="{% url 'vpc-subnets' object.id %}" class="btn btn-primary">Edit Subnets</a>
+    {% endif %}
     {% if "m" in object.cloud_state %}
     <a href="{% url 'backend-start-vpc' object.id %}" class="btn btn-primary {% if not subnets %}disabled{% endif %}">Apply Cloud Changes</a>
     {% endif %}

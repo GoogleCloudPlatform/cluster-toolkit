@@ -167,15 +167,21 @@ class WorkbenchForm(forms.ModelForm):
         cleaned_data = super().clean()
         subnet = cleaned_data.get("subnet")
 
-        if subnet.cloud_zone not in self.workbench_zones:
-            validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_zone + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
-            raise forms.ValidationError(mark_safe(validation_error_message))
+        # if subnet.cloud_zone not in self.workbench_zones:
+        #     validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_zone + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
+        #     raise forms.ValidationError(mark_safe(validation_error_message))
 
         #validate user has an email address that we can pass to GCP 
-        users = cleaned_data.get("trusted_users")
-        for user in users:
-            if not user.email:
-                raise forms.ValidationError("Trusted User has no email address")
+        user = cleaned_data.get("trusted_users")
+        if not user.email:
+            raise forms.ValidationError("User has no email address")
+
+        #check user is associated with a social login account
+        try:
+            if user.socialaccount_set.first().uid:
+                pass
+        except:
+            raise forms.ValidationError("User not associated with a required Social ID ")
 
     def __init__(self, user, *args, **kwargs):
         has_creds = 'cloud_credential' in kwargs
@@ -185,7 +191,21 @@ class WorkbenchForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if not has_creds:
             credential = self.instance.cloud_credential
+        zone_choices = None
+        if 'zone_choices' in kwargs:
+            zone_choices = kwargs.pop('zone_choices')
+
         self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential).filter(Q(cloud_state="i")|Q(cloud_state="m"))
+        if zone_choices:
+            # We set this on the widget, because we will be changing the
+            # widget's field in the template via javascript
+            self.fields['cloud_zone'].widget.choices = zone_choices
+
+        if 'n' not in self.instance.cloud_state:
+            # Need to disable certain widgets
+            self.fields['subnet'].disabled = True
+            self.fields['cloud_zone'].disabled = True
+
         self.workbench_zones = cloud_info.get_gcp_workbench_region_zone_info(credential.detail)
         if 'n' not in self.instance.cloud_state:
             #Need to disable certain widgets
@@ -229,13 +249,15 @@ class WorkbenchForm(forms.ModelForm):
     class Meta:
         model = Workbench
 
-        fields = ('name', 'subnet', 'cloud_credential', 'trusted_users', 'machine_type', 'boot_disk_type', 'boot_disk_capacity', 'image_family')
+        fields = ('name', 'subnet', 'cloud_zone', 'cloud_credential', 'trusted_users', 'machine_type', 'boot_disk_type', 'boot_disk_capacity', 'image_family')
 
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'cloud_credential': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
             'subnet': forms.Select(attrs={'class': 'form-control'}),
             'machine_type': forms.Select(attrs={'class': 'form-control'}),
+            'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
+            'trusted_users': forms.Select(attrs={'class': 'form-control'}),
         }
 
 class ApplicationEditForm(forms.ModelForm):
@@ -397,9 +419,12 @@ class BenchmarkForm(forms.ModelForm):
 
 class VPCForm(forms.ModelForm):
     """ Custom form for VPC model implementing option filtering """
+    subnets = forms.MultipleChoiceField(widget=forms.SelectMultiple(attrs={'class': 'form-control'}), help_text="Available Subnets")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['cloud_region'].widget.choices = [(x, x) for x in kwargs['initial']['regions']]
+        self.fields['subnets'].choices = kwargs['initial'].get('available_subnets', [])
 
     class Meta:
         model = VirtualNetwork
@@ -449,6 +474,50 @@ class VirtualSubnetForm(forms.ModelForm):
             'cidr': forms.TextInput(attrs={'class': 'form-control'}),
             'cloud_region': forms.Select(attrs={'class': 'form-control'}),
         }
+
+class FilesystemImportForm(forms.ModelForm):
+
+    share_name = forms.CharField(label='Export Name',
+                    help_text='Mount point from this filesystem (ie:  /shared)',
+                    widget=forms.TextInput(attrs={'class': 'form-control'}),
+                    validators=[
+                        RegexValidator(
+                            regex='^/[-a-zA-Z0-9_]{1,63}',
+                            message="Share must start with a '/' and be no more than 64 characters long, with no spaces"),
+                        ]
+                    )
+
+    class Meta:
+        model = Filesystem
+        fields = ('name', 'vpc', 'cloud_zone', 'hostname_or_ip', 'fstype')
+
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'cloud_credential': forms.Select(attrs={'class': 'form-control', 'disabled': True}),
+            'vpc': forms.Select(attrs={'class': 'form-control'}), 
+            'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
+            'hostname_or_ip': forms.TextInput(attrs={'class': 'form-control'}),
+            'fstype': forms.Select(attrs={'class': 'form-control'}),
+        }
+
+    def _get_creds(self, kwargs):
+        # We do this, because on Create views, there isn't an instance, so we
+        # set the creds via the 'initial' data field.  On Updates, there is 
+        # an object, so pull from there
+        if 'cloud_credential' in kwargs['initial']:
+            creds = kwargs['initial']['cloud_credential']
+        else:
+            creds = self.instance.cloud_credential
+        return creds
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        creds = self._get_creds(kwargs)
+        self.fields['vpc'].queryset = VirtualNetwork.objects.filter(cloud_credential=creds).filter(Q(cloud_state="i")|Q(cloud_state="m"))
+        region_info = cloud_info.get_region_zone_info("GCP", creds.detail)
+        self.fields['cloud_zone'].widget.choices = [(r, [(z, z) for z in rz]) for r,rz in region_info.items()]
+
 
 
 class FilestoreForm(forms.ModelForm):
