@@ -102,8 +102,8 @@ echo "Do you have a static IP address to assign to the webserver?"
 echo "If so, we will assign this IP address, otherwise, we will automatically"
 echo "create an ephemeral public IP address."
 echo "You can create a static IP address with the command:"
-echo "  $ gcloud compute addresses create <NAME> --project${project_id} --region=${region}"
-echo "  $ gcloud compute addresses describe <NAME> --project${project_id} --region=${region} | grep 'address:'"
+echo "  $ gcloud compute addresses create <NAME> --project ${project_id} --region=${region}"
+echo "  $ gcloud compute addresses describe <NAME> --project ${project_id} --region=${region} | grep 'address:'"
 echo ""
 echo "If you have set a hostname above, it is recommended that you use a static"
 echo "IP addresses, and set the DNS record for the hostname to point at this"
@@ -120,7 +120,7 @@ read -p "  supply this user's email address: " django_superuser_email
 # Collect deployment files
 if [ "${deployment}" == "tarball" ] ;
 then
-    tar -cz -f tf/deployment.tar.gz --exclude=tf ../../hpc-toolkit #2>/dev/null
+    tar -cz -f tf/deployment.tar.gz --exclude=tf ../../hpc-toolkit 2>/dev/null
 fi
 
 cd tf

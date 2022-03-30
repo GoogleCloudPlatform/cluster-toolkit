@@ -292,7 +292,7 @@ class VirtualSubnet(CloudResource):
     )
 
     def __str__(self):
-        return f"{self.vpc.cloud_id} - {self.vpc.name} - {self.name}"
+        return f"{self.vpc.name} - {self.name} - {self.cloud_region}"
 
 
 FILESYSTEM_TYPES = (
@@ -306,6 +306,7 @@ FILESYSTEM_TYPES = (
 class FilesystemImpl(models.IntegerChoices):
     BUILT_IN = 0, 'Cluster Built-in'
     GCPFILESTORE = 1, 'GCP Filestore'
+    IMPORTED = 2, 'Imported Filesystem'
 
 
 class Filesystem(CloudResource):
@@ -343,6 +344,8 @@ class Filesystem(CloudResource):
         max_length = 1,
         choices = FILESYSTEM_TYPES,
         help_text = 'Type of Filesystem (NFS, Lustre, etc)',
+        blank = False,
+        default = FILESYSTEM_TYPES[0][0]
     )
 
     @property
@@ -985,6 +988,7 @@ class GCPFilestoreFilesystem(Filesystem):
 FILESYSTEM_IMPL_INFO = {
     FilesystemImpl.BUILT_IN: {'name': 'Cluster Built-in', 'class': None},
     FilesystemImpl.GCPFILESTORE: {'name': 'GCP Filestore', 'class': GCPFilestoreFilesystem, 'url-key': 'filestore', 'terraform_dir': 'gcp_filestore'},
+    FilesystemImpl.IMPORTED: {'name': 'Imported Filesystem', 'class': Filesystem, 'url-key': 'import-fs'},
 }
 
 class WorkbenchPreset(models.Model):
@@ -1091,9 +1095,10 @@ class Workbench(CloudResource):
         blank = True,
         null = True
     )
-    trusted_users = models.ManyToManyField(
+    trusted_users = models.ForeignKey(
         User,
-        help_text = 'Select other users authorised to use this cluster',
+        help_text = 'Select primary user authorised to use this workbench',
+        on_delete = models.RESTRICT
     )
     WORKBENCH_IMAGEFAMILIES = (
         ('common-cpu-notebooks', 'Base Python 3 (with Intel MKL)'),

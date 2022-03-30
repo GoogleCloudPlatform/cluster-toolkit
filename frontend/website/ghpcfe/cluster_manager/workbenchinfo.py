@@ -28,6 +28,7 @@ import os, shutil, sys
 import subprocess
 import json
 import os.path as path
+import requests
 from datetime import datetime
 from datetime import timedelta
 
@@ -47,6 +48,7 @@ class WorkbenchInfo:
 
         self.set_credentials(credentials)
         self.copy_terraform()
+        self.copy_startup_script()
         self.prepare_terraform_vars()
 
     def get_credentials_file(self):
@@ -66,6 +68,38 @@ class WorkbenchInfo:
         #shutil.copytree(self.config["baseDir"] / 'infrastructure_files' / 'workbench_tf' / 'common-files' , tfDir / 'common-files' )
         return tfDir
 
+    def copy_startup_script(self):
+        user = self.workbench.trusted_users
+        unix_username = ""
+        
+        # setup metadata query to get user profiles
+        metadata_url = "http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024"
+        metadata_headers = {'Metadata-Flavor': 'Google'}
+        # TODO - wrap in a loop with page Tokens
+        req = requests.get(metadata_url, headers=metadata_headers)
+        resp = json.loads(req.text)
+        
+        #for each user profile
+        for profile in resp['loginProfiles']:
+            #if profile "name" matches the user ID then save unix username for the startup script
+            if profile['name'] == user.socialaccount_set.first().uid:
+                # TODO: Should also check login authorization
+                for acct in profile['posixAccounts']:
+                   unix_username = acct['username']
+
+        startup_script_vars = f"""
+USER="{unix_username}"
+"""
+
+        startup_script = self.workbench_dir / 'startup_script.sh'
+        with startup_script.open('w') as f:
+            f.write(f"""#!/bin/bash
+{startup_script_vars}
+""")
+            with open(self.config["baseDir"] / 'infrastructure_files' / 'gcs_bucket' / 'workbench' / 'startup_script_template.sh') as infile:
+                for line in infile:
+                    f.write(line)
+
     def prepare_terraform_vars(self):
         region = self.workbench.cloud_region
         zone = self.workbench.cloud_zone
@@ -74,15 +108,8 @@ class WorkbenchInfo:
 
         # Cloud-specific Terraform changes
         project = json.loads(self.workbench.cloud_credential.detail)["project_id"]
-
-        users = self.workbench.trusted_users.all()
-        trusted_user_tfvalue = ""
-        i = 0
-        for user in users:
-            if i != 0:
-                trusted_user_tfvalue = trusted_user_tfvalue + ","
-            i = 1
-            trusted_user_tfvalue = trusted_user_tfvalue + "\"user:" + user.email + "\""
+        user = self.workbench.trusted_users
+        trusted_user_tfvalue = "\"user:" + user.email + "\""
 
         csp_info = f"""
 region = "{region}"
@@ -95,6 +122,10 @@ boot_disk_type = "{self.workbench.boot_disk_type}"
 boot_disk_size_gb = "{self.workbench.boot_disk_capacity}"
 trusted_users = [{trusted_user_tfvalue}]
 image_family = "{self.workbench.image_family}"
+
+owner_id = ["{user.email}"]
+wb_startup_script_name   = "workbench/workbench_{self.workbench.id}_startup_script"
+wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 """
 #        pkeys_str = b"\n".join(self._get_ssh_keys()).decode('utf-8')
         tfvars = self.workbench_dir / 'terraform' / self.cloud_dir / 'terraform.tfvars'
@@ -110,10 +141,8 @@ image_family = "{self.workbench.image_family}"
     def initialize_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
         try:
-            print("Invoking Terraform Init")
             utils.run_terraform(tfDir / self.cloud_dir, "init")
             utils.run_terraform(tfDir / self.cloud_dir, "validate")
-            print("Invoking Terraform Plan")
             utils.run_terraform(tfDir / self.cloud_dir, "plan")
         except subprocess.CalledProcessError as cpe:
             if cpe.stdout:
@@ -126,7 +155,6 @@ image_family = "{self.workbench.image_family}"
     def run_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
         try:
-            print("Invoking Terraform Apply")
             (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply")
             # Look for Management Public IP in terraform.tfstate
             stateFile = tfDir / self.cloud_dir / 'terraform.tfstate'

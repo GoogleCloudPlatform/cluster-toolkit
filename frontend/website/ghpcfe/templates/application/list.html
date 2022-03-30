@@ -15,8 +15,8 @@
       <tr>
         <th scope="col">#</th>
         <th scope="col">Name</th>
+        <th scope="col">Type</th>
         <th scope="col">Version</th>
-        <th scope="col">Spack Specs</th>
         <th scope="col">Compiler</th>
         <th scope="col">MPI</th>
         <th scope="col">File System</th>
@@ -30,8 +30,8 @@
       <tr>
         <th>{{ application.id }}</th>
         <td><a href="{% url 'application-detail' application.id %}">{{ application.name }}</a></td>
+        <td>{{ application.type }}</td>
         <td>{{ application.version }}</td>
-        <td>{{ application.spack_spec }}</td>
         <td>{{ application.compiler }}</td>
         <td>{{ application.mpi }}</td>
         <td><img src="/static/img/GCP_logo.png" style="width:32px;height:32px;"> {{ application.install_loc.filesystem.name }}</td>

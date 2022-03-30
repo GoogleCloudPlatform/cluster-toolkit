@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """ workbench.py """
-
+import json
 from asgiref.sync import sync_to_async
 
 from django.shortcuts import get_object_or_404
@@ -24,8 +24,10 @@ from django.urls import reverse
 from django.views import generic
 from django.views.generic.edit import CreateView, DeleteView
 from django.contrib import messages
-from ..models import Credential, Workbench
+from django.db.models import Q
+from ..models import Credential, Workbench, VirtualSubnet
 from ..forms import WorkbenchForm
+from ..cluster_manager import cloud_info
 from ..cluster_manager import workbenchinfo
 from .asyncview import BackendAsyncView
 
@@ -102,7 +104,6 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
         self.object = form.save(commit=False)
         self.object.owner = self.request.user
         self.object.cloud_region = self.object.subnet.cloud_region;
-        self.object.cloud_zone = self.object.subnet.cloud_zone;
         self.object.save()
         form.save_m2m()
         messages.success(self.request, "A record for this workbench has been created. Click the 'Edit' button to customise it.")
@@ -111,6 +112,10 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
     def get_context_data(self, **kwargs):
         """ Perform extra query to populate instance types data """
         context = super().get_context_data(**kwargs)
+        region_info = cloud_info.get_region_zone_info("GCP", self.cloud_credential.detail)
+        subnet_regions = {sn.id: sn.cloud_region for sn in VirtualSubnet.objects.filter(cloud_credential=self.cloud_credential).filter(Q(cloud_state="i") | Q(cloud_state="m")).all()}
+        context['subnet_regions'] = json.dumps(subnet_regions)
+        context['region_info'] = json.dumps(region_info)
         context['navtab'] = 'Workbench'
         return context
 
@@ -181,7 +186,7 @@ class BackendStartWorkbench(BackendAsyncView):
 
 
     def cmd(self, task_id, token, workbench):
-        from cluster_manager.start_workbench import start_workbench
+        from ..cluster_manager.start_workbench import start_workbench
         start_workbench(workbench, token)
 
 
@@ -204,7 +209,7 @@ class BackendDestroyWorkbench(BackendAsyncView):
         return (workbench,)
 
     def cmd(self, task_id, token, workbench):
-        from cluster_manager.destroy_workbench import destroy_workbench
+        from ..cluster_manager.destroy_workbench import destroy_workbench
         destroy_workbench(workbench, token)
 
     async def get(self, request, pk):

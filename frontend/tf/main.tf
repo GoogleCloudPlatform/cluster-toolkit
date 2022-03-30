@@ -40,7 +40,7 @@ module "service_account" {
     version = "~> 4.1"
 
     description   = "Service Account for GHPC Open Frontend"
-    names         = ["fe-service-account"]
+    names         = ["fe-sa"]
     prefix        = var.deployment_name
     project_id    = var.project_id
     project_roles = [for role in local.sa_roles : "${var.project_id}=>roles/${role}"]

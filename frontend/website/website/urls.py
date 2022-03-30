@@ -32,7 +32,7 @@ from django.conf.urls.static import static
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 # customise admin site
-admin.site.site_header = 'Google HPC Toolkit FrontEnd Admin Site'  # default: "Django Administration"
+admin.site.site_header = 'HPC Toolkit FrontEnd Admin Site'  # default: "Django Administration"
 admin.site.index_title = 'Administration' # default: "Site administration"
 admin.site.site_title = 'Administration site' # default: "Django site admin"
 
