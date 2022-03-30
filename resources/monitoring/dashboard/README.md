@@ -77,5 +77,7 @@ No modules.
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+|------|-------------|
+| <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for accessing the monitoring dashboard |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
