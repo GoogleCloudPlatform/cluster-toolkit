@@ -15,6 +15,7 @@
     {% csrf_token %}
 
     <input type="hidden" name="cloud_credential" class="form-control" id="id_cloud_credential" value="{{ form.cloud_credential.value }}">
+    <input type="hidden" name="cloud_region" class="form-control" id="id_cloud_region" value="{{ form.cloud_region.value }}">
     <div class="form-group">
       {{ form.name.label_tag }}
       {{ form.name.errors }}
@@ -27,6 +28,15 @@
       {{ form.cloud_credential }}
         <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
     </div>
+    {% if "i" in object.cloud_state %}
+    <div class="form-group">
+      {{ form.subnets.label_tag }}
+      {{ form.subnets.errors }}
+      {{ form.subnets }}
+        <small class="form-text text-muted">{{ form.subnets.help_text }}</small>
+    </div>
+
+    {% endif %}
 
     <br/>
     <input type="submit" value="Save" class="btn btn-primary"/>

@@ -292,7 +292,7 @@ class VirtualSubnet(CloudResource):
     )
 
     def __str__(self):
-        return f"{self.vpc.cloud_id} - {self.vpc.name} - {self.name}"
+        return f"{self.vpc.name} - {self.name} - {self.cloud_region}"
 
 
 FILESYSTEM_TYPES = (

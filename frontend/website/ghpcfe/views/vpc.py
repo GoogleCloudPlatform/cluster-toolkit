@@ -194,7 +194,7 @@ class VPCImportView2(SuperUserRequiredMixin, CreateView):
         self.object.cloud_id = form.data['vpc']
         self.object.cloud_region = 'N/A'  # GCP VPCs are multi-region
         self.object.save()
-        form_subnets = form.data['subnets']
+        form_subnets = form.cleaned_data['subnets']
         def add_subnet(vpc_name, region, subnet, cidr):
             vs = VirtualSubnet(name=subnet, vpc=self.object, cidr=cidr, cloud_id=subnet, cloud_region=region, cloud_state='i', cloud_credential=self.cloud_credential)
             vs.save()
@@ -225,6 +225,44 @@ class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse('vpc-detail', kwargs={'pk': self.object.pk})
+
+    def get_initial(self):
+        initial = {'regions': cloud_info.get_region_zone_info("GCP", self.get_object().cloud_credential.detail).keys()}
+        if self.get_object().cloud_state == 'i':
+            subnet_info = cloud_info.get_subnets("GCP", self.get_object().cloud_credential.detail)
+            initial['available_subnets'] = [(x[2],x[2]) for x in subnet_info if x[0] == self.get_object().cloud_id]
+            initial['subnets'] = [x.cloud_id for x in self.get_object().subnets.all()]
+        return initial
+
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.save()
+
+        form_subnets = form.cleaned_data['subnets']
+        def add_subnet(vpc_name, region, subnet, cidr):
+            vs = VirtualSubnet(name=subnet, vpc=self.object, cidr=cidr, cloud_id=subnet, cloud_region=region, cloud_state='i', cloud_credential=self.object.cloud_credential)
+            vs.save()
+        subnet_info = cloud_info.get_subnets("GCP", self.get_object().cloud_credential.detail)
+        # Need list of subnets to delete - not selected, but are in DB
+        for sn in self.object.subnets.all():
+            if sn.cloud_id not in form_subnets:
+                logger.info(f"Removing subnet {sn.cloud_id} from VPC {self.object.name}")
+                sn.delete()
+
+        # Need list of subnets to add - selected, but aren't in DB
+        for sn in form_subnets:
+            logger.info(f"Subnet {sn} has been selected")
+            if self.object.subnets.filter(cloud_id=sn).count() == 0:
+                logger.info(f"Subnet {sn} not found in DB")
+                # Need to find subnet info in 'subnet_info'
+                for subnet in subnet_info:
+                    if subnet[2] in form_subnets:
+                        logger.info(f"Adding new subnet {subnet[2]} from VPC {self.object.name}")
+                        add_subnet(*subnet)
+                        break
+
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
         """ Perform extra query to populate instance types data """
