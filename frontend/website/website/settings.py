@@ -13,6 +13,29 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 from pathlib import Path
 import os
 
+
+def get_listen_hosts():
+    ip_list = ['127.0.0.1']  # Start with localhost
+    try:
+        # Try to get IP info from Google Metadata
+        import requests
+        metadata_headers = {'Metadata-Flavor': 'Google'}
+        base_url = 'http://metadata.google.internal/computeMetadata/v1/instance'
+        hostname_url = f'{base_url}/attributes/hostname'
+        external_ip_url = f'{base_url}/network-interfaces/0/access-configs/0/external-ip'
+        internal_ip_url = f'{base_url}/network-interfaces/0/ip'
+
+        for url in [hostname_url, external_ip_url, internal_ip_url]:
+            try:
+                req = requests.get(url, headers=metadata_headers)
+                if req.ok:
+                    ip_list.append(req.text)
+            except Exception:
+                pass
+    except Exception:
+            pass
+    return ip_list
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -26,7 +49,7 @@ SECRET_KEY = 'qn$u0rvaae-$k=c-@^$828f(wygoh85-qdz5jc)xg&6y7imqag'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'SERVER_IP', 'SERVER_NAME']
+ALLOWED_HOSTS = get_listen_hosts()
 
 
 # Application definition

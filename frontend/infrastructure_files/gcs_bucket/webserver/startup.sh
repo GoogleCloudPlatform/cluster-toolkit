@@ -21,7 +21,11 @@
 
 # obtain metadata of this server
 GCP_PROJECT=$(curl --silent --show-error http://metadata.google.internal/computeMetadata/v1/project/project-id -H "Metadata-Flavor: Google")
-SERVER_IP_ADDRESS=$(curl --silent --show-error http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
+SERVER_IP_ADDRESS=$(curl --silent --fail http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
+if [ -z "${SERVER_IP_ADDRESS}" ]; then
+    # No public IP.  Fall back to internal
+    SERVER_IP_ADDRESS=$(curl --silent --fail http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip -H "Metadata-Flavor: Google")
+fi
 SERVER_HOSTNAME=$(curl --silent --fail http://metadata/computeMetadata/v1/instance/attributes/hostname -H "Metadata-Flavor: Google")
 config_bucket=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/webserver-config-bucket -H "Metadata-Flavor: Google")
 c2_topic=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/ghpcfe-c2-topic -H "Metadata-Flavor: Google")
@@ -151,7 +155,6 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "Generating configuration file for backend..."
   echo "config:" > configuration.yaml
   echo "  server:" >> configuration.yaml
-  echo "    domain_name: \"${SERVER_HOSTNAME:-${SERVER_IP_ADDRESS}}\"" >> configuration.yaml
   echo "    host_type: \"GCP\"" >> configuration.yaml
   echo "    gcp_project: \"$GCP_PROJECT\"" >> configuration.yaml
   echo "    gcs_bucket: \"${config_bucket}\"" >> configuration.yaml
@@ -165,14 +168,13 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nCreating django super user..."
   DJANGO_SUPERUSER_PASSWORD=$DJANGO_PASSWORD python manage.py createsuperuser --username $DJANGO_USERNAME --email $DJANGO_EMAIL --noinput
   printf "\nInitialise Django db"
-  python manage.py custom_startup_command $GOOGLE_CLIENT_ID $GOOGLE_CLIENT_SECRET
+  python manage.py custom_setup_command $GOOGLE_CLIENT_ID $GOOGLE_CLIENT_SECRET ${SERVER_HOSTNAME:-${SERVER_IP_ADDRESS}}
   printf "\nSet up static contents..."
   python manage.py collectstatic
   python manage.py seed_workbench_presets
   popd
 
-  printf "\nUpdating Django settings.py...\n"
-  sed -e "s/SERVER_IP/$SERVER_IP_ADDRESS/g" -e "s/SERVER_NAME/$SERVER_HOSTNAME/g" -i website/website/settings.py
+  printf "\nUpdating nginx config...\n"
   if [ -n "${SERVER_HOSTNAME}" ] ; then
     sed "s/SERVER_NAME/$SERVER_HOSTNAME/g" -i website/nginx.conf
   else
