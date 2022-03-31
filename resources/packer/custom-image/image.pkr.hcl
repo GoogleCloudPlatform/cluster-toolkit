@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-locals {
-  toolkit_venv = "/usr/local/toolkit"
-}
-
 source "googlecompute" "hpc_centos_7" {
   project_id              = var.project_id
   image_name              = "example-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
