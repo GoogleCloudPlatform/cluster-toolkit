@@ -25,10 +25,12 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('client_id', type=str, help='Client ID',)
         parser.add_argument('secret', type=str, help='Client secret key',)
+        parser.add_argument('sitename', type=str, help='Site Name for Google OAuth',)
 
     def handle(self, *args, **kwargs):
         client_id = kwargs['client_id']
         secret = kwargs['secret']
+        site_name = kwargs['sitename']
         try:
             # one-off database initialisation
             records = Role.objects.all()
@@ -42,15 +44,12 @@ class Command(BaseCommand):
                 user = User.objects.get(pk=1)
                 user.roles.set(roles, clear=True)
                 # initialise database for Google social login
-                with open('../configuration.yaml', 'r') as file:
-                    config = yaml.safe_load(file)
-                    domain_name = config['config']['server']['domain_name']
-                    site = Site.objects.get(pk=1)
-                    site.name = domain_name
-                    site.domain = domain_name
-                    site.save()
-                    socialapp = SocialApp(provider="google", name="Google API", client_id=client_id, key='', secret=secret)
-                    socialapp.save()
-                    socialapp.sites.add(site)
+                site = Site.objects.get(pk=1)
+                site.name = site_name
+                site.domain = site_name
+                site.save()
+                socialapp = SocialApp(provider="google", name="Google API", client_id=client_id, key='', secret=secret)
+                socialapp.save()
+                socialapp.sites.add(site)
         except:
             raise CommandError('Initalization failed.')

@@ -15,7 +15,7 @@ locals {
         "pubsub.admin"
     ]
 
-    deploy_key1 = var.deployment_key != "" ? file(var.deployment_key) : ""
+    deploy_key1 = var.deployment_key != "" ? filebase64(var.deployment_key) : ""
 
     server_config_file = <<-EOT
 django_username: "${var.django_su_username}"
