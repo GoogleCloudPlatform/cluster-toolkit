@@ -133,7 +133,6 @@ resource "google_compute_instance" "server_vm" {
     ghpcfe-c2-topic         = module.pubsub.topic,
     hostname                = var.webserver_hostname
     deploy_mode             = var.deployment_mode
-    ssh-keys                = "gcluster:${file(var.ssh_key)}"
   }
 
   service_account {
