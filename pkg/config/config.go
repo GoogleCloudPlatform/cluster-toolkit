@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -291,5 +292,14 @@ func (bc *BlueprintConfig) validateConfig() {
 	if err = checkUsedResourceNames(
 		bc.Config.ResourceGroups, bc.ResourceToGroup); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// SetCLIVariables sets the variables at CLI
+func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) {
+	for _, vars := range cliVariables {
+		arr := strings.Split(vars, "=")
+		key, value := arr[0], arr[1]
+		bc.Config.Vars[key] = value
 	}
 }

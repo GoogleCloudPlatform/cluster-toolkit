@@ -32,12 +32,14 @@ func init() {
 		"please see the command usage for more details."))
 	createCmd.Flags().StringVarP(&bpDirectory, "out", "o", "",
 		"Output directory for the new blueprints")
+	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, "Variables to override the YAML config")
 	rootCmd.AddCommand(createCmd)
 }
 
 var (
 	yamlFilename string
 	bpDirectory  string
+	cliVariables []string
 	createCmd    = &cobra.Command{
 		Use:   "create FILENAME",
 		Short: "Create a new blueprint.",
@@ -57,6 +59,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	}
 
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
+	blueprintConfig.SetCLIVariables(cliVariables)
 	blueprintConfig.ExpandConfig()
 	reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory)
 }

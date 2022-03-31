@@ -17,6 +17,7 @@ limitations under the License.
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -349,6 +350,32 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 	c.Assert(fileInfo.Name(), Equals, outFilename)
 	c.Assert(fileInfo.Size() > 0, Equals, true)
 	c.Assert(fileInfo.IsDir(), Equals, false)
+}
+
+func (s *MySuite) TestSetCLIVariables(c *C) {
+	bc := getBasicBlueprintConfigWithTestResource()
+	c.Assert(bc.Config.Vars["project_id"], IsNil)
+	c.Assert(bc.Config.Vars["deployment_name"], IsNil)
+	c.Assert(bc.Config.Vars["region"], IsNil)
+	c.Assert(bc.Config.Vars["zone"], IsNil)
+
+	cliProjectID := "cli_test_project_id"
+	cliDeploymentName := "cli_deployment_name"
+	cliRegion := "cli_region"
+	cliZone := "cli_zone"
+
+	cliVars := []string{
+		fmt.Sprintf("project_id=%s", cliProjectID),
+		fmt.Sprintf("deployment_name=%s", cliDeploymentName),
+		fmt.Sprintf("region=%s", cliRegion),
+		fmt.Sprintf("zone=%s", cliZone),
+	}
+	bc.SetCLIVariables(cliVars)
+
+	c.Assert(bc.Config.Vars["project_id"], Equals, cliProjectID)
+	c.Assert(bc.Config.Vars["deployment_name"], Equals, cliDeploymentName)
+	c.Assert(bc.Config.Vars["region"], Equals, cliRegion)
+	c.Assert(bc.Config.Vars["zone"], Equals, cliZone)
 }
 
 func TestMain(m *testing.M) {

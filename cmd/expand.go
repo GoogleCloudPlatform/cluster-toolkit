@@ -29,6 +29,7 @@ func init() {
 		"please see the command usage for more details."))
 	expandCmd.Flags().StringVarP(&outputFilename, "out", "o", "expanded.yaml",
 		"Output file for the expanded yaml.")
+	expandCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, "Variables to override the YAML config")
 	rootCmd.AddCommand(expandCmd)
 }
 
@@ -53,6 +54,7 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 	}
 
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
+	blueprintConfig.SetCLIVariables(cliVariables)
 	blueprintConfig.ExpandConfig()
 	blueprintConfig.ExportYamlConfig(outputFilename)
 	fmt.Printf(
