@@ -31,12 +31,18 @@ config_bucket=$(curl --silent --show-error http://metadata/computeMetadata/v1/in
 c2_topic=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/ghpcfe-c2-topic -H "Metadata-Flavor: Google")
 deploy_mode=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deploy_mode -H "Metadata-Flavor: Google")
 
+
 # Exit if deployment already exists to stop startup script running on reboots
 if [[ -d /opt/gcluster/hpc-toolkit ]]
 then
         printf "It appears gcluster has already been deployed. Exiting...\n"
         exit 0;
 fi
+
+printf "\n############## Setting SELinux to Permissive ###############\n"
+setenforce 0
+sed -i -e 's/SELINUX=enforcing/SELINUX=permissive/g' /etc/selinux/config
+
 
 printf "####################\n#### Installing required packages\n####################\n"
 dnf install -y epel-release
@@ -211,8 +217,8 @@ Restart=no
 WantedBy=default.target" > /etc/systemd/system/gcluster.service
 
 printf "Reloading systemd and starting service..."
-setenforce 0
 systemctl daemon-reload
+systemctl enable gcluster.service
 systemctl start gcluster.service
 systemctl status gcluster.service
 
