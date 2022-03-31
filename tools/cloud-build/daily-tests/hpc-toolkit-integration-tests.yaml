@@ -14,7 +14,7 @@
 
 ---
 
-timeout: 10800s
+timeout: 14400s # 4hr
 availableSecrets:
   secretManager:
   - versionName: projects/$PROJECT_ID/secrets/spack_cache_url/versions/1
@@ -45,7 +45,7 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/spack-gromacs.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/omnia.yml"
 
 ## Test DDN Lustre with new VPC
 - name: >-
@@ -83,7 +83,7 @@ steps:
     sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" examples/spack-gromacs.yaml
     sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE//\//\\\/}/" examples/spack-gromacs.yaml
 
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/spack-gromacs.yml"
 

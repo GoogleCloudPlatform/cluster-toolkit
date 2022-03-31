@@ -140,7 +140,6 @@
       vars:
         mounts: "{{ mounts }}"
         partitions: "{{ partitions }}"
-        remote_node: "{{ remote_node }}"
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test

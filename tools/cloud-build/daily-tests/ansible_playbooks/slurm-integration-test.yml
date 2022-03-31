@@ -144,6 +144,7 @@
       include_tasks: "{{ test }}"
       run_once: true
       vars:
+        login_node: "{{ login_node }}"
         mounts: "{{ mounts }}"
         partitions: "{{ partitions }}"
       loop: "{{ post_deploy_tests }}"

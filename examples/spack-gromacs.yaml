@@ -63,18 +63,9 @@ resource_groups:
           modules:
             tcl:
               hash_length: 0
-              whitelist:
-                - gcc
-              blacklist:
-                - '%gcc@4.8.5'
               all:
                 conflict:
                   - '{name}'
-                filter:
-                  environment_blacklist:
-                    - "C_INCLUDE_PATH"
-                    - "CPLUS_INCLUDE_PATH"
-                    - "LIBRARY_PATH"
               projections:
                 all: '{name}/{version}-{compiler.name}-{compiler.version}'
       compilers:

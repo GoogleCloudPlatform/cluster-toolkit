@@ -18,12 +18,10 @@
   become: true
   wait_for:
     path: /var/log/messages
-    search_regex: '.*{{ remote_node }}.*startup-script exit status ([0-9]+)'
+    search_regex: '.*{{ login_node }}.*startup-script exit status ([0-9]+)'
     timeout: 3600
     state: present
   register: startup_status
-- debug:
-    msg: "{{ startup_status }}"
 - name: Fail if startup script exited with a non-zero return code
   fail:
     msg: There was a failure in the startup script
@@ -32,3 +30,8 @@
   command: spack --version
 - name: Ensure gromacs is installed
   shell: spack load gromacs
+- name: Test gromacs is available on compute nodes
+  shell: |
+    spack load gromacs
+    srun -N 1 gmx_mpi -version
+    sleep 120
