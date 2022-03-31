@@ -104,3 +104,8 @@ resource_groups:
     - slurm_controller
     settings:
       login_machine_type: n2-standard-4
+
+  - source: resources/monitoring/dashboard
+    kind: terraform
+    id: hpc_dashboard
+    outputs: [instructions]
