@@ -22,7 +22,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponseRedirect, HttpResponseBadRequest
 from django.urls import reverse
 from django.views import generic
-from django.views.generic.edit import CreateView, DeleteView
+from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.contrib import messages
 from django.db.models import Q
 from ..models import Credential, Workbench, VirtualSubnet
@@ -123,6 +123,46 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
         # Redirect to backend view that creates cluster files
         return reverse('backend-create-workbench', kwargs={'pk': self.object.pk})
 
+class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
+    """ Custom DetailView for Cluster model """
+    model = Workbench
+    template_name = 'workbench/update.html'
+    form_class = WorkbenchForm
+
+    def get_context_data(self, **kwargs):
+        """ Perform extra query to populate instance types data """
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'workbench'
+        workbench_info = workbenchinfo.WorkbenchInfo(context['object'])
+        #kwargs['user'] = self.request.user
+        print(user)
+
+        context['mountpoints_formset'] = self.get_mp_formset()
+
+        return context
+
+    def get_mp_formset(self, **kwargs):
+        def formfield_cb(modelField, **kwargs):
+            field = modelField.formfield(**kwargs)
+            if modelField.name == 'export':
+                workbench = self.object
+                fsquery = Filesystem.objects    \
+                            .exclude(impl_type=FilesystemImpl.BUILT_IN) \
+                            .filter(cloud_state__in=['m', 'i']) \
+                            .filter(subnet__vpc=workbench.subnet.vpc).values_list('pk', flat=True)
+            return field
+
+        FormClass = inlineformset_factory(
+            Cluster, MountPoint,
+            form=ClusterMountPointForm,
+            formfield_callback=formfield_cb,
+            can_delete=True,
+            extra=1)
+
+        if self.request.POST:
+            kwargs['data'] = self.request.POST
+        return FormClass(instance=self.object, **kwargs)
+
 class WorkbenchDeleteView(LoginRequiredMixin, DeleteView):
     """ Custom DeleteView for Workbench model """
 
@@ -174,7 +214,8 @@ class BackendCreateWorkbench(BackendAsyncView):
 
         args = await self.get_orm(pk)
         await self.create_task("Create Workbench", *args)
-        return HttpResponseRedirect(reverse('workbench-detail', kwargs={'pk':pk}))
+        #return HttpResponseRedirect(reverse('workbench-detail', kwargs={'pk':pk}))
+        return HttpResponseRedirect(reverse('workbench-update', kwargs={'pk':pk}))
 
 class BackendStartWorkbench(BackendAsyncView):
     """ A view to make async call to create a new cluster """
