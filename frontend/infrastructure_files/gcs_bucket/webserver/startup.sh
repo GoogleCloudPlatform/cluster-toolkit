@@ -63,9 +63,7 @@ GOOGLE_CLIENT_SECRET=$(/usr/local/bin/yq e '.google_client_secret' /tmp/config)
 repo_fork=$(/usr/local/bin/yq e '.git_fork' /tmp/config)
 repo_branch=$(/usr/local/bin/yq e '.git_branch' /tmp/config)
 # 'yq' does not handle multi-line string properly, need to restore the correct key format
-TMP=$(/usr/local/bin/yq e '.deploy_key1' /tmp/config)
-TMP2=$(echo "$TMP" | sed 's/ /\n/g')
-DEPLOY_KEY1=$(echo "$TMP2" | sed -z 's/\nOPENSSH\nPRIVATE\nKEY/ OPENSSH PRIVATE KEY/g')
+DEPLOY_KEY1=$(/usr/local/bin/yq e '.deploy_key1' /tmp/config | tr ' ' '\n' | base64 -d)
 rm -f /tmp/config
 
 #install go from golang as repo version is too low for hpc-toolkit
