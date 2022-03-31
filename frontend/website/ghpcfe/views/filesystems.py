@@ -37,6 +37,7 @@ from ..cluster_manager import cloud_info, filesystem as cm_fs
 from ..views.asyncview import BackendAsyncView
 from ..forms import FilesystemImportForm
 from ..permissions import SuperUserRequiredMixin
+from .view_utils import TerraformLogFile, StreamingFileView
 
 
 class FilesystemListView(SuperUserRequiredMixin, generic.ListView):
@@ -230,6 +231,12 @@ class FilesystemImportDetailView(SuperUserRequiredMixin, generic.DetailView):
         return context
 
 # Other supporting views
+
+class FilesystemTFLogView(StreamingFileView):
+    def get_file_info(self):
+        fs_id = self.kwargs.get('pk')
+        fs = get_object_or_404(Filesystem, pk=fs_id)
+        return TerraformLogFile(prefix=cm_fs.get_terraform_dir(fs))
 
 class BackendDestroyFilesystem(BackendAsyncView):
     """ A view to make async call to destroy a filesystem """

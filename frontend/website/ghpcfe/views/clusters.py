@@ -356,7 +356,7 @@ class ClusterCostView(generic.DetailView):
 class ClusterLogFileView(StreamingFileView):
     bucket = utils.load_config()['server']['gcs_bucket']
     valid_logs = [
-        {"title": "Terraform Log", "type": TerraformLogFile, "args": ("apply",)},
+        {"title": "Terraform Log", "type": TerraformLogFile, "args": ()},
         {"title": "Startup Log", "type": GCSFile, "args": (bucket, "tmp/setup.log")},
         {"title": "Ansible Sync Log", "type": GCSFile, "args": (bucket, "tmp/ansible.log")},
         {"title": "System Log", "type": GCSFile, "args": (bucket, "var/log/messages")},
