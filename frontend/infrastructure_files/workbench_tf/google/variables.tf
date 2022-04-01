@@ -146,16 +146,16 @@ variable "zone" {
   default     = "us-east4-c"
 }
 
-variable "credentials" {
-  default    = ""
-}
-
 variable "region" {
-  default    = ""
+  description = "Cloud Region associated to the AI Notebooks."
+  type        = string
+  default     = "us-east4"
 }
 
 variable "project" {
-  default    = ""
+  description = "Project in which to launch the AI Notebooks."
+  type        = string
+  default     = ""
 }
 
 variable "owner_id" {

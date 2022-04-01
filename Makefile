@@ -11,7 +11,7 @@ MIN_GOLANG_VERSION=1.16 # for building ghpc
         check-tflint check-pre-commit
 
 ENG = ./cmd/... ./pkg/...
-TERRAFORM_FOLDERS=$(shell find ./resources ./tools -type f -name "*.tf" -not -path '*/\.*' -printf '%h\n' | sort -u)
+TERRAFORM_FOLDERS=$(shell find ./resources ./tools ./frontend -type f -name "*.tf" -not -path '*/\.*' -printf '%h\n' | sort -u)
 PACKER_FOLDERS=$(shell find ./resources ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
 
 # RULES MEANT TO BE USED DIRECTLY

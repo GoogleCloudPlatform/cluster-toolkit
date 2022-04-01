@@ -1,0 +1,109 @@
+{
+  "header": "",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "project",
+      "type": "string",
+      "description": "Project in which the VPC will be created.",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "region",
+      "type": "string",
+      "description": "The region where Cloud NAT and Cloud Router will be configured.",
+      "default": null,
+      "required": true
+    }
+  ],
+  "modules": [],
+  "outputs": [
+    {
+      "name": "vpc_id",
+      "description": "Name of the created VPC"
+    }
+  ],
+  "providers": [
+    {
+      "name": "google",
+      "alias": null,
+      "version": "\u003e= 3.54"
+    },
+    {
+      "name": "random",
+      "alias": null,
+      "version": "\u003e= 3.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 0.12.20"
+    },
+    {
+      "name": "google",
+      "version": "\u003e= 3.54"
+    },
+    {
+      "name": "random",
+      "version": "\u003e= 3.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "compute_firewall",
+      "name": "firewall_allow_ssh",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "compute_firewall",
+      "name": "firewall_internal",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "compute_network",
+      "name": "network",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": "VPC Creation"
+    },
+    {
+      "type": "compute_router",
+      "name": "network_router",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "compute_router_nat",
+      "name": "network_nat",
+      "provider": "google",
+      "source": "hashicorp/google",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "pet",
+      "name": "vpc_name",
+      "provider": "random",
+      "source": "hashicorp/random",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    }
+  ]
+}

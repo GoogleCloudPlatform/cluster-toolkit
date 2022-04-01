@@ -19,12 +19,12 @@ output "deployment_id" {
   value       = local.random_id
 }
 
-output "project-radlab-ds-analytics-id" {
+output "project_radlab_ds_analytics_id" {
   description = "Analytics Project ID"
   value       = local.project.project_id
 }
 
-output "notebooks-instance-names" {
+output "notebooks_instance_names" {
   description = "Notebook Instance Names"
   value       = join(", ", google_notebooks_instance.ai_notebook[*].name)
 }

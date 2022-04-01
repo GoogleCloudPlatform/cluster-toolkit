@@ -14,6 +14,7 @@ run/
 configuration.yaml
 website/static/
 workbenches/
+dependencies/
 tf/deployment.tar.gz
 key1
 key2
