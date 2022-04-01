@@ -14,18 +14,64 @@
 
 """ users.py """
 
+from collections import defaultdict
+from decimal import Decimal
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.views import generic
-from ..models import User
+from ..models import User, Job
 from ..serializers import UserSerializer
-from ..forms import UserUpdateForm
+from ..forms import UserUpdateForm, UserAdminUpdateForm
+from ..permissions import SuperUserRequiredMixin
 
 
 # list views
+class UserListView(SuperUserRequiredMixin, generic.ListView):
+    model = User
+    template_name = 'user/list.html'
 
+    def get_queryset(self):
+        user_costs = defaultdict(Decimal)
+        jobs = Job.objects.all()
+        for job in jobs:
+            user_costs[job.user.id] += job.job_cost
+
+        qs = super().get_queryset()
+
+        for user in qs:
+            user.total_spend = "${:0.2f}".format(user_costs[user.id])
+
+        return qs
+
+class UserDetailView(SuperUserRequiredMixin, generic.DetailView):
+    model = User
+    template_name = 'user/detail.html'
+
+
+    def get_object(self, queryset=None):
+        user = super().get_object(queryset=queryset)
+
+        jobs = Job.objects.filter(user=user.id)
+
+        total_spend = 0.0
+        for job in jobs:
+            total_spend += float(job.job_cost)
+
+        user.total_spend = "${:0.2f}".format(total_spend)
+
+        return user
+
+
+class UserAdminUpdateView(SuperUserRequiredMixin, generic.UpdateView):
+    model = User
+    template_name = "user/adminupdate_form.html"
+    form_class = UserAdminUpdateForm
+
+
+    def get_success_url(self):
+        return reverse('user-detail', kwargs={'pk': self.object.pk})
 
 # create/update views
 class AccountUpdateView(LoginRequiredMixin, generic.UpdateView):
@@ -39,7 +85,9 @@ class AccountUpdateView(LoginRequiredMixin, generic.UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'home'
+        context['quota_type_friendly'] = User.QUOTA_TYPE
         return context
+
     def setup(self, request, *args, **kwargs):
         kwargs['pk'] = request.user.id
         print("Called AccountUpdateView setup()")

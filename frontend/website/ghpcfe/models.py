@@ -17,6 +17,7 @@
 import itertools
 import json
 import re
+from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
@@ -85,6 +86,49 @@ class User(AbstractUser):
         blank = True,
         null = True,
     )
+    QUOTA_TYPE = (
+        ('u', 'Unlimited compute spend'),
+        ('l', 'Limited compute spend'),
+        ('d', 'Compute disabled'),
+    )
+    quota_type = models.CharField(
+        max_length = 1,
+        choices = QUOTA_TYPE,
+        default = 'd',
+        help_text = 'User Compute Quota Type',
+    )
+    quota_amount = models.DecimalField(
+            max_digits=8,
+            decimal_places=2,
+            help_text = "Maximum allowed spend ($)",
+            default = 0
+            )
+
+    def get_total_spend(self):
+        jobs = Job.objects.filter(user=self.id)
+
+        total_spend = Decimal(0)
+        for job in jobs:
+            total_spend += job.job_cost
+
+        return total_spend
+
+    def get_quota_remaining(self):
+        return self.quota_amount - self.get_total_spend()
+
+    def check_sufficient_quota_for_job(self, job_cost):
+        # Quota checks
+        if self.quota_type == 'u':
+            return True
+        if self.quota_type == 'd':
+            return False
+
+        if quota_type == 'l':
+            current_used = self.get_total_spend()
+            if (current_used + job_cost) < self.quota_amount:
+                return True
+
+            return False
 
     def get_avatar_url(self):
         """ If using social login, return the Google profile picture if available """
@@ -521,6 +565,15 @@ class Cluster(CloudResource):
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
 
+    def total_cost(self):
+        jobs = Job.objects.filter(cluster=self.id)
+
+        total_cost = Decimal(0)
+        for job in jobs:
+            total_cost += job.job_cost
+
+        return total_cost
+
     def __str__(self):
         """String for representing the Model object."""
         return f"Cluster '{self.name}'"
@@ -898,12 +951,19 @@ class Job(models.Model):
         blank = True,
         null = True,
     )
-    cost = models.DecimalField(
+    node_price = models.DecimalField(
         max_digits=8,
         decimal_places=3,
-        help_text = 'Job cost hour rate',
+        help_text = 'Node price - hourly rate',
         blank = True,
         null = True,
+    )
+    job_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        help_text = 'Total job cost (predicted or actual)',
+        blank = True,
+        default = 0.0
     )
     result_unit = models.CharField(
         max_length = 20,

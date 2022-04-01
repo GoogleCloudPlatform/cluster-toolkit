@@ -9,7 +9,12 @@
 {% block content %}
 
   <h2>Job List</h2>
-  {% if job_list %}
+    {% if messages %}
+    {% for message in messages %}
+      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% if job_list %}
   <div class="table-responsive" style="min-height:20em;">
   <table class="table align-middle">
     <thead>
@@ -24,6 +29,7 @@
         <th scope="col">Ranks / node</th>
         <th scope="col">Threads / rank</th>
         <th scope="col">Status</th>
+        <th scope="col">Cost</th>
         <th scope="col">Actions</th>
       </tr>
     </thead>
@@ -54,6 +60,7 @@
           {% endif %}
           {{ job.get_status_display }}
         </td>
+	<td>{% if job.status != "c" and job.status != "e" %}<={% endif %}${{ job.job_cost }}</td>
         <td>
           <div class="dropdown">
             <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">

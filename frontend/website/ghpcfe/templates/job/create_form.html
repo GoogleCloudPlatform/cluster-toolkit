@@ -47,8 +47,11 @@ $(function() {
 
 var priceCache = {};
 function updatePricing() {
+    user_quota_type = document.getElementById("id_user_quota_type").value;
+    user_quota_remaining = document.getElementById("id_user_quota_remaining").value;
     partition_id = document.getElementById("id_partition").value;
     nNodes = document.getElementById("id_number_of_nodes").value;
+    max_walltime = document.getElementById("id_wall_clock_time_limit").value;
     if (!priceCache[partition_id]) {
         priceCache[partition_id] = $.ajax({
             url: "{% url 'api-pricing-list' %}" + partition_id,
@@ -58,18 +61,34 @@ function updatePricing() {
             });
     }
     priceCache[partition_id].done(function(data) {
-        hourly_price = data["price"] * nNodes;
-        fmt_price = new Intl.NumberFormat('en-US', {style: "currency", currency: data["currency"]}).format(hourly_price);
+        hourly_price = data["price"];
+	total_cost = hourly_price * nNodes * max_walltime/60;
+        usd_fmt = new Intl.NumberFormat('en-US', {style: "currency", currency: data["currency"]})
+	fmt_price = usd_fmt.format(total_cost);
         priceDiv = document.getElementById("id_pricing");
-        priceDiv.innerHTML = "<p>Estimated cost:  "+fmt_price+" per hour.</p>";
-        document.getElementById("id_cost").value = fmt_price;
+        priceDiv.innerHTML = "<p>Estimated cost:  "+fmt_price+".</p>";
+        document.getElementById("id_job_cost").value = total_cost;
+        document.getElementById("id_node_price").value = hourly_price;
+	if (user_quota_type == "l" ){
+	    if (total_cost > user_quota_remaining) {
+		priceDiv.innerHTML += "\n<div class=\"alert alert-danger\" role=\"alert\">Job cost exceeds remaining quota (${{ user_quota_remaining }}) - submission will likely fail.</div>";
+	    } else {
+		priceDiv.innerHTML += "\n<div class=\"alert alert-info\" role=\"alert\">Estimated "+usd_fmt.format(user_quota_remaining - total_cost)+" quota will remain after this job.</div>";
+	    }
+	}
     });
     priceCache[partition_id].fail(function(data) {
         priceDiv = document.getElementById("id_pricing");
         priceDiv.innerHTML = "<p>Unable to retrieve pricing information for estimated price.</p>";
+        document.getElementById("id_job_cost").value = -1.0;
+        document.getElementById("id_node_price").value = -1.0;
     });
 }
 
+
+function wallclock_limit_change() {
+    updatePricing();
+}
 
 function instance_count_change() {
     updatePricing();
@@ -84,9 +103,16 @@ function initPage() {
     setLimits();
     document.getElementById("id_number_of_nodes").value = 1;
     document.getElementById("id_number_of_nodes").oninput = instance_count_change;
+    document.getElementById("id_wall_clock_time_limit").oninput = wallclock_limit_change;
     document.getElementById("id_partition").onselect = change_partition;
     updateRunScriptSelection('url');
     updatePricing();
+
+    user_quota_type = document.getElementById("id_user_quota_type").value;
+
+    if (user_quota_type == "d") {
+        document.getElementById("id_submit_button").disabled = true;
+    }
 }
 
 window.onload=initPage;
@@ -97,15 +123,22 @@ window.onload=initPage;
 {% block content %}
   <h2>{{ application.name }} - {{ application.version }} on {{ cluster.name }}</h2>
 
+  {% if user_quota_type == "d" %}
+  <div class="alert alert-danger" role="alert">Job submission disabled for this account. Contact your administrator.</div>
+  {% endif %}
+
   {% if form.non_field_errors %}
   <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
   {% endif %}
 
+  <input type="hidden" name="user_quota_type" id="id_user_quota_type" value="{{ user_quota_type }}" readonly>
+  <input type="hidden" name="user_quota_remaining" id="id_user_quota_remaining" value="{{ user_quota_remaining }}" readonly>
+
   <form action="" method="post">
     {% csrf_token %}
-
     <input type="hidden" name="application" class="form-control" id="id_application" value="{{ application.id }}">
-    <input type="hidden" name="cost" class="form-control" id="id_cost">
+    <input type="hidden" name="job_cost" class="form-control" id="id_job_cost">
+    <input type="hidden" name="node_price" class="form-control" id="id_node_price">
 
     <div class="form-group">
       {{ form.name.errors }}
@@ -227,7 +260,7 @@ window.onload=initPage;
     <hr>
     <div id="id_pricing">
     </div>
-    <input type="submit" value="Launch" class="btn btn-primary"/>
+    <input type="submit" value="Launch" class="btn btn-primary" id="id_submit_button"/>
   </form>
 
 {% endblock %}

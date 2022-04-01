@@ -1,0 +1,47 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Cluster List</h2>
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+  {% if user_list %}
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_user_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Email</th>
+        <th scope="col">Spend To Date</th>
+        <th scope="col">Quota</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for user in user_list %}
+      <tr>
+        <th>{{ user.id }}</th>
+        <td><a href="{% url 'user-detail' user.id %}">{{ user.username }}</a></td>
+        <td>{{ user.email }}</td>
+	<td>{{ user.total_spend }}</td>
+	<td>{{ user.get_quota_type_display }}{% if user.quota_type == "l" %} (${{ user.quota_amount }}){% endif %}</td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-detail' user.id  %}">Detail</a>
+	      <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-admin' user.id  %}">Admin</a>
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+{% endblock %}

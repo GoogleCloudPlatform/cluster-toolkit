@@ -1,0 +1,16 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>User Detail</h2>
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+    <p><b>Username:</b> {{ object.username }}</p>
+    <p><b>User ID:</b> {{ object.id }}</p>
+    <p><b>Email:</b> {{ object.email }}</p>
+    <p><b>Total Spend:</b> {{ user.total_spend }}</p>
+    <p><b>Quota Type:</b> {{ user.get_quota_type_display }}</p>
+    {% if user.quota_type == "l" %}<p><b>Quota Amount:</b> ${{ user.quota_amount }}</p>{% endif %}
+{% endblock %}

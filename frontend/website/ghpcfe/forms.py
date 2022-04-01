@@ -52,6 +52,20 @@ class UserUpdateForm(UserChangeForm):
             'ssh_key': forms.Textarea(attrs={'class': 'form-control'}),
         }
 
+class UserAdminUpdateForm(forms.ModelForm):
+    """ Custom form for Admin update of users """
+
+
+    class Meta:
+        model = User
+        fields = ('username', 'email', 'quota_type', 'quota_amount',)
+        widgets = {
+                'username': forms.TextInput(attrs={'class': 'form-control'}),
+                'email': forms.TextInput(attrs={'class': 'form-control'}),
+                'quota_type': forms.Select(attrs={'class': 'form-control', 'disabled': False}),
+                'quota_amount': forms.NumberInput(attrs={'class':'form-control'})
+                }
+
 
 class CredentialForm(forms.ModelForm):
     """ Custom form for Credential model implementing additional validation """
@@ -390,7 +404,7 @@ class JobForm(forms.ModelForm):
             'number_of_nodes': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'ranks_per_node': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'threads_per_rank': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'readonly': True}),
-            'wall_clock_time_limit': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
+            'wall_clock_time_limit': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'run_script': forms.URLInput(attrs={'class': 'form-control'}),
             'input_data': forms.URLInput(attrs={'class': 'form-control'}),
             'result_data': forms.URLInput(attrs={'class': 'form-control'}),
@@ -402,6 +416,7 @@ class JobForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         cluster = kwargs['initial']['cluster']
         self.fields['partition'].queryset = cluster.partitions
+
 
 
 class BenchmarkForm(forms.ModelForm):

@@ -5,8 +5,83 @@
 
   <p><b>Cluster ID:</b> {{ object.id }}</p>
   <p><b>Name:</b> {{ object.name }}</p>
-  <p><b>Cloud Name:</b> {{ object.internal_name }}</p>
+  <p><b>Total Jobs:</b> {{ object.total_jobs }}</p>
+  <p><b>Total Cost:</b> ${{ object.total_cost|floatformat:2 }}</p>
 
   <a href="{% url 'cluster-detail' object.id %}" class="btn btn-primary">Cluster Detail</a>
+  <hr />
+  <h2>Top Users</h2>
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_topuser_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Spend To Date</th>
+        <th scope="col">Quota</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for user in object.users_by_spend %}
+      <tr>
+        <td>{{ user.id }}</td>
+        <td><a href="{% url 'user-detail' user.id %}">{{ user.username }}</a></td>
+        <td>{{ user.total_spend }}</td>
+        <td>{% if user.quota %}{{ user.quota }}{% else %}None{% endif %}</td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-detail' user.id  %}">Detail</a>
+	      <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-admin' user.id  %}">Admin</a>
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>  <hr />
+  <h2>Top Applications</h2>
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_topapp_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Spend To Date</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for app in object.apps_by_spend %}
+      <tr>
+        <td>{{ app.id }}</td>
+        <td><a href="{% url 'application-detail' app.id %}">{{ app.name }}</a></td>
+        <td>{{ app.total_spend }}</td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-detail' app.id %}">Detail</a>
+              {% if app.status == 'n' %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-delete' app.id %}">Delete</a>
+              {% endif %}
+              {% if app.status == 'n' and app.spack_name and app.cluster.status == 'r' %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-spack-install' app.id %}">Spack Install</a>
+              {% elif app.status == 'r' and app.cluster.status == 'r' %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-create' app.id %}">New Job</a>
+              {% endif %}
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
 
 {% endblock %}

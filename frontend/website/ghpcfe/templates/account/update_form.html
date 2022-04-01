@@ -7,6 +7,11 @@
   <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
   {% endif %}
 
+  <p><b>Quota Type:</b> {{ object.get_quota_type_display }}</p>
+  {% if object.quota_type == "l" %}
+  <p><b>Quota Remaining:</b> ${{ object.get_quota_remaining|floatformat:2 }}/${{ object.quota_amount|floatformat:2 }}</p>
+  {% endif %}
+
   <form action="" method="post">
     {% csrf_token %}
 

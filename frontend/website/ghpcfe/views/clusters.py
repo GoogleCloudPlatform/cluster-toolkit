@@ -14,6 +14,7 @@
 
 """ clusters.py """
 
+from collections import defaultdict
 import json
 from pathlib import Path
 from asgiref.sync import sync_to_async
@@ -38,7 +39,7 @@ from django.contrib import messages
 from django.conf import settings
 from ..models import Application, Cluster, Credential, Job, \
     MachineType, InstanceType, Filesystem, FilesystemExport, MountPoint, \
-    FilesystemImpl, Role, ClusterPartition, VirtualSubnet, Task
+    FilesystemImpl, Role, ClusterPartition, VirtualSubnet, Task, User
 from ..serializers import ClusterSerializer
 from ..forms import ClusterForm, ClusterMountPointForm, ClusterPartitionForm
 from ..cluster_manager import cloud_info, c2, utils
@@ -346,6 +347,33 @@ class ClusterCostView(generic.DetailView):
 
     model = Cluster
     template_name = 'cluster/cost.html'
+
+    def get_object(self, queryset=None):
+        cluster = super().get_object(queryset=queryset)
+
+        jobs = Job.objects.filter(cluster=cluster.id)
+        users = User.objects.all()
+        apps = Application.objects.filter(cluster=cluster.id)
+
+        cluster.total_jobs = len(jobs)
+
+        app_costs = defaultdict(float)
+        user_costs = defaultdict(float)
+        for job in jobs:
+            user_costs[job.user.id] += float(job.job_cost)
+            app_costs[job.application.id] += float(job.job_cost)
+
+        for user in users:
+            user.total_spend = "${:0.2f}".format(user_costs[user.id])
+
+        cluster.users_by_spend = sorted(users, key=lambda ur: ur.total_spend)
+
+        for app in apps:
+            app.total_spend = "${:0.2f}".format(app_costs[app.id])
+
+        cluster.apps_by_spend = sorted(apps, key=lambda ur: ur.total_spend)
+
+        return cluster
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
