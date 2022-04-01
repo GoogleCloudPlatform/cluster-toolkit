@@ -17,6 +17,7 @@
 import itertools
 import json
 import re
+import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
@@ -955,6 +956,14 @@ class Task(models.Model):
         null = False,
         default = dict,
     )
+
+class C2Callback(models.Model):
+    ackid = models.UUIDField(
+        primary_key = True,
+        default = uuid.uuid4,
+        editable = False
+    )
+    callback = models.TextField()
 
 
 class GCPFilestoreFilesystem(Filesystem):
