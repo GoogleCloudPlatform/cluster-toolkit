@@ -33,6 +33,24 @@ Logins that do not match these patterns will be rejected.
 
 ### Credential Management
 
+To use the web system to create cloud resources, the first task is for an admin user to register a cloud credential with the system. The supplied credential will be validated and stored in the database for future use.
+
+The preferred way to access GCP resources from this system is through a [Service Account](https://cloud.google.com/iam/docs/service-accounts). To create a service account, a GCP account with sufficient permissions is required. Typically, the Owner or Editor of a GCP project have enough permissions. For other users with custom roles, if certain permissions are missing, GCP will typically return clear error messages. 
+
+For this project, the following roles should be sufficient for the admin users to manage the required service account: *Service Account User*, *Service Account Admin*, and *Service Account Key Admin*.
+
+To register the GCP credential with the system:
+
+- Log in to the GCP console and select the GCP project that hosts this work.
+- From the main menu, select *IAM & Admin*, then *Service Accounts*.
+- Click the *CREATE SERVICE ACCOUNT* button.
+- Name the service account, optionally provide a description, and then click the *CREATE* button.
+- Grant the service account the following roles: *Editor*, *Security Admin*.
+- Human users may be given permissions to access this service account but that is not required in this work. Clock *Done* button.
+- Locate the new service account from the list, click *Manage Keys* from the *Actions* menu.
+- Click *ADD KEY*, then *Create new key*. Select JSON as key type, and click the *CREATE* button.
+- Copy the generated JSON content which should then be pasted into the credential creation form on the website.
+ 
 ### Network Management
 
 All cloud systems begin with defining the network within which the systems will be deployed. Before a cluster or stand-alone filesystem can be created, the administrator must create the virtual cloud network (VPC). This is accomplished under the *Networks* main menu item.
