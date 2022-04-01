@@ -1,9 +1,7 @@
 {% extends "base_generic.html" %}
 
-{% block meta %}
-  {% if workbench.status == "c" or workbench.status == "i" or workbench.status == "t" %}
-  <meta http-equiv="refresh" content="15" />
-  {% endif %}
+{% block extrameta %}
+{% load static %}
 {% endblock %}
 
 {% block content %}
@@ -30,45 +28,61 @@
       {{ object.get_status_display }}
     </p>
 
-    <hr>
-    <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
-    <div class="table-responsive">
-        <table class="table align-middle">
-        {{ mountpoints_formset.management_form }}
-        {% for form in mountpoints_formset.forms %}
-          {% if forloop.first %}
-            <thead>
-            <tr>
-              {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
+    <form action="" method="post" id="clusterForm">
+      {% csrf_token %}
+      <hr>
+      <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
+      <div class="table-responsive">
+          <table class="table align-middle">
+          {{ mountpoints_formset.management_form }}
+          {% for form in mountpoints_formset.forms %}
+            {% if forloop.first %}
+              <thead>
+              <tr>
+                {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
+              </tr>
+              </thead>
+            {% endif %}
+            <tr class="mp_formset_row">
+              {% for field in form.visible_fields %}
+                <td>
+                {% if forloop.first %}
+                  {% for hidden in form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                {% endif %}
+                  {{ field.errors.as_ul }}
+                  {{ field }}
+                </td>
+              {% endfor %}
             </tr>
-            </thead>
-          {% endif %}
-          <tr class="mp_formset_row">
-            {% for field in form.visible_fields %}
-              <td>
-              {% if forloop.first %}
-                {% for hidden in form.hidden_fields %}
-                  {{ hidden }}
-                {% endfor %}
-              {% endif %}
-                {{ field.errors.as_ul }}
-                {{ field }}
-              </td>
-            {% endfor %}
-          </tr>
-        {% endfor %}    
-        </table>
-    </div>
+          {% endfor %}    
+          </table>
+      </div>
 
-    {% if object.status == "d" %}
-    <div class="alert alert-info">This workbench is destroyed and its settings archived. No further change is possible.</div>
-    {% endif %}
-    {% if object.status == "n" %}
-    <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
-    <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Create</a>
-    {% endif %}
-    {% if object.status == "r" %}
-    <a href="https://{{ object.proxy_uri }}" class="btn btn-primary" target="_blank">Open JupyterLab </a>
-    {% endif %}
+      {% if object.status == "d" %}
+      <div class="alert alert-info">This workbench is destroyed and its settings archived. No further change is possible.</div>
+      {% endif %}
+      {% if object.status == "n" %}
+      <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
+      {% endif %}
+      <input type="submit" value="Save" class="btn btn-primary"/>
+      <button class="btn btn-primary" onclick="javascript:history.back();"/>Cancel</button>
+    </form>
 
+{% endblock %}
+
+{% block tailscript %}
+<script src="{% static 'js/jquery.formset.js' %}"></script>
+<script type="text/javascript">
+    $('.mp_formset_row').formset({
+        addText: 'add mount point',
+        /*addCssClass: 'add-row btn btn-info',*/
+        deleteText: 'remove',
+        /*deleteCssClass: 'delete-row btn btn-danger',*/
+        prefix: 'mount_points',
+        formCssClass: 'dynamic-mp',
+        hideLastAddForm: 'true'
+    });
+</script>
 {% endblock %}
