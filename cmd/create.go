@@ -21,9 +21,12 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/reswriter"
+	"log"
 
 	"github.com/spf13/cobra"
 )
+
+const msgCLIVars = "Comma-separated list of name=value variables to override YAML configuration. Can be invoked multiple times."
 
 func init() {
 	createCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
@@ -32,7 +35,7 @@ func init() {
 		"please see the command usage for more details."))
 	createCmd.Flags().StringVarP(&bpDirectory, "out", "o", "",
 		"Output directory for the new blueprints")
-	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, "Variables to override the YAML config")
+	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
 	rootCmd.AddCommand(createCmd)
 }
 
@@ -59,7 +62,9 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	}
 
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
-	blueprintConfig.SetCLIVariables(cliVariables)
+	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
+		log.Fatalf("Failed to set the variables at CLI: %v", err)
+	}
 	blueprintConfig.ExpandConfig()
 	reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory)
 }

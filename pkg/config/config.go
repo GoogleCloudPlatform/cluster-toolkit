@@ -296,10 +296,17 @@ func (bc *BlueprintConfig) validateConfig() {
 }
 
 // SetCLIVariables sets the variables at CLI
-func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) {
-	for _, vars := range cliVariables {
-		arr := strings.Split(vars, "=")
+func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
+	for _, cliVar := range cliVariables {
+		arr := strings.SplitN(cliVar, "=", 2)
+
+		if len(arr) != 2 {
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
+		}
+
 		key, value := arr[0], arr[1]
 		bc.Config.Vars[key] = value
 	}
+
+	return nil
 }

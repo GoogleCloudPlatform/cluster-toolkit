@@ -353,6 +353,7 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 }
 
 func (s *MySuite) TestSetCLIVariables(c *C) {
+	// Success
 	bc := getBasicBlueprintConfigWithTestResource()
 	c.Assert(bc.Config.Vars["project_id"], IsNil)
 	c.Assert(bc.Config.Vars["deployment_name"], IsNil)
@@ -363,19 +364,35 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	cliDeploymentName := "cli_deployment_name"
 	cliRegion := "cli_region"
 	cliZone := "cli_zone"
-
+	cliKeyVal := "key=val"
 	cliVars := []string{
 		fmt.Sprintf("project_id=%s", cliProjectID),
 		fmt.Sprintf("deployment_name=%s", cliDeploymentName),
 		fmt.Sprintf("region=%s", cliRegion),
 		fmt.Sprintf("zone=%s", cliZone),
+		fmt.Sprintf("kv=%s", cliKeyVal),
 	}
-	bc.SetCLIVariables(cliVars)
+	err := bc.SetCLIVariables(cliVars)
 
+	c.Assert(err, IsNil)
 	c.Assert(bc.Config.Vars["project_id"], Equals, cliProjectID)
 	c.Assert(bc.Config.Vars["deployment_name"], Equals, cliDeploymentName)
 	c.Assert(bc.Config.Vars["region"], Equals, cliRegion)
 	c.Assert(bc.Config.Vars["zone"], Equals, cliZone)
+	c.Assert(bc.Config.Vars["kv"], Equals, cliKeyVal)
+
+	// Failure: Variable without '='
+	bc = getBasicBlueprintConfigWithTestResource()
+	c.Assert(bc.Config.Vars["project_id"], IsNil)
+
+	invalidNonEQVars := []string{
+		fmt.Sprintf("project_id%s", cliProjectID),
+	}
+	err = bc.SetCLIVariables(invalidNonEQVars)
+
+	expErr := "invalid format: .*"
+	c.Assert(err, ErrorMatches, expErr)
+	c.Assert(bc.Config.Vars["project_id"], IsNil)
 }
 
 func TestMain(m *testing.M) {
