@@ -14,7 +14,7 @@
 
 from google.cloud import pubsub
 from google.api_core.exceptions import AlreadyExists
-import json, uuid
+import base64, json, uuid, dill
 
 # Note: We can't import Models here, because this module gets run as part of
 # startup, and the Models haven't yet been created.
@@ -87,7 +87,7 @@ def cb_ack(message, source_id):
     try:
         entry = C2Callback.objects.get(ackid=uuid.UUID(ackid))
         logger.info("Calling Callback registered for this ACK")
-        cb = dill.loads(entry.callback)
+        cb = dill.loads(base64.decodebytes(bytes(entry.callback, 'utf-8')))
         entry.delete()
         cb(message)
     except C2Callback.DoesNotExist:
@@ -107,7 +107,7 @@ def cb_update(message, source_id):
     try:
         entry = C2Callback.objects.get(ackid=uuid.UUID(ackid))
         logger.info("Calling Callback registered for this UPDATE")
-        cb = dill.loads(entry.callback)
+        cb = dill.loads(bytes(entry.callback, 'utf-8'))
         entry.delete()
         cb(message)
     except C2Callback.DoesNotExist:
@@ -308,7 +308,7 @@ def startup():
 def send_command(cluster_id, cmd, data, onResponse=None):
     if onResponse:
         from ..models import C2Callback
-        CB = C2Callback(callback = dill.dumps(onResponse))
+        CB = C2Callback(callback=base64.encodebytes(dill.dumps(onResponse)).decode('utf-8'))
         CB.save()
         data['ackid'] = str(CB.ackid)
     _c2State.send_message(command=cmd, message=data, target=get_cluster_sub_id(cluster_id))
