@@ -297,12 +297,11 @@ class VPCDeleteView(SuperUserRequiredMixin, DeleteView):
         except:
             messages.add_message(self.request, messages.ERROR, 'Can not delete. Unknown error')
             return redirect('vpcs')
+        messages.success(self.request, f'VPC {vpc.name} deleted.')
         success_url = self.get_success_url()
         return HttpResponseRedirect(success_url)
 
     def get_success_url(self):
-        vpc = VirtualNetwork.objects.get(pk=self.kwargs['pk'])
-        messages.success(self.request, f'VPC {vpc.name} deleted.')
         return reverse('vpcs')
 
 

@@ -419,7 +419,10 @@ class BenchmarkForm(forms.ModelForm):
 
 class VPCForm(forms.ModelForm):
     """ Custom form for VPC model implementing option filtering """
-    subnets = forms.MultipleChoiceField(widget=forms.SelectMultiple(attrs={'class': 'form-control'}), help_text="Available Subnets")
+    subnets = forms.MultipleChoiceField(
+                    widget=forms.SelectMultiple(attrs={'class': 'form-control'}),
+                    help_text="Available Subnets",
+                    required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -16,6 +16,7 @@
 
 import itertools
 import json
+import re
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
@@ -35,6 +36,16 @@ CLOUD_RESOURCE_MGMT_STATUS = (
     ('dm', 'Destroying'),      # In the process of deleting, managed
     ('xm', 'Destroyed'),       # Deleted, managed
 )
+
+def RFC1035Validator(maxLength, message):
+    if not maxLength:
+        regex = re.compile(f'^[a-z][-a-z0-9]*[a-z0-9])$')
+    elif maxLength < 2:
+            raise ValueError("Max Length must be >= 2")
+        #regex = re.compile(f'[a-z]([-a-z0-9]{{0,{maxLength-2}}}[a-z0-9])')
+    else:
+        regex = f'^[a-z]([-a-z0-9]{{0,{maxLength-2}}}[a-z0-9])$'
+    return RegexValidator(regex, message=message)
 
 # Create your models here.
 
@@ -252,26 +263,16 @@ class VirtualNetwork(CloudResource):
     name = models.CharField(
         max_length = 64,
         help_text = 'Name for the virtual network',
+        validators=[RFC1035Validator(63, 'VPC Name must be RFC1035 Compliant (lower case, alpha-numeric with hyphens)')],
     )
 
     def __str__(self):
         return self.name
 
     def in_use(self):
-        for wb in Workbench.objects.all():
-            if self == wb.subnet.vpc:
-                #print(vpc)
-                return True
-
-        for cluster in Cluster.objects.all():
-            if self == cluster.subnet.vpc:
-                return True
-
-        for fs in Filesystem.objects.all():
-            if self == fs.subnet.vpc:#
-                return True
-
-        return False
+        return (Workbench.objects.filter(subnet__vpc=self).exists() or
+                Cluster.objects.filter(subnet__vpc=self).exists() or
+                Filesystem.objects.filter(subnet__vpc=self).exists())
 
 
 class VirtualSubnet(CloudResource):
@@ -279,6 +280,7 @@ class VirtualSubnet(CloudResource):
     name = models.CharField(
         max_length = 64,
         help_text = 'Name for the virtual subnet',
+        validators=[RFC1035Validator(63, 'Subnet Name must be RFC1035 Compliant (lower case, alpha-numeric with hyphens)')],
     )
     vpc = models.ForeignKey(
         VirtualNetwork,
@@ -452,6 +454,7 @@ class Cluster(CloudResource):
     name = models.CharField(
         max_length = 40,
         help_text = 'Enter a name for the cluster',
+        validators=[RFC1035Validator(63, 'Cluster Name must be RFC1035 Compliant (lower case, alpha-numeric with hyphens)')],
     )
     owner = models.ForeignKey(
         User,
@@ -827,7 +830,6 @@ class Job(models.Model):
             'The URL to the job script (a shell script or a tarball containing run.sh). Or the raw script',
     )
     # adpated from Django's URL validation regex
-    import re
     ul = '\u00a1-\uffff'
     hostname_re = r'[a-z' + ul + r'0-9](?:[a-z' + ul + r'0-9-]{0,61}[a-z' + ul + r'0-9])?'
     domain_re = r'(?:\.(?!-)[a-z' + ul + r'0-9-]{1,63}(?<!-))*'
@@ -1034,6 +1036,7 @@ class Workbench(CloudResource):
     name = models.CharField(
         max_length = 40,
         help_text = 'Enter a name for the Workbench',
+        validators=[RFC1035Validator(63, 'Workbench Name must be RFC1035 Compliant (lower-case alpha-numeric with hyphens)')],
     )
     internal_name = models.CharField(
         max_length = 40,

@@ -140,6 +140,10 @@ def destroy_filesystem(fs: Filesystem) -> None:
     utils.run_terraform(tgtDir, "destroy", extraEnv=extraEnv)
 
 
+def get_terraform_dir(fs: Filesystem) -> Path:
+    # Just a wrapper to expose as "non-private"
+    return _tf_dir_for_fs(fs)
+
 def _base_dir_for_fs(fs: Filesystem) -> Path:
     config = utils.load_config()
     return config["baseDir"] / 'fs' / f'fs_{fs.id}'
