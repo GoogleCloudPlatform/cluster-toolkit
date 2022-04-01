@@ -20,7 +20,7 @@ mkdir /exports
 %{ for mount in local_mounts ~}
 echo ${mount}
 mkdir -p /exports${mount}
-chmod 777 /exports${mount}
+chmod 755 /exports${mount}
 echo '/exports${mount} *(rw,sync,no_root_squash)' >> "/etc/exports"    
 %{ endfor ~}
 exportfs -r
