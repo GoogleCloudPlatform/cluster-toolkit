@@ -6,6 +6,17 @@ The HPC Toolkit FronEnd is a web application built upon the Django framework. By
 
 ### System Deployment
 
+To deploy this system, follow these simple steps:
+
+- Make sure the client machine has supporting software installed, such as the Google Cloud CLI and Terraform.
+- Make sure that a hosting GCP project is in place and the current user has sufficient permissions to access multiple cloud resources. Project *Onwer*s and *Editor*s are obviously fine. For other users, the following list of roles are likely to be sufficient: *Compute Admin*; *Storage Admin*; *Pub/Sub Admin*; *Create Service Accounts*; *Delete Service Accounts*; *Service Account User*, although permissions can be further fine-tuned to achieve least privilege.
+-`git clone` the HPC Toolkit project from GitHub into a client machine [TODO: give official repository name after turning this into a public project].
+- Run `hpc-toolkit/frontend/deploy.sh` to deploy the system. Follow instructions to name the hosting VM instance and select its cloud region and zone.
+- For a production deployment, follow on-screen instructions to create a static IP address and then provide a domain name. In this case, an SSL certificate will be automatically obtained to secure the web application. For testing purpose, ignore the IP and domain name - the system can still be successfully deployed and ran on an IP address (although some features may not be fully functioning).
+- Follow instructions to provide details for a Django superuser account.
+- On prompt, check the generated Terraform settings and make further changes if necessary. This step is optional.
+- Confirm to create the VM instance. The VM creation takes a few minutes. However, after the script has completed, it can take up to 15 more minutes to have the software environment set up. Be patient.
+- Use the domain name or IP address to access the website. Log in as the Django superuser. The deployment is completed.
 
 
 ### Post-deployment Configurations
