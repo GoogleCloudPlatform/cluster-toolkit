@@ -67,14 +67,15 @@ If the organisation already has pre-defined VPCs on cloud within the hosting GCP
 
 ### Filesystem Management
 
+By default each cluster creates two shared filesystems: one at */opt/cluster* to hold installed applications and one at */home* to hold job files for individual users. Both can be customised if required. Additional filesystems may be created and mounted to the clusters. 
+
 #### Create new filesystems
+
+Currently, only GCP Filestore is supported. GCP Filestore can be created from the *Filesystems* main menu item. A new Filestore has to be associated with an existing VPC and placed in a cloud zone. All performance tiers are supported.
 
 #### Import existing filesystems
 
-Import NFS: an external NFS can be registered to this system and subsequently mounted by clusters. For this to work, provide its IP address and export name. The IP address can be:
-
-- A public IP address
-- An internal IP address. 
+External NFS can be registered to this system and subsequently mounted by clusters. For this to work, for each NFS, provide an IP address and an export name. The IP addresses can be both public IP and internal.
 
 An internal address can be used if the cluster shares the same VPC with the imported filesystem. Alternatively, system administrators can set up hybrid connectivity (such as extablishing network peering) beforing mounting the external filesystem located elsewhere on GCP. 
 
