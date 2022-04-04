@@ -32,36 +32,10 @@ class UserListView(SuperUserRequiredMixin, generic.ListView):
     model = User
     template_name = 'user/list.html'
 
-    def get_queryset(self):
-        user_costs = defaultdict(Decimal)
-        jobs = Job.objects.all()
-        for job in jobs:
-            user_costs[job.user.id] += job.job_cost
-
-        qs = super().get_queryset()
-
-        for user in qs:
-            user.total_spend = "${:0.2f}".format(user_costs[user.id])
-
-        return qs
 
 class UserDetailView(SuperUserRequiredMixin, generic.DetailView):
     model = User
     template_name = 'user/detail.html'
-
-
-    def get_object(self, queryset=None):
-        user = super().get_object(queryset=queryset)
-
-        jobs = Job.objects.filter(user=user.id)
-
-        total_spend = 0.0
-        for job in jobs:
-            total_spend += float(job.job_cost)
-
-        user.total_spend = "${:0.2f}".format(total_spend)
-
-        return user
 
 
 class UserAdminUpdateView(SuperUserRequiredMixin, generic.UpdateView):

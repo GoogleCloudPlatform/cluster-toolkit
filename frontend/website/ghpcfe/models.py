@@ -104,8 +104,14 @@ class User(AbstractUser):
             default = 0
             )
 
-    def get_total_spend(self):
-        jobs = Job.objects.filter(user=self.id)
+    def total_spend(self, date_range=None, cluster_id=None):
+        filters={'user':self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        if cluster_id:
+            filters['cluster'] = cluster_id
+
+        jobs = Job.objects.filter(**filters)
 
         total_spend = Decimal(0)
         for job in jobs:
@@ -113,8 +119,19 @@ class User(AbstractUser):
 
         return total_spend
 
-    def get_quota_remaining(self):
-        return self.quota_amount - self.get_total_spend()
+    def total_jobs(self, date_range=None, cluster_id=None):
+        filters={'user':self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        if cluster_id:
+            filters['cluster'] = cluster_id
+
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
+
+    def quota_remaining(self):
+        return self.quota_amount - self.total_spend()
 
     def check_sufficient_quota_for_job(self, job_cost):
         # Quota checks
@@ -124,11 +141,11 @@ class User(AbstractUser):
             return False
 
         if quota_type == 'l':
-            current_used = self.get_total_spend()
+            current_used = self.total_spend()
             if (current_used + job_cost) < self.quota_amount:
                 return True
 
-            return False
+        return False
 
     def get_avatar_url(self):
         """ If using social login, return the Google profile picture if available """
@@ -565,14 +582,28 @@ class Cluster(CloudResource):
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
 
-    def total_cost(self):
-        jobs = Job.objects.filter(cluster=self.id)
+    def total_cost(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'cluster': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
 
         total_cost = Decimal(0)
         for job in jobs:
             total_cost += job.job_cost
 
         return total_cost
+
+    def total_jobs(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'cluster': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
+
 
     def __str__(self):
         """String for representing the Model object."""
@@ -761,6 +792,28 @@ class Application(models.Model):
     def __str__(self):
         """String for representing the Model object."""
         return f'{self.name} - {self.get_status_display()}'
+
+    def total_spend(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'application': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        total_spend = Decimal(0)
+        for job in jobs:
+            total_spend += job.job_cost
+
+        return total_spend
+
+    def total_jobs(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'application': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
 
 
 class CustomInstallationApplication(Application):

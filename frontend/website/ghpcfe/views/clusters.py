@@ -348,36 +348,23 @@ class ClusterCostView(generic.DetailView):
     model = Cluster
     template_name = 'cluster/cost.html'
 
-    def get_object(self, queryset=None):
-        cluster = super().get_object(queryset=queryset)
-
-        jobs = Job.objects.filter(cluster=cluster.id)
-        users = User.objects.all()
-        apps = Application.objects.filter(cluster=cluster.id)
-
-        cluster.total_jobs = len(jobs)
-
-        app_costs = defaultdict(float)
-        user_costs = defaultdict(float)
-        for job in jobs:
-            user_costs[job.user.id] += float(job.job_cost)
-            app_costs[job.application.id] += float(job.job_cost)
-
-        for user in users:
-            user.total_spend = "${:0.2f}".format(user_costs[user.id])
-
-        cluster.users_by_spend = sorted(users, key=lambda ur: ur.total_spend)
-
-        for app in apps:
-            app.total_spend = "${:0.2f}".format(app_costs[app.id])
-
-        cluster.apps_by_spend = sorted(apps, key=lambda ur: ur.total_spend)
-
-        return cluster
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'cluster'
+
+        cluster_users = []
+        for user in User.objects.all():
+            spend = user.total_spend(cluster_id=context['cluster'].id)
+            if spend > 0:
+                cluster_users.append((spend, user.total_jobs(cluster_id=context['cluster'].id), user))
+
+        cluster_apps = []
+        for app in Application.objects.filter(cluster=context['cluster'].id):
+            cluster_apps.append((app.total_spend(), app))
+
+
+        context['users_by_spend'] = sorted(cluster_users, key=lambda x: x[0], reverse=True)
+        context['apps_by_spend'] = sorted(cluster_apps, key=lambda x: x[0], reverse=True)
         return context
 
 

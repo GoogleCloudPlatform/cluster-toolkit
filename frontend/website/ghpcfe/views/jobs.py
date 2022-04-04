@@ -69,10 +69,6 @@ class JobDetailView(LoginRequiredMixin, generic.DetailView):
     model = Job
     template_name = 'job/detail.html'
 
-    def get_object(self, queryset=None):
-        job = super().get_object(queryset=queryset)
-        return job
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'job'
@@ -151,7 +147,7 @@ class JobCreateView2(LoginRequiredMixin, generic.CreateView):
             form.add_error(None, "Error: Cannot submit job. User quota disabled")
             return self.form_invalid(form)
         if self.object.user.quota_type == "l":
-            quota_remaining = self.object.user.quota_amount - self.object.user.get_total_spend()
+            quota_remaining = self.object.user.quota_amount - self.object.user.total_spend()
             # Fudge to nearest cent to avoid "apparently equal" issues in user display
             if self.object.job_cost > (quota_remaining - Decimal(0.005)):
                 form.add_error(None,
@@ -176,7 +172,7 @@ class JobCreateView2(LoginRequiredMixin, generic.CreateView):
         cluster = get_object_or_404(Cluster, pk=self.kwargs['cluster'])
 
         context['user_quota_type'] = self.request.user.quota_type
-        context['user_quota_remaining'] = self.request.user.quota_amount - self.request.user.get_total_spend()
+        context['user_quota_remaining'] = self.request.user.quota_amount - self.request.user.total_spend()
 
         context['application'] = application
         context['cluster'] = cluster
@@ -222,7 +218,7 @@ class JobRerunView(LoginRequiredMixin, generic.CreateView):
             form.add_error(None, "Error: Cannot submit job. User quota disabled")
             return self.form_invalid(form)
         if self.object.user.quota_type == "l":
-            quota_remaining = self.object.user.quota_amount - self.object.user.get_total_spend()
+            quota_remaining = self.object.user.quota_amount - self.object.user.total_spend()
             # Fudge to nearest cent to avoid "apparently equal" issues in user display
             if self.object.job_cost > (quota_remaining - Decimal(0.005)):
                 form.add_error(None,
@@ -262,7 +258,7 @@ class JobRerunView(LoginRequiredMixin, generic.CreateView):
             run_script_type = 'url'
 
         context['user_quota_type'] = self.request.user.quota_type
-        context['user_quota_remaining'] = self.request.user.quota_amount - self.request.user.get_total_spend()
+        context['user_quota_remaining'] = self.request.user.quota_remaining()
 
         context['application'] = application
         context['cluster'] = cluster

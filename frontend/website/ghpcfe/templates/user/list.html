@@ -17,6 +17,7 @@
         <th scope="col">Email</th>
         <th scope="col">Spend To Date</th>
         <th scope="col">Quota</th>
+        <th scope="col">Role</th>
         <th scope="col">Actions</th>
       </tr>
     </thead>
@@ -28,6 +29,7 @@
         <td>{{ user.email }}</td>
 	<td>{{ user.total_spend }}</td>
 	<td>{{ user.get_quota_type_display }}{% if user.quota_type == "l" %} (${{ user.quota_amount }}){% endif %}</td>
+        <td>{% if user.has_admin_role %}Admin{% elif user.has_normaluser_role %}Cluster User{% elif user.has_viewer_role %}Viewer{% else %}Unknown{% endif %}</td>
         <td>
           <div class="dropdown">
             <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">

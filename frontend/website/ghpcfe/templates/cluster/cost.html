@@ -17,18 +17,20 @@
       <tr>
         <th scope="col">#</th>
         <th scope="col">Name</th>
+        <th scope="col">Jobs To Date</th>
         <th scope="col">Spend To Date</th>
         <th scope="col">Quota</th>
         <th scope="col">Actions</th>
       </tr>
     </thead>
     <tbody>
-    {% for user in object.users_by_spend %}
+    {% for spend,jobs,user in users_by_spend %}
       <tr>
         <td>{{ user.id }}</td>
         <td><a href="{% url 'user-detail' user.id %}">{{ user.username }}</a></td>
-        <td>{{ user.total_spend }}</td>
-        <td>{% if user.quota %}{{ user.quota }}{% else %}None{% endif %}</td>
+	<td>{{ jobs }} </td>
+        <td>${{ spend|floatformat:2 }}</td>
+	<td>{% if user.quota_type == "u" %}Unlimited{% elif user.quota_type == "d" %}Disabled{% else %}${{ user.quota_amount|floatformat:2 }}{% endif %}</td>
         <td>
           <div class="dropdown">
             <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -51,15 +53,17 @@
       <tr>
         <th scope="col">#</th>
         <th scope="col">Name</th>
+        <th scope="col">Jobs To Date</th>
         <th scope="col">Spend To Date</th>
         <th scope="col">Actions</th>
       </tr>
     </thead>
     <tbody>
-    {% for app in object.apps_by_spend %}
+    {% for spend, app in apps_by_spend %}
       <tr>
         <td>{{ app.id }}</td>
         <td><a href="{% url 'application-detail' app.id %}">{{ app.name }}</a></td>
+        <td>{{ app.total_jobs }}</td>
         <td>{{ app.total_spend }}</td>
         <td>
           <div class="dropdown">
@@ -68,12 +72,7 @@
             </button>
             <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-detail' app.id %}">Detail</a>
-              {% if app.status == 'n' %}
-              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-delete' app.id %}">Delete</a>
-              {% endif %}
-              {% if app.status == 'n' and app.spack_name and app.cluster.status == 'r' %}
-              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-spack-install' app.id %}">Spack Install</a>
-              {% elif app.status == 'r' and app.cluster.status == 'r' %}
+              {% if app.status == 'r' and app.cluster.status == 'r' %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-create' app.id %}">New Job</a>
               {% endif %}
             </div>

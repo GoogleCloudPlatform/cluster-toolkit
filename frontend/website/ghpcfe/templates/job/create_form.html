@@ -62,7 +62,7 @@ function updatePricing() {
     }
     priceCache[partition_id].done(function(data) {
         hourly_price = data["price"];
-	total_cost = hourly_price * nNodes * max_walltime/60;
+        total_cost = hourly_price * nNodes * max_walltime/60;
         usd_fmt = new Intl.NumberFormat('en-US', {style: "currency", currency: data["currency"]})
 	fmt_price = usd_fmt.format(total_cost);
         priceDiv = document.getElementById("id_pricing");
