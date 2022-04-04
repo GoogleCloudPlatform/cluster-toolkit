@@ -1,7 +1,7 @@
 {% extends "base_generic.html" %}
 
 {% block content %}
-  <h2>Cluster List</h2>
+  <h2>User List</h2>
   {% if messages %}
     {% for message in messages %}
       <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>

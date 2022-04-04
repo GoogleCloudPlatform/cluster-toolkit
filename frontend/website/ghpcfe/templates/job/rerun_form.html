@@ -51,8 +51,8 @@ $(function() {
 
 var priceCache = {};
 function updatePricing() {
-    user_quota_type = document.getElementById("id_user_quota_type").value;
-    user_quota_remaining = document.getElementById("id_user_quota_remaining").value;
+    var user_quota_type = "{{ user_quota_type|safe }}";
+    var user_quota_remaining = {{ user_quota_remaining|safe }};
     partition_id = document.getElementById("id_partition").value;
     nNodes = document.getElementById("id_number_of_nodes").value;
     max_walltime = document.getElementById("id_wall_clock_time_limit").value;
@@ -109,7 +109,7 @@ function initPage() {
     updateRunScriptSelection("{{ run_script_type }}");
     updatePricing();
 
-    user_quota_type = document.getElementById("id_user_quota_type").value;
+    var user_quota_type = "{{ user_quota_type|safe }}";
 
     if (user_quota_type == "d") {
         document.getElementById("id_submit_button").disabled = true;
@@ -131,9 +131,6 @@ window.onload=initPage;
   {% if form.non_field_errors %}
   <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
   {% endif %}
-
-  <input type="hidden" name="user_quota_type" id="id_user_quota_type" value="{{ user_quota_type }}" readonly>
-  <input type="hidden" name="user_quota_remaining" id="id_user_quota_remaining" value="{{ user_quota_remaining }}" readonly>
 
   <form action="" method="post">
     {% csrf_token %}
