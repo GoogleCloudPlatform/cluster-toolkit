@@ -312,16 +312,16 @@ func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
 	return nil
 }
 
-// IsLiteralVariable is exported for user in reswriter as well
+// IsLiteralVariable is exported for use in reswriter as well
 func IsLiteralVariable(str string) bool {
-	match, err := regexp.MatchString(beginLiteralExp, str)
+	match, err := regexp.MatchString(fullLiteralExp, str)
 	if err != nil {
 		log.Fatalf("Failed checking if variable is a literal: %v", err)
 	}
 	return match
 }
 
-// HandleLiteralVariable is exported for user in reswriter as well
+// HandleLiteralVariable is exported for use in reswriter as well
 func HandleLiteralVariable(str string) string {
 	re := regexp.MustCompile(fullLiteralExp)
 	contents := re.FindStringSubmatch(str)
@@ -329,5 +329,5 @@ func HandleLiteralVariable(str string) string {
 		log.Fatalf("Incorrectly formatted literal variable: %s", str)
 	}
 
-	return contents[1]
+	return strings.TrimSpace(contents[1])
 }

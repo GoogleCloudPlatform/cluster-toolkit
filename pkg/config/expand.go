@@ -32,7 +32,6 @@ const (
 	roleLabel         string = "ghpc_role"
 	simpleVariableExp string = `^\$\((.*)\)$`
 	anyVariableExp    string = `\$\((.*)\)`
-	beginLiteralExp   string = `^\(\(.*$`
 	fullLiteralExp    string = `^\(\((.*)\)\)$`
 )
 

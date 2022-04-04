@@ -401,3 +401,15 @@ func TestMain(m *testing.M) {
 	teardown()
 	os.Exit(code)
 }
+
+func (s *MySuite) TestLiteralVariables(c *C) {
+	match := IsLiteralVariable("((var.project_id))")
+	c.Assert(match, Equals, true)
+	match = IsLiteralVariable("(( var.project_id ))")
+	c.Assert(match, Equals, true)
+	match = IsLiteralVariable("var.project_id")
+	c.Assert(match, Equals, false)
+
+	// HandleLiteralVariable should be modified to return an error
+	// rather than exit via log.Fatalf
+}
