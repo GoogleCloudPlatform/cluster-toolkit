@@ -1,22 +1,32 @@
 ## HPC Toolkit FrontEnd - Administrator’s Guide
 
-This document is for administrators of the HPC Toolkit FronEnd. An administrator can manage the life cycles of HPC clusters, set up networking and storage resources that support clusters, install applications and manage user access. Ordinary HPC users should refer to the [User Guide](user_guide.md) on how to prepare and run jobs on existing clusters.
+This document is for administrators of the HPC Toolkit FrontEnd. An administrator can manage the life cycles of HPC clusters, set up networking and storage resources that support clusters, install applications and manage user access. Ordinary HPC users should refer to the [User Guide](user_guide.md) on how to prepare and run jobs on existing clusters.
 
-The HPC Toolkit FronEnd is a web application built upon the Django framework. By default, a Django superuser is created at deployment time. For large organisations, additional Django superusers can be created from the Admin site. 
+The HPC Toolkit FrontEnd is a web application built upon the Django framework. By default, a Django superuser is created at deployment time. For large organisations, additional Django superusers can be created from the Admin site. 
 
 ### System Deployment
 
 To deploy this system, follow these simple steps:
 
-- Make sure the client machine has supporting software installed, such as the Google Cloud CLI and Terraform.
-- Make sure that a hosting GCP project is in place and the current user has sufficient permissions to access multiple cloud resources. Project *Onwer*s and *Editor*s are obviously fine. For other users, the following list of roles are likely to be sufficient: *Compute Admin*; *Storage Admin*; *Pub/Sub Admin*; *Create Service Accounts*; *Delete Service Accounts*; *Service Account User*, although permissions can be further fine-tuned to achieve least privilege.
--`git clone` the HPC Toolkit project from GitHub into a client machine [TODO: give official repository name after turning this into a public project].
-- Run `hpc-toolkit/frontend/deploy.sh` to deploy the system. Follow instructions to name the hosting VM instance and select its cloud region and zone. The hosting VM will be referred to as the *service machine* from now on.
-- For a production deployment, follow on-screen instructions to create a static IP address and then provide a domain name. In this case, an SSL certificate will be automatically obtained to secure the web application. For testing purpose, ignore the IP and domain name - the system can still be successfully deployed and ran on an IP address (although some features may not be fully functioning).
-- Follow instructions to provide details for a Django superuser account.
-- On prompt, check the generated Terraform settings and make further changes if necessary. This step is optional.
-- Confirm to create the VM instance. The VM creation takes a few minutes. However, after the script has completed, it can take up to 15 more minutes to have the software environment set up. Be patient.
-- Use the domain name or IP address to access the website. Log in as the Django superuser. The deployment is completed.
+  - Make sure the client machine has supporting software installed, such as the Google Cloud CLI and Terraform.
+  - Make sure that a hosting GCP project is in place and the current user has sufficient permissions to access multiple cloud resources. Project *Owners*s are obviously fine. For other users, the following list of roles are likely to be sufficient:
+
+    - *Compute Admin*
+    - *Storage Admin*
+    - *Pub/Sub Admin*
+    - *Create Service Accounts*
+    - *Delete Service Accounts*
+    - *Service Account User*
+
+  Permissions can be further fine-tuned to achieve least privilege.
+  
+  - `git clone` the HPC Toolkit project from GitHub into a client machine [TODO: give official repository name after turning this into a public project].
+  - Run `hpc-toolkit/frontend/deploy.sh` to deploy the system. Follow instructions to name the hosting VM instance and select its cloud region and zone. The hosting VM will be referred to as the *service machine* from now on.
+    - For a production deployment, follow on-screen instructions to create a static IP address and then provide a domain name. In this case, an SSL certificate will be automatically obtained via LetsEncyrpt to secure the web application. For testing purpose, ignore the IP and domain name - the system can still be successfully deployed and ran via only an IP address (although some features may not be fully function).
+    - Follow instructions to provide details for a Django superuser account.
+    - On prompt, check the generated Terraform settings and make further changes if necessary. This step is optional.
+    - Confirm to create the VM instance. The VM creation takes a few minutes. However, after the script has completed, it can take up to 15 more minutes to have the software environment set up. Be patient.
+  - Use the domain name or IP address to access the website. Log in as the Django superuser. The deployment is completed.
 
 To uninstall after testing, make sure to clean up cluster resouces from the web interface first. Then go to `hpc-toolkit/frontend/tf` and run `terraform destroy` to remove the service machine and associated resources.
 
@@ -35,7 +45,7 @@ SSH access to the service machine is possible for administration purpose. Admini
 
 While it is possible to use a Django user account to access the FrontEnd website, and indeed doing so is required for some administration tasks, ordinary users must authenticate using their Google identities so that, via Google OSLogin, they can maintain consistent Linux identities across VM instances that form the clusters. This is made possible by the *django-allauth* social login extension. 
 
-For a production deployment, a domain name must be obtained and attached to the website. Next, register the site with the hosting GCP project on the GCP console in the *Credentials* section under *APIs and services* category. Note that the *Authorised JavaScript origins* field should contain a callback URL in the following format: *https://<domain_name>/accounts/google/login/callback/*
+For a production deployment, a fully-qualified domain name must be obtained and attached to the website as configured in the deployment script.  Next, register the site with the hosting GCP project on the GCP console in the *Credentials* section under *APIs and services* category. Note that the *Authorised JavaScript origins* field should contain a callback URL in the following format: *https://<domain_name>/accounts/google/login/callback/*
 
 ![Oauth set-up](images/GCP-app-credential.png)
 
@@ -64,12 +74,18 @@ To register the GCP credential with the system:
 - From the main menu, select *IAM & Admin*, then *Service Accounts*.
 - Click the *CREATE SERVICE ACCOUNT* button.
 - Name the service account, optionally provide a description, and then click the *CREATE* button.
-- Grant the service account the following roles: *Editor*, *Security Admin*.
-- Human users may be given permissions to access this service account but that is not required in this work. Clock *Done* button.
+- Grant the service account the following roles: 
+  - *Editor*  <!-- # TODO: Trim this WAY down: ComputeAdmin, Filestore?, Workbench? Must encompass everything we might create -->
+  - *Security Admin*  <!-- TODO: I believe this can be changed to Project IAM Admin  (roles/resourcemanager.projectIamAdministrator) which is a SIGNIFICANTLY smaller set of permissions. -->
+- Human users may be given permissions to access this service account but that is not required in this work. Click *Done* button.
 - Locate the new service account from the list, click *Manage Keys* from the *Actions* menu.
 - Click *ADD KEY*, then *Create new key*. Select JSON as key type, and click the *CREATE* button.
 - Copy the generated JSON content which should then be pasted into the credential creation form on the website.
- 
+
+<!-- TODO: Show the gcloud commandline way -->
+
+#### TODO:  List of Permissions required by Service Account
+
 ### Network Management
 
 All cloud systems begin with defining the network within which the systems will be deployed. Before a cluster or stand-alone filesystem can be created, the administrator must create the virtual cloud network (VPC). This is accomplished under the *Networks* main menu item. Note that network resources have their own life cycles and are managed independently to cluster.
@@ -94,7 +110,7 @@ Currently, only GCP Filestore is supported. GCP Filestore can be created from th
 
 #### Import existing filesystems
 
-External NFS can be registered to this system and subsequently mounted by clusters. For this to work, for each NFS, provide an IP address and an export name. The IP addresses can be both public IP and internal.
+Existing filesystems can be registered to this system and subsequently mounted by clusters. These can be existing NFS servers (like Filestore), or other filesystems for which Linux has built-in mount support. For this to work, for each NFS server, provide an IP address and an export name. The IP address must be reachable by the VPC subnets intended to be used for clusters.
 
 An internal address can be used if the cluster shares the same VPC with the imported filesystem. Alternatively, system administrators can set up hybrid connectivity (such as extablishing network peering) beforing mounting the external filesystem located elsewhere on GCP. 
 
@@ -107,7 +123,7 @@ Clusters can be in different states and their *Actions* menus adapt to this info
 
 - Status 'n' – Cluster is being newly configured by user. At this stage, a new cluster is being set up by an administrator. Only a database record exists, and no cloud resource has been created yet. User is free to edit this cluster: rename it, re-configure its associated network and storage components, and add authorized users. Click *Start* from the cluster detail page to actually provision the cluster on GCP.
 - Status 'c' – Cluster is being created. This is a state when the backend Terraform scripts is being invoked to commission the cloud resources for the Cluster. This transient stage typically lasts for a few minutes.
-- Status 'i' – Cluster is being initialised. This is a state when the cluster hardware is already online, and Ansible playbooks are being executed to install and configure the software environment of the Slurm controller and login nodes. This transient stage can last for up to 10 more minutes.
+- Status 'i' – Cluster is being initialised. This is a state when the cluster hardware is already online, and Ansible playbooks are being executed to install and configure the software environment of the Slurm controller and login nodes. This transient stage can last for up to 15 minutes.
 - Status 'r' – Cluster is ready for jobs. The cluster is now ready to use. Applications can be installed and jobs can run on it. A Slurm job scheduler is running on the controller node to orchestrate job activities.
 - Status 't' – Cluster is terminating. This is a transient state after Terraform is being invoked to destroy the cluster. This stage can take a few minutes when Terraform is working with the cloud platform to decommission cloud resources.
 - Status 'd’ – Cluster has been destroyed. When destroyed, a cluster cannot be brought back online. Only the relevant database record remains for information archival purposes.
@@ -118,9 +134,8 @@ A visual indication is shown on the website for the cluster being in creating, i
 
 A typical workflow for creating a new cluster is as follows:
 
-- At the bottom of the cluster list page, click the *Add cluster* button to start creating a new cluster. In the next form, choose a cloud credential. This is the account all cloud spending by this cluster
-would be charged to. Click the *Next* button to go to a second form from which details of the cluster can be specified.
-- In the *Create a new cluster* form, give the new cluster a name. Cloud resource names are subject to naming constraints and will be validated by the system.
+- At the bottom of the cluster list page, click the *Add cluster* button to start creating a new cluster. In the next form, choose a cloud credential. This is the Google Service Account which will create the cloud resources. Click the *Next* button to go to a second form from which details of the cluster can be specified.
+- In the *Create a new cluster* form, give the new cluster a name. Cloud resource names are subject to naming constraints and will be validated by the system.  In general, lower-case alpha-numeric names with hyphens are accepted.
 - From the *Subnet* dropdown list, select the subnet within which the cluster resides.
 - From the *Cloud zone* dropdown list, select a zone.
 - From the *Authorised users* list, select users that are allowed to use this cluster. 
@@ -192,7 +207,7 @@ Before any attempt to redeploy, make sure to run `terraform destroy` in `hpc-too
 
 #### Cluster problems
 
-The FrontEnd should be quite reliable provisioning clusters. However, in cloud computing, erroneous situations will happen and do happen from time to time. many outside our controls. For example, a resource creation could fail because the hosting GCP project has ran out of certain resource quotas. Or, an upgrade of an underlying machine image might have introduced changes that are imcompatible to our system. It is not possible to capture all such situations. Here, a list of tips is given to help debug cluster creation problems. The [Developer's Guide](developer_guide.md) contains a lot of detais on how the backend logics are handled, which can also shed light on certain issues.
+The FrontEnd should be quite reliable provisioning clusters. However, in cloud computing, erroneous situations will happen and do happen from time to time; many outside our controls. For example, a resource creation could fail because the hosting GCP project has ran out of certain resource quotas. Or, an upgrade of an underlying machine image might have introduced changes that are incompatible to our system. It is not possible to capture all such situations. Here, a list of tips is given to help debug cluster creation problems. The [Developer's Guide](developer_guide.md) contains a lot of detais on how the backend logics are handled, which can also shed light on certain issues.
 
 - If a cluster is stuck at status 'c', something is wrong with the provisioning of cluster hardware. SSH into the service machine and identify the directory containing the run-time data for that cluster at `frontend/clusters/cluster_<cluster_id>` where `<cluster_id>` can be found on the web interface. Check the Terraform log files there for debugging information.
 - If a cluster is stuck at status 'i', hardware resources should have been commissioned properly and there is something wrong in the software configuration stage. Locate the IP address of the Slurm controller node and find its VM instance on GCP console. Check its related *Serial port* for system log. If needed, SSH into the controller from the GCP console to check Slurm logs under `/var/log/slurm/`.
