@@ -90,6 +90,12 @@ Now you can run `ghpc` with the following command:
 ./ghpc create examples/hpc-cluster-small.yaml
 ```
 
+Or you can specify the variables with `./ghpc create --vars` which supports comma-separated list of name=value variables to override YAML configuration like below. This feature only supports variables of string type.
+
+```shell
+./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
+
 By default, the blueprint directory will be created in the same directory as the
 `ghpc` binary and will have the name specified by the `blueprint_name` field
 from the input config. Optionally, the output directory can be specified with
