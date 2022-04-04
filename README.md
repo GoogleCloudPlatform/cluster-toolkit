@@ -90,7 +90,7 @@ Now you can run `ghpc` with the following command:
 ./ghpc create examples/hpc-cluster-small.yaml
 ```
 
-Or you can specify the variables with `./ghpc create --vars` which supports comma-separated list of name=value variables to override YAML configuration like below:
+Or you can specify the variables with `./ghpc create --vars` which supports comma-separated list of name=value variables to override YAML configuration like below. This feature only supports variables of string type.
 
 ```shell
 ./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
