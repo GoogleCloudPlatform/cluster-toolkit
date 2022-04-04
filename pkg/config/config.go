@@ -92,11 +92,33 @@ const (
 	testZoneInRegionName
 )
 
+// this enum will be used to control how fatal validator failures will be
+// treated during blueprint creation
 const (
 	validationError int = iota
 	validationWarning
 	validationIgnore
 )
+
+func isValidValidationLevel(level int) bool {
+	return !(level > validationIgnore || level < validationError)
+}
+
+// SetValidationLevel allows command-line tools to set the validation level
+func (bc *BlueprintConfig) SetValidationLevel(level string) error {
+	switch level {
+	case "ERROR":
+		bc.Config.ValidationLevel = validationError
+	case "WARNING":
+		bc.Config.ValidationLevel = validationWarning
+	case "IGNORE":
+		bc.Config.ValidationLevel = validationIgnore
+	default:
+		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
+	}
+
+	return nil
+}
 
 func (v validatorName) String() string {
 	switch v {
@@ -108,8 +130,9 @@ func (v validatorName) String() string {
 		return "test_zone_exists"
 	case testZoneInRegionName:
 		return "test_zone_in_region"
+	default:
+		return "unknown_validator"
 	}
-	return "unknown_validator"
 }
 
 type validatorConfig struct {
@@ -215,7 +238,9 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 		yamlConfig.Vars = make(map[string]interface{})
 	}
 
-	if yamlConfig.ValidationLevel > validationIgnore || yamlConfig.ValidationLevel < validationError {
+	// if the validation level has been explicitly set to an invalid value
+	// in YAML blueprint then silently default to validationError
+	if !isValidValidationLevel(yamlConfig.ValidationLevel) {
 		yamlConfig.ValidationLevel = validationError
 	}
 

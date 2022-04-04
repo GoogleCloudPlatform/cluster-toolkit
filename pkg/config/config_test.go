@@ -403,6 +403,29 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func (s *MySuite) TestValidationLevels(c *C) {
+	var err error
+	var ok bool
+	bc := getBlueprintConfigForTest()
+	validLevels := []string{"ERROR", "WARNING", "IGNORE"}
+	for idx, level := range validLevels {
+		err = bc.SetValidationLevel(level)
+		c.Assert(err, IsNil)
+		ok = isValidValidationLevel(idx)
+		c.Assert(ok, Equals, true)
+	}
+
+	err = bc.SetValidationLevel("INVALID")
+	c.Assert(err, Not(IsNil))
+
+	// check that our test for iota enum is working
+	ok = isValidValidationLevel(-1)
+	c.Assert(ok, Equals, false)
+	invalidLevel := len(validLevels) + 1
+	ok = isValidValidationLevel(invalidLevel)
+	c.Assert(ok, Equals, false)
+}
+
 func (s *MySuite) TestLiteralVariables(c *C) {
 	match := IsLiteralVariable("((var.project_id))")
 	c.Assert(match, Equals, true)
