@@ -13,11 +13,6 @@
 
 {% block content %}
   <h2>Cluster List</h2>
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
   {% if cluster_list %}
   <div class="table-responsive" style="min-height:25em;">
   <table class="table align-middle" id="id_cluster_table">
