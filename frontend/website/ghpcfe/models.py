@@ -962,15 +962,17 @@ class Task(models.Model):
 
 class CallbackField(models.TextField):
     empty_strings_allowed = False
-    description = _("Serializable Python Callback")
+    description = "Serializable Python Callback"
 
     def to_python(self, value):
-        try:
-            cb = dill.loads(base64.decodebytes(bytes(value, 'utf-8')))
-        except Exception as ex:
-            logger.error(f"Failed to deserialize callback", exc_info=ex)
-            return None
-        return cb
+        if isinstance(value, str):
+            try:
+                return dill.loads(base64.decodebytes(bytes(value, 'utf-8')))
+            except Exception:
+                logger.exception(f"Failed to deserialize callback")
+                return None
+
+        return value
 
     def get_prep_value(self, value):
         value = super().get_prep_value(value)
@@ -978,9 +980,9 @@ class CallbackField(models.TextField):
             return None
 
         try:
-            return base64.encodebytes(dill.dumps(onResponse)).decode('utf-8')
-        except Exception as ex:
-            logger.error(f"Failed to serialize callback", exc_info=ex)
+            return base64.encodebytes(dill.dumps(value)).decode('utf-8')
+        except Exception:
+            logger.exception(f"Failed to serialize callback")
             return None
 
 
