@@ -100,8 +100,37 @@ An internal address can be used if the cluster shares the same VPC with the impo
 
 ### Cluster Management
 
+HPC clusters can be created after setting up the hosting VPC and, optionally, additional filesystems. The HPC Toolkit FrontEnd can manage the whole life cycles of clusters. Click the *Clusters* item in the main menu to list all existing clusters.
+
+#### Cluster status
+Clusters can be in different states and their *Actions* menus adapt to this information to show different actions:
+
+- Status 'n' – Cluster is being newly configured by user. At this stage, a new cluster is being set up by an administrator. Only a database record exists, and no cloud resource has been created yet. User is free to edit this cluster: rename it, re-configure its associated network and storage components, and add authorized users. Click *Start* from the cluster detail page to actually provision the cluster on GCP.
+- Status 'c' – Cluster is being created. This is a state when the backend Terraform scripts is being invoked to commission the cloud resources for the Cluster. This transient stage typically lasts for a few minutes.
+- Status 'i' – Cluster is being initialised. This is a state when the cluster hardware is already online, and Ansible playbooks are being executed to install and configure the software environment of the Slurm controller and login nodes. This transient stage can last for up to 10 more minutes.
+- Status 'r' – Cluster is ready for jobs. The cluster is now ready to use. Applications can be installed and jobs can run on it. A Slurm job scheduler is running on the controller node to orchestrate job activities.
+- Status 't' – Cluster is terminating. This is a transient state after Terraform is being invoked to destroy the cluster. This stage can take a few minutes when Terraform is working with the cloud platform to decommission cloud resources.
+- Status 'd’ – Cluster has been destroyed. When destroyed, a cluster cannot be brought back online. Only the relevant database record remains for information archival purposes.
+
+A visual indication is shown on the website for the cluster being in creating, initialising or destroying states. Also, relevant web pages will refresh every 15 seconds to pick status changes.
+
+#### Create a new cluster
+
+A typical workflow for creating a new cluster is as follows:
+
+- At the bottom of the cluster list page, click the *Add cluster* button to start creating a new cluster. In the next form, choose a cloud credential. This is the account all cloud spending by this cluster
+would be charged to. Click the *Next* button to go to a second form from which details of the cluster can be specified.
+- In the *Create a new cluster* form, give the new cluster a name. Cloud resource names are subject to naming constraints and will be validated by the system.
+- From the *Subnet* dropdown list, select the subnet within which the cluster resides.
+- From the *Cloud zone* dropdown list, select a zone.
+- From the *Authorised users* list, select users that are allowed to use this cluster. 
+- Click the *Save* button to store the cluster settings in the database. Continue from the *Cluster Detail* page.
+- Click the *Edit* button to make additional changes. such as creating more Slurm partitions for differnt compute node instance types, or 
+mounting additional filesystems.
+  - For filesystems, note the two existing shared filesystems defined by default. Additional ones can be mounted if they have been created earlier. Note the *Mounting order* parameter only matters if the *Mount path* parameter has dependencies.
+  - For cluster partitions, note that one *c2-standard-60* partition is defined by default. Additional partitions can be added, supporting different instance types. Enable or disable hyprethreading and node reuse as appropriate. Also, placement group can be enabled (for C2 and C2D partitions only).
+- Finally, save the configurations and click the *Create* button to trigger the cluster creation.
+
 ### Application Management
 
-### Job Management
-
-### Benchmarks
+### Debugging problems
