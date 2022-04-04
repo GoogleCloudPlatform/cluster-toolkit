@@ -17,7 +17,7 @@
 import itertools
 import json
 import re
-import uuid
+import uuid, dill, base64
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
@@ -28,6 +28,9 @@ from django.dispatch import receiver
 from django.conf import settings
 from rest_framework.authtoken.models import Token
 from allauth.socialaccount.models import SocialAccount
+
+import logging
+logger = logging.getLogger(__name__)
 
 CLOUD_RESOURCE_MGMT_STATUS = (
     ('i',  'Imported'),        # Use an existing resource created outside this system
@@ -957,13 +960,37 @@ class Task(models.Model):
         default = dict,
     )
 
+class CallbackField(models.TextField):
+    empty_strings_allowed = False
+    description = _("Serializable Python Callback")
+
+    def to_python(self, value):
+        try:
+            cb = dill.loads(base64.decodebytes(bytes(value, 'utf-8')))
+        except Exception as ex:
+            logger.error(f"Failed to deserialize callback", exc_info=ex)
+            return None
+        return cb
+
+    def get_prep_value(self, value):
+        value = super().get_prep_value(value)
+        if value is None:
+            return None
+
+        try:
+            return base64.encodebytes(dill.dumps(onResponse)).decode('utf-8')
+        except Exception as ex:
+            logger.error(f"Failed to serialize callback", exc_info=ex)
+            return None
+
+
 class C2Callback(models.Model):
     ackid = models.UUIDField(
         primary_key = True,
         default = uuid.uuid4,
         editable = False
     )
-    callback = models.TextField()
+    callback = CallbackField()
 
 
 class GCPFilestoreFilesystem(Filesystem):
