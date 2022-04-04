@@ -76,21 +76,19 @@ def c2_pong(message, source_id):
 
 
 
+_c2_ackMap = {}
 # Difference between UPDATE and ACK:  ACK removes the callback, UPDATE leaves it in place
 def cb_ack(message, source_id):
-    from ..models import C2Callback
     ackid = message.get('ackid', None)
     logger.info(f"Received ACK to message {ackid} from {source_id}!")
     if not ackid:
         logger.error("No ackid in ACK.  Ignoring")
         return True
     try:
-        entry = C2Callback.objects.get(ackid=uuid.UUID(ackid))
+        cb = _c2_ackMap.pop(ackid)
         logger.info("Calling Callback registered for this ACK")
-        cb = entry.callback
-        entry.delete()
         cb(message)
-    except C2Callback.DoesNotExist:
+    except KeyError:
         logger.warning("No Callback registered for the ACK")
         pass
 
@@ -98,18 +96,16 @@ def cb_ack(message, source_id):
 
 # Difference between UPDATE and ACK:  ACK removes the callback, UPDATE leaves it in place
 def cb_update(message, source_id):
-    from ..models import C2Callback
     ackid = message.get('ackid', None)
     logger.info(f"Received UPDATE to message {ackid} from {source_id}!")
     if not ackid:
         logger.error("No ackid in UPDATE.  Ignoring")
         return True
     try:
-        entry = C2Callback.objects.get(ackid=uuid.UUID(ackid))
+        cb = _c2_ackMap[ackid]
         logger.info("Calling Callback registered for this UPDATE")
-        cb = entry.callback
         cb(message)
-    except C2Callback.DoesNotExist:
+    except KeyError:
         logger.warning("No Callback registered for the UPDATE")
         pass
 
@@ -306,10 +302,8 @@ def startup():
 
 def send_command(cluster_id, cmd, data, onResponse=None):
     if onResponse:
-        from ..models import C2Callback
-        CB = C2Callback(callback=onResponse)
-        CB.save()
-        data['ackid'] = str(CB.ackid)
+        data['ackid'] = str(uuid.uuid4())
+        _c2_ackMap[data['ackid']] = onResponse
     _c2State.send_message(command=cmd, message=data, target=get_cluster_sub_id(cluster_id))
     return data['ackid']
 
