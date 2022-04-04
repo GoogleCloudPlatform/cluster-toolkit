@@ -25,8 +25,10 @@ from django.views import generic
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.contrib import messages
 from django.db.models import Q
-from ..models import Credential, Workbench, VirtualSubnet
-from ..forms import WorkbenchForm
+from django.forms import inlineformset_factory
+
+from ..models import Credential, Workbench, VirtualSubnet, WorkbenchMountPoint, Filesystem, FilesystemImpl
+from ..forms import WorkbenchForm, WorkbenchMountPointForm
 from ..cluster_manager import cloud_info
 from ..cluster_manager import workbenchinfo
 from .asyncview import BackendAsyncView
@@ -129,19 +131,23 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
     template_name = 'workbench/update.html'
     form_class = WorkbenchForm
 
+    def get_form_kwargs(self):
+        print("Getting kwargs")
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
     def get_context_data(self, **kwargs):
+        print("Getting context datat")
         """ Perform extra query to populate instance types data """
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'workbench'
         workbench_info = workbenchinfo.WorkbenchInfo(context['object'])
-        #kwargs['user'] = self.request.user
-        print(user)
-
         context['mountpoints_formset'] = self.get_mp_formset()
-
         return context
 
     def get_mp_formset(self, **kwargs):
+        print("getting mp formset")
         def formfield_cb(modelField, **kwargs):
             field = modelField.formfield(**kwargs)
             if modelField.name == 'export':
@@ -153,8 +159,8 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
             return field
 
         FormClass = inlineformset_factory(
-            Cluster, MountPoint,
-            form=ClusterMountPointForm,
+            Workbench, WorkbenchMountPoint,
+            form=WorkbenchMountPointForm,
             formfield_callback=formfield_cb,
             can_delete=True,
             extra=1)
@@ -162,6 +168,38 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
         if self.request.POST:
             kwargs['data'] = self.request.POST
         return FormClass(instance=self.object, **kwargs)
+
+    def get_success_url(self):
+        print("getting success url")
+        # Update the Terraform
+        #return reverse('backend-create-workbench', kwargs={'pk': self.object.pk})
+        return reverse('workbench-detail', kwargs={'pk': self.object.pk})
+
+    def form_valid(self, form):
+        print("running form_valid")
+        context = self.get_context_data()
+        workbenchmountpoints = context['workbenchmountpoints_formset']
+        
+        print("Checking form is valid")
+        # Verify formset validity (suprised there's not another method to do this)
+        for formset in workbenchmountpoints:
+            print(formset)
+            if not formset.is_valid():
+                for error in formset.errors:
+                    form.add_error(None, error)
+                return self.form_invalid(form)
+
+        with transaction.atomic():
+            self.object = form.save()
+            workbenchmountpoints.instance = self.object
+            print(self.object)
+            workbenchmountpoints.save()
+        msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Create' button to provision the cluster."
+        if (self.object.status == 'r'):
+            msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Sync Cluster' button to apply changes."
+        messages.success(self.request, msg)
+        #return super().form_valid(form)
+        return HttpResponseRedirect(self.get_success_url())
 
 class WorkbenchDeleteView(LoginRequiredMixin, DeleteView):
     """ Custom DeleteView for Workbench model """

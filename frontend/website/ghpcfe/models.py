@@ -1193,4 +1193,4 @@ class WorkbenchMountPoint(models.Model):
     )
 
     def __str__(self):
-        return f"{self.mount_path} on {self.cluster}"
+        return f"{self.mount_path} on {self.workbench}"

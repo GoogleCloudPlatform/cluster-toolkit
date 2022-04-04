@@ -173,8 +173,8 @@ class WorkbenchForm(forms.ModelForm):
 
         #validate user has an email address that we can pass to GCP 
         user = cleaned_data.get("trusted_users")
-        if not user.email:
-            raise forms.ValidationError("User has no email address")
+        # if not user.email:
+        #     raise forms.ValidationError("User has no email address")
 
         #check user is associated with a social login account
         try:
@@ -584,3 +584,13 @@ class FilestoreForm(forms.ModelForm):
             'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
         }
 
+class WorkbenchMountPointForm(forms.ModelForm):
+    """ Form for Cluster Mount points """
+    class Meta:
+        model = WorkbenchMountPoint
+        fields = ('workbench', 'export', 'mount_order', 'mount_path', 'mount_options')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields:
+            self.fields[field].widget.attrs.update({'class': 'form-control'})
