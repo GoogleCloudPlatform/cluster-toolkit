@@ -183,3 +183,30 @@ this record if desired; click the *Spack install* button to actually start build
 - A successfully installed application will have its status updated to ‘ready’. A *New Job* button becomes available from the Actions menu on the application list page, or from the application detail page. The [User Guide](user_guide.md) contains additional information on how jobs can be prepared and submitted.
 
 ### Debugging problems
+
+#### Deployment problems
+
+Most deployment problems are caused by not having the right permissions. If this is the case, error message will normally show what permissions are missing. Use the [IAM permissions reference](https://cloud.google.com/iam/docs/permissions-reference) to research this and identify additional roles to add to your user account.
+
+Before any attempt to redeploy, make sure to run `terraform destroy` in `hpc-toolkit/frontend/tf` to remove cloud resources that have been already created. Also remove the Terraform state files.
+
+#### Cluster problems
+
+The FrontEnd should be quite reliable provisioning clusters. However, in cloud computing, erroneous situations will happen and do happen from time to time. many outside our controls. For example, a resource creation could fail because the hosting GCP project has ran out of certain resource quotas. Or, an upgrade of an underlying machine image might have introduced changes that are imcompatible to our system. It is not possible to capture all such situations. Here, a list of tips is given to help debug cluster creation problems. The [Developer's Guide](developer_guide.md) contains a lot of detais on how the backend logics are handled, which can also shed light on certain issues.
+
+- If a cluster is stuck at status 'c', something is wrong with the provisioning of cluster hardware. SSH into the service machine and identify the directory containing the run-time data for that cluster at `frontend/clusters/cluster_<cluster_id>` where `<cluster_id>` can be found on the web interface. Check the Terraform log files there for debugging information.
+- If a cluster is stuck at status 'i', hardware resources should have been commissioned properly and there is something wrong in the software configuration stage. Locate the IP address of the Slurm controller node and find its VM instance on GCP console. Check its related *Serial port* for system log. If needed, SSH into the controller from the GCP console to check Slurm logs under `/var/log/slurm/`.
+
+#### Application problems
+
+Spack installation is fairly reliable. However, there are throusands of packages in the Spack repository and packages are not always tested on all systems. If a Spack installation returns an error, first locate the Spack logs by clicking the *View Logs* button from the application detail page. Then identify from the *Installation Error Log* the root cause of the problem.
+
+Spack installation problem can happen with not only the package installed, but also its depdendencies. There is not a general way debugging Spack problems. It may be helpful to create a standalone compute engine virtual machine with Centos 7 operating system (same OS used by our Slurm clusters) and debug Spack problems there manually. Alternatively, adminstrators can SSH into the Slurm controller and try the manually run `spack` commands there for debugging.
+
+Complex bugs should be reported to Spack. If an easy fix can be found, note the procedure. This can be then used in a custom installation.
+
+#### General clean-up tips
+
+- If a cluster is stucked in 'i' state, it is normally OK to find the *Destroy* button from its *Actions* menu to destroy it.
+- For failed network/filesystem/cluster creations, one may need to SSH into the service machine, locate the run-time data directory, and manually run `terraform destroy` there for clean up cloud resources.
+- Certain database records might get corrupted and need to be removed for failed clusters or network/filesystem components. This can be done from the Django Admin site, although adminstrators need to exercise caution while modifying the raw data in Django database.
