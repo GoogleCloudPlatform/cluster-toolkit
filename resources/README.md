@@ -3,10 +3,19 @@
 This directory contains a set of resources built for the HPC Toolkit. These
 resources can be used to define components of an HPC cluster.
 
-## Referring to resources
+## Resource Fields
 
-There are some ways of referring to resources from a configuration YAML as below.
+### Source (Required)
 
+The source is a path or URL that points to the source files for a resource. The
+actual content of those files is determined by the [kind](#kind-required) of the
+resource.
+
+A source can be a path which may refer to a resource embedded in the `ghpc`
+binary or a local file. It can also be a URL pointing to a github path
+containing a conforming module.
+
+#### Embedded Resources
 Embedded resources are embedded in the ghpc binary during compilation and cannot
 be edited. To refer to embedded resources, set the source path to
 `resources/<resource path>`. The paths match the resources in the repository at
@@ -19,6 +28,8 @@ pre-existing-vpc resource.
     id: network1
 ```
 
+#### Local Resources
+
 Local resources point to a resource in the file system and can easily be edited.
 They are very useful during resource development. To use a local resource, set
 the source to a path starting with `/`, `./`, or `../`. For instance, the
@@ -29,6 +40,8 @@ following code is using the local pre-existing-vpc resource.
     kind: terraform
     id: network1
 ```
+
+#### Github Resources
 
 GitHub resources point to a resource in GitHub. To use a GitHub resource, set
 the source to a path starting with `github.com` (over HTTPS) or `git@github.com`
@@ -50,6 +63,77 @@ Get resource from GitHub over HTTPS:
     kind: terraform
     id: network1
 ```
+
+### Kind (Required)
+
+Kind refers to the way in which a resource is deployed. Currently, kind can be
+either `terraform` or `packer`.
+
+### ID (Required)
+
+The `id` field is used to uniquely identify and reference a definied resource.
+ID's are used in [variables](../examples/README.md#variables) and become the
+name of each module when writing terraform resources. They are also used in the
+[use](#use) and [outputs](#outputs) lists described just below.
+
+### Settings (May Be Required)
+The settings field is a map that supplies any user-defined variables for each
+resource. Settings values can be simple strings, numbers or booleans, but can
+also support complex data types like maps and lists of variable depth.
+
+For some resources, there are mandatory variables that must be set,
+therefore `settings` is a required field in that case. In many situations, a
+combination of sensible defaults, global variables and used resources can
+populated all required settings and therefore the settings field can be left out
+entirely.
+
+### Use (Optional)
+
+The `use` field is a powerful way of linking a resource to one or more other
+resources. When a resource "uses" another resource, the outputs of the used
+resource are compared to the settings of the current resource. If they have
+matching names, and the setting has no explicit value, then it will be set to
+the used resource's output. For example, see the following YAML:
+
+```yaml
+resources:
+- source: resources/network/vpc
+  kind: terraform
+  id: network1
+
+- resource: resources/compute/simple-instance
+  kind: terraform
+  id: workstation
+  use: [network1]
+  settings:
+    ...
+```
+
+In this snippet, the simple instance, `workstation`, uses the outputs of vpc
+`network1`.
+
+In this case both `network_self_link` and `subnetwork_self_link` in the
+[`workstation` settings](compute/simple-instance/README.md#Inputs) will be set
+to `$(network1.network_self_link)` and `$(network1.subnetwork_self_link)` which
+refer to the [`network1` outputs](network/vpc/README#Outputs)
+of the same names.
+
+The order of precedence that `ghpc` uses in determining when to infer a setting
+value is the following:
+
+1. Explicitly set in the config by the user
+1. Output from a used resource, taken in the order provided in the `use` list
+1. Global variable (`vars`) of the same name
+1. Default value for the setting
+
+### Outputs (Optional)
+
+The `outputs` field allows a resource-level output to be made available at the
+resource group level and therefore will be available via `terraform output` in
+terraform-based resources groups. This can useful for displaying the IP of a
+login node or simply displaying instructions on how to use a resources, as we
+have in the
+[monitoring dashboard resource](monitoring/dashboard/README.md#Outputs).
 
 ## Common Settings
 
