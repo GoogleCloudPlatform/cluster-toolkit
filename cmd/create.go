@@ -36,7 +36,7 @@ func init() {
 	createCmd.Flags().StringVarP(&bpDirectory, "out", "o", "",
 		"Output directory for the new blueprints")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
-	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "ERROR",
+	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
 	rootCmd.AddCommand(createCmd)
 }

@@ -31,7 +31,7 @@ func init() {
 	expandCmd.Flags().StringVarP(&outputFilename, "out", "o", "expanded.yaml",
 		"Output file for the expanded yaml.")
 	expandCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
-	expandCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "ERROR",
+	expandCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
 	rootCmd.AddCommand(expandCmd)
 }

@@ -227,10 +227,10 @@ validators: []
 They can also be set to 3 differing levels of behavior using the command-line
 `--validation-level` flag` for the `create` and `expand` commands:
 
-* `"ERROR"` (default): If any validator fails, the blueprint will not be
+* `"ERROR"`: If any validator fails, the blueprint will not be
     written. Error messages will be printed to the screen that indicate which
     validator(s) failed and how.
-* `"WARNING"`: The blueprint will be written even if any validators
+* `"WARNING"` (default): The blueprint will be written even if any validators
     fail. Warning messages will be printed to the screen that indicate which
     validator(s) failed and how.
 * `"IGNORE"`: Do not execute any validators, even if they are explicitly
