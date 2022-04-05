@@ -1,25 +1,49 @@
 ## HPC Toolkit FrontEnd - Administrator’s Guide
 
-This document is for administrators of the HPC Toolkit FrontEnd. An administrator can manage the life cycles of HPC clusters, set up networking and storage resources that support clusters, install applications and manage user access. Ordinary HPC users should refer to the [User Guide](user_guide.md) on how to prepare and run jobs on existing clusters.
+This document is for administrators of the HPC Toolkit FrontEnd. An administrator can manage the life cycles of HPC clusters, set up networking and storage resources that support clusters, install applications and manage user access. Ordinary HPC users should refer to the [User Guide](user_guide.md) for guidance on how to prepare and run jobs on existing clusters.
 
 The HPC Toolkit FrontEnd is a web application built upon the Django framework. By default, a Django superuser is created at deployment time. For large organisations, additional Django superusers can be created from the Admin site. 
 
 ### System Deployment
 
-To deploy this system, follow these simple steps:
+#### Prerequisites
 
-  - Make sure the client machine has supporting software installed, such as the Google Cloud CLI and Terraform.
-  - Make sure that a hosting GCP project is in place and the current user has sufficient permissions to access multiple cloud resources. Project *Owners*s are obviously fine. For other users, the following list of roles are likely to be sufficient:
+##### Client Machine:
 
-    - *Compute Admin*
-    - *Storage Admin*
-    - *Pub/Sub Admin*
-    - *Create Service Accounts*
-    - *Delete Service Accounts*
-    - *Service Account User*
+- Linux (WSL) environment with bash interpreter
+- Terraform CLI installation
+- Google Cloud SDK installation (`gcloud` utility)
+- Authenticated google cloud user for deployment (`gcloud auth` - see below for required permissions)
 
-  Permissions can be further fine-tuned to achieve least privilege.
+##### Google Cloud:
+
+- GCP project with the following APIs enabled:
+  - Cloud Monitoring API
+  - Compute Engine API
+  - Cloud Logging API
+  - Cloud Pub/Sub API
+  - Cloud Resource Manager
+  - Cloud Billing API
+  - Identity and Access Management (IAM) API
+  - Cloud OS Login API
+ 
+-  Cloud user/service account with suitable roles granting the required permissions:
+
+    - The `Owner` role grant complete project control and is more than sufficient
+
+    - Alternatively, a collection of more limited roles can be used:
+    ```- Compute Admin
+    - Storage Admin
+    - Pub/Sub Admin
+    - Create Service Accounts
+    - Delete Service Accounts
+    - Service Account User
+    - Project IAM Admin
+    ```
+
+  Permissions can be further fine-tuned to achieve least privilege e.g using the security insights tool.
   
+#### Deployment Process
   - `git clone` the HPC Toolkit project from GitHub into a client machine [TODO: give official repository name after turning this into a public project].
   - Run `hpc-toolkit/frontend/deploy.sh` to deploy the system. Follow instructions to name the hosting VM instance and select its cloud region and zone. The hosting VM will be referred to as the *service machine* from now on.
     - For a production deployment, follow on-screen instructions to create a static IP address and then provide a domain name. In this case, an SSL certificate will be automatically obtained via LetsEncyrpt to secure the web application. For testing purpose, ignore the IP and domain name - the system can still be successfully deployed and ran via only an IP address (although some features may not be fully function).
