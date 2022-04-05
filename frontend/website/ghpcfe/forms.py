@@ -588,7 +588,7 @@ class WorkbenchMountPointForm(forms.ModelForm):
     """ Form for Cluster Mount points """
     class Meta:
         model = WorkbenchMountPoint
-        fields = ('workbench', 'export', 'mount_order', 'mount_path', 'mount_options')
+        fields = ('workbench', 'export', 'mount_order', 'mount_path')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -1181,12 +1181,6 @@ class WorkbenchMountPoint(models.Model):
         default = 0,
     )
 
-    mount_options = models.CharField(
-        max_length = 128,
-        help_text = "Mount options (passed to mount -o)",
-        blank = True,
-    )
-
     mount_path = models.CharField(
         max_length = 4096,
         help_text = "Path on which to mount this filesystem",
