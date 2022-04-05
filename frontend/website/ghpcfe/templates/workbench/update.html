@@ -11,16 +11,6 @@
       <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
     {% endfor %}
   {% endif %}
-    <p><b>Workbench ID:</b> {{ object.id }}</p>
-    <p><b>Name:</b> {{ object.name }}</p>
-    <p><b>Cloud Name:</b> {{ object.internal_name }}</p>
-    <p><b>Region:</b> {{ object.cloud_region }}</p>
-    <p><b>Zone:</b> {{ object.cloud_zone }}</p>
-    <p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
-    <p><b>Machine Type:</b> {{ object.machine_type }}</p>
-    <p><b>Boot Disk Type:</b> {{ object.boot_disk_type }}</p>
-    <p><b>Boot Disk Capacity:</b> {{ object.boot_disk_capacity }} GB</p>
-    <p>
       <b>Status:</b>
       {% if workbench.status == "c" or workbench.status == "i" or workbench.status  == "t"  %}
           <img src="/static/img/loading.gif" style="width:32px;height:32px;">
@@ -36,12 +26,6 @@
         {{ form.name.label_tag }}
         {{ form.name }}
           <small class="form-text text-muted">{{ form.name.help_text }}</small>
-      </div>
-      <div class="form-group">
-        {{ form.cloud_credential.errors }}
-        {{ form.cloud_credential.label_tag }}
-        {{ form.cloud_credential }}
-          <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
       </div>
       <div class="form-group">
         {{ form.subnet.errors }}

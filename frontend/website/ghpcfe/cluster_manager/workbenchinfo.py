@@ -66,7 +66,6 @@ class WorkbenchInfo:
     def copy_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
         shutil.copytree(self.config["baseDir"] / 'infrastructure_files' / 'workbench_tf' / self.cloud_dir, tfDir / self.cloud_dir )
-        #shutil.copytree(self.config["baseDir"] / 'infrastructure_files' / 'workbench_tf' / 'common-files' , tfDir / 'common-files' )
         return tfDir
 
     def copy_startup_script(self):
@@ -106,15 +105,10 @@ USER="{unix_username}"
                 for mp in WorkbenchMountPoint.objects.all():
                     if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
                         f.write("mkdir " + mp.mount_path + "\n")
-                        f.write("mount /" + mp.export.filesystem.hostname_or_ip + ":/" + mp.export.filesystem.name + " " + mp.mount_path +"\n")
+                        f.write("mount " + mp.export.filesystem.hostname_or_ip + ":/" + mp.export.filesystem.name + " " + mp.mount_path +"\n")
                         f.write("ln -s " + mp.mount_path + " /home/$USER/mount_points \n")
                         print("mount /" + mp.export.filesystem.hostname_or_ip + ":/" + mp.export.filesystem.name + " " + mp.mount_path)
-                        # print(mp.workbench.id)
-                        # print(self.workbench.id)
-                        # print(mp.export.filesystem.hostname_or_ip)
-                        # print(mp.mount_order)
-                        # print(mp.mount_options)
-                        # print(mp.mount_path)
+
 
     def prepare_terraform_vars(self):
         region = self.workbench.cloud_region
