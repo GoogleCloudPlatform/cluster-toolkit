@@ -28,11 +28,6 @@ import (
 	"path/filepath"
 )
 
-const (
-	beginLiteralExp string = `^\(\(.*$`
-	fullLiteralExp  string = `^\(\((.*)\)\)$`
-)
-
 // ResWriter interface for writing resources to a blueprint
 type ResWriter interface {
 	getNumResources() int
