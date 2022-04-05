@@ -70,25 +70,9 @@ class WorkbenchInfo:
 
     def copy_startup_script(self):
         user = self.workbench.trusted_users
-        unix_username = ""
-        
-        # setup metadata query to get user profiles
-        metadata_url = "http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024"
-        metadata_headers = {'Metadata-Flavor': 'Google'}
-        # TODO - wrap in a loop with page Tokens
-        req = requests.get(metadata_url, headers=metadata_headers)
-        resp = json.loads(req.text)
-        
-        #for each user profile
-        for profile in resp['loginProfiles']:
-            #if profile "name" matches the user ID then save unix username for the startup script
-            if profile['name'] == user.socialaccount_set.first().uid:
-                # TODO: Should also check login authorization
-                for acct in profile['posixAccounts']:
-                   unix_username = acct['username']
 
         startup_script_vars = f"""
-USER="{unix_username}"
+USER=`curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024 -H 'Metadata-Flavor: Google' | jq '.[][] | select ( .name == "{user.socialaccount_set.first().uid}") | .posixAccounts | .[].username' 2>&- | tr -d '"'`
 """
    
         startup_script = self.workbench_dir / 'startup_script.sh'
