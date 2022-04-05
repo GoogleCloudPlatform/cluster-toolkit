@@ -2,11 +2,6 @@
 
 {% block content %}
   <h2>User Detail</h2>
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
     <p><b>Username:</b> {{ object.username }}</p>
     <p><b>User ID:</b> {{ object.id }}</p>
     <p><b>Email:</b> {{ object.email }}</p>
