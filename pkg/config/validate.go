@@ -30,6 +30,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const (
+	validationErrorMsg = "validation failed due to the issues listed above"
+)
+
 // validate is the top-level function for running the validation suite.
 func (bc BlueprintConfig) validate() {
 	if err := bc.validateVars(); err != nil {
@@ -51,7 +55,7 @@ func (bc BlueprintConfig) validate() {
 
 // performs validation of global variables
 func (bc BlueprintConfig) executeValidators() error {
-	var errored bool
+	var errored, warned bool
 	implementedValidators := bc.getValidators()
 
 	if bc.Config.ValidationLevel == validationIgnore {
@@ -65,12 +69,14 @@ func (bc BlueprintConfig) executeValidators() error {
 				var prefix string
 				switch bc.Config.ValidationLevel {
 				case validationWarning:
+					warned = true
 					prefix = "warning: "
 				default:
 					errored = true
 					prefix = "error: "
 				}
 				log.Print(prefix, err)
+				log.Println()
 			}
 		} else {
 			errored = true
@@ -78,8 +84,25 @@ func (bc BlueprintConfig) executeValidators() error {
 		}
 	}
 
+	if warned || errored {
+		log.Println("validator failures can indicate a credentials problem.")
+		log.Println("troubleshooting info appears at:")
+		log.Println()
+		log.Println("https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/README.md#supplying-cloud-credentials-to-terraform")
+		log.Println()
+		log.Println("validation can be configured:")
+		log.Println("- treat failures as warnings by using the create command")
+		log.Println("  with the flag \"--validation-level WARNING\"")
+		log.Println("- can be disabled entirely by using the create command")
+		log.Println("  with the flag \"--validation-level IGNORE\"")
+		log.Println("- a custom set of validators can be configured following")
+		log.Println("  instructions at:")
+		log.Println()
+		log.Println("https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/README.md#blueprint-warnings-and-errors")
+	}
+
 	if errored {
-		return fmt.Errorf("at least one validator failed")
+		return fmt.Errorf(validationErrorMsg)
 	}
 	return nil
 }

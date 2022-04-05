@@ -31,7 +31,6 @@ const (
 	missingRequiredInputRegex    = "at least one required input was not provided to .*"
 	passedWrongValidatorRegex    = "passed wrong validator to .*"
 	undefinedGlobalVariableRegex = ".* was not defined$"
-	validatorFailRegex           = "at least one validator failed"
 )
 
 func (s *MySuite) TestValidateResources(c *C) {
@@ -208,7 +207,7 @@ func (s *MySuite) TestTestInputList(c *C) {
 	// FAIL: inputs are a proper subset of required inputs
 	requiredInputs = []string{"in0", "in1", "in2"}
 	err = testInputList("testfunc", inputs, requiredInputs)
-	c.Assert(err, ErrorMatches, "at least one required input was not provided to testfunc")
+	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// FAIL: inputs intersect with required inputs but are not a proper subset
 	inputs = map[string]interface{}{
@@ -217,7 +216,7 @@ func (s *MySuite) TestTestInputList(c *C) {
 		"in3": nil,
 	}
 	err = testInputList("testfunc", inputs, requiredInputs)
-	c.Assert(err, ErrorMatches, "at least one required input was not provided to testfunc")
+	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// FAIL inputs are a proper superset of required inputs
 	inputs = map[string]interface{}{
@@ -268,7 +267,7 @@ func (s *MySuite) TestExecuteValidators(c *C) {
 	}
 
 	err := bc.executeValidators()
-	c.Assert(err, ErrorMatches, validatorFailRegex)
+	c.Assert(err, ErrorMatches, validationErrorMsg)
 
 	bc.Config.Validators = []validatorConfig{
 		{
@@ -278,7 +277,7 @@ func (s *MySuite) TestExecuteValidators(c *C) {
 	}
 
 	err = bc.executeValidators()
-	c.Assert(err, ErrorMatches, validatorFailRegex)
+	c.Assert(err, ErrorMatches, validationErrorMsg)
 }
 
 // this function tests that the "gateway" functions in this package for our
