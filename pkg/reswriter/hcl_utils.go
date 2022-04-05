@@ -17,9 +17,12 @@ package reswriter
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v2"
 
 	"hpc-toolkit/pkg/config"
@@ -166,4 +169,27 @@ func flattenToHCLStrings(yamlConfig *config.YamlConfig, kind string) {
 			}
 		}
 	}
+}
+
+func writeHclAttributes(vars map[string]cty.Value, dst string) error {
+	if err := createBaseFile(dst); err != nil {
+		return fmt.Errorf("error creating variables file %v: %v", filepath.Base(dst), err)
+	}
+
+	// Create hcl body
+	hclFile := hclwrite.NewEmptyFile()
+	hclBody := hclFile.Body()
+
+	// for each variable
+	for k, v := range vars {
+		// Write attribute
+		hclBody.SetAttributeValue(k, v)
+	}
+
+	// Write file
+	err := appendHCLToFile(dst, hclFile.Bytes())
+	if err != nil {
+		return fmt.Errorf("error writing HCL to %v: %v", filepath.Base(dst), err)
+	}
+	return err
 }
