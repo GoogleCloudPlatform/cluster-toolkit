@@ -25,6 +25,7 @@ from django.views import generic
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.contrib import messages
 from django.db.models import Q
+from django.db import transaction
 from django.forms import inlineformset_factory
 
 from ..models import Credential, Workbench, VirtualSubnet, WorkbenchMountPoint, Filesystem, FilesystemImpl
@@ -170,20 +171,15 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
         return FormClass(instance=self.object, **kwargs)
 
     def get_success_url(self):
-        print("getting success url")
         # Update the Terraform
-        #return reverse('backend-create-workbench', kwargs={'pk': self.object.pk})
-        return reverse('workbench-detail', kwargs={'pk': self.object.pk})
-
-    def form_valid(self, form):
-        print("running form_valid")
-        context = self.get_context_data()
-        workbenchmountpoints = context['workbenchmountpoints_formset']
+        return reverse('backend-update-workbench', kwargs={'pk': self.object.pk})
         
-        print("Checking form is valid")
+    def form_valid(self, form):
+        context = self.get_context_data()
+        workbenchmountpoints = context['mountpoints_formset']
+        
         # Verify formset validity (suprised there's not another method to do this)
         for formset in workbenchmountpoints:
-            print(formset)
             if not formset.is_valid():
                 for error in formset.errors:
                     form.add_error(None, error)
@@ -192,14 +188,12 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
         with transaction.atomic():
             self.object = form.save()
             workbenchmountpoints.instance = self.object
-            print(self.object)
             workbenchmountpoints.save()
         msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Create' button to provision the cluster."
         if (self.object.status == 'r'):
             msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Sync Cluster' button to apply changes."
         messages.success(self.request, msg)
-        #return super().form_valid(form)
-        return HttpResponseRedirect(self.get_success_url())
+        return super().form_valid(form)
 
 class WorkbenchDeleteView(LoginRequiredMixin, DeleteView):
     """ Custom DeleteView for Workbench model """
@@ -301,3 +295,28 @@ class BackendDestroyWorkbench(BackendAsyncView):
         args = await self.get_orm(pk)
         await self.create_task("Destroy workbench", *args)
         return HttpResponseRedirect(reverse('workbench-detail', kwargs={'pk': pk}))
+
+class BackendUpdateWorkbench(BackendAsyncView):
+    """ A view to make async call to create a new cluster """
+
+    @sync_to_async
+    def get_orm(self, workbench_id):
+        workbench = Workbench.objects.get(pk=workbench_id)
+        return (workbench,)
+
+
+    def cmd(self, task_id, token, workbench):
+        from ..cluster_manager.create_workbench import update_workbench
+        update_workbench(workbench)
+
+
+    async def get(self, request, pk):
+        """ this will invoke the background tasks and return immediately """
+        # Mixins don't yet work with Async views
+        if not await sync_to_async(lambda: request.user.is_authenticated)():
+            return redirect_to_login(request.get_full_path)
+        await self.test_user_is_cluster_admin(request.user)
+
+        args = await self.get_orm(pk)
+        await self.create_task("Update Workbench", *args)
+        return HttpResponseRedirect(reverse('workbench-detail', kwargs={'pk':pk}))

@@ -32,9 +32,9 @@ from . import utils
 from .workbenchinfo import WorkbenchInfo
 
 
-def update_workbench_terraform(workbench):
+def update_workbench(workbench):
     wi = WorkbenchInfo(workbench)
-    wi.prepare_terraform_vars()
+    wi.copy_startup_script()
     return 0
 
 def create_workbench(workbench, token, credentials=None):

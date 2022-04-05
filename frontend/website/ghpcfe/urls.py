@@ -183,4 +183,5 @@ urlpatterns += [
     path('backend/workbench-create/<int:pk>', BackendCreateWorkbench.as_view(), name='backend-create-workbench'),
     path('backend/workbench-start/<int:pk>', BackendStartWorkbench.as_view(), name='backend-start-workbench'),
     path('backend/workbench-destroy/<int:pk>', BackendDestroyWorkbench.as_view(), name='backend-destroy-workbench'),
+    path('backend/workbench-update/<int:pk>', BackendUpdateWorkbench.as_view(), name='backend-update-workbench'),
 ]

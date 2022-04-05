@@ -33,6 +33,7 @@ from datetime import datetime
 from datetime import timedelta
 
 from . import utils
+from ..models import WorkbenchMountPoint
 class WorkbenchInfo:
 
     def __init__(self, workbench):
@@ -90,7 +91,7 @@ class WorkbenchInfo:
         startup_script_vars = f"""
 USER="{unix_username}"
 """
-
+   
         startup_script = self.workbench_dir / 'startup_script.sh'
         with startup_script.open('w') as f:
             f.write(f"""#!/bin/bash
@@ -99,6 +100,20 @@ USER="{unix_username}"
             with open(self.config["baseDir"] / 'infrastructure_files' / 'gcs_bucket' / 'workbench' / 'startup_script_template.sh') as infile:
                 for line in infile:
                     f.write(line)
+                
+                f.write("\n")
+
+                for mp in WorkbenchMountPoint.objects.all():
+                    if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
+                        f.write("mount /" + mp.export.filesystem.hostname_or_ip + ":/" + mp.export.filesystem.name + " " + mp.mount_path +"\n")
+                        f.write("ln -s " + mp.mount_path + "/home/$USER/mount_points")
+                        print("mount /" + mp.export.filesystem.hostname_or_ip + ":/" + mp.export.filesystem.name + " " + mp.mount_path)
+                        # print(mp.workbench.id)
+                        # print(self.workbench.id)
+                        # print(mp.export.filesystem.hostname_or_ip)
+                        # print(mp.mount_order)
+                        # print(mp.mount_options)
+                        # print(mp.mount_path)
 
     def prepare_terraform_vars(self):
         region = self.workbench.cloud_region

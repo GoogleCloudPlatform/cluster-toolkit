@@ -38,5 +38,5 @@ service jupyter restart
 
 echo "Mounting FileStore filesystem"
 sudo apt-get -y update && sudo apt-get install -y nfs-common
-mount 10.75.91.162:/testfs /mnt
-ln -s /mnt /home/$USER/filestore
+
+mkdir /home/$USER/mount_points
