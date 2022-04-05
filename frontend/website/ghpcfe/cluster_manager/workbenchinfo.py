@@ -105,8 +105,9 @@ USER="{unix_username}"
 
                 for mp in WorkbenchMountPoint.objects.all():
                     if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
+                        f.write("mkdir " + mp.mount_path + "\n")
                         f.write("mount /" + mp.export.filesystem.hostname_or_ip + ":/" + mp.export.filesystem.name + " " + mp.mount_path +"\n")
-                        f.write("ln -s " + mp.mount_path + "/home/$USER/mount_points")
+                        f.write("ln -s " + mp.mount_path + " /home/$USER/mount_points \n")
                         print("mount /" + mp.export.filesystem.hostname_or_ip + ":/" + mp.export.filesystem.name + " " + mp.mount_path)
                         # print(mp.workbench.id)
                         # print(self.workbench.id)
@@ -213,10 +214,12 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
                     
                     with stateFile.open('r') as statefp:
                         state = json.load(statefp)
-                        
-                        self.workbench.proxy_uri = state["resources"][3]["instances"][0]["attributes"]["proxy_uri"]
-                        if state["resources"][3]["instances"][0]["attributes"]["state"] == "ACTIVE":
-                            self.workbench.status = 'r'
+                        try:
+                            self.workbench.proxy_uri = state["resources"][3]["instances"][0]["attributes"]["proxy_uri"]
+                            if state["resources"][3]["instances"][0]["attributes"]["state"] == "ACTIVE":
+                                self.workbench.status = 'r'
+                        except Exception:
+                            pass
 
                         self.workbench.save()
 
