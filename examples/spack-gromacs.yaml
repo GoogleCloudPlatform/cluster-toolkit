@@ -35,7 +35,7 @@ resource_groups:
     id: appsfs
     use: [network1]
     settings:
-      local_mount: /apps
+      local_mount: /sw
 
   - source: resources/file-system/filestore
     kind: terraform
@@ -49,7 +49,7 @@ resource_groups:
     kind: terraform
     id: spack
     settings:
-      install_dir: /apps/spack
+      install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
@@ -87,8 +87,6 @@ resource_groups:
       - type: shell
         source: modules/startup-script/examples/install_ansible.sh
         destination: install_ansible.sh
-      - $(appsfs.install_nfs_client_runner)
-      - $(appsfs.mount_runner)
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
 

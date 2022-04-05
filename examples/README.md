@@ -141,7 +141,7 @@ To load the gromacs module, use spack:
 spack load gromacs
 ```
 
-Note: Installing spack compilers and libraries in this example can take 1-2
+ **_NOTE:_** Installing spack compilers and libraries in this example can take 1-2
 hours to run on startup. To decrease this time in future deployments, consider
 including a spack build cache as described in the comments of the example.
 

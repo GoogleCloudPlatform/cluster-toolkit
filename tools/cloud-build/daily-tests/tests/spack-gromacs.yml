@@ -25,9 +25,8 @@ login_node: slurm-{{ deployment_name }}-login0
 controller_node: slurm-{{ deployment_name }}-controller
 post_deploy_tests:
 - spack.yml
-- test-mounts-and-partitions.yml
 partitions:
 - compute
 mounts:
 - /home
-- /apps
+- /sw

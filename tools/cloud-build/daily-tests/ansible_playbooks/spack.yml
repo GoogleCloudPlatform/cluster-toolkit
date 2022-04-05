@@ -19,7 +19,7 @@
   wait_for:
     path: /var/log/messages
     search_regex: '.*{{ login_node }}.*startup-script exit status ([0-9]+)'
-    timeout: 3600
+    timeout: 7200
     state: present
   register: startup_status
 - name: Fail if startup script exited with a non-zero return code
