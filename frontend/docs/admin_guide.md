@@ -11,9 +11,9 @@ The HPC Toolkit FrontEnd is a web application built upon the Django framework. B
 #### Client Machine:
 
 - Linux (WSL) environment with bash interpreter
-- Terraform CLI installation
-- Google Cloud SDK installation (`gcloud` utility)
-- Authenticated google cloud user for deployment (`gcloud auth` - see below for required permissions)
+- [Terraform CLI](https://www.terraform.io/downloads) installation
+- Google [Cloud CLI](https://cloud.google.com/cli) installation (`gcloud` utility)
+- Google cloud user for deployment [authenticated in gcloud](https://cloud.google.com/sdk/gcloud/reference/auth/login) (see below for required permissions)
 
 #### Google Cloud:
 
@@ -239,7 +239,7 @@ Administrators can install and manage applications in the following ways:
 
 ### Install Spack applications
 
-The recommended method of application installation is via Spack. Spack, an established package management system for HPC, contains build recipes of the most widely used open-source HPC applications. This method is completed automated. Spack installation is performed as a Slurm job. Simply choose a Slurm partition to run Spack. Advanced user may also customise the installation by specifying a Spack spec string.
+The recommended method of application installation is via [Spack](https://spack.readthedocs.io). Spack, an established package management system for HPC, contains build recipes of the most widely used open-source HPC applications. This method is completed automated. Spack installation is performed as a Slurm job. Simply choose a Slurm partition to run Spack. Advanced user may also customise the installation by specifying a Spack spec string.
 
 ### Install custom applications
 
@@ -274,6 +274,7 @@ A typical workflow for installing a new Spack application is as follows:
 completion function to choose the Spack package to install. The *Name* and *Version* fields are populated automatically. If Spack supports multiple versions of the application, click the dropdown list there to select the desired version.
 - Spack supports variants - applications built with customised compile-time options. These may be special compiler flags or optional features that must be switched on manually. Advanced users may
 supply additional specs using the optional *Spack spec* field.
+  - For a guide to the Spack spec syntax see the [Spack documentation](https://spack.readthedocs.io/en/latest/basic_usage.html#building-a-specific-version)
   - By default, the GCC 11.2 compiler is used for building all applications.
   - Other compilers may be specified with the % compiler specifier and an optional version number using the @ version specifier (e.g., `%intel@19.1.1.217`). Obviously, admin users are responsible for installing and configuring those additional compilers and, if applicable, arrange their licenses.
   - Spack is configured in this system to use Intel MPI to build application.
