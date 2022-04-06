@@ -38,7 +38,7 @@ Each command will have additional data in the Message Data, specific to that com
   * `UPDATE` - Acknowledges a previous command, but signals that the command is not yet complete.  Can be sent in response to other commands multiple times, to be finally followed by an `ACK`
   * `PING`, `PONG` - Testing commands.  Not typically used
   * `CLUSTER_STATUS` - Cluster command to Frontend to indicate a change in the status of the cluster. For example, to signal that the cluster has finished initialization and is ready for jobs.
-  * `SYNC` - Command to cluster to synchronize with the Frontend, including updating Log Files, and potentially other activities in the future (such as setting user permissions).
+  * `SYNC` - Command to cluster to synchronize with the Frontend, including updating Log Files, rerunning Ansible, and potentially other activities in the future (such as setting user permissions).
   * `SPACK_INSTALL` - Install a Spack package
   * `RUN_JOB` - Submit a job on behalf of a user to SLURM
   * `REGISTER_USER_GCS` - Begin the process to register a user's GCS credentials with `gsutil`.
@@ -63,6 +63,6 @@ For example, if the Frontend is in GCP Project `Alpha`, the C2 Topic will also b
 
 ## Data Storage
 
-Previous systems relied on the Frontend webserver using SSH to download log files from the clusters to display to users.  With the PubSub architecture, this needed to change. Clusters now automatically upload job logs to a GCS bucket, which is specified at cluster creation time.  The Cluster's Service Account is granted ObjectAdmin permissions in order to create and update Log files in the GCS bucket.
+Clusters automatically upload job logs to a GCS bucket, which is specified at cluster creation time.  The Cluster's Service Account is granted ObjectAdmin permissions in order to create and update Log files in the GCS bucket.
 
-The Frontend webserver now displays log files from the GCS bucket, rather than copying them from the clusters via SSH.
+The Frontend webserver displays log files from the GCS bucket.

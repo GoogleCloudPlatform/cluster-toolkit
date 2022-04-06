@@ -17,22 +17,37 @@ The HPC Toolkit FrontEnd is a web application built upon the Django framework. B
 
 #### Google Cloud:
 
-- GCP project with the following APIs enabled:
-  - Cloud Monitoring API
-  - Compute Engine API
-  - Cloud Logging API
-  - Cloud Pub/Sub API
-  - Cloud Resource Manager
-  - Cloud Billing API
-  - Identity and Access Management (IAM) API
-  - Cloud OS Login API
- 
--  Cloud user/service account with suitable roles granting the required permissions:
+- GCP project(s):
+  - for the HPC Toolkit FrontEnd with at least the following APIs enabled:
+     - Compute Engine API
+     - Cloud Monitoring API
+     - Cloud Logging API
+     - Cloud Pub/Sub API
+     - Cloud Resource Manager
+     - Identity and Access Management (IAM) API
 
-    - The `Owner` role grant complete project control and is more than sufficient
+
+  - A GCP project for deploying Clusters with at least the following APIs enabled:
+
+     - Compute Engine API
+     - Cloud Monitoring API
+     - Cloud Resource Manager
+     - Cloud Logging API
+     - Cloud OS Login API
+     - Cloud Filestore API
+     - Cloud Billing API
+     - Vertex AI API
+
+  - These two projects may actually be the same project.  The HPC Toolkit Frontend supports deploying clusters into the same project in which the service machine runs, as well as deploying clusters into other projects.
+ 
+-  Cloud user/service account with suitable roles granting the required permissions for deployment of the HPC Toolkit Frontend:
+
+    - The `Owner` role grants complete project control and is more than sufficient
 
     - Alternatively, a collection of more limited roles can be used:
-    ```- Compute Admin
+   
+    ```
+    - Compute Admin
     - Storage Admin
     - Pub/Sub Admin
     - Create Service Accounts
@@ -51,6 +66,7 @@ The HPC Toolkit FrontEnd is a web application built upon the Django framework. B
     - Follow instructions to provide details for a Django superuser account.
     - On prompt, check the generated Terraform settings and make further changes if necessary. This step is optional.
     - Confirm to create the VM instance. The VM creation takes a few minutes. **N.B after the script has completed, it can take up to 15 more minutes to have the software environment set up.**
+  - Alternatively, manually run `terraform apply` in the `frontend/tf` directory after properly setting the `terraform.tfvars`.
   - Use the domain name or IP address to access the website. Log in as the Django superuser.
   - **Important: To ensure that the web interface resources can be cleaned up fully at a later date, ensure that the directory containing the terraform configuration (`hpc-toolkit/frontend/tf`) is retained.**
 
@@ -68,9 +84,9 @@ SSH access to the service machine is possible for administration purpose. Admini
 
 *N.B The service machine is not, by default, configured to use the os-login service.*
 
-### Set up Google login
+### Set up Google OAuth2 login
 
-While it is possible to use a Django user account to access the FrontEnd website, and indeed doing so is required for some administration tasks, ordinary users must authenticate using their Google identities via Google OSLogin.  This ensures that they can maintain consistent Linux identities across VM instances that form the clusters. Web frontend login is made possible by the *django-allauth* social login extension. 
+While it is possible to use a Django user account to access the FrontEnd website, and indeed doing so is required for some administration tasks, ordinary users must authenticate using their Google identities via Google OAuth2.  This, combined with the use of Google OSLogin for access to clusters, ensures consistent Linux identities across VM instances that form the clusters. Web frontend login is made possible by the *django-allauth* social login extension. 
 
 For a working  deployment, a fully-qualified domain name must be obtained and attached to the website as configured in the deployment script.  Next, register the site with the hosting GCP project on the GCP console in the *Credentials* section under *APIs and services* category. Note that the *Authorised JavaScript origins* field should contain a callback URL in the following format: *https://<domain_name>/accounts/google/login/callback/*
 
@@ -102,14 +118,17 @@ For this project, the following roles should be sufficient for the admin users t
 - Click the *CREATE SERVICE ACCOUNT* button.
 - Name the service account, optionally provide a description, and then click the *CREATE* button.
 - Grant the service account the following roles:
-  ```- Cloud Filestore Editor
-     - Compute Admin
-     - Create Service Accounts
-     - Delete Service Accounts
-     - Project IAM Admin
-     - Notebooks Admin
-     - Vertex AI administrator 
+  
   ```
+  - Cloud Filestore Editor
+  - Compute Admin
+  - Create Service Accounts
+  - Delete Service Accounts
+  - Project IAM Admin
+  - Notebooks Admin
+  - Vertex AI administrator 
+  ```
+
 - Human users may be given permissions to access this service account but that is not required in this work. Click *Done* button.
 - Locate the new service account from the list, click *Manage Keys* from the *Actions* menu.
 - Click *ADD KEY*, then *Create new key*. Select JSON as key type, and click the *CREATE* button.
@@ -251,11 +270,21 @@ this record if desired; click the *Spack install* button to actually start build
 
 ## Debugging problems
 
-### Deployment problems
+#### Finding Log Files
+
+The service machine produces log files in `/opt/gcluster/run/`. These log files will show errors from the Django web application.
+
+Cloud resource deployment log files (from Terraform) are typically shown via the Frontend web site.  If those logs are not being shown, they can be found on the service machine under `/opt/gcluster/hpc-toolkit/frontend/(clusters|fs|vpc)/...`.  HPC Toolkit log files will also be found in those directories.  The Terraform log files and status files will be down a few directories, based off of the Cluster Number, Deployment ID, and Terraform directory.
+
+On Cluster controllers, most of the useful log files for debugging can be retrieved by executing the 'Sync Cluster' command.  These include SLURM log files as well as general system log files.  The daemon which communicates to the service machine logs to syslog, and can be viewed on the cluster controller node via `journalctl`, looking at the `ghpcfe_c2` service.
+
+Job logs and Spack application logs are uploaded upon job completion to Google Cloud Storage and viewable via the HPC Frontend.
+
+#### Deployment problems
 
 Most deployment problems are caused by not having the right permissions. If this is the case, error message will normally show what permissions are missing. Use the [IAM permissions reference](https://cloud.google.com/iam/docs/permissions-reference) to research this and identify additional roles to add to your user account.
 
-Before any attempt to redeploy, make sure to run `terraform destroy` in `hpc-toolkit/frontend/tf` to remove cloud resources that have been already created. Also remove the Terraform state files.
+Before any attempt to redeploy the Frontend, make sure to run `terraform destroy` in `hpc-toolkit/frontend/tf` to remove cloud resources that have been already created.
 
 ### Cluster problems
 
@@ -268,7 +297,7 @@ The FrontEnd should be quite reliable provisioning clusters. However, in cloud c
 
 Spack installation is fairly reliable. However, there are throusands of packages in the Spack repository and packages are not always tested on all systems. If a Spack installation returns an error, first locate the Spack logs by clicking the *View Logs* button from the application detail page. Then identify from the *Installation Error Log* the root cause of the problem.
 
-Spack installation problem can happen with not only the package installed, but also its depdendencies. There is not a general way debugging Spack problems. It may be helpful to create a standalone compute engine virtual machine with Centos 7 operating system (same OS used by our Slurm clusters) and debug Spack problems there manually. Alternatively, adminstrators can SSH into the Slurm controller and try the manually run `spack` commands there for debugging.
+Spack installation problem can happen with not only the package installed, but also its depdendencies. There is not a general way to debug Spack compilation problems. It may be helpful submit an interactive job to the cluster and debug Spack problems there manually. It is recommended to not build applications from the controller or login nodes, as the underlying processor may differ on the compute nodes.
 
 Complex bugs should be reported to Spack. If an easy fix can be found, note the procedure. This can be then used in a custom installation.
 

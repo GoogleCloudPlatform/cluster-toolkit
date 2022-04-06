@@ -10,13 +10,15 @@ The overall system design is described in the following figure.
 
 In most cases, end users are expected to communicate with the cloud systems via the web front-end. Of course, users from a traditional supercomputing background may wish to work with HPC clusters from the command line. This is entirely possible and is covered in later sections.
 
-In a production environment, it is typically good practice to leave the web application behind a load balancer, which provides additional performance, scalability, and security. 
+<!--  This system is currently NOT capable of being run in parallel, so a Load Balancer will not add any benefits.
 
-Behind the load balancer, a single compute engine virtual machine, referred to as the **service machine** from now on, should be created to host the application server, webserver and database server. In large productions, these servers can of course be hosted on different machines if required.
+In a production environment, it is typically good practice to leave the web application behind a load balancer, which provides additional performance, scalability, and security. -->
+
+A single compute engine virtual machine, referred to as the **service machine** from now on, should be created to host the application server, webserver and database server. In large productions, these servers can of course be hosted on different machines if required.
 
 The web application is built upon Django, a Python framework to develop data-driven dynamic websites. A Nginx server is configured to serve the static files of the website, as well as proxying Django URLs to the application server. Application data is stored in a file-based SQLite database which can be easily replaced by a managed SQL service in large production.
 
-From the web application, HPC clusters can be created on GCP by administrators. A typical HPC cluster contains a single Slurm controller node, and one or more login nodes, typlically all running on mid-range virtual machines. The controller node hosts the Slurm job
+From the web application, HPC clusters can be created on GCP by administrators. A typical HPC cluster contains a single Slurm controller node, and one or more login nodes, typically all running on low- to mid-range virtual machines. The controller node hosts the Slurm job
 scheduler. Through the job scheduler, compute nodes can be started or terminated as required. The controller node and login nodes all provide public IP addresses for administrators or users to SSH into, although doing so is not mandatory as day-to-day tasks can be performed via the web interface.
 
 The Slurm job scheduler supports partitions. Each partition can have compute nodes of different instance types. All major HPC capable instance types can be supported from a single cluster if so desired. Of course, it is also possible to create multiple clusters, which is entirely an
@@ -48,7 +50,7 @@ The home directory of the *gcluster* account is at */opt/gcluster*. For a new de
 - *go* - the development environment of the Go programming language, required to build Google HPC Toolkit
 - *hpc-toolkit* - a clone of the Google HPC Toolkit project. The *ghpc* binary should have already been built during the deployment. The *frontend* sub-directory contains the Django-based web application for the FrontEnd and other supporting files.
 - *django-env* - a Python 3 virtual environment containing everything required to support Django development. To activate this environment: `source ~/django-env/bin/activate`.
-- *run*’* -  directory for run-time data, including the following log files:
+- *run* -  directory for run-time data, including the following log files:
   - *nginx-access.log* - web server access log.
   - *nginx-error.log* - web server error log.
   - *supvisor.log* -  Django application server log. Python *print* from Django source files will appear in this file for debugging purposes.
