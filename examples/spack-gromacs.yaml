@@ -20,7 +20,7 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: spack-gromacs
   region: us-central1
-  zone: us-central1-a
+  zone: us-central1-c
 
 resource_groups:
 - group: primary
@@ -35,7 +35,7 @@ resource_groups:
     id: appsfs
     use: [network1]
     settings:
-      local_mount: /apps
+      local_mount: /sw
 
   - source: resources/file-system/filestore
     kind: terraform
@@ -49,7 +49,7 @@ resource_groups:
     kind: terraform
     id: spack
     settings:
-      install_dir: /apps/spack
+      install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
@@ -63,18 +63,9 @@ resource_groups:
           modules:
             tcl:
               hash_length: 0
-              whitelist:
-                - gcc
-              blacklist:
-                - '%gcc@4.8.5'
               all:
                 conflict:
                   - '{name}'
-                filter:
-                  environment_blacklist:
-                    - "C_INCLUDE_PATH"
-                    - "CPLUS_INCLUDE_PATH"
-                    - "LIBRARY_PATH"
               projections:
                 all: '{name}/{version}-{compiler.name}-{compiler.version}'
       compilers:
@@ -85,8 +76,8 @@ resource_groups:
       # Uncomment and update the name and path to add a shared or personal Spack
       # cache location to speed up future deployments.
       # spack_cache_url:
-      #  - mirror_name: gcs_cache
-      #    mirror_url: gs://bucket-name/...
+      # - mirror_name: gcs_cache
+      #   mirror_url: gs://bucket-name/...
 
   - source: resources/scripts/startup-script
     kind: terraform
@@ -96,8 +87,6 @@ resource_groups:
       - type: shell
         source: modules/startup-script/examples/install_ansible.sh
         destination: install_ansible.sh
-      - $(appsfs.install_nfs_client_runner)
-      - $(appsfs.mount_runner)
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
 
