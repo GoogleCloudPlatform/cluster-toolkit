@@ -494,9 +494,7 @@ hpc-cluster-small/
 ./ghpc create <environment-definition.yaml>
 ```
 
-The create command is the primary interface for the HPC Toolkit. This command takes the path to a environment definition file as input and creates a blueprint based on it. Further information on creating this config file can be found below in Writing Config YAML.
-
-TODO: the line above
+The create command is the primary interface for the HPC Toolkit. This command takes the path to a environment definition file as input and creates a blueprint based on it. Further information on creating this config file, see [Writing Config YAML](examples/README.md#writing-config-yaml).
 
 By default, the blueprint directory will be created in the same directory as the
 `ghpc` binary and will have the name specified by the `blueprint_name` field
@@ -601,3 +599,10 @@ the following script against the packer config file:
 ```shell
 tools/autodoc/terraform_docs.sh resources/packer/new_resource/image.json
 ```
+
+### Contributing
+
+Please refer to the [contributing file](CONTRIBUTING.md) in our github repo, or
+to
+[Google’s Open Source documentation](https://opensource.google/docs/releasing/template/CONTRIBUTING/#).
+Before submitting, we recommend contributors run pre-commit tests (more below).

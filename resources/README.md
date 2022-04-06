@@ -137,6 +137,8 @@ have in the
 
 ## Common Settings
 
+TODO: merge with *Common Variable Naming Conventions*
+
 There are a few common setting names that are consistent accross different
 HPC Toolkit resources. This is intentional to allow multiple resources to share
 inferred settings from global variables. These variables are listed and
@@ -152,6 +154,82 @@ described below.
 * **zone**: The GCP [zone](https://cloud.google.com/compute/docs/regions-zones)
   for the resource(s)
 * **network_name**: The name of the network a resource will use or connect to.
+
+## Writing Custom Resources
+
+Resources are much more flexible by design, however we do define some best practices when creating a new resource.
+
+### Terraform Requirements
+
+The resource source field must point to a single module. We recommend the following structure:
+
+* main.tf file composing the resources using provided variables.
+* variables.tf file defining the variables used.
+* (Optional) outputs.tf file defining any exported outputs used (if any).
+* (Optional) modules directory pointing to submodules needed to create the resource.
+
+### General Best Practices
+
+* Variables for environment-specific values (like project_id) should not be given defaults. This forces the calling module to provide meaningful values.
+* Variables should only have zero-value defaults (like null or empty strings) where leaving the variable empty is a valid preference which will not be rejected by the underlying API(s).
+* Set good defaults wherever possible. Be opinionated about HPC use cases.
+* Follow common variable naming conventions described below
+
+### Resource Role
+
+A resource role is a default label applied to resources (ghpc_role), which
+conveys what role that resource plays within a larger HPC environment.
+
+The standard resources provided with the HPC toolkit include 4 roles currently:
+compute, file-system, network and scheduler. When possible, custom resources
+should use these roles so that they match other resources defined by the
+toolkit. If a custom resource does not fit into these roles, a new role can be
+defined.
+
+A resource’s parent folder will define the resource’s role. Therefore,
+regardless of where the resource is located, the resource directory should be
+explicitly referenced 2 layers deep, where the top layer refers to the “role” of
+that resource.
+
+If a resource is not defined 2 layers deep and the ghpc_role label has not been
+explicitly set in settings, ghpc_role will default to undefined.
+
+Below we show a few of the resources and their roles (as parent folders).
+
+```text
+resources/
+├── compute
+│   └── simple-instance
+├── file-system
+│   └── filestore
+├── network
+│   ├── pre-existing-vpc
+│   └── vpc
+├── packer
+│   └── custom-image
+├── scripts
+│   ├── omnia-install
+│   ├── startup-script
+│   └── wait-for-startup
+└── third-party
+    ├── compute
+    ├── file-system
+    └── scheduler
+```
+
+### Terraform Coding Standards
+
+Any Terraform based resources in the HPC Toolkit repo should implement the following standards:
+
+* terraform-docs is used to generate README files for each resource.
+* The first parameter listed under a module should be source (when referring to an external implementation).
+* The order for parameters in inputs should be:
+  * description
+  * type
+  * default
+* The order for parameters in outputs should be:
+  * description
+  * value
 
 ## Available Resources
 

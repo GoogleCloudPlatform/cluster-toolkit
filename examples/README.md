@@ -207,6 +207,122 @@ resource_groups:
   - source: github.com/org/repo//resources/role/resource-name
 ```
 
+## Writing Config YAML
+
+The input YAML is composed of 3 primary parts, top-level parameters, global variables and resources group. These are described in more detail below.
+
+### Top Level Parameters
+
+* **blueprint_name** (required): Name of this set of blueprints. This also defines the name of the directory the blueprints will be created into.
+
+### Global Variables
+
+```yaml
+vars:
+  region: "us-west-1"
+  labels:
+    "user-defined-global-label": "slurm-cluster"
+  ...
+```
+
+Global variables are set under the vars field at the top level of the YAML.
+These variables can be explicitly referenced in resources as
+[Config Variables](#config-variables). Any resource setting (inputs) not explicitly provided and
+matching exactly a global variable name will automatically be set to these
+values.
+
+Global variables should be used with care. Resource default settings with the
+same name as a global variable and not explicitly set will be overwritten by the
+global variable.
+
+The global “labels” variable is a special case as it will be appended to labels
+found in resource settings, whereas normally an explicit resource setting would
+be left unchanged. This ensures that global labels can be set alongside resource
+specific labels. Precedence is given to the resource specific labels if a
+collision occurs. Default resource labels will still be overwritten by global
+labels.
+
+The HPC Toolkit uses special reserved labels for monitoring each deployment.
+These are set automatically, but can be overridden through global vars or
+resource settings. They include:
+
+* ghpc_blueprint: The name of the blueprint the deployment was created from
+* ghpc_deployment: The name of the specific deployment of the blueprint
+* ghpc_role: The role of a given resource, e.g. compute, network, or
+  file-system. By default, it will be taken from the folder immediately
+  containing the resource. Example: A resource with the source path of
+  `./resources/network/vpc` will have `network` as its `ghpc_role` label by
+  default.
+
+### Resource Groups
+
+Resource groups allow distinct sets of resources to be defined and deployed as a
+group. A resource group can only contain resources of a single kind, for example
+a resource group may not mix packer and terraform resources.
+
+For terraform resources, a top-level main.tf will be created for each resource
+group so different groups can be created or destroyed independently.
+
+A resource group is made of 2 fields, group and resources. They are described in
+more detail below.
+
+#### Group
+
+Defines the name of the group. Each group must have a unique name. The name will
+be used to create the subdirectory in the blueprint directory that the resource
+group will be defined in.
+
+#### Resources
+
+```yaml
+resources:
+  - source: ./resources/network/vpc
+    kind: terraform
+    id: mynetwork
+  - source: ./resources/file-system/filestore
+    kind: terraform
+    id: homedir
+    settings:
+      local_mount: "/home"
+```
+
+Resources describe the building blocks of an HPC blueprint. The expected fields
+in a resource are listed in more detail below.
+
+##### Source (Required)
+
+Source points to a local directory where the Resource has been defined. This
+directory must contain a `main.tf` and `variables.tf` for a Terraform resource
+or `*.pkr.hcl` and `variables.pkr.hcl` files for a Packer resource.
+
+Our intent is to support remote resources in the near future and so source could
+point to a git repository.
+
+##### Kind (Required)
+
+The kind of the resource. This can be either `terraform` or `packer`.
+
+##### ID (Required)
+
+A unique identifier string for this resource. This will allow other resources to
+reference outputs and variables of this resource as needed, for instance if a
+filesystem needs to know which network to connect to. The ID cannot be the same
+as another resource, even if they are defined in another resource group.
+
+For terraform resources, the ID will be rendered into the terraform module label
+at the top level main.tf file.
+
+##### Settings
+
+Settings is a map of arbitrary depth. The values provided here should map to the
+input variables described in the resource itself. For the provided resources, it
+is in either the `variables.tf` file for Terraform or `variable.pkr.hcl` file
+for Packer. Any required variables in the resource must be either in the
+resources settings or in the global variables.
+
+The description of a resource input and output variables is defined in the
+README.md file inside of each resource directory.
+
 ## Variables
 
 Variables can be used to refer both to values defined elsewhere in the config
@@ -275,6 +391,8 @@ will perform basic validation making sure all config variables are defined
 before creating a blueprint making debugging quicker and easier.
 
 ## Resources
+
+TODO: need to square with section above.
 
 Resources are the building blocks of an HPC environment. They can be composed to
 create complex deployments using the config YAML. Several resources are provided
