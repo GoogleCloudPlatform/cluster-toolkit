@@ -1,21 +1,21 @@
-## HPC Toolkit FrontEnd - Administrator’s Guide
+# HPC Toolkit FrontEnd - Administrator’s Guide
 
 This document is for administrators of the HPC Toolkit FrontEnd. An administrator can manage the life cycles of HPC clusters, set up networking and storage resources that support clusters, install applications and manage user access. Ordinary HPC users should refer to the [User Guide](user_guide.md) for guidance on how to prepare and run jobs on existing clusters.
 
 The HPC Toolkit FrontEnd is a web application built upon the Django framework. By default, a Django superuser is created at deployment time. For large organisations, additional Django superusers can be created from the Admin site. 
 
-### System Deployment
+## System Deployment
 
-#### Prerequisites
+### Prerequisites
 
-##### Client Machine:
+#### Client Machine:
 
 - Linux (WSL) environment with bash interpreter
 - Terraform CLI installation
 - Google Cloud SDK installation (`gcloud` utility)
 - Authenticated google cloud user for deployment (`gcloud auth` - see below for required permissions)
 
-##### Google Cloud:
+#### Google Cloud:
 
 - GCP project with the following APIs enabled:
   - Cloud Monitoring API
@@ -43,33 +43,36 @@ The HPC Toolkit FrontEnd is a web application built upon the Django framework. B
 
   Permissions can be further fine-tuned to achieve least privilege e.g using the security insights tool.
   
-#### Deployment Process
+### Deployment Process
   - `git clone` the HPC Toolkit project from GitHub into a client machine [TODO: give official repository name after turning this into a public project].
   - Run `hpc-toolkit/frontend/deploy.sh` to deploy the system. Follow instructions to name the hosting VM instance and select its cloud region and zone. The hosting VM will be referred to as the *service machine* from now on.
-    - For a production deployment, follow on-screen instructions to create a static IP address and then provide a domain name. In this case, an SSL certificate will be automatically obtained via LetsEncyrpt to secure the web application. For testing purpose, ignore the IP and domain name - the system can still be successfully deployed and ran via only an IP address (although some features may not be fully function).
+    - For a production deployment, follow on-screen instructions to create a static IP address and then provide a domain name. In this case, an SSL certificate will be automatically obtained via [LetsEncrypt](https://letsencrypt.org/) to secure the web application. 
+    - For testing purposes the static public IP address and domain name can be left blank. The system can still be successfully deployed and run with an ephemeral IP address, however OAuth-based login will not be available as this requires a publicly-resolvable domain name.
     - Follow instructions to provide details for a Django superuser account.
     - On prompt, check the generated Terraform settings and make further changes if necessary. This step is optional.
-    - Confirm to create the VM instance. The VM creation takes a few minutes. However, after the script has completed, it can take up to 15 more minutes to have the software environment set up. Be patient.
-  - Use the domain name or IP address to access the website. Log in as the Django superuser. The deployment is completed.
+    - Confirm to create the VM instance. The VM creation takes a few minutes. **N.B after the script has completed, it can take up to 15 more minutes to have the software environment set up.**
+  - Use the domain name or IP address to access the website. Log in as the Django superuser.
+  - **Important: To ensure that the web interface resources can be cleaned up fully at a later date, ensure that the directory containing the terraform configuration (`hpc-toolkit/frontend/tf`) is retained.**
 
-To uninstall after testing, make sure to clean up cluster resouces from the web interface first. Then go to `hpc-toolkit/frontend/tf` and run `terraform destroy` to remove the service machine and associated resources.
+The deployment is now complete.
 
+## Post-deployment Configuration
 
-### Post-deployment Configurations
-
-#### SSH access to the service machine
+### SSH access to the service machine
 
 SSH access to the service machine is possible for administration purpose. Administrators can choose from one of the following options:
 
-- An administrator can add his/her public SSH key to the VM instance after the deployment via GCP console or command line.
-- An administrator can SSH directly from the GCP console.
-- A user with project-wide SSH set in the hosting GCP project should already have SSH access to the service machine.
+- [SSH directly from the GCP console](https://cloud.google.com/compute/docs/instances/connecting-to-instance).
+- [Add his/her public SSH key to the VM instance after deployment via GCP console](https://cloud.google.com/compute/docs/connect/add-ssh-keys#add_ssh_keys_to_instance_metadata).
+- [Add his/her SSH key to the GCP project to use on all VMs within the project](https://cloud.google.com/compute/docs/connect/add-ssh-keys#add_ssh_keys_to_project_metadata).
 
-#### Set up Google login
+*N.B The service machine is not, by default, configured to use the os-login service.*
 
-While it is possible to use a Django user account to access the FrontEnd website, and indeed doing so is required for some administration tasks, ordinary users must authenticate using their Google identities so that, via Google OSLogin, they can maintain consistent Linux identities across VM instances that form the clusters. This is made possible by the *django-allauth* social login extension. 
+### Set up Google login
 
-For a production deployment, a fully-qualified domain name must be obtained and attached to the website as configured in the deployment script.  Next, register the site with the hosting GCP project on the GCP console in the *Credentials* section under *APIs and services* category. Note that the *Authorised JavaScript origins* field should contain a callback URL in the following format: *https://<domain_name>/accounts/google/login/callback/*
+While it is possible to use a Django user account to access the FrontEnd website, and indeed doing so is required for some administration tasks, ordinary users must authenticate using their Google identities via Google OSLogin.  This ensures that they can maintain consistent Linux identities across VM instances that form the clusters. Web frontend login is made possible by the *django-allauth* social login extension. 
+
+For a working  deployment, a fully-qualified domain name must be obtained and attached to the website as configured in the deployment script.  Next, register the site with the hosting GCP project on the GCP console in the *Credentials* section under *APIs and services* category. Note that the *Authorised JavaScript origins* field should contain a callback URL in the following format: *https://<domain_name>/accounts/google/login/callback/*
 
 ![Oauth set-up](images/GCP-app-credential.png)
 
@@ -80,9 +83,9 @@ From the GCP console, note the client ID and client secret. Then return to admin
 Next, go to the *Authorised user* table. This is where further access control to the site is applied. Create new entries to grant access to users. A new entry can be:
 
 - a valid domain name to grant access to multiple users from authorised organisations (e.g. @example.com) 
-- an email address to grant access to an individual user. 
+- an email address to grant access to an individual user (e.g user.name@example.com) 
 
-Logins that do not match these patterns will be rejected.
+All login attempts that do not match these patterns will be rejected.
 
 ### Credential Management
 
@@ -92,57 +95,82 @@ The preferred way to access GCP resources from this system is through a [Service
 
 For this project, the following roles should be sufficient for the admin users to manage the required service account: *Service Account User*, *Service Account Admin*, and *Service Account Key Admin*.
 
-To register the GCP credential with the system:
+#### Creating a service account via the GCP Console
 
 - Log in to the GCP console and select the GCP project that hosts this work.
 - From the main menu, select *IAM & Admin*, then *Service Accounts*.
 - Click the *CREATE SERVICE ACCOUNT* button.
 - Name the service account, optionally provide a description, and then click the *CREATE* button.
-- Grant the service account the following roles: 
-  - *Editor*  <!-- # TODO: Trim this WAY down: ComputeAdmin, Filestore?, Workbench? Must encompass everything we might create -->
-  - *Security Admin*  <!-- TODO: I believe this can be changed to Project IAM Admin  (roles/resourcemanager.projectIamAdministrator) which is a SIGNIFICANTLY smaller set of permissions. -->
+- Grant the service account the following roles:
+  ```- Cloud Filestore Editor
+     - Compute Admin
+     - Create Service Accounts
+     - Delete Service Accounts
+     - Project IAM Admin
+     - Notebooks Admin
+     - Vertex AI administrator 
+  ```
 - Human users may be given permissions to access this service account but that is not required in this work. Click *Done* button.
 - Locate the new service account from the list, click *Manage Keys* from the *Actions* menu.
 - Click *ADD KEY*, then *Create new key*. Select JSON as key type, and click the *CREATE* button.
 - Copy the generated JSON content which should then be pasted into the credential creation form on the website.
 
-<!-- TODO: Show the gcloud commandline way -->
+#### Creating a service account using the `gcloud` tool
 
-#### TODO:  List of Permissions required by Service Account
+Alternatively the `gcloud` command line tool can be used to create a suitable service account:
 
-### Network Management
+```bash
+$ gcloud iam service-accounts create <service_account_name>
+$ for roleid in file.editor \
+              compute.admin \
+              iam.serviceAccountCreator \
+              iam.serviceAccountDelete \
+              resourcemanager.projectIamAdmin \
+              notebooks.admin aiplatform.admin; \
+  do gcloud projects add-iam-policy-binding <project_name> \
+      --member="serviceAccount:<service_account_name>@<project_name>.iam.gserviceaccount.com" \
+      --role="roles/$roleid"; \
+  done
+
+$ gcloud iam service-accounts keys create <path_to_key_file> \
+    --iam-account=<service_account_name>@<project_name>.iam.gserviceaccount.com
+```
+
+Once complete, the service account key json can be copied from `path_to_key_file` into the credentials form on the frontend.
+
+## Network Management
 
 All cloud systems begin with defining the network within which the systems will be deployed. Before a cluster or stand-alone filesystem can be created, the administrator must create the virtual cloud network (VPC). This is accomplished under the *Networks* main menu item. Note that network resources have their own life cycles and are managed independently to cluster.
 
-#### Create a new VPC
+### Create a new VPC
 To create a new network, the admin must first select which cloud credential should be used for this network, then give the VPC a name, and then select the cloud region for the network.
 
 Upon clicking the *Save* button, the network is not immediately created. The admin has to click *Edit Subnet* to create at least one subnet. Once the network and subnets are appropriately defined, click the ‘Apply Cloud Changes’ button to trigger Terraform to provision the  cloud resources.
 
-#### Import an existing VPC
+### Import an existing VPC
 
 If the organisation already has pre-defined VPCs on cloud within the hosting GCP project, they can be imported. Simply selecting an existing VPC and associated subnets from the web interface to register them with the system. Imported VPCs can be used in exactly the same way as newly created ones.
 
 
-### Filesystem Management
+## Filesystem Management
 
 By default each cluster creates two shared filesystems: one at */opt/cluster* to hold installed applications and one at */home* to hold job files for individual users. Both can be customised if required. Additional filesystems may be created and mounted to the clusters. Note that filesystem resources have their own life cycles and are managed independently to cluster.
 
-#### Create new filesystems
+### Create new filesystems
 
 Currently, only GCP Filestore is supported. GCP Filestore can be created from the *Filesystems* main menu item. A new Filestore has to be associated with an existing VPC and placed in a cloud zone. All performance tiers are supported.
 
-#### Import existing filesystems
+### Import existing filesystems
 
 Existing filesystems can be registered to this system and subsequently mounted by clusters. These can be existing NFS servers (like Filestore), or other filesystems for which Linux has built-in mount support. For this to work, for each NFS server, provide an IP address and an export name. The IP address must be reachable by the VPC subnets intended to be used for clusters.
 
 An internal address can be used if the cluster shares the same VPC with the imported filesystem. Alternatively, system administrators can set up hybrid connectivity (such as extablishing network peering) beforing mounting the external filesystem located elsewhere on GCP. 
 
-### Cluster Management
+## Cluster Management
 
 HPC clusters can be created after setting up the hosting VPC and, optionally, additional filesystems. The HPC Toolkit FrontEnd can manage the whole life cycles of clusters. Click the *Clusters* item in the main menu to list all existing clusters.
 
-#### Cluster status
+### Cluster status
 Clusters can be in different states and their *Actions* menus adapt to this information to show different actions:
 
 - Status 'n' – Cluster is being newly configured by user. At this stage, a new cluster is being set up by an administrator. Only a database record exists, and no cloud resource has been created yet. User is free to edit this cluster: rename it, re-configure its associated network and storage components, and add authorized users. Click *Start* from the cluster detail page to actually provision the cluster on GCP.
@@ -154,7 +182,7 @@ Clusters can be in different states and their *Actions* menus adapt to this info
 
 A visual indication is shown on the website for the cluster being in creating, initialising or destroying states. Also, relevant web pages will refresh every 15 seconds to pick status changes.
 
-#### Create a new cluster
+### Create a new cluster
 
 A typical workflow for creating a new cluster is as follows:
 
@@ -170,23 +198,23 @@ mounting additional filesystems.
   - For cluster partitions, note that one *c2-standard-60* partition is defined by default. Additional partitions can be added, supporting different instance types. Enable or disable hyprethreading and node reuse as appropriate. Also, placement group can be enabled (for C2 and C2D partitions only).
 - Finally, save the configurations and click the *Create* button to trigger the cluster creation.
 
-### Application Management
+## Application Management
 
 Administrators can install and manage applications in the following ways:
 
-###### Install Spack applications
+### Install Spack applications
 
 The recommended method of application installation is via Spack. Spack, an established package management system for HPC, contains build recipes of the most widely used open-source HPC applications. This method is completed automated. Spack installation is performed as a Slurm job. Simply choose a Slurm partition to run Spack. Advanced user may also customise the installation by specifying a Spack spec string.
 
-###### Install custom applications
+### Install custom applications
 
 For applications not yet covered by the Spack package repository, e.g., codes developed in-house, or those failed to build by Spack, use custom installations by specifying custom scripts containing steps to build the applications.
 
-###### Register manually installed applications
+### Register manually installed applications
 
 Complex packages, such as some commercial applications that may require special steps to set up, can be installed manually on the cluster's shared filesystem. Once done, they can be registered with the FrontEnd so that future job submissions can be automated through the FrontEnd.
 
-#### Application status
+### Application status
 
 Clicking the *Applications* item in the main menu leads to the application list page which displays all existing application installations. Applications can be in different states and their *Actions* menus adapt to this information to show different actions:
 
@@ -206,7 +234,7 @@ A visual indication is shown on the website for any application installation in 
 
 A typical workflow for installing a new Spack application is as follows:
 
-- From the application list page, press the *New application* button. In the next form, select the target cluster and choose *Spack instatllation*.
+- From the application list page, press the *New application* button. In the next form, select the target cluster and choose *Spack installation*.
 - In the *Create a new Spack application* form, type a keyword in the *Create a new Spack application* form, and use the auto-
 completion function to choose the Spack package to install. The *Name* and *Version* fields are populated automatically. If Spack supports multiple versions of the application, click the dropdown list there to select the desired version.
 - Spack supports variants - applications built with customised compile-time options. These may be special compiler flags or optional features that must be switched on manually. Advanced users may
@@ -221,22 +249,22 @@ supply additional specs using the optional *Spack spec* field.
 this record if desired; click the *Spack install* button to actually start building this application on the cluster. The last step can take quite a while to complete depending on the application. A visual indication is given on the related web pages until the installation Slurm job is completed.
 - A successfully installed application will have its status updated to ‘ready’. A *New Job* button becomes available from the Actions menu on the application list page, or from the application detail page. The [User Guide](user_guide.md) contains additional information on how jobs can be prepared and submitted.
 
-### Debugging problems
+## Debugging problems
 
-#### Deployment problems
+### Deployment problems
 
 Most deployment problems are caused by not having the right permissions. If this is the case, error message will normally show what permissions are missing. Use the [IAM permissions reference](https://cloud.google.com/iam/docs/permissions-reference) to research this and identify additional roles to add to your user account.
 
 Before any attempt to redeploy, make sure to run `terraform destroy` in `hpc-toolkit/frontend/tf` to remove cloud resources that have been already created. Also remove the Terraform state files.
 
-#### Cluster problems
+### Cluster problems
 
 The FrontEnd should be quite reliable provisioning clusters. However, in cloud computing, erroneous situations will happen and do happen from time to time; many outside our controls. For example, a resource creation could fail because the hosting GCP project has ran out of certain resource quotas. Or, an upgrade of an underlying machine image might have introduced changes that are incompatible to our system. It is not possible to capture all such situations. Here, a list of tips is given to help debug cluster creation problems. The [Developer's Guide](developer_guide.md) contains a lot of detais on how the backend logics are handled, which can also shed light on certain issues.
 
 - If a cluster is stuck at status 'c', something is wrong with the provisioning of cluster hardware. SSH into the service machine and identify the directory containing the run-time data for that cluster at `frontend/clusters/cluster_<cluster_id>` where `<cluster_id>` can be found on the web interface. Check the Terraform log files there for debugging information.
 - If a cluster is stuck at status 'i', hardware resources should have been commissioned properly and there is something wrong in the software configuration stage. Locate the IP address of the Slurm controller node and find its VM instance on GCP console. Check its related *Serial port* for system log. If needed, SSH into the controller from the GCP console to check Slurm logs under `/var/log/slurm/`.
 
-#### Application problems
+### Application problems
 
 Spack installation is fairly reliable. However, there are throusands of packages in the Spack repository and packages are not always tested on all systems. If a Spack installation returns an error, first locate the Spack logs by clicking the *View Logs* button from the application detail page. Then identify from the *Installation Error Log* the root cause of the problem.
 
@@ -244,8 +272,14 @@ Spack installation problem can happen with not only the package installed, but a
 
 Complex bugs should be reported to Spack. If an easy fix can be found, note the procedure. This can be then used in a custom installation.
 
-#### General clean-up tips
+### General clean-up tips
 
 - If a cluster is stucked in 'i' state, it is normally OK to find the *Destroy* button from its *Actions* menu to destroy it.
 - For failed network/filesystem/cluster creations, one may need to SSH into the service machine, locate the run-time data directory, and manually run `terraform destroy` there for clean up cloud resources.
 - Certain database records might get corrupted and need to be removed for failed clusters or network/filesystem components. This can be done from the Django Admin site, although adminstrators need to exercise caution while modifying the raw data in Django database.
+
+
+## Teardown Process
+
+  - **Important: First ensure that all clusters, workbenches and filestores are removed using the web interface before destroying it. These resources will otherwise persist and continue to cost.**
+  - To tear down the web interface and its hosting infrastructure, navigate to the directory `hpc-toolkit/frontend/tf` on the original client machine and run `terraform destroy` to remove the service machine and associated resources.
