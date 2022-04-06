@@ -187,6 +187,68 @@ displayed:
 Apply complete! Resources: 20 added, 0 changed, 0 destroyed.
 ```
 
+### Blueprint Warnings and Errors
+
+By default, each blueprint is configured with a number of "validator" functions
+which perform basic tests of your global variables. If `project_id`, `region`,
+and `zone` are defined as global variables, then the following validators are
+enabled:
+
+```yaml
+validators:
+- validator: test_project_exists
+  inputs:
+    project_id: $(vars.project_id)
+- validator: test_region_exists
+  inputs:
+    project_id: $(vars.project_id)
+    region: $(vars.region)
+- validator: test_zone_exists
+  inputs:
+    project_id: $(vars.project_id)
+    zone: $(vars.zone)
+- validator: test_zone_in_region
+  inputs:
+    project_id: $(vars.project_id)
+    zone: $(vars.zone)
+    region: $(vars.region)
+```
+
+This configures validators that check the validity of the project ID, region,
+and zone. Additionally, it checks that the zone is in the region. Validators can
+be overwritten, however they are limited to the set of functions defined above.
+
+Validators can be explicitly set to the empty list:
+
+```yaml
+validators: []
+```
+
+They can also be set to 3 differing levels of behavior using the command-line
+`--validation-level` flag` for the `create` and `expand` commands:
+
+* `"ERROR"`: If any validator fails, the blueprint will not be
+    written. Error messages will be printed to the screen that indicate which
+    validator(s) failed and how.
+* `"WARNING"` (default): The blueprint will be written even if any validators
+    fail. Warning messages will be printed to the screen that indicate which
+    validator(s) failed and how.
+* `"IGNORE"`: Do not execute any validators, even if they are explicitly
+    defined in a `validators` block or the default set is implicitly added.
+
+For example, this command will set all validators to `WARNING` behavior:
+
+```shell
+./ghpc create --validation-level WARNING examples/hpc-cluster-small.yaml
+```
+
+The flag can be shortened to `-l` as shown below using `IGNORE` to disable all
+validators.
+
+```shell
+./ghpc create -l IGNORE examples/hpc-cluster-small.yaml
+```
+
 ### Testing your cluster
 Once the blueprint has successfully been deployed, take the following steps to run a job:
 

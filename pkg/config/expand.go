@@ -32,6 +32,7 @@ const (
 	roleLabel         string = "ghpc_role"
 	simpleVariableExp string = `^\$\((.*)\)$`
 	anyVariableExp    string = `\$\((.*)\)`
+	fullLiteralExp    string = `^\(\((.*)\)\)$`
 )
 
 // expand expands variables and strings in the yaml config. Used directly by
@@ -40,6 +41,11 @@ func (bc *BlueprintConfig) expand() {
 	bc.addSettingsToResources()
 	if err := bc.expandBackends(); err != nil {
 		log.Fatalf("failed to apply default backend to resource groups: %v", err)
+	}
+
+	if err := bc.addDefaultValidators(); err != nil {
+		log.Fatalf(
+			"failed to update validators when expanding the config: %v", err)
 	}
 
 	if err := bc.combineLabels(); err != nil {
@@ -544,6 +550,13 @@ func updateVariables(
 // expandVariables recurses through the data structures in the yaml config and
 // expands all variables
 func (bc *BlueprintConfig) expandVariables() {
+	for _, validator := range bc.Config.Validators {
+		err := updateVariables(varContext{yamlConfig: bc.Config}, validator.Inputs, make(map[string]int))
+		if err != nil {
+			log.Fatalf("expandVariables: %v", err)
+		}
+	}
+
 	for iGrp, grp := range bc.Config.ResourceGroups {
 		for iRes := range grp.Resources {
 			context := varContext{
@@ -560,4 +573,63 @@ func (bc *BlueprintConfig) expandVariables() {
 			}
 		}
 	}
+}
+
+// this function adds default validators to the blueprint if none have been
+// defined. default validators are only added for global variables that exist
+func (bc *BlueprintConfig) addDefaultValidators() error {
+	if bc.Config.Validators != nil {
+		return nil
+	}
+	bc.Config.Validators = []validatorConfig{}
+
+	_, projectIDExists := bc.Config.Vars["project_id"]
+	_, regionExists := bc.Config.Vars["region"]
+	_, zoneExists := bc.Config.Vars["zone"]
+
+	if projectIDExists {
+		v := validatorConfig{
+			Validator: testProjectExistsName.String(),
+			Inputs: map[string]interface{}{
+				"project_id": "$(vars.project_id)",
+			},
+		}
+		bc.Config.Validators = append(bc.Config.Validators, v)
+	}
+
+	if projectIDExists && regionExists {
+		v := validatorConfig{
+			Validator: testRegionExistsName.String(),
+			Inputs: map[string]interface{}{
+				"project_id": "$(vars.project_id)",
+				"region":     "$(vars.region)",
+			},
+		}
+		bc.Config.Validators = append(bc.Config.Validators, v)
+
+	}
+
+	if projectIDExists && zoneExists {
+		v := validatorConfig{
+			Validator: testZoneExistsName.String(),
+			Inputs: map[string]interface{}{
+				"project_id": "$(vars.project_id)",
+				"zone":       "$(vars.zone)",
+			},
+		}
+		bc.Config.Validators = append(bc.Config.Validators, v)
+	}
+
+	if projectIDExists && regionExists && zoneExists {
+		v := validatorConfig{
+			Validator: testZoneInRegionName.String(),
+			Inputs: map[string]interface{}{
+				"project_id": "$(vars.project_id)",
+				"region":     "$(vars.region)",
+				"zone":       "$(vars.zone)",
+			},
+		}
+		bc.Config.Validators = append(bc.Config.Validators, v)
+	}
+	return nil
 }

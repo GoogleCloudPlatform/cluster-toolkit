@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
@@ -49,32 +48,14 @@ func getType(obj interface{}) string {
 	return "string"
 }
 
-func isLiteralVariable(str string) bool {
-	match, err := regexp.MatchString(beginLiteralExp, str)
-	if err != nil {
-		log.Fatalf("Failed checking if variable is a literal: %v", err)
-	}
-	return match
-}
-
-func handleLiteralVariable(str string) string {
-	re := regexp.MustCompile(fullLiteralExp)
-	contents := re.FindStringSubmatch(str)
-	if len(contents) != 2 {
-		log.Fatalf("Incorrectly formatted literal variable: %s", str)
-	}
-
-	return contents[1]
-}
-
 func handleData(val interface{}) interface{} {
 	str, ok := val.(string)
 	if !ok {
 		// We only need to act on strings
 		return val
 	}
-	if isLiteralVariable(str) {
-		return handleLiteralVariable(str)
+	if config.IsLiteralVariable(str) {
+		return config.HandleLiteralVariable(str)
 	} else if !strings.HasPrefix(str, "[") &&
 		!strings.HasPrefix(str, "{") {
 		return fmt.Sprintf("\"%s\"", str)

@@ -36,14 +36,18 @@ func init() {
 	createCmd.Flags().StringVarP(&bpDirectory, "out", "o", "",
 		"Output directory for the new blueprints")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
+	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
+		validationLevelDesc)
 	rootCmd.AddCommand(createCmd)
 }
 
 var (
-	yamlFilename string
-	bpDirectory  string
-	cliVariables []string
-	createCmd    = &cobra.Command{
+	yamlFilename        string
+	bpDirectory         string
+	cliVariables        []string
+	validationLevel     string
+	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
+	createCmd           = &cobra.Command{
 		Use:   "create FILENAME",
 		Short: "Create a new blueprint.",
 		Long:  "Create a new blueprint based on a provided YAML config.",
@@ -64,6 +68,9 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
 	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
+	}
+	if err := blueprintConfig.SetValidationLevel(validationLevel); err != nil {
+		log.Fatal(err)
 	}
 	blueprintConfig.ExpandConfig()
 	reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory)

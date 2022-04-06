@@ -38,7 +38,7 @@ run_test() {
 			exit 1
 		}
 	cd "${cwd}"
-	./ghpc create "${tmpdir}"/"${exampleFile}" >/dev/null ||
+	./ghpc create -l IGNORE "${tmpdir}"/"${exampleFile}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating blueprint with ghpc for ${exampleFile}"
 			exit 1

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v2"
@@ -80,6 +81,65 @@ type TerraformBackend struct {
 	Configuration map[string]interface{}
 }
 
+type validatorName int64
+
+const (
+	// Undefined will be default and potentially throw errors if used
+	Undefined validatorName = iota
+	testProjectExistsName
+	testRegionExistsName
+	testZoneExistsName
+	testZoneInRegionName
+)
+
+// this enum will be used to control how fatal validator failures will be
+// treated during blueprint creation
+const (
+	validationError int = iota
+	validationWarning
+	validationIgnore
+)
+
+func isValidValidationLevel(level int) bool {
+	return !(level > validationIgnore || level < validationError)
+}
+
+// SetValidationLevel allows command-line tools to set the validation level
+func (bc *BlueprintConfig) SetValidationLevel(level string) error {
+	switch level {
+	case "ERROR":
+		bc.Config.ValidationLevel = validationError
+	case "WARNING":
+		bc.Config.ValidationLevel = validationWarning
+	case "IGNORE":
+		bc.Config.ValidationLevel = validationIgnore
+	default:
+		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
+	}
+
+	return nil
+}
+
+func (v validatorName) String() string {
+	switch v {
+	case testProjectExistsName:
+		return "test_project_exists"
+	case testRegionExistsName:
+		return "test_region_exists"
+	case testZoneExistsName:
+		return "test_zone_exists"
+	case testZoneInRegionName:
+		return "test_zone_in_region"
+	default:
+		return "unknown_validator"
+	}
+}
+
+type validatorConfig struct {
+	Validator string
+	Inputs    map[string]interface{}
+}
+
 // HasKind checks to see if a resource group contains any resources of the given
 // kind. Note that a resourceGroup should never have more than one kind, this
 // function is used in the validation step to ensure that is true.
@@ -113,8 +173,13 @@ func (r *Resource) createWrapSettingsWith() {
 }
 
 // YamlConfig stores the contents on the User YAML
+// omitempty on validation_level ensures that expand will not expose the setting
+// unless it has been set to a non-default value; the implementation as an
+// integer is primarily for internal purposes even if it can be set in blueprint
 type YamlConfig struct {
 	BlueprintName            string `yaml:"blueprint_name"`
+	Validators               []validatorConfig
+	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     map[string]interface{}
 	ResourceGroups           []ResourceGroup  `yaml:"resource_groups"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`
@@ -167,6 +232,16 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 	// Ensure Vars is not a nil map if not set by the user
 	if len(yamlConfig.Vars) == 0 {
 		yamlConfig.Vars = make(map[string]interface{})
+	}
+
+	if len(yamlConfig.Vars) == 0 {
+		yamlConfig.Vars = make(map[string]interface{})
+	}
+
+	// if the validation level has been explicitly set to an invalid value
+	// in YAML blueprint then silently default to validationError
+	if !isValidValidationLevel(yamlConfig.ValidationLevel) {
+		yamlConfig.ValidationLevel = validationError
 	}
 
 	return yamlConfig
@@ -309,4 +384,24 @@ func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
 	}
 
 	return nil
+}
+
+// IsLiteralVariable is exported for use in reswriter as well
+func IsLiteralVariable(str string) bool {
+	match, err := regexp.MatchString(fullLiteralExp, str)
+	if err != nil {
+		log.Fatalf("Failed checking if variable is a literal: %v", err)
+	}
+	return match
+}
+
+// HandleLiteralVariable is exported for use in reswriter as well
+func HandleLiteralVariable(str string) string {
+	re := regexp.MustCompile(fullLiteralExp)
+	contents := re.FindStringSubmatch(str)
+	if len(contents) != 2 {
+		log.Fatalf("Incorrectly formatted literal variable: %s", str)
+	}
+
+	return strings.TrimSpace(contents[1])
 }
