@@ -96,6 +96,8 @@ From the GCP console, note the client ID and client secret. Then return to admin
 
 ![Social login set-up](images/register-social-app.png)]
 
+#### Set Allowed Users by Email Address
+
 Next, go to the *Authorised user* table. This is where further access control to the site is applied. Create new entries to grant access to users. A new entry can be:
 
 - a valid domain name to grant access to multiple users from authorised organisations (e.g. @example.com) 
@@ -183,7 +185,21 @@ Currently, only GCP Filestore is supported. GCP Filestore can be created from th
 
 Existing filesystems can be registered to this system and subsequently mounted by clusters. These can be existing NFS servers (like Filestore), or other filesystems for which Linux has built-in mount support. For this to work, for each NFS server, provide an IP address and an export name. The IP address must be reachable by the VPC subnets intended to be used for clusters.
 
-An internal address can be used if the cluster shares the same VPC with the imported filesystem. Alternatively, system administrators can set up hybrid connectivity (such as extablishing network peering) beforing mounting the external filesystem located elsewhere on GCP. 
+An internal address can be used if the cluster shares the same VPC with the imported filesystem. Alternatively, system administrators can set up hybrid connectivity (such as extablishing network peering) beforing mounting the external filesystem located elsewhere on GCP.
+
+## User Management
+
+User accounts will be automatically created for users when they log into the frontend for the first time, by default new accounts are created with quota disabled.  To enable job submission for an account, administrators must enable compute quota from the 
+
+### User Compute Quota
+
+Currently three quota modes are supported:
+
+* **Unlimited quota** - User may submit an unlimited number of jobs
+* **Limited quota** - User may submit jobs up to a total spend limit in USD
+* **Quota Disabled** - User may not submit jobs - this is the default for newly created accounts
+
+When **limited quota** is selected, an additional field **quota amount** will be available to set the total spend available to the user.
 
 ## Cluster Management
 
