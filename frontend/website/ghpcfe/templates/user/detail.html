@@ -8,4 +8,5 @@
     <p><b>Total Spend:</b> {{ user.total_spend }}</p>
     <p><b>Quota Type:</b> {{ user.get_quota_type_display }}</p>
     {% if user.quota_type == "l" %}<p><b>Quota Amount:</b> ${{ user.quota_amount }}</p>{% endif %}
+    <a href="{% url 'user-admin' object.id %}" class="btn btn-primary">Manage</a>
 {% endblock %}

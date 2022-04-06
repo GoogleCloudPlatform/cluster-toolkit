@@ -58,10 +58,11 @@ class UserAdminUpdateForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'quota_type', 'quota_amount',)
+        fields = ('username', 'email', 'roles', 'quota_type', 'quota_amount',)
         widgets = {
                 'username': forms.TextInput(attrs={'class': 'form-control'}),
                 'email': forms.TextInput(attrs={'class': 'form-control'}),
+                'roles': forms.SelectMultiple(attrs={'class': 'form-control'}),
                 'quota_type': forms.Select(attrs={'class': 'form-control', 'disabled': False}),
                 'quota_amount': forms.NumberInput(attrs={'class':'form-control'})
                 }

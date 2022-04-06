@@ -49,6 +49,11 @@ window.onload=initPage
       {{ form.email.label_tag }}
       {{ form.email }}
         <small class="form-text text-muted">{{ form.email.help_text }}</small>
+    <div class="form-group">
+      {{ form.roles.errors }}
+      {{ form.roles.label_tag }}
+      {{ form.roles }}
+        <small class="form-text text-muted">{{ form.roles.help_text }}</small>
     </div>
     <div class="form-group">
       {{ form.quota_type.errors }}
