@@ -1,7 +1,8 @@
 # Resources
 
-This directory contains a set of resources built for the HPC Toolkit. These
-resources can be used to define components of an HPC cluster.
+This directory contains a set of resources built for the HPC Toolkit. Resources
+describe the building blocks of an HPC blueprint. The expected fields in a
+resource are listed in more detail below.
 
 ## Resource Fields
 
@@ -16,6 +17,7 @@ binary or a local file. It can also be a URL pointing to a github path
 containing a conforming module.
 
 #### Embedded Resources
+
 Embedded resources are embedded in the ghpc binary during compilation and cannot
 be edited. To refer to embedded resources, set the source path to
 `resources/<resource path>`. The paths match the resources in the repository at
@@ -71,15 +73,21 @@ either `terraform` or `packer`.
 
 ### ID (Required)
 
-The `id` field is used to uniquely identify and reference a definied resource.
+The `id` field is used to uniquely identify and reference a defined resource.
 ID's are used in [variables](../examples/README.md#variables) and become the
 name of each module when writing terraform resources. They are also used in the
 [use](#use) and [outputs](#outputs) lists described just below.
 
+For terraform resources, the ID will be rendered into the terraform module label
+at the top level main.tf file.
+
 ### Settings (May Be Required)
+
 The settings field is a map that supplies any user-defined variables for each
 resource. Settings values can be simple strings, numbers or booleans, but can
-also support complex data types like maps and lists of variable depth.
+also support complex data types like maps and lists of variable depth. These
+settings will become the values for the variables defined in either the
+`variables.tf` file for Terraform or `variable.pkr.hcl` file for Packer.
 
 For some resources, there are mandatory variables that must be set,
 therefore `settings` is a required field in that case. In many situations, a
@@ -137,23 +145,28 @@ have in the
 
 ## Common Settings
 
-TODO: merge with *Common Variable Naming Conventions*
+The following common naming conventions should be used to decrease the verbosity
+needed to define a blueprint via YAML. This is intentional to allow multiple
+resources to share inferred settings from global variables. For example, if all
+resources are to be created in a single region, that region can be defined as a
+global variable, which is shared between all resources without an explicit
+setting.
 
-There are a few common setting names that are consistent accross different
-HPC Toolkit resources. This is intentional to allow multiple resources to share
-inferred settings from global variables. These variables are listed and
-described below.
-
-* **project_id**: The associated GCP project ID of the project a resource (or
-  resources) will be created.
+* **project_id**: The GCP project ID in which to create the resource.
 * **deployment_name**: The name of the current deployment of a blueprint. This
-  can be changed either in the blueprint itself as needed or in the input yaml.
+  can help to avoid naming conflicts of resources when multiple deployments are
+  created from the same set of blueprints.
 * **region**: The GCP
-  [region](https://cloud.google.com/compute/docs/regions-zones) for the
-  resource(s)
+  [region](https://cloud.google.com/compute/docs/regions-zones) the resource
+  will be created in.
 * **zone**: The GCP [zone](https://cloud.google.com/compute/docs/regions-zones)
-  for the resource(s)
+  the resource will be created in.
 * **network_name**: The name of the network a resource will use or connect to.
+* **labels**:
+  [Labels](https://cloud.google.com/resource-manager/docs/creating-managing-labels)
+  added to the resource. In order to include any resource in advanced
+  monitoring, labels must be exposed. We strongly recommend that all resources
+  expose this variable.
 
 ## Writing Custom Resources
 

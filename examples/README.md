@@ -274,54 +274,12 @@ group will be defined in.
 
 #### Resources
 
-```yaml
-resources:
-  - source: ./resources/network/vpc
-    kind: terraform
-    id: mynetwork
-  - source: ./resources/file-system/filestore
-    kind: terraform
-    id: homedir
-    settings:
-      local_mount: "/home"
-```
+Resources are the building blocks of an HPC environment. They can be composed to
+create complex deployments using the config YAML. Several resources are provided
+by default in the [resources](../resources/README.md) folder.
 
-Resources describe the building blocks of an HPC blueprint. The expected fields
-in a resource are listed in more detail below.
-
-##### Source (Required)
-
-Source points to a local directory where the Resource has been defined. This
-directory must contain a `main.tf` and `variables.tf` for a Terraform resource
-or `*.pkr.hcl` and `variables.pkr.hcl` files for a Packer resource.
-
-Our intent is to support remote resources in the near future and so source could
-point to a git repository.
-
-##### Kind (Required)
-
-The kind of the resource. This can be either `terraform` or `packer`.
-
-##### ID (Required)
-
-A unique identifier string for this resource. This will allow other resources to
-reference outputs and variables of this resource as needed, for instance if a
-filesystem needs to know which network to connect to. The ID cannot be the same
-as another resource, even if they are defined in another resource group.
-
-For terraform resources, the ID will be rendered into the terraform module label
-at the top level main.tf file.
-
-##### Settings
-
-Settings is a map of arbitrary depth. The values provided here should map to the
-input variables described in the resource itself. For the provided resources, it
-is in either the `variables.tf` file for Terraform or `variable.pkr.hcl` file
-for Packer. Any required variables in the resource must be either in the
-resources settings or in the global variables.
-
-The description of a resource input and output variables is defined in the
-README.md file inside of each resource directory.
+To learn more about how to refer to a resource in a YAML, please consult the
+[resources README file.](../resources/README.md)
 
 ## Variables
 
@@ -389,14 +347,3 @@ everything inside will be provided as is to the resource.
 Whenever possible, config variables are preferred over literal variables. `ghpc`
 will perform basic validation making sure all config variables are defined
 before creating a blueprint making debugging quicker and easier.
-
-## Resources
-
-TODO: need to square with section above.
-
-Resources are the building blocks of an HPC environment. They can be composed to
-create complex deployments using the config YAML. Several resources are provided
-by default in the [resources](../resources/README.md) folder.
-
-To learn more about how to refer to a resource in a YAML, please consult the
-[resources README file.](../resources/README.md)
