@@ -6,7 +6,7 @@ The HPC Toolkit FrontEnd is a web application integrating several front-end and 
 
 The overall system design is described in the following figure. 
 
-[TODO: insert figure]
+![System Design](images/system-design.png) <!--TODO: refine this sketch-->
 
 In most cases, end users are expected to communicate with the cloud systems via the web front-end. Of course, users from a traditional supercomputing background may wish to work with HPC clusters from the command line. This is entirely possible and is covered in later sections.
 
