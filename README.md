@@ -100,7 +100,7 @@ Use these commands to run terraform and deploy your cluster. If the `apply` is
 successful, a message similar to the following will be displayed:
 
 ```shell
-Apply complete! Resources: 20 added, 0 changed, 0 destroyed.
+Apply complete! Resources: 13 added, 0 changed, 0 destroyed.
 ```
 
 > **_NOTE:_** Before you run this for the first time you may need to enable some
