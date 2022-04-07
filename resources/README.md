@@ -1,7 +1,8 @@
 # Resources
 
-This directory contains a set of resources built for the HPC Toolkit. These
-resources can be used to define components of an HPC cluster.
+This directory contains a set of resources built for the HPC Toolkit. Resources
+describe the building blocks of an HPC blueprint. The expected fields in a
+resource are listed in more detail below.
 
 ## Resource Fields
 
@@ -16,6 +17,7 @@ binary or a local file. It can also be a URL pointing to a github path
 containing a conforming module.
 
 #### Embedded Resources
+
 Embedded resources are embedded in the ghpc binary during compilation and cannot
 be edited. To refer to embedded resources, set the source path to
 `resources/<resource path>`. The paths match the resources in the repository at
@@ -71,15 +73,21 @@ either `terraform` or `packer`.
 
 ### ID (Required)
 
-The `id` field is used to uniquely identify and reference a definied resource.
+The `id` field is used to uniquely identify and reference a defined resource.
 ID's are used in [variables](../examples/README.md#variables) and become the
 name of each module when writing terraform resources. They are also used in the
 [use](#use) and [outputs](#outputs) lists described just below.
 
+For terraform resources, the ID will be rendered into the terraform module label
+at the top level main.tf file.
+
 ### Settings (May Be Required)
+
 The settings field is a map that supplies any user-defined variables for each
 resource. Settings values can be simple strings, numbers or booleans, but can
-also support complex data types like maps and lists of variable depth.
+also support complex data types like maps and lists of variable depth. These
+settings will become the values for the variables defined in either the
+`variables.tf` file for Terraform or `variable.pkr.hcl` file for Packer.
 
 For some resources, there are mandatory variables that must be set,
 therefore `settings` is a required field in that case. In many situations, a
@@ -137,21 +145,110 @@ have in the
 
 ## Common Settings
 
-There are a few common setting names that are consistent accross different
-HPC Toolkit resources. This is intentional to allow multiple resources to share
-inferred settings from global variables. These variables are listed and
-described below.
+The following common naming conventions should be used to decrease the verbosity
+needed to define a blueprint via YAML. This is intentional to allow multiple
+resources to share inferred settings from global variables. For example, if all
+resources are to be created in a single region, that region can be defined as a
+global variable, which is shared between all resources without an explicit
+setting.
 
-* **project_id**: The associated GCP project ID of the project a resource (or
-  resources) will be created.
+* **project_id**: The GCP project ID in which to create the resource.
 * **deployment_name**: The name of the current deployment of a blueprint. This
-  can be changed either in the blueprint itself as needed or in the input yaml.
+  can help to avoid naming conflicts of resources when multiple deployments are
+  created from the same set of blueprints.
 * **region**: The GCP
-  [region](https://cloud.google.com/compute/docs/regions-zones) for the
-  resource(s)
+  [region](https://cloud.google.com/compute/docs/regions-zones) the resource
+  will be created in.
 * **zone**: The GCP [zone](https://cloud.google.com/compute/docs/regions-zones)
-  for the resource(s)
+  the resource will be created in.
 * **network_name**: The name of the network a resource will use or connect to.
+* **labels**:
+  [Labels](https://cloud.google.com/resource-manager/docs/creating-managing-labels)
+  added to the resource. In order to include any resource in advanced
+  monitoring, labels must be exposed. We strongly recommend that all resources
+  expose this variable.
+
+## Writing Custom Resources
+
+Resources are flexible by design, however we do define some best practices when
+creating a new resource.
+
+### Terraform Requirements
+
+The resource source field must point to a single module. We recommend the
+following structure:
+
+* main.tf file composing the resources using provided variables.
+* variables.tf file defining the variables used.
+* (Optional) outputs.tf file defining any exported outputs used (if any).
+* (Optional) modules directory pointing to submodules needed to create the
+  resource.
+
+### General Best Practices
+
+* Variables for environment-specific values (like project_id) should not be
+  given defaults. This forces the calling module to provide meaningful values.
+* Variables should only have zero-value defaults (like null or empty strings)
+  where leaving the variable empty is a valid preference which will not be
+  rejected by the underlying API(s).
+* Set good defaults wherever possible. Be opinionated about HPC use cases.
+* Follow common variable [naming conventions](#common-settings).
+
+### Resource Role
+
+A resource role is a default label applied to resources (ghpc_role), which
+conveys what role that resource plays within a larger HPC environment.
+
+The resources provided with the HPC toolkit have been divided into roles
+matching the names of folders in this directory (ex: compute, file-system etc.).
+When possible, custom resources should use these roles so that they match other
+resources defined by the toolkit. If a custom resource does not fit into these
+roles, a new role can be defined.
+
+A resource’s parent folder will define the resource’s role. Therefore,
+regardless of where the resource is located, the resource directory should be
+explicitly referenced 2 layers deep, where the top layer refers to the “role” of
+that resource.
+
+If a resource is not defined 2 layers deep and the ghpc_role label has not been
+explicitly set in settings, ghpc_role will default to undefined.
+
+Below we show a few of the resources and their roles (as parent folders).
+
+```text
+resources/
+├── compute
+│   └── simple-instance
+├── file-system
+│   └── filestore
+├── network
+│   ├── pre-existing-vpc
+│   └── vpc
+├── packer
+│   └── custom-image
+├── scripts
+│   ├── omnia-install
+│   ├── startup-script
+│   └── wait-for-startup
+└── third-party
+    ├── compute
+    ├── file-system
+    └── scheduler
+```
+
+### Terraform Coding Standards
+
+Any Terraform based resources in the HPC Toolkit repo should implement the following standards:
+
+* terraform-docs is used to generate README files for each resource.
+* The first parameter listed under a module should be source (when referring to an external implementation).
+* The order for parameters in inputs should be:
+  * description
+  * type
+  * default
+* The order for parameters in outputs should be:
+  * description
+  * value
 
 ## Available Resources
 

@@ -105,6 +105,51 @@ the `-o` flag as shown in the following example.
 ./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
 ```
 
+## HPC Toolkit Components
+
+The HPC Toolkit has been designed to simplify the process of deploying a
+familiar HPC cluster on Google Cloud. The block diagram below describes the
+individual components of the HPC toolkit.
+
+```mermaid
+graph LR
+    subgraph Basic Customizations
+    A(1. GCP-provided reference configs.) --> B(2. Configuration YAML)
+    end
+    B --> D
+    subgraph Advanced Customizations
+    C(3. Resources, eg. Terraform, Scripts) --> D(4. ghpc Engine)
+    D --> E(5. Deployment Blueprint)
+    end
+    E --> F(6. HPC environment on GCP)
+```
+
+1. **GCP-provided reference configs** – A set of vetted reference configs can be
+   found in the examples directory. These can be used to create a predefined
+   blueprint for a cluster or as a starting point for creating a custom
+   blueprint.
+2. **Configuration YAML** – The primary interface to the HPC Toolkit is an input
+   YAML file that defines which resources to use and how to customize them.
+3. **gHPC Engine** – The gHPC engine converts the configuration YAML into a self-contained blueprint directory.
+4. **Resources** – The building blocks of a blueprint directory are the
+   resources. Resources can be found in the resources directory. They are
+   composed of terraform, packer and/or script files that meet the expectations
+   of the gHPC engine.
+5. **Deployment Blueprint** – A self-contained directory that can be used to
+   deploy a cluster onto Google Cloud. This is the output of the gHPC engine.
+6. **HPC environment on GCP** – After deployment of a blueprint, an HPC environment will be available in Google Cloud.
+
+Users can configure a set of resources, and using the gHPC Engine of the HPC
+Toolkit, they can produce a blueprint and deployment instructions for creating
+those resources. Terraform is the primary method for defining the resources
+behind the HPC cluster, but other resources based on tools like ansible and
+Packer are available.
+
+The HPC Toolkit can provide extra flexibility to configure a cluster to the
+specifications of a customer by making the blueprints directly available and
+editable before deployment. Any HPC customer seeking a quick on-ramp to building
+out their infrastructure on GCP can benefit from this.
+
 ## Deploying HPC Blueprints
 
 Blueprints are a set of resource groups each composed of Packer templates and
@@ -441,6 +486,46 @@ hpc-cluster-small/
       vpc/
 ```
 
+## `ghpc` Commands
+
+### Create
+
+``` shell
+./ghpc create <environment-definition.yaml>
+```
+
+The create command is the primary interface for the HPC Toolkit. This command takes the path to a environment definition file as input and creates a blueprint based on it. Further information on creating this config file, see [Writing Config YAML](examples/README.md#writing-config-yaml).
+
+By default, the blueprint directory will be created in the same directory as the
+`ghpc` binary and will have the name specified by the `blueprint_name` field
+from the input config. Optionally, the output directory can be specified with
+the `-o` flag as shown in the following example.
+
+```shell
+./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
+```
+
+### Expand
+
+```shell
+./ghpc expand <config.yaml> –out <expanded-config.yaml>
+```
+
+The expand command creates an expanded config file with all settings explicitly
+listed and variables expanded. This can be a useful tool for creating explicit,
+detailed examples and for debugging purposes. The expanded yaml is still valid
+as input to [`ghpc create`](#create) to create the blueprint.
+
+### Completion
+
+```shell
+./ghpc completion [bash|zsh|fish|powershell]
+```
+
+The completion command creates a shell completion config file for the specified shell. To apply the configuration file created by the command, it is required to set up for each shell. For example, loading the completion config by .bashrc is required for Bash.
+
+Call `ghpc completion --help` for shell specific setup instructions.
+
 ## Dependencies
 
 Much of the HPC Toolkit blueprint is built using Terraform and Packer, and
@@ -514,3 +599,10 @@ the following script against the packer config file:
 ```shell
 tools/autodoc/terraform_docs.sh resources/packer/new_resource/image.json
 ```
+
+### Contributing
+
+Please refer to the [contributing file](CONTRIBUTING.md) in our github repo, or
+to
+[Google’s Open Source documentation](https://opensource.google/docs/releasing/template/CONTRIBUTING/#).
+Before submitting, we recommend contributors run pre-commit tests (more below).
