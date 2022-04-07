@@ -24,6 +24,8 @@ from ..models import VirtualNetwork, VirtualSubnet
 
 from . import utils
 
+import logging
+logger = logging.getLogger(__name__)
 
 def create_vpc(vpc: VirtualNetwork) -> None:
 
