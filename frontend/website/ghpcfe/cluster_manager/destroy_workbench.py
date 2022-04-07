@@ -15,6 +15,7 @@
 import argparse
 
 from .utils import run_terraform, load_config
+from .workbenchinfo import WorkbenchInfo
 
 
 def destroy_workbench(workbench, token):
@@ -27,6 +28,9 @@ def destroy_workbench(workbench, token):
                 'accessKey' - DB access key
     '''
 
+    wb = WorkbenchInfo(workbench)
+    extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': wb._get_credentials_file()}
+
     config = load_config()
 
     workbench.status = 't'
@@ -35,7 +39,7 @@ def destroy_workbench(workbench, token):
     workbench_dir = config["baseDir"] / 'workbenches' / f'workbench_{workbench.id}'
 
     print("running destroy workbench " + str(workbench.id))
-    run_terraform(workbench_dir / 'terraform' / 'google', 'destroy')
+    run_terraform(workbench_dir / 'terraform' / 'google', 'destroy', extraEnv=extraEnv)
     workbench.status = 'd'
     workbench.cloud_status = 'xm'
     workbench.save()

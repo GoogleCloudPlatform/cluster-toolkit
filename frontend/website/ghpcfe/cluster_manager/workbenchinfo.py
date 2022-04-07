@@ -51,6 +51,9 @@ class WorkbenchInfo:
         self.copy_terraform()
         self.copy_startup_script()
         self.prepare_terraform_vars()
+    
+    def _get_credentials_file(self):
+        return self.workbench_dir / 'cloud_credentials'
 
     def get_credentials_file(self):
         return self.workbench_dir / 'cloud_credentials'
@@ -108,7 +111,6 @@ USER=`curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?p
 region = "{region}"
 zone = "{zone}"
 project_name = "{project}"
-credentials = "{self.get_credentials_file().resolve().as_posix()}"
 subnet_name = "{subnet}"
 machine_type = "{self.workbench.machine_type}"
 boot_disk_type = "{self.workbench.boot_disk_type}"
@@ -133,10 +135,13 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
     def initialize_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
+        extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': self._get_credentials_file()}
+        #            utils.run_terraform(tfDir, "validate", extraEnv=extraEnv)
+
         try:
             utils.run_terraform(tfDir / self.cloud_dir, "init")
-            utils.run_terraform(tfDir / self.cloud_dir, "validate")
-            utils.run_terraform(tfDir / self.cloud_dir, "plan")
+            utils.run_terraform(tfDir / self.cloud_dir, "validate", extraEnv=extraEnv)
+            utils.run_terraform(tfDir / self.cloud_dir, "plan", extraEnv=extraEnv)
         except subprocess.CalledProcessError as cpe:
             if cpe.stdout:
                 print(cpe.stdout.decode('utf-8'))
@@ -147,8 +152,9 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
     def run_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
+        extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': self._get_credentials_file()}
         try:
-            (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply")
+            (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply", extraEnv=extraEnv)
             # Look for Management Public IP in terraform.tfstate
             stateFile = tfDir / self.cloud_dir / 'terraform.tfstate'
             with stateFile.open('r') as statefp:
@@ -180,6 +186,8 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
     def get_workbench_proxy_uri(self):
         # set terraform dir
         tfDir = self.workbench_dir / 'terraform'
+        extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': self._get_credentials_file()}
+
         try:
             stateFile = tfDir / self.cloud_dir / 'terraform.tfstate'
             if os.path.exists(stateFile):
@@ -187,7 +195,7 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
                 check_time = datetime.utcnow() - timedelta(seconds=60)
                 
                 if file_time < check_time:
-                    (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply", ["-refresh-only"])
+                    (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply", ["-refresh-only"], extraEnv=extraEnv)
                     
                     with stateFile.open('r') as statefp:
                         state = json.load(statefp)
