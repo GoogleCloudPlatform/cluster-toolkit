@@ -20,6 +20,6 @@ terraform {
   required_providers {
     google = ">= 3.87.0"
     random = ">= 2.0"
-    time   = ">= 1.0"
+    time   = ">= 0.7.2"
   }
 }
