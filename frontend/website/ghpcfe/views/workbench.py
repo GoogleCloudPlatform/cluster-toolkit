@@ -241,7 +241,6 @@ class BackendCreateWorkbench(BackendAsyncView):
 
         args = await self.get_orm(pk)
         await self.create_task("Create Workbench", *args)
-        #return HttpResponseRedirect(reverse('workbench-detail', kwargs={'pk':pk}))
         return HttpResponseRedirect(reverse('workbench-update', kwargs={'pk':pk}))
 
 class BackendStartWorkbench(BackendAsyncView):
