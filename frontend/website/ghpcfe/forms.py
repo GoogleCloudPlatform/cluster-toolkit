@@ -167,9 +167,13 @@ class WorkbenchForm(forms.ModelForm):
         cleaned_data = super().clean()
         subnet = cleaned_data.get("subnet")
 
-        # if subnet.cloud_zone not in self.workbench_zones:
-        #     validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_zone + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
-        #     raise forms.ValidationError(mark_safe(validation_error_message))
+        print("Workbench zones:")
+        print(self.workbench_zones)
+        print("subnet cloud_region")
+        print(subnet.cloud_region)
+        if subnet.cloud_region not in self.workbench_zones:
+            validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_region + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
+            raise forms.ValidationError(mark_safe(validation_error_message))
 
         user = cleaned_data.get("trusted_users")
         #check user is associated with a social login account
