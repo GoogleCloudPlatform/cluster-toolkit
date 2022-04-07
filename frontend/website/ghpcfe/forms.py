@@ -42,14 +42,12 @@ class UserUpdateForm(UserChangeForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['ssh_key'].label = "SSH key"
 
     class Meta:
         model = User
-        fields = ('email','ssh_key',)
+        fields = ('email',)
         widgets = {
             'email': forms.TextInput(attrs={'class': 'form-control'}),
-            'ssh_key': forms.Textarea(attrs={'class': 'form-control'}),
         }
 
 class UserAdminUpdateForm(forms.ModelForm):

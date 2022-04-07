@@ -77,7 +77,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('username', 'first_name', 'last_name', 'ssh_key', 'unix_id')
+        fields = ('username', 'first_name', 'last_name')
 
 
 class TaskSerializer(serializers.ModelSerializer):

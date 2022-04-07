@@ -77,19 +77,6 @@ class User(AbstractUser):
     """ A custom User model extending the base Django one """
 
     roles = models.ManyToManyField(Role)
-    ssh_key = models.TextField(
-        max_length = 3072,
-        help_text = 'If required, provide your public key to SSH into the cluster head node',
-        blank = True,
-        null = True,
-    )
-    # this field is set automatically from the post_save signal
-    unix_id = models.PositiveIntegerField(
-        validators = [MinValueValidator(1000)],
-        help_text = "Unix ID for the user on the clusters and fileystems",
-        blank = True,
-        null = True,
-    )
     QUOTA_TYPE = (
         ('u', 'Unlimited compute spend'),
         ('l', 'Limited compute spend'),
@@ -187,9 +174,6 @@ def user_post_save(sender, instance=None, created=False, **kwargs):
     if created:
         # generate API token
         Token.objects.create(user=instance)
-        # assign a UNIX ID to this user
-        instance.unix_id = instance.id + 9999
-        instance.save()
         # by default set new user to 'ordinary user'
         if instance.id > 1:
             instance.roles.set([Role.NORMALUSER])
