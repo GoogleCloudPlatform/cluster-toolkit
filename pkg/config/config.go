@@ -16,12 +16,15 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"regexp"
 	"strings"
 
+	"github.com/zclconf/go-cty/cty"
+	ctyJson "github.com/zclconf/go-cty/cty/json"
 	"gopkg.in/yaml.v2"
 
 	"hpc-toolkit/pkg/resreader"
@@ -404,4 +407,31 @@ func HandleLiteralVariable(str string) string {
 	}
 
 	return strings.TrimSpace(contents[1])
+}
+
+// ConvertToCty convert interface directly to a cty.Value
+func ConvertToCty(val interface{}) (cty.Value, error) {
+	// Convert to JSON bytes
+	jsonBytes, err := json.Marshal(val)
+	if err != nil {
+		return cty.Value{}, err
+	}
+
+	// Unmarshal JSON into cty
+	simpleJSON := ctyJson.SimpleJSONValue{}
+	simpleJSON.UnmarshalJSON(jsonBytes)
+	return simpleJSON.Value, nil
+}
+
+// ConvertMapToCty convert an interface map to a map of cty.Values
+func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) {
+	cMap := make(map[string]cty.Value)
+	for k, v := range iMap {
+		convertedVal, err := ConvertToCty(v)
+		if err != nil {
+			return cMap, err
+		}
+		cMap[k] = convertedVal
+	}
+	return cMap, nil
 }
