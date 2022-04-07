@@ -14,16 +14,18 @@
 
 """ jobs.py """
 
+from decimal import Decimal
 from asgiref.sync import sync_to_async
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import redirect_to_login
 from django.contrib import messages
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.views import generic
 from django.shortcuts import get_object_or_404
+from ..permissions import SuperUserRequiredMixin
 from ..models import Application, Job, Role, InstanceType, Cluster
 from ..serializers import JobSerializer
 from ..forms import JobForm
@@ -119,19 +121,58 @@ class JobCreateView2(LoginRequiredMixin, generic.CreateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.user = self.request.user
-        self.object.cost = self.request.POST.get('cost')[1:] # remove $
+
+        # Can't trust client side input for these... (bad user, no cookie)
+        # self.object.node_price = self.request.POST.get('node_price')
+        # self.object.job_cost = self.request.POST.get('job_cost')
+        cluster = self.object.cluster
+        instance_type = self.object.partition.machine_type
+
+        try:
+            node_price_float = cloud_info.get_instance_pricing("GCP",
+                                                       cluster.cloud_credential.detail,
+                                                       cluster.cloud_region,
+                                                       cluster.cloud_zone,
+                                                       instance_type.name)
+            self.object.node_price = Decimal(node_price_float)
+            print("Got api price {}".format(self.object.node_price))
+        except Exception as err:
+            form.add_error(None, "Error: Pricing API Unavailable. Please retry in a few moments {}".format(err))
+            return self.form_invalid(form)
+
+        self.object.job_cost = self.object.node_price * self.object.number_of_nodes * self.object.wall_clock_time_limit/Decimal(60)
+
+
+        if self.object.user.quota_type == "d":
+            form.add_error(None, "Error: Cannot submit job. User quota disabled")
+            return self.form_invalid(form)
+        if self.object.user.quota_type == "l":
+            quota_remaining = self.object.user.quota_amount - self.object.user.total_spend()
+            # Fudge to nearest cent to avoid "apparently equal" issues in user display
+            if self.object.job_cost > (quota_remaining - Decimal(0.005)):
+                form.add_error(None,
+                               "Error: Insufficient quota remaining (have ${:0.2f}, "
+                               "job would require ${:0.2f}"
+                               "".format(quota_remaining, self.object.job_cost))
+                return self.form_invalid(form)
+
         self.object.save()
         return HttpResponseRedirect(self.get_success_url())
 
 
     def get_initial(self):
         cluster = get_object_or_404(Cluster, pk=self.kwargs['cluster'])
-        return {'cluster': cluster, 'application': Application.objects.get(pk=self.kwargs['app'])}
+        return {'cluster': cluster,
+                'application': Application.objects.get(pk=self.kwargs['app']),
+                'wall_clock_time_limit': 120}
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         application = get_object_or_404(Application, pk=self.kwargs['app'])
         cluster = get_object_or_404(Cluster, pk=self.kwargs['cluster'])
+
+        context['user_quota_type'] = self.request.user.quota_type
+        context['user_quota_remaining'] = self.request.user.quota_amount - self.request.user.total_spend()
 
         context['application'] = application
         context['cluster'] = cluster
@@ -151,7 +192,40 @@ class JobRerunView(LoginRequiredMixin, generic.CreateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.user = self.request.user
-        self.object.cost = self.request.POST.get('cost')[1:] # remove $
+
+        # Can't trust client side input for these... (bad user, no cookie)
+        # self.object.node_price = self.request.POST.get('node_price')
+        # self.object.job_cost = self.request.POST.get('job_cost')
+        cluster = self.object.cluster
+        instance_type = self.object.partition.machine_type
+
+        try:
+            node_price_float = cloud_info.get_instance_pricing("GCP",
+                                                       cluster.cloud_credential.detail,
+                                                       cluster.cloud_region,
+                                                       cluster.cloud_zone,
+                                                       instance_type.name)
+            self.object.node_price = Decimal(node_price_float)
+            print("Got api price {}".format(self.object.node_price))
+        except Exception as err:
+            form.add_error(None, "Error: Pricing API Unavailable. Please retry in a few moments {}".format(err))
+            return self.form_invalid(form)
+
+        self.object.job_cost = self.object.node_price * self.object.number_of_nodes * self.object.wall_clock_time_limit/Decimal(60)
+
+
+        if self.object.user.quota_type == "d":
+            form.add_error(None, "Error: Cannot submit job. User quota disabled")
+            return self.form_invalid(form)
+        if self.object.user.quota_type == "l":
+            quota_remaining = self.object.user.quota_amount - self.object.user.total_spend()
+            # Fudge to nearest cent to avoid "apparently equal" issues in user display
+            if self.object.job_cost > (quota_remaining - Decimal(0.005)):
+                form.add_error(None,
+                               "Error: Insufficient quota remaining (have ${:0.2f}, "
+                               "job would require ${:0.2f}"
+                               "".format(quota_remaining, self.object.job_cost))
+                return self.form_invalid(form)
         self.object.save()
         return HttpResponseRedirect(self.get_success_url())
 
@@ -183,6 +257,9 @@ class JobRerunView(LoginRequiredMixin, generic.CreateView):
         else:
             run_script_type = 'url'
 
+        context['user_quota_type'] = self.request.user.quota_type
+        context['user_quota_remaining'] = self.request.user.quota_remaining()
+
         context['application'] = application
         context['cluster'] = cluster
         context['navtab'] = 'job'
@@ -205,8 +282,12 @@ class JobUpdateView(LoginRequiredMixin, generic.UpdateView):
         return context
 
 
-class JobDeleteView(LoginRequiredMixin, generic.DeleteView):
+class JobDeleteView(SuperUserRequiredMixin, generic.DeleteView):
     """ Custom DeleteView for Job model """
+
+    # Note on SuperUserRequiredMixin use here:
+    # Current cost management model means spend is tied to job records users
+    # deleting their own jobs would therefore allow them to delete their spend
 
     model = Job
     success_url = reverse_lazy('jobs')
@@ -283,14 +364,18 @@ class BackendJobRun(LoginRequiredMixin, generic.View):
                 job.status = 'n'
                 return HttpResponseRedirect(reverse('job-detail', kwargs={'pk':pk}))
 
+
         def response(message):
             if message.get('cluster_id') != cluster_id:
                 logger.error(f"Cluster ID Mis-match to Callback!  Expected {pk}, Received {message.get('cluster_id')}")
             if message.get('job_id') != pk:
                 logger.error(f"Job ID Mis-match to Callback!  Expected {pk}, Received {message.get('job_id')}")
 
+
             job = Job.objects.get(pk=pk)
             job.status = message['status']
+            logger.info(f"Processing job message, id %d, status %s", pk, job.status)
+
             if 'slurm_job_id' in message and not job.slurm_jobid:
                 job.slurm_jobid = message['slurm_job_id']
 
@@ -298,6 +383,7 @@ class BackendJobRun(LoginRequiredMixin, generic.View):
                 job.runtime = message.get('job_runtime', None)
                 job.result_unit = message.get('result_unit', '')
                 job.result_value = message.get('result_value', None)
+                job.job_cost = job.number_of_nodes * job.runtime/Decimal(3600) * job.node_price
             job.save()
 
 

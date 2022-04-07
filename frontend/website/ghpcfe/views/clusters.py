@@ -14,6 +14,7 @@
 
 """ clusters.py """
 
+from collections import defaultdict
 import json
 from pathlib import Path
 from asgiref.sync import sync_to_async
@@ -38,7 +39,7 @@ from django.contrib import messages
 from django.conf import settings
 from ..models import Application, Cluster, Credential, Job, \
     MachineType, InstanceType, Filesystem, FilesystemExport, MountPoint, \
-    FilesystemImpl, Role, ClusterPartition, VirtualSubnet, Task
+    FilesystemImpl, Role, ClusterPartition, VirtualSubnet, Task, User
 from ..serializers import ClusterSerializer
 from ..forms import ClusterForm, ClusterMountPointForm, ClusterPartitionForm
 from ..cluster_manager import cloud_info, c2, utils
@@ -350,6 +351,20 @@ class ClusterCostView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'cluster'
+
+        cluster_users = []
+        for user in User.objects.all():
+            spend = user.total_spend(cluster_id=context['cluster'].id)
+            if spend > 0:
+                cluster_users.append((spend, user.total_jobs(cluster_id=context['cluster'].id), user))
+
+        cluster_apps = []
+        for app in Application.objects.filter(cluster=context['cluster'].id):
+            cluster_apps.append((app.total_spend(), app))
+
+
+        context['users_by_spend'] = sorted(cluster_users, key=lambda x: x[0], reverse=True)
+        context['apps_by_spend'] = sorted(cluster_apps, key=lambda x: x[0], reverse=True)
         return context
 
 

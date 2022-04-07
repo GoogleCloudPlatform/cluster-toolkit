@@ -1,0 +1,12 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>User Detail</h2>
+    <p><b>Username:</b> {{ object.username }}</p>
+    <p><b>User ID:</b> {{ object.id }}</p>
+    <p><b>Email:</b> {{ object.email }}</p>
+    <p><b>Total Spend:</b> {{ user.total_spend }}</p>
+    <p><b>Quota Type:</b> {{ user.get_quota_type_display }}</p>
+    {% if user.quota_type == "l" %}<p><b>Quota Amount:</b> ${{ user.quota_amount }}</p>{% endif %}
+    <a href="{% url 'user-admin' object.id %}" class="btn btn-primary">Manage</a>
+{% endblock %}

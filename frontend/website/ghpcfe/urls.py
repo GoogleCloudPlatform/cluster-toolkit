@@ -129,6 +129,12 @@ urlpatterns += [
     path('filesystem/filestore/edit/<int:pk>', GCPFilestoreFilesystemUpdateView.as_view(), name='filestore-update'),
 ]
 
+urlpatterns += [
+    path('users/', UserListView.as_view(), name='users'),
+    path('user/detail/<int:pk>', UserDetailView.as_view(), name='user-detail'),
+    path('user/admin/<int:pk>', UserAdminUpdateView.as_view(), name='user-admin'),
+]
+
 # For APIs
 
 router = routers.DefaultRouter()

@@ -17,6 +17,7 @@
 import itertools
 import json
 import re
+from decimal import Decimal
 import uuid, dill, base64
 from django.db import models
 from django.contrib.auth.models import AbstractUser
@@ -76,19 +77,66 @@ class User(AbstractUser):
     """ A custom User model extending the base Django one """
 
     roles = models.ManyToManyField(Role)
-    ssh_key = models.TextField(
-        max_length = 3072,
-        help_text = 'If required, provide your public key to SSH into the cluster head node',
-        blank = True,
-        null = True,
+    QUOTA_TYPE = (
+        ('u', 'Unlimited compute spend'),
+        ('l', 'Limited compute spend'),
+        ('d', 'Compute disabled'),
     )
-    # this field is set automatically from the post_save signal
-    unix_id = models.PositiveIntegerField(
-        validators = [MinValueValidator(1000)],
-        help_text = "Unix ID for the user on the clusters and fileystems",
-        blank = True,
-        null = True,
+    quota_type = models.CharField(
+        max_length = 1,
+        choices = QUOTA_TYPE,
+        default = 'd',
+        help_text = 'User Compute Quota Type',
     )
+    quota_amount = models.DecimalField(
+            max_digits=8,
+            decimal_places=2,
+            help_text = "Maximum allowed spend ($)",
+            default = 0
+            )
+
+    def total_spend(self, date_range=None, cluster_id=None):
+        filters={'user':self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        if cluster_id:
+            filters['cluster'] = cluster_id
+
+        jobs = Job.objects.filter(**filters)
+
+        total_spend = Decimal(0)
+        for job in jobs:
+            total_spend += job.job_cost
+
+        return total_spend
+
+    def total_jobs(self, date_range=None, cluster_id=None):
+        filters={'user':self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        if cluster_id:
+            filters['cluster'] = cluster_id
+
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
+
+    def quota_remaining(self):
+        return self.quota_amount - self.total_spend()
+
+    def check_sufficient_quota_for_job(self, job_cost):
+        # Quota checks
+        if self.quota_type == 'u':
+            return True
+        if self.quota_type == 'd':
+            return False
+
+        if quota_type == 'l':
+            current_used = self.total_spend()
+            if (current_used + job_cost) < self.quota_amount:
+                return True
+
+        return False
 
     def get_avatar_url(self):
         """ If using social login, return the Google profile picture if available """
@@ -126,9 +174,6 @@ def user_post_save(sender, instance=None, created=False, **kwargs):
     if created:
         # generate API token
         Token.objects.create(user=instance)
-        # assign a UNIX ID to this user
-        instance.unix_id = instance.id + 9999
-        instance.save()
         # by default set new user to 'ordinary user'
         if instance.id > 1:
             instance.roles.set([Role.NORMALUSER])
@@ -525,6 +570,29 @@ class Cluster(CloudResource):
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
 
+    def total_cost(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'cluster': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        total_cost = Decimal(0)
+        for job in jobs:
+            total_cost += job.job_cost
+
+        return total_cost
+
+    def total_jobs(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'cluster': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
+
+
     def __str__(self):
         """String for representing the Model object."""
         return f"Cluster '{self.name}'"
@@ -712,6 +780,28 @@ class Application(models.Model):
     def __str__(self):
         """String for representing the Model object."""
         return f'{self.name} - {self.get_status_display()}'
+
+    def total_spend(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'application': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        total_spend = Decimal(0)
+        for job in jobs:
+            total_spend += job.job_cost
+
+        return total_spend
+
+    def total_jobs(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'application': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
 
 
 class CustomInstallationApplication(Application):
@@ -902,12 +992,19 @@ class Job(models.Model):
         blank = True,
         null = True,
     )
-    cost = models.DecimalField(
+    node_price = models.DecimalField(
         max_digits=8,
         decimal_places=3,
-        help_text = 'Job cost hour rate',
+        help_text = 'Node price - hourly rate',
         blank = True,
         null = True,
+    )
+    job_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        help_text = 'Total job cost (predicted or actual)',
+        blank = True,
+        default = 0.0
     )
     result_unit = models.CharField(
         max_length = 20,

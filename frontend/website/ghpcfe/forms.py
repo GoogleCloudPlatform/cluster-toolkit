@@ -42,15 +42,28 @@ class UserUpdateForm(UserChangeForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['ssh_key'].label = "SSH key"
 
     class Meta:
         model = User
-        fields = ('email','ssh_key',)
+        fields = ('email',)
         widgets = {
             'email': forms.TextInput(attrs={'class': 'form-control'}),
-            'ssh_key': forms.Textarea(attrs={'class': 'form-control'}),
         }
+
+class UserAdminUpdateForm(forms.ModelForm):
+    """ Custom form for Admin update of users """
+
+
+    class Meta:
+        model = User
+        fields = ('username', 'email', 'roles', 'quota_type', 'quota_amount',)
+        widgets = {
+                'username': forms.TextInput(attrs={'class': 'form-control'}),
+                'email': forms.TextInput(attrs={'class': 'form-control'}),
+                'roles': forms.SelectMultiple(attrs={'class': 'form-control'}),
+                'quota_type': forms.Select(attrs={'class': 'form-control', 'disabled': False}),
+                'quota_amount': forms.NumberInput(attrs={'class':'form-control'})
+                }
 
 
 class CredentialForm(forms.ModelForm):
@@ -390,7 +403,7 @@ class JobForm(forms.ModelForm):
             'number_of_nodes': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'ranks_per_node': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'threads_per_rank': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'readonly': True}),
-            'wall_clock_time_limit': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
+            'wall_clock_time_limit': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'run_script': forms.URLInput(attrs={'class': 'form-control'}),
             'input_data': forms.URLInput(attrs={'class': 'form-control'}),
             'result_data': forms.URLInput(attrs={'class': 'form-control'}),
@@ -402,6 +415,7 @@ class JobForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         cluster = kwargs['initial']['cluster']
         self.fields['partition'].queryset = cluster.partitions
+
 
 
 class BenchmarkForm(forms.ModelForm):

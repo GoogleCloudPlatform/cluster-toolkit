@@ -24,6 +24,7 @@
         <th scope="col">Ranks / node</th>
         <th scope="col">Threads / rank</th>
         <th scope="col">Status</th>
+        <th scope="col">Cost</th>
         <th scope="col">Actions</th>
       </tr>
     </thead>
@@ -54,6 +55,7 @@
           {% endif %}
           {{ job.get_status_display }}
         </td>
+	<td>{% if job.status != "c" and job.status != "e" %}<={% endif %}${{ job.job_cost }}</td>
         <td>
           <div class="dropdown">
             <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">

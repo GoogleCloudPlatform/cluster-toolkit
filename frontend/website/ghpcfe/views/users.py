@@ -14,18 +14,38 @@
 
 """ users.py """
 
+from collections import defaultdict
+from decimal import Decimal
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.views import generic
-from ..models import User
+from ..models import User, Job
 from ..serializers import UserSerializer
-from ..forms import UserUpdateForm
+from ..forms import UserUpdateForm, UserAdminUpdateForm
+from ..permissions import SuperUserRequiredMixin
 
 
 # list views
+class UserListView(SuperUserRequiredMixin, generic.ListView):
+    model = User
+    template_name = 'user/list.html'
 
+
+class UserDetailView(SuperUserRequiredMixin, generic.DetailView):
+    model = User
+    template_name = 'user/detail.html'
+
+
+class UserAdminUpdateView(SuperUserRequiredMixin, generic.UpdateView):
+    model = User
+    template_name = "user/adminupdate_form.html"
+    form_class = UserAdminUpdateForm
+
+
+    def get_success_url(self):
+        return reverse('user-detail', kwargs={'pk': self.object.pk})
 
 # create/update views
 class AccountUpdateView(LoginRequiredMixin, generic.UpdateView):
@@ -39,7 +59,9 @@ class AccountUpdateView(LoginRequiredMixin, generic.UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'home'
+        context['quota_type_friendly'] = User.QUOTA_TYPE
         return context
+
     def setup(self, request, *args, **kwargs):
         kwargs['pk'] = request.user.id
         print("Called AccountUpdateView setup()")
