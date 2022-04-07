@@ -38,7 +38,6 @@ def destroy_workbench(workbench, token):
     workbench.save()
     workbench_dir = config["baseDir"] / 'workbenches' / f'workbench_{workbench.id}'
 
-    print("running destroy workbench " + str(workbench.id))
     run_terraform(workbench_dir / 'terraform' / 'google', 'destroy', extraEnv=extraEnv)
     workbench.status = 'd'
     workbench.cloud_status = 'xm'

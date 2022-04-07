@@ -133,13 +133,11 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
     form_class = WorkbenchForm
 
     def get_form_kwargs(self):
-        print("Getting kwargs")
         kwargs = super().get_form_kwargs()
         kwargs['user'] = self.request.user
         return kwargs
 
     def get_context_data(self, **kwargs):
-        print("Getting context datat")
         """ Perform extra query to populate instance types data """
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'workbench'
@@ -148,7 +146,6 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
         return context
 
     def get_mp_formset(self, **kwargs):
-        print("getting mp formset")
         def formfield_cb(modelField, **kwargs):
             field = modelField.formfield(**kwargs)
             if modelField.name == 'export':

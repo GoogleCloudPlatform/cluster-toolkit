@@ -34,6 +34,7 @@ from datetime import timedelta
 
 from . import utils
 from ..models import WorkbenchMountPoint
+
 class WorkbenchInfo:
 
     def __init__(self, workbench):
@@ -160,7 +161,6 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
             with stateFile.open('r') as statefp:
                 state = json.load(statefp)
                 workbench_name = state["outputs"]["workbench_id"]["value"]
-                print(f"Created workbench {workbench_name}, url not available yet")
                 # workbench is now being initialized
                 self.workbench.internal_name = workbench_name
                 self.workbench.cloud_state = 'm'

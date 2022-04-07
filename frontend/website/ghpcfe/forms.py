@@ -171,11 +171,7 @@ class WorkbenchForm(forms.ModelForm):
         #     validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_zone + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
         #     raise forms.ValidationError(mark_safe(validation_error_message))
 
-        #validate user has an email address that we can pass to GCP 
         user = cleaned_data.get("trusted_users")
-        # if not user.email:
-        #     raise forms.ValidationError("User has no email address")
-
         #check user is associated with a social login account
         try:
             if user.socialaccount_set.first().uid:
@@ -194,6 +190,11 @@ class WorkbenchForm(forms.ModelForm):
         zone_choices = None
         if 'zone_choices' in kwargs:
             zone_choices = kwargs.pop('zone_choices')
+        
+        if self.instance.id:
+            for field in self.fields:
+                if field != "name":
+                    self.fields[field].widget.attrs['readonly'] = True
 
         self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential).filter(Q(cloud_state="i")|Q(cloud_state="m"))
         if zone_choices:
