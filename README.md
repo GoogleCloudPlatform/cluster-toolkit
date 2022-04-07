@@ -113,7 +113,7 @@ individual components of the HPC toolkit.
 
 ```mermaid
 graph LR
-    subgraph GCP Supported Customizations
+    subgraph Basic Customizations
     A(1. GCP-provided reference configs.) --> B(2. Configuration YAML)
     end
     B --> D

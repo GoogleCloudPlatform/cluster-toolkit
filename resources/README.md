@@ -170,34 +170,40 @@ setting.
 
 ## Writing Custom Resources
 
-Resources are much more flexible by design, however we do define some best practices when creating a new resource.
+Resources are flexible by design, however we do define some best practices when
+creating a new resource.
 
 ### Terraform Requirements
 
-The resource source field must point to a single module. We recommend the following structure:
+The resource source field must point to a single module. We recommend the
+following structure:
 
 * main.tf file composing the resources using provided variables.
 * variables.tf file defining the variables used.
 * (Optional) outputs.tf file defining any exported outputs used (if any).
-* (Optional) modules directory pointing to submodules needed to create the resource.
+* (Optional) modules directory pointing to submodules needed to create the
+  resource.
 
 ### General Best Practices
 
-* Variables for environment-specific values (like project_id) should not be given defaults. This forces the calling module to provide meaningful values.
-* Variables should only have zero-value defaults (like null or empty strings) where leaving the variable empty is a valid preference which will not be rejected by the underlying API(s).
+* Variables for environment-specific values (like project_id) should not be
+  given defaults. This forces the calling module to provide meaningful values.
+* Variables should only have zero-value defaults (like null or empty strings)
+  where leaving the variable empty is a valid preference which will not be
+  rejected by the underlying API(s).
 * Set good defaults wherever possible. Be opinionated about HPC use cases.
-* Follow common variable naming conventions described below
+* Follow common variable [naming conventions](#common-settings).
 
 ### Resource Role
 
 A resource role is a default label applied to resources (ghpc_role), which
 conveys what role that resource plays within a larger HPC environment.
 
-The standard resources provided with the HPC toolkit include 4 roles currently:
-compute, file-system, network and scheduler. When possible, custom resources
-should use these roles so that they match other resources defined by the
-toolkit. If a custom resource does not fit into these roles, a new role can be
-defined.
+The resources provided with the HPC toolkit have been divided into roles
+matching the names of folders in this directory (ex: compute, file-system etc.).
+When possible, custom resources should use these roles so that they match other
+resources defined by the toolkit. If a custom resource does not fit into these
+roles, a new role can be defined.
 
 A resource’s parent folder will define the resource’s role. Therefore,
 regardless of where the resource is located, the resource directory should be
