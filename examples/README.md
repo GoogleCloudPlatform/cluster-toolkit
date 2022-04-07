@@ -152,6 +152,50 @@ omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
 
+### image-builder.yaml
+
+This Blueprint helps create custom VM images by applying necessary software and
+configurations to existing images, such as the [HPC VM Image][hpcimage].
+Using a custom VM image can be more scalable than installing software using
+boot-time startup scripts because
+
+* it avoids reliance on continued availability of package repositories
+* VMs will join an HPC cluster and execute workloads more rapidly due to reduced
+  boot-time configuration
+* machines are guaranteed to boot with a static set of packages available when
+  the custom image was created. No potential for some machines to be upgraded
+  relative to other based upon their creation time!
+
+[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+
+**Note**: it is important _not to modify_ the subnetwork name in either of the
+two resource groups without modifying them both. These _must_ match!
+
+#### Custom Network (resource group)
+
+A tool called [Packer](https://packer.io) builds custom VM images by creating
+short-lived VMs, executing scripts on them, and saving the boot disk as an
+image that can be used by future VMs. The short-lived VM must operate in a
+network that
+
+* has outbound access to the internet for downloading software
+* has SSH access from the machine running Packer so that local files/scripts
+  can be copied to the VM
+
+This resource group creates such a network, while using [Cloud Nat][cloudnat]
+and [Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
+connections without exposing the machine to the internet on a public IP address.
+
+[cloudnat]: https://cloud.google.com/nat/docs/overview
+[iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
+
+#### Packer Template (resource group)
+
+The Packer template in this resource group accepts a list of Ansible playbooks
+which will be run on the VM to customize it.  Although it defaults to creating
+VMs with a public IP address, it can be easily set to use [IAP][iap] for SSH
+tunneling following the [example in its README](../resources/packer/custom-image/README.md).
+
 ## Config Schema
 
 A user defined config should follow the following schema:
