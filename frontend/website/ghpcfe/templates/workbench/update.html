@@ -6,11 +6,7 @@
 
 {% block content %}
   <h2>Workbench Detail</h2>
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
+
       <b>Status:</b>
       {% if workbench.status == "c" or workbench.status == "i" or workbench.status  == "t"  %}
           <img src="/static/img/loading.gif" style="width:32px;height:32px;">

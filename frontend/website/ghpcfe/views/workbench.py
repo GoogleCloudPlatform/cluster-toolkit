@@ -109,7 +109,7 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
         self.object.cloud_region = self.object.subnet.cloud_region;
         self.object.save()
         form.save_m2m()
-        messages.success(self.request, "A record for this workbench has been created. Click the 'Edit' button to customise it.")
+        messages.success(self.request, "A record for this workbench has been created. Please add any desired storage")
         return HttpResponseRedirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
@@ -189,9 +189,7 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
             self.object = form.save()
             workbenchmountpoints.instance = self.object
             workbenchmountpoints.save()
-        msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Create' button to provision the cluster."
-        if (self.object.status == 'r'):
-            msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Sync Cluster' button to apply changes."
+        msg = "Workbench configuration updated. Click create to provision the workbench"
         messages.success(self.request, msg)
         return super().form_valid(form)
 
