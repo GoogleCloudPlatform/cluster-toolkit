@@ -357,9 +357,8 @@ func writeVersions(dst string) error {
 
 func printTerraformInstructions(grpPath string) {
 	printInstructionsPreamble("Terraform", grpPath)
-	fmt.Printf("  cd %s\n", grpPath)
-	fmt.Println("  terraform init")
-	fmt.Println("  terraform apply")
+	fmt.Printf("  terraform -chdir=%s init\n", grpPath)
+	fmt.Printf("  terraform -chdir=%s apply\n", grpPath)
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
