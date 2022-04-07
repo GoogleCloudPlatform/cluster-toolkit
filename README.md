@@ -23,9 +23,9 @@ You must first set up Cloud Shell to authenticate with GitHub. We will use an
 SSH key.
 
 > **_NOTE:_** You can skip this step if you have previously set up cloud shell
-> with GitHub.
+> with GitHub.\
 > **_NOTE:_** You can find much more detailed instructions for this step in the
-> [GitHub docs](https://docs.github.com/en/authentication/connecting-to-github-with-ssh).
+> [GitHub docs](https://docs.github.com/en/authentication/connecting-to-github-with-ssh).\
 > **_NOTE:_** This step is only required during the private preview of the
 > HPC-Toolkit.
 
@@ -52,7 +52,7 @@ cd hpc-toolkit && make
 You should now have a binary named `ghpc` in the project root directory.
 Optionally, you can run `./ghpc --version` to verify the build.
 
-## Creating HPC Blueprints
+## Quick Start
 
 To create a blueprint, an input YAML file needs to be written or adapted from
 one of the [examples](examples/).
@@ -74,35 +74,70 @@ These instructions assume you are using
 you wish to deploy in, and that you are in the root directory of the hpc-toolkit
 repo cloned during [installation](#installation).
 
-The [examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml) file must
-be updated to point to your GCP project ID. You can either edit the file
-manually or run the following command.
-
-```shell
-sed -i \
-  "s/## Set GCP Project ID Here ##/$GOOGLE_CLOUD_PROJECT/g" \
-  examples/hpc-cluster-small.yaml
-```
-
-Now you can run `ghpc` with the following command:
-
-```shell
-./ghpc create examples/hpc-cluster-small.yaml
-```
-
-Or you can specify the variables with `./ghpc create --vars` which supports comma-separated list of name=value variables to override YAML configuration like below. This feature only supports variables of string type.
+Run the ghpc binary with the following command:
 
 ```shell
 ./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ```
 
-By default, the blueprint directory will be created in the same directory as the
-`ghpc` binary and will have the name specified by the `blueprint_name` field
-from the input config. Optionally, the output directory can be specified with
-the `-o` flag as shown in the following example.
+> **_NOTE:_** The `--vars` argument supports comma-separated list of name=value
+> variables to override YAML configuration variables. This feature only supports
+> variables of string type.
+
+This will create a blueprint directory named `hpc-cluster-small/`.
+
+After successfully running `ghpc create`, a short message displaying how to
+proceed is displayed. For the `hpc-cluster-small` example, the message will
+appear similar to:
 
 ```shell
-./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
+cd hpc-cluster-small/primary
+terraform init
+terraform apply
+```
+
+Use these commands to run terraform and deploy your cluster. If the `apply` is
+successful, a message similar to the following will be displayed:
+
+```shell
+Apply complete! Resources: 13 added, 0 changed, 0 destroyed.
+```
+
+> **_NOTE:_** Before you run this for the first time you may need to enable some
+> APIs and possibly request additional quotas. See
+> [Enable GCP APIs](#enable-gcp-apis) and
+> [Small Example Quotas](examples/README.md#hpc-cluster-smallyaml).\
+> **_NOTE:_** If not using cloud shell you may need to set up
+> [GCP Credentials](#gcp-credentials).\
+> **_NOTE:_** Cloud Shell times out after 20 minutes of inactivity. This example
+> deploys in about 5 minutes but for more complex deployments it may be
+> necessary to deploy (`terraform apply`) from a cloud VM. The same process
+> above can be used, although [dependencies](#dependencies) will need to be
+> installed first.
+
+Once the blueprint has successfully been deployed, take the following steps to run a job:
+
+* First navigate to `Compute Engine` > `VM instances` in the Google Cloud Console.
+* Next click on the `SSH` button associated with the `slurm-hpc-small-login0` instance.
+* Finally run the `hostname` command on 3 nodes by running the following command in the shell popup:
+
+```shell
+$ srun -N 3 hostname
+slurm-hpc-slurm-small-debug-0-0
+slurm-hpc-slurm-small-debug-0-1
+slurm-hpc-slurm-small-debug-0-2
+```
+
+By default, this runs the job on the `debug` partition. See details in
+[examples/](examples/README.md#compute-partition) for how to run on the more
+performant `compute` partition.
+
+This example does not contain any Packer-based resources but for completeness,
+you can use the following command to deploy a Packer-based resource group:
+
+```shell
+cd <blueprint-directory>/<packer-group>/<custom-vm-image>
+packer build .
 ```
 
 ## HPC Toolkit Components
@@ -150,16 +185,7 @@ specifications of a customer by making the blueprints directly available and
 editable before deployment. Any HPC customer seeking a quick on-ramp to building
 out their infrastructure on GCP can benefit from this.
 
-## Deploying HPC Blueprints
-
-Blueprints are a set of resource groups each composed of Packer templates and
-Terraform modules. The process for deploying Terraform modules is documented
-below.
-
-> **_NOTE:_** Before you run this for the first time you may need to enable some
-> APIs and possibly request additional quotas. See
-> [Enable GCP APIs](#enable-gcp-apis) and
-> [Small Example Quotas](examples/README.md#hpc-cluster-smallyaml).
+## GCP Credentials
 
 ### Supplying cloud credentials to Terraform
 
@@ -213,26 +239,7 @@ in particular an inactivity timeout that will close running shells after 20
 minutes. Please consider it only for small blueprints that are quickly
 deployed.
 
-### Running Terraform
-
-After successfully running `ghpc create`, a short message displaying how to
-proceed is displayed. For the `hpc-cluster-small` example, the message will
-appear similar to:
-
-```shell
-cd hpc-cluster-small/primary
-terraform init
-terraform apply
-```
-
-If the `apply` is successful, a message similar to the following will be
-displayed:
-
-```shell
-Apply complete! Resources: 20 added, 0 changed, 0 destroyed.
-```
-
-### Blueprint Warnings and Errors
+## Blueprint Warnings and Errors
 
 By default, each blueprint is configured with a number of "validator" functions
 which perform basic tests of your global variables. If `project_id`, `region`,
@@ -292,38 +299,6 @@ validators.
 
 ```shell
 ./ghpc create -l IGNORE examples/hpc-cluster-small.yaml
-```
-
-### Testing your cluster
-Once the blueprint has successfully been deployed, take the following steps to run a job:
-
-* First navigate to `Compute Engine` > `VM instances` in the Google Cloud Console.
-* Next click on the `SSH` button associated with the `slurm-hpc-small-login0` instance.
-* Finally run the `hostname` command on 3 nodes by running the following command in the shell popup:
-
-```shell
-$ srun -N 3 hostname
-slurm-hpc-slurm-small-debug-0-0
-slurm-hpc-slurm-small-debug-0-1
-slurm-hpc-slurm-small-debug-0-2
-```
-
-By default, this runs the job on the `debug` partition. See details in
-[examples/](examples/README.md#compute-partition) for how to run on the more
-performant `compute` partition.
-
-> **_NOTE:_** Cloud Shell times out after 20 minutes of inactivity. This example
-> deploys in about 5 minutes but for more complex deployments it may be
-> necessary to deploy (`terraform apply`) from a cloud VM. The same process
-> above can be used, although [dependencies](#dependencies) will need to be
-> installed first.
-
-This example does not contain any Packer-based resources but for completeness,
-you can use the following command to deploy a Packer-based resource group:
-
-```shell
-cd <blueprint-directory>/<packer-group>/<custom-vm-image>
-packer build .
 ```
 
 ## Enable GCP APIs
