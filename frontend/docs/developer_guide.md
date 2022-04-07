@@ -88,3 +88,18 @@ Job data is stored in the shared filesystem `/home/<username>` for each user. He
 - Standard output and error files for Slurm jobs are uploaded to the GCS bucket associated with the deployment at the following URLs: `gs://<deployment_name>-<deployment_zone>-storage/clusters/<cluster_id>/jobs/<job_id>/stdout|err`.
 
 Note that a special home directory is created at `/home/root_jobs` to host jobs submitted by the Django superusers. For convenience they do not need Google identities and their jobs are run as *root* on the clusters.
+
+---
+
+### Django development
+
+#### Database Design
+
+Django is great at building data-driven applications. The major system components, such as clusters, applications, and jobs, can easily map to Django data models. The database design of this system is best shown with a UML diagram. This was generated using a function available in the Python *django-extensions* package (depending on the Python *pydotplus* package and *graphviz* package to create the image output). To generate the UML diagram, run from the command line:
+```python manage.py graph_models -a -X <classes_to_exclude> -o UML_output.png```
+
+To simplify the output and exclude the internal models coming with Django, append a list of comma-separated class names after the -X flag. The result is shown below:
+
+![UML](images/db-UML.png)
+
+Note that the *CloudResource* model is at the base of all cloud resources including network components, storage components, compute instance (representing a single VM), clusters, and Workbenches.
