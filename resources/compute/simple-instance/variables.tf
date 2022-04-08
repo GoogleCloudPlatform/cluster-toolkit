@@ -149,8 +149,17 @@ variable "on_host_maintenance" {
   }
 }
 
-variable "enable_tier_1_higher_bandwidth" {
-  description = "Enables the TIER_1 higher bandwidth networking option on the simple instance. If set to true, this will both enable gVNIC (required for higher bandwidth) and enable TIER_1 networking."
-  type        = bool
-  default     = false
+variable "advanced_networking" {
+  description = <<EOT
+  Enables advanced networking features on the simple instance. 
+  Using the `tier_1_enabled` setting will enable both gVNIC and TIER_1 higher bandwidth networking. 
+  Note that TIER_1 only works with specific machine families & shapes and must be using an image that supports gVNIC.
+  EOT
+  type        = string
+  default     = "not_enabled"
+
+  validation {
+    condition     = contains(["not_enabled", "gvnic_enabled", "tier_1_enabled"], var.advanced_networking)
+    error_message = "Allowed values for advanced_networking are 'not_enabled', 'gvnic_enabled', or  'tier_1_enabled'."
+  }
 }

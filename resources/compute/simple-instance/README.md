@@ -69,11 +69,11 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_advanced_networking"></a> [advanced\_networking](#input\_advanced\_networking) | Enables advanced networking features on the simple instance. <br>  Using the `tier_1_enabled` setting will enable both gVNIC and TIER\_1 higher bandwidth networking. <br>  Note that TIER\_1 only works with specific machine families & shapes and must be using an image that supports gVNIC. | `string` | `"not_enabled"` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used to name the cluster | `string` | n/a | yes |
 | <a name="input_disable_public_ips"></a> [disable\_public\_ips](#input\_disable\_public\_ips) | If set to true, instances will not have public IPs | `bool` | `false` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for instances. | `number` | `200` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for instances. | `string` | `"pd-standard"` | no |
-| <a name="input_enable_tier_1_higher_bandwidth"></a> [enable\_tier\_1\_higher\_bandwidth](#input\_enable\_tier\_1\_higher\_bandwidth) | Enables the TIER\_1 higher bandwidth networking option on the simple instance. If set to true, this will both enable gVNIC (required for higher bandwidth) and enable TIER\_1 networking. | `bool` | `false` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `[]` | no |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of instances | `number` | `1` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Instance Image | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
