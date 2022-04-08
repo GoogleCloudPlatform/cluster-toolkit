@@ -42,6 +42,18 @@ CLOUD_RESOURCE_MGMT_STATUS = (
     ('xm', 'Destroyed'),       # Deleted, managed
 )
 
+def RESTRICT_IF_CLOUD_ACTIVE(collector, field, sub_objs, using):
+    restrict_objs = []
+    set_null_objs = []
+    for obj in sub_objs:
+        if obj.cloud_state == 'xm':
+            set_null_objs.append(obj)
+        else:
+            restrict_objs.append(obj)
+    models.RESTRICT(collector, field, restrict_objs, using)
+    models.SET_NULL(collector, field, set_null_objs, using)
+
+
 def RFC1035Validator(maxLength, message):
     if not maxLength:
         regex = re.compile(f'^[a-z][-a-z0-9]*[a-z0-9])$')
@@ -376,7 +388,7 @@ class Filesystem(CloudResource):
         VirtualSubnet,
         related_name = 'filesystems',
         help_text = 'Subnet within which the Filesystem resides (if any)',
-        on_delete = models.RESTRICT,
+        on_delete = RESTRICT_IF_CLOUD_ACTIVE,
         null = True,
         blank = True,
     )
@@ -497,6 +509,7 @@ class MountPoint(models.Model):
         return f"{self.mount_path} on {self.cluster}"
 
 
+
 class Cluster(CloudResource):
     """ Model representing a cluster """
 
@@ -515,7 +528,7 @@ class Cluster(CloudResource):
         VirtualSubnet,
         related_name = 'clusters',
         help_text = 'Subnet within which the cluster resides',
-        on_delete = models.RESTRICT,
+        on_delete = RESTRICT_IF_CLOUD_ACTIVE,
     )
     authorised_users = models.ManyToManyField(
         User,
@@ -546,7 +559,7 @@ class Cluster(CloudResource):
     )
     shared_fs = models.ForeignKey(
         Filesystem,
-        on_delete = models.RESTRICT,
+        on_delete = RESTRICT_IF_CLOUD_ACTIVE,
         related_name = '+',
     )
     spack_install = models.ForeignKey(
@@ -1189,7 +1202,7 @@ class Workbench(CloudResource):
         VirtualSubnet,
         related_name = 'workbench_subnet',
         help_text = 'Subnet within which the workbench resides',
-        on_delete = models.RESTRICT,
+        on_delete = RESTRICT_IF_CLOUD_ACTIVE,
     )
     WORKBENCH_STATUS = (
         ('n', 'Workbench is being newly configured by user'),
