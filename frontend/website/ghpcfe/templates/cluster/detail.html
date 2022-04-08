@@ -69,6 +69,7 @@ window.onload=function(event) {
     </table>
     </div>
 
+{% if admin_view == 1 %}
     <p style="text-decoration: underline; font-size: large;">Authorized Users</p>
     <div class="table-responsive">
     <table class="table align-middle">
@@ -86,6 +87,7 @@ window.onload=function(event) {
       {% endfor %}
     </table>
     </div>
+{% endif %}
 
 
     <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
@@ -105,6 +107,7 @@ window.onload=function(event) {
     </div>
 
 
+{% if admin_view == 1 %}
     {% if object.status == "d" %}
     <div class="alert alert-info">This cluster is destroyed and its settings archived. No further change is possible.</div>
     {% else %}
@@ -130,5 +133,6 @@ window.onload=function(event) {
         <textarea class="log-file form-control" id="id_log_1" rows=10 disabled readonly></textarea>
     </div>
     {% endif %}
+{% endif %}
 
 {% endblock %}

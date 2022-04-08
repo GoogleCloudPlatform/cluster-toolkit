@@ -88,9 +88,13 @@ class ClusterDetailView(LoginRequiredMixin, generic.DetailView):
     template_name = 'cluster/detail.html'
 
     def get_context_data(self, **kwargs):
-        """ Perform extra query to populate instance types data """
+        admin_view = 0
+        if self.request.user.has_admin_role():
+            admin_view = 1
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'cluster'
+        context['admin_view'] = admin_view
+        # Perform extra query to populate instance types data
 #        context['cluster_instance_types'] = \
 #            ClusterInstanceType.objects.filter(cluster=self.kwargs['pk'])
         return context
