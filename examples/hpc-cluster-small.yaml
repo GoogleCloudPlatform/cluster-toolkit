@@ -50,6 +50,7 @@ resource_groups:
       partition_name: debug
       max_node_count: 4
       enable_placement: false
+      exclusive: false
       machine_type: n2-standard-2
 
   # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
