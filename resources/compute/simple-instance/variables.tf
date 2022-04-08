@@ -148,3 +148,9 @@ variable "on_host_maintenance" {
     error_message = "The on_host_maintenance must be set to MIGRATE or TERMINATE."
   }
 }
+
+variable "enable_tier_1_higher_bandwidth" {
+  description = "Enables the TIER_1 higher bandwidth networking option on the simple instance. If set to true, this will both enable gVNIC (required for higher bandwidth) and enable TIER_1 networking."
+  type        = bool
+  default     = false
+}

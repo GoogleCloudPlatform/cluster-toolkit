@@ -39,6 +39,8 @@ resource "google_compute_disk" "boot_disk" {
 }
 
 resource "google_compute_instance" "compute_vm" {
+  provider = google-beta
+
   count = var.instance_count
 
   depends_on = [var.network_self_link, var.network_storage]
@@ -63,6 +65,12 @@ resource "google_compute_instance" "compute_vm" {
 
     network    = var.network_self_link
     subnetwork = var.subnetwork_self_link
+    nic_type   = var.enable_tier_1_higher_bandwidth ? "GVNIC" : null
+  }
+
+  dynamic "network_performance_config" {
+    for_each = var.enable_tier_1_higher_bandwidth == true ? [1] : []
+    content { total_egress_bandwidth_tier = "TIER_1" }
   }
 
   dynamic "service_account" {
