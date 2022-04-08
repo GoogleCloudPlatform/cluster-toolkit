@@ -92,6 +92,8 @@ def start_vpc(vpc: VirtualNetwork) -> None:
             logger.info(f"  STDOUT:\n{cpe.stdout.decode('utf-8')}\n")
         if cpe.stderr:
             logger.info(f"  STDERR:\n{cpe.stderr.decode('utf-8')}\n")
+        vpc.status = 'e'
+        vpc.save()
         raise
 
 
