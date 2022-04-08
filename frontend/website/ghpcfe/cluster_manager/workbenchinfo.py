@@ -83,16 +83,33 @@ USER=`curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?p
         with startup_script.open('w') as f:
             f.write(f"""#!/bin/bash
 echo "starting starup script at `date`" | tee -a /tmp/startup.log
-
+echo "Getting username..." | tee -a /tmp/startup.log
 {startup_script_vars}
+
+echo "Setting up storage" | tee -a /tmp/startup.log
+sudo apt-get -y update && sudo apt-get install -y nfs-common
+
+mkdir /tmp/jupyterhome 
+chown $USER:$USER /tmp/jupyterhome
+
+mkdir /home/$USER
+chown $USER:$USER /home/$USER
+
+cp /home/jupyter/.jupyter /tmp/jupyterhome/.jupyter -R
+chown $USER:$USER /tmp/jupyterhome/.jupyter -R
+
+echo "The data on this workbench instance is not automatically saved unless it is saved in a shared filesystem that has been mounted. When the system was started any filesystems would be listed below. If none are listed then all data on this instance will be deleted. \n\n\n" > /tmp/jupyterhome/DATA_LOSS_WARNING.txt
+
 """)
 
             for mp in WorkbenchMountPoint.objects.all():
                 if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
                     f.write("mkdir -p " + mp.mount_path + "\n")
-                    f.write("mkdir -p /tmp/jupyterhome" + mp.mount_path + "\n")
+                    f.write("mkdir -p /tmp/jupyterhome`dirname " + mp.mount_path + "`\n")
                     f.write("mount " + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " " + mp.mount_path +"\n")
-                    f.write("mount " + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " /tmp/jupyterhome" + mp.mount_path +"\n")
+                    f.write("chmod 777 " + mp.mount_path +"\n")
+                    f.write("ln -s " + mp.mount_path + " /tmp/jupyterhome`dirname " + mp.mount_path + "` \n")
+                    f.write("echo \"" + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " is mounted at " + mp.mount_path + "\" >> /tmp/jupyterhome/DATA_LOSS_WARNING.txt\n")
                     
             with open(self.config["baseDir"] / 'infrastructure_files' / 'gcs_bucket' / 'workbench' / 'startup_script_template.sh') as infile:
                 for line in infile:

@@ -34,7 +34,7 @@
     {% endif %}
     {% if object.status == "r" %}
     <a href="https://{{ object.proxy_uri }}" class="btn btn-primary" target="_blank">Open JupyterLab</a>
-    <a href="{% url 'backend-destroy-workbench' object.id %}" class="btn btn-primary">Destroy</a>
+    <a href="{% url 'workbench-destroy' object.id %}" class="btn btn-primary">Destroy</a>
     {% endif %}
     {% if object.status == "d" %}
       <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>

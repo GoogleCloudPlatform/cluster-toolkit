@@ -1,13 +1,5 @@
-mkdir /tmp/jupyterhome 
-mkdir /home/$USER
-chown $USER:$USER /tmp/jupyterhome
+ln -s /home /tmp/jupyterhome/
 
-cp /home/jupyter/.jupyter /tmp/jupyterhome/.jupyter -R
-chown $USER:$USER /tmp/jupyterhome/.jupyter -R
-chown $USER:$USER /home/$USER
-
-
-#Need to move .jupyter config to a temp dir and create a sudo filesystem under that
 echo "modifying jupyter config" | tee -a /tmp/startup.log
 echo "jupyter_user = \"$USER\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
 echo "jupyter_home = \"/tmp/jupyterhome\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
@@ -38,6 +30,3 @@ WantedBy=multi-user.target
 echo "reloading and restarting service" | tee -a /tmp/startup.log
 systemctl daemon-reload
 service jupyter restart
-
-echo "Mounting FileStore filesystem"
-sudo apt-get -y update && sudo apt-get install -y nfs-common
