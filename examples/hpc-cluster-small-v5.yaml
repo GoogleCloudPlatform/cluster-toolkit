@@ -21,7 +21,7 @@ vars:
   deployment_name: hpc-small
   region: us-central1
   zone: us-central1-c
-  slurm_cluster_name: test_cluster
+  slurm_cluster_name: testcluster
 
 resource_groups:
 - group: primary
@@ -39,6 +39,7 @@ resource_groups:
     use: [network1]
     settings:
       local_mounts: [/home]
+      auto_delete_disk: true
 
   - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-v5-partition
     kind: terraform
@@ -46,9 +47,11 @@ resource_groups:
     use: [network1]
     settings:
       partition_name: debug
-      max_node_count: 4
+      count_dynamic: 4
       enable_placement: false
       machine_type: n2-standard-2
+      source_image: schedmd-v5-slurm-21-08-4-hpc-centos-7-1648163377
+      image_project: $(vars.project_id) # If not working in host project, change this
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-v5-controller
     kind: terraform

@@ -13,14 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+variable "slurm_cluster_name" {
+  type        = string
+  description = "Cluster name, used for resource naming and slurm accounting."
+
+  validation {
+    condition     = can(regex("(^[a-z][a-z0-9]*$)", var.slurm_cluster_name))
+    error_message = "Variable 'slurm_cluster_name' must be a match of regex '(^[a-z][a-z0-9]*$)'."
+  }
+}
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created"
-  type        = string
-}
-
-variable "deployment_name" {
-  description = "Name of the deployment, used to name the cluster"
   type        = string
 }
 
@@ -40,42 +44,37 @@ variable "machine_type" {
   default     = "c2-standard-60"
 }
 
-variable "static_node_count" {
+variable "count_static" {
   description = "Number of nodes to be statically created"
   type        = number
   default     = 0
 }
 
-variable "max_node_count" {
+variable "count_dynamic" {
   description = "Maximum number of nodes allowed in this partition"
   type        = number
   default     = 10
 }
 
-variable "zone" {
-  description = "Compute Platform zone where the notebook server will be located"
-  type        = string
-}
-
-variable "image" {
+variable "source_image" {
   description = "Image to be used of the compute VMs in this partition"
   type        = string
-  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-4-hpc-centos-7"
+  default     = "schedmd-slurm-21-08-4-hpc-centos-7"
 }
 
-variable "image_hyperthreads" {
-  description = "Enable hyperthreading"
-  type        = bool
-  default     = false
+variable "image_project" {
+  description = "Project the image is hosted in"
+  type        = string
+  default     = "schedmd-slurm-public"
 }
 
-variable "compute_disk_type" {
+variable "disk_type" {
   description = "Type of boot disk to create for the partition compute nodes"
   type        = string
   default     = "pd-standard"
 }
 
-variable "compute_disk_size_gb" {
+variable "disk_size_gb" {
   description = "Size of boot disk to create for the partition compute nodes"
   type        = number
   default     = 20
@@ -87,22 +86,19 @@ variable "labels" {
   default     = {}
 }
 
-variable "cpu_platform" {
+variable "min_cpu_platform" {
   description = "The name of the minimum CPU platform that you want the instance to use."
   type        = string
   default     = null
 }
 
-variable "gpu_count" {
-  description = "Number of GPUs attached to the partition compute instances"
-  type        = number
-  default     = 0
-}
-
-variable "gpu_type" {
-  description = "Type of GPUs attached to the partition compute instances"
-  type        = string
-  default     = null
+variable "gpu" {
+  description = "Definition of requested GPU resources"
+  type = object({
+    count = number,
+    type  = string
+  })
+  default = null
 }
 
 variable "network_storage" {
@@ -117,15 +113,16 @@ variable "network_storage" {
   default = []
 }
 
-variable "preemptible_bursting" {
+variable "preemptible" {
   description = "Should use preemptibles to burst"
   type        = string
   default     = false
 }
 
-variable "subnetwork_name" {
-  description = "The name of the pre-defined VPC subnet you want the nodes to attach to based on Region."
+variable "subnetwork_self_link" {
   type        = string
+  description = "Subnet to deploy to. Only one of network or subnetwork should be specified."
+  default     = ""
 }
 
 variable "exclusive" {
@@ -138,22 +135,4 @@ variable "enable_placement" {
   description = "Enable placement groups"
   type        = bool
   default     = true
-}
-
-variable "regional_capacity" {
-  description = "If True, then create instances in the region that has available capacity. Specify the region in the zone field."
-  type        = bool
-  default     = false
-}
-
-variable "regional_policy" {
-  description = "locationPolicy defintion for regional bulkInsert()"
-  type        = any
-  default     = {}
-}
-
-variable "instance_template" {
-  description = "Instance template to use to create partition instances"
-  type        = string
-  default     = null
 }
