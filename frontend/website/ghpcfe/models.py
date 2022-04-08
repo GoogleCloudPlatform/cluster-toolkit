@@ -331,9 +331,9 @@ class VirtualNetwork(CloudResource):
         return self.name
 
     def in_use(self):
-        return (Workbench.objects.filter(subnet__vpc=self).exists() or
-                Cluster.objects.filter(subnet__vpc=self).exists() or
-                Filesystem.objects.filter(subnet__vpc=self).exists())
+        return (Workbench.objects.filter(subnet__vpc=self).exclude(cloud_state='xm').exists() or
+                Cluster.objects.filter(subnet__vpc=self).exclude(cloud_state='xm').exists() or
+                Filesystem.objects.filter(subnet__vpc=self).exclude(cloud_state='xm').exists())
 
 
 class VirtualSubnet(CloudResource):
