@@ -93,7 +93,9 @@
     {% endfor %}
     </tbody>
   </table>
+  {% if admin_view == 1 %}
   <input type="checkbox" id="id_show_destroyed"/> Show Destroyed Clusters
+  {% endif %}
   </div>
   {% else %}
     <p>This is no record of any cluster in this system. Create one!</p>

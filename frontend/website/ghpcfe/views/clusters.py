@@ -58,14 +58,26 @@ class ClusterListView(generic.ListView):
     model = Cluster
     template_name = 'cluster/list.html'
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        wanted_items = set()
+        for cluster in qs:
+            if self.request.user in cluster.authorised_users.all() and cluster.status == 'r':
+                wanted_items.add(cluster.pk)
+        return qs.filter(pk__in = wanted_items)
+
     def get_context_data(self, *args, **kwargs):
         loading = 0
-        for cluster in Cluster.objects.all():
+        for cluster in self.get_queryset():
             if (cluster.status == 'c' or cluster.status == 'i' or cluster.status == 't'):
                 loading = 1
                 break
+        admin_view = 0
+        if self.request.user.has_admin_role():
+            admin_view = 1
         context = super().get_context_data(*args, **kwargs)
         context['loading'] = loading
+        context['admin_view'] = admin_view
         context['navtab'] = 'cluster'
         return context
 
