@@ -91,9 +91,8 @@ proceed is displayed. For the `hpc-cluster-small` example, the message will
 appear similar to:
 
 ```shell
-cd hpc-cluster-small/primary
-terraform init
-terraform apply
+terraform -chdir=hpc-cluster-small/primary init
+terraform -chdir=hpc-cluster-small/primary apply
 ```
 
 Use these commands to run terraform and deploy your cluster. If the `apply` is
