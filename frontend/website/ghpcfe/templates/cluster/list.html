@@ -61,6 +61,7 @@
             <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-detail' cluster.id  %}">Detail</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-cost' cluster.id  %}">Cost Detail</a>
+           {% if admin_view == 1 %}
               {% if cluster.status == "n" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-update' cluster.id  %}">Edit</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-delete' cluster.id  %}">Delete</a>
@@ -77,10 +78,11 @@
               {% if cluster.status == "r" %}
               <div class="dropdown-divider"></div>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-sync-cluster' cluster.id %}">Sync Cluster</a>
-              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create-install' cluster.id %}">Install Application</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create-spack-cluster' cluster.id %}">Install Spack Application</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create-install' cluster.id %}">Install Custom Application</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create' cluster.id %}">Add Manually-configured Application</a>
               {% endif %}
+           {% endif %}
               {% if user.is_authenticated and cluster.status == "r" %}
               <div class="dropdown-divider"></div>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-gcp-auth' cluster.id %}">Authenticate to Google Cloud Storage</a>
@@ -93,7 +95,9 @@
     {% endfor %}
     </tbody>
   </table>
+  {% if admin_view == 1 %}
   <input type="checkbox" id="id_show_destroyed"/> Show Destroyed Clusters
+  {% endif %}
   </div>
   {% else %}
     <p>This is no record of any cluster in this system. Create one!</p>

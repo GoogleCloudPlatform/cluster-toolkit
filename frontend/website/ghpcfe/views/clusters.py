@@ -58,14 +58,28 @@ class ClusterListView(generic.ListView):
     model = Cluster
     template_name = 'cluster/list.html'
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.has_admin_role():
+            return qs
+        wanted_items = set()
+        for cluster in qs:
+            if self.request.user in cluster.authorised_users.all() and cluster.status == 'r':
+                wanted_items.add(cluster.pk)
+        return qs.filter(pk__in = wanted_items)
+
     def get_context_data(self, *args, **kwargs):
         loading = 0
-        for cluster in Cluster.objects.all():
+        for cluster in self.get_queryset():
             if (cluster.status == 'c' or cluster.status == 'i' or cluster.status == 't'):
                 loading = 1
                 break
+        admin_view = 0
+        if self.request.user.has_admin_role():
+            admin_view = 1
         context = super().get_context_data(*args, **kwargs)
         context['loading'] = loading
+        context['admin_view'] = admin_view
         context['navtab'] = 'cluster'
         return context
 
@@ -76,9 +90,13 @@ class ClusterDetailView(LoginRequiredMixin, generic.DetailView):
     template_name = 'cluster/detail.html'
 
     def get_context_data(self, **kwargs):
-        """ Perform extra query to populate instance types data """
+        admin_view = 0
+        if self.request.user.has_admin_role():
+            admin_view = 1
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'cluster'
+        context['admin_view'] = admin_view
+        # Perform extra query to populate instance types data
 #        context['cluster_instance_types'] = \
 #            ClusterInstanceType.objects.filter(cluster=self.kwargs['pk'])
         return context
