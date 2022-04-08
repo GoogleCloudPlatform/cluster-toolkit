@@ -123,7 +123,6 @@ owner_id = ["{user.email}"]
 wb_startup_script_name   = "workbench/workbench_{self.workbench.id}_startup_script"
 wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 """
-#        pkeys_str = b"\n".join(self._get_ssh_keys()).decode('utf-8')
         tfvars = self.workbench_dir / 'terraform' / self.cloud_dir / 'terraform.tfvars'
         with tfvars.open('w') as f:
             f.write(f"""
@@ -137,7 +136,6 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
     def initialize_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
         extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': self._get_credentials_file()}
-        #            utils.run_terraform(tfDir, "validate", extraEnv=extraEnv)
 
         try:
             utils.run_terraform(tfDir / self.cloud_dir, "init")
