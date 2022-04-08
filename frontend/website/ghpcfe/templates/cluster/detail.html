@@ -119,12 +119,14 @@ window.onload=function(event) {
     {% endif %}
     {% if object.status == "r" %}
     <a href="{% url 'backend-sync-cluster' object.id %}" class="btn btn-primary">Sync Cluster</a>
-    <a href="{% url 'application-create-install' object.id %}" class="btn btn-primary">Install Application</a>
     <a href="{% url 'application-create-spack-cluster' object.id %}" class="btn btn-primary">Install Spack Application</a>
+    <a href="{% url 'application-create-install' object.id %}" class="btn btn-primary">Install Custom Application</a>
+    <a href="{% url 'application-create' object.id %}" class="btn btn-primary">Add Manually-configured Application</a>
     {% endif %}
     {% if object.status != "n" %}
     <a href="{% url 'cluster-log' cluster.id %}" class="btn btn-primary">View Logs</a>
     {% endif %}
+    <br/><br/>
 
     {% if object.status == "c" or object.status == "t" %}
     {# aka, if Terraform running, let's show the TF log #}
