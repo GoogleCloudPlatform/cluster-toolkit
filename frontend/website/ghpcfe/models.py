@@ -501,9 +501,9 @@ class Cluster(CloudResource):
     """ Model representing a cluster """
 
     name = models.CharField(
-        max_length = 40,
+        max_length = 17,
         help_text = 'Enter a name for the cluster',
-        validators=[RFC1035Validator(63, 'Cluster Name must be RFC1035 Compliant (lower case, alpha-numeric with hyphens)')],
+        validators=[RFC1035Validator(17, 'Cluster Name must be RFC1035 Compliant (lower case, alpha-numeric with hyphens)')],
     )
     owner = models.ForeignKey(
         User,
