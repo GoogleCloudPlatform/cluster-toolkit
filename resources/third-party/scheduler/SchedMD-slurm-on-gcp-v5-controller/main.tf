@@ -19,14 +19,14 @@ module "slurm_controller_instance" {
 
   count = 1
 
-  access_config      = var.access_config
-  slurm_cluster_name = var.slurm_cluster_name
-  instance_template  = module.slurm_controller_template[0].self_link
-  project_id         = var.project_id
-  region             = var.region
-  subnetwork         = var.subnetwork_self_link
-  zone               = var.zone
-
+  access_config         = var.access_config
+  slurm_cluster_name    = var.slurm_cluster_name
+  instance_template     = module.slurm_controller_template[0].self_link
+  project_id            = var.project_id
+  region                = var.region
+  subnetwork            = var.subnetwork_self_link
+  zone                  = var.zone
+  static_ips            = var.static_ips
   cgroup_conf_tpl       = var.cgroup_conf_tpl
   cloud_parameters      = var.cloud_parameters
   cloudsql              = var.cloudsql
@@ -75,6 +75,7 @@ module "slurm_controller_template" {
   source_image_family      = var.source_image_family
   source_image_project     = var.source_image_project
   source_image             = var.source_image
+  network                  = var.network
   subnetwork_project       = var.subnetwork_project
   subnetwork               = var.subnetwork_self_link
   tags                     = concat([var.slurm_cluster_name], var.tags)

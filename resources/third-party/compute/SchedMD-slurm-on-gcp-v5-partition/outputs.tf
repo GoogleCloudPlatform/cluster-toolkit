@@ -41,9 +41,9 @@
 # }
 
 output "partition" {
+  description = "Details of a slurm partition"
   value = {
     compute_list = module.slurm_partition.compute_list
     partition    = module.slurm_partition.partition
-    sa_node_map  = module.slurm_partition.sa_node_map
   }
 }

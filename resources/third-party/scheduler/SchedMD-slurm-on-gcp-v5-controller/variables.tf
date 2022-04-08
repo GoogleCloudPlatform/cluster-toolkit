@@ -148,13 +148,6 @@ variable "disable_smt" {
   default     = false
 }
 
-
-variable "slurm_cluster_id" {
-  type        = string
-  description = "The Cluster ID to use. If 'null' or '', then an ID will be generated."
-  default     = null
-}
-
 variable "enable_devel" {
   type        = bool
   description = "Enables development mode. Not for production use."
@@ -312,7 +305,6 @@ variable "partition" {
       zone_policy_allow = list(string)
       zone_policy_deny  = list(string)
     })
-    sa_node_map = map(list(string))
   }))
   default = []
 
