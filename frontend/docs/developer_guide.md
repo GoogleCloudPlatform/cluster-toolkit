@@ -103,3 +103,61 @@ To simplify the output and exclude the internal models coming with Django, appen
 ![UML](images/db-UML.png)
 
 Note that the *CloudResource* model is at the base of all cloud resources including network components, storage components, compute instance (representing a single VM), clusters, and Workbenches.
+
+#### Code Layout
+
+The top few layers of the directory hierarchy of the HPC Toolkit Frontend define the major components
+
+| dir                         | description |
+|-----------------------------|-------------|
+| `hpc-toolkit/frontend/`     | Top level   |
+| `.../cli/`                  | client commandline interface |
+| `.../docs/`                 | documentation |
+| `.../infrastructure_files/` | Support files for deploying cloud infrastructure |
+| `.../tf/`                   | Terraform files for deploying the HPC Frontend |
+| `.../website/`              | Source code for the HPC Frontend website |
+
+##### Infrastructure Files
+
+| dir                         | description |
+|-----------------------------|-------------|
+| `.../frontend/infrastructure_files/` | Top level   |
+| `.../cluster_startup/`               | Bootstrap startup scripts |
+| `.../gcs_bucket/`                    | Common configuration files (scripts, Ansible) to store in GCS |
+| `.../vpc_tf/`                        | Terraform templates for creating VPCs |
+| `.../workbench_tf/`                  | Terraform templates for creating Workbenches |
+
+These directories hold all the support infrastructure files which are used to create, provision, and initialize the cloud resources which may be created via the HPC Toolkit Frontend.  The VPC Terraform and Workbench Terraform files may eventually migrate into HPC Toolkit YAML files.
+
+The files under `gcs_bucket` contain the more in-depth startup scripts and configuration information for the Frontend webserver as well as for new clusters.  During the initial deployment of the HPC Toolkit Frontend, this directory is copied to a new Google Cloud Storage Bucket which is then used for storing these startup codes as well as additional cluster information, such as log files.  When clusters are created in Google Cloud, the initial bootstrap template startup script (from the `cluster_startup` directory) are set to be the instance startup script.  These scripts are responsible for downloading from Google Cloud Storage the Ansible repository which is stored in the `gcs_bucket/clusters/ansible_setup/`, and running Ansible to initialize the instance.
+
+The source-code for the cluster client-side Command & Control daemon is stored here as well, under `.../ansible_setup/roles/c2_daemon/files/ghpcfe_c2daemon.py`
+
+##### Website
+
+| dir                     | description |
+|-------------------------|-------------|
+| `.../frontend/website/` | Top level   |
+| `.../ghpcfe/`           | Frontend Application dir |
+| `....../cluster_manager/` | Utilities for cloud & backend operations |
+| `....../management/`     | Extra Django setup commands |
+| `....../migrations/`     | Database migration scripts |
+| `....../static/`         | Images, Javascript and other static web collateral |
+| `....../templates/`      | Web view templates |
+| `....../views/`          | Python files for model views |
+| `.../templates/`        | All-Social plugin Templates |
+| `.../website/`          | Django core website configuration (including `settings.py`) |
+| `.../manage.py`         | Core Django application management script |
+
+
+As with many Django-based web applications, the HPC Toolkit Frontend Django application is broken across multiple directories, each responsible for some critical subcomponent of the overall application.  The `ghpcfe/` directory hosts the pieces specific to the HPC Toolkit Frontend, whereas the other directories are more Django-focused.
+
+Under `ghpcfe/`, there are a variety of directories as show in the above table.  Directly inside this directory is the majority of the Python files which make up the Frontend web application. Of particular interest would be `models.py`, which stores the DB models and `forms.py`.  There are a sufficiently large number of Django Views in the application, so the proto-typical `views.py` is broken into its own Python package.
+
+Also under `ghpcfe/` is the `cluster_manager` directory, which contains most of the "backend" code responsible for gathering cloud information as well as creating, controlling, and configuring cloud resources.  Of particular interest here are the files:
+
+- `c2.py`: Responsible for bidirectional communication between the Frontend and any created clusters.
+- `cloud_info.py`: Provides many utilities for querying information from Google Cloud about instance types, pricing, VPCs and so forth
+- `cluster_info.py`: Responsible for creating clusters and keeping track of local-to-frontend cluster metadata
+
+
