@@ -61,6 +61,7 @@
             <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-detail' cluster.id  %}">Detail</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-cost' cluster.id  %}">Cost Detail</a>
+           {% if admin_view == 1 %}
               {% if cluster.status == "n" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-update' cluster.id  %}">Edit</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-delete' cluster.id  %}">Delete</a>
@@ -81,6 +82,7 @@
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create-spack-cluster' cluster.id %}">Install Spack Application</a>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create' cluster.id %}">Add Manually-configured Application</a>
               {% endif %}
+           {% endif %}
               {% if user.is_authenticated and cluster.status == "r" %}
               <div class="dropdown-divider"></div>
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-gcp-auth' cluster.id %}">Authenticate to Google Cloud Storage</a>
