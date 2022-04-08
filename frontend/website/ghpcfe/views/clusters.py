@@ -60,6 +60,8 @@ class ClusterListView(generic.ListView):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        if self.request.user.has_admin_role():
+            return qs
         wanted_items = set()
         for cluster in qs:
             if self.request.user in cluster.authorised_users.all() and cluster.status == 'r':
