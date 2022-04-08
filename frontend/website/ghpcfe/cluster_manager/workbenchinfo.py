@@ -82,20 +82,23 @@ USER=`curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?p
         startup_script = self.workbench_dir / 'startup_script.sh'
         with startup_script.open('w') as f:
             f.write(f"""#!/bin/bash
+echo "starting starup script at `date`" | tee -a /tmp/startup.log
+
 {startup_script_vars}
 """)
+
+            for mp in WorkbenchMountPoint.objects.all():
+                if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
+                    f.write("mkdir -p " + mp.mount_path + "\n")
+                    f.write("mkdir -p /tmp/jupyterhome" + mp.mount_path + "\n")
+                    f.write("mount " + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " " + mp.mount_path +"\n")
+                    f.write("mount " + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " /tmp/jupyterhome" + mp.mount_path +"\n")
+                    
             with open(self.config["baseDir"] / 'infrastructure_files' / 'gcs_bucket' / 'workbench' / 'startup_script_template.sh') as infile:
                 for line in infile:
                     f.write(line)
                 
                 f.write("\n")
-
-                for mp in WorkbenchMountPoint.objects.all():
-                    if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
-                        f.write("mkdir " + mp.mount_path + "\n")
-                        f.write("mount " + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " " + mp.mount_path +"\n")
-                        f.write("ln -s " + mp.mount_path + " /home/$USER/mount_points \n")
-
 
     def prepare_terraform_vars(self):
         region = self.workbench.cloud_region

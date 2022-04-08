@@ -1,4 +1,3 @@
-echo "starting starup script at `date`" | tee -a /tmp/startup.log
 mkdir /tmp/jupyterhome 
 mkdir /home/$USER
 chown $USER:$USER /tmp/jupyterhome
@@ -13,7 +12,7 @@ echo "modifying jupyter config" | tee -a /tmp/startup.log
 echo "jupyter_user = \"$USER\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
 echo "jupyter_home = \"/tmp/jupyterhome\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
 echo 'sys.path.append(f"{jupyter_home}/.jupyter/")' >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
-echo "c.ServerApp.notebook_dir = \"/home/$USER\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
+echo "c.ServerApp.notebook_dir = \"/tmp/jupyterhome\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
 
 echo "modifying jupyter service" | tee -a /tmp/startup.log
 cat > /lib/systemd/system/jupyter.service <<+ 
