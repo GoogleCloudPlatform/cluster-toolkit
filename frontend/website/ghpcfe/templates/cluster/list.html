@@ -71,11 +71,6 @@
               {% if cluster.status == "n" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-start-cluster' cluster.id %}">Start</a>
               {% endif %}
-              {% if cluster.status == "r" %}
-              <a class="dropdown-item btn btn-sm btn-secondary" href="#">Pause</a>
-              {% elif cluster.status == "s" %}
-              <a class="dropdown-item btn btn-sm btn-secondary" href="#">Resume</a>
-              {% endif %}
               {% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s"  %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-destroy' cluster.id %}">Destroy</a>
               {% endif %}
