@@ -34,6 +34,15 @@ Communication between the service machine and clusters is handled by Pub/Sub. Fo
 
 Please follow the deployment section in the [Administrator’s Guide](admin_guide.md) to deploy the system for testing and development.
 
+Here are some notes from a developer's perspective:
+
+- The deployment is done using Terraform.
+- When `deploy.sh` is invoked, it validates the client machine's development environment, collects configuration information from user, save input variables in `tf/terraform.tfvars`, and invoke Terraform.
+- Terraform creates a hosting VPC and a subnetwork for the deployment, together with the necessary firewall rules.
+- Terraform creates a supporting GCS bucket. This bucket is not only used during deployment, but also provides a long-term storage for clusters operating within this deployment.
+- Terraform sets up a Pub/Sub topic for communication between the service machine and clusters.
+- Terraform provisions a compute engine virtual machine to be the service machine. A startup script is then executed on the service machine to set up the software environment for HPC Toolkit and Django, and start the web and application servers.
+
 ### Access the service machine
 
 By default, access to the service machine is restricted to authorised users (the owner/editor of the hosting GCP project or other users delegated with sufficient permissions). Use one of the following two methods to access the system after a new deployment:
