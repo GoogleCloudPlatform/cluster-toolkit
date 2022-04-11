@@ -62,7 +62,7 @@ variable "source_image" {
   default     = "schedmd-slurm-21-08-4-hpc-centos-7"
 }
 
-variable "image_project" {
+variable "source_image_project" {
   description = "Project the image is hosted in"
   type        = string
   default     = "schedmd-slurm-public"
