@@ -1071,6 +1071,13 @@ class CallbackField(models.TextField):
 
         return value
 
+    def from_db_value(self, value, expression, connection):
+        try:
+            return dill.loads(base64.decodebytes(bytes(value, 'utf-8')))
+        except Exception:
+            logger.exception(f"Failed to deserialize callback")
+            return None
+
     def get_prep_value(self, value):
         value = super().get_prep_value(value)
         if value is None:
