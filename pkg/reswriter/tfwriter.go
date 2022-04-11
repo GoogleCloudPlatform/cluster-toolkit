@@ -50,10 +50,10 @@ func (w *TFWriter) addNumResources(value int) {
 // license and any other boilerplate
 func createBaseFile(path string) error {
 	baseFile, err := os.Create(path)
-	defer baseFile.Close()
 	if err != nil {
 		return err
 	}
+	defer baseFile.Close()
 	_, err = baseFile.WriteString(license)
 	return err
 }
