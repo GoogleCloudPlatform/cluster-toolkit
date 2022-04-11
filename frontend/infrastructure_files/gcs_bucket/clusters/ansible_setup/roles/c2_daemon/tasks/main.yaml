@@ -6,13 +6,7 @@
     state: present
 
 - name: Install FE C&C Dependencies
-  pip:
-    executable: pip3
-    name:
-    - requests
-    - pexpect
-    - google-cloud-storage
-    - google-cloud-pubsub
+  shell: . /opt/rh/devtoolset-11/enable && pip3 install requests pexpect google-cloud-storage google-cloud-pubsub
 
 - name: Install FE C&C Daemon
   copy:
