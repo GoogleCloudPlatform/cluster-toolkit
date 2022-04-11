@@ -57,11 +57,8 @@ class WorkbenchInfo:
     def _get_credentials_file(self):
         return self.workbench_dir / 'cloud_credentials'
 
-    def get_credentials_file(self):
-        return self.workbench_dir / 'cloud_credentials'
-
     def set_credentials(self, creds=None):
-        credfile = self.get_credentials_file()
+        credfile = self._get_credentials_file()
         if not creds:
             # pull from DB
             creds = self.workbench.cloud_credential.detail
