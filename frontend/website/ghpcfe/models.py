@@ -1147,22 +1147,6 @@ class WorkbenchPreset(models.Model):
         max_length = 40,
         help_text = 'Enter the heading this preset should appear under',
     )
-    # WORKBENCH_BOOTDISKTYPE = (
-    #     ('PD_STANDARD', 'Standard Persistent Disk'),
-    #     ('PD_BALANCED', 'Balanced Persistent Disk'),
-    #     ('PD_SSD', 'SSD Persistent Disk'),
-    # )
-    # boot_disk_type = models.CharField(
-    #     max_length = 11,
-    #     choices = WORKBENCH_BOOTDISKTYPE,
-    #     default = 'PD_STANDARD',
-    #     help_text = 'Type of storage to be required for notebook boot disk',
-    # )
-    # boot_disk_capacity = models.PositiveIntegerField(
-    #     validators = [MinValueValidator(100)],
-    #     help_text = 'Capacity (in GB) of the filesystem (min of 1024)',
-    #     default = 100
-    # )
 
 
 class Workbench(CloudResource):
@@ -1261,3 +1245,43 @@ class Workbench(CloudResource):
 
     def list_trusted_users(self):
         return list(self.trusted_users.all())
+
+
+class WorkbenchMountPoint(models.Model):
+    """ Model representing a mount point """
+    export = models.ForeignKey(
+        FilesystemExport,
+        related_name = '+',
+        on_delete = models.CASCADE,
+    )
+
+    workbench = models.ForeignKey(
+        "Workbench",
+        related_name = "mount_points",
+        on_delete = models.CASCADE,
+    )
+
+    @property
+    def fstype(self):
+        return self.export.fstype
+
+    @property
+    def fstype_name(self):
+        return self.export.fstype_name
+
+    @property
+    def mount_source(self):
+        return self.export.source_string
+
+    mount_order = models.PositiveIntegerField(
+        help_text = 'Mounts are mounted in numerically increasing order',
+        default = 0,
+    )
+
+    mount_path = models.CharField(
+        max_length = 4096,
+        help_text = "Path on which to mount this filesystem",
+    )
+
+    def __str__(self):
+        return f"{self.mount_path} on {self.workbench}"

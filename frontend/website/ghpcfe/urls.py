@@ -83,6 +83,7 @@ urlpatterns += [
     path('job/delete/<int:pk>', JobDeleteView.as_view(), name='job-delete'),
     path('workbench/create/', WorkbenchCreateView1.as_view(), name='workbench-create'),
     path('workbench/create2/?credential=<int:credential>', WorkbenchCreateView2.as_view(), name='workbench-create2'),
+    path('workbench/update/<int:pk>', WorkbenchUpdate.as_view(), name='workbench-update'),
     path('workbench/delete/<int:pk>', WorkbenchDeleteView.as_view(), name='workbench-delete'),
 ]
 
@@ -188,4 +189,5 @@ urlpatterns += [
     path('backend/workbench-create/<int:pk>', BackendCreateWorkbench.as_view(), name='backend-create-workbench'),
     path('backend/workbench-start/<int:pk>', BackendStartWorkbench.as_view(), name='backend-start-workbench'),
     path('backend/workbench-destroy/<int:pk>', BackendDestroyWorkbench.as_view(), name='backend-destroy-workbench'),
+    path('backend/workbench-update/<int:pk>', BackendUpdateWorkbench.as_view(), name='backend-update-workbench'),
 ]

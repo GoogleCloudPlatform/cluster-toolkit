@@ -29,10 +29,13 @@ import subprocess
 import json
 import os.path as path
 import requests
+import operator
 from datetime import datetime
 from datetime import timedelta
 
 from . import utils
+from ..models import WorkbenchMountPoint
+
 class WorkbenchInfo:
 
     def __init__(self, workbench):
@@ -50,12 +53,12 @@ class WorkbenchInfo:
         self.copy_terraform()
         self.copy_startup_script()
         self.prepare_terraform_vars()
-
-    def get_credentials_file(self):
+    
+    def _get_credentials_file(self):
         return self.workbench_dir / 'cloud_credentials'
 
     def set_credentials(self, creds=None):
-        credfile = self.get_credentials_file()
+        credfile = self._get_credentials_file()
         if not creds:
             # pull from DB
             creds = self.workbench.cloud_credential.detail
@@ -65,40 +68,53 @@ class WorkbenchInfo:
     def copy_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
         shutil.copytree(self.config["baseDir"] / 'infrastructure_files' / 'workbench_tf' / self.cloud_dir, tfDir / self.cloud_dir )
-        #shutil.copytree(self.config["baseDir"] / 'infrastructure_files' / 'workbench_tf' / 'common-files' , tfDir / 'common-files' )
         return tfDir
 
     def copy_startup_script(self):
         user = self.workbench.trusted_users
-        unix_username = ""
-        
-        # setup metadata query to get user profiles
-        metadata_url = "http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024"
-        metadata_headers = {'Metadata-Flavor': 'Google'}
-        # TODO - wrap in a loop with page Tokens
-        req = requests.get(metadata_url, headers=metadata_headers)
-        resp = json.loads(req.text)
-        
-        #for each user profile
-        for profile in resp['loginProfiles']:
-            #if profile "name" matches the user ID then save unix username for the startup script
-            if profile['name'] == user.socialaccount_set.first().uid:
-                # TODO: Should also check login authorization
-                for acct in profile['posixAccounts']:
-                   unix_username = acct['username']
 
         startup_script_vars = f"""
-USER="{unix_username}"
+USER=`curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024 -H 'Metadata-Flavor: Google' | jq '.[][] | select ( .name == "{user.socialaccount_set.first().uid}") | .posixAccounts | .[].username' 2>&- | tr -d '"'`
 """
-
+   
         startup_script = self.workbench_dir / 'startup_script.sh'
         with startup_script.open('w') as f:
             f.write(f"""#!/bin/bash
+echo "starting starup script at `date`" | tee -a /tmp/startup.log
+echo "Getting username..." | tee -a /tmp/startup.log
 {startup_script_vars}
+
+echo "Setting up storage" | tee -a /tmp/startup.log
+sudo apt-get -y update && sudo apt-get install -y nfs-common
+
+mkdir /tmp/jupyterhome 
+chown $USER:$USER /tmp/jupyterhome
+
+mkdir /home/$USER
+chown $USER:$USER /home/$USER
+
+cp /home/jupyter/.jupyter /tmp/jupyterhome/.jupyter -R
+chown $USER:$USER /tmp/jupyterhome/.jupyter -R
+
+echo "The data on this workbench instance is not automatically saved unless it is saved in a shared filesystem that has been mounted. When the system was started any filesystems would be listed below. If none are listed then all data on this instance will be deleted. \n\n" > /tmp/jupyterhome/DATA_LOSS_WARNING.txt
+
 """)
+            for mp in self.workbench.mount_points.order_by('mount_order'):
+                if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
+                    f.write("mkdir -p " + mp.mount_path + "\n")
+                    f.write("mkdir -p /tmp/jupyterhome`dirname " + mp.mount_path + "`\n")
+                    f.write("mount " + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " " + mp.mount_path +"\n")
+                    f.write("chmod 777 " + mp.mount_path +"\n")
+                    f.write("ln -s " + mp.mount_path + " /tmp/jupyterhome`dirname " + mp.mount_path + "` \n")
+                    f.write("echo \"" + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " is mounted at " + mp.mount_path + "\" >> /tmp/jupyterhome/DATA_LOSS_WARNING.txt\n")
+
+            print("SS template")        
             with open(self.config["baseDir"] / 'infrastructure_files' / 'gcs_bucket' / 'workbench' / 'startup_script_template.sh') as infile:
                 for line in infile:
+                    print(line)
                     f.write(line)
+                
+                f.write("\n")
 
     def prepare_terraform_vars(self):
         region = self.workbench.cloud_region
@@ -115,7 +131,6 @@ USER="{unix_username}"
 region = "{region}"
 zone = "{zone}"
 project_name = "{project}"
-credentials = "{self.get_credentials_file().resolve().as_posix()}"
 subnet_name = "{subnet}"
 machine_type = "{self.workbench.machine_type}"
 boot_disk_type = "{self.workbench.boot_disk_type}"
@@ -127,7 +142,6 @@ owner_id = ["{user.email}"]
 wb_startup_script_name   = "workbench/workbench_{self.workbench.id}_startup_script"
 wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 """
-#        pkeys_str = b"\n".join(self._get_ssh_keys()).decode('utf-8')
         tfvars = self.workbench_dir / 'terraform' / self.cloud_dir / 'terraform.tfvars'
         with tfvars.open('w') as f:
             f.write(f"""
@@ -140,10 +154,12 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
     def initialize_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
+        extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': self._get_credentials_file()}
+
         try:
             utils.run_terraform(tfDir / self.cloud_dir, "init")
-            utils.run_terraform(tfDir / self.cloud_dir, "validate")
-            utils.run_terraform(tfDir / self.cloud_dir, "plan")
+            utils.run_terraform(tfDir / self.cloud_dir, "validate", extraEnv=extraEnv)
+            utils.run_terraform(tfDir / self.cloud_dir, "plan", extraEnv=extraEnv)
         except subprocess.CalledProcessError as cpe:
             if cpe.stdout:
                 print(cpe.stdout.decode('utf-8'))
@@ -154,14 +170,14 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
     def run_terraform(self):
         tfDir = self.workbench_dir / 'terraform'
+        extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': self._get_credentials_file()}
         try:
-            (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply")
+            (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply", extraEnv=extraEnv)
             # Look for Management Public IP in terraform.tfstate
             stateFile = tfDir / self.cloud_dir / 'terraform.tfstate'
             with stateFile.open('r') as statefp:
                 state = json.load(statefp)
                 workbench_name = state["outputs"]["workbench_id"]["value"]
-                print(f"Created workbench {workbench_name}, url not available yet")
                 # workbench is now being initialized
                 self.workbench.internal_name = workbench_name
                 self.workbench.cloud_state = 'm'
@@ -187,6 +203,8 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
     def get_workbench_proxy_uri(self):
         # set terraform dir
         tfDir = self.workbench_dir / 'terraform'
+        extraEnv = {'GOOGLE_APPLICATION_CREDENTIALS': self._get_credentials_file()}
+
         try:
             stateFile = tfDir / self.cloud_dir / 'terraform.tfstate'
             if os.path.exists(stateFile):
@@ -194,14 +212,16 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
                 check_time = datetime.utcnow() - timedelta(seconds=60)
                 
                 if file_time < check_time:
-                    (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply", ["-refresh-only"])
+                    (log_out, log_err) = utils.run_terraform(tfDir / self.cloud_dir, "apply", ["-refresh-only"], extraEnv=extraEnv)
                     
                     with stateFile.open('r') as statefp:
                         state = json.load(statefp)
-                        
-                        self.workbench.proxy_uri = state["resources"][3]["instances"][0]["attributes"]["proxy_uri"]
-                        if state["resources"][3]["instances"][0]["attributes"]["state"] == "ACTIVE":
-                            self.workbench.status = 'r'
+                        try:
+                            self.workbench.proxy_uri = state["resources"][3]["instances"][0]["attributes"]["proxy_uri"]
+                            if state["resources"][3]["instances"][0]["attributes"]["state"] == "ACTIVE":
+                                self.workbench.status = 'r'
+                        except Exception:
+                            pass
 
                         self.workbench.save()
 
