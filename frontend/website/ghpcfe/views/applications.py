@@ -110,7 +110,7 @@ class ApplicationDetailView(generic.DetailView):
             spack_application = SpackApplication.objects.get(pk=context['application'].id)
             context['application'].spack_spec = spack_application.spack_spec
             load = context['application'].load_command
-            if load.startswith("spack load /"):
+            if load and load.startswith("spack load /"):
                 context['application'].spack_hash = load.split("/", 1)[1]
         context['navtab'] = 'application'
         context['admin_view'] = admin_view
