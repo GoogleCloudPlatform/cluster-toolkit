@@ -194,7 +194,7 @@ class WorkbenchForm(forms.ModelForm):
         if self.instance.id:
             for field in self.fields:
                 if field != "name":
-                    self.fields[field].widget.attrs['readonly'] = True
+                    self.fields[field].disabled = True
 
         self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential).filter(Q(cloud_state="i")|Q(cloud_state="m"))
         if zone_choices:
