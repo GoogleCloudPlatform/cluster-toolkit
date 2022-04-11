@@ -6,6 +6,7 @@
       - ./vars.yaml
     roles:
       - common
+      # Need a newer gcc to sucessfully install grpcio
       - dev_env
       - spack_install
       - spack_setup
