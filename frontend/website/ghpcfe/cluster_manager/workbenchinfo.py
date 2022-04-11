@@ -102,8 +102,7 @@ chown $USER:$USER /tmp/jupyterhome/.jupyter -R
 echo "The data on this workbench instance is not automatically saved unless it is saved in a shared filesystem that has been mounted. When the system was started any filesystems would be listed below. If none are listed then all data on this instance will be deleted. \n\n" > /tmp/jupyterhome/DATA_LOSS_WARNING.txt
 
 """)
-
-            for mp in WorkbenchMountPoint.objects.order_by('mount_order'):
+            for mp in self.workbench.mount_points.order_by('mount_order'):
                 if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
                     f.write("mkdir -p " + mp.mount_path + "\n")
                     f.write("mkdir -p /tmp/jupyterhome`dirname " + mp.mount_path + "`\n")
@@ -111,9 +110,11 @@ echo "The data on this workbench instance is not automatically saved unless it i
                     f.write("chmod 777 " + mp.mount_path +"\n")
                     f.write("ln -s " + mp.mount_path + " /tmp/jupyterhome`dirname " + mp.mount_path + "` \n")
                     f.write("echo \"" + mp.export.filesystem.hostname_or_ip + ":" + mp.export.export_name + " is mounted at " + mp.mount_path + "\" >> /tmp/jupyterhome/DATA_LOSS_WARNING.txt\n")
-                    
+
+            print("SS template")        
             with open(self.config["baseDir"] / 'infrastructure_files' / 'gcs_bucket' / 'workbench' / 'startup_script_template.sh') as infile:
                 for line in infile:
+                    print(line)
                     f.write(line)
                 
                 f.write("\n")
