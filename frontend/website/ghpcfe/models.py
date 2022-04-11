@@ -529,6 +529,8 @@ class Cluster(CloudResource):
         related_name = 'clusters',
         help_text = 'Subnet within which the cluster resides',
         on_delete = RESTRICT_IF_CLOUD_ACTIVE,
+        null = True,
+        blank = True,
     )
     authorised_users = models.ManyToManyField(
         User,
@@ -560,6 +562,8 @@ class Cluster(CloudResource):
     shared_fs = models.ForeignKey(
         Filesystem,
         on_delete = RESTRICT_IF_CLOUD_ACTIVE,
+        null = True,
+        blank = True,
         related_name = '+',
     )
     spack_install = models.ForeignKey(
@@ -1203,6 +1207,8 @@ class Workbench(CloudResource):
         related_name = 'workbench_subnet',
         help_text = 'Subnet within which the workbench resides',
         on_delete = RESTRICT_IF_CLOUD_ACTIVE,
+        null = True,
+        blank = True,
     )
     WORKBENCH_STATUS = (
         ('n', 'Workbench is being newly configured by user'),
