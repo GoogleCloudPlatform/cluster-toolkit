@@ -20,8 +20,8 @@ locals {
   network_storage = var.network_storage != null ? (
   { network_storage = jsonencode(var.network_storage) }) : {}
 
-  enable_gvnic  = var.advanced_networking != "not_enabled" ? true : false
-  enable_tier_1 = var.advanced_networking == "tier_1_enabled" ? true : false
+  enable_gvnic  = var.bandwidth_tier != "not_enabled" ? true : false
+  enable_tier_1 = var.bandwidth_tier == "tier_1_enabled" ? true : false
 }
 
 data "google_compute_image" "compute_image" {
