@@ -69,12 +69,6 @@ variable "deployment_mode" {
   }
 }
 
-variable "ssh_key" {
-  description = "admin SSH Key to add to the webserver instance"
-  default     = "~/.ssh/id_rsa.pub"
-  type        = string
-}
-
 variable "repo_branch" {
   default     = "main"
   type        = string
@@ -99,3 +93,4 @@ variable "extra_labels" {
   default     = {}
   description = "Extra labels to apply to created GCP resources."
 }
+

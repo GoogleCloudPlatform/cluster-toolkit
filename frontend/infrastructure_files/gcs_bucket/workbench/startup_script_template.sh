@@ -1,13 +1,18 @@
-if [ ! -d /tmp/jupyterhome\home ]; then ln -s /home /tmp/jupyterhome/; fi
+#!/bin/bash
+
+if [ ! -d /tmp/jupyterhome/home ]; then ln -s /home /tmp/jupyterhome/; fi
 
 echo "modifying jupyter config" | tee -a /tmp/startup.log
-echo "jupyter_user = \"$USER\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
-echo "jupyter_home = \"/tmp/jupyterhome\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
-echo 'sys.path.append(f"{jupyter_home}/.jupyter/")' >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
-echo "c.ServerApp.notebook_dir = \"/tmp/jupyterhome\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
+
+cat >>/tmp/jupyterhome/.jupyter/jupyter_notebook_config.py <<+
+jupyter_user = "$USER"
+jupyter_home = "/tmp/jupyterhome"
+sys.path.append(f"{jupyter_home}/.jupyter/")
+c.ServerApp.notebook_dir = "/tmp/jupyterhome"
++
 
 echo "modifying jupyter service" | tee -a /tmp/startup.log
-cat > /lib/systemd/system/jupyter.service <<+ 
+cat >/lib/systemd/system/jupyter.service <<+
 [Unit]
 Description=Jupyter Notebook Service
 

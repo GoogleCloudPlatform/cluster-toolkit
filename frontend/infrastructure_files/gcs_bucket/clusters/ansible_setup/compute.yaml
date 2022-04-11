@@ -1,10 +1,10 @@
 ---
-  - name: "Compute Node Setup"
-    hosts: localhost
-    connection: local
-    vars_files:
-      - ./vars.yaml
-    roles:
-      - common
-      - dev_env
-      - spack_setup
+- name: "Compute Node Setup"
+  hosts: localhost
+  connection: local
+  vars_files:
+  - ./vars.yaml
+  roles:
+  - common
+  - dev_env
+  - spack_setup
