@@ -1,4 +1,4 @@
-ln -s /home /tmp/jupyterhome/
+if [ ! -d /tmp/jupyterhome\home ]; then ln -s /home /tmp/jupyterhome/; fi
 
 echo "modifying jupyter config" | tee -a /tmp/startup.log
 echo "jupyter_user = \"$USER\"" >> /tmp/jupyterhome/.jupyter/jupyter_notebook_config.py
