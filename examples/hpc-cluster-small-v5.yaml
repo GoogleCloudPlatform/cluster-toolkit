@@ -51,7 +51,7 @@ resource_groups:
       enable_placement: false
       machine_type: n2-standard-2
       source_image: schedmd-v5-slurm-21-08-4-hpc-centos-7-1648163377
-      image_project: $(vars.project_id) # If not working in host project, change this
+      image_project: $(vars.project_id) # If not stored in host project, change this
 
   - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-v5-controller
     kind: terraform

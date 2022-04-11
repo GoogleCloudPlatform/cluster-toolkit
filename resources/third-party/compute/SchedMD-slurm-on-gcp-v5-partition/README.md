@@ -1,4 +1,18 @@
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+Copyright 2022 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
 ## Requirements
 
 | Name | Version |
@@ -30,7 +44,6 @@ No resources.
 | <a name="input_enable_placement"></a> [enable\_placement](#input\_enable\_placement) | Enable placement groups | `bool` | `true` | no |
 | <a name="input_exclusive"></a> [exclusive](#input\_exclusive) | Exclusive job access to nodes | `bool` | `false` | no |
 | <a name="input_gpu"></a> [gpu](#input\_gpu) | Definition of requested GPU resources | <pre>object({<br>    count = number,<br>    type  = string<br>  })</pre> | `null` | no |
-| <a name="input_image_project"></a> [image\_project](#input\_image\_project) | Project the image is hosted in | `string` | `"schedmd-slurm-public"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to partition compute instances. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Compute Platform machine type to use for this partition compute nodes | `string` | `"c2-standard-60"` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | The name of the minimum CPU platform that you want the instance to use. | `string` | `null` | no |
@@ -41,6 +54,7 @@ No resources.
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources | `string` | n/a | yes |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used for resource naming and slurm accounting. | `string` | n/a | yes |
 | <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Image to be used of the compute VMs in this partition | `string` | `"schedmd-slurm-21-08-4-hpc-centos-7"` | no |
+| <a name="input_source_image_project"></a> [source\_image\_project](#input\_source\_image\_project) | Project the image is hosted in | `string` | `"schedmd-slurm-public"` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. Only one of network or subnetwork should be specified. | `string` | `""` | no |
 
 ## Outputs
