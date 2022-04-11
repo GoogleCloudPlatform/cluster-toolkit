@@ -106,6 +106,14 @@ class ApplicationDetailView(generic.DetailView):
         if self.request.user.has_admin_role():
             admin_view = 1
         context = super().get_context_data(**kwargs)
+        print(context)
+        if hasattr(self.get_object(), 'spackapplication'):
+            spack_application = SpackApplication.objects.get(pk=context['application'].id)
+            context['application'].spack_spec = spack_application.spack_spec
+            load = context['application'].load_command
+            print(load)
+            if load.startswith("spack load /"):
+                context['application'].spack_hash = load.split("/", 1)[1]
         context['navtab'] = 'application'
         context['admin_view'] = admin_view
         return context
