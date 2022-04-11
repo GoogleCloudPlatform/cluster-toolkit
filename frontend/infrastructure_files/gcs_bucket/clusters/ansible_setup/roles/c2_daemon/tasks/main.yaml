@@ -5,10 +5,11 @@
     name: pip
     state: present
 
-# Can't use the pip action here because we need to explicitly enable 
+# Can't use the pip action here because we need to explicitly enable
 # a modern gcc from the dev_env role
 - name: Install FE C&C Dependencies
   shell: . /opt/rh/devtoolset-11/enable && pip3 install requests pexpect google-cloud-storage google-cloud-pubsub
+  when: True
 
 - name: Install FE C&C Daemon
   copy:
