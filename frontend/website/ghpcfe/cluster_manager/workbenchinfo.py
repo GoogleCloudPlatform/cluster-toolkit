@@ -29,6 +29,7 @@ import subprocess
 import json
 import os.path as path
 import requests
+import operator
 from datetime import datetime
 from datetime import timedelta
 
@@ -98,11 +99,11 @@ chown $USER:$USER /home/$USER
 cp /home/jupyter/.jupyter /tmp/jupyterhome/.jupyter -R
 chown $USER:$USER /tmp/jupyterhome/.jupyter -R
 
-echo "The data on this workbench instance is not automatically saved unless it is saved in a shared filesystem that has been mounted. When the system was started any filesystems would be listed below. If none are listed then all data on this instance will be deleted. \n\n\n" > /tmp/jupyterhome/DATA_LOSS_WARNING.txt
+echo "The data on this workbench instance is not automatically saved unless it is saved in a shared filesystem that has been mounted. When the system was started any filesystems would be listed below. If none are listed then all data on this instance will be deleted. \n\n" > /tmp/jupyterhome/DATA_LOSS_WARNING.txt
 
 """)
 
-            for mp in WorkbenchMountPoint.objects.all():
+            for mp in WorkbenchMountPoint.objects.order_by('mount_order'):
                 if self.workbench.id == mp.workbench.id and mp.export.filesystem.hostname_or_ip:
                     f.write("mkdir -p " + mp.mount_path + "\n")
                     f.write("mkdir -p /tmp/jupyterhome`dirname " + mp.mount_path + "`\n")
