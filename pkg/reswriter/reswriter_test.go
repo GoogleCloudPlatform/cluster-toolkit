@@ -89,7 +89,7 @@ func getYamlConfigForTest() config.YamlConfig {
 		},
 	}
 	testResourceGroups := []config.ResourceGroup{
-		config.ResourceGroup{
+		{
 			Resources: []config.Resource{testResource, testResourceWithLabels},
 		},
 	}
@@ -299,7 +299,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 	testResourceWithWrap := config.Resource{
 		ID: "test_resource_with_wrap",
 		WrapSettingsWith: map[string][]string{
-			"wrappedSetting": []string{"list(flatten(", "))"},
+			"wrappedSetting": {"list(flatten(", "))"},
 		},
 		Settings: map[string]interface{}{
 			"wrappedSetting": []interface{}{"val1", "val2"},
