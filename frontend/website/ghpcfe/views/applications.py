@@ -48,6 +48,16 @@ class ApplicationListView(generic.ListView):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        if self.request.user.has_admin_role():
+            pass
+        else:
+            wanted_items = set()
+            for application in qs:
+                cluster = application.cluster
+                if self.request.user in cluster.authorised_users.all() and cluster.status == 'r' \
+                   and application.status == 'r':
+                    wanted_items.add(application.pk)
+            qs = qs.filter(pk__in = wanted_items)
         for item in qs:
             type = 'pre-installed'
             if hasattr(item, 'spackapplication'):
@@ -92,8 +102,18 @@ class ApplicationDetailView(generic.DetailView):
             return super().get_template_names()
 
     def get_context_data(self, **kwargs):
+        admin_view = 0
+        if self.request.user.has_admin_role():
+            admin_view = 1
         context = super().get_context_data(**kwargs)
+        if hasattr(self.get_object(), 'spackapplication'):
+            spack_application = SpackApplication.objects.get(pk=context['application'].id)
+            context['application'].spack_spec = spack_application.spack_spec
+            load = context['application'].load_command
+            if load.startswith("spack load /"):
+                context['application'].spack_hash = load.split("/", 1)[1]
         context['navtab'] = 'application'
+        context['admin_view'] = admin_view
         return context
 
 

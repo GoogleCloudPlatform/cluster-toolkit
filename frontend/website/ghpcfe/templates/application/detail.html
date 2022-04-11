@@ -39,8 +39,10 @@
   {% if object.status == "r" %}
   <a href="{% url 'job-create' application.id %}" class="btn btn-primary">New Job</a>
   {% endif %}
-  {% if object.status == "r" or object.status == "e"%}
+  {% if admin_view == 1 %}
+    {% if object.status == "r" or object.status == "e"%}
   <a href="{% url 'application-log' application.id %}" class="btn btn-primary">View Logs</a>
+    {% endif %}
   {% endif %}
 
 {% endblock %}
