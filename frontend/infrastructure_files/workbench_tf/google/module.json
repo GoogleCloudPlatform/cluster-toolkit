@@ -101,6 +101,15 @@
       "required": false
     },
     {
+      "name": "owner_id",
+      "type": "list(any)",
+      "description": "Billing Account associated to the GCP Resources",
+      "default": [
+        ""
+      ],
+      "required": false
+    },
+    {
       "name": "project",
       "type": "string",
       "description": "Project in which to launch the AI Notebooks.",
@@ -164,6 +173,20 @@
       "required": false
     },
     {
+      "name": "wb_startup_script_bucket",
+      "type": "string",
+      "description": "Name for the bucket where the workbench startup script is stored. ",
+      "default": "",
+      "required": false
+    },
+    {
+      "name": "wb_startup_script_name",
+      "type": "string",
+      "description": "Name \u0026 Path for the wb startup script file when uploaded to GCP cloud storage",
+      "default": "",
+      "required": false
+    },
+    {
       "name": "zone",
       "type": "string",
       "description": "Cloud Zone associated to the AI Notebooks",
@@ -197,10 +220,6 @@
     {
       "name": "project_radlab_ds_analytics_id",
       "description": "Analytics Project ID"
-    },
-    {
-      "name": "user_scripts_bucket_uri",
-      "description": "User Script Bucket URI"
     }
   ],
   "providers": [
@@ -217,7 +236,7 @@
     {
       "name": "time",
       "alias": null,
-      "version": "\u003e= 1.0"
+      "version": "\u003e= 0.7.2"
     }
   ],
   "requirements": [
@@ -235,31 +254,13 @@
     },
     {
       "name": "time",
-      "version": "\u003e= 1.0"
+      "version": "\u003e= 0.7.2"
     }
   ],
   "resources": [
     {
       "type": "notebooks_instance",
       "name": "ai_notebook",
-      "provider": "google",
-      "source": "hashicorp/google",
-      "mode": "managed",
-      "version": "latest",
-      "description": null
-    },
-    {
-      "type": "project_iam_binding",
-      "name": "ai_notebook_user_role1",
-      "provider": "google",
-      "source": "hashicorp/google",
-      "mode": "managed",
-      "version": "latest",
-      "description": null
-    },
-    {
-      "type": "project_iam_binding",
-      "name": "ai_notebook_user_role2",
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "managed",
@@ -330,17 +331,8 @@
       "description": null
     },
     {
-      "type": "storage_bucket",
-      "name": "user_scripts_bucket",
-      "provider": "google",
-      "source": "hashicorp/google",
-      "mode": "managed",
-      "version": "latest",
-      "description": null
-    },
-    {
-      "type": "storage_bucket_iam_binding",
-      "name": "binding",
+      "type": "storage_bucket_object",
+      "name": "startup_script",
       "provider": "google",
       "source": "hashicorp/google",
       "mode": "managed",
