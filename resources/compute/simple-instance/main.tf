@@ -71,9 +71,8 @@ resource "google_compute_instance" "compute_vm" {
     nic_type   = local.enable_gvnic ? "GVNIC" : null
   }
 
-  dynamic "network_performance_config" {
-    for_each = local.enable_tier_1 == true ? [1] : []
-    content { total_egress_bandwidth_tier = "TIER_1" }
+  network_performance_config {
+    total_egress_bandwidth_tier = local.enable_tier_1 ? "TIER_1" : "DEFAULT"
   }
 
   dynamic "service_account" {
