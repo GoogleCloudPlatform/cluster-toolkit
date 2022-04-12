@@ -32,10 +32,20 @@ class UserListView(SuperUserRequiredMixin, generic.ListView):
     model = User
     template_name = 'user/list.html'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'user'
+        return context
+
 
 class UserDetailView(SuperUserRequiredMixin, generic.DetailView):
     model = User
     template_name = 'user/detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'user'
+        return context
 
 
 class UserAdminUpdateView(SuperUserRequiredMixin, generic.UpdateView):
@@ -43,9 +53,14 @@ class UserAdminUpdateView(SuperUserRequiredMixin, generic.UpdateView):
     template_name = "user/adminupdate_form.html"
     form_class = UserAdminUpdateForm
 
-
     def get_success_url(self):
         return reverse('user-detail', kwargs={'pk': self.object.pk})
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'user'
+        return context
+
 
 # create/update views
 class AccountUpdateView(LoginRequiredMixin, generic.UpdateView):
@@ -58,7 +73,7 @@ class AccountUpdateView(LoginRequiredMixin, generic.UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'home'
+        context['navtab'] = 'user'
         context['quota_type_friendly'] = User.QUOTA_TYPE
         return context
 
