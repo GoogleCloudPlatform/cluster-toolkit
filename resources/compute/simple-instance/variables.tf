@@ -140,12 +140,12 @@ variable "guest_accelerator" {
 }
 
 variable "on_host_maintenance" {
-  description = "Describes maintenance behavior for the instance."
+  description = "Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy` requires it to be `TERMINATE`"
   type        = string
-  default     = "MIGRATE"
+  default     = null
   validation {
-    condition     = contains(["MIGRATE", "TERMINATE"], var.on_host_maintenance)
-    error_message = "The on_host_maintenance must be set to MIGRATE or TERMINATE."
+    condition     = var.on_host_maintenance == null ? true : contains(["MIGRATE", "TERMINATE"], var.on_host_maintenance)
+    error_message = "When set, the on_host_maintenance must be set to MIGRATE or TERMINATE."
   }
 }
 
@@ -163,4 +163,14 @@ variable "bandwidth_tier" {
     condition     = contains(["not_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
     error_message = "Allowed values for bandwidth_tier are 'not_enabled', 'gvnic_enabled', or  'tier_1_enabled'."
   }
+}
+
+variable "placement_policy" {
+  description = "Control where your VM instances are physically located relative to each other within a zone."
+  type = object({
+    vm_count                  = number,
+    availability_domain_count = number,
+    collocation               = string,
+  })
+  default = null
 }

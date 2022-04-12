@@ -21,6 +21,47 @@ This creates a cluster of 8 compute VMs named `compute-[0-7]` on the network
 defined by the `network1` resource. The VMs are of type c2-standard-60 and mount
 the `homefs` file system resource.
 
+### Placement
+
+The `placement_policy` variable can be used to control where your VM instances
+are physically located relative to each other within a zone. See the official
+placement
+[guide](https://cloud.google.com/compute/docs/instances/define-instance-placement)
+and
+[api](https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement)
+documentation.
+
+Use the following settings for compact placement:
+
+```yaml
+  ...
+  settings:
+    instance_count: 4
+    machine_type: c2-standard-60
+    placement_policy:
+      vm_count: 4  # Note: should match instance count
+      collocation: "COLLOCATED"
+      availability_domain_count: null
+```
+
+Use the following settings for spread placement:
+
+```yaml
+  ...
+  settings:
+    instance_count: 4
+    machine_type: n2-standard-4
+    placement_policy:
+      vm_count: null
+      collocation: null
+      availability_domain_count: 2
+```
+
+> **_NOTE:_** Due to
+> [this open issue](https://github.com/hashicorp/terraform-provider-google/issues/11483),
+> it may be required to specify the `vm_count`. Once this issue is resolved,
+> `vm_count` will no longer be mandatory.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -63,6 +104,7 @@ No modules.
 |------|------|
 | [google-beta_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance) | resource |
 | [google_compute_disk.boot_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
+| [google_compute_resource_policy.placement_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy) | resource |
 | [google_compute_image.compute_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 
 ## Inputs
@@ -83,7 +125,8 @@ No modules.
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name Prefix | `string` | `null` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the VM. | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |
-| <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. | `string` | `"MIGRATE"` | no |
+| <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy` requires it to be `TERMINATE` | `string` | `null` | no |
+| <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Control where your VM instances are physically located relative to each other within a zone. | <pre>object({<br>    vm_count                  = number,<br>    availability_domain_count = number,<br>    collocation               = string,<br>  })</pre> | `null` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the instance. See https://www.terraform.io/docs/providers/google/r/compute_instance_template.html#service_account. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/devstorage.read_only",<br>    "https://www.googleapis.com/auth/logging.write",<br>    "https://www.googleapis.com/auth/monitoring.write",<br>    "https://www.googleapis.com/auth/servicecontrol",<br>    "https://www.googleapis.com/auth/service.management.readonly",<br>    "https://www.googleapis.com/auth/trace.append"<br>  ]<br>}</pre> | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script used on the instance | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the VM. | `string` | `null` | no |
