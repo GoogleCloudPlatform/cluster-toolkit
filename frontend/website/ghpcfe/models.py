@@ -318,6 +318,14 @@ class CloudResource(models.Model):
     def is_managed(self):
         return 'm' in self.cloud_state
 
+    @property
+    def cloud_status(self):
+        raise NameError("Use cloud_state!")
+
+    @cloud_status.setter
+    def cloud_status(self, new_status):
+        raise NameError("Use cloud_state!")
+
 
 class VirtualNetwork(CloudResource):
     """ Model representing a virtual network (VPC) in the cloud """
