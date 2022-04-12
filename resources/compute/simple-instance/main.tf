@@ -19,6 +19,9 @@ locals {
   { startup-script = var.startup_script }) : {}
   network_storage = var.network_storage != null ? (
   { network_storage = jsonencode(var.network_storage) }) : {}
+
+  enable_gvnic  = var.bandwidth_tier != "not_enabled" ? true : false
+  enable_tier_1 = var.bandwidth_tier == "tier_1_enabled" ? true : false
 }
 
 data "google_compute_image" "compute_image" {
@@ -39,6 +42,8 @@ resource "google_compute_disk" "boot_disk" {
 }
 
 resource "google_compute_instance" "compute_vm" {
+  provider = google-beta
+
   count = var.instance_count
 
   depends_on = [var.network_self_link, var.network_storage]
@@ -63,6 +68,11 @@ resource "google_compute_instance" "compute_vm" {
 
     network    = var.network_self_link
     subnetwork = var.subnetwork_self_link
+    nic_type   = local.enable_gvnic ? "GVNIC" : null
+  }
+
+  network_performance_config {
+    total_egress_bandwidth_tier = local.enable_tier_1 ? "TIER_1" : "DEFAULT"
   }
 
   dynamic "service_account" {
