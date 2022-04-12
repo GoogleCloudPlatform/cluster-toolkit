@@ -130,6 +130,13 @@ window.onload=initPage;
             </tr>
             </thead>
           {% endif %}
+          {% if form.errors %}
+            {% for error in form.non_field_errors %}
+              <div class="alert alert-danger">
+              <strong>{{ error|escape }}</strong>
+              </div>
+            {% endfor %}
+          {% endif %}
           <tr class="part_formset_row">
             {% for field in form.visible_fields %}
               <td>
