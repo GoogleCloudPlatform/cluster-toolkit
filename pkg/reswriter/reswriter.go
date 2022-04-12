@@ -18,7 +18,6 @@
 package reswriter
 
 import (
-	"embed"
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
@@ -40,9 +39,6 @@ var kinds = map[string]ResWriter{
 	"packer":    new(PackerWriter),
 }
 
-//go:embed *.tmpl
-var templatesFS embed.FS
-
 func factory(kind string) ResWriter {
 	writer, exists := kinds[kind]
 	if !exists {
@@ -51,15 +47,6 @@ func factory(kind string) ResWriter {
 				"kind must be in (terraform, blueprint-controller).", kind)
 	}
 	return writer
-}
-
-func getTemplate(filename string) string {
-	// Create path to template from the embedded template FS
-	tmplText, err := templatesFS.ReadFile(filename)
-	if err != nil {
-		log.Fatalf("reswriter: %v", err)
-	}
-	return string(tmplText)
 }
 
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {

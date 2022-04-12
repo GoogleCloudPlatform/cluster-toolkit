@@ -23,7 +23,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
 	"gopkg.in/yaml.v2"
 
@@ -389,18 +391,32 @@ func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
 	return nil
 }
 
-// IsLiteralVariable is exported for use in reswriter as well
+// IsLiteralVariable returns true if string matches variable ((ctx.name))
 func IsLiteralVariable(str string) bool {
-	match, err := regexp.MatchString(fullLiteralExp, str)
+	match, err := regexp.MatchString(literalExp, str)
 	if err != nil {
 		log.Fatalf("Failed checking if variable is a literal: %v", err)
 	}
 	return match
 }
 
+// IdentifyLiteralVariable returns
+// string: variable source (e.g. global "vars" or module "modname")
+// string: variable name (e.g. "project_id")
+// bool: true/false reflecting success
+func IdentifyLiteralVariable(str string) (string, string, bool) {
+	re := regexp.MustCompile(literalSplitExp)
+	contents := re.FindStringSubmatch(str)
+	if len(contents) != 3 {
+		return "", "", false
+	}
+
+	return contents[1], contents[2], true
+}
+
 // HandleLiteralVariable is exported for use in reswriter as well
 func HandleLiteralVariable(str string) string {
-	re := regexp.MustCompile(fullLiteralExp)
+	re := regexp.MustCompile(literalExp)
 	contents := re.FindStringSubmatch(str)
 	if len(contents) != 2 {
 		log.Fatalf("Incorrectly formatted literal variable: %s", str)
@@ -434,4 +450,48 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 		cMap[k] = convertedVal
 	}
 	return cMap, nil
+}
+
+// ResolveGlobalVariables given a map of strings to cty.Value types, will examine
+// all cty.Values that are of type cty.String. If they are literal global variables,
+// then they are replaces by the cty.Value of the corresponding entry in yc.Vars
+// the cty.Value types that are string literal global variables to their value
+// ERROR: if conversion from yc.Vars to map[string]cty.Value fails
+// ERROR: if (somehow) the cty.String cannot be covnerted to a Go string
+// ERROR: if there are literal variables which are not globals
+//        (this will be a use case we should consider)
+// ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global variable
+//        being resolved does not exist in yc.Vars
+func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error {
+	ctyVars, err := ConvertMapToCty(yc.Vars)
+	if err != nil {
+		return fmt.Errorf("could not convert global variables to cty map")
+	}
+	evalCtx := &hcl.EvalContext{
+		Variables: map[string]cty.Value{"var": cty.ObjectVal(ctyVars)},
+	}
+	for key, val := range ctyMap {
+		if val.Type() == cty.String {
+			var valString string
+			if err := gocty.FromCtyValue(val, &valString); err != nil {
+				return err
+			}
+			ctx, varName, found := IdentifyLiteralVariable(valString)
+			// confirm literal and that it is global
+			if found && ctx == "var" {
+				varTraversal := hcl.Traversal{
+					hcl.TraverseRoot{Name: ctx},
+					hcl.TraverseAttr{Name: varName},
+				}
+				newVal, diags := varTraversal.TraverseAbs(evalCtx)
+				if diags.HasErrors() {
+					return diags
+				}
+				ctyMap[key] = newVal
+			} else {
+				return fmt.Errorf("%s was not a literal global variable ((var.name))", valString)
+			}
+		}
+	}
+	return nil
 }

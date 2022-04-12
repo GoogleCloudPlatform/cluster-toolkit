@@ -18,14 +18,14 @@ package reswriter
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"text/template"
 
 	"hpc-toolkit/pkg/config"
+
+	"github.com/zclconf/go-cty/cty"
 )
 
-const packerAutoVarFilename = "variables.auto.pkrvars.hcl"
+const packerAutoVarFilename = "defaults.auto.pkrvars.hcl"
 
 // PackerWriter writes packer to the blueprint folder
 type PackerWriter struct {
@@ -38,13 +38,6 @@ func (w *PackerWriter) getNumResources() int {
 
 func (w *PackerWriter) addNumResources(value int) {
 	w.numResources += value
-}
-
-// prepareToWrite makes any resource kind specific changes to the config before
-// writing to the blueprint directory
-func (w PackerWriter) prepareToWrite(yamlConfig *config.YamlConfig) {
-	updateStringsInConfig(yamlConfig, "packer")
-	flattenToHCLStrings(yamlConfig, "packer")
 }
 
 func printPackerInstructions(grpPath string) {
@@ -61,8 +54,16 @@ func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig, bpDirect
 			if res.Kind != "packer" {
 				continue
 			}
+
+			ctySettings, err := config.ConvertMapToCty(res.Settings)
+
+			if err != nil {
+				return fmt.Errorf(
+					"error converting global vars to cty for writing: %v", err)
+			}
+			yamlConfig.ResolveGlobalVariables(ctySettings)
 			resPath := filepath.Join(groupPath, res.ID)
-			err := writePackerAutoVariables(packerAutoVarFilename, res, resPath)
+			err = writePackerAutovars(ctySettings, resPath)
 			if err != nil {
 				return err
 			}
@@ -72,42 +73,14 @@ func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig, bpDirect
 	return nil
 }
 
-func writePackerAutoVariables(
-	tmplFilename string, resource config.Resource, destPath string) error {
-	tmplText := getTemplate(fmt.Sprintf("%s.tmpl", tmplFilename))
-
-	funcMap := template.FuncMap{
-		"getType": getType,
-	}
-	tmpl, err := template.New(tmplFilename).Funcs(funcMap).Parse(tmplText)
-
-	if err != nil {
-		return fmt.Errorf(
-			"failed to create template %s when writing packer resource at %s: %v",
-			tmplFilename, resource.Source, err)
-	}
-	if tmpl == nil {
-		return fmt.Errorf(
-			"failed to parse the %s template", tmplFilename)
-	}
-
-	outputPath := filepath.Join(destPath, tmplFilename)
-	outputFile, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to create packer file %s: %v", tmplFilename, err)
-	}
-	if err := tmpl.Execute(outputFile, resource); err != nil {
-		return fmt.Errorf(
-			"failed to write template for %s file when writing packer resource %s: %e",
-			tmplFilename, resource.ID, err)
-	}
-	return nil
+func writePackerAutovars(vars map[string]cty.Value, dst string) error {
+	packerAutovarsPath := filepath.Join(dst, packerAutoVarFilename)
+	err := writeHclAttributes(vars, packerAutovarsPath)
+	return err
 }
 
 // writeResourceGroups writes any needed files to the top and resource levels
 // of the blueprint
 func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig, bpDirectory string) error {
-	w.prepareToWrite(yamlConfig)
 	return w.writeResourceLevel(yamlConfig, bpDirectory)
 }

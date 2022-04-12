@@ -32,7 +32,12 @@ const (
 	roleLabel         string = "ghpc_role"
 	simpleVariableExp string = `^\$\((.*)\)$`
 	anyVariableExp    string = `\$\((.*)\)`
-	fullLiteralExp    string = `^\(\((.*)\)\)$`
+	literalExp        string = `^\(\((.*)\)\)$`
+	// the greediness and non-greediness of expression below is important
+	// consume all whitespace at beginning and end
+	// consume only up to first period to get variable source
+	// consume only up to whitespace to get variable name
+	literalSplitExp string = `^\(\([[:space:]]*(.*?)\.(.*?)[[:space:]]*\)\)$`
 )
 
 // expand expands variables and strings in the yaml config. Used directly by
