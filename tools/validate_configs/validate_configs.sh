@@ -50,10 +50,6 @@ run_test() {
 	}
 	for folder in ./*; do
 		cd "$folder"
-		pkrdirs=()
-		while IFS= read -r -d $'\n'; do
-			pkrdirs+=("$REPLY")
-		done < <(find . -name "*.pkr.hcl" -printf '%h\n' | sort -u)
 		if [ -f 'main.tf' ]; then
 			tfpw=$(pwd)
 			terraform init -no-color -backend=false >"${exampleFile}.init" ||
@@ -66,16 +62,8 @@ run_test() {
 					echo "*** ERROR: terraform validate failed for ${example}, logs in ${tfpw}"
 					exit 1
 				}
-		elif [ ${#pkrdirs[@]} -gt 0 ]; then
-			for pkrdir in "${pkrdirs[@]}"; do
-				packer validate -syntax-only "${pkrdir}" >/dev/null ||
-					{
-						echo "*** ERROR: packer validate failed for ${example}"
-						exit 1
-					}
-			done
 		else
-			echo "neither packer nor terraform found in folder ${BLUEPRINT}/${folder}. Skipping."
+			echo "terraform not found in folder ${BLUEPRINT}/${folder}. Skipping."
 		fi
 		cd .. # back to blueprint folder
 	done
