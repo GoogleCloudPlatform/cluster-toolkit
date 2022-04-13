@@ -22,7 +22,7 @@ vars:
   zone: us-central1-c
   ansible_playbooks:
   - playbook_file: ./example-playbook.yml
-    galaxy_file: null
+    galaxy_file: ./requirements.yml
     extra_arguments: ["-vv"]
 
 resource_groups:
