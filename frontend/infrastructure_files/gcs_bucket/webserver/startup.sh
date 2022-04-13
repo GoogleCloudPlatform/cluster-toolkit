@@ -208,7 +208,7 @@ Requires=supervisord.service
 [Service]
 Type=forking
 ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/frontend/website/nginx.conf
-ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkig/frontend/website/nginx.conf -s stop
+ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/frontend/website/nginx.conf -s stop
 PIDFile=/opt/gcluster/run/nginx.pid
 Restart=no
 
