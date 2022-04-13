@@ -28,7 +28,7 @@
     {% if object.status == "d" %}
     <div class="alert alert-info">This workbench is destroyed and its settings archived. No further change is possible.</div>
     {% endif %}
-    {% with viewer=request.user.has_viewer_role normaluser=request.user.has_normaluser_role admin=request.user.has_admin_role %}
+    {% with admin=request.user.has_admin_role %}
       {% if object.status == "n" %}
         {% if workbench.trusted_users == request.user or admin %} 
           <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
