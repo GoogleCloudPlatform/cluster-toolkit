@@ -28,17 +28,27 @@
     {% if object.status == "d" %}
     <div class="alert alert-info">This workbench is destroyed and its settings archived. No further change is possible.</div>
     {% endif %}
-    {% if object.status == "n" %}
-    <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
-    <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Create</a>
-    {% endif %}
-    {% if object.status == "r" %}
-    <a href="https://{{ object.proxy_uri }}" class="btn btn-primary" target="_blank">Open JupyterLab</a>
-    <a href="{% url 'workbench-destroy' object.id %}" class="btn btn-primary">Destroy</a>
-    {% endif %}
-    {% if object.status == "d" %}
-      <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
-      <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Recreate</a>
-    {% endif %}
+    {% with viewer=request.user.has_viewer_role normaluser=request.user.has_normaluser_role admin=request.user.has_admin_role %}
+      {{ workbench.trusted_users }} - {{ request.user }} - {{ admin }}
+      {% if object.status == "n" %}
+        {% if workbench.trusted_users == request.user or admin %} 
+          <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
+          <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Create</a>
+        {% endif %}
+      {% endif %}
+      {% if object.status == "r" %}
+        <a href="https://{{ object.proxy_uri }}" class="btn btn-primary" target="_blank">Open JupyterLab</a>
+        {% if workbench.trusted_users == request.user or admin %} 
+          <a href="{% url 'workbench-destroy' object.id %}" class="btn btn-primary">Destroy</a>
+        {% endif %}
+      {% endif %}
+      {% if object.status == "d" %}
+        {% if workbench.trusted_users == request.user or admin %} 
+          <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
+          <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Recreate</a>
+        {% endif %}
+      {% endif %}
+    {% endwith %}
+
 
 {% endblock %}
