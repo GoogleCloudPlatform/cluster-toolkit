@@ -89,6 +89,7 @@ Job data is stored in the shared filesystem `/home/<username>` for each user. He
 
 Note that a special home directory is created at `/home/root_jobs` to host jobs submitted by the Django superusers. For convenience they do not need Google identities and their jobs are run as *root* on the clusters.
 
+
 ## Workbenches Architecture
 
 The workbench process is fairly simple. Gather configuration values from the frontend and pass them to terraform to control the creation of the workbench instance. This is done directly via terraform as the HPC Toolkit does not currently support VertexAI Workbenches. 
