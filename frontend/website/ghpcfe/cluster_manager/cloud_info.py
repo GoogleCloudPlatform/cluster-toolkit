@@ -20,6 +20,8 @@ from google.cloud.billing_v1.services import cloud_catalog
 import google.cloud.exceptions
 import googleapiclient.discovery
 
+from functools import lru_cache
+import time
 import configparser
 from collections import defaultdict
 import archspec.cpu
@@ -60,7 +62,9 @@ def _get_gcp_client(credentials, service="compute", api_version="v1"):
             googleapiclient.discovery.build(service, api_version, credentials=creds, cache_discovery=False)
             )
 
-def _get_gcp_machine_types(credentials, region, zone):
+@lru_cache
+def _get_gcp_machine_types(credentials, region, zone, ttl_hash=None):
+    del ttl_hash # Unused argument, make pylint not care
     (project, client) = _get_gcp_client(credentials)
 
     req = client.machineTypes().list(project=project, zone=zone,
@@ -82,42 +86,17 @@ def _get_gcp_machine_types(credentials, region, zone):
     }
 
 
+def _get_ttl_hash(seconds=3600*24):
+    """Return the same value within `seconds` time period. Default to 1 day of caching"""
+    return round(time.time() / seconds)
 
 
 def get_machine_types(cloudProvider, credentials, region, zone):
     if cloudProvider == "GCP":
-        return _get_gcp_machine_types(credentials, region, zone)
+        return _get_gcp_machine_types(credentials, region, zone, ttl_hash=_get_ttl_hash())
     else:
         raise Exception("Unsupport Cloud Provider")
 
-
-class MachineFamily():
-    def __init__(self, name = None):
-        self.name = name
-        self.members = []
-        self.arch_family = None
-
-    @property
-    def common_arch(self):
-        return get_common_arch([m["arch"] for m in self.members])
-
-    def addMember(self, machineInfo):
-        memberArch = archspec.cpu.TARGETS[machineInfo["arch"]]
-        if not self.name:
-            self.name = machineInfo["family"]
-        if not self.arch_family:
-            self.arch_family = memberArch.family
-        elif self.arch_family != memberArch.family:
-            raise Exception(f"Mismatched architectures! {self.arch_family.name} != {memberArch.family.name}")
-        self.members.append(machineInfo)
-
-
-def get_machine_families(cloudProvider, credentials, region, zone):
-    """ From list of machines, produce a family info array """
-    machines = get_machine_types(cloudProvider, credentials, region, zone)
-    families = defaultdict(MachineFamily)
-    [families[m["family"]].addMember(m) for m in machines.values()]
-    return families.values()
 
 
 def _get_arch_ancestry(arch):
@@ -150,7 +129,8 @@ def sort_architectures(archNames):
 
 
 
-def _get_gcp_region_zone_info(credentials):
+@lru_cache
+def _get_gcp_region_zone_info(credentials, ttl_hash = None):
     (project, client) = _get_gcp_client(credentials)
 
     req = client.zones().list(project=project)
@@ -165,7 +145,7 @@ def _get_gcp_region_zone_info(credentials):
 
 def get_region_zone_info(cloudProvider, credentials):
     if cloudProvider == "GCP":
-        return _get_gcp_region_zone_info(credentials)
+        return _get_gcp_region_zone_info(credentials, ttl_hash=_get_ttl_hash())
     else:
         raise Exception("Unsupport Cloud Provider")
 

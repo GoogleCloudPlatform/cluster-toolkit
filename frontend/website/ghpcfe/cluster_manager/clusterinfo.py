@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 from ..models import Cluster, ApplicationInstallationLocation, \
-    ComputeInstance, InstanceType
+    ComputeInstance
 
 class ClusterInfo:
     """ Expected process:
@@ -172,7 +172,7 @@ ClusterInfo object - represent a cluster
       partition_name: {part.name}
       subnetwork_name: {self.cluster.subnet.cloud_id}
       max_node_count: {part.max_node_count}
-      machine_type: {part.machine_type.name}
+      machine_type: {part.machine_type}
       enable_placement: {part.enable_placement}
       image_hyperthreads: {part.enable_hyperthreads}
       exclusive: {part.enable_placement or not part.enable_node_reuse}
@@ -372,8 +372,7 @@ resource_groups:
 
             try:
                 ciKwargs['cloud_id'] = tf["attributes"]["name"]
-                instance_type_name = tf["attributes"]["machine_type"]
-                ciKwargs['instance_type'] = InstanceType.objects.get(name=instance_type_name)
+                ciKwargs['instance_type'] = tf["attributes"]["machine_type"]
             except (KeyError):
                 pass
 

@@ -155,6 +155,9 @@ class ClusterMountPointForm(forms.ModelForm):
 
 class ClusterPartitionForm(forms.ModelForm):
     """ Form for Cluster Paritions """
+
+    machine_type = forms.ChoiceField(widget=forms.Select(attrs={'class': 'form-control machine_type_select'}))
+
     class Meta:
         model = ClusterPartition
         fields = ('name', 'machine_type', 'image', 'max_node_count', 'enable_placement', 'enable_hyperthreads', 'enable_node_reuse')
@@ -162,13 +165,22 @@ class ClusterPartitionForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields:
-            self.fields[field].widget.attrs.update({'class': 'form-control'})
+            if field == 'machine_type':
+                # NOTE:  This is a just a hack...
+                # We need to set choices such that the current value is valid,
+                # so that the current 'value' is valid, and gets selected.
+                self.fields[field].widget.choices = [(self.instance.machine_type, self.instance.machine_type)]
+                # NOTE: Hack to bypass cleaning 'machine_type' here, and do so in form_valid
+                self.fields[field].clean = lambda value: value;
+            else:
+                self.fields[field].widget.attrs.update({'class': 'form-control'})
             if self.fields[field].help_text:
                 self.fields[field].widget.attrs.update({'title': self.fields[field].help_text})
 
+
     def clean(self):
         cleaned_data = super().clean()
-        if cleaned_data['enable_placement'] and cleaned_data['machine_type'].family.name not in ['c2', 'c2d']:
+        if cleaned_data['enable_placement'] and cleaned_data['machine_type'].split('-')[0] not in ['c2', 'c2d']:
             raise ValidationError('Placement Groups are only valid for C2 and C2D instance types')
         return cleaned_data
 
@@ -288,20 +300,6 @@ class ApplicationEditForm(forms.ModelForm):
             'load_command': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
-    def clean(self):
-        super().clean()
-
-        # Validate selected instance types with each other, and 'install instance'
-        common_arch = cloud_info.get_common_arch([x.cpu_arch for x in self.cleaned_data['instance_type']])
-        if not common_arch:
-            raise ValidationError('Selected Instance Types have incompatible architectures.')
-
-        if self.instance.installed_architecture:
-            install_arch = self.instance.installed_architecture
-            for t in self.cleaned_data['instance_type']:
-                common = cloud_info.get_common_arch([install_arch, t.cpu_arch])
-                if not common or common != install_arch:
-                    raise ValidationError(f'Application installed for {install_arch} not valid on {t.cpu_arch} ({t.name})')
 
 
 class ApplicationForm(forms.ModelForm):

@@ -62,7 +62,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
 class JobSerializer(serializers.ModelSerializer):
     """ Custom ModelSerializer for Job model """
     user = serializers.CharField(source='user.username', read_only=True)
-    instance_type = serializers.CharField(source='instance_type.name', read_only=True)
+    instance_type = serializers.CharField(source='instance_type', read_only=True)
     class Meta:
         model = Job
         fields = ('application', 'user', 'name', 'date_time_submission',

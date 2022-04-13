@@ -62,7 +62,7 @@ window.onload=function(event) {
       {% for part in object.partitions.all %}
       <tr>
         <td>{{ part.name }}</td>
-        <td>{{ part.machine_type.name }}</td>
+        <td>{{ part.machine_type }}</td>
         <td>{{ part.max_node_count }}</td>
       </tr>
       {% endfor %}
