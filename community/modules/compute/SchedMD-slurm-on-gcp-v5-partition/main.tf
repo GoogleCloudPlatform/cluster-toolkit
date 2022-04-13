@@ -19,10 +19,10 @@ locals {
   partition_nodes = [
     {
       # Group Definition
-      group_name    = "test"
-      count_dynamic = var.count_dynamic
-      count_static  = var.count_static
-      node_conf     = {}
+      group_name             = "ghpc"
+      node_count_dynamic_max = var.node_count_dynamic_max
+      node_count_static      = var.node_count_static
+      node_conf              = {}
 
       # Template By Definition
       additional_disks       = []
@@ -54,6 +54,10 @@ locals {
       source_image             = var.source_image
       tags                     = []
 
+      # Spot VM settings
+      enable_spot_vm       = var.enable_spot_vm
+      spot_instance_config = var.spot_instance_config
+
       # Template By Source
       instance_template = null
     },
@@ -62,7 +66,7 @@ locals {
 
 
 module "slurm_partition" {
-  source = "git::https://gitlab.com/SchedMD/slurm-gcp.git//terraform/modules/slurm_partition?ref=dev-v5"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.1"
 
   slurm_cluster_name      = var.slurm_cluster_name
   partition_nodes         = local.partition_nodes
@@ -72,7 +76,6 @@ module "slurm_partition" {
   partition_name          = var.partition_name
   project_id              = var.project_id
   region                  = var.region
-  slurm_cluster_id        = "placeholder"
   subnetwork              = var.subnetwork_self_link
   partition_conf = {
     Default = "YES"

@@ -18,47 +18,63 @@ blueprint_name: hpc-cluster-small-v5
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: hpc-small
+  deployment_name: hpc-small-v5
   region: us-central1
   zone: us-central1-c
-  slurm_cluster_name: testcluster
+  slurm_cluster_name: hpc-small-v5
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
+  modules:
   # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
   # as a prefix. To refer to a local resource, prefix with ./, ../ or /
   # Example - ./resources/network/vpc
-  - source: resources/network/vpc
+  - source: modules/network/vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/nfs-server
+  - source: community/modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
     settings:
-      local_mounts: [/home]
-      auto_delete_disk: true
+      local_mount: /home
 
-  - source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-v5-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-v5-partition
     kind: terraform
-    id: compute-partition
-    use: [network1]
+    id: debug_partition
+    use:
+    - network1
+    - homefs
     settings:
       partition_name: debug
-      count_dynamic: 4
+      node_count_dynamic_max: 4
       enable_placement: false
       machine_type: n2-standard-2
-      source_image: schedmd-v5-slurm-21-08-4-hpc-centos-7-1648163377
-      image_project: $(vars.project_id) # If not stored in host project, change this
 
-  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-v5-controller
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-v5-partition
     kind: terraform
-    id: slurm-contoller
-    use: [network1, compute-partition]
+    id: compute_partition
+    use:
+    - network1
+    - homefs
     settings:
-      slurm_cluster_name: testcluster
-      source_image_family: null
-      source_image_project: "hpc-toolkit-dev"
-      source_image: "schedmd-v5-slurm-21-08-4-hpc-centos-7-1648163377"
+      partition_name: compute
+      node_count_dynamic_max: 20
+
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-v5-controller
+    kind: terraform
+    id: slurm_controller
+    use:
+    - network1
+    - debug_partition
+    - compute_partition
+    - homefs
+
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-v5-login-node
+    kind: terraform
+    id: slurm_login
+    use:
+    - network1
+    - slurm_controller
+    - homefs
