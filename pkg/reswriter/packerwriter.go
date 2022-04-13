@@ -61,7 +61,10 @@ func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig, bpDirect
 				return fmt.Errorf(
 					"error converting global vars to cty for writing: %v", err)
 			}
-			yamlConfig.ResolveGlobalVariables(ctySettings)
+			err = yamlConfig.ResolveGlobalVariables(ctySettings)
+			if err != nil {
+				return err
+			}
 			resPath := filepath.Join(groupPath, res.ID)
 			err = writePackerAutovars(ctySettings, resPath)
 			if err != nil {
