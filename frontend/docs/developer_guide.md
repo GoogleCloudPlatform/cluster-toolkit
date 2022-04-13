@@ -87,6 +87,7 @@ Job data is stored in the shared filesystem `/home/<username>` for each user. He
 - When running a Spack application, a job script `submit.sh` is generated to submit a Slurm job. This script performs a `spack load` to set up the application environment and then invoke `job.sh` which contains the user-supplied custom commands to run the job.
 - Standard output and error files for Slurm jobs are uploaded to the GCS bucket associated with the deployment at the following URLs: `gs://<deployment_name>-<deployment_zone>-storage/clusters/<cluster_id>/jobs/<job_id>/stdout|err`.
 
+
 Note that a special home directory is created at `/home/root_jobs` to host jobs submitted by the Django superusers. For convenience they do not need Google identities and their jobs are run as *root* on the clusters.
 
 
