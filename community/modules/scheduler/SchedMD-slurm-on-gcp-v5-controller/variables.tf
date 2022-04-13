@@ -53,7 +53,6 @@ EOD
   default     = true
 }
 
-
 ###########
 # NETWORK #
 ###########
@@ -63,8 +62,7 @@ variable "can_ip_forward" {
   default     = false
 }
 
-
-variable "network" {
+variable "network_self_link" {
   type        = string
   description = "Network to deploy to. Only one of network or subnetwork should be specified."
   default     = ""
@@ -93,8 +91,6 @@ variable "network_ip" {
   description = "Private IP address to assign to the instance if desired."
   default     = ""
 }
-
-
 
 ############
 # INSTANCE #
@@ -136,7 +132,6 @@ variable "tags" {
   description = "Network tag list."
   default     = []
 }
-
 
 #########
 # SLURM #
@@ -181,10 +176,10 @@ variable "cgroup_conf_tpl" {
 variable "cloudsql" {
   description = <<EOD
 Use this database instead of the one on the controller.
-* server_ip : Address of the database server.
-* user      : The user to access the database as.
-* password  : The password, given the user, to access the given database. (sensitive)
-* db_name   : The database to access.
+  server_ip : Address of the database server.
+  user      : The user to access the database as.
+  password  : The password, given the user, to access the given database. (sensitive)
+  db_name   : The database to access.
 EOD
   type = object({
     server_ip = string
@@ -196,7 +191,7 @@ EOD
   sensitive = true
 }
 
-variable "controller_d" {
+variable "controller_startup_scripts" {
   description = "List of scripts to be ran on controller VM startup."
   type = list(object({
     filename = string
@@ -205,7 +200,7 @@ variable "controller_d" {
   default = []
 }
 
-variable "compute_d" {
+variable "compute_startup_scripts" {
   description = "List of scripts to be ran on compute VM startup."
   type = list(object({
     filename = string
@@ -214,7 +209,7 @@ variable "compute_d" {
   default = []
 }
 
-variable "prolog_d" {
+variable "prolog_scripts" {
   description = <<EOD
 List of scripts to be used for Prolog. Programs for the slurmd to execute
 whenever it is asked to run a job step from a new job allocation.
@@ -227,7 +222,7 @@ EOD
   default = []
 }
 
-variable "epilog_d" {
+variable "epilog_scripts" {
   description = <<EOD
 List of scripts to be used for Epilog. Programs for the slurmd to execute
 on every node when a user's job completes.
@@ -243,30 +238,11 @@ EOD
 variable "network_storage" {
   description = <<EOD
 Storage to mounted on all instances.
-* server_ip     : Address of the storage server.
-* remote_mount  : The location in the remote instance filesystem to mount from.
-* local_mount   : The location on the instance filesystem to mount to.
-* fs_type       : Filesystem type (e.g. "nfs").
-* mount_options : Options to mount with.
-EOD
-  type = list(object({
-    server_ip     = string
-    remote_mount  = string
-    local_mount   = string
-    fs_type       = string
-    mount_options = string
-  }))
-  default = []
-}
-
-variable "login_network_storage" {
-  description = <<EOD
-Storage to mounted on login and controller instances
-* server_ip     : Address of the storage server.
-* remote_mount  : The location in the remote instance filesystem to mount from.
-* local_mount   : The location on the instance filesystem to mount to.
-* fs_type       : Filesystem type (e.g. "nfs").
-* mount_options : Options to mount with.
+  server_ip     : Address of the storage server.
+  remote_mount  : The location in the remote instance filesystem to mount from.
+  local_mount   : The location on the instance filesystem to mount to.
+  fs_type       : Filesystem type (e.g. "nfs").
+  mount_options : Options to mount with.
 EOD
   type = list(object({
     server_ip     = string
@@ -295,11 +271,15 @@ variable "partition" {
       partition_conf = map(string)
       partition_name = string
       partition_nodes = map(object({
-        count_dynamic     = number
-        count_static      = number
-        group_name        = string
-        instance_template = string
-        node_conf         = map(string)
+        node_count_dynamic_max = number
+        node_count_static      = number
+        enable_spot_vm         = bool
+        group_name             = string
+        instance_template      = string
+        node_conf              = map(string)
+        spot_instance_config = object({
+          termination_action = string
+        })
       }))
       subnetwork        = string
       zone_policy_allow = list(string)
@@ -339,19 +319,19 @@ variable "cloud_parameters" {
 variable "source_image_project" {
   type        = string
   description = "Project where the source image comes from. If it is not provided, the provider project is used."
-  default     = ""
+  default     = null
 }
 
 variable "source_image_family" {
   type        = string
   description = "Source image family."
-  default     = ""
+  default     = null
 }
 
 variable "source_image" {
   type        = string
   description = "Source disk image."
-  default     = ""
+  default     = null
 }
 
 ############
@@ -382,8 +362,8 @@ variable "gpu" {
   description = <<EOD
 GPU information. Type and count of GPU to attach to the instance template. See
 https://cloud.google.com/compute/docs/gpus more details.
-* type : the GPU type
-* count : number of GPUs
+  type : the GPU type
+  count : number of GPUs
 EOD
   default     = null
 }
@@ -409,12 +389,12 @@ variable "shielded_instance_config" {
   description = <<EOD
 Shielded VM configuration for the instance. Note: not used unless
 enable_shielded_vm is 'true'.
-* enable_integrity_monitoring : Compare the most recent boot measurements to the
+  enable_integrity_monitoring : Compare the most recent boot measurements to the
   integrity policy baseline and return a pair of pass/fail results depending on
   whether they match or not.
-* enable_secure_boot : Verify the digital signature of all boot components, and
+  enable_secure_boot : Verify the digital signature of all boot components, and
   halt the boot process if signature verification fails.
-* enable_vtpm : Use a virtualized trusted platform module, which is a
+  enable_vtpm : Use a virtualized trusted platform module, which is a
   specialized computer chip you can use to encrypt objects like keys and
   certificates.
 EOD
@@ -457,12 +437,6 @@ variable "disk_size_gb" {
   type        = number
   description = "Boot disk size in GB."
   default     = 100
-}
-
-variable "disk_labels" {
-  type        = map(string)
-  description = "Labels to be assigned to boot disk, provided as a map."
-  default     = {}
 }
 
 variable "disk_auto_delete" {

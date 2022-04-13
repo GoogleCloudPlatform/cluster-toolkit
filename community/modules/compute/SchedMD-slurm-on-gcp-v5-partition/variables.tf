@@ -44,13 +44,13 @@ variable "machine_type" {
   default     = "c2-standard-60"
 }
 
-variable "count_static" {
+variable "node_count_static" {
   description = "Number of nodes to be statically created"
   type        = number
   default     = 0
 }
 
-variable "count_dynamic" {
+variable "node_count_dynamic_max" {
   description = "Maximum number of nodes allowed in this partition"
   type        = number
   default     = 10
@@ -59,13 +59,13 @@ variable "count_dynamic" {
 variable "source_image" {
   description = "Image to be used of the compute VMs in this partition"
   type        = string
-  default     = "schedmd-slurm-21-08-4-hpc-centos-7"
+  default     = null
 }
 
 variable "source_image_project" {
   description = "Project the image is hosted in"
   type        = string
-  default     = "schedmd-slurm-public"
+  default     = null
 }
 
 variable "disk_type" {
@@ -77,7 +77,7 @@ variable "disk_type" {
 variable "disk_size_gb" {
   description = "Size of boot disk to create for the partition compute nodes"
   type        = number
-  default     = 20
+  default     = 30
 }
 
 variable "labels" {
@@ -135,4 +135,18 @@ variable "enable_placement" {
   description = "Enable placement groups"
   type        = bool
   default     = true
+}
+
+variable "enable_spot_vm" {
+  description = "Enable the partition to use spot VMs (https://cloud.google.com/spot-vms)"
+  type        = bool
+  default     = false
+}
+
+variable "spot_instance_config" {
+  description = "Configuration for spot VMs."
+  type = object({
+    termination_action = string
+  })
+  default = null
 }
