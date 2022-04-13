@@ -303,9 +303,9 @@ class ClusterUpdateView(UpdateView):
         self.object.cloud_id = self.object.name + '-' + suffix
 
         # Verify formset validity (suprised there's not another method to do this)
-        for formset in [mountpoints, partitions]:
+        for formset, formset_name in [(mountpoints, "mountpoints"), (partitions, "partitions")]:
             if not formset.is_valid():
-                form.add_error(None, "Error in form below")
+                form.add_error(None, f"Error in {formset_name} section")
                 return self.form_invalid(form)
 
         with transaction.atomic():
