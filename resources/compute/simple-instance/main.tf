@@ -20,6 +20,8 @@ locals {
   network_storage = var.network_storage != null ? (
   { network_storage = jsonencode(var.network_storage) }) : {}
 
+  resource_prefix = var.name_prefix != null ? var.name_prefix : var.deployment_name
+
   enable_gvnic  = var.bandwidth_tier != "not_enabled"
   enable_tier_1 = var.bandwidth_tier == "tier_1_enabled"
 
@@ -42,9 +44,7 @@ data "google_compute_image" "compute_image" {
 resource "google_compute_disk" "boot_disk" {
   count = var.instance_count
 
-  name = var.name_prefix != null ? (
-    "${var.name_prefix}-boot-disk-${count.index}") : (
-  "${var.deployment_name}-boot-disk-${count.index}")
+  name   = "${local.resource_prefix}-boot-disk-${count.index}"
   image  = data.google_compute_image.compute_image.self_link
   type   = var.disk_type
   size   = var.disk_size_gb
@@ -53,7 +53,7 @@ resource "google_compute_disk" "boot_disk" {
 
 resource "google_compute_resource_policy" "placement_policy" {
   count = var.placement_policy != null ? 1 : 0
-  name  = var.name_prefix != null ? "${var.name_prefix}-simple-instance-placement" : "${var.deployment_name}-simple-instance-placement"
+  name  = "${local.resource_prefix}-simple-instance-placement"
   group_placement_policy {
     vm_count                  = var.placement_policy.vm_count
     availability_domain_count = var.placement_policy.availability_domain_count
@@ -68,7 +68,7 @@ resource "google_compute_instance" "compute_vm" {
 
   depends_on = [var.network_self_link, var.network_storage]
 
-  name         = var.name_prefix != null ? "${var.name_prefix}-${count.index}" : "${var.deployment_name}-${count.index}"
+  name         = "${local.resource_prefix}-${count.index}"
   machine_type = var.machine_type
   zone         = var.zone
 
