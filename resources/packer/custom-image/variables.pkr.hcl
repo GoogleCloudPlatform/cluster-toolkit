@@ -19,7 +19,7 @@ variable "project_id" {
 variable "machine_type" {
   description = "VM machine type on which to build new image"
   type        = string
-  default     = "n2d-standard-4"
+  default     = "n2-standard-4"
 }
 
 variable "disk_size" {
