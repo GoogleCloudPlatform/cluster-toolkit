@@ -537,7 +537,7 @@ class Cluster(CloudResource):
     spack_install = models.ForeignKey(
         'ApplicationInstallationLocation',
         on_delete = models.SET_NULL,
-        related_name = 'clusters_using',
+        related_name = '+',
         null = True,
         blank = True,
     )
@@ -685,6 +685,10 @@ class ApplicationInstallationLocation(models.Model):
     @property
     def filesystem(self):
         return self.fs_export.filesystem
+
+    @property
+    def clusters_using(self):
+        return Cluster.objects.filter(mount_points__export=self.fs_export)
 
 
 class Application(models.Model):
