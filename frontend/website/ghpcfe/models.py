@@ -651,12 +651,21 @@ class ClusterPartition(models.Model):
         default = True,
         help_text = 'Enable nodes to be re-used for multiple jobs. (Disabled when Placement Groups are used.)'
     )
-
     vCPU_per_node = models.PositiveIntegerField(
         validators = [MinValueValidator(1)],
         help_text = 'The number of vCPU per node of the partition'
     )
-
+    GPU_per_node = models.PositiveIntegerField(
+        validators = [MinValueValidator(1)],
+        help_text = 'The number of vCPU per node of the partition'
+        default = 0
+    )
+    GPU_type = models.CharField(
+        max_length = 64,
+        blank = True,
+        default = "",
+        help_text = 'GPU device type'
+        )
 
     def __str__(self):
         return self.name

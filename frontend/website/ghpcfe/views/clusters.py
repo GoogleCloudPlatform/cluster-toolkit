@@ -312,6 +312,13 @@ class ClusterUpdateView(UpdateView):
                 try:
                     for part in parts:
                         part.vCPU_per_node = machine_info[part.machine_type].num_vCPU // (1 if part.enable_hyperthreads else 2)
+                        for accelerator in machine_info[part.machine_type].accelerators:
+                            if not accelerator.guestAcceleratorType.startswith('nvidia-tesla'):
+                                continue
+                            if part.GPU_per_node != 0:
+                                raise ValidationError(f"Multiple GPU types per node are not supported")
+                            part.GPU_type = accelerator.guestAcceleratorType
+                            part.GPU_per_node = accelerator.guestAcceleratorCount
                 except KeyError:
                     raise ValidationError(f"Error in Partition - invalid machine type: {part.machine_type}")
 

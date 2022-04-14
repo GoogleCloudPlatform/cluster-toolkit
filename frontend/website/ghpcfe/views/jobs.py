@@ -406,6 +406,8 @@ class BackendJobRun(LoginRequiredMixin, generic.View):
             message_data['input_data'] = job.input_data
         if job.result_data:
             message_data['result_data'] = job.result_data
+        if job.partition.GPU_per_node:
+            message_data['gpus_per_node'] = job.partition.GPU_per_node
 
         c2.send_command(cluster_id, 'RUN_JOB', onResponse=response, data=message_data)
         messages.success(request, "Job sent to Cluster")

@@ -176,7 +176,15 @@ ClusterInfo object - represent a cluster
       enable_placement: {part.enable_placement}
       image_hyperthreads: {part.enable_hyperthreads}
       exclusive: {part.enable_placement or not part.enable_node_reuse}
-      {image_str}
+      {image_str}\
+""")
+            # Temporarily hack in some A100 support
+            if part.GPU_per_node < 0:
+                yaml.append(f"""\
+      gpu_count: {part.GPU_per_node}
+      gpu_type: {part.GPU_type}\
+""")
+            yaml.append(f"""\
     use:
 {uses_str}
 """)
@@ -267,7 +275,7 @@ resource_groups:
       - https://www.googleapis.com/auth/pubsub
       compute_startup_script: |
         #!/bin/bash
-        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash 
+        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
     use:
 {controller_uses}
 

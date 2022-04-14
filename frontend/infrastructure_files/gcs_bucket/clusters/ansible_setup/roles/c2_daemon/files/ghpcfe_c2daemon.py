@@ -71,7 +71,7 @@ def _download_gcs_directory(blob_path: str, tgtDir: Path) -> None:
 def _rerun_ansible():
     # Download ansible repo from GCS  (Can't just point at it)
     _download_gcs_directory(f"clusters/ansible_setup", Path("/tmp/ansible_setup"))
-    
+
     logger.info("Downloaded Ansible Repo.  Beginning playbook")
     try:
         with open("/tmp/ansible_setup/hosts", "w") as fp:
@@ -419,7 +419,7 @@ def _verify_oslogin_user(login_uid):
                             subprocess.run(["mkhomedir_helper", acct['username']])
                         except Exception as ex:
                             logger.error("Error creating homedir", exc_info=ex)
-    
+
     return _oslogin_cache[login_uid]
 
 def _verify_params(message, keys):
@@ -524,6 +524,8 @@ def _submit_job(uid, gid, job_dir, job_id, partition, nNodes, run_script, *args,
         extra_sbatch += f"#SBATCH --cpus-per-task={kwargs['threadsPerRank']}\n"
     if 'wall_limit' in kwargs:
         extra_sbatch += f"#SBATCH --time={kwargs['wall_limit']}\n"
+    if 'gpus_per_node' in kwargs:
+        extra_sbatch += f"#SBATCH --gpus={kwargs['gpus_per_node']}\n"
 
     # Download input data, if specified
     download_command =""
