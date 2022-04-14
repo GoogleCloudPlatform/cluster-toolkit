@@ -18,7 +18,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 3.0"
+      version = ">= 3.83"
     }
     random = {
       source  = "hashicorp/random"
@@ -26,7 +26,7 @@ terraform {
     }
     local = {
       source  = "hashicorp/local"
-      version = "~> 2.0"
+      version = ">= 2.0.0, < 2.2.0"
     }
   }
 

@@ -4,9 +4,7 @@ This resource creates a slurm controller node via the SchedMD/slurm-gcp
 [controller](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
 module.
 
-**Warning**: Slurm handles startup scripts differently from virtual machines.
-This will not work in conjuntion with the [startup_script](../../../scripts/startup-script/README.md)
-resource.
+More information about Slurm On GCP can be found at the [project's GitHub page](https://github.com/SchedMD/slurm-gcp) and in the [Slurm on Google Cloud User Guide](https://goo.gle/slurm-gcp-user-guide).
 
 ### Example
 

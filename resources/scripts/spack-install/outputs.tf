@@ -23,3 +23,13 @@ output "controller_startup_script" {
   description = "Path to the Spack installation script, duplicate for SLURM controller."
   value       = local.script_content
 }
+
+output "install_spack_deps_runner" {
+  description = "Runner to install dependencies for spack using startup-scripts, requires ansible."
+  value       = local.install_spack_deps_runner
+}
+
+output "install_spack_runner" {
+  description = "Runner to install Spack using startup-scripts"
+  value       = local.install_spack_runner
+}

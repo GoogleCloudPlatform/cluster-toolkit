@@ -107,6 +107,12 @@ variable "network_self_link" {
   default     = "default"
 }
 
+variable "subnetwork_self_link" {
+  description = "The self link of the subnetwork to attach the VM."
+  type        = string
+  default     = null
+}
+
 variable "zone" {
   description = "Compute Platform zone"
   type        = string
@@ -122,4 +128,39 @@ variable "startup_script" {
   description = "Startup script used on the instance"
   type        = string
   default     = null
+}
+
+variable "guest_accelerator" {
+  description = "List of the type and count of accelerator cards attached to the instance."
+  type = list(object({
+    type  = string,
+    count = number
+  }))
+  default = []
+}
+
+variable "on_host_maintenance" {
+  description = "Describes maintenance behavior for the instance."
+  type        = string
+  default     = "MIGRATE"
+  validation {
+    condition     = contains(["MIGRATE", "TERMINATE"], var.on_host_maintenance)
+    error_message = "The on_host_maintenance must be set to MIGRATE or TERMINATE."
+  }
+}
+
+variable "bandwidth_tier" {
+  description = <<EOT
+  Tier 1 bandwidth increases the maximum egress bandwidth for VMs.
+  Using the `tier_1_enabled` setting will enable both gVNIC and TIER_1 higher bandwidth networking.
+  Using the `gvnic_enabled` setting will only enable gVNIC and will not enable TIER_1.
+  Note that TIER_1 only works with specific machine families & shapes and must be using an image that supports gVNIC. See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details.
+  EOT
+  type        = string
+  default     = "not_enabled"
+
+  validation {
+    condition     = contains(["not_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
+    error_message = "Allowed values for bandwidth_tier are 'not_enabled', 'gvnic_enabled', or  'tier_1_enabled'."
+  }
 }

@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/resreader"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"github.com/hashicorp/go-getter"
 )
@@ -63,17 +64,18 @@ func (r GitHubSourceReader) GetResourceInfo(resPath string, kind string) (resrea
 
 	resDir, err := ioutil.TempDir("", "git-module-*")
 	defer os.RemoveAll(resDir)
+	writeDir := filepath.Join(resDir, "mod")
 	if err != nil {
 		return resreader.ResourceInfo{}, err
 	}
 
-	if err := copyGitHubResources(resPath, resDir); err != nil {
+	if err := copyGitHubResources(resPath, writeDir); err != nil {
 		return resreader.ResourceInfo{}, fmt.Errorf("failed to clone GitHub resource at %s to tmp dir %s: %v",
-			resPath, resDir, err)
+			resPath, writeDir, err)
 	}
 
 	reader := resreader.Factory(kind)
-	return reader.GetInfo(resDir)
+	return reader.GetInfo(writeDir)
 }
 
 // GetResource copies the GitHub source to a provided destination (the blueprint directory)
@@ -84,14 +86,15 @@ func (r GitHubSourceReader) GetResource(resPath string, copyPath string) error {
 
 	resDir, err := ioutil.TempDir("", "git-module-*")
 	defer os.RemoveAll(resDir)
+	writeDir := filepath.Join(resDir, "mod")
 	if err != nil {
 		return err
 	}
 
-	if err := copyGitHubResources(resPath, resDir); err != nil {
+	if err := copyGitHubResources(resPath, writeDir); err != nil {
 		return fmt.Errorf("failed to clone GitHub resource at %s to tmp dir %s: %v",
-			resPath, resDir, err)
+			resPath, writeDir, err)
 	}
 
-	return copyFromPath(resDir, copyPath)
+	return copyFromPath(writeDir, copyPath)
 }

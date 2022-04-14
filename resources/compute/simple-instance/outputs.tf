@@ -18,3 +18,8 @@ output "name" {
   description = "Name of any instance created"
   value       = google_compute_instance.compute_vm.*.name
 }
+
+output "internal_ip" {
+  description = "Internal IP of the instances"
+  value       = google_compute_instance.compute_vm.*.network_interface.0.network_ip
+}

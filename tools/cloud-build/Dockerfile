@@ -38,7 +38,8 @@ RUN go install github.com/terraform-docs/terraform-docs@latest      && \
     go install github.com/fzipp/gocyclo/cmd/gocyclo@latest          && \
     go install github.com/go-critic/go-critic/cmd/gocritic@latest   && \
     go install github.com/google/addlicense@latest                  && \
-    go install mvdan.cc/sh/v3/cmd/shfmt@latest
+    go install mvdan.cc/sh/v3/cmd/shfmt@latest                      && \
+    go install golang.org/x/tools/cmd/goimports@latest
 
 # Setting GHPC dependencies
 WORKDIR /ghpc-tmp

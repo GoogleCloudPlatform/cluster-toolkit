@@ -35,16 +35,13 @@ locals {
   }
 }
 
-provider "google" {
-  project = var.project_id
-  region  = var.region
-}
-
 module "ddn_exascaler" {
-  source          = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=f329c21"
+  source          = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=76ab7fc"
   fsname          = var.fsname
   zone            = var.zone
   project         = var.project_id
+  prefix          = var.prefix
+  labels          = var.labels
   security        = var.security
   service_account = var.service_account
   waiter          = var.waiter

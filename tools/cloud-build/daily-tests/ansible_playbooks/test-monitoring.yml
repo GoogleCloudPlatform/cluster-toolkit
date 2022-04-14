@@ -1,0 +1,40 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Wait for startup script to complete
+  become: true
+  wait_for:
+    path: /var/log/messages
+    search_regex: '.*{{ remote_node }}.*startup-script exit status ([0-9]+)'
+  register: startup_status
+- name: Fail if ops agent is not running
+  become: true
+  command: systemctl is-active {{ item }}
+  with_items:
+  - google-cloud-ops-agent.service
+  - google-cloud-ops-agent-fluent-bit.service
+  - google-cloud-ops-agent-opentelemetry-collector.service
+- name: Check that monitoring dashboard has been created
+  command: gcloud monitoring dashboards list --format="get(displayName)"
+  run_once: true
+  delegate_to: localhost
+  register: dashboards
+- debug:
+    var: dashboards
+- name: Fail if the HPC Dashboard hasn't been created
+  fail:
+    msg: Failed to create dashboard
+  when: "deployment_name not in dashboards.stdout"

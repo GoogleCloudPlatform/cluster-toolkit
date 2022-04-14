@@ -14,3 +14,32 @@
  * limitations under the License.
  */
 
+output "inventory_file" {
+  description = "The inventory file for the omnia cluster"
+  value       = local.inventory
+}
+
+output "setup_omnia_node_script" {
+  description = "An ansible script that adds the user that install omnia"
+  value       = local.setup_omnia_node_file
+}
+
+output "copy_inventory_runner" {
+  description = "Runner to copy the inventory to the omnia manager using startup-scripts"
+  value       = local.copy_inventory_runner
+}
+
+output "setup_omnia_node_runner" {
+  description = "Runner to create the omnia user using startup-scripts"
+  value       = local.setup_omnia_node_runner
+}
+
+output "install_omnia_runner" {
+  description = "Runner to install Omnia using startup-scripts"
+  value       = local.install_omnia_runner
+}
+
+output "omnia_user_warning" {
+  description = "Warn developers that the omnia user was created with sudo permissions"
+  value       = "WARNING: A new user named '${var.omnia_username}' was created with sudo permissions. Remove user from all Omnia nodes if this is not desired."
+}
