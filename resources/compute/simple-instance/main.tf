@@ -25,6 +25,7 @@ locals {
   enable_gvnic  = var.bandwidth_tier != "not_enabled"
   enable_tier_1 = var.bandwidth_tier == "tier_1_enabled"
 
+  # compact_placement : true when placement policy is provided and collocation set; false if unset
   compact_placement                  = try(var.placement_policy.collocation, null) != null
   automatic_restart                  = local.compact_placement ? false : null
   on_host_maintenance_from_placement = local.compact_placement ? "TERMINATE" : "MIGRATE"

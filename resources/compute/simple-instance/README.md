@@ -25,11 +25,10 @@ the `homefs` file system resource.
 
 The `placement_policy` variable can be used to control where your VM instances
 are physically located relative to each other within a zone. See the official
-placement
-[guide](https://cloud.google.com/compute/docs/instances/define-instance-placement)
-and
-[api](https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement)
-documentation.
+placement [guide][guide-link] and [api][api-link] documentation.
+
+[guide-link]: https://cloud.google.com/compute/docs/instances/define-instance-placement
+[api-link]: https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement
 
 Use the following settings for compact placement:
 
