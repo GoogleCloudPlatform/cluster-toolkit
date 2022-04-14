@@ -2,7 +2,7 @@
 - name: Add Enviornment Modules
   yum:
     name:
-      - environment-modules
+    - environment-modules
 
 - name: Create Modules directory
   file:
@@ -17,7 +17,7 @@
       module use /opt/cluster/modulefiles
     owner: root
     mode: 0755
-    force: no
+    force: False
 
 - name: Enable su to OS Login
   lineinfile:

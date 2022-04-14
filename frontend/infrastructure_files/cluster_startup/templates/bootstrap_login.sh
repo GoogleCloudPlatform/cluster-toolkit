@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# shellcheck disable=SC1083
 BUCKET={{ server_bucket }}
 CLUSTER_ID={{ cluster.id }}
 SPACK_DIR={{ spack_dir }}
@@ -16,12 +17,12 @@ set -e
 yum install -y ansible
 
 cd /tmp
-gsutil -m cp -r gs://${BUCKET}/clusters/ansible_setup /tmp
+gsutil -m cp -r "gs://${BUCKET}/clusters/ansible_setup" /tmp
 cd /tmp/ansible_setup
 
 # Set up facts file
 mkdir -p /etc/ansible/facts.d
-cat > /etc/ansible/facts.d/ghpcfe.fact <<EOF
+cat >/etc/ansible/facts.d/ghpcfe.fact <<EOF
 [config]
 cluster_id=${CLUSTER_ID}
 cluster_bucket=${BUCKET}

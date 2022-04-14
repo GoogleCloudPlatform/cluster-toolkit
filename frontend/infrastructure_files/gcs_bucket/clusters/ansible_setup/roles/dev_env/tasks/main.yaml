@@ -2,14 +2,15 @@
 - name: Install CentOS Software Collections
   yum:
     name: centos-release-scl
+
 - name: Install Dev Tools
   yum:
     name:
-      - devtoolset-9
-      - devtoolset-11
-      - cmake
-      - python2-devel
-      - python36-devel
+    - devtoolset-9
+    - devtoolset-11
+    - cmake
+    - python2-devel
+    - python36-devel
 
 
 - name: Add DevTools to default shells
@@ -19,4 +20,4 @@
       . /opt/rh/devtoolset-11/enable
     owner: root
     mode: 0755
-    force: no
+    force: False

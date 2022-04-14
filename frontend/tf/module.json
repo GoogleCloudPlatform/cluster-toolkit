@@ -87,13 +87,6 @@
       "required": false
     },
     {
-      "name": "ssh_key",
-      "type": "string",
-      "description": "admin SSH Key to add to the webserver instance",
-      "default": "~/.ssh/id_rsa.pub",
-      "required": false
-    },
-    {
       "name": "static_ip",
       "type": "string",
       "description": "Optional pre-configured static IP for HPC Frontend.",
