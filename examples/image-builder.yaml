@@ -20,10 +20,6 @@ vars:
   deployment_name: image-builder-001
   region: us-central1
   zone: us-central1-c
-  ansible_playbooks:
-  - playbook_file: ./example-playbook.yml
-    galaxy_file: null
-    extra_arguments: ["-vv"]
 
 resource_groups:
 - group: network
@@ -50,3 +46,7 @@ resource_groups:
       use_iap: true
       omit_external_ip: true
       disk_size: 100
+      ansible_playbooks:
+      - playbook_file: ./example-playbook.yml
+        galaxy_file: ./requirements.yml
+        extra_arguments: ["-vv"]
