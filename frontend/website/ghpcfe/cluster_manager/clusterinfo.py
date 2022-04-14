@@ -179,7 +179,7 @@ ClusterInfo object - represent a cluster
       {image_str}\
 """)
             # Temporarily hack in some A100 support
-            if part.GPU_per_node < 0:
+            if part.GPU_per_node > 0:
                 yaml.append(f"""\
       gpu_count: {part.GPU_per_node}
       gpu_type: {part.GPU_type}\
