@@ -384,5 +384,6 @@ class BackendSpackInstall(LoginRequiredMixin, generic.View):
             'name': app.spack_name,
             'spec': app.spack_spec,
             'partition': app.install_partition.name,
+            'extra_sbatch' : [f'--gpus={app.install_partition.GPU_per_node}'] if app.install_partition.GPU_per_node else [],
         })
         return HttpResponseRedirect(reverse('application-detail', kwargs={'pk': pk}))
