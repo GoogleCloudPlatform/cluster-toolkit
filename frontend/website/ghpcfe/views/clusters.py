@@ -302,6 +302,10 @@ class ClusterUpdateView(UpdateView):
         suffix = self.object.cloud_id.split('-')[-1]
         self.object.cloud_id = self.object.name + '-' + suffix
 
+        if self.object.status != 'n':
+            form.add_error("Running clusters cannot currently be updated!")
+            return self.form_invalid(form)
+
         # Verify formset validity (suprised there's not another method to do this)
         for formset, formset_name in [(mountpoints, "mountpoints"), (partitions, "partitions")]:
             if not formset.is_valid():
@@ -315,8 +319,6 @@ class ClusterUpdateView(UpdateView):
             partitions.instance = self.object
             partitions.save()
         msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Create' button to provision the cluster."
-        if (self.object.status == 'r'):
-            msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Sync Cluster' button to apply changes."
         messages.success(self.request, msg)
 
         # Be kind... Check filesystems to verify all in the same zone as us.
