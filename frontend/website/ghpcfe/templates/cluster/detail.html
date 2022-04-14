@@ -110,7 +110,7 @@ window.onload=function(event) {
 {% if admin_view == 1 %}
     {% if object.status == "d" %}
     <div class="alert alert-info">This cluster is destroyed and its settings archived. No further change is possible.</div>
-    {% else %}
+    {% else if object.status == "n"  %}
     <a href="{% url 'cluster-update' object.id %}" class="btn btn-primary">Edit</a>
     {% endif %}
     {% if object.status == "n" %}

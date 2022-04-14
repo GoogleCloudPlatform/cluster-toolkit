@@ -70,7 +70,7 @@
               <div class="dropdown-divider"></div>
               {% endif %}
               {% if cluster.status == "n" %}
-              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-start-cluster' cluster.id %}">Start</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-start-cluster' cluster.id %}">Create</a>
               {% endif %}
               {% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s"  %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-destroy' cluster.id %}">Destroy</a>
@@ -101,7 +101,7 @@
   </div>
   {% else %}
     <p>This is no record of any cluster in this system. Create one!</p>
-  {% endif %} 
+  {% endif %}
 
   <br/>
   <a href="{% url 'cluster-create' %}" class="btn btn-primary">Add cluster</a>
