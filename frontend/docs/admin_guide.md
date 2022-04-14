@@ -2,51 +2,49 @@
 
 This document is for administrators of the HPC Toolkit FrontEnd. An administrator can manage the life cycles of HPC clusters, set up networking and storage resources that support clusters, install applications and manage user access. Ordinary HPC users should refer to the [User Guide](user_guide.md) for guidance on how to prepare and run jobs on existing clusters.
 
-The HPC Toolkit FrontEnd is a web application built upon the Django framework. By default, a Django superuser is created at deployment time. For large organisations, additional Django superusers can be created from the Admin site. 
+The HPC Toolkit FrontEnd is a web application built upon the Django framework. By default, a Django superuser is created at deployment time. For large organisations, additional Django superusers can be created from the Admin site.
 
 ## System Deployment
 
 ### Prerequisites
 
-#### Client Machine:
+#### Client Machine
 
 - Linux (WSL) environment with bash interpreter
 - [Terraform CLI](https://www.terraform.io/downloads) installation
 - Google [Cloud CLI](https://cloud.google.com/cli) installation (`gcloud` utility)
 - Google cloud user for deployment [authenticated in gcloud](https://cloud.google.com/sdk/gcloud/reference/auth/login) (see below for required permissions)
 
-#### Google Cloud:
+#### Google Cloud
 
 - GCP project(s):
   - for the HPC Toolkit FrontEnd with at least the following APIs enabled:
-     - Compute Engine API
-     - Cloud Monitoring API
-     - Cloud Logging API
-     - Cloud Pub/Sub API
-     - Cloud Resource Manager
-     - Identity and Access Management (IAM) API
-
+    - Compute Engine API
+    - Cloud Monitoring API
+    - Cloud Logging API
+    - Cloud Pub/Sub API
+    - Cloud Resource Manager
+    - Identity and Access Management (IAM) API
 
   - A GCP project for deploying Clusters with at least the following APIs enabled:
 
-     - Compute Engine API
-     - Cloud Monitoring API
-     - Cloud Resource Manager
-     - Cloud Logging API
-     - Cloud OS Login API
-     - Cloud Filestore API
-     - Cloud Billing API
-     - Vertex AI API
+    - Compute Engine API
+    - Cloud Monitoring API
+    - Cloud Resource Manager
+    - Cloud Logging API
+    - Cloud OS Login API
+    - Cloud Filestore API
+    - Cloud Billing API
+    - Vertex AI API
 
   - These two projects may actually be the same project.  The HPC Toolkit Frontend supports deploying clusters into the same project in which the service machine runs, as well as deploying clusters into other projects.
- 
--  Cloud user/service account with suitable roles granting the required permissions for deployment of the HPC Toolkit Frontend:
 
-    - The `Owner` role grants complete project control and is more than sufficient
+- Cloud user/service account with suitable roles granting the required permissions for deployment of the HPC Toolkit Frontend:
 
-    - Alternatively, a collection of more limited roles can be used:
-   
-    ```
+  - The *Owner* role grants complete project control and is more than sufficient
+
+  - Alternatively, a collection of more limited roles can be used:
+
     - Compute Admin
     - Storage Admin
     - Pub/Sub Admin
@@ -54,21 +52,21 @@ The HPC Toolkit FrontEnd is a web application built upon the Django framework. B
     - Delete Service Accounts
     - Service Account User
     - Project IAM Admin
-    ```
 
-  Permissions can be further fine-tuned to achieve least privilege e.g using the security insights tool.
+  - Permissions can be further fine-tuned to achieve least privilege e.g using the security insights tool.
   
 ### Deployment Process
-  - `git clone` the HPC Toolkit project from GitHub into a client machine [TODO: give official repository name after turning this into a public project].
-  - Run `hpc-toolkit/frontend/deploy.sh` to deploy the system. Follow instructions to name the hosting VM instance and select its cloud region and zone. The hosting VM will be referred to as the *service machine* from now on.
-    - For a production deployment, follow on-screen instructions to create a static IP address and then provide a domain name. In this case, an SSL certificate will be automatically obtained via [LetsEncrypt](https://letsencrypt.org/) to secure the web application. 
-    - For testing purposes the static public IP address and domain name can be left blank. The system can still be successfully deployed and run with an ephemeral IP address, however OAuth-based login will not be available as this requires a publicly-resolvable domain name.
-    - Follow instructions to provide details for a Django superuser account.
-    - On prompt, check the generated Terraform settings and make further changes if necessary. This step is optional.
-    - Confirm to create the VM instance. The VM creation takes a few minutes. **N.B after the script has completed, it can take up to 15 more minutes to have the software environment set up.**
-  - Alternatively, manually run `terraform apply` in the `frontend/tf` directory after properly setting the `terraform.tfvars`.
-  - Use the domain name or IP address to access the website. Log in as the Django superuser.
-  - **Important: To ensure that the web interface resources can be cleaned up fully at a later date, ensure that the directory containing the terraform configuration (`hpc-toolkit/frontend/tf`) is retained.**
+
+- `git clone` the HPC Toolkit project from GitHub into a client machine [TODO: give official repository name after turning this into a public project].
+- Run `hpc-toolkit/frontend/deploy.sh` to deploy the system. Follow instructions to name the hosting VM instance and select its cloud region and zone. The hosting VM will be referred to as the *service machine* from now on.
+  - For a production deployment, follow on-screen instructions to create a static IP address and then provide a domain name. In this case, an SSL certificate will be automatically obtained via [LetsEncrypt](https://letsencrypt.org/) to secure the web application.
+  - For testing purposes the static public IP address and domain name can be left blank. The system can still be successfully deployed and run with an ephemeral IP address, however OAuth-based login will not be available as this requires a publicly-resolvable domain name.
+  - Follow instructions to provide details for a Django superuser account.
+  - On prompt, check the generated Terraform settings and make further changes if necessary. This step is optional.
+  - Confirm to create the VM instance. The VM creation takes a few minutes. **N.B after the script has completed, it can take up to 15 more minutes to have the software environment set up.**
+- Alternatively, manually run `terraform apply` in the `frontend/tf` directory after properly setting the `terraform.tfvars`.
+- Use the domain name or IP address to access the website. Log in as the Django superuser.
+- **Important: To ensure that the web interface resources can be cleaned up fully at a later date, ensure that the directory containing the terraform configuration (`hpc-toolkit/frontend/tf`) is retained.**
 
 The deployment is now complete.
 
@@ -100,8 +98,8 @@ From the GCP console, note the client ID and client secret. Then return to admin
 
 Next, go to the *Authorised user* table. This is where further access control to the site is applied. Create new entries to grant access to users. A new entry can be:
 
-- a valid domain name to grant access to multiple users from authorised organisations (e.g. @example.com) 
-- an email address to grant access to an individual user (e.g user.name@example.com) 
+- a valid domain name to grant access to multiple users from authorised organisations (e.g. @example.com)
+- an email address to grant access to an individual user (e.g user.name@example.com)
 
 All login attempts that do not match these patterns will be rejected.
 
@@ -109,7 +107,7 @@ All login attempts that do not match these patterns will be rejected.
 
 To use the web system to create cloud resources, the first task is for an admin user to register a cloud credential with the system. The supplied credential will be validated and stored in the database for future use.
 
-The preferred way to access GCP resources from this system is through a [Service Account](https://cloud.google.com/iam/docs/service-accounts). To create a service account, a GCP account with sufficient permissions is required. Typically, the Owner or Editor of a GCP project have enough permissions. For other users with custom roles, if certain permissions are missing, GCP will typically return clear error messages. 
+The preferred way to access GCP resources from this system is through a [Service Account](https://cloud.google.com/iam/docs/service-accounts). To create a service account, a GCP account with sufficient permissions is required. Typically, the Owner or Editor of a GCP project have enough permissions. For other users with custom roles, if certain permissions are missing, GCP will typically return clear error messages.
 
 For this project, the following roles should be sufficient for the admin users to manage the required service account: *Service Account User*, *Service Account Admin*, and *Service Account Key Admin*.
 
@@ -121,15 +119,13 @@ For this project, the following roles should be sufficient for the admin users t
 - Name the service account, optionally provide a description, and then click the *CREATE* button.
 - Grant the service account the following roles:
   
-  ```
   - Cloud Filestore Editor
   - Compute Admin
   - Create Service Accounts
   - Delete Service Accounts
   - Project IAM Admin
   - Notebooks Admin
-  - Vertex AI administrator 
-  ```
+  - Vertex AI administrator
 
 - Human users may be given permissions to access this service account but that is not required in this work. Click *Done* button.
 - Locate the new service account from the list, click *Manage Keys* from the *Actions* menu.
@@ -172,7 +168,6 @@ Upon clicking the *Save* button, the network is not immediately created. The adm
 
 If the organisation already has pre-defined VPCs on cloud within the hosting GCP project, they can be imported. Simply selecting an existing VPC and associated subnets from the web interface to register them with the system. Imported VPCs can be used in exactly the same way as newly created ones.
 
-
 ## Filesystem Management
 
 By default each cluster creates two shared filesystems: one at */opt/cluster* to hold installed applications and one at */home* to hold job files for individual users. Both can be customised if required. Additional filesystems may be created and mounted to the clusters. Note that filesystem resources have their own life cycles and are managed independently to cluster.
@@ -189,15 +184,15 @@ An internal address can be used if the cluster shares the same VPC with the impo
 
 ## User Management
 
-User accounts will be automatically created for users when they log into the frontend for the first time, by default new accounts are created with quota disabled.  To enable job submission for an account, administrators must enable compute quota from the 
+User accounts will be automatically created for users when they log into the frontend for the first time, by default new accounts are created with quota disabled.  To enable job submission for an account, administrators must enable compute quota from the *Users* page.
 
 ### User Compute Quota
 
 Currently three quota modes are supported:
 
-* **Unlimited quota** - User may submit an unlimited number of jobs
-* **Limited quota** - User may submit jobs up to a total spend limit in USD
-* **Quota Disabled** - User may not submit jobs - this is the default for newly created accounts
+- **Unlimited quota** - User may submit an unlimited number of jobs
+- **Limited quota** - User may submit jobs up to a total spend limit in USD
+- **Quota Disabled** - User may not submit jobs - this is the default for newly created accounts
 
 When **limited quota** is selected, an additional field **quota amount** will be available to set the total spend available to the user.
 
@@ -225,10 +220,9 @@ A typical workflow for creating a new cluster is as follows:
 - In the *Create a new cluster* form, give the new cluster a name. Cloud resource names are subject to naming constraints and will be validated by the system.  In general, lower-case alpha-numeric names with hyphens are accepted.
 - From the *Subnet* dropdown list, select the subnet within which the cluster resides.
 - From the *Cloud zone* dropdown list, select a zone.
-- From the *Authorised users* list, select users that are allowed to use this cluster. 
+- From the *Authorised users* list, select users that are allowed to use this cluster.
 - Click the *Save* button to store the cluster settings in the database. Continue from the *Cluster Detail* page.
-- Click the *Edit* button to make additional changes. such as creating more Slurm partitions for differnt compute node instance types, or 
-mounting additional filesystems.
+- Click the *Edit* button to make additional changes. such as creating more Slurm partitions for differnt compute node instance types, or mounting additional filesystems.
   - For filesystems, note the two existing shared filesystems defined by default. Additional ones can be mounted if they have been created earlier. Note the *Mounting order* parameter only matters if the *Mount path* parameter has dependencies.
   - For cluster partitions, note that one *c2-standard-60* partition is defined by default. Additional partitions can be added, supporting different instance types. Enable or disable hyprethreading and node reuse as appropriate. Also, placement group can be enabled (for C2 and C2D partitions only).
 - Finally, save the configurations and click the *Create* button to trigger the cluster creation.
@@ -287,52 +281,54 @@ this record if desired; click the *Spack install* button to actually start build
 
 ## Workbench Management
 
-The Workbench feature provides a way to create and control VertexAI Workbenches which provide a single interactive development environment using a Jupyter Notebook perfect for pre/post processing of data. Workbenches can be located within the same VPC as other GCP resources managed by the frontend. 
+The Workbench feature provides a way to create and control VertexAI Workbenches which provide a single interactive development environment using a Jupyter Notebook perfect for pre/post processing of data. Workbenches can be located within the same VPC as other GCP resources managed by the frontend.
 
 ### Workbench Configuration
+
 The first stage of configuration, after selecting the desired cloud credential, is to select the basic profile of the workbench including:
-* Workbench Name
-* Subnet
-* Cloud Zone
-* Trusted User
+- Workbench Name
+- Subnet
+- Cloud Zone
+- Trusted User
 
 ![Workbench create process part 1](images/Workbench-Create-1.png)
 
-The subnet will define which regions the workbench can be located in. Workbenches are not available in all regions, see [Workbench Documentation](https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations) for more detail on currently available regions. Once a region is selected the cloud zone field will be populated with the available zones. 
+The subnet will define which regions the workbench can be located in. Workbenches are not available in all regions, see [Workbench Documentation](https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations) for more detail on currently available regions. Once a region is selected the cloud zone field will be populated with the available zones.
 
 ### Trusted Users
-The trusted user field will govern which user has access to the workbench. This is a 1:1 relationship as each workbench has a single instance owner that is set by the trusted user value. The workbench is then configured to run the jupyter notebook as the users OSLogin account. Access to the notebook is controlled by a proxy that requires the user to be logged into their google account to gain access. 
+
+The trusted user field will govern which user has access to the workbench. This is a 1:1 relationship as each workbench has a single instance owner that is set by the trusted user value. The workbench is then configured to run the jupyter notebook as the users OSLogin account. Access to the notebook is controlled by a proxy that requires the user to be logged into their google account to gain access.
 
 Workbench instances have a limited number of configurations:
-* Machine type
-* Boot disk type
-* Boot disk capacity
-* Image type
+- Machine type
+- Boot disk type
+- Boot disk capacity
+- Image type
 
 ![Workbench create process part 2](images/Workbench-Create-2.png)
 
 ### Machine type & Workbench Presets
 An administrator can configure any type of machine type that is available. Users with the "Normal User" class will only be able to create workbenches using the preset machine type configurations while users with the "Viewer" class will not be able to create workbenches for themselves. The HPC toolkit frontend comes with some pre-configured workbench presets:
-* Small - 1x core with 3840 Memory (n1-standard-1)
-* Medium - 2x cores with 7680 Memory (n1-standard-2)
-* Large - 4x cores with 15360 Memory (n1-standard-4)
-* X-Large - 8x cores with 30720 Memory (n1-standard-8)
+- Small - 1x core with 3840 Memory (n1-standard-1)
+- Medium - 2x cores with 7680 Memory (n1-standard-2)
+- Large - 4x cores with 15360 Memory (n1-standard-4)
+- X-Large - 8x cores with 30720 Memory (n1-standard-8)
 
-Each of these have been created under the category "Recommended". Presets can be edited, deleted or new presets added via the admin panel where you can set the machine type and the category under which the user will see the preset
+Each of these have been created under the category "Recommended". Presets can be edited, deleted or new presets added via the admin panel where you can set the machine type and the category under which the user will see the preset.
 
 ![Workbench create process - Presets](images/Workbench-Create-Presets.png)
 
 ### Workbench Storage
 
-The final setup of the workbench is to select any filesystems that are required to be mounted on the workbench. On this page the configuration fields will be disabled and no changes will be possible to the workbench configuration. 
+The final setup of the workbench is to select any filesystems that are required to be mounted on the workbench. On this page the configuration fields will be disabled and no changes will be possible to the workbench configuration.
 
-![Workbench create process - Storage ](images/Workbench-Create-Storage.png)
+![Workbench create process - Storage](images/Workbench-Create-Storage.png)
 
-Within this configuration you can select from existing storage exports, the order they are mounted, and the mouth path in the filesystem. Storage will be mounted in the order according to the mount order which will be important if you are mounting storage within a sub-directory of another storage mount. Another important configuration to be aware of is that filesystems will only be mounted if the filestore or cluster is active and has an accurate IP address or hostname in the frontends database. 
+Within this configuration you can select from existing storage exports, the order they are mounted, and the mouth path in the filesystem. Storage will be mounted in the order according to the mount order which will be important if you are mounting storage within a sub-directory of another storage mount. Another important configuration to be aware of is that filesystems will only be mounted if the filestore or cluster is active and has an accurate IP address or hostname in the frontends database.
 
-## Debugging problems
+## Debugging Problems
 
-#### Finding Log Files
+### Finding Log Files
 
 The service machine produces log files in `/opt/gcluster/run/`. These log files will show errors from the Django web application.
 
@@ -342,7 +338,7 @@ On Cluster controllers, most of the useful log files for debugging can be retrie
 
 Job logs and Spack application logs are uploaded upon job completion to Google Cloud Storage and viewable via the HPC Frontend.
 
-#### Deployment problems
+### Deployment problems
 
 Most deployment problems are caused by not having the right permissions. If this is the case, error message will normally show what permissions are missing. Use the [IAM permissions reference](https://cloud.google.com/iam/docs/permissions-reference) to research this and identify additional roles to add to your user account.
 
@@ -377,8 +373,7 @@ If a workbench is stuck in "Creating" status this can be resolved by manually ch
 - For failed network/filesystem/cluster creations, one may need to SSH into the service machine, locate the run-time data directory, and manually run `terraform destroy` there for clean up cloud resources.
 - Certain database records might get corrupted and need to be removed for failed clusters or network/filesystem components. This can be done from the Django Admin site, although adminstrators need to exercise caution while modifying the raw data in Django database.
 
+### Teardown Process
 
-## Teardown Process
-
-  - **Important: First ensure that all clusters, workbenches and filestores are removed using the web interface before destroying it. These resources will otherwise persist and continue to cost.**
-  - To tear down the web interface and its hosting infrastructure, navigate to the directory `hpc-toolkit/frontend/tf` on the original client machine and run `terraform destroy` to remove the service machine and associated resources.
+- **Important: First ensure that all clusters, workbenches and filestores are removed using the web interface before destroying it. These resources will otherwise persist and continue to cost.**
+- To tear down the web interface and its hosting infrastructure, navigate to the directory `hpc-toolkit/frontend/tf` on the original client machine and run `terraform destroy` to remove the service machine and associated resources.
