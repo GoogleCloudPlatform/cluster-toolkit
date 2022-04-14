@@ -19,10 +19,10 @@ sed -i -e "/outputtiming/a\\outputenergies 600" apoa1/apoa1.namd
 GET_PERF="\$2==\"Benchmark\"{n++; s+=log(\$8); }END{print 1/exp(s/n)}"
 
 # Run 1 rank per host
-mpirun -N 1 -np ${SLURM_JOB_NUM_NODES} namd2 +p ${SLURM_CPUS_ON_NODE} +ppn ${SLURM_CPUS_ON_NODE} +setcpuaffinity ./apoa1/apoa1.namd  > namd-apoa1.log 2>&1
+mpirun -N 1 -np "${SLURM_JOB_NUM_NODES}" namd2 +p "${SLURM_CPUS_ON_NODE}" +ppn "${SLURM_CPUS_ON_NODE}" +setcpuaffinity ./apoa1/apoa1.namd >namd-apoa1.log 2>&1
 res=$?
 
 if [[ "$res" == 0 ]]; then
-    kpi=$(awk "${GET_PERF}" < namd-apoa1.log)
-    echo "{\"result_unit\": \"ns/day\", \"result_value\": $kpi}" > kpi.json
+	kpi=$(awk "${GET_PERF}" <namd-apoa1.log)
+	echo "{\"result_unit\": \"ns/day\", \"result_value\": $kpi}" >kpi.json
 fi

@@ -16,29 +16,41 @@ source "googlecompute" "hpc_centos_7" {
   project_id              = var.project_id
   image_name              = "example-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
   image_family            = "example-v1"
-  machine_type            = "n2d-standard-4"
+  machine_type            = var.machine_type
+  disk_size               = var.disk_size
+  omit_external_ip        = var.omit_external_ip
+  use_internal_ip         = var.omit_external_ip
   subnetwork              = var.subnetwork
-  source_image_family     = "hpc-centos-7"
-  source_image_project_id = ["cloud-hpc-image-public"]
-  ssh_username            = "packer"
-  tags                    = ["builder"]
-  zone                    = "us-central1-a"
+  source_image            = var.source_image
+  source_image_family     = var.source_image_family
+  source_image_project_id = var.source_image_project_id
+  ssh_username            = var.ssh_username
+  tags                    = var.tags
+  use_iap                 = var.use_iap
+  use_os_login            = var.use_os_login
+  zone                    = var.zone
 }
 
 build {
   name    = "example"
   sources = ["sources.googlecompute.hpc_centos_7"]
 
-  dynamic "provisioner" {
-    # labels adds each element of below list to the right of dynamic block
-    # i.e. this creates multiple ansible provisioners
-    labels   = ["ansible"]
-    for_each = var.ansible_playbook_files
+  provisioner "shell" {
+    execute_command = "sudo -H sh -c '{{ .Vars }} {{ .Path }}'"
+    script          = "scripts/install_ansible.sh"
+  }
 
+  # this will end up installing custom roles/collections from ansible-galaxy
+  # under /home/packer until we modify /etc/ansible/ansible.cfg to identify
+  # a directory that will remain after Packer is complete
+  dynamic "provisioner" {
+    # using labels this way effectively creates 'provisioner "ansible-local"' blocks
+    labels   = ["ansible-local"]
+    for_each = var.ansible_playbooks
     content {
-      playbook_file   = provisioner.value
-      extra_arguments = var.ansible_extra_arguments
-      user            = var.ansible_user
+      playbook_file   = provisioner.value.playbook_file
+      galaxy_file     = provisioner.value.galaxy_file
+      extra_arguments = provisioner.value.extra_arguments
     }
   }
 

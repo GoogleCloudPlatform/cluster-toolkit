@@ -20,7 +20,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.87.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 2.0 |
-| <a name="requirement_time"></a> [time](#requirement\_time) | >= 1.0 |
+| <a name="requirement_time"></a> [time](#requirement\_time) | >= 0.7.2 |
 
 ## Providers
 
@@ -28,7 +28,7 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.87.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | >= 2.0 |
-| <a name="provider_time"></a> [time](#provider\_time) | >= 1.0 |
+| <a name="provider_time"></a> [time](#provider\_time) | >= 0.7.2 |
 
 ## Modules
 
@@ -42,8 +42,6 @@ limitations under the License.
 | Name | Type |
 |------|------|
 | [google_notebooks_instance.ai_notebook](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/notebooks_instance) | resource |
-| [google_project_iam_binding.ai_notebook_user_role1](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_binding) | resource |
-| [google_project_iam_binding.ai_notebook_user_role2](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_binding) | resource |
 | [google_project_iam_member.sa_p_notebook_permissions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_project_organization_policy.external_ip_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_organization_policy) | resource |
 | [google_project_organization_policy.shielded_vm_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_organization_policy) | resource |
@@ -51,8 +49,7 @@ limitations under the License.
 | [google_project_service.enabled_services](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_service) | resource |
 | [google_service_account.sa_p_notebook](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
 | [google_service_account_iam_member.sa_ai_notebook_user_iam](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
-| [google_storage_bucket.user_scripts_bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket) | resource |
-| [google_storage_bucket_iam_binding.binding](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
+| [google_storage_bucket_object.startup_script](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [random_id.default](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [time_sleep.wait_120_seconds](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 | [google_compute_network.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network) | data source |
@@ -77,6 +74,7 @@ limitations under the License.
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Name of the network to be created. | `string` | `"ai-notebook"` | no |
 | <a name="input_notebook_count"></a> [notebook\_count](#input\_notebook\_count) | Number of AI Notebooks requested | `string` | `"1"` | no |
 | <a name="input_organization_id"></a> [organization\_id](#input\_organization\_id) | Organization ID where GCP Resources need to get spin up. It can be skipped if already setting folder\_id | `string` | `""` | no |
+| <a name="input_owner_id"></a> [owner\_id](#input\_owner\_id) | Billing Account associated to the GCP Resources | `list(any)` | <pre>[<br>  ""<br>]</pre> | no |
 | <a name="input_project"></a> [project](#input\_project) | Project in which to launch the AI Notebooks. | `string` | `""` | no |
 | <a name="input_project_name"></a> [project\_name](#input\_project\_name) | Project name or ID, if it's an existing project. | `string` | `"gcluster-discovery"` | no |
 | <a name="input_random_id"></a> [random\_id](#input\_random\_id) | Adds a suffix of 4 random characters to the `project_id` | `string` | `null` | no |
@@ -86,6 +84,8 @@ limitations under the License.
 | <a name="input_set_trustedimage_project_policy"></a> [set\_trustedimage\_project\_policy](#input\_set\_trustedimage\_project\_policy) | Apply org policy to set the trusted image projects. | `bool` | `false` | no |
 | <a name="input_subnet_name"></a> [subnet\_name](#input\_subnet\_name) | Name of the subnet where to deploy the Notebooks. | `string` | `"subnet-ai-notebook"` | no |
 | <a name="input_trusted_users"></a> [trusted\_users](#input\_trusted\_users) | The list of trusted users. | `set(string)` | `[]` | no |
+| <a name="input_wb_startup_script_bucket"></a> [wb\_startup\_script\_bucket](#input\_wb\_startup\_script\_bucket) | Name for the bucket where the workbench startup script is stored. | `string` | `""` | no |
+| <a name="input_wb_startup_script_name"></a> [wb\_startup\_script\_name](#input\_wb\_startup\_script\_name) | Name & Path for the wb startup script file when uploaded to GCP cloud storage | `string` | `""` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Cloud Zone associated to the AI Notebooks | `string` | `"us-east4-c"` | no |
 
 ## Outputs
@@ -95,5 +95,4 @@ limitations under the License.
 | <a name="output_deployment_id"></a> [deployment\_id](#output\_deployment\_id) | RADLab Module Deployment ID |
 | <a name="output_notebooks_instance_names"></a> [notebooks\_instance\_names](#output\_notebooks\_instance\_names) | Notebook Instance Names |
 | <a name="output_project_radlab_ds_analytics_id"></a> [project\_radlab\_ds\_analytics\_id](#output\_project\_radlab\_ds\_analytics\_id) | Analytics Project ID |
-| <a name="output_user_scripts_bucket_uri"></a> [user\_scripts\_bucket\_uri](#output\_user\_scripts\_bucket\_uri) | User Script Bucket URI |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

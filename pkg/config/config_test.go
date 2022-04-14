@@ -17,6 +17,7 @@ limitations under the License.
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -26,6 +27,7 @@ import (
 
 	"hpc-toolkit/pkg/resreader"
 
+	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 )
 
@@ -185,6 +187,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	}
 	testYamlConfig := YamlConfig{
 		BlueprintName: "simple",
+		Validators:    []validatorConfig{},
 		Vars:          map[string]interface{}{},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
@@ -351,9 +354,202 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 	c.Assert(fileInfo.IsDir(), Equals, false)
 }
 
+func (s *MySuite) TestSetCLIVariables(c *C) {
+	// Success
+	bc := getBasicBlueprintConfigWithTestResource()
+	c.Assert(bc.Config.Vars["project_id"], IsNil)
+	c.Assert(bc.Config.Vars["deployment_name"], IsNil)
+	c.Assert(bc.Config.Vars["region"], IsNil)
+	c.Assert(bc.Config.Vars["zone"], IsNil)
+
+	cliProjectID := "cli_test_project_id"
+	cliDeploymentName := "cli_deployment_name"
+	cliRegion := "cli_region"
+	cliZone := "cli_zone"
+	cliKeyVal := "key=val"
+	cliVars := []string{
+		fmt.Sprintf("project_id=%s", cliProjectID),
+		fmt.Sprintf("deployment_name=%s", cliDeploymentName),
+		fmt.Sprintf("region=%s", cliRegion),
+		fmt.Sprintf("zone=%s", cliZone),
+		fmt.Sprintf("kv=%s", cliKeyVal),
+	}
+	err := bc.SetCLIVariables(cliVars)
+
+	c.Assert(err, IsNil)
+	c.Assert(bc.Config.Vars["project_id"], Equals, cliProjectID)
+	c.Assert(bc.Config.Vars["deployment_name"], Equals, cliDeploymentName)
+	c.Assert(bc.Config.Vars["region"], Equals, cliRegion)
+	c.Assert(bc.Config.Vars["zone"], Equals, cliZone)
+	c.Assert(bc.Config.Vars["kv"], Equals, cliKeyVal)
+
+	// Failure: Variable without '='
+	bc = getBasicBlueprintConfigWithTestResource()
+	c.Assert(bc.Config.Vars["project_id"], IsNil)
+
+	invalidNonEQVars := []string{
+		fmt.Sprintf("project_id%s", cliProjectID),
+	}
+	err = bc.SetCLIVariables(invalidNonEQVars)
+
+	expErr := "invalid format: .*"
+	c.Assert(err, ErrorMatches, expErr)
+	c.Assert(bc.Config.Vars["project_id"], IsNil)
+}
+
 func TestMain(m *testing.M) {
 	setup()
 	code := m.Run()
 	teardown()
 	os.Exit(code)
+}
+
+func (s *MySuite) TestValidationLevels(c *C) {
+	var err error
+	var ok bool
+	bc := getBlueprintConfigForTest()
+	validLevels := []string{"ERROR", "WARNING", "IGNORE"}
+	for idx, level := range validLevels {
+		err = bc.SetValidationLevel(level)
+		c.Assert(err, IsNil)
+		ok = isValidValidationLevel(idx)
+		c.Assert(ok, Equals, true)
+	}
+
+	err = bc.SetValidationLevel("INVALID")
+	c.Assert(err, NotNil)
+
+	// check that our test for iota enum is working
+	ok = isValidValidationLevel(-1)
+	c.Assert(ok, Equals, false)
+	invalidLevel := len(validLevels) + 1
+	ok = isValidValidationLevel(invalidLevel)
+	c.Assert(ok, Equals, false)
+}
+
+func (s *MySuite) TestIsLiteralVariable(c *C) {
+	var matched bool
+	matched = IsLiteralVariable("((var.project_id))")
+	c.Assert(matched, Equals, true)
+	matched = IsLiteralVariable("(( var.project_id ))")
+	c.Assert(matched, Equals, true)
+	matched = IsLiteralVariable("(var.project_id)")
+	c.Assert(matched, Equals, false)
+	matched = IsLiteralVariable("var.project_id")
+	c.Assert(matched, Equals, false)
+}
+
+func (s *MySuite) TestIdentifyLiteralVariable(c *C) {
+	var ctx, name string
+	var ok bool
+	ctx, name, ok = IdentifyLiteralVariable("((var.project_id))")
+	c.Assert(ctx, Equals, "var")
+	c.Assert(name, Equals, "project_id")
+	c.Assert(ok, Equals, true)
+
+	ctx, name, ok = IdentifyLiteralVariable("((module.structure.nested_value))")
+	c.Assert(ctx, Equals, "module")
+	c.Assert(name, Equals, "structure.nested_value")
+	c.Assert(ok, Equals, true)
+
+	// TODO: properly variables with periods in them!
+	// One purpose of literal variables is to refer to values in nested
+	// structures of a module output; should probably accept that case
+	// but not global variables with periods in them
+	ctx, name, ok = IdentifyLiteralVariable("var.project_id")
+	c.Assert(ctx, Equals, "")
+	c.Assert(name, Equals, "")
+	c.Assert(ok, Equals, false)
+}
+
+func (s *MySuite) TestConvertToCty(c *C) {
+	var testval interface{}
+	var testcty cty.Value
+	var err error
+
+	testval = "test"
+	testcty, err = ConvertToCty(testval)
+	c.Assert(testcty.Type(), Equals, cty.String)
+	c.Assert(err, IsNil)
+
+	testval = complex(1, -1)
+	testcty, err = ConvertToCty(testval)
+	c.Assert(testcty.Type(), Equals, cty.NilType)
+	c.Assert(err, NotNil)
+}
+
+func (s *MySuite) TestConvertMapToCty(c *C) {
+	var testmap map[string]interface{}
+	var testcty map[string]cty.Value
+	var err error
+	var testkey = "testkey"
+	var testval = "testval"
+	testmap = map[string]interface{}{
+		testkey: testval,
+	}
+
+	testcty, err = ConvertMapToCty(testmap)
+	c.Assert(err, IsNil)
+	ctyval, found := testcty[testkey]
+	c.Assert(found, Equals, true)
+	c.Assert(ctyval.Type(), Equals, cty.String)
+
+	testmap = map[string]interface{}{
+		"testkey": complex(1, -1),
+	}
+	testcty, err = ConvertMapToCty(testmap)
+	c.Assert(err, NotNil)
+	ctyval, found = testcty[testkey]
+	c.Assert(found, Equals, false)
+}
+
+func (s *MySuite) TestResolveGlobalVariables(c *C) {
+	var err error
+	var testkey1 = "testkey1"
+	var testkey2 = "testkey2"
+	var testkey3 = "testkey3"
+	bc := getBlueprintConfigForTest()
+	ctyMap := make(map[string]cty.Value)
+	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	c.Assert(err, IsNil)
+
+	// confirm plain string is unchanged and does not error
+	testCtyString := cty.StringVal("testval")
+	ctyMap[testkey1] = testCtyString
+	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	c.Assert(err, IsNil)
+	c.Assert(ctyMap[testkey1], Equals, testCtyString)
+
+	// confirm literal, non-global, variable is unchanged and does not error
+	testCtyString = cty.StringVal("((module.testval))")
+	ctyMap[testkey1] = testCtyString
+	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	c.Assert(err, IsNil)
+	c.Assert(ctyMap[testkey1], Equals, testCtyString)
+
+	// confirm failed resolution of a literal global
+	testCtyString = cty.StringVal("((var.test_global_var))")
+	ctyMap[testkey1] = testCtyString
+	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Matches, ".*Unsupported attribute;.*")
+
+	// confirm successful resolution of literal globals in presence of other strings
+	testGlobalVarString := "test_global_string"
+	testGlobalValString := "testval"
+	testGlobalVarBool := "test_global_bool"
+	testGlobalValBool := "testval"
+	testPlainString := "plain-string"
+	bc.Config.Vars[testGlobalVarString] = testGlobalValString
+	bc.Config.Vars[testGlobalVarBool] = testGlobalValBool
+	testCtyString = cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarString))
+	testCtyBool := cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarBool))
+	ctyMap[testkey1] = testCtyString
+	ctyMap[testkey2] = testCtyBool
+	ctyMap[testkey3] = cty.StringVal(testPlainString)
+	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	c.Assert(err, IsNil)
+	c.Assert(ctyMap[testkey1], Equals, cty.StringVal(testGlobalValString))
+	c.Assert(ctyMap[testkey2], Equals, cty.StringVal(testGlobalValBool))
+	c.Assert(ctyMap[testkey3], Equals, cty.StringVal(testPlainString))
 }

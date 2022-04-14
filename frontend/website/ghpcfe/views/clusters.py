@@ -14,6 +14,7 @@
 
 """ clusters.py """
 
+from collections import defaultdict
 import json
 from pathlib import Path
 from asgiref.sync import sync_to_async
@@ -38,7 +39,7 @@ from django.contrib import messages
 from django.conf import settings
 from ..models import Application, Cluster, Credential, Job, \
     MachineType, InstanceType, Filesystem, FilesystemExport, MountPoint, \
-    FilesystemImpl, Role, ClusterPartition, VirtualSubnet, Task
+    FilesystemImpl, Role, ClusterPartition, VirtualSubnet, Task, User
 from ..serializers import ClusterSerializer
 from ..forms import ClusterForm, ClusterMountPointForm, ClusterPartitionForm
 from ..cluster_manager import cloud_info, c2, utils
@@ -57,14 +58,28 @@ class ClusterListView(generic.ListView):
     model = Cluster
     template_name = 'cluster/list.html'
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.has_admin_role():
+            return qs
+        wanted_items = set()
+        for cluster in qs:
+            if self.request.user in cluster.authorised_users.all() and cluster.status == 'r':
+                wanted_items.add(cluster.pk)
+        return qs.filter(pk__in = wanted_items)
+
     def get_context_data(self, *args, **kwargs):
         loading = 0
-        for cluster in Cluster.objects.all():
+        for cluster in self.get_queryset():
             if (cluster.status == 'c' or cluster.status == 'i' or cluster.status == 't'):
                 loading = 1
                 break
+        admin_view = 0
+        if self.request.user.has_admin_role():
+            admin_view = 1
         context = super().get_context_data(*args, **kwargs)
         context['loading'] = loading
+        context['admin_view'] = admin_view
         context['navtab'] = 'cluster'
         return context
 
@@ -75,9 +90,13 @@ class ClusterDetailView(LoginRequiredMixin, generic.DetailView):
     template_name = 'cluster/detail.html'
 
     def get_context_data(self, **kwargs):
-        """ Perform extra query to populate instance types data """
+        admin_view = 0
+        if self.request.user.has_admin_role():
+            admin_view = 1
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'cluster'
+        context['admin_view'] = admin_view
+        # Perform extra query to populate instance types data
 #        context['cluster_instance_types'] = \
 #            ClusterInstanceType.objects.filter(cluster=self.kwargs['pk'])
         return context
@@ -283,10 +302,14 @@ class ClusterUpdateView(UpdateView):
         suffix = self.object.cloud_id.split('-')[-1]
         self.object.cloud_id = self.object.name + '-' + suffix
 
+        if self.object.status != 'n':
+            form.add_error("Running clusters cannot currently be updated!")
+            return self.form_invalid(form)
+
         # Verify formset validity (suprised there's not another method to do this)
-        for formset in [mountpoints, partitions]:
+        for formset, formset_name in [(mountpoints, "mountpoints"), (partitions, "partitions")]:
             if not formset.is_valid():
-                form.add_error(None, "Error in form below")
+                form.add_error(None, f"Error in {formset_name} section")
                 return self.form_invalid(form)
 
         with transaction.atomic():
@@ -296,8 +319,6 @@ class ClusterUpdateView(UpdateView):
             partitions.instance = self.object
             partitions.save()
         msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Create' button to provision the cluster."
-        if (self.object.status == 'r'):
-            msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Sync Cluster' button to apply changes."
         messages.success(self.request, msg)
 
         # Be kind... Check filesystems to verify all in the same zone as us.
@@ -350,6 +371,20 @@ class ClusterCostView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['navtab'] = 'cluster'
+
+        cluster_users = []
+        for user in User.objects.all():
+            spend = user.total_spend(cluster_id=context['cluster'].id)
+            if spend > 0:
+                cluster_users.append((spend, user.total_jobs(cluster_id=context['cluster'].id), user))
+
+        cluster_apps = []
+        for app in Application.objects.filter(cluster=context['cluster'].id):
+            cluster_apps.append((app.total_spend(), app))
+
+
+        context['users_by_spend'] = sorted(cluster_users, key=lambda x: x[0], reverse=True)
+        context['apps_by_spend'] = sorted(cluster_apps, key=lambda x: x[0], reverse=True)
         return context
 
 

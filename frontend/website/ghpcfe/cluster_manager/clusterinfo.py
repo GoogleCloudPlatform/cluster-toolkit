@@ -87,7 +87,7 @@ ClusterInfo object - represent a cluster
             self._apply_terraform()
         except Exception as e:
             self.cluster.status = 'e'
-            self.cluster.cloud_status = 'nm'
+            self.cluster.cloud_state = 'nm'
             self.cluster.save()
             raise
 
@@ -507,7 +507,7 @@ resource_groups:
         try:
             logger.info("Invoking Terraform destroy")
             self.cluster.status = 't'
-            self.cluster.cloud_status = 'dm'
+            self.cluster.cloud_state = 'dm'
             self.cluster.save()
 
             #utils.remove_host_from_server_firewall(self.cluster.XXXX)
@@ -521,10 +521,12 @@ resource_groups:
             self.cluster = Cluster.objects.get(id=self.cluster.id)
 
             self.cluster.status = 'd'
-            self.cluster.cloud_status = 'xm'
+            self.cluster.cloud_state = 'xm'
             self.cluster.save()
 
             c2.delete_cluster_subscription(self.cluster.id, controller_sa)
+            logger.info("Terraform destroy completed")
+
         except subprocess.CalledProcessError as cpe:
             logger.error("Terraform destroy failed", exc_info=cpe)
             if cpe.stdout:

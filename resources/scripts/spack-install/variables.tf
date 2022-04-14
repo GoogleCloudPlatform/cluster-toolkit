@@ -51,6 +51,41 @@ variable "spack_cache_url" {
   default = null
 }
 
+variable "configs" {
+  description = <<EOT
+    List of configuration options to set within spack.
+    Configs can be of type 'single-config' or 'file'.
+    All configs must specify a value, and a
+    a scope.
+EOT
+  default     = []
+  type        = list(map(any))
+  validation {
+    condition = alltrue([
+      for c in var.configs : contains(keys(c), "type")
+    ])
+    error_message = "All configs must declare a type."
+  }
+  validation {
+    condition = alltrue([
+      for c in var.configs : contains(keys(c), "scope")
+    ])
+    error_message = "All configs must declare a scope."
+  }
+  validation {
+    condition = alltrue([
+      for c in var.configs : contains(keys(c), "value")
+    ])
+    error_message = "All configs must declare a value."
+  }
+  validation {
+    condition = alltrue([
+      for c in var.configs : (c["type"] == "single-config" || c["type"] == "file")
+    ])
+    error_message = "The 'type' must be 'single-config' or 'file'."
+  }
+}
+
 variable "compilers" {
   description = "Defines compilers for spack to install before installing packages."
   default     = []
@@ -70,6 +105,75 @@ variable "packages" {
   description = "Defines root packages for spack to install (in order)."
   default     = []
   type        = list(string)
+}
+
+variable "gpg_keys" {
+  description = <<EOT
+  GPG Keys to trust within spack.
+  Each key must define a type. Valid types are 'file' and 'new'.
+  Keys of type 'file' must define a path to the key that
+  should be trusted.
+  Keys of type 'new' must define a 'name' and 'email' to create
+  the key with.
+EOT
+  default     = []
+  type        = list(map(any))
+  validation {
+    condition = alltrue([
+      for k in var.gpg_keys : contains(keys(k), "type")
+    ])
+    error_message = "Each gpg_key must define a type."
+  }
+  validation {
+    condition = alltrue([
+      for k in var.gpg_keys : (k["type"] == "file" || k["type"] == "new")
+    ])
+    error_message = "Valid types for gpg_keys are 'file' and 'new'."
+  }
+  validation {
+    condition = alltrue([
+      for k in var.gpg_keys : ((k["type"] == "file" && contains(keys(k), "path")) || (k["type"] == "new"))
+    ])
+    error_message = "Each gpg_key of type file must define a path."
+  }
+  validation {
+    condition = alltrue([
+      for k in var.gpg_keys : (k["type"] == "file" || ((k["type"] == "new") && contains(keys(k), "name") && contains(keys(k), "email")))
+    ])
+    error_message = "Each gpg_key of type new must define a name and email."
+  }
+}
+
+variable "caches_to_populate" {
+  description = <<EOT
+  Defines caches which will be populated with the installed packages.
+  Each cache must specify a type (either directory, or mirror).
+  Each cache must also specify a path. For directory caches, this path
+  must be on a local file system (i.e. file:///path/to/cache). For
+  mirror paths, this can be any valid URL that spack accepts.
+
+  NOTE: GPG Keys should be installed before trying to populate a cache
+  with packages.
+
+  NOTE: The gpg_keys variable can be used to install existing GPG keys
+  and create new GPG keys, both of which are acceptable for populating a
+  cache.
+EOT
+  default     = []
+  type        = list(map(any))
+  validation {
+    condition = alltrue([
+      for c in var.caches_to_populate : (contains(keys(c), "type") && contains(keys(c), "path"))
+    ])
+    error_message = "Each cache_to_populate must have define both 'type' and 'path'."
+  }
+  validation {
+    condition = alltrue([
+      for c in var.caches_to_populate : (c["type"] == "directory" || c["type"] == "mirror")
+    ])
+
+    error_message = "Cache_to_populate type must be either 'directory' or 'mirror'."
+  }
 }
 
 variable "environments" {

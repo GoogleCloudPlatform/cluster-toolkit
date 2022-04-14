@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # Startup script to prepare a new VM to host the web application for the
 # Multi-platform HPC Application System
 
@@ -23,34 +22,31 @@
 GCP_PROJECT=$(curl --silent --show-error http://metadata.google.internal/computeMetadata/v1/project/project-id -H "Metadata-Flavor: Google")
 SERVER_IP_ADDRESS=$(curl --silent --fail http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
 if [ -z "${SERVER_IP_ADDRESS}" ]; then
-    # No public IP.  Fall back to internal
-    SERVER_IP_ADDRESS=$(curl --silent --fail http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip -H "Metadata-Flavor: Google")
+	# No public IP.  Fall back to internal
+	SERVER_IP_ADDRESS=$(curl --silent --fail http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip -H "Metadata-Flavor: Google")
 fi
 SERVER_HOSTNAME=$(curl --silent --fail http://metadata/computeMetadata/v1/instance/attributes/hostname -H "Metadata-Flavor: Google")
 config_bucket=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/webserver-config-bucket -H "Metadata-Flavor: Google")
 c2_topic=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/ghpcfe-c2-topic -H "Metadata-Flavor: Google")
 deploy_mode=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deploy_mode -H "Metadata-Flavor: Google")
 
-
 # Exit if deployment already exists to stop startup script running on reboots
-if [[ -d /opt/gcluster/hpc-toolkit ]]
-then
-        printf "It appears gcluster has already been deployed. Exiting...\n"
-        exit 0;
+if [[ -d /opt/gcluster/hpc-toolkit ]]; then
+	printf "It appears gcluster has already been deployed. Exiting...\n"
+	exit 0
 fi
 
 printf "\n############## Setting SELinux to Permissive ###############\n"
 setenforce 0
 sed -i -e 's/SELINUX=enforcing/SELINUX=permissive/g' /etc/selinux/config
 
-
 printf "####################\n#### Installing required packages\n####################\n"
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
-    rsync nginx bind-utils policycoreutils-python-utils \
-    terraform packer supervisor python3-certbot-nginx
+	rsync nginx bind-utils policycoreutils-python-utils \
+	terraform packer supervisor python3-certbot-nginx
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
 chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
@@ -77,7 +73,8 @@ curl --silent --show-error --location https://golang.org/dl/go1.17.3.linux-amd64
 rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go1.17.3.linux-amd64.tar.gz
 
 #Add path entry for Go binaries to bashrc for all users (only works on future logins)
-echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >> /etc/bashrc
+# shellcheck disable=SC2016
+echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
 
 printf "\n####################\n#### Creating firewall & SELinux rules\n####################\n"
 printf "Adding rule for port 22 (ssh): "
@@ -94,34 +91,31 @@ printf "\n####################\n#### Create gcluster user & create deployment ke
 printf "Adding gcluster user...\n"
 useradd -r -m -d /opt/gcluster gcluster
 
-if [ "${deploy_mode}" == "git" ];
-then
-    printf "Adding deployment keys..\n"
-    mkdir -p /opt/gcluster/.ssh
+if [ "${deploy_mode}" == "git" ]; then
+	printf "Adding deployment keys..\n"
+	mkdir -p /opt/gcluster/.ssh
 
-    echo "$DEPLOY_KEY1" > /opt/gcluster/.ssh/gcluster-deploykey
-    sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-deploykey
-    cat >> /opt/gcluster/.ssh/config <<+
+	echo "$DEPLOY_KEY1" >/opt/gcluster/.ssh/gcluster-deploykey
+	sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-deploykey
+	cat >>/opt/gcluster/.ssh/config <<+
 
 host github.com
         hostname github.com
         IdentityFile ~/.ssh/gcluster-deploykey
         StrictHostKeyChecking=accept-new
 +
-    chmod 700 /opt/gcluster/.ssh
-    chmod 600 /opt/gcluster/.ssh/*
-    chown gcluster -R /opt/gcluster/.ssh
+	chmod 700 /opt/gcluster/.ssh
+	chmod 600 /opt/gcluster/.ssh/*
+	chown gcluster -R /opt/gcluster/.ssh
 
-    fetch_hpc_toolkit="git clone -b \"${repo_branch}\" git@github.com:${repo_fork}/hpc-toolkit.git"
+	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" git@github.com:${repo_fork}/hpc-toolkit.git"
 
-elif [ "${deploy_mode}" == "tarball" ];
-then
-    printf "\n####################\n#### Download web application files\n####################\n"
-    gsutil cp "gs://${config_bucket}/webserver/deployment.tar.gz" /tmp/deployment.tar.gz
+elif [ "${deploy_mode}" == "tarball" ]; then
+	printf "\n####################\n#### Download web application files\n####################\n"
+	gsutil cp "gs://${config_bucket}/webserver/deployment.tar.gz" /tmp/deployment.tar.gz
 
-    fetch_hpc_toolkit="tar xfz /tmp/deployment.tar.gz"
+	fetch_hpc_toolkit="tar xfz /tmp/deployment.tar.gz"
 fi
-
 
 #Clean up anything we may have missed
 chown gcluster:gcluster -R /opt/gcluster
@@ -197,7 +191,7 @@ autostart=true
 autorestart=true
 user=gcluster
 redirect_stderr=true
-stdout_logfile=/opt/gcluster/run/supvisor.log" > /etc/supervisord.d/gcluster.ini
+stdout_logfile=/opt/gcluster/run/supvisor.log" >/etc/supervisord.d/gcluster.ini
 
 printf "Creating systemd service..."
 echo "[Unit]
@@ -208,13 +202,13 @@ Requires=supervisord.service
 [Service]
 Type=forking
 ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/frontend/website/nginx.conf
-ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkig/frontend/website/nginx.conf -s stop
+ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/frontend/website/nginx.conf -s stop
 PIDFile=/opt/gcluster/run/nginx.pid
 Restart=no
 
 
 [Install]
-WantedBy=default.target" > /etc/systemd/system/gcluster.service
+WantedBy=default.target" >/etc/systemd/system/gcluster.service
 
 printf "Reloading systemd and starting service..."
 systemctl daemon-reload
@@ -222,17 +216,15 @@ systemctl enable gcluster.service
 systemctl start gcluster.service
 systemctl status gcluster.service
 
-
 # IF we have a hostname, configure for TLS
-if [ -n "${SERVER_HOSTNAME}" ] ; then
-    printf "Installing LetsEncrypt Certificate"
-    /usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/frontend/website -m ${DJANGO_EMAIL} --agree-tos -d ${SERVER_HOSTNAME}
+if [ -n "${SERVER_HOSTNAME}" ]; then
+	printf "Installing LetsEncrypt Certificate"
+	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/frontend/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
 
-    printf "Installing Cron entry to keep Cert up to date"
-    tmpcron=$(mktemp)
-    crontab -l root > "${tmpcron}" 2>/dev/null
-    echo "0 12 * * * /usr/bin/certbot renew --quiet" >> "${tmpcron}"
-    crontab -u root "${tmpcron}"
-    rm "${tmpcron}"
+	printf "Installing Cron entry to keep Cert up to date"
+	tmpcron=$(mktemp)
+	crontab -l root >"${tmpcron}" 2>/dev/null
+	echo "0 12 * * * /usr/bin/certbot renew --quiet" >>"${tmpcron}"
+	crontab -u root "${tmpcron}"
+	rm "${tmpcron}"
 fi
-

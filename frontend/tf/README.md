@@ -49,7 +49,6 @@
 | <a name="input_repo_branch"></a> [repo\_branch](#input\_repo\_branch) | git branch to checkout when deploying the HPC Frontend | `string` | `"main"` | no |
 | <a name="input_repo_fork"></a> [repo\_fork](#input\_repo\_fork) | GitHub repository name in which to find the hpc-toolkit repo | `string` | `"GoogleCloudPlatform"` | no |
 | <a name="input_server_instance_type"></a> [server\_instance\_type](#input\_server\_instance\_type) | Instance size to use from HPC Frontend webserver | `string` | `"e2-standard-2"` | no |
-| <a name="input_ssh_key"></a> [ssh\_key](#input\_ssh\_key) | admin SSH Key to add to the webserver instance | `string` | `"~/.ssh/id_rsa.pub"` | no |
 | <a name="input_static_ip"></a> [static\_ip](#input\_static\_ip) | Optional pre-configured static IP for HPC Frontend. | `string` | `""` | no |
 | <a name="input_subnet"></a> [subnet](#input\_subnet) | Subnet in which to deploy HPC Frontend. | `string` | `""` | no |
 | <a name="input_webserver_hostname"></a> [webserver\_hostname](#input\_webserver\_hostname) | DNS Hostname for the webserver | `string` | `""` | no |

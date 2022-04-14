@@ -160,7 +160,7 @@ variable "project" {
 
 variable "owner_id" {
   description = "Billing Account associated to the GCP Resources"
-  type        = list
+  type        = list(any)
   default     = [""]
 }
 

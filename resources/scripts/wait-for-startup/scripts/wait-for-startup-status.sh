@@ -27,7 +27,7 @@ if [ -z "${PROJECT_ID}" ]; then
 fi
 
 tries=0
-until [ $tries -ge 120 ]; do
+until [ $tries -ge "${RETRIES}" ]; do
 	GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
 	FINISH_LINE="startup-script exit status"
 	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep "${FINISH_LINE}")
@@ -45,6 +45,8 @@ elif [ "${STATUS}" == 1 ]; then
 	echo "${GCLOUD}"
 else
 	echo "invalid return status '${STATUS}'"
+	echo "to inspect the startup script output, please run:"
+	echo "${GCLOUD}"
 	exit 1
 fi
 

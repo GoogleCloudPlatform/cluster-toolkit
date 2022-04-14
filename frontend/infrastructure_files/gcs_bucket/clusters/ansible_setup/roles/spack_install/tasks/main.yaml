@@ -26,7 +26,6 @@
 - name: Determine Slurm version
   shell:
     cmd: "/usr/local/bin/scontrol --version | awk '{print $2}' | tr '.' '-'"
-    pipefail: True
   register: slurm_version_cmd
   when: True
 

@@ -22,11 +22,14 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponseRedirect, HttpResponseBadRequest
 from django.urls import reverse
 from django.views import generic
-from django.views.generic.edit import CreateView, DeleteView
+from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.contrib import messages
 from django.db.models import Q
-from ..models import Credential, Workbench, VirtualSubnet
-from ..forms import WorkbenchForm
+from django.db import transaction
+from django.forms import inlineformset_factory
+
+from ..models import Credential, Workbench, VirtualSubnet, WorkbenchMountPoint, Filesystem, FilesystemImpl
+from ..forms import WorkbenchForm, WorkbenchMountPointForm
 from ..cluster_manager import cloud_info
 from ..cluster_manager import workbenchinfo
 from .asyncview import BackendAsyncView
@@ -106,7 +109,7 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
         self.object.cloud_region = self.object.subnet.cloud_region;
         self.object.save()
         form.save_m2m()
-        messages.success(self.request, "A record for this workbench has been created. Click the 'Edit' button to customise it.")
+        messages.success(self.request, "A record for this workbench has been created. Please add any desired storage")
         return HttpResponseRedirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
@@ -122,6 +125,70 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
     def get_success_url(self):
         # Redirect to backend view that creates cluster files
         return reverse('backend-create-workbench', kwargs={'pk': self.object.pk})
+
+class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
+    """ Custom DetailView for Cluster model """
+    model = Workbench
+    template_name = 'workbench/update.html'
+    form_class = WorkbenchForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        """ Perform extra query to populate instance types data """
+        context = super().get_context_data(**kwargs)
+        context['navtab'] = 'workbench'
+        workbench_info = workbenchinfo.WorkbenchInfo(context['object'])
+        context['mountpoints_formset'] = self.get_mp_formset()
+        return context
+
+    def get_mp_formset(self, **kwargs):
+        def formfield_cb(modelField, **kwargs):
+            field = modelField.formfield(**kwargs)
+            if modelField.name == 'export':
+                workbench = self.object
+                fsquery = Filesystem.objects    \
+                            .exclude(impl_type=FilesystemImpl.BUILT_IN) \
+                            .filter(cloud_state__in=['m', 'i']) \
+                            .filter(subnet__vpc=workbench.subnet.vpc).values_list('pk', flat=True)
+            return field
+
+        FormClass = inlineformset_factory(
+            Workbench, WorkbenchMountPoint,
+            form=WorkbenchMountPointForm,
+            formfield_callback=formfield_cb,
+            can_delete=True,
+            extra=1)
+
+        if self.request.POST:
+            kwargs['data'] = self.request.POST
+        return FormClass(instance=self.object, **kwargs)
+
+    def get_success_url(self):
+        # Update the Terraform
+        return reverse('backend-update-workbench', kwargs={'pk': self.object.pk})
+        
+    def form_valid(self, form):
+        context = self.get_context_data()
+        workbenchmountpoints = context['mountpoints_formset']
+        
+        # Verify formset validity (suprised there's not another method to do this)
+        for formset in workbenchmountpoints:
+            if not formset.is_valid():
+                for error in formset.errors:
+                    form.add_error(None, error)
+                return self.form_invalid(form)
+
+        with transaction.atomic():
+            self.object = form.save()
+            workbenchmountpoints.instance = self.object
+            workbenchmountpoints.save()
+        msg = "Workbench configuration updated. Click create to provision the workbench"
+        messages.success(self.request, msg)
+        return super().form_valid(form)
 
 class WorkbenchDeleteView(LoginRequiredMixin, DeleteView):
     """ Custom DeleteView for Workbench model """
@@ -174,7 +241,7 @@ class BackendCreateWorkbench(BackendAsyncView):
 
         args = await self.get_orm(pk)
         await self.create_task("Create Workbench", *args)
-        return HttpResponseRedirect(reverse('workbench-detail', kwargs={'pk':pk}))
+        return HttpResponseRedirect(reverse('workbench-update', kwargs={'pk':pk}))
 
 class BackendStartWorkbench(BackendAsyncView):
     """ A view to make async call to create a new cluster """
@@ -222,3 +289,28 @@ class BackendDestroyWorkbench(BackendAsyncView):
         args = await self.get_orm(pk)
         await self.create_task("Destroy workbench", *args)
         return HttpResponseRedirect(reverse('workbench-detail', kwargs={'pk': pk}))
+
+class BackendUpdateWorkbench(BackendAsyncView):
+    """ A view to make async call to create a new cluster """
+
+    @sync_to_async
+    def get_orm(self, workbench_id):
+        workbench = Workbench.objects.get(pk=workbench_id)
+        return (workbench,)
+
+
+    def cmd(self, task_id, token, workbench):
+        from ..cluster_manager.create_workbench import update_workbench
+        update_workbench(workbench)
+
+
+    async def get(self, request, pk):
+        """ this will invoke the background tasks and return immediately """
+        # Mixins don't yet work with Async views
+        if not await sync_to_async(lambda: request.user.is_authenticated)():
+            return redirect_to_login(request.get_full_path)
+        await self.test_user_is_cluster_admin(request.user)
+
+        args = await self.get_orm(pk)
+        await self.create_task("Update Workbench", *args)
+        return HttpResponseRedirect(reverse('workbench-detail', kwargs={'pk':pk}))

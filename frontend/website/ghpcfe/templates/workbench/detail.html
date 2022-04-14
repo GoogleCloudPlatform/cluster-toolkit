@@ -2,17 +2,12 @@
 
 {% block meta %}
   {% if workbench.status == "c" or workbench.status == "i" or workbench.status == "t" %}
-  <meta http-equiv="refresh" content="15" />
+  <meta http-equiv="refresh" content="60" />
   {% endif %}
 {% endblock %}
 
 {% block content %}
   <h2>Workbench Detail</h2>
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
     <p><b>Workbench ID:</b> {{ object.id }}</p>
     <p><b>Name:</b> {{ object.name }}</p>
     <p><b>Cloud Name:</b> {{ object.internal_name }}</p>
@@ -33,12 +28,26 @@
     {% if object.status == "d" %}
     <div class="alert alert-info">This workbench is destroyed and its settings archived. No further change is possible.</div>
     {% endif %}
-    {% if object.status == "n" %}
-    <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
-    <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Create</a>
-    {% endif %}
-    {% if object.status == "r" %}
-    <a href="https://{{ object.proxy_uri }}" class="btn btn-primary" target="_blank">Open JupyterLab </a>
-    {% endif %}
+    {% with admin=request.user.has_admin_role %}
+      {% if object.status == "n" %}
+        {% if workbench.trusted_users == request.user or admin %} 
+          <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
+          <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Create</a>
+        {% endif %}
+      {% endif %}
+      {% if object.status == "r" %}
+        <a href="https://{{ object.proxy_uri }}" class="btn btn-primary" target="_blank">Open JupyterLab</a>
+        {% if workbench.trusted_users == request.user or admin %} 
+          <a href="{% url 'workbench-destroy' object.id %}" class="btn btn-primary">Destroy</a>
+        {% endif %}
+      {% endif %}
+      {% if object.status == "d" %}
+        {% if workbench.trusted_users == request.user or admin %} 
+          <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
+          <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Recreate</a>
+        {% endif %}
+      {% endif %}
+    {% endwith %}
+
 
 {% endblock %}

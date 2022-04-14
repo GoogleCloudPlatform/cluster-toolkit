@@ -33,4 +33,4 @@
       . {{ spack_dir }}/share/spack/setup-env.sh
     owner: root
     mode: 0755
-    force: no
+    force: False

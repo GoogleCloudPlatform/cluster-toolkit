@@ -54,10 +54,16 @@ variable "auto_delete_disk" {
   default     = false
 }
 
-variable "network_name" {
-  description = "Network to deploy to. Only one of network or subnetwork should be specified."
+variable "network_self_link" {
+  description = "The self link of the network to attach the nfs VM."
   type        = string
   default     = "default"
+}
+
+variable "subnetwork_self_link" {
+  description = "The self link of the subnetwork to attach the nfs VM."
+  type        = string
+  default     = null
 }
 
 variable "machine_type" {

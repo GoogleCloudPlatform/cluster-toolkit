@@ -24,6 +24,8 @@ from ..models import VirtualNetwork, VirtualSubnet
 
 from . import utils
 
+import logging
+logger = logging.getLogger(__name__)
 
 def create_vpc(vpc: VirtualNetwork) -> None:
 
@@ -90,6 +92,8 @@ def start_vpc(vpc: VirtualNetwork) -> None:
             logger.info(f"  STDOUT:\n{cpe.stdout.decode('utf-8')}\n")
         if cpe.stderr:
             logger.info(f"  STDERR:\n{cpe.stderr.decode('utf-8')}\n")
+        vpc.status = 'e'
+        vpc.save()
         raise
 
 

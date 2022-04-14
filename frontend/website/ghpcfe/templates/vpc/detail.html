@@ -8,11 +8,6 @@
 
 {% block content %}
   <h2>Virtual Network Detail</h2>
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
   {% if "x" in object.cloud_state %}
   <div class="alert alert-info">This VPC is destroyed and its settings archived. No further change is possible.</div>
   {% endif %}
@@ -50,7 +45,7 @@
         {% endfor %}
       {% else %}
       <tr>
-        <td colspan="2">
+        <td colspan="3">
           {% if "c" not in object.cloud_state %}
           Click the <b>Edit Subnets</b> button below to configure subnets.</td> 
           {% endif %}
@@ -95,7 +90,7 @@
         {% endfor %}
       {% else %}
       <tr>
-        <td colspan="2">
+        <td colspan="3">
           {% if "c" not in object.cloud_state %}
           Click the <b>Edit Subnets</b> button below to configure subnets.</td> 
           {% endif %}

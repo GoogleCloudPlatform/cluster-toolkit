@@ -14,13 +14,23 @@
  * limitations under the License.
  */
 
+variable "project_id" {
+  description = "ID of project in which Filestore instance will be created."
+  type        = string
+}
+
 variable "deployment_name" {
   description = "Name of the HPC deployment, used as name of the filestore instace if no name is specified."
   type        = string
 }
 
 variable "zone" {
-  description = "The name of the Filestore zone of the instance."
+  description = "Location for Filestore instances below Enterprise tier."
+  type        = string
+}
+
+variable "region" {
+  description = "Location for Filestore instances at Enterprise tier."
   type        = string
 }
 

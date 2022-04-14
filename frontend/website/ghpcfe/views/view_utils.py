@@ -51,7 +51,7 @@ class TerraformLogFile(LocalFile):
         self.prefix = Path(prefix)
 
     def get_file(self):
-        for phase in ['destroy', 'apply', 'init']:
+        for phase in ['destroy', 'apply', 'plan', 'init']:
             tf_log = self.prefix / f'terraform_{phase}_log.stderr'
 
             if (not tf_log.exists()) or tf_log.stat().st_size == 0:

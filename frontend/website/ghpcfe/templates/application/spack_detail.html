@@ -8,11 +8,6 @@
 
 {% block content %}
   <h2>Application Detail</h2>
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
   <p><b>Application ID:</b> {{ object.id }}</p>
   <p><b>Name:</b> {{ object.name }}</p>
   <p><b>Version:</b> {{ object.version }}</p>
@@ -30,7 +25,8 @@
   <p><b>Installed CPU Arcitecture:</b> {{ object.installed_architecture }}</p>
   <hr>
   <p style="text-decoration: underline; font-size: large;">Spack detail</p>
-  <p><b>Spack Name:</b> {{ object.spack_name }}   [<a href="https://spack.readthedocs.io/en/latest/package_list.html#{{ object.spack_name }}" target="_blank">Spack pacakge document</a>]</p>
+  <p><b>Spack Name:</b> {{ object.spack_name }}   [<a
+    href="https://spack.readthedocs.io/en/latest/package_list.html#{{ object.spack_name }}" target="_blank">Spack package documentation</a>]</p>
   <p><b>Spack Spec:</b> {{ object.spack_spec }}</p>
   <p><b>Spack Hash:</b> {{ object.spack_hash }}</p>
   <p><b>Compiler:</b> {{ object.compiler }}</p>
@@ -48,8 +44,10 @@
   {% if object.status == "r" %}
   <a href="{% url 'job-create' application.id %}" class="btn btn-primary">New Job</a>
   {% endif %}
-  {% if object.status == "r" or object.status == "e"%}
+  {% if admin_view == 1 %}
+    {% if object.status == "r" or object.status == "e"%}
   <a href="{% url 'application-log' application.id %}" class="btn btn-primary">View Logs</a>
+    {% endif %}
   {% endif %}
 
 {% endblock %}

@@ -1,2 +1,5 @@
 skip_list:
 - yaml
+
+mock_roles:
+- googlecloudplatform.google_cloud_ops_agents

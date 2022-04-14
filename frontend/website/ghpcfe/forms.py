@@ -42,15 +42,28 @@ class UserUpdateForm(UserChangeForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['ssh_key'].label = "SSH key"
 
     class Meta:
         model = User
-        fields = ('email','ssh_key',)
+        fields = ('email',)
         widgets = {
             'email': forms.TextInput(attrs={'class': 'form-control'}),
-            'ssh_key': forms.Textarea(attrs={'class': 'form-control'}),
         }
+
+class UserAdminUpdateForm(forms.ModelForm):
+    """ Custom form for Admin update of users """
+
+
+    class Meta:
+        model = User
+        fields = ('username', 'email', 'roles', 'quota_type', 'quota_amount',)
+        widgets = {
+                'username': forms.TextInput(attrs={'class': 'form-control'}),
+                'email': forms.TextInput(attrs={'class': 'form-control'}),
+                'roles': forms.SelectMultiple(attrs={'class': 'form-control'}),
+                'quota_type': forms.Select(attrs={'class': 'form-control', 'disabled': False}),
+                'quota_amount': forms.NumberInput(attrs={'class':'form-control'})
+                }
 
 
 class CredentialForm(forms.ModelForm):
@@ -167,15 +180,11 @@ class WorkbenchForm(forms.ModelForm):
         cleaned_data = super().clean()
         subnet = cleaned_data.get("subnet")
 
-        # if subnet.cloud_zone not in self.workbench_zones:
-        #     validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_zone + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
-        #     raise forms.ValidationError(mark_safe(validation_error_message))
+        if subnet.cloud_region not in self.workbench_zones:
+            validation_error_message = "Network " + subnet.vpc.cloud_id + " has an invalid region & zone for Vertex AI Workbenches: " + subnet.cloud_region + ". Please see <a href=\"https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations\" target=\"_blank\"> Workbench Documentation</a> for more infromation on region availability, try"
+            raise forms.ValidationError(mark_safe(validation_error_message))
 
-        #validate user has an email address that we can pass to GCP 
         user = cleaned_data.get("trusted_users")
-        if not user.email:
-            raise forms.ValidationError("User has no email address")
-
         #check user is associated with a social login account
         try:
             if user.socialaccount_set.first().uid:
@@ -194,6 +203,11 @@ class WorkbenchForm(forms.ModelForm):
         zone_choices = None
         if 'zone_choices' in kwargs:
             zone_choices = kwargs.pop('zone_choices')
+        
+        if self.instance.id:
+            for field in self.fields:
+                if field != "name":
+                    self.fields[field].disabled = True
 
         self.fields['subnet'].queryset = VirtualSubnet.objects.filter(cloud_credential=credential).filter(Q(cloud_state="i")|Q(cloud_state="m"))
         if zone_choices:
@@ -390,7 +404,7 @@ class JobForm(forms.ModelForm):
             'number_of_nodes': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'ranks_per_node': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'threads_per_rank': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'readonly': True}),
-            'wall_clock_time_limit': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
+            'wall_clock_time_limit': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'run_script': forms.URLInput(attrs={'class': 'form-control'}),
             'input_data': forms.URLInput(attrs={'class': 'form-control'}),
             'result_data': forms.URLInput(attrs={'class': 'form-control'}),
@@ -402,6 +416,7 @@ class JobForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         cluster = kwargs['initial']['cluster']
         self.fields['partition'].queryset = cluster.partitions
+
 
 
 class BenchmarkForm(forms.ModelForm):
@@ -584,3 +599,13 @@ class FilestoreForm(forms.ModelForm):
             'cloud_zone': forms.Select(attrs={'class': 'form-control'}),
         }
 
+class WorkbenchMountPointForm(forms.ModelForm):
+    """ Form for Cluster Mount points """
+    class Meta:
+        model = WorkbenchMountPoint
+        fields = ('workbench', 'export', 'mount_order', 'mount_path')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields:
+            self.fields[field].widget.attrs.update({'class': 'form-control'})

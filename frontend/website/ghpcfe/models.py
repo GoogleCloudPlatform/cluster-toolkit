@@ -17,6 +17,8 @@
 import itertools
 import json
 import re
+from decimal import Decimal
+import uuid, dill, base64
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
@@ -28,6 +30,9 @@ from django.conf import settings
 from rest_framework.authtoken.models import Token
 from allauth.socialaccount.models import SocialAccount
 
+import logging
+logger = logging.getLogger(__name__)
+
 CLOUD_RESOURCE_MGMT_STATUS = (
     ('i',  'Imported'),        # Use an existing resource created outside this system
     ('nm', 'New'),             # Just defined, managed
@@ -36,6 +41,18 @@ CLOUD_RESOURCE_MGMT_STATUS = (
     ('dm', 'Destroying'),      # In the process of deleting, managed
     ('xm', 'Destroyed'),       # Deleted, managed
 )
+
+def RESTRICT_IF_CLOUD_ACTIVE(collector, field, sub_objs, using):
+    restrict_objs = []
+    set_null_objs = []
+    for obj in sub_objs:
+        if obj.cloud_state == 'xm':
+            set_null_objs.append(obj)
+        else:
+            restrict_objs.append(obj)
+    models.RESTRICT(collector, field, restrict_objs, using)
+    models.SET_NULL(collector, field, set_null_objs, using)
+
 
 def RFC1035Validator(maxLength, message):
     if not maxLength:
@@ -72,19 +89,66 @@ class User(AbstractUser):
     """ A custom User model extending the base Django one """
 
     roles = models.ManyToManyField(Role)
-    ssh_key = models.TextField(
-        max_length = 3072,
-        help_text = 'If required, provide your public key to SSH into the cluster head node',
-        blank = True,
-        null = True,
+    QUOTA_TYPE = (
+        ('u', 'Unlimited compute spend'),
+        ('l', 'Limited compute spend'),
+        ('d', 'Compute disabled'),
     )
-    # this field is set automatically from the post_save signal
-    unix_id = models.PositiveIntegerField(
-        validators = [MinValueValidator(1000)],
-        help_text = "Unix ID for the user on the clusters and fileystems",
-        blank = True,
-        null = True,
+    quota_type = models.CharField(
+        max_length = 1,
+        choices = QUOTA_TYPE,
+        default = 'd',
+        help_text = 'User Compute Quota Type',
     )
+    quota_amount = models.DecimalField(
+            max_digits=8,
+            decimal_places=2,
+            help_text = "Maximum allowed spend ($)",
+            default = 0
+            )
+
+    def total_spend(self, date_range=None, cluster_id=None):
+        filters={'user':self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        if cluster_id:
+            filters['cluster'] = cluster_id
+
+        jobs = Job.objects.filter(**filters)
+
+        total_spend = Decimal(0)
+        for job in jobs:
+            total_spend += job.job_cost
+
+        return total_spend
+
+    def total_jobs(self, date_range=None, cluster_id=None):
+        filters={'user':self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        if cluster_id:
+            filters['cluster'] = cluster_id
+
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
+
+    def quota_remaining(self):
+        return self.quota_amount - self.total_spend()
+
+    def check_sufficient_quota_for_job(self, job_cost):
+        # Quota checks
+        if self.quota_type == 'u':
+            return True
+        if self.quota_type == 'd':
+            return False
+
+        if quota_type == 'l':
+            current_used = self.total_spend()
+            if (current_used + job_cost) < self.quota_amount:
+                return True
+
+        return False
 
     def get_avatar_url(self):
         """ If using social login, return the Google profile picture if available """
@@ -122,9 +186,6 @@ def user_post_save(sender, instance=None, created=False, **kwargs):
     if created:
         # generate API token
         Token.objects.create(user=instance)
-        # assign a UNIX ID to this user
-        instance.unix_id = instance.id + 9999
-        instance.save()
         # by default set new user to 'ordinary user'
         if instance.id > 1:
             instance.roles.set([Role.NORMALUSER])
@@ -257,6 +318,14 @@ class CloudResource(models.Model):
     def is_managed(self):
         return 'm' in self.cloud_state
 
+    @property
+    def cloud_status(self):
+        raise NameError("Use cloud_state!")
+
+    @cloud_status.setter
+    def cloud_status(self, new_status):
+        raise NameError("Use cloud_state!")
+
 
 class VirtualNetwork(CloudResource):
     """ Model representing a virtual network (VPC) in the cloud """
@@ -270,9 +339,9 @@ class VirtualNetwork(CloudResource):
         return self.name
 
     def in_use(self):
-        return (Workbench.objects.filter(subnet__vpc=self).exists() or
-                Cluster.objects.filter(subnet__vpc=self).exists() or
-                Filesystem.objects.filter(subnet__vpc=self).exists())
+        return (Workbench.objects.filter(subnet__vpc=self).exclude(cloud_state='xm').exists() or
+                Cluster.objects.filter(subnet__vpc=self).exclude(cloud_state='xm').exists() or
+                Filesystem.objects.filter(subnet__vpc=self).exclude(cloud_state='xm').exists())
 
 
 class VirtualSubnet(CloudResource):
@@ -327,7 +396,7 @@ class Filesystem(CloudResource):
         VirtualSubnet,
         related_name = 'filesystems',
         help_text = 'Subnet within which the Filesystem resides (if any)',
-        on_delete = models.RESTRICT,
+        on_delete = RESTRICT_IF_CLOUD_ACTIVE,
         null = True,
         blank = True,
     )
@@ -448,13 +517,14 @@ class MountPoint(models.Model):
         return f"{self.mount_path} on {self.cluster}"
 
 
+
 class Cluster(CloudResource):
     """ Model representing a cluster """
 
     name = models.CharField(
-        max_length = 40,
+        max_length = 17,
         help_text = 'Enter a name for the cluster',
-        validators=[RFC1035Validator(63, 'Cluster Name must be RFC1035 Compliant (lower case, alpha-numeric with hyphens)')],
+        validators=[RFC1035Validator(17, 'Cluster Name must be RFC1035 Compliant (lower case, alpha-numeric with hyphens)')],
     )
     owner = models.ForeignKey(
         User,
@@ -466,7 +536,9 @@ class Cluster(CloudResource):
         VirtualSubnet,
         related_name = 'clusters',
         help_text = 'Subnet within which the cluster resides',
-        on_delete = models.RESTRICT,
+        on_delete = RESTRICT_IF_CLOUD_ACTIVE,
+        null = True,
+        blank = True,
     )
     authorised_users = models.ManyToManyField(
         User,
@@ -497,7 +569,9 @@ class Cluster(CloudResource):
     )
     shared_fs = models.ForeignKey(
         Filesystem,
-        on_delete = models.RESTRICT,
+        on_delete = RESTRICT_IF_CLOUD_ACTIVE,
+        null = True,
+        blank = True,
         related_name = '+',
     )
     spack_install = models.ForeignKey(
@@ -520,6 +594,29 @@ class Cluster(CloudResource):
     )
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
+
+    def total_cost(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'cluster': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        total_cost = Decimal(0)
+        for job in jobs:
+            total_cost += job.job_cost
+
+        return total_cost
+
+    def total_jobs(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'cluster': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
+
 
     def __str__(self):
         """String for representing the Model object."""
@@ -708,6 +805,28 @@ class Application(models.Model):
     def __str__(self):
         """String for representing the Model object."""
         return f'{self.name} - {self.get_status_display()}'
+
+    def total_spend(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'application': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        total_spend = Decimal(0)
+        for job in jobs:
+            total_spend += job.job_cost
+
+        return total_spend
+
+    def total_jobs(self, date_range=None):
+        # Django won't accept None on a kwarg to ignore it...
+        filters={'application': self.id}
+        if date_range:
+            filters['date_time_submission__range'] = date_range
+        jobs = Job.objects.filter(**filters)
+
+        return len(jobs)
 
 
 class CustomInstallationApplication(Application):
@@ -898,12 +1017,19 @@ class Job(models.Model):
         blank = True,
         null = True,
     )
-    cost = models.DecimalField(
+    node_price = models.DecimalField(
         max_digits=8,
         decimal_places=3,
-        help_text = 'Job cost hour rate',
+        help_text = 'Node price - hourly rate',
         blank = True,
         null = True,
+    )
+    job_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        help_text = 'Total job cost (predicted or actual)',
+        blank = True,
+        default = 0.0
     )
     result_unit = models.CharField(
         max_length = 20,
@@ -955,6 +1081,47 @@ class Task(models.Model):
         null = False,
         default = dict,
     )
+
+class CallbackField(models.TextField):
+    empty_strings_allowed = False
+    description = "Serializable Python Callback"
+
+    def to_python(self, value):
+        if isinstance(value, str):
+            try:
+                return dill.loads(base64.decodebytes(bytes(value, 'utf-8')))
+            except Exception:
+                logger.exception(f"Failed to deserialize callback")
+                return None
+
+        return value
+
+    def from_db_value(self, value, expression, connection):
+        try:
+            return dill.loads(base64.decodebytes(bytes(value, 'utf-8')))
+        except Exception:
+            logger.exception(f"Failed to deserialize callback")
+            return None
+
+    def get_prep_value(self, value):
+        value = super().get_prep_value(value)
+        if value is None:
+            return None
+
+        try:
+            return base64.encodebytes(dill.dumps(value)).decode('utf-8')
+        except Exception:
+            logger.exception(f"Failed to serialize callback")
+            return None
+
+
+class C2Callback(models.Model):
+    ackid = models.UUIDField(
+        primary_key = True,
+        default = uuid.uuid4,
+        editable = False
+    )
+    callback = CallbackField()
 
 
 class GCPFilestoreFilesystem(Filesystem):
@@ -1012,22 +1179,6 @@ class WorkbenchPreset(models.Model):
         max_length = 40,
         help_text = 'Enter the heading this preset should appear under',
     )
-    # WORKBENCH_BOOTDISKTYPE = (
-    #     ('PD_STANDARD', 'Standard Persistent Disk'),
-    #     ('PD_BALANCED', 'Balanced Persistent Disk'),
-    #     ('PD_SSD', 'SSD Persistent Disk'),
-    # )
-    # boot_disk_type = models.CharField(
-    #     max_length = 11,
-    #     choices = WORKBENCH_BOOTDISKTYPE,
-    #     default = 'PD_STANDARD',
-    #     help_text = 'Type of storage to be required for notebook boot disk',
-    # )
-    # boot_disk_capacity = models.PositiveIntegerField(
-    #     validators = [MinValueValidator(100)],
-    #     help_text = 'Capacity (in GB) of the filesystem (min of 1024)',
-    #     default = 100
-    # )
 
 
 class Workbench(CloudResource):
@@ -1054,7 +1205,9 @@ class Workbench(CloudResource):
         VirtualSubnet,
         related_name = 'workbench_subnet',
         help_text = 'Subnet within which the workbench resides',
-        on_delete = models.RESTRICT,
+        on_delete = RESTRICT_IF_CLOUD_ACTIVE,
+        null = True,
+        blank = True,
     )
     WORKBENCH_STATUS = (
         ('n', 'Workbench is being newly configured by user'),
@@ -1126,3 +1279,43 @@ class Workbench(CloudResource):
 
     def list_trusted_users(self):
         return list(self.trusted_users.all())
+
+
+class WorkbenchMountPoint(models.Model):
+    """ Model representing a mount point """
+    export = models.ForeignKey(
+        FilesystemExport,
+        related_name = '+',
+        on_delete = models.CASCADE,
+    )
+
+    workbench = models.ForeignKey(
+        "Workbench",
+        related_name = "mount_points",
+        on_delete = models.CASCADE,
+    )
+
+    @property
+    def fstype(self):
+        return self.export.fstype
+
+    @property
+    def fstype_name(self):
+        return self.export.fstype_name
+
+    @property
+    def mount_source(self):
+        return self.export.source_string
+
+    mount_order = models.PositiveIntegerField(
+        help_text = 'Mounts are mounted in numerically increasing order',
+        default = 0,
+    )
+
+    mount_path = models.CharField(
+        max_length = 4096,
+        help_text = "Path on which to mount this filesystem",
+    )
+
+    def __str__(self):
+        return f"{self.mount_path} on {self.workbench}"

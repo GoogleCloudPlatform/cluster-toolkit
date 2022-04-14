@@ -28,3 +28,9 @@ variable "project_id" {
   description = "Project in which the HPC deployment will be created"
   type        = string
 }
+
+variable "timeout" {
+  description = "Timeout in seconds"
+  type        = number
+  default     = 1200
+}
