@@ -17,7 +17,6 @@
 package reswriter
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,9 +26,9 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
-	ctyJson "github.com/zclconf/go-cty/cty/json"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/sourcereader"
 )
 
 // TFWriter writes terraform to the blueprint folder
@@ -51,10 +50,10 @@ func (w *TFWriter) addNumResources(value int) {
 // license and any other boilerplate
 func createBaseFile(path string) error {
 	baseFile, err := os.Create(path)
-	defer baseFile.Close()
 	if err != nil {
 		return err
 	}
+	defer baseFile.Close()
 	_, err = baseFile.WriteString(license)
 	return err
 }
@@ -74,31 +73,6 @@ func appendHCLToFile(path string, hclBytes []byte) error {
 		return err
 	}
 	return nil
-}
-
-func convertToCty(val interface{}) (cty.Value, error) {
-	// Convert to JSON bytes
-	jsonBytes, err := json.Marshal(val)
-	if err != nil {
-		return cty.Value{}, err
-	}
-
-	// Unmarshal JSON into cty
-	simpleJSON := ctyJson.SimpleJSONValue{}
-	simpleJSON.UnmarshalJSON(jsonBytes)
-	return simpleJSON.Value, nil
-}
-
-func convertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) {
-	cMap := make(map[string]cty.Value)
-	for k, v := range iMap {
-		convertedVal, err := convertToCty(v)
-		if err != nil {
-			return cMap, err
-		}
-		cMap[k] = convertedVal
-	}
-	return cMap, nil
 }
 
 func writeOutputs(
@@ -144,25 +118,7 @@ func writeOutputs(
 func writeTfvars(vars map[string]cty.Value, dst string) error {
 	// Create file
 	tfvarsPath := filepath.Join(dst, "terraform.tfvars")
-	if err := createBaseFile(tfvarsPath); err != nil {
-		return fmt.Errorf("error creating terraform.tfvars file: %v", err)
-	}
-
-	// Create hcl body
-	hclFile := hclwrite.NewEmptyFile()
-	hclBody := hclFile.Body()
-
-	// for each variable
-	for k, v := range vars {
-		// Write attribute
-		hclBody.SetAttributeValue(k, v)
-	}
-
-	// Write file
-	err := appendHCLToFile(tfvarsPath, hclFile.Bytes())
-	if err != nil {
-		return fmt.Errorf("error writing HCL to terraform.tfvars file: %v", err)
-	}
+	err := writeHclAttributes(vars, tfvarsPath)
 	return err
 }
 
@@ -245,7 +201,7 @@ func writeMain(
 
 	// Write Terraform backend if needed
 	if tfBackend.Type != "" {
-		tfConfig, err := convertMapToCty(tfBackend.Configuration)
+		tfConfig, err := config.ConvertMapToCty(tfBackend.Configuration)
 		if err != nil {
 			errString := "error converting terraform backend configuration to cty when writing main.tf: %v"
 			return fmt.Errorf(errString, err)
@@ -262,7 +218,7 @@ func writeMain(
 	// For each resource:
 	for _, res := range resources {
 		// Convert settings to cty.Value
-		ctySettings, err := convertMapToCty(res.Settings)
+		ctySettings, err := config.ConvertMapToCty(res.Settings)
 		if err != nil {
 			return fmt.Errorf(
 				"error converting setting in resource %s to cty when writing main.tf: %v",
@@ -274,7 +230,13 @@ func writeMain(
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
-		moduleSource := cty.StringVal(fmt.Sprintf("./modules/%s", res.ResourceName))
+		var moduleSource cty.Value
+		if sourcereader.IsGitHubPath(res.Source) {
+			moduleSource = cty.StringVal(res.Source)
+		} else {
+			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", res.ResourceName))
+		}
+
 		moduleBody.SetAttributeValue("source", moduleSource)
 
 		// For each Setting
@@ -395,9 +357,8 @@ func writeVersions(dst string) error {
 
 func printTerraformInstructions(grpPath string) {
 	printInstructionsPreamble("Terraform", grpPath)
-	fmt.Printf("  cd %s\n", grpPath)
-	fmt.Println("  terraform init")
-	fmt.Println("  terraform apply")
+	fmt.Printf("  terraform -chdir=%s init\n", grpPath)
+	fmt.Printf("  terraform -chdir=%s apply\n", grpPath)
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
@@ -406,7 +367,7 @@ func (w TFWriter) writeResourceGroups(
 	bpDirectory string,
 ) error {
 	bpName := yamlConfig.BlueprintName
-	ctyVars, err := convertMapToCty(yamlConfig.Vars)
+	ctyVars, err := config.ConvertMapToCty(yamlConfig.Vars)
 	if err != nil {
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %v", err)

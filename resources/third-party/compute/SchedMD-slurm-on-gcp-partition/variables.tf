@@ -115,7 +115,7 @@ variable "subnetwork_name" {
 variable "exclusive" {
   description = "Exclusive job access to nodes"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_placement" {

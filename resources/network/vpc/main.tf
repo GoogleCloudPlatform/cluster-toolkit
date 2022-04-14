@@ -15,23 +15,61 @@
 */
 
 locals {
-  project_id   = var.project_id
   network_name = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
-  region       = var.region
+  cidr_blocks  = cidrsubnets(var.network_address_range, var.primary_subnetwork.new_bits, var.additional_subnetworks[*].new_bits...)
+
+  regions = distinct([for subnet in local.all_subnets : subnet.subnet_region])
+
+  primary_subnet = {
+    subnet_name           = var.primary_subnetwork.name == null ? "${var.deployment_name}-primary-subnet" : var.primary_subnetwork.name
+    subnet_ip             = local.cidr_blocks[0]
+    subnet_region         = var.region
+    subnet_private_access = lookup(var.primary_subnetwork, "private_access", false)
+    subnet_flow_logs      = lookup(var.primary_subnetwork, "flow_logs", false)
+    description           = lookup(var.primary_subnetwork, "description", null)
+    purpose               = lookup(var.primary_subnetwork, "purpose", null)
+    role                  = lookup(var.primary_subnetwork, "role", null)
+  }
+
+  additional_subnets = [for index, subnet in var.additional_subnetworks :
+    {
+      subnet_name           = subnet.name
+      subnet_ip             = local.cidr_blocks[index + 1]
+      subnet_region         = subnet.region
+      subnet_private_access = lookup(subnet, "private_access", false)
+      subnet_flow_logs      = lookup(subnet, "flow_logs", false)
+      description           = lookup(subnet, "description", null)
+      purpose               = lookup(subnet, "purpose", null)
+      role                  = lookup(subnet, "role", null)
+    }
+  ]
+
+  all_subnets = concat([local.primary_subnet], local.additional_subnets)
+
+  # this comprehension is guaranteed to have 1 and only 1 match
+  primary_subnetwork               = one([for k, v in module.vpc.subnets : v if k == "${local.primary_subnet.subnet_region}/${local.primary_subnet.subnet_name}"])
+  primary_subnetwork_name          = local.primary_subnetwork.name
+  primary_subnetwork_self_link     = local.primary_subnetwork.self_link
+  primary_subnetwork_ip_cidr_range = local.primary_subnetwork.ip_cidr_range
 }
 
 module "vpc" {
-  source                  = "terraform-google-modules/network/google"
-  version                 = "~> 3.0"
-  network_name            = local.network_name
-  project_id              = local.project_id
-  auto_create_subnetworks = true
-  subnets                 = []
+  source  = "terraform-google-modules/network/google"
+  version = "~> 5.0"
+
+  network_name                           = local.network_name
+  project_id                             = var.project_id
+  auto_create_subnetworks                = false
+  subnets                                = local.all_subnets
+  routing_mode                           = var.network_routing_mode
+  description                            = var.network_description
+  shared_vpc_host                        = var.shared_vpc_host
+  delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
 }
 
 module "firewall_rules" {
   source       = "terraform-google-modules/network/google//modules/firewall-rules"
-  version      = "~> 3.0"
+  version      = "~> 5.0"
   project_id   = var.project_id
   network_name = module.vpc.network_name
 
@@ -59,7 +97,7 @@ module "firewall_rules" {
       priority                = null
       description             = "allow traffic between nodes of this VPC"
       direction               = "INGRESS"
-      ranges                  = ["10.0.0.0/8"]
+      ranges                  = [var.network_address_range]
       source_tags             = null
       source_service_accounts = null
       target_tags             = null
@@ -82,36 +120,43 @@ module "firewall_rules" {
   }]
 }
 
+# This use of the module may appear odd when var.ips_per_nat = 0. The module
+# will be called for all regions with subnetworks but names will be set to the
+# empty list. This is a perfectly valid value (the default!). In this scenario,
+# no IP addresses are created and all module outputs are empty lists.
+#
+# https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/variables.tf#L27
+# https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/outputs.tf
+module "nat_ip_addresses" {
+  source  = "terraform-google-modules/address/google"
+  version = "~> 3.1"
+
+  for_each = toset(local.regions)
+
+  project_id = var.project_id
+  region     = each.value
+  # an external, regional (not global) IP address is suited for a regional NAT
+  address_type = "EXTERNAL"
+  global       = false
+  names        = [for idx in range(var.ips_per_nat) : "${local.network_name}-nat-ips-${each.value}-${idx}"]
+}
+
 module "cloud_router" {
   source  = "terraform-google-modules/cloud-router/google"
-  version = "~> 0.4"
+  version = "~> 1.3"
 
+  for_each = toset(local.regions)
+
+  project = var.project_id
   name    = "${local.network_name}-router"
-  project = local.project_id
-  region  = local.region
+  region  = each.value
   network = module.vpc.network_name
-}
-
-resource "google_compute_address" "nat_ips" {
-  count  = 2
-  name   = "${local.network_name}-nat-ips-${count.index}"
-  region = local.region
-}
-
-module "cloud_nat" {
-  source     = "terraform-google-modules/cloud-nat/google"
-  version    = "~> 1.4"
-  project_id = local.project_id
-  region     = local.region
-  nat_ips    = google_compute_address.nat_ips.*.self_link
-  router     = module.cloud_router.router.name
-}
-
-data "google_compute_subnetwork" "primary_subnetwork" {
-  depends_on = [
-    module.vpc
+  # in scenario with no NAT IPs, no NAT is created even if router is created
+  # https://github.com/terraform-google-modules/terraform-google-cloud-router/blob/v1.3.0/nat.tf#L18-L20
+  nats = length(module.nat_ip_addresses[each.value].self_links) == 0 ? [] : [
+    {
+      name : "cloud-nat-${each.value}",
+      nat_ips : module.nat_ip_addresses[each.value].self_links
+    },
   ]
-  name    = local.network_name
-  region  = local.region
-  project = local.project_id
 }

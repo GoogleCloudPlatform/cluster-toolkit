@@ -15,7 +15,8 @@
 ---
 
 steps:
-- name: 'gcr.io/cloud-builders/docker'
+- id: builder
+  name: 'gcr.io/cloud-builders/docker'
   args:
   - 'build'
   - '-t'
@@ -25,36 +26,75 @@ steps:
   - '-f'
   - 'tools/cloud-build/Dockerfile'
   - '.'
-- name: 'gcr.io/cloud-builders/docker'
+- id: pre-commits-setup
+  waitFor:
+  - builder
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
   args:
-  - 'run'
-  - '--entrypoint'
-  - '/bin/bash'
-  - '--volume'
-  - '/workspace:/ghpc'
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder'
+  - '-c'
+  - |
+    set -e
+    pre-commit install
+    tools/cloud-build/split-pre-commit-hooks.sh
+- id: make-tests
+  waitFor:
+  - pre-commits-setup
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  args:
   - '-c'
   - |
     set -e
     export PROJECT=build-project
     addlicense -check . >/dev/null
     make tests
-- name: 'gcr.io/cloud-builders/docker'
+- id: pre-commits1
+  waitFor:
+  - pre-commits-setup
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
   args:
-  - 'run'
-  - '--entrypoint'
-  - '/bin/bash'
-  - '--volume'
-  - '/workspace:/ghpc'
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder'
+  - '-c'
+  - |
+    set -e -x
+    time tflint --init
+    export SKIP=$(cat hooks1.txt)
+    echo skipping: $$SKIP
+    time pre-commit run --all-files
+- id: pre-commits2
+  waitFor:
+  - pre-commits-setup
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  args:
   - '-c'
   - |
     set -e
-    pre-commit install --install-hooks
-    tflint --init
-    SKIP=go-unit-tests pre-commit run --all-files
+    time tflint --init
+    export SKIP=$(cat hooks2.txt)
+    echo skipping: $$SKIP
+    time pre-commit run --all-files
+- id: pre-commits3
+  waitFor:
+  - pre-commits-setup
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  args:
+  - '-c'
+  - |
+    set -e
+    time tflint --init
+    export SKIP=$(cat hooks3.txt)
+    echo skipping: $$SKIP
+    time pre-commit run --all-files
 images: [
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder']
-timeout: "1200s"
+timeout: "1500s"
 options:
   machineType: N1_HIGHCPU_8

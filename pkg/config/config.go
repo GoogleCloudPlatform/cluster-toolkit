@@ -16,10 +16,17 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"regexp"
+	"strings"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/gocty"
+	ctyJson "github.com/zclconf/go-cty/cty/json"
 	"gopkg.in/yaml.v2"
 
 	"hpc-toolkit/pkg/resreader"
@@ -79,6 +86,65 @@ type TerraformBackend struct {
 	Configuration map[string]interface{}
 }
 
+type validatorName int64
+
+const (
+	// Undefined will be default and potentially throw errors if used
+	Undefined validatorName = iota
+	testProjectExistsName
+	testRegionExistsName
+	testZoneExistsName
+	testZoneInRegionName
+)
+
+// this enum will be used to control how fatal validator failures will be
+// treated during blueprint creation
+const (
+	validationError int = iota
+	validationWarning
+	validationIgnore
+)
+
+func isValidValidationLevel(level int) bool {
+	return !(level > validationIgnore || level < validationError)
+}
+
+// SetValidationLevel allows command-line tools to set the validation level
+func (bc *BlueprintConfig) SetValidationLevel(level string) error {
+	switch level {
+	case "ERROR":
+		bc.Config.ValidationLevel = validationError
+	case "WARNING":
+		bc.Config.ValidationLevel = validationWarning
+	case "IGNORE":
+		bc.Config.ValidationLevel = validationIgnore
+	default:
+		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
+	}
+
+	return nil
+}
+
+func (v validatorName) String() string {
+	switch v {
+	case testProjectExistsName:
+		return "test_project_exists"
+	case testRegionExistsName:
+		return "test_region_exists"
+	case testZoneExistsName:
+		return "test_zone_exists"
+	case testZoneInRegionName:
+		return "test_zone_in_region"
+	default:
+		return "unknown_validator"
+	}
+}
+
+type validatorConfig struct {
+	Validator string
+	Inputs    map[string]interface{}
+}
+
 // HasKind checks to see if a resource group contains any resources of the given
 // kind. Note that a resourceGroup should never have more than one kind, this
 // function is used in the validation step to ensure that is true.
@@ -103,17 +169,6 @@ type Resource struct {
 	Settings         map[string]interface{}
 }
 
-// getSetSettings returns a slice of explicitly set settings at a given point.
-func (r Resource) getSetSettings() []string {
-	setSettings := make([]string, len(r.Settings))
-	i := 0
-	for setting := range r.Settings {
-		setSettings[i] = setting
-		i++
-	}
-	return setSettings
-}
-
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
 // a new map is created.
 func (r *Resource) createWrapSettingsWith() {
@@ -123,8 +178,13 @@ func (r *Resource) createWrapSettingsWith() {
 }
 
 // YamlConfig stores the contents on the User YAML
+// omitempty on validation_level ensures that expand will not expose the setting
+// unless it has been set to a non-default value; the implementation as an
+// integer is primarily for internal purposes even if it can be set in blueprint
 type YamlConfig struct {
 	BlueprintName            string `yaml:"blueprint_name"`
+	Validators               []validatorConfig
+	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     map[string]interface{}
 	ResourceGroups           []ResourceGroup  `yaml:"resource_groups"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`
@@ -177,6 +237,16 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 	// Ensure Vars is not a nil map if not set by the user
 	if len(yamlConfig.Vars) == 0 {
 		yamlConfig.Vars = make(map[string]interface{})
+	}
+
+	if len(yamlConfig.Vars) == 0 {
+		yamlConfig.Vars = make(map[string]interface{})
+	}
+
+	// if the validation level has been explicitly set to an invalid value
+	// in YAML blueprint then silently default to validationError
+	if !isValidValidationLevel(yamlConfig.ValidationLevel) {
+		yamlConfig.ValidationLevel = validationError
 	}
 
 	return yamlConfig
@@ -303,4 +373,122 @@ func (bc *BlueprintConfig) validateConfig() {
 		bc.Config.ResourceGroups, bc.ResourceToGroup); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// SetCLIVariables sets the variables at CLI
+func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
+	for _, cliVar := range cliVariables {
+		arr := strings.SplitN(cliVar, "=", 2)
+
+		if len(arr) != 2 {
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
+		}
+
+		key, value := arr[0], arr[1]
+		bc.Config.Vars[key] = value
+	}
+
+	return nil
+}
+
+// IsLiteralVariable returns true if string matches variable ((ctx.name))
+func IsLiteralVariable(str string) bool {
+	match, err := regexp.MatchString(literalExp, str)
+	if err != nil {
+		log.Fatalf("Failed checking if variable is a literal: %v", err)
+	}
+	return match
+}
+
+// IdentifyLiteralVariable returns
+// string: variable source (e.g. global "vars" or module "modname")
+// string: variable name (e.g. "project_id")
+// bool: true/false reflecting success
+func IdentifyLiteralVariable(str string) (string, string, bool) {
+	re := regexp.MustCompile(literalSplitExp)
+	contents := re.FindStringSubmatch(str)
+	if len(contents) != 3 {
+		return "", "", false
+	}
+
+	return contents[1], contents[2], true
+}
+
+// HandleLiteralVariable is exported for use in reswriter as well
+func HandleLiteralVariable(str string) string {
+	re := regexp.MustCompile(literalExp)
+	contents := re.FindStringSubmatch(str)
+	if len(contents) != 2 {
+		log.Fatalf("Incorrectly formatted literal variable: %s", str)
+	}
+
+	return strings.TrimSpace(contents[1])
+}
+
+// ConvertToCty convert interface directly to a cty.Value
+func ConvertToCty(val interface{}) (cty.Value, error) {
+	// Convert to JSON bytes
+	jsonBytes, err := json.Marshal(val)
+	if err != nil {
+		return cty.Value{}, err
+	}
+
+	// Unmarshal JSON into cty
+	simpleJSON := ctyJson.SimpleJSONValue{}
+	simpleJSON.UnmarshalJSON(jsonBytes)
+	return simpleJSON.Value, nil
+}
+
+// ConvertMapToCty convert an interface map to a map of cty.Values
+func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) {
+	cMap := make(map[string]cty.Value)
+	for k, v := range iMap {
+		convertedVal, err := ConvertToCty(v)
+		if err != nil {
+			return cMap, err
+		}
+		cMap[k] = convertedVal
+	}
+	return cMap, nil
+}
+
+// ResolveGlobalVariables given a map of strings to cty.Value types, will examine
+// all cty.Values that are of type cty.String. If they are literal global variables,
+// then they are replaced by the cty.Value of the corresponding entry in
+// yc.Vars. All other cty.Values are unmodified.
+// ERROR: if conversion from yc.Vars to map[string]cty.Value fails
+// ERROR: if (somehow) the cty.String cannot be converted to a Go string
+// ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global variable
+//        being resolved does not exist in yc.Vars
+func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error {
+	ctyVars, err := ConvertMapToCty(yc.Vars)
+	if err != nil {
+		return fmt.Errorf("could not convert global variables to cty map")
+	}
+	evalCtx := &hcl.EvalContext{
+		Variables: map[string]cty.Value{"var": cty.ObjectVal(ctyVars)},
+	}
+	for key, val := range ctyMap {
+		if val.Type() == cty.String {
+			var valString string
+			if err := gocty.FromCtyValue(val, &valString); err != nil {
+				return err
+			}
+			ctx, varName, found := IdentifyLiteralVariable(valString)
+			// only attempt resolution on global literal variables
+			// leave all other strings alone (including non-global)
+			if found && ctx == "var" {
+				varTraversal := hcl.Traversal{
+					hcl.TraverseRoot{Name: ctx},
+					hcl.TraverseAttr{Name: varName},
+				}
+				newVal, diags := varTraversal.TraverseAbs(evalCtx)
+				if diags.HasErrors() {
+					return diags
+				}
+				ctyMap[key] = newVal
+			}
+		}
+	}
+	return nil
 }

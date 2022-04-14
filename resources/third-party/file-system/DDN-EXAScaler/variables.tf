@@ -445,3 +445,15 @@ variable "local_mount" {
   type        = string
   default     = "/shared"
 }
+
+variable "prefix" {
+  description = "EXAScaler Cloud deployment prefix (`null` defaults to 'exascaler-cloud')"
+  type        = string
+  default     = null
+}
+
+variable "labels" {
+  description = "Labels to add to EXAScaler Cloud deployment. List of key key, value pairs."
+  type        = any
+  default     = {}
+}
