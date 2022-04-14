@@ -90,11 +90,11 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
+func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) error {
 	blueprintio := blueprintio.GetBlueprintIOLocal()
 	bpDirectoryPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName)
 	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
-		log.Fatalf("failed to create a directory for blueprints: %v", err)
+		return fmt.Errorf("failed to create a directory for blueprints: %w", err)
 	}
 
 	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
@@ -102,8 +102,9 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
 		if writer.getNumResources() > 0 {
 			err := writer.writeResourceGroups(yamlConfig, bpDirectory)
 			if err != nil {
-				log.Fatalf("error writing resources to blueprint: %v", err)
+				return fmt.Errorf("error writing resources to blueprint: %w", err)
 			}
 		}
 	}
+	return nil
 }
