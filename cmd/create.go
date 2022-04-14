@@ -73,5 +73,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 	blueprintConfig.ExpandConfig()
-	reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory)
+	if err := reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory); err != nil {
+		log.Fatal(err)
+	}
 }

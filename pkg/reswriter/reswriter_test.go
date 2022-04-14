@@ -109,7 +109,11 @@ func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	blueprintName := "blueprints_TestWriteBlueprint"
 	testYamlConfig.BlueprintName = blueprintName
-	WriteBlueprint(&testYamlConfig, testDir)
+	err := WriteBlueprint(&testYamlConfig, testDir)
+	c.Check(err, IsNil)
+	// Overwriting the blueprint fails
+	err = WriteBlueprint(&testYamlConfig, testDir)
+	c.Check(err, NotNil)
 }
 
 // tfwriter.go
