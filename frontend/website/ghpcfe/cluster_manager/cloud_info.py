@@ -74,13 +74,18 @@ def _get_gcp_machine_types(credentials, region, zone, ttl_hash=None):
     if "items" not in resp:
         return []
 
+    print(resp)
+
     return {
         mt["name"]: {
             "name": mt["name"],
             "family": mt["name"].split('-')[0],
             "memory": mt["memoryMb"],
             "vCPU": mt["guestCpus"],
-            "arch": _get_arch_for_node_type_gcp(mt["name"], default="x86_64")
+            "arch": _get_arch_for_node_type_gcp(mt["name"], default="x86_64"),
+            "accelerators": [{"type": acc["guestAcceleratorType"], 
+                              "count": acc["guestAcceleratorCount"]}
+                              for acc in mt.get("accelerators", [])]
         }
         for mt in resp["items"]
     }

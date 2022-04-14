@@ -311,19 +311,22 @@ class ClusterUpdateView(UpdateView):
                 parts = partitions.save()
                 try:
                     for part in parts:
-                        part.vCPU_per_node = machine_info[part.machine_type].num_vCPU // (1 if part.enable_hyperthreads else 2)
-                        for accelerator in machine_info[part.machine_type].accelerators:
-                            if not accelerator.guestAcceleratorType.startswith('nvidia-tesla'):
+                        part.vCPU_per_node = machine_info[part.machine_type]['vCPU'] // (1 if part.enable_hyperthreads else 2)
+                        part.GPU_per_node = 0
+                        part.GPU_type = ""
+                        for accelerator in machine_info[part.machine_type]['accelerators']:
+                            if not accelerator['type'].startswith('nvidia-tesla'):
                                 continue
                             if part.GPU_per_node != 0:
                                 raise ValidationError(f"Multiple GPU types per node are not supported")
-                            part.GPU_type = accelerator.guestAcceleratorType
-                            part.GPU_per_node = accelerator.guestAcceleratorCount
+                            part.GPU_type = accelerator['type']
+                            part.GPU_per_node = accelerator['count']
                 except KeyError:
                     raise ValidationError(f"Error in Partition - invalid machine type: {part.machine_type}")
+                parts = partitions.save()
 
         except ValidationError as ve:
-            form.add_error(ve)
+            form.add_error(None, ve)
             return self.form_invalid(form)
 
         msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Create' button to provision the cluster."

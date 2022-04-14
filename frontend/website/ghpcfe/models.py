@@ -653,11 +653,12 @@ class ClusterPartition(models.Model):
     )
     vCPU_per_node = models.PositiveIntegerField(
         validators = [MinValueValidator(1)],
-        help_text = 'The number of vCPU per node of the partition'
+        help_text = 'The number of vCPU per node of the partition',
+        default = 0
     )
     GPU_per_node = models.PositiveIntegerField(
         validators = [MinValueValidator(1)],
-        help_text = 'The number of vCPU per node of the partition'
+        help_text = 'The number of vCPU per node of the partition',
         default = 0
     )
     GPU_type = models.CharField(
