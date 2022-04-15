@@ -168,8 +168,8 @@ boot-time startup scripts because
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
-**Note**: it is important _not to modify_ the subnetwork name in either of the
-two resource groups without modifying them both. These _must_ match!
+**Note**:  this example relies on the default behavior of the Toolkit to derive
+naming convention for networks and other resources from the `deployment_name`.
 
 #### Custom Network (resource group)
 
