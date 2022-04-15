@@ -49,6 +49,7 @@ var errorMessages = map[string]string{
 	"settingsLabelType": "labels in resources settings are not a map",
 	"invalidVar":        "invalid variable definition in",
 	"varNotFound":       "Could not find source of variable",
+	"varInAnotherGroup": "References to other groups are not yet supported",
 	"noOutput":          "Output not found for a variable",
 	// validator
 	"emptyID":         "a resource id cannot be empty",
