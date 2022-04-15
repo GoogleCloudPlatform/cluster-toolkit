@@ -340,7 +340,8 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 	// Return bytes
 	bc := BlueprintConfig{}
 	bc.Config = expectedSimpleYamlConfig
-	obtainedYaml := bc.ExportYamlConfig("")
+	obtainedYaml, err := bc.ExportYamlConfig("")
+	c.Assert(err, IsNil)
 	c.Assert(obtainedYaml, Not(IsNil))
 
 	// Write file
