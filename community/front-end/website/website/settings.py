@@ -209,7 +209,7 @@ LOGGING = {
         },
         'file': {
             'class': 'logging.FileHandler',
-            'filename': BASE_DIR.parent.parent.parent / 'run' / 'django.log',
+            'filename': BASE_DIR.parent.parent.parent.parent / 'run' / 'django.log',
             'formatter': 'std',
         }
     },
