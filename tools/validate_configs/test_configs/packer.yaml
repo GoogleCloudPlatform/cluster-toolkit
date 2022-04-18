@@ -36,7 +36,6 @@ resource_groups:
     kind: packer
     id: my-custom-image
     settings:
-      subnetwork: "subnet-central1"
       use_iap: true
       omit_external_ip: true
       disk_size: 100
