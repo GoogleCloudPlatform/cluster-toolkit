@@ -49,6 +49,26 @@ func factory(kind string) ResWriter {
 	return writer
 }
 
+// WriteBlueprint writes the blueprint using resources defined in config.
+func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) error {
+	blueprintio := blueprintio.GetBlueprintIOLocal()
+	bpDirectoryPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName)
+	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
+		return fmt.Errorf("failed to create a directory for blueprints: %w", err)
+	}
+
+	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
+	for _, writer := range kinds {
+		if writer.getNumResources() > 0 {
+			err := writer.writeResourceGroups(yamlConfig, bpDirectory)
+			if err != nil {
+				return fmt.Errorf("error writing resources to blueprint: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
@@ -87,24 +107,4 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 func printInstructionsPreamble(kind string, path string) {
 	fmt.Printf("%s group was successfully created in directory %s\n", kind, path)
 	fmt.Println("To deploy, run the following commands:")
-}
-
-// WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) error {
-	blueprintio := blueprintio.GetBlueprintIOLocal()
-	bpDirectoryPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName)
-	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
-		return fmt.Errorf("failed to create a directory for blueprints: %w", err)
-	}
-
-	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
-	for _, writer := range kinds {
-		if writer.getNumResources() > 0 {
-			err := writer.writeResourceGroups(yamlConfig, bpDirectory)
-			if err != nil {
-				return fmt.Errorf("error writing resources to blueprint: %w", err)
-			}
-		}
-	}
-	return nil
 }
