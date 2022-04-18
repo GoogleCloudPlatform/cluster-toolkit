@@ -26,6 +26,8 @@ from ..models import *
 
 from . import utils
 
+from website.settings import SITE_NAME
+
 
 def write_filestore_yaml(fs: GCPFilestoreFilesystem, tgtDir: Path) -> None:
     ymlFile = tgtDir / 'filesystem.yaml'
@@ -42,6 +44,8 @@ vars:
   deployment_name: {fs.name}
   region: {fs.cloud_region}
   zone: {fs.cloud_zone}
+  labels:
+    created_by: {SITE_NAME}
     
 resource_groups:
 - group: primary

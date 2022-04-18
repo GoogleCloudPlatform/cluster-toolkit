@@ -35,6 +35,8 @@ from . import utils
 from . import cloud_info
 from . import c2
 
+from website.settings import SITE_NAME
+
 from google.api_core.exceptions import PermissionDenied as GCPPermissionDenied
 
 from django.template import engines as template_engines
@@ -227,6 +229,8 @@ vars:
   deployment_name: {self.cluster.cloud_id}
   region: {self.cluster.cloud_region}
   zone: {self.cluster.cloud_zone}
+  labels:
+    created_by: {SITE_NAME}
 
 resource_groups:
 - group: primary

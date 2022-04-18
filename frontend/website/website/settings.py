@@ -12,13 +12,13 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 
 from pathlib import Path
 import os
+import requests
 
 
 def get_listen_hosts():
     ip_list = ['127.0.0.1']  # Start with localhost
     try:
         # Try to get IP info from Google Metadata
-        import requests
         metadata_headers = {'Metadata-Flavor': 'Google'}
         base_url = 'http://metadata.google.internal/computeMetadata/v1/instance'
         hostname_url = f'{base_url}/attributes/hostname'
@@ -36,6 +36,26 @@ def get_listen_hosts():
             pass
     return ip_list
 
+def get_site_name():
+    """Returns the GCP name of this instance, or hostname"""
+    try:
+        # Try to get IP info from Google Metadata
+        metadata_headers = {'Metadata-Flavor': 'Google'}
+        base_url = 'http://metadata.google.internal/computeMetadata/v1/instance/'
+        for name_type in ['name', 'hostname']:
+            try:
+                url = base_url + name_type
+                req = requests.get(url, headers=metadata_headers)
+                if req.ok:
+                    return req.text
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return "localhost";
+        
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -51,6 +71,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = get_listen_hosts()
 
+SITE_NAME = get_site_name()
 
 # Application definition
 
