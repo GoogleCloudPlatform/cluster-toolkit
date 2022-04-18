@@ -12,15 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+locals {
+  subnetwork_name = var.subnetwork_name != null ? var.subnetwork_name : "${var.deployment_name}-primary-subnet"
+}
+
 source "googlecompute" "hpc_centos_7" {
   project_id              = var.project_id
-  image_name              = "example-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
-  image_family            = "example-v1"
+  image_name              = "${var.deployment_name}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
+  image_family            = var.deployment_name
   machine_type            = var.machine_type
   disk_size               = var.disk_size
   omit_external_ip        = var.omit_external_ip
   use_internal_ip         = var.omit_external_ip
-  subnetwork              = var.subnetwork
+  subnetwork              = local.subnetwork_name
   source_image            = var.source_image
   source_image_family     = var.source_image_family
   source_image_project_id = var.source_image_project_id
