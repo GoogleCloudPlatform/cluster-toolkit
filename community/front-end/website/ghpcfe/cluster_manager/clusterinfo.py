@@ -62,7 +62,7 @@ ClusterInfo object - represent a cluster
 
     def __init__(self, cluster):
         self.config = utils.load_config()
-        self.ghpc_path = self.config["baseDir"].parent / 'ghpc'
+        self.ghpc_path = self.config["baseDir"].parent.parent / 'ghpc'
 
         self.cluster = cluster
         self.cluster_dir = self.config["baseDir"] / 'clusters' / f'cluster_{self.cluster.id}'

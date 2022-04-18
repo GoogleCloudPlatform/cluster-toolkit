@@ -125,7 +125,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   cd /opt/gcluster
   ${fetch_hpc_toolkit}
 
-  cd /opt/gcluster/hpc-toolkit/frontend
+  cd /opt/gcluster/hpc-toolkit/community/front-end
 
   printf "\nDownloading Frontend dependencies...\n"
   mkdir dependencies
@@ -148,7 +148,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nUpgrading pip...\n"
   pip install --upgrade pip
   printf "\nInstalling pip requirements...\n"
-  pip install -r /opt/gcluster/hpc-toolkit/frontend/requirements.txt
+  pip install -r /opt/gcluster/hpc-toolkit/community/front-end/requirements.txt
 
   printf "Generating configuration file for backend..."
   echo "config:" > configuration.yaml
@@ -185,7 +185,7 @@ EOF
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]
 process_name=%(program_name)s_%(process_num)02d
-directory=/opt/gcluster/hpc-toolkit/frontend/website
+directory=/opt/gcluster/hpc-toolkit/community/front-end/website
 command=/opt/gcluster/django-env/bin/uvicorn website.asgi:application --reload --host 127.0.0.1 --port 8001
 autostart=true
 autorestart=true
@@ -201,8 +201,8 @@ Requires=supervisord.service
 
 [Service]
 Type=forking
-ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/frontend/website/nginx.conf
-ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/frontend/website/nginx.conf -s stop
+ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/website/nginx.conf
+ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/website/nginx.conf -s stop
 PIDFile=/opt/gcluster/run/nginx.pid
 Restart=no
 
@@ -219,7 +219,7 @@ systemctl status gcluster.service
 # IF we have a hostname, configure for TLS
 if [ -n "${SERVER_HOSTNAME}" ]; then
 	printf "Installing LetsEncrypt Certificate"
-	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/frontend/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
+	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
 
 	printf "Installing Cron entry to keep Cert up to date"
 	tmpcron=$(mktemp)
