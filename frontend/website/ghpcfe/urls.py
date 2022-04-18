@@ -147,6 +147,7 @@ router.register(r'api/users', UserViewSet, basename='api-user')
 router.register(r'api/spack_packages', SpackPackageViewSet, basename='api-spack')
 router.register(r'api/tasks', RunningTasksViewSet, basename='api-tasks')
 router.register(r'api/instance_pricing', InstancePricingViewSet, basename='api-pricing') # Specify pk=ClusterPartition
+router.register(r'api/instance_available', InstanceAvailabilityViewSet, basename='api-instancetype') # Specify pk=ClusterID, zone, region
 router.register(r'api/vpcs', VPCViewSet, basename='api-vpcs')
 router.register(r'api/subnets', VirtualSubnetViewSet, basename='api-subnets')
 

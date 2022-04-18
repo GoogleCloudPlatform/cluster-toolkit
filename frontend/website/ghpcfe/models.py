@@ -236,46 +236,6 @@ class Credential(models.Model):
         return self.name
 
 
-class MachineType(models.Model):
-    """ Model representing a virtual machine family on a cloud platform """
-
-    name = models.CharField(
-        max_length = 30,
-        help_text = 'Enter a valid machine type',
-        unique=True,
-    )
-    cpu_arch = models.CharField(
-        max_length = 16,
-        help_text = 'Processor architecture'
-    )
-
-    def __str__(self):
-        return self.name
-
-
-class InstanceType(models.Model):
-    """ Model represent individual instance types/sizes """
-    name = models.CharField(
-                max_length=30,
-                help_text = 'Instance Type/Size Name',
-                unique=True
-                )
-    family = models.ForeignKey(
-                MachineType,
-                on_delete = models.RESTRICT,
-                )
-    num_vCPU = models.PositiveIntegerField(
-                validators = [MinValueValidator(1)],
-                help_text = 'Number of vCPU for this size'
-    )
-
-    @property
-    def cpu_arch(self):
-        return self.family.cpu_arch
-
-    def __str__(self):
-        return self.name
-
 
 class CloudResource(models.Model):
     """ The base class of all cloud resource """
@@ -577,7 +537,7 @@ class Cluster(CloudResource):
     spack_install = models.ForeignKey(
         'ApplicationInstallationLocation',
         on_delete = models.SET_NULL,
-        related_name = 'clusters_using',
+        related_name = '+',
         null = True,
         blank = True,
     )
@@ -642,13 +602,9 @@ class ComputeInstance(CloudResource):
         blank = True,
         null = True,
     )
-    instance_type = models.ForeignKey(
-        InstanceType,
-        related_name = '+',
-        # Probably shouldn't ever be not set, but we don't *require* it for anything yet.
-        on_delete = models.SET_NULL,
-        null = True,
-        blank = True,
+    instance_type = models.CharField(
+        max_length = 40,
+        help_text = 'GCP Instance Type name',
     )
     service_account = models.EmailField(
         max_length = 512,
@@ -669,10 +625,9 @@ class ClusterPartition(models.Model):
         related_name = "partitions",
         on_delete = models.CASCADE,
     )
-    machine_type = models.ForeignKey(
-        InstanceType,
-        related_name = '+',
-        on_delete = models.RESTRICT,
+    machine_type = models.CharField(
+        max_length = 40,
+        help_text = 'GCP Instance Type name',
     )
     image = models.CharField(
         max_length = 4096,
@@ -696,11 +651,22 @@ class ClusterPartition(models.Model):
         default = True,
         help_text = 'Enable nodes to be re-used for multiple jobs. (Disabled when Placement Groups are used.)'
     )
-
-    @property
-    def vCPU_per_node(self):
-        return self.machine_type.num_vCPU // (1 if self.enable_hyperthreads else 2)
-
+    vCPU_per_node = models.PositiveIntegerField(
+        validators = [MinValueValidator(1)],
+        help_text = 'The number of vCPU per node of the partition',
+        default = 1
+    )
+    GPU_per_node = models.PositiveIntegerField(
+        validators = [MinValueValidator(0)],
+        help_text = 'The number of GPU per node of the partition',
+        default = 0
+    )
+    GPU_type = models.CharField(
+        max_length = 64,
+        blank = True,
+        default = "",
+        help_text = 'GPU device type'
+        )
 
     def __str__(self):
         return self.name
@@ -719,6 +685,10 @@ class ApplicationInstallationLocation(models.Model):
     @property
     def filesystem(self):
         return self.fs_export.filesystem
+
+    @property
+    def clusters_using(self):
+        return Cluster.objects.filter(mount_points__export=self.fs_export)
 
 
 class Application(models.Model):

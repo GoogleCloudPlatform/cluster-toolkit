@@ -1,12 +1,15 @@
 {% extends "base_generic.html" %}
 
 {% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
 <script>
+{% autoescape off %}
+var subnet_map = {{ subnet_regions }};
+var region_info = {{ region_info }};
+{% endautoescape %}
+
 function subnetSelected() {
-    {% autoescape off %}
-    var subnet_map = {{ subnet_regions }};
-    var region_info = {{ region_info }};
-    {% endautoescape %}
     subnet_element = document.getElementById("id_subnet");
     zone_element = document.getElementById("id_cloud_zone");
     zone_element.disabled = false;
@@ -19,11 +22,48 @@ function subnetSelected() {
     });
 }
 
-function initPage() {
-    document.getElementById("id_subnet").onchange = subnetSelected;
+function updateMachineAvailability() {
+    // Get machine Info
+    // For each select of class 'machine_type_select'...
+    //     ??Save it's value
+    //     Clear the options
+    //     Replace options
+    //     ??Restore it's value (selected)?
+
+    var subnet_element = document.getElementById("id_subnet");
+    var zone_element = document.getElementById("id_cloud_zone");
+    var region = subnet_map[subnet_element.value];
+    var zone = zone_element.value;
+    machine_info = $.ajax({
+        url: "{% url 'api-instancetype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+        type: "GET",
+        dataType: "json",
+        headers: {'X-CSRFToken': $.cookie("csrftoken")}
+    }).done(function(data) {
+        $(".machine_type_select").each(function(pos, selObj) {
+            var curVal = selObj.value;
+            $(selObj).empty();
+            $.each(data.machine_types, function(i, machineName) {
+                var option = document.createElement("option");
+                option.text = machineName;
+                option.setAttribute("value", machineName);
+                selObj.appendChild(option)
+            });
+            selObj.value = curVal;
+        });
+    });
+
+
 }
 
-window.onload=initPage;
+
+
+$(document).ready(function() {
+    document.getElementById("id_subnet").onchange = subnetSelected;
+    updateMachineAvailability();
+    $("#id_cloud_zone").on("change", updateMachineAvailability);
+});
+
 </script>
 {% load static %}
 {% endblock %}
@@ -178,7 +218,8 @@ window.onload=initPage;
         deleteText: 'remove',
         prefix: 'partitions',
         formCssClass: 'dynamic-part',
-        hideLastAddForm: 'true'
+        hideLastAddForm: 'true',
+        added: updateMachineAvailability, // Called each time a new form is added
     });
 </script>
 {% endblock %}

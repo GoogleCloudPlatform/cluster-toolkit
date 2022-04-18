@@ -26,7 +26,7 @@ from django.urls import reverse, reverse_lazy
 from django.views import generic
 from django.shortcuts import get_object_or_404
 from ..permissions import SuperUserRequiredMixin
-from ..models import Application, Job, Role, InstanceType, Cluster
+from ..models import Application, Job, Role, Cluster
 from ..serializers import JobSerializer
 from ..forms import JobForm
 from ..cluster_manager import c2, cloud_info, utils
@@ -133,7 +133,7 @@ class JobCreateView2(LoginRequiredMixin, generic.CreateView):
                                                        cluster.cloud_credential.detail,
                                                        cluster.cloud_region,
                                                        cluster.cloud_zone,
-                                                       instance_type.name)
+                                                       instance_type)
             self.object.node_price = Decimal(node_price_float)
             print("Got api price {}".format(self.object.node_price))
         except Exception as err:
@@ -204,7 +204,7 @@ class JobRerunView(LoginRequiredMixin, generic.CreateView):
                                                        cluster.cloud_credential.detail,
                                                        cluster.cloud_region,
                                                        cluster.cloud_zone,
-                                                       instance_type.name)
+                                                       instance_type)
             self.object.node_price = Decimal(node_price_float)
             print("Got api price {}".format(self.object.node_price))
         except Exception as err:
@@ -406,6 +406,8 @@ class BackendJobRun(LoginRequiredMixin, generic.View):
             message_data['input_data'] = job.input_data
         if job.result_data:
             message_data['result_data'] = job.result_data
+        if job.partition.GPU_per_node:
+            message_data['gpus_per_node'] = job.partition.GPU_per_node
 
         c2.send_command(cluster_id, 'RUN_JOB', onResponse=response, data=message_data)
         messages.success(request, "Job sent to Cluster")

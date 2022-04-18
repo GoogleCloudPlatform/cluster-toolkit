@@ -28,6 +28,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect, JsonResponse, \
     Http404, HttpResponseBadRequest, HttpResponseNotFound, \
     FileResponse
@@ -38,7 +39,7 @@ from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.contrib import messages
 from django.conf import settings
 from ..models import Application, Cluster, Credential, Job, \
-    MachineType, InstanceType, Filesystem, FilesystemExport, MountPoint, \
+    Filesystem, FilesystemExport, MountPoint, \
     FilesystemImpl, Role, ClusterPartition, VirtualSubnet, Task, User
 from ..serializers import ClusterSerializer
 from ..forms import ClusterForm, ClusterMountPointForm, ClusterPartitionForm
@@ -122,25 +123,13 @@ class ClusterCreateView2(LoginRequiredMixin, CreateView):
     template_name = 'cluster/create_form.html'
     form_class = ClusterForm
 
-    def populate_MachineTypes(self):
-        families = cloud_info.get_machine_families(
-                        "GCP", self.object.cloud_credential.detail,
-                        self.object.cloud_region, self.object.cloud_zone)
-
-        MachineType.objects.bulk_create(
-                [MachineType(name=fam.name, cpu_arch=fam.common_arch)
-                    for fam in families],
-                ignore_conflicts=True)
-
-        for family in families:
-            fam = MachineType.objects.get(name=family.name)
-            InstanceType.objects.bulk_create(
-                [InstanceType(name=m["name"], family=fam, num_vCPU=m["vCPU"]) for m in family.members],
-                ignore_conflicts=True)
 
     def find_default_instance_type(self):
         # TODO:  Config Parameter???
-        return InstanceType.objects.get(name="c2-standard-60")
+        return "c2-standard-60"
+    def find_default_instance_type_vCPU(self):
+        # TODO:  Config Parameter???
+        return 30   # Default to Hyperthreads off
 
     def add_default_mounts(self, cluster):
         export = cluster.shared_fs.exports.all()[0]
@@ -191,14 +180,13 @@ class ClusterCreateView2(LoginRequiredMixin, CreateView):
         self.object.shared_fs = shared_fs
         self.object.save()
         form.save_m2m()
-        # Must make sure machine types are populated before creating default partition
-        self.populate_MachineTypes()
         # This MUST come after the self.object being saved, so that it has its ID
         self.add_default_mounts(self.object)
         default_partition = self.object.partitions.create(**{
             "name": "batch",
             "machine_type": self.find_default_instance_type(),
             "max_node_count": 4,   # TODO:  Config parameter?
+            "vCPU_per_node": self.find_default_instance_type_vCPU(),
             })
         self.object.save()
         messages.success(self.request, "A record for this cluster has been created. Click the 'Edit' button to customise it and click 'Create' button to provision the cluster.")
@@ -301,6 +289,11 @@ class ClusterUpdateView(UpdateView):
         partitions = context['cluster_partitions_formset']
         suffix = self.object.cloud_id.split('-')[-1]
         self.object.cloud_id = self.object.name + '-' + suffix
+        self.object.cloud_region = self.object.subnet.cloud_region
+
+        machine_info = cloud_info.get_machine_types("GCP",
+                                self.object.cloud_credential.detail,
+                                self.object.cloud_region, self.object.cloud_zone)
 
         if self.object.status != 'n':
             form.add_error("Running clusters cannot currently be updated!")
@@ -312,12 +305,34 @@ class ClusterUpdateView(UpdateView):
                 form.add_error(None, f"Error in {formset_name} section")
                 return self.form_invalid(form)
 
-        with transaction.atomic():
-            self.object = form.save()
-            mountpoints.instance = self.object
-            mountpoints.save()
-            partitions.instance = self.object
-            partitions.save()
+        try:
+            with transaction.atomic():
+                self.object = form.save()
+                mountpoints.instance = self.object
+                mountpoints.save()
+
+                partitions.instance = self.object
+                parts = partitions.save()
+                try:
+                    for part in parts:
+                        part.vCPU_per_node = machine_info[part.machine_type]['vCPU'] // (1 if part.enable_hyperthreads else 2)
+                        part.GPU_per_node = 0
+                        part.GPU_type = ""
+                        for accelerator in machine_info[part.machine_type]['accelerators']:
+                            if not accelerator['type'].startswith('nvidia-tesla'):
+                                continue
+                            if part.GPU_per_node != 0:
+                                raise ValidationError(f"Multiple GPU types per node are not supported")
+                            part.GPU_type = accelerator['type']
+                            part.GPU_per_node = accelerator['count']
+                except KeyError:
+                    raise ValidationError(f"Error in Partition - invalid machine type: {part.machine_type}")
+                parts = partitions.save()
+
+        except ValidationError as ve:
+            form.add_error(None, ve)
+            return self.form_invalid(form)
+
         msg = "Cluster configuration updated. Click 'Edit' button again to make further changes and click 'Create' button to provision the cluster."
         messages.success(self.request, msg)
 
@@ -491,11 +506,54 @@ class InstancePricingViewSet(viewsets.ViewSet):
         price = cloud_info.get_instance_pricing("GCP",
                                                 cluster.cloud_credential.detail,
                                                 cluster.cloud_region, cluster.cloud_zone,
-                                                instance_type.name)
-        return JsonResponse({"instance": instance_type.name, "price": price, "currency": "USD"}) #TODO: Currency
+                                                instance_type)
+        return JsonResponse({"instance": instance_type, "price": price, "currency": "USD"}) #TODO: Currency
 
     def list(self, request):
         return JsonResponse({})
+
+
+class InstanceAvailabilityViewSet(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    def retrieve(self, request, pk=None):
+        cluster = get_object_or_404(Cluster, pk=request.query_params.get("cluster", -1))
+        region = request.query_params.get("region", None)
+        zone = request.query_params.get("zone", None)
+
+        try:
+            region_info = cloud_info.get_region_zone_info("GCP", cluster.cloud_credential.detail)
+            if zone not in region_info.get(region, []):
+                return JsonResponse({})
+
+            machine_info = cloud_info.get_machine_types("GCP",
+                cluster.cloud_credential.detail, region, zone)
+            return JsonResponse(machine_info.get(pk, {}))
+        except Exception:
+            pass
+
+        return JsonResponse()
+
+    def list(self, request):
+        cluster = get_object_or_404(Cluster, pk=request.query_params.get("cluster", -1))
+        region = request.query_params.get("region", None)
+        zone = request.query_params.get("zone", None)
+
+        try:
+            region_info = cloud_info.get_region_zone_info("GCP", cluster.cloud_credential.detail)
+            if zone not in region_info.get(region, []):
+                logger.info(f"Zone or region fail:  zone: {zone}   region: {region}")
+                return JsonResponse({})
+
+            machine_info = cloud_info.get_machine_types("GCP",
+                cluster.cloud_credential.detail, region, zone)
+            return JsonResponse({"machine_types": list(machine_info.keys())})
+        except Exception:
+            logger.exception("Caught Exception")
+            pass
+
+        return JsonResponse({})
+
 
 
 # Other supporting views

@@ -9,7 +9,7 @@ function setLimits() {
         {% for partition in cluster.partitions.all %}
         {{ partition.id }}: {
             "name": "{{ partition.name }}",
-            "instance_type": "{{ partition.machine_type.name }}",
+            "instance_type": "{{ partition.machine_type }}",
             "vcpu": {{ partition.vCPU_per_node }},
             "nodes": {{ partition.max_node_count }},
             },
@@ -159,7 +159,7 @@ window.onload=initPage;
       {{ form.partition.label_tag }}
       <select name="partition" class="form-control" required id="id_partition">
       {% for partition in cluster.partitions.all %}
-        <option value="{{partition.id}}">{{partition.name}} - {{partition.max_node_count}} of {{ partition.machine_type.name}}</option>
+        <option value="{{partition.id}}">{{partition.name}} - {{partition.max_node_count}} of {{ partition.machine_type }}</option>
       {% endfor %}
       </select>
       {% if form.partition.help_text %}

@@ -71,7 +71,7 @@ def _download_gcs_directory(blob_path: str, tgtDir: Path) -> None:
 def _rerun_ansible():
     # Download ansible repo from GCS  (Can't just point at it)
     _download_gcs_directory(f"clusters/ansible_setup", Path("/tmp/ansible_setup"))
-    
+
     logger.info("Downloaded Ansible Repo.  Beginning playbook")
     try:
         with open("/tmp/ansible_setup/hosts", "w") as fp:
@@ -179,7 +179,7 @@ def _slurm_get_job_state(jobid):
     return state.get('job_state', None) if state else None
 
 
-def _spack_submit_build(app_id, partition, app_name, spec):
+def _spack_submit_build(app_id, partition, app_name, spec, extra_sbatch=[]):
     build_dir = Path('/opt/cluster/installs') / str(app_id)
     build_dir.mkdir(parents=True, exist_ok=True)
 
@@ -187,6 +187,8 @@ def _spack_submit_build(app_id, partition, app_name, spec):
 
     outfile = build_dir / f"{app_name}.out"
     errfile = build_dir / f"{app_name}.err"
+
+    extra_sbatch = "\n".join([f"#SBATCH {e}" for e in extra_sbatch])
 
     script = build_dir / 'install.sh'
     with script.open('w') as fp:
@@ -196,6 +198,7 @@ def _spack_submit_build(app_id, partition, app_name, spec):
 #SBATCH --job-name={app_name}-install
 #SBATCH --output={outfile.as_posix()}
 #SBATCH --error={errfile.as_posix()}
+{extra_sbatch}
 
 cd {build_dir.as_posix()}
 {spack_bin} install -v -y {full_spec}
@@ -257,7 +260,7 @@ def cb_spack_install(message):
     appid = message.get('app_id', None)
     app_name = message['name']
 
-    (jobid, outfile, errfile) = _spack_submit_build(appid, message['partition'], app_name, message['spec'])
+    (jobid, outfile, errfile) = _spack_submit_build(appid, message['partition'], app_name, message['spec'], message['extra_sbatch'])
     if not jobid:
         # There was an error - stdout, stderr in outfile, errfile
         logger.error("Failed to run batch submission")
@@ -419,7 +422,7 @@ def _verify_oslogin_user(login_uid):
                             subprocess.run(["mkhomedir_helper", acct['username']])
                         except Exception as ex:
                             logger.error("Error creating homedir", exc_info=ex)
-    
+
     return _oslogin_cache[login_uid]
 
 def _verify_params(message, keys):
@@ -524,6 +527,8 @@ def _submit_job(uid, gid, job_dir, job_id, partition, nNodes, run_script, *args,
         extra_sbatch += f"#SBATCH --cpus-per-task={kwargs['threadsPerRank']}\n"
     if 'wall_limit' in kwargs:
         extra_sbatch += f"#SBATCH --time={kwargs['wall_limit']}\n"
+    if 'gpus_per_node' in kwargs:
+        extra_sbatch += f"#SBATCH --gpus={kwargs['gpus_per_node']}\n"
 
     # Download input data, if specified
     download_command =""

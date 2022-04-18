@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 from ..models import Cluster, ApplicationInstallationLocation, \
-    ComputeInstance, InstanceType
+    ComputeInstance
 
 class ClusterInfo:
     """ Expected process:
@@ -172,11 +172,19 @@ ClusterInfo object - represent a cluster
       partition_name: {part.name}
       subnetwork_name: {self.cluster.subnet.cloud_id}
       max_node_count: {part.max_node_count}
-      machine_type: {part.machine_type.name}
+      machine_type: {part.machine_type}
       enable_placement: {part.enable_placement}
       image_hyperthreads: {part.enable_hyperthreads}
       exclusive: {part.enable_placement or not part.enable_node_reuse}
-      {image_str}
+      {image_str}\
+""")
+            # Temporarily hack in some A100 support
+            if part.GPU_per_node > 0:
+                yaml.append(f"""\
+      gpu_count: {part.GPU_per_node}
+      gpu_type: {part.GPU_type}\
+""")
+            yaml.append(f"""\
     use:
 {uses_str}
 """)
@@ -267,7 +275,7 @@ resource_groups:
       - https://www.googleapis.com/auth/pubsub
       compute_startup_script: |
         #!/bin/bash
-        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash 
+        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
     use:
 {controller_uses}
 
@@ -372,8 +380,7 @@ resource_groups:
 
             try:
                 ciKwargs['cloud_id'] = tf["attributes"]["name"]
-                instance_type_name = tf["attributes"]["machine_type"]
-                ciKwargs['instance_type'] = InstanceType.objects.get(name=instance_type_name)
+                ciKwargs['instance_type'] = tf["attributes"]["machine_type"]
             except (KeyError):
                 pass
 

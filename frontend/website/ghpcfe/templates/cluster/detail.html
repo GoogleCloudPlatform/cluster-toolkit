@@ -57,12 +57,18 @@ window.onload=function(event) {
       <tr>
         <th>Partition Name</th>
         <th>Instance Type</th>
+        <th>vCPUs per Node</th>
+        <th>GPU Type</th>
+        <th>GPUs per Node</th>
         <th>Maximum Instances</th>
       </tr>
       {% for part in object.partitions.all %}
       <tr>
         <td>{{ part.name }}</td>
-        <td>{{ part.machine_type.name }}</td>
+        <td>{{ part.machine_type }}</td>
+        <td>{{ part.vCPU_per_node }}</td>
+	<td>{% if part.GPU_per_node > 0 %}{{ part.GPU_type }}{% else %}-{% endif %}</td>
+	<td>{% if part.GPU_per_node > 0 %}{{ part.GPU_per_node }}{% else %}-{% endif %}</td>
         <td>{{ part.max_node_count }}</td>
       </tr>
       {% endfor %}
