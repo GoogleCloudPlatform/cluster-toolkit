@@ -33,11 +33,17 @@ func init() {
 		"Configuration file for the new blueprints")
 	cobra.CheckErr(createCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
+
 	createCmd.Flags().StringVarP(&bpDirectory, "out", "o", "",
 		"Output directory for the new blueprints")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
 	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
+	createCmd.Flags().BoolVarP(&overwriteBlueprint, "overwrite-blueprint", "w", false,
+		"if set, an existing blueprint dir can be overwritten by the created blueprint. \n"+
+			"Note: Terraform state IS preserved. \n"+
+			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
+			"Note: Packer is NOT supported.")
 	rootCmd.AddCommand(createCmd)
 }
 
@@ -45,6 +51,7 @@ var (
 	yamlFilename        string
 	bpDirectory         string
 	cliVariables        []string
+	overwriteBlueprint  bool
 	validationLevel     string
 	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
 	createCmd           = &cobra.Command{
@@ -73,7 +80,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 	blueprintConfig.ExpandConfig()
-	if err := reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory, false /* overwriteFlag */); err != nil {
+	if err := reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory, overwriteBlueprint); err != nil {
 		log.Fatal(err)
 	}
 }

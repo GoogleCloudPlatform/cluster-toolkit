@@ -167,8 +167,11 @@ type OverwriteDeniedError struct {
 }
 
 func (err *OverwriteDeniedError) Error() string {
-	// TODO: Update error message to reference command line flag once feature is launched
-	return fmt.Sprintf("failed to create a directory for blueprint: %v", err.cause)
+	return fmt.Sprintf("Failed to overwrite existing blueprint. "+
+		"Use the -w command line argument to enable overwrite. "+
+		"If overwrite is already enabled then this may be because "+
+		"you are attempting to remove a resource group, which is not supported : %v",
+		err.cause)
 }
 
 // Prepares a blueprint directory to be written to.
