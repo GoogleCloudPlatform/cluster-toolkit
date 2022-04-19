@@ -25,10 +25,10 @@ function subnetSelected() {
 function updateMachineAvailability() {
     // Get machine Info
     // For each select of class 'machine_type_select'...
-    //     ??Save it's value
+    //     Save it's value
     //     Clear the options
     //     Replace options
-    //     ??Restore it's value (selected)?
+    //     Restore it's value
 
     var subnet_element = document.getElementById("id_subnet");
     var zone_element = document.getElementById("id_cloud_zone");
@@ -40,7 +40,7 @@ function updateMachineAvailability() {
         dataType: "json",
         headers: {'X-CSRFToken': $.cookie("csrftoken")}
     }).done(function(data) {
-        $(".machine_type_select").each(function(pos, selObj) {
+        $(".machine_type_select:visible").each(function(pos, selObj) {
             var curVal = selObj.value;
             $(selObj).empty();
             $.each(data.machine_types, function(i, machineName) {
@@ -49,7 +49,47 @@ function updateMachineAvailability() {
                 option.setAttribute("value", machineName);
                 selObj.appendChild(option)
             });
+            var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("-"));
+            var gpuCount = $(selObj).parent().parent().find("#" + id_prefix + "-GPU_per_node")[0];
+            var gpuType = $(selObj).parent().parent().find("#" + id_prefix + "-GPU_type")[0];
+            selObj.onchange = function() {
+                var newMachType = selObj.value;
+                machine_data = $.ajax({
+                    url: "{% url 'api-instancetype-list' %}" + newMachType + "/?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+                    type: "GET",
+                    dataType: "json",
+                    headers: {'X-CSRFToken': $.cookie("csrftoken")}
+                }).done(function(data) {
+                    oldGPUType = gpuType.value;
+                    $(gpuType).empty();
+                    accelerators = new Map(Object.entries(data.accelerators));
+                    accelerators.forEach(function(range, type, accels) {
+                        var option = document.createElement("option");
+                        option.text = type;
+                        option.setAttribute("value", type);
+                        gpuType.appendChild(option);
+                    });
+                    gpuType.onchange = function() {
+                        gpuCount.min = accelerators[gpuType.value]['min_count'];
+                        gpuCount.max = accelerators[gpuType.value]['max_count'];
+                    };
+                    /* If only 1 accelerator, and min_count > 0, then we must set */
+                    /* Otherwise, if oldGPUType in new set, re-set it, otherwise set blank */
+                    if ( ( accelerators.size == 1) && ([...accelerators][0][1].min_count > 0 ) ) {
+                        gpuType.value = [...accelerators][0][0];
+                        gpuCount.value = [...accelerators][0][1].min_count;
+                    } else if ( accelerators.has(oldGPUType) ) {
+                        gpuType.value = oldGPUType;
+                    } else {
+                        gpuType.value = "";
+                        gpuCount.value = 0;
+                    }
+
+                });
+            };
             selObj.value = curVal;
+            selObj.onchange();
+
         });
     });
 

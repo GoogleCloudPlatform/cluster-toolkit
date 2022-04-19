@@ -85,23 +85,36 @@ def _get_gcp_machine_types(
     if "items" not in resp:
         return []
 
-    return {
+    data = {
         mt["name"]: {
             "name": mt["name"],
             "family": mt["name"].split("-")[0],
             "memory": mt["memoryMb"],
             "vCPU": mt["guestCpus"],
             "arch": _get_arch_for_node_type_gcp(mt["name"]),
-            "accelerators": [
-                {
-                    "type": acc["guestAcceleratorType"],
-                    "count": acc["guestAcceleratorCount"],
+            "accelerators": {
+                acc["guestAcceleratorType"]: {
+                    "min_count": acc["guestAcceleratorCount"],
+                    "max_count": acc["guestAcceleratorCount"],
                 }
                 for acc in mt.get("accelerators", [])
-            ],
+            },
         }
         for mt in resp["items"]
     }
+
+    # Grab the N1-associated Accelerators
+    accels = client.acceleratorTypes().list(project=project, zone=zone,
+                    filter="name!=nvidia-tesla-a100").execute()
+    n1_accels = {acc['name']: {
+                "min_count": 0,
+                "max_count": acc['maximumCardsPerInstance']}
+            for acc in accels.get('items', [])}
+    for mach in data.keys():
+        if data[mach]["family"] == "n1":
+            data[mach]["accelerators"] = n1_accels
+
+    return data
 
 
 def _get_ttl_hash(seconds=3600 * 24):

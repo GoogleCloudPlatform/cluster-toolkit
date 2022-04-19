@@ -414,26 +414,25 @@ class ClusterUpdateView(UpdateView):
                         part.vCPU_per_node = machine_info[part.machine_type][
                             "vCPU"
                         ] // (1 if part.enable_hyperthreads else 2)
-                        part.GPU_per_node = 0
-                        part.GPU_type = ""
-                        for accelerator in machine_info[part.machine_type][
-                            "accelerators"
-                        ]:
-                            if not accelerator["type"].startswith(
-                                "nvidia-tesla"
+                        # Validate GPU choice
+                        try:
+                            accel_info = machine_info[part.machine_type][
+                                "accelerators"
+                            ][part.GPU_type]
+                            if (
+                                part.GPU_per_node < accel_info['min_count']
+                                or part.GPU_per_node > accel_info['max_count']
                             ):
-                                continue
-                            if part.GPU_per_node != 0:
                                 raise ValidationError(
-                                    "Inhomogeneous GPU configurations are "
-                                    "not supported"
+                                    f"Invalid number of GPUs of type {part.GPU_type}"
                                 )
-                            part.GPU_type = accelerator["type"]
-                            part.GPU_per_node = accelerator["count"]
+                        except KeyError as err:
+                            raise ValidationError(
+                                f"Invalid GPU type {part.GPU_type}"
+                            ) from err
                 except KeyError as err:
                     raise ValidationError(
-                        "Error in Partition - invalid machine type: "
-                        f"{part.machine_type}"
+                        f"Error in Partition - invalid machine type: {part.machine_type}"
                     ) from err
                 parts = partitions.save()
 

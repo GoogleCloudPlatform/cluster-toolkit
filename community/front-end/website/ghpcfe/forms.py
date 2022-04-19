@@ -174,9 +174,8 @@ class ClusterMountPointForm(forms.ModelForm):
 class ClusterPartitionForm(forms.ModelForm):
     """Form for Cluster Paritions"""
 
-    machine_type = forms.ChoiceField(
-        widget=forms.Select(attrs={"class": "form-control machine_type_select"})
-    )
+    machine_type = forms.ChoiceField(widget=forms.Select())
+    GPU_type = forms.ChoiceField(widget=forms.Select())
 
     class Meta:
         model = ClusterPartition
@@ -188,29 +187,37 @@ class ClusterPartitionForm(forms.ModelForm):
             "enable_placement",
             "enable_hyperthreads",
             "enable_node_reuse",
+            "GPU_per_node",
+            "GPU_type",
         )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         for field in self.fields:
-            if field == "machine_type":
-                # NOTE:  This is a just a hack...
-                # We need to set choices such that the current value is valid,
-                # so that the current 'value' is valid, and gets selected.
-                self.fields[field].widget.choices = [
-                    (self.instance.machine_type, self.instance.machine_type)
-                ]
-                # NOTE: Hack to bypass cleaning 'machine_type' here, and do so
-                # in form_valid
-                self.fields[field].clean = lambda value: value
-            else:
-                self.fields[field].widget.attrs.update(
-                    {"class": "form-control"}
-                )
+            self.fields[field].widget.attrs.update({"class": "form-control"})
             if self.fields[field].help_text:
                 self.fields[field].widget.attrs.update(
                     {"title": self.fields[field].help_text}
                 )
+
+        self.fields["machine_type"].widget.attrs[
+            "class"
+        ] += " machine_type_select"
+        # NOTE:  This is a just a hack...
+        # We need to set choices such that the current value is valid,
+        # so that the current 'value' is valid, and gets selected.
+        self.fields["machine_type"].widget.choices = [
+            (self.instance.machine_type, self.instance.machine_type)
+        ]
+        self.fields["GPU_type"].widget.choices = [
+            (self.instance.GPU_type, self.instance.GPU_type)
+        ]
+
+        # NOTE: Hack to bypass cleaning 'machine_type' & GPU_type here,
+        # and do so in form_valid
+        self.fields["machine_type"].clean = lambda value: value;
+        self.fields["GPU_type"].clean = lambda value: value;
 
     def clean(self):
         cleaned_data = super().clean()
