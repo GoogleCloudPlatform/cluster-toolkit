@@ -180,6 +180,34 @@ func (s *MySuite) TestWriteBlueprint(c *C) {
 	c.Check(err, NotNil)
 }
 
+func (s *MySuite) TestRestoreTfState(c *C) {
+	// set up dir structure
+	//
+	// └── test_restore_state
+	//    ├── .ghpc
+	//       └── previous_resource_groups
+	//          └── fake_resource_group
+	//             └── terraform.tfstate
+	//    └── fake_resource_group
+	bpDir := filepath.Join(testDir, "test_restore_state")
+	resourceGroupName := "fake_resource_group"
+
+	prevResourceGroup := filepath.Join(bpDir, hiddenGhpcDirName, prevResourceGroupDirName, resourceGroupName)
+	curResourceGroup := filepath.Join(bpDir, resourceGroupName)
+	prevStateFile := filepath.Join(prevResourceGroup, tfStateFileName)
+	os.MkdirAll(prevResourceGroup, 0755)
+	os.MkdirAll(curResourceGroup, 0755)
+	emptyFile, _ := os.Create(prevStateFile)
+	emptyFile.Close()
+
+	restoreTfState(bpDir)
+
+	// check state file was moved to current resource group dir
+	curStateFile := filepath.Join(curResourceGroup, tfStateFileName)
+	_, err := os.Stat(curStateFile)
+	c.Check(err, IsNil)
+}
+
 // tfwriter.go
 func (s *MySuite) TestGetTypeTokens(c *C) {
 	// Success Integer
