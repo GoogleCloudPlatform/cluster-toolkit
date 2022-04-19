@@ -12,7 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+"""Views for GHPC Frontend
+
+Views are organised in the codebase using one file per model.
+
+"""
+
 from django.shortcuts import render
+
 
 # home page
 def index(request):

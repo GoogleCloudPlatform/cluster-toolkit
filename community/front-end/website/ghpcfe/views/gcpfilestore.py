@@ -11,112 +11,113 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """ gcpfilestore.py """
 
-import itertools, json
-from asgiref.sync import sync_to_async
-from rest_framework import viewsets
-from rest_framework.authentication import SessionAuthentication, TokenAuthentication
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Q
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.contrib.auth.views import redirect_to_login
-from django.http import HttpResponseRedirect, JsonResponse, \
-    Http404, HttpResponseBadRequest
-from django.urls import reverse, reverse_lazy
-from django.forms import inlineformset_factory
+from django.shortcuts import get_object_or_404
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 from django.views import generic
-from django.views.generic.edit import CreateView, UpdateView, DeleteView
-from django.contrib import messages
-from ..models import Credential, GCPFilestoreFilesystem, FilesystemImpl, \
-    FilesystemExport, VirtualSubnet
+from django.views.generic.edit import UpdateView
+from ..models import (
+    Credential,
+    GCPFilestoreFilesystem,
+    FilesystemImpl,
+    FilesystemExport,
+)
 from ..forms import FilestoreForm
-from ..views.asyncview import BackendAsyncView
-from ..cluster_manager import filesystem as cm_fs
-from ..cluster_manager import cloud_info
 
 
 # detail views
 class GCPFilestoreFilesystemDetailView(LoginRequiredMixin, generic.DetailView):
-    """ Custom DetailView for Filestore  model """
+    """Custom DetailView for Filestore  model"""
+
     model = GCPFilestoreFilesystem
-    template_name = 'filesystem/filestore_detail.html'
+    template_name = "filesystem/filestore_detail.html"
 
     def get_context_data(self, **kwargs):
-        """ Perform extra query to populate instance types data """
+        """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'fs'
-        context['exports'] = FilesystemExport.objects.filter(filesystem=self.kwargs['pk'])
+        context["navtab"] = "fs"
+        context["exports"] = FilesystemExport.objects.filter(
+            filesystem=self.kwargs["pk"]
+        )
         return context
 
 
 class GCPFilestoreFilesystemUpdateView(UpdateView):
-    """ Custom UpdateView for Filestore model """
+    """Custom UpdateView for Filestore model"""
 
     model = GCPFilestoreFilesystem
-    template_name = 'filesystem/filestore_update_form.html'
+    template_name = "filesystem/filestore_update_form.html"
     form_class = FilestoreForm
 
     def get_success_url(self):
-        return reverse('backend-filesystem-update-files', kwargs={'pk': self.object.pk})
+        return reverse(
+            "backend-filesystem-update-files", kwargs={"pk": self.object.pk}
+        )
 
     def get_initial(self):
-        return {'share_name': self.get_object().exports.first().export_name}
+        return {"share_name": self.get_object().exports.first().export_name}
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
-        self.object.cloud_region = self.object.cloud_zone.rsplit('-', 1)[0]
+        self.object.cloud_region = self.object.cloud_zone.rsplit("-", 1)[0]
         self.object.impl_type = FilesystemImpl.GCPFILESTORE
         self.object.save()
 
         export = self.object.exports.first()
-        export.export_name = form.data['share_name']
+        export.export_name = form.data["share_name"]
         export.save()
 
         return HttpResponseRedirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'fs'
+        context["navtab"] = "fs"
         return context
 
 
 class GCPFilestoreFilesystemCreateView(LoginRequiredMixin, generic.CreateView):
-    """ Custom view for Filestore creation """
+    """Custom view for Filestore creation"""
 
-    template_name = 'filesystem/filestore_create_form.html'
+    template_name = "filesystem/filestore_create_form.html"
     form_class = FilestoreForm
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'fs'
+        context["navtab"] = "fs"
         return context
 
     def get_initial(self):
-        return {'cloud_credential': self.cloud_credential}
+        return {"cloud_credential": self.cloud_credential}
 
     def get(self, request, *args, **kwargs):
-        self.cloud_credential = get_object_or_404(Credential, pk=kwargs['credential'])
+        self.cloud_credential = get_object_or_404(
+            Credential, pk=kwargs["credential"]
+        )
         return super().get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        self.cloud_credential = get_object_or_404(Credential, pk=kwargs['credential'])
+        self.cloud_credential = get_object_or_404(
+            Credential, pk=kwargs["credential"]
+        )
         return super().post(request, *args, **kwargs)
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
-        self.object.cloud_region = self.object.cloud_zone.rsplit('-', 1)[0]
+        self.object.cloud_region = self.object.cloud_zone.rsplit("-", 1)[0]
         self.object.impl_type = FilesystemImpl.GCPFILESTORE
         self.object.save()
 
-        export = FilesystemExport(filesystem=self.object, export_name=form.data['share_name'])
+        export = FilesystemExport(
+            filesystem=self.object, export_name=form.data["share_name"]
+        )
         export.save()
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
         # Redirect to backend view that creates cluster files
-        return reverse('backend-filesystem-create-files', kwargs={'pk': self.object.pk})
+        return reverse(
+            "backend-filesystem-create-files", kwargs={"pk": self.object.pk}
+        )

@@ -11,11 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """ credentials.py """
 
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponseRedirect, HttpResponse
+from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.views import generic
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
@@ -30,115 +28,128 @@ from ..forms import CredentialForm
 from ..serializers import CredentialSerializer
 from ..permissions import CredentialPermission, SuperUserRequiredMixin
 from ..cluster_manager import validate_credential
-import json
+
 
 class CredentialListView(SuperUserRequiredMixin, generic.ListView):
-    """ Custom ListView for Credential model """
+    """Custom ListView for Credential model"""
+
     model = Credential
-    template_name = 'credential/list.html'
+    template_name = "credential/list.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'credential'
+        context["navtab"] = "credential"
         return context
 
 
 class CredentialDetailView(SuperUserRequiredMixin, generic.DetailView):
-    """ Custom DetailView for Credential model """
+    """Custom DetailView for Credential model"""
+
     model = Credential
-    template_name = 'credential/detail.html'
+    template_name = "credential/detail.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'credential'
+        context["navtab"] = "credential"
         return context
 
 
 class CredentialCreateView(SuperUserRequiredMixin, CreateView):
-    """ Custom CreateView for Credential model """
+    """Custom CreateView for Credential model"""
 
-    success_url = reverse_lazy('credentials')
-    template_name = 'credential/create_form.html'
+    success_url = reverse_lazy("credentials")
+    template_name = "credential/create_form.html"
     form_class = CredentialForm
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'credential'
+        context["navtab"] = "credential"
         return context
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.owner = self.request.user
         self.object.save()
-        messages.success(self.request, f'Credential {self.object.name} validated and saved.')
+        messages.success(
+            self.request, f"Credential {self.object.name} validated and saved."
+        )
         return HttpResponseRedirect(self.get_success_url())
 
 
 class CredentialUpdateView(SuperUserRequiredMixin, UpdateView):
-    """ Custom UpdateView for Credential model """
+    """Custom UpdateView for Credential model"""
 
     model = Credential
-    success_url = reverse_lazy('credentials')
-    template_name = 'credential/update_form.html'
+    success_url = reverse_lazy("credentials")
+    template_name = "credential/update_form.html"
     form_class = CredentialForm
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'credential'
+        context["navtab"] = "credential"
         return context
 
     def get_initial(self):
         initial = super().get_initial()
-        initial['detail'] = ''  # do not show existing credential details in edit form
+        initial[
+            "detail"
+        ] = ""  # do not show existing credential details in edit form
         return initial
 
 
 class CredentialDeleteView(SuperUserRequiredMixin, DeleteView):
-    """ Custom DeleteView for Credential model """
+    """Custom DeleteView for Credential model"""
 
     model = Credential
-    template_name = 'credential/check_delete.html'
+    template_name = "credential/check_delete.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['navtab'] = 'credential'
+        context["navtab"] = "credential"
         return context
 
     def get_success_url(self):
-        credential = Credential.objects.get(pk=self.kwargs['pk'])
-        messages.success(self.request, f'Credential {credential.name} deleted.')
-        return reverse('credentials')
+        credential = Credential.objects.get(pk=self.kwargs["pk"])
+        messages.success(self.request, f"Credential {credential.name} deleted.")
+        return reverse("credentials")
 
 
 # For APIs
 
+
 class CredentialViewSet(viewsets.ModelViewSet):
-    """ Custom ModelViewSet for Crendential model """
-    permission_classes = (IsAuthenticated, CredentialPermission,)
+    """Custom ModelViewSet for Crendential model"""
+
+    permission_classes = (
+        IsAuthenticated,
+        CredentialPermission,
+    )
     queryset = Credential.objects.all()
     serializer_class = CredentialSerializer
 
     def create(self, request):
-        request.data._mutable = True
-        request.data['owner'] = request.user.id
-        request.data._mutable = False
+        request.data._mutable = True  # pylint: disable=protected-access
+        request.data["owner"] = request.user.id
+        request.data._mutable = False  # pylint: disable=protected-access
         serializer = CredentialSerializer(data=request.data)
         if serializer.is_valid():
             credential = serializer.save()
-            id = credential.id
             data = serializer.data
-            data.update({'id': id})
-            return HttpResponse(json.dumps(data), content_type='application/json')
+            data.update({"id": credential.id})
+            return JsonResponse(data)
         else:
             print(serializer.errors)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class CredentialValidateAPIView(APIView):
-    """ Validte credential against cloud platform """
+    """Validte credential against cloud platform"""
 
-    def post(self, request, format=None):
-        credential = request.data.__getitem__('detail').rstrip()
-        result = validate_credential.validate_credential('GCP', credential)
-        res = { "validated" : result }
-        return HttpResponse(json.dumps(res), content_type='application/json')
+    def post(self, request):
+        credential = request.data.__getitem__("detail").rstrip()
+        result = validate_credential.validate_credential("GCP", credential)
+        res = {"validated": result}
+        return JsonResponse(res)
+
