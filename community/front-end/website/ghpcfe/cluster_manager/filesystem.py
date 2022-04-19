@@ -89,7 +89,7 @@ def create_filesystem(fs: Filesystem) -> None:
 
 
 def _run_ghpc(tgtDir: Path) -> None:
-    ghpc_path = utils.load_config()["baseDir"].parent / 'ghpc'
+    ghpc_path = utils.load_config()["baseDir"].parent.parent / 'ghpc'
 
     try:
         logger.info("Invoking ghpc create")
