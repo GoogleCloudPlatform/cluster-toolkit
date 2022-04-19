@@ -36,7 +36,7 @@ logger.addHandler(logging.handlers.SysLogHandler(address="/dev/log"))
 EXIT_CODE = 0
 
 # GCS metadata access
-GCS_METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024"
+GCS_METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024" # pylint: disable=line-too-long
 GCS_METADATA_HEADERS = {"Metadata-Flavor": "Google"}
 
 # Caching of oslogin users
