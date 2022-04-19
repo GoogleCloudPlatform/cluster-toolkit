@@ -107,13 +107,13 @@
     {% if "c" not in object.cloud_state %}
     <a href="{% url 'vpc-update' object.id %}" class="btn btn-primary">Edit</a>
     {% endif %}
-    {% if "i" not in object.cloud_state %}
+    {% if "i" not in object.cloud_state and "c" not in object.cloud_state %}
     <a href="{% url 'vpc-subnets' object.id %}" class="btn btn-primary">Edit Subnets</a>
     {% endif %}
-    {% if "m" in object.cloud_state %}
+    {% if "m" in object.cloud_state and "c" not in object.cloud_state %}
     <a href="{% url 'backend-start-vpc' object.id %}" class="btn btn-primary {% if not subnets %}disabled{% endif %}">Apply Cloud Changes</a>
     {% endif %}
-    {% if "m" in object.cloud_state and "n" not in object.cloud_state and "x" not in object.cloud_state %}
+    {% if "m" in object.cloud_state and "n" not in object.cloud_state and "x" not in object.cloud_state and "c" not in object.cloud_state %}
     <a href="{% url 'vpc-destroy' object.id %}" class="btn btn-primary"">Destroy</a>
     {% endif %}
     {% endif %}
