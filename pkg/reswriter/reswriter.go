@@ -57,9 +57,11 @@ func factory(kind string) ResWriter {
 }
 
 // WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string) error {
+func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFlag bool) error {
 	bpDir := filepath.Join(outputDir, yamlConfig.BlueprintName)
-	if err := prepBpDir(bpDir, false /* overwrite */); err != nil {
+
+	overwrite := isOverwriteAllowed(bpDir, yamlConfig, overwriteFlag)
+	if err := prepBpDir(bpDir, overwrite); err != nil {
 		return err
 	}
 
@@ -115,6 +117,48 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 func printInstructionsPreamble(kind string, path string) {
 	fmt.Printf("%s group was successfully created in directory %s\n", kind, path)
 	fmt.Println("To deploy, run the following commands:")
+}
+
+// Determines if overwrite is allowed
+func isOverwriteAllowed(bpDir string, overwritingConfig *config.YamlConfig, overwriteFlag bool) bool {
+	if !overwriteFlag {
+		return false
+	}
+
+	files, err := ioutil.ReadDir(bpDir)
+	if err != nil {
+		return false
+	}
+
+	// build list of previous and current resource groups
+	var prevGroups []string
+	for _, f := range files {
+		if f.IsDir() && f.Name() != hiddenGhpcDirName {
+			prevGroups = append(prevGroups, f.Name())
+		}
+	}
+
+	var curGroups []string
+	for _, group := range overwritingConfig.ResourceGroups {
+		curGroups = append(curGroups, group.Name)
+	}
+
+	return isSubset(prevGroups, curGroups)
+}
+
+func isSubset(sub, super []string) bool {
+	// build set (map keys) from slice
+	superM := make(map[string]bool)
+	for _, item := range super {
+		superM[item] = true
+	}
+
+	for _, item := range sub {
+		if _, found := superM[item]; !found {
+			return false
+		}
+	}
+	return true
 }
 
 // OverwriteDeniedError signifies when a blueprint overwrite was denied.

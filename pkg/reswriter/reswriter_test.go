@@ -151,7 +151,7 @@ func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
 	realBpDir := filepath.Join(testDir, testYamlConfig.BlueprintName)
 
 	// writes a full blueprint w/ actual resource groups
-	WriteBlueprint(&testYamlConfig, testDir)
+	WriteBlueprint(&testYamlConfig, testDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
 	files, _ := ioutil.ReadDir(realBpDir)
@@ -170,16 +170,59 @@ func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
 	c.Check(len(files2), Equals, 1)
 }
 
+func (s *MySuite) TestIsSubset(c *C) {
+	baseConfig := []string{"group1", "group2", "group3"}
+	subsetConfig := []string{"group1", "group2"}
+	swapConfig := []string{"group1", "group4", "group3"}
+	c.Check(isSubset(subsetConfig, baseConfig), Equals, true)
+	c.Check(isSubset(baseConfig, subsetConfig), Equals, false)
+	c.Check(isSubset(baseConfig, swapConfig), Equals, false)
+}
+
+func (s *MySuite) TestIsOverwriteAllowed(c *C) {
+	bpDir := filepath.Join(testDir, "overwrite_test")
+	ghpcDir := filepath.Join(bpDir, hiddenGhpcDirName)
+	resource1 := filepath.Join(bpDir, "group1")
+	resource2 := filepath.Join(bpDir, "group2")
+	os.MkdirAll(ghpcDir, 0755)
+	os.MkdirAll(resource1, 0755)
+	os.MkdirAll(resource2, 0755)
+
+	supersetConfig := config.YamlConfig{
+		ResourceGroups: []config.ResourceGroup{
+			{Name: "group1"},
+			{Name: "group2"},
+			{Name: "group3"},
+		},
+	}
+	swapConfig := config.YamlConfig{
+		ResourceGroups: []config.ResourceGroup{
+			{Name: "group1"},
+			{Name: "group4"},
+		},
+	}
+
+	// overwrite allowed when new resource group is added
+	c.Check(isOverwriteAllowed(bpDir, &supersetConfig, true /* overwriteFlag */), Equals, true)
+	// overwrite fails when resource group is deleted
+	c.Check(isOverwriteAllowed(bpDir, &swapConfig, true /* overwriteFlag */), Equals, false)
+	// overwrite fails when overwrite is false
+	c.Check(isOverwriteAllowed(bpDir, &supersetConfig, false /* overwriteFlag */), Equals, false)
+}
+
 // reswriter.go
 func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	blueprintName := "blueprints_TestWriteBlueprint"
 	testYamlConfig.BlueprintName = blueprintName
-	err := WriteBlueprint(&testYamlConfig, testDir)
+	err := WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the blueprint fails
-	err = WriteBlueprint(&testYamlConfig, testDir)
+	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
+	// Overwriting the blueprint succeeds with flag
+	err = WriteBlueprint(&testYamlConfig, testDir, true /* overwriteFlag */)
+	c.Check(err, IsNil)
 }
 
 // tfwriter.go
