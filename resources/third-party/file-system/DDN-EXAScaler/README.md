@@ -49,7 +49,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_ddn_exascaler"></a> [ddn\_exascaler](#module\_ddn\_exascaler) | github.com/DDNStorage/exascaler-cloud-terraform//gcp | f329c21 |
+| <a name="module_ddn_exascaler"></a> [ddn\_exascaler](#module\_ddn\_exascaler) | github.com/DDNStorage/exascaler-cloud-terraform//gcp | 76ab7fc |
 
 ## Resources
 
@@ -64,6 +64,7 @@ No resources.
 | <a name="input_clt"></a> [clt](#input\_clt) | Compute client target properties | <pre>object({<br>    disk_bus   = string<br>    disk_type  = string<br>    disk_size  = number<br>    disk_count = number<br>  })</pre> | <pre>{<br>  "disk_bus": "SCSI",<br>  "disk_count": 0,<br>  "disk_size": 256,<br>  "disk_type": "pd-standard"<br>}</pre> | no |
 | <a name="input_fsname"></a> [fsname](#input\_fsname) | EXAScaler filesystem name, only alphanumeric characters are allowed, and the value must be 1-8 characters long | `string` | `"exacloud"` | no |
 | <a name="input_image"></a> [image](#input\_image) | Source image properties | <pre>object({<br>    project = string<br>    name    = string<br>  })</pre> | <pre>{<br>  "name": "exascaler-cloud-v523-centos7",<br>  "project": "ddn-public"<br>}</pre> | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to EXAScaler Cloud deployment. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint (at the client instances) for this EXAScaler system | `string` | `"/shared"` | no |
 | <a name="input_mds"></a> [mds](#input\_mds) | Metadata server properties | <pre>object({<br>    node_type  = string<br>    node_cpu   = string<br>    nic_type   = string<br>    node_count = number<br>    public_ip  = bool<br>  })</pre> | <pre>{<br>  "nic_type": "GVNIC",<br>  "node_count": 1,<br>  "node_cpu": "Intel Cascade Lake",<br>  "node_type": "n2-standard-32",<br>  "public_ip": true<br>}</pre> | no |
 | <a name="input_mdt"></a> [mdt](#input\_mdt) | Metadata target properties | <pre>object({<br>    disk_bus   = string<br>    disk_type  = string<br>    disk_size  = number<br>    disk_count = number<br>    disk_raid  = bool<br>  })</pre> | <pre>{<br>  "disk_bus": "SCSI",<br>  "disk_count": 1,<br>  "disk_raid": false,<br>  "disk_size": 3500,<br>  "disk_type": "pd-ssd"<br>}</pre> | no |
@@ -74,6 +75,7 @@ No resources.
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self-link of the VPC network to where the system is connected.  Ignored if 'network\_properties' is provided. 'network\_self\_link' or 'network\_properties' must be provided. | `string` | `null` | no |
 | <a name="input_oss"></a> [oss](#input\_oss) | Object Storage server properties | <pre>object({<br>    node_type  = string<br>    node_cpu   = string<br>    nic_type   = string<br>    node_count = number<br>    public_ip  = bool<br>  })</pre> | <pre>{<br>  "nic_type": "GVNIC",<br>  "node_count": 3,<br>  "node_cpu": "Intel Cascade Lake",<br>  "node_type": "n2-standard-16",<br>  "public_ip": true<br>}</pre> | no |
 | <a name="input_ost"></a> [ost](#input\_ost) | Object Storage target properties | <pre>object({<br>    disk_bus   = string<br>    disk_type  = string<br>    disk_size  = number<br>    disk_count = number<br>    disk_raid  = bool<br>  })</pre> | <pre>{<br>  "disk_bus": "SCSI",<br>  "disk_count": 1,<br>  "disk_raid": false,<br>  "disk_size": 3500,<br>  "disk_type": "pd-ssd"<br>}</pre> | no |
+| <a name="input_prefix"></a> [prefix](#input\_prefix) | EXAScaler Cloud deployment prefix (`null` defaults to 'exascaler-cloud') | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Compute Platform project that will host the EXAScaler filesystem | `string` | n/a | yes |
 | <a name="input_security"></a> [security](#input\_security) | Security options | <pre>object({<br>    admin              = string<br>    public_key         = string<br>    block_project_keys = bool<br>    enable_os_login    = bool<br>    enable_local       = bool<br>    enable_ssh         = bool<br>    enable_http        = bool<br>    ssh_source_ranges  = list(string)<br>    http_source_ranges = list(string)<br>  })</pre> | <pre>{<br>  "admin": "stack",<br>  "block_project_keys": false,<br>  "enable_http": false,<br>  "enable_local": false,<br>  "enable_os_login": true,<br>  "enable_ssh": false,<br>  "http_source_ranges": [<br>    "0.0.0.0/0"<br>  ],<br>  "public_key": null,<br>  "ssh_source_ranges": [<br>    "0.0.0.0/0"<br>  ]<br>}</pre> | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account name used by deploy application | <pre>object({<br>    new   = bool<br>    email = string<br>  })</pre> | <pre>{<br>  "email": null,<br>  "new": false<br>}</pre> | no |

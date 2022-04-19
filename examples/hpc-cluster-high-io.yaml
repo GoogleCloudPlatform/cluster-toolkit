@@ -67,6 +67,7 @@ resource_groups:
       partition_name: low_cost
       max_node_count: 10
       enable_placement: false
+      exclusive: false
       machine_type: n2-standard-4
 
   # This compute_partition is far more performant than low_cost_partition.
@@ -104,3 +105,8 @@ resource_groups:
     - slurm_controller
     settings:
       login_machine_type: n2-standard-4
+
+  - source: resources/monitoring/dashboard
+    kind: terraform
+    id: hpc_dashboard
+    outputs: [instructions]

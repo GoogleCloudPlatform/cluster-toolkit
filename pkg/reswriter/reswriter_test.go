@@ -89,7 +89,7 @@ func getYamlConfigForTest() config.YamlConfig {
 		},
 	}
 	testResourceGroups := []config.ResourceGroup{
-		config.ResourceGroup{
+		{
 			Resources: []config.Resource{testResource, testResourceWithLabels},
 		},
 	}
@@ -102,14 +102,6 @@ func getYamlConfigForTest() config.YamlConfig {
 	return testYamlConfig
 }
 
-func createTestApplyFunctions(config config.YamlConfig) [][]map[string]string {
-	applyFuncs := make([][]map[string]string, len(config.ResourceGroups))
-	for iGrp, group := range config.ResourceGroups {
-		applyFuncs[iGrp] = make([]map[string]string, len(group.Resources))
-	}
-	return applyFuncs
-}
-
 // Tests
 
 // reswriter.go
@@ -117,157 +109,11 @@ func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	blueprintName := "blueprints_TestWriteBlueprint"
 	testYamlConfig.BlueprintName = blueprintName
-	WriteBlueprint(&testYamlConfig, testDir)
-}
-
-func (s *MySuite) TestFlattenInterfaceMap(c *C) {
-	wrapper := interfaceStruct{Elem: nil}
-	inputMaps := []interface{}{
-		// Just a string
-		"str1",
-		// map of strings
-		map[string]interface{}{
-			"str1": "val1",
-			"str2": "val2",
-		},
-		// slice of strings
-		[]interface{}{"str1", "str2"},
-		// map of maps
-		map[string]interface{}{
-			"map1": map[string]interface{}{},
-			"map2": map[string]interface{}{
-				"str1": "val1",
-				"str2": "val2",
-			},
-		},
-		// slice of slices
-		[]interface{}{
-			[]interface{}{},
-			[]interface{}{"str1", "str2"},
-		},
-		// map of slice of map
-		map[string]interface{}{
-			"slice": []map[string]interface{}{
-				map[string]interface{}{
-					"str1": "val1",
-					"str2": "val2",
-				},
-			},
-		},
-		// empty map
-		map[string]interface{}{},
-		// empty slice
-		[]interface{}{},
-	}
-	// map of all 3
-	inputMapAllThree := map[string]interface{}{
-		"str": "val",
-		"map": map[string]interface{}{
-			"str1": "val1",
-			"str2": "val2",
-		},
-		"slice": []interface{}{"str1", "str2"},
-	}
-	stringMapContents := "{str1: val1, str2: val2}"
-	stringSliceContents := "[str1, str2]"
-	expectedOutputs := []string{
-		"str1",              // Just a string
-		stringMapContents,   // map of strings
-		stringSliceContents, // slice of strings
-		fmt.Sprintf("{map1: {}, map2: %s}", stringMapContents), // map of maps
-		fmt.Sprintf("[[], %s]", stringSliceContents),           // slice of slices
-		fmt.Sprintf("{slice: [%s]}", stringMapContents),        // map of slice of map
-		"{}",
-		"[]",
-	}
-
-	// Test the test setup
-	c.Assert(len(inputMaps), Equals, len(expectedOutputs))
-
-	// Test common cases
-	mapWrapper := make(map[string]interface{})
-	for i := range inputMaps {
-		mapWrapper["key"] = inputMaps[i]
-		err := flattenInterfaceMap(mapWrapper, &wrapper)
-		c.Assert(err, IsNil)
-		c.Assert(mapWrapper["key"], Equals, expectedOutputs[i])
-	}
-
-	// Test complicated case
-	mapWrapper["key"] = inputMapAllThree
-	err := flattenInterfaceMap(mapWrapper, &wrapper)
-	c.Assert(err, IsNil)
-	c.Assert(
-		strings.Contains(mapWrapper["key"].(string), "str: val"), Equals, true)
-	mapString := fmt.Sprintf("map: %s", stringMapContents)
-	c.Assert(
-		strings.Contains(mapWrapper["key"].(string), mapString), Equals, true)
-	sliceString := fmt.Sprintf("slice: %s", stringSliceContents)
-	c.Assert(
-		strings.Contains(mapWrapper["key"].(string), sliceString), Equals, true)
-}
-
-func testHandlePrimitivesCreateMap() map[string]interface{} {
-	// String test variables
-	addQuotes := "addQuotes"
-	noQuotes := "((noQuotes))"
-
-	// Composite test variables
-	testMap := map[string]interface{}{
-		"stringMap":   addQuotes,
-		"variableMap": noQuotes,
-		"deep": map[string]interface{}{
-			"slice": []interface{}{addQuotes, noQuotes},
-		},
-	}
-	testSlice := []interface{}{addQuotes, noQuotes}
-
-	return map[string]interface{}{
-		"string":   addQuotes,
-		"variable": noQuotes,
-		"map":      testMap,
-		"slice":    testSlice,
-	}
-}
-
-func testHandlePrimitivesHelper(c *C, varMap map[string]interface{}) {
-	addQuotesExpected := fmt.Sprintf("\"%s\"", "addQuotes")
-	noQuotesExpected := "noQuotes"
-
-	// Test top level
-	c.Assert(varMap["string"], Equals, addQuotesExpected)
-	c.Assert(varMap["variable"], Equals, noQuotesExpected)
-
-	// Test map
-	interfaceMap := varMap["map"].(map[string]interface{})
-	c.Assert(interfaceMap["\"stringMap\""],
-		Equals,
-		addQuotesExpected)
-	c.Assert(interfaceMap["\"variableMap\""], Equals, noQuotesExpected)
-	interfaceMap = interfaceMap["\"deep\""].(map[string]interface{})
-	interfaceSlice := interfaceMap["\"slice\""].([]interface{})
-	c.Assert(interfaceSlice[0], Equals, addQuotesExpected)
-	c.Assert(interfaceSlice[1], Equals, noQuotesExpected)
-
-	// Test slice
-	interfaceSlice = varMap["slice"].([]interface{})
-	c.Assert(interfaceSlice[0], Equals, addQuotesExpected)
-	c.Assert(interfaceSlice[1], Equals, noQuotesExpected)
-}
-
-func (s *MySuite) TestUpdateStrings(c *C) {
-	yamlConfig := getYamlConfigForTest()
-
-	// Setup Vars
-	yamlConfig.Vars = testHandlePrimitivesCreateMap()
-	yamlConfig.ResourceGroups[0].Resources[0].Settings =
-		testHandlePrimitivesCreateMap()
-
-	updateStringsInConfig(&yamlConfig, "terraform")
-
-	testHandlePrimitivesHelper(
-		c, yamlConfig.ResourceGroups[0].Resources[0].Settings)
-
+	err := WriteBlueprint(&testYamlConfig, testDir)
+	c.Check(err, IsNil)
+	// Overwriting the blueprint fails
+	err = WriteBlueprint(&testYamlConfig, testDir)
+	c.Check(err, NotNil)
 }
 
 // tfwriter.go
@@ -367,7 +213,7 @@ func (s *MySuite) TestCreateBaseFile(c *C) {
 	c.Assert(fi.Name(), Equals, baseFilename)
 	c.Assert(fi.Size() > 0, Equals, true)
 	c.Assert(fi.IsDir(), Equals, false)
-	b, err := ioutil.ReadFile(goodPath)
+	b, _ := ioutil.ReadFile(goodPath)
 	c.Assert(strings.Contains(string(b), "Licensed under the Apache License"),
 		Equals, true)
 
@@ -398,39 +244,6 @@ func stringExistsInFile(str string, filename string) (bool, error) {
 		return false, err
 	}
 	return strings.Contains(string(b), str), nil
-}
-
-// hcl_utils.go
-func (s *MySuite) TestFlattenToHCLStrings(c *C) {
-	testConfig := getYamlConfigForTest()
-	flattenToHCLStrings(&testConfig, "terraform")
-}
-
-func (s *MySuite) TestGetType(c *C) {
-
-	// string
-	testString := "test string"
-	ret := getType(testString)
-	c.Assert(ret, Equals, "string")
-
-	// map
-	testMap := "{testMap: testVal}"
-	ret = getType(testMap)
-	c.Assert(ret, Equals, "map")
-
-	// list
-	testList := "[testList0,testList]"
-	ret = getType(testList)
-	c.Assert(ret, Equals, "list")
-
-	// non-string input
-	testNull := 42 // random int
-	ret = getType(testNull)
-	c.Assert(ret, Equals, "null")
-
-	// nil input
-	ret = getType(nil)
-	c.Assert(ret, Equals, "null")
 }
 
 func (s *MySuite) TestWriteMain(c *C) {
@@ -490,7 +303,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 	testResourceWithWrap := config.Resource{
 		ID: "test_resource_with_wrap",
 		WrapSettingsWith: map[string][]string{
-			"wrappedSetting": []string{"list(flatten(", "))"},
+			"wrappedSetting": {"list(flatten(", "))"},
 		},
 		Settings: map[string]interface{}{
 			"wrappedSetting": []interface{}{"val1", "val2"},
@@ -653,15 +466,24 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestWritePackerAutoVariables(c *C) {
-	// The happy path is tested outside of this funcation already
+func (s *MySuite) TestWritePackerAutoVars(c *C) {
+	testYamlConfig := getYamlConfigForTest()
+	testYamlConfig.Vars["testkey"] = "testval"
+	ctyVars, _ := config.ConvertMapToCty(testYamlConfig.Vars)
 
-	// Bad tmplFilename
+	// fail writing to a bad path
 	badDestPath := "not/a/real/path"
-	err := writePackerAutoVariables(
-		packerAutoVarFilename, config.Resource{}, badDestPath)
-	expErr := "failed to create packer file .*"
+	err := writePackerAutovars(ctyVars, badDestPath)
+	expErr := fmt.Sprintf("error creating variables file %s:.*", packerAutoVarFilename)
 	c.Assert(err, ErrorMatches, expErr)
+
+	testPackerTemplateDir := filepath.Join(testDir, "TestWritePackerTemplate")
+	if err := os.Mkdir(testPackerTemplateDir, 0755); err != nil {
+		log.Fatalf("Failed to create test dir for creating %s file", packerAutoVarFilename)
+	}
+	err = writePackerAutovars(ctyVars, testPackerTemplateDir)
+	c.Assert(err, IsNil)
+
 }
 
 func TestMain(m *testing.M) {

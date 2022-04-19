@@ -141,11 +141,15 @@
       pause:
         minutes: 2
     - name: Run Integration tests for HPC toolkit
-      include_tasks: slurm-tests.yml
+      include_tasks: "{{ test }}"
       run_once: true
       vars:
+        login_node: "{{ login_node }}"
         mounts: "{{ mounts }}"
         partitions: "{{ partitions }}"
+      loop: "{{ post_deploy_tests }}"
+      loop_control:
+        loop_var: test
 
     ## Always cleanup, even on failure
     always:

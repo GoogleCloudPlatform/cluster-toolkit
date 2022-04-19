@@ -19,6 +19,22 @@ locals {
   { startup-script = var.startup_script }) : {}
   network_storage = var.network_storage != null ? (
   { network_storage = jsonencode(var.network_storage) }) : {}
+
+  resource_prefix = var.name_prefix != null ? var.name_prefix : var.deployment_name
+
+  enable_gvnic  = var.bandwidth_tier != "not_enabled"
+  enable_tier_1 = var.bandwidth_tier == "tier_1_enabled"
+
+  # compact_placement : true when placement policy is provided and collocation set; false if unset
+  compact_placement                  = try(var.placement_policy.collocation, null) != null
+  automatic_restart                  = local.compact_placement ? false : null
+  on_host_maintenance_from_placement = local.compact_placement ? "TERMINATE" : "MIGRATE"
+
+  on_host_maintenance = (
+    var.on_host_maintenance != null
+    ? var.on_host_maintenance
+    : local.on_host_maintenance_from_placement
+  )
 }
 
 data "google_compute_image" "compute_image" {
@@ -29,23 +45,35 @@ data "google_compute_image" "compute_image" {
 resource "google_compute_disk" "boot_disk" {
   count = var.instance_count
 
-  name = var.name_prefix != null ? (
-    "${var.name_prefix}-boot-disk-${count.index}") : (
-  "${var.deployment_name}-boot-disk-${count.index}")
+  name   = "${local.resource_prefix}-boot-disk-${count.index}"
   image  = data.google_compute_image.compute_image.self_link
   type   = var.disk_type
   size   = var.disk_size_gb
   labels = var.labels
 }
 
+resource "google_compute_resource_policy" "placement_policy" {
+  count = var.placement_policy != null ? 1 : 0
+  name  = "${local.resource_prefix}-simple-instance-placement"
+  group_placement_policy {
+    vm_count                  = var.placement_policy.vm_count
+    availability_domain_count = var.placement_policy.availability_domain_count
+    collocation               = var.placement_policy.collocation
+  }
+}
+
 resource "google_compute_instance" "compute_vm" {
+  provider = google-beta
+
   count = var.instance_count
 
   depends_on = [var.network_self_link, var.network_storage]
 
-  name         = var.name_prefix != null ? "${var.name_prefix}-${count.index}" : "${var.deployment_name}-${count.index}"
+  name         = "${local.resource_prefix}-${count.index}"
   machine_type = var.machine_type
   zone         = var.zone
+
+  resource_policies = google_compute_resource_policy.placement_policy[*].self_link
 
   labels = var.labels
 
@@ -63,6 +91,11 @@ resource "google_compute_instance" "compute_vm" {
 
     network    = var.network_self_link
     subnetwork = var.subnetwork_self_link
+    nic_type   = local.enable_gvnic ? "GVNIC" : null
+  }
+
+  network_performance_config {
+    total_egress_bandwidth_tier = local.enable_tier_1 ? "TIER_1" : "DEFAULT"
   }
 
   dynamic "service_account" {
@@ -75,7 +108,8 @@ resource "google_compute_instance" "compute_vm" {
 
   guest_accelerator = var.guest_accelerator
   scheduling {
-    on_host_maintenance = var.on_host_maintenance
+    on_host_maintenance = local.on_host_maintenance
+    automatic_restart   = local.automatic_restart
   }
 
   metadata = merge(local.network_storage, local.startup_script, var.metadata)

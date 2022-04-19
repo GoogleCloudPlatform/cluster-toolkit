@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+variable "deployment_name" {
+  description = "HPC Toolkit deployment name"
+  type        = string
+}
+
 variable "project_id" {
-  type = string
+  description = "Project in which to create VM and image"
+  type        = string
 }
 
 variable "machine_type" {
   description = "VM machine type on which to build new image"
   type        = string
-  default     = "n2d-standard-4"
+  default     = "n2-standard-4"
 }
 
 variable "disk_size" {
@@ -33,9 +39,10 @@ variable "zone" {
   type        = string
 }
 
-variable "subnetwork" {
+variable "subnetwork_name" {
   description = "Name of subnetwork in which to provision image building VM"
   type        = string
+  default     = null
 }
 
 variable "omit_external_ip" {

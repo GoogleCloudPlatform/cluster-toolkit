@@ -18,7 +18,6 @@
 package reswriter
 
 import (
-	"embed"
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
@@ -26,11 +25,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-)
-
-const (
-	beginLiteralExp string = `^\(\(.*$`
-	fullLiteralExp  string = `^\(\((.*)\)\)$`
 )
 
 // ResWriter interface for writing resources to a blueprint
@@ -45,9 +39,6 @@ var kinds = map[string]ResWriter{
 	"packer":    new(PackerWriter),
 }
 
-//go:embed *.tmpl
-var templatesFS embed.FS
-
 func factory(kind string) ResWriter {
 	writer, exists := kinds[kind]
 	if !exists {
@@ -58,18 +49,13 @@ func factory(kind string) ResWriter {
 	return writer
 }
 
-func getTemplate(filename string) string {
-	// Create path to template from the embedded template FS
-	tmplText, err := templatesFS.ReadFile(filename)
-	if err != nil {
-		log.Fatalf("reswriter: %v", err)
-	}
-	return string(tmplText)
-}
-
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
 		for iRes, resource := range grp.Resources {
+			if sourcereader.IsGitHubPath(resource.Source) {
+				continue
+			}
+
 			/* Copy source files */
 			resourceName := filepath.Base(resource.Source)
 			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
@@ -104,11 +90,11 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
+func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) error {
 	blueprintio := blueprintio.GetBlueprintIOLocal()
 	bpDirectoryPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName)
 	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
-		log.Fatalf("failed to create a directory for blueprints: %v", err)
+		return fmt.Errorf("failed to create a directory for blueprints: %w", err)
 	}
 
 	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
@@ -116,8 +102,9 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
 		if writer.getNumResources() > 0 {
 			err := writer.writeResourceGroups(yamlConfig, bpDirectory)
 			if err != nil {
-				log.Fatalf("error writing resources to blueprint: %v", err)
+				return fmt.Errorf("error writing resources to blueprint: %w", err)
 			}
 		}
 	}
+	return nil
 }

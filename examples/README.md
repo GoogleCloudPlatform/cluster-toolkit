@@ -103,16 +103,45 @@ Quota required for this example:
 
 ### spack-gromacs.yaml
 
-Spack is a HPC software package manager. This example creates a
-[Spack](../resources/scripts/spack-install/README.md) build VM and a
-workstation for testing and validating a spack build. The build VM will install
-and configure spack, and install gromacs with spack (as configured in the
-spack-install resource). This happens in a shared location (/apps). Then the
-build VM will shutdown. This build leverages the startup-script resource and
-can be applied in any cluster by using the output of spack-install or
-startup-script resources.
+Spack is a HPC software package manager. This example creates a small slurm
+cluster with software installed with
+[Spack](../resources/scripts/spack-install/README.md) The controller will
+install and configure spack, and install [gromacs](https://www.gromacs.org/)
+using spack. Spack is installed in a shared location (/apps) via filestore. This
+build leverages the startup-script resource and can be applied in any cluster by
+using the output of spack-install or startup-script resources.
 
-Note: Installing spack compilers and libraries in this example can take 1-2
+The installation will occur as part of the slurm startup-script, a warning
+message will be displayed upon SSHing to the login node indicating
+that configuration is still active. To track the status of the overall
+startup script, run the following command on the login node:
+
+```shell
+sudo tail -f /var/log/messages
+```
+
+Spack specific installation logs will be sent to the spack_log as configured in
+your YAML, by default /var/log/spack.log in the login node.
+
+```shell
+sudo tail -f /var/log/spack.log
+```
+
+Once Slurm and spack installation is complete, spack will available on the login
+node. To use spack in the controller or compute nodes, the following command
+must be run first:
+
+```shell
+source /apps/spack/share/spack/setup-env.sh
+```
+
+To load the gromacs module, use spack:
+
+```shell
+spack load gromacs
+```
+
+ **_NOTE:_** Installing spack compilers and libraries in this example can take 1-2
 hours to run on startup. To decrease this time in future deployments, consider
 including a spack build cache as described in the comments of the example.
 
@@ -122,6 +151,50 @@ Creates a simple omnia cluster, with an
 omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
+
+### image-builder.yaml
+
+This Blueprint helps create custom VM images by applying necessary software and
+configurations to existing images, such as the [HPC VM Image][hpcimage].
+Using a custom VM image can be more scalable than installing software using
+boot-time startup scripts because
+
+* it avoids reliance on continued availability of package repositories
+* VMs will join an HPC cluster and execute workloads more rapidly due to reduced
+  boot-time configuration
+* machines are guaranteed to boot with a static set of packages available when
+  the custom image was created. No potential for some machines to be upgraded
+  relative to other based upon their creation time!
+
+[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+
+**Note**:  this example relies on the default behavior of the Toolkit to derive
+naming convention for networks and other resources from the `deployment_name`.
+
+#### Custom Network (resource group)
+
+A tool called [Packer](https://packer.io) builds custom VM images by creating
+short-lived VMs, executing scripts on them, and saving the boot disk as an
+image that can be used by future VMs. The short-lived VM must operate in a
+network that
+
+* has outbound access to the internet for downloading software
+* has SSH access from the machine running Packer so that local files/scripts
+  can be copied to the VM
+
+This resource group creates such a network, while using [Cloud Nat][cloudnat]
+and [Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
+connections without exposing the machine to the internet on a public IP address.
+
+[cloudnat]: https://cloud.google.com/nat/docs/overview
+[iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
+
+#### Packer Template (resource group)
+
+The Packer template in this resource group accepts a list of Ansible playbooks
+which will be run on the VM to customize it.  Although it defaults to creating
+VMs with a public IP address, it can be easily set to use [IAP][iap] for SSH
+tunneling following the [example in its README](../resources/packer/custom-image/README.md).
 
 ## Config Schema
 
@@ -177,6 +250,80 @@ resource_groups:
   # GitHub resource over HTTPS, prefixed with github.com
   - source: github.com/org/repo//resources/role/resource-name
 ```
+
+## Writing Config YAML
+
+The input YAML is composed of 3 primary parts, top-level parameters, global variables and resources group. These are described in more detail below.
+
+### Top Level Parameters
+
+* **blueprint_name** (required): Name of this set of blueprints. This also defines the name of the directory the blueprints will be created into.
+
+### Global Variables
+
+```yaml
+vars:
+  region: "us-west-1"
+  labels:
+    "user-defined-global-label": "slurm-cluster"
+  ...
+```
+
+Global variables are set under the vars field at the top level of the YAML.
+These variables can be explicitly referenced in resources as
+[Config Variables](#config-variables). Any resource setting (inputs) not explicitly provided and
+matching exactly a global variable name will automatically be set to these
+values.
+
+Global variables should be used with care. Resource default settings with the
+same name as a global variable and not explicitly set will be overwritten by the
+global variable.
+
+The global “labels” variable is a special case as it will be appended to labels
+found in resource settings, whereas normally an explicit resource setting would
+be left unchanged. This ensures that global labels can be set alongside resource
+specific labels. Precedence is given to the resource specific labels if a
+collision occurs. Default resource labels will still be overwritten by global
+labels.
+
+The HPC Toolkit uses special reserved labels for monitoring each deployment.
+These are set automatically, but can be overridden through global vars or
+resource settings. They include:
+
+* ghpc_blueprint: The name of the blueprint the deployment was created from
+* ghpc_deployment: The name of the specific deployment of the blueprint
+* ghpc_role: The role of a given resource, e.g. compute, network, or
+  file-system. By default, it will be taken from the folder immediately
+  containing the resource. Example: A resource with the source path of
+  `./resources/network/vpc` will have `network` as its `ghpc_role` label by
+  default.
+
+### Resource Groups
+
+Resource groups allow distinct sets of resources to be defined and deployed as a
+group. A resource group can only contain resources of a single kind, for example
+a resource group may not mix packer and terraform resources.
+
+For terraform resources, a top-level main.tf will be created for each resource
+group so different groups can be created or destroyed independently.
+
+A resource group is made of 2 fields, group and resources. They are described in
+more detail below.
+
+#### Group
+
+Defines the name of the group. Each group must have a unique name. The name will
+be used to create the subdirectory in the blueprint directory that the resource
+group will be defined in.
+
+#### Resources
+
+Resources are the building blocks of an HPC environment. They can be composed to
+create complex deployments using the config YAML. Several resources are provided
+by default in the [resources](../resources/README.md) folder.
+
+To learn more about how to refer to a resource in a YAML, please consult the
+[resources README file.](../resources/README.md)
 
 ## Variables
 
@@ -244,12 +391,3 @@ everything inside will be provided as is to the resource.
 Whenever possible, config variables are preferred over literal variables. `ghpc`
 will perform basic validation making sure all config variables are defined
 before creating a blueprint making debugging quicker and easier.
-
-## Resources
-
-Resources are the building blocks of an HPC environment. They can be composed to
-create complex deployments using the config YAML. Several resources are provided
-by default in the [resources](../resources/README.md) folder.
-
-To learn more about how to refer to a resource in a YAML, please consult the
-[resources README file.](../resources/README.md)

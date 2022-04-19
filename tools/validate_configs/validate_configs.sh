@@ -38,7 +38,7 @@ run_test() {
 			exit 1
 		}
 	cd "${cwd}"
-	./ghpc create "${tmpdir}"/"${exampleFile}" >/dev/null ||
+	./ghpc create -l IGNORE "${tmpdir}"/"${exampleFile}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating blueprint with ghpc for ${exampleFile}"
 			exit 1
@@ -50,6 +50,10 @@ run_test() {
 	}
 	for folder in ./*; do
 		cd "$folder"
+		pkrdirs=()
+		while IFS= read -r -d $'\n'; do
+			pkrdirs+=("$REPLY")
+		done < <(find . -name "*.pkr.hcl" -printf '%h\n' | sort -u)
 		if [ -f 'main.tf' ]; then
 			tfpw=$(pwd)
 			terraform init -no-color -backend=false >"${exampleFile}.init" ||
@@ -62,8 +66,16 @@ run_test() {
 					echo "*** ERROR: terraform validate failed for ${example}, logs in ${tfpw}"
 					exit 1
 				}
+		elif [ ${#pkrdirs[@]} -gt 0 ]; then
+			for pkrdir in "${pkrdirs[@]}"; do
+				packer validate -syntax-only "${pkrdir}" >/dev/null ||
+					{
+						echo "*** ERROR: packer validate failed for ${example}"
+						exit 1
+					}
+			done
 		else
-			echo "terraform not found in folder ${BLUEPRINT}/${folder}. Skipping."
+			echo "neither packer nor terraform found in folder ${BLUEPRINT}/${folder}. Skipping."
 		fi
 		cd .. # back to blueprint folder
 	done
@@ -77,10 +89,27 @@ run_test() {
 }
 
 check_background() {
-	if ! wait -n; then
-		wait
-		echo "*** ERROR: a test failed. Exiting with status 1."
-		exit 1
+	# "wait -n" was introduced in bash 4.3; support CentOS 7: 4.2 and MacOS: 3.2!
+	if [[ "${BASH_VERSINFO[0]}" -ge 5 || "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -ge 3 ]]; then
+		if ! wait -n; then
+			wait
+			echo "*** ERROR: a test failed. Exiting with status 1."
+			exit 1
+
+		fi
+	else
+		failed=0
+		for pid in "${pids[@]}"; do
+			if ! wait "$pid"; then
+				failed=1
+			fi
+		done
+		pids=()
+
+		if [[ $failed -eq 1 ]]; then
+			echo "*** ERROR: a test failed. Exiting with status 1."
+			exit 1
+		fi
 	fi
 }
 
@@ -88,11 +117,13 @@ CONFIGS=$(find examples/ tools/validate_configs/test_configs/ -name "*.yaml" -ty
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
+pids=()
 for example in $CONFIGS; do
 	JNUM=$(jobs | wc -l)
 	# echo "$JNUM jobs running"
 	if [ "$JNUM" -lt "$NPROCS" ]; then
 		run_test "$example" &
+		pids+=("$!")
 	else
 		# echo "Reached max number of parallel tests (${JNUM}). Waiting for one to finish."
 		check_background

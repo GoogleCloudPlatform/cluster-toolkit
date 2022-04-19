@@ -19,7 +19,7 @@ blueprint_name: omnia-cluster
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: omnia-cluster
-  zone: us-central1-a
+  zone: us-central1-c
   region: us-central1
 
 resource_groups:
@@ -96,3 +96,12 @@ resource_groups:
     settings:
       name_prefix: omnia-compute
       instance_count: 2
+
+  # This resource simply makes terraform wait until the startup script is complete
+  - source: resources/scripts/wait-for-startup
+    kind: terraform
+    id: wait
+    use:
+    - network
+    settings:
+      instance_name: ((module.manager.name[0]))

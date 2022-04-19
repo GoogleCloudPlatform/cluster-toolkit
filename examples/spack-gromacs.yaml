@@ -14,13 +14,13 @@
 
 ---
 
-blueprint_name: spack-build
+blueprint_name: spack-gromacs
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: spack
+  deployment_name: spack-gromacs
   region: us-central1
-  zone: us-central1-a
+  zone: us-central1-c
 
 resource_groups:
 - group: primary
@@ -29,40 +29,43 @@ resource_groups:
     kind: terraform
     id: network1
 
+  ## Filesystems
   - source: resources/file-system/filestore
     kind: terraform
     id: appsfs
     use: [network1]
     settings:
-      local_mount: /apps
+      local_mount: /sw
 
+  - source: resources/file-system/filestore
+    kind: terraform
+    id: homefs
+    use: [network1]
+    settings:
+      local_mount: /home
+
+  ## Install Scripts
   - source: resources/scripts/spack-install
     kind: terraform
     id: spack
     settings:
-      install_dir: /apps/spack
+      install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
       configs:
+      - type: single-config
+        scope: defaults
+        value: "config:build_stage:/apps/spack/spack-stage"
       - type: file
-        scope: site
+        scope: defaults
         value: |
           modules:
             tcl:
               hash_length: 0
-              whitelist:
-                - gcc
-              blacklist:
-                - '%gcc@4.8.5'
               all:
                 conflict:
                   - '{name}'
-                filter:
-                  environment_blacklist:
-                    - "C_INCLUDE_PATH"
-                    - "CPLUS_INCLUDE_PATH"
-                    - "LIBRARY_PATH"
               projections:
                 all: '{name}/{version}-{compiler.name}-{compiler.version}'
       compilers:
@@ -73,8 +76,8 @@ resource_groups:
       # Uncomment and update the name and path to add a shared or personal Spack
       # cache location to speed up future deployments.
       # spack_cache_url:
-      #  - mirror_name: gcs_cache
-      #    mirror_url: gs://bucket-name/...
+      # - mirror_name: gcs_cache
+      #   mirror_url: gs://bucket-name/...
 
   - source: resources/scripts/startup-script
     kind: terraform
@@ -84,55 +87,38 @@ resource_groups:
       - type: shell
         source: modules/startup-script/examples/install_ansible.sh
         destination: install_ansible.sh
-      - type: shell
-        content: $(appsfs.install_nfs_client)
-        destination: install-nfs.sh
-      - type: ansible-local
-        source: modules/startup-script/examples/mount.yaml
-        destination: "mount.yaml"
-      - type: ansible-local
-        source: modules/spack-install/scripts/install_spack_deps.yml
-        destination: install_spack_deps.yml
-      - type: shell
-        content: $(spack.startup_script)
-        destination: install_spack.sh
-      - type: shell
-        destination: shutdown.sh
-        content: shutdown -h
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
 
-  - source: resources/compute/simple-instance
+  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: spack-build
+    id: compute_partition
     use:
     - network1
+    - homefs
     - appsfs
-    - spack-startup
     settings:
-      name_prefix: spack-builder
-      machine_type: n2-standard-8
+      partition_name: compute
+      max_node_count: 20
 
-  - source: resources/scripts/startup-script
+  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: mount-startup
-    settings:
-      runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
-      - type: shell
-        content: $(appsfs.install_nfs_client)
-        destination: install-nfs.sh
-      - type: ansible-local
-        source: modules/startup-script/examples/mount.yaml
-        destination: "mount.yaml"
-
-  - source: resources/compute/simple-instance
-    kind: terraform
-    id: workstation
+    id: slurm_controller
     use:
     - network1
+    - homefs
     - appsfs
-    - mount-startup
+    - compute_partition
     settings:
-      name_prefix: workstation
-      machine_type: n2-standard-8
+      login_node_count: 1
+
+  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+    kind: terraform
+    id: slurm_login
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - slurm_controller
+    settings:
+      login_startup_script: $(spack-startup.startup_script)
