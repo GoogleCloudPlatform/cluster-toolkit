@@ -53,7 +53,6 @@ def RESTRICT_IF_CLOUD_ACTIVE(collector, field, sub_objs, using):
     models.RESTRICT(collector, field, restrict_objs, using)
     models.SET_NULL(collector, field, set_null_objs, using)
 
-
 def RFC1035Validator(maxLength, message):
     if not maxLength:
         regex = re.compile(f'^[a-z][-a-z0-9]*[a-z0-9])$')
@@ -63,6 +62,12 @@ def RFC1035Validator(maxLength, message):
     else:
         regex = f'^[a-z]([-a-z0-9]{{0,{maxLength-2}}}[a-z0-9])$'
     return RegexValidator(regex, message=message)
+
+def CIDRValidator():
+    regex = r'^(10(\.(25[0-5]|2[0-4][0-9]|1[0-9]{1,2}|[0-9]{1,2})){3}|((172\.(1[6-9]|2[0-9]|3[01]))|192\.168)(\.(25[0-5]|2[0-4][0-9]|1[0-9]{1,2}|[0-9]{1,2})){2})(\/([0-9]|[1-2][0-9]|3[0-2]))$'
+    message = 'A valid CIDR block has to be provided'
+    return RegexValidator(regex, message=message)
+
 
 # Create your models here.
 
@@ -320,6 +325,7 @@ class VirtualSubnet(CloudResource):
     cidr = models.CharField(
         max_length=18,
         help_text = 'CIDR for this subnet',
+        validators = [CIDRValidator()],
     )
 
     def __str__(self):
