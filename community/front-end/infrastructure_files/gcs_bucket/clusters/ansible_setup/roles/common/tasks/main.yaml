@@ -3,6 +3,7 @@
   yum:
     name:
     - environment-modules
+  when: ansible_distribution == 'CentOS'
 
 - name: Create Modules directory
   file:
@@ -18,6 +19,7 @@
     owner: root
     mode: 0755
     force: False
+  when: ansible_distribution == 'CentOS'
 
 - name: Enable su to OS Login
   lineinfile:
