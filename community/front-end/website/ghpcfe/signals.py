@@ -12,31 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from django.db.models.signals import *
+"""Signal handlers for model state"""
+
+from django.db.models.signals import pre_save, post_delete
 from django.dispatch import receiver
-from .models import Cluster, Filesystem, FilesystemExport, MountPoint
-from .models import VirtualNetwork, VirtualSubnet
+from .models import Cluster, VirtualNetwork
 
 
 @receiver(pre_save, sender=VirtualNetwork)
-def sync_VN_subnet_state(sender, **kwargs):
-    vpc = kwargs['instance']
+def sync_vnet_subnet_state(unused_sender, **kwargs):
+    vpc = kwargs["instance"]
     for sn in vpc.subnets.all():
         sn.cloud_state = vpc.cloud_state
         sn.save()
-    
 
 
 @receiver(post_delete, sender=Cluster)
-def delete_cluster_extras(sender, **kwargs):
-    cluster = kwargs['instance']
+def delete_cluster_extras(unused_sender, **kwargs):
+    cluster = kwargs["instance"]
     cluster.shared_fs.delete()
     if cluster.controller_node:
         cluster.controller_node.delete()
 
+
 @receiver(pre_save, sender=Cluster)
-def sync_cluster_fs_ip(sender, **kwargs):
-    cluster = kwargs['instance']
+def sync_cluster_fs_ip(unused_sender, **kwargs):
+    cluster = kwargs["instance"]
     if cluster.subnet:
         cluster.cloud_region = cluster.subnet.cloud_region
     if cluster.shared_fs:
@@ -49,6 +50,7 @@ def sync_cluster_fs_ip(sender, **kwargs):
         cluster.shared_fs.internal_name = f"{cluster.name} SharedFS"
         cluster.shared_fs.subnet = cluster.subnet
         if cluster.controller_node:
-            cluster.shared_fs.hostname_or_ip = cluster.controller_node.internal_ip
+            cluster.shared_fs.hostname_or_ip = (
+                cluster.controller_node.internal_ip
+            )
         cluster.shared_fs.save()
-

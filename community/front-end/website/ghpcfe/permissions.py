@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Permission handling view mixin classes"""
+
 from rest_framework import permissions
 from .models import Role
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -29,6 +31,5 @@ class CredentialPermission(permissions.BasePermission):
 
 
 class SuperUserRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-
     def test_func(self):
         return self.request.user.is_superuser

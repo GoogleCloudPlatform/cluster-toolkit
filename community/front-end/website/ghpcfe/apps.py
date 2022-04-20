@@ -12,13 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Top level Django app definitions"""
+
 from django.apps import AppConfig
 from .cluster_manager import c2
 
-class ghpcfeConfig(AppConfig):
-    name = 'ghpcfe'
-    default_auto_field = 'django.db.models.AutoField'
+class GHPCFEConfig(AppConfig):
+    name = "ghpcfe"
+    default_auto_field = "django.db.models.AutoField"
 
     def ready(self):
-        import ghpcfe.signals
+        # Has side effect of registering various receiver callbacks
+        import ghpcfe.signals # pylint:disable=unused-import,import-outside-toplevel
+
         c2.startup()
