@@ -92,6 +92,7 @@ appear similar to:
 
 ```shell
 terraform -chdir=hpc-cluster-small/primary init
+terraform -chdir=hpc-cluster-small/primary validate
 terraform -chdir=hpc-cluster-small/primary apply
 ```
 
