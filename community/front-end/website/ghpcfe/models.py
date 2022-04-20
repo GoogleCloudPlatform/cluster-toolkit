@@ -74,17 +74,17 @@ def RFC1035Validator(maxLength, message):  # pylint: disable=invalid-name
 def CIDRValidator(value):
     try:
         net = ipaddress.IPv4Network(value)
-    except Exception:
+    except ipaddress.AddressValueError as err:
         raise ValidationError(
             "%(value)s is not a valid CIDR. Please provide a valid CIDR.",
             params={"value": value},
-        )
+        ) from err
     if not net.is_private:
         raise ValidationError(
             "Only private IP addresses can be used in a VPC network."
         )
-    else:
-        return value
+
+    return value
 
 
 class Role(models.Model):
@@ -197,7 +197,7 @@ class User(AbstractUser):
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def user_post_save(unused_sender, instance=None, created=False, **kwargs):
+def user_post_save(sender, instance=None, created=False, **kwargs): #pylint: disable=invalid-name
     """Initialise certain information for new users"""
     if created:
         # generate API token
@@ -207,7 +207,7 @@ def user_post_save(unused_sender, instance=None, created=False, **kwargs):
             instance.roles.set([Role.NORMALUSER])
 
 
-def validate_domain_or_email(value):
+def validate_domain_or_email(value): #pylint: disable=invalid-name
     tmp = value
     if value.startswith("@"):
         tmp = "dummy" + tmp
