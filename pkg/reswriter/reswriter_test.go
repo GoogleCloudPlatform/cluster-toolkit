@@ -182,6 +182,7 @@ func (s *MySuite) TestWriteBlueprint(c *C) {
 	c.Check(err, NotNil)
 }
 
+// tfwriter.go
 func (s *MySuite) TestRestoreTfState(c *C) {
 	// set up dir structure
 	//
@@ -202,7 +203,8 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	emptyFile, _ := os.Create(prevStateFile)
 	emptyFile.Close()
 
-	restoreTfState(bpDir)
+	testWriter := TFWriter{}
+	testWriter.restoreState(bpDir)
 
 	// check state file was moved to current resource group dir
 	curStateFile := filepath.Join(curResourceGroup, tfStateFileName)
@@ -210,7 +212,6 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	c.Check(err, IsNil)
 }
 
-// tfwriter.go
 func (s *MySuite) TestGetTypeTokens(c *C) {
 	// Success Integer
 	tok := getTypeTokens(cty.NumberIntVal(-1))

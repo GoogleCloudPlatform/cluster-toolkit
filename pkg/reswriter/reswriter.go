@@ -31,7 +31,6 @@ import (
 const (
 	hiddenGhpcDirName        = ".ghpc"
 	prevResourceGroupDirName = "previous_resource_groups"
-	tfStateFileName          = "terraform.tfstate"
 )
 
 // ResWriter interface for writing resources to a blueprint
@@ -39,6 +38,7 @@ type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
 	writeResourceGroups(*config.YamlConfig, string) error
+	restoreState(bpDir string) error
 }
 
 var kinds = map[string]ResWriter{
@@ -66,17 +66,14 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string) error {
 	copySource(bpDir, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
-			err := writer.writeResourceGroups(yamlConfig, outputDir)
-			if err != nil {
+			if err := writer.writeResourceGroups(yamlConfig, outputDir); err != nil {
 				return fmt.Errorf("error writing resources to blueprint: %w", err)
+			}
+			if err := writer.restoreState(bpDir); err != nil {
+				return fmt.Errorf("Error trying to restore terraform state: %w", err)
 			}
 		}
 	}
-
-	if err := restoreTfState(bpDir); err != nil {
-		return fmt.Errorf("Error trying to restore terraform state: %w", err)
-	}
-
 	return nil
 }
 
@@ -170,27 +167,6 @@ func prepBpDir(bpDir string, overwrite bool) error {
 		dest := filepath.Join(prevGroupDir, f.Name())
 		if err := os.Rename(src, dest); err != nil {
 			return fmt.Errorf("Error while moving previous resource groups: failed on %s: %w", f.Name(), err)
-		}
-	}
-	return nil
-}
-
-func restoreTfState(bpDir string) error {
-	prevResourceGroupPath := filepath.Join(bpDir, hiddenGhpcDirName, prevResourceGroupDirName)
-	files, err := ioutil.ReadDir(prevResourceGroupPath)
-	if err != nil {
-		return fmt.Errorf("Error trying to read previous resources in %s, %w", prevResourceGroupPath, err)
-	}
-
-	for _, f := range files {
-		src := filepath.Join(prevResourceGroupPath, f.Name(), tfStateFileName)
-		dest := filepath.Join(bpDir, f.Name(), tfStateFileName)
-
-		if bytesRead, err := ioutil.ReadFile(src); err == nil {
-			err = ioutil.WriteFile(dest, bytesRead, 0644)
-			if err != nil {
-				return fmt.Errorf("Failed to write previous state file %s, %w", dest, err)
-			}
 		}
 	}
 	return nil
