@@ -74,7 +74,9 @@ def RFC1035Validator(maxLength, message):  # pylint: disable=invalid-name
 def CIDRValidator(value):
     try:
         net = ipaddress.IPv4Network(value)
-    except ipaddress.AddressValueError as err:
+
+    # Note: ipaddress throws exception types beyond those documented
+    except Exception as err:  # pylint: disable=broad-except
         raise ValidationError(
             "%(value)s is not a valid CIDR. Please provide a valid CIDR.",
             params={"value": value},
@@ -197,7 +199,12 @@ class User(AbstractUser):
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def user_post_save(sender, instance=None, created=False, **kwargs): #pylint: disable=unused-argument
+def user_post_save(  # pylint: disable=invalid-name,unused-argument
+    sender,
+    instance=None,
+    created=False,
+    **kwargs,
+):
     """Initialise certain information for new users"""
     if created:
         # generate API token
@@ -207,7 +214,7 @@ def user_post_save(sender, instance=None, created=False, **kwargs): #pylint: dis
             instance.roles.set([Role.NORMALUSER])
 
 
-def validate_domain_or_email(value): #pylint: disable=invalid-name
+def validate_domain_or_email(value):  # pylint: disable=invalid-name
     tmp = value
     if value.startswith("@"):
         tmp = "dummy" + tmp
