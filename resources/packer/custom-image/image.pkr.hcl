@@ -14,6 +14,7 @@
 
 locals {
   subnetwork_name = var.subnetwork_name != null ? var.subnetwork_name : "${var.deployment_name}-primary-subnet"
+  metadata        = var.startup_script == null ? null : { startup-script = var.startup_script }
 }
 
 source "googlecompute" "hpc_centos_7" {
@@ -34,6 +35,8 @@ source "googlecompute" "hpc_centos_7" {
   use_iap                 = var.use_iap
   use_os_login            = var.use_os_login
   zone                    = var.zone
+  metadata                = local.metadata
+  wrap_startup_script     = var.wrap_startup_script
 }
 
 build {

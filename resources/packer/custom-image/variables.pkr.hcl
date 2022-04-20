@@ -128,3 +128,15 @@ variable "ansible_playbooks" {
   }))
   default = []
 }
+
+variable "startup_script" {
+  description = "Startup script (as raw string) used to build the custom VM image"
+  type        = string
+  default     = null
+}
+
+variable "wrap_startup_script" {
+  description = "Wrap startup script with Packer-generated wrapper"
+  type        = bool
+  default     = true
+}
