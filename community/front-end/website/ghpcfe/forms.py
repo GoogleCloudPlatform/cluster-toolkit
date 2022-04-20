@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class UserCreationForm(BaseUserCreationForm):
     """Custom UserCreationForm"""
 
-    class Meta(UserCreationForm):
+    class Meta(BaseUserCreationForm):
         model = User
         fields = ("email",)
 
