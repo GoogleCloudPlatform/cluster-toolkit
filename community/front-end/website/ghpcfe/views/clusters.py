@@ -32,7 +32,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ValidationError
 from django.http import (
     HttpResponseRedirect,
-    JsonResponse,
+    Json_response,
     HttpResponseNotFound,
 )
 from django.urls import reverse
@@ -670,7 +670,7 @@ class ClusterViewSet(viewsets.ModelViewSet):
             }
             for mp in cluster.mount_points.all()
         ]
-        return JsonResponse({"mounts": mounts})
+        return Json_response({"mounts": mounts})
 
 
 class InstancePricingViewSet(viewsets.ViewSet):
@@ -691,12 +691,12 @@ class InstancePricingViewSet(viewsets.ViewSet):
             cluster.cloud_zone,
             instance_type,
         )
-        return JsonResponse(
+        return Json_response(
             {"instance": instance_type, "price": price, "currency": "USD"}
         )  # TODO: Currency
 
     def list(self, request):
-        return JsonResponse({})
+        return Json_response({})
 
 
 class InstanceAvailabilityViewSet(viewsets.ViewSet):
@@ -717,18 +717,18 @@ class InstanceAvailabilityViewSet(viewsets.ViewSet):
                 "GCP", cluster.cloud_credential.detail
             )
             if zone not in region_info.get(region, []):
-                return JsonResponse({})
+                return Json_response({})
 
             machine_info = cloud_info.get_machine_types(
                 "GCP", cluster.cloud_credential.detail, region, zone
             )
-            return JsonResponse(machine_info.get(pk, {}))
+            return Json_response(machine_info.get(pk, {}))
 
         # Want to fail gracefully here
         except Exception:  # pylint: disable=broad-except
             pass
 
-        return JsonResponse({})
+        return Json_response({})
 
     def list(self, request):
         cluster = get_object_or_404(
@@ -747,19 +747,19 @@ class InstanceAvailabilityViewSet(viewsets.ViewSet):
                     zone,
                     region,
                 )
-                return JsonResponse({})
+                return Json_response({})
 
             machine_info = cloud_info.get_machine_types(
                 "GCP", cluster.cloud_credential.detail, region, zone
             )
-            return JsonResponse({"machine_types": list(machine_info.keys())})
+            return Json_response({"machine_types": list(machine_info.keys())})
 
         # Can't do a lot about API failures, just log it and move one
         except Exception as err:  # pylint: disable=broad-except
             logger.exception("Exception during cloud API query:", exc_info=err)
             pass
 
-        return JsonResponse({})
+        return Json_response({})
 
 
 # Other supporting views
@@ -891,7 +891,7 @@ class BackendSyncCluster(LoginRequiredMixin, generic.View):
         cluster = get_object_or_404(Cluster, pk=pk)
         cluster.status = "i"
         cluster.save()
-        c2.send_command(pk, "SYNC", data={}, onResponse=response)
+        c2.send_command(pk, "SYNC", data={}, on_response=response)
 
         return HttpResponseRedirect(
             reverse("cluster-detail", kwargs={"pk": pk})
@@ -922,7 +922,7 @@ class BackendAuthUserGCP(BackendAsyncView):
         record = await self.create_task(
             "Auth User GCP", cluster, request.user.username
         )
-        return JsonResponse({"taskid": record.id})
+        return Json_response({"taskid": record.id})
 
 
 class BackendAuthUserGCP2(LoginRequiredMixin, generic.View):
@@ -993,13 +993,13 @@ class BackendAuthUserGCP2(LoginRequiredMixin, generic.View):
         comm_id = c2.send_command(
             cluster_id,
             "REGISTER_USER_GCS",
-            onResponse=callback,
+            on_response=callback,
             data=message_data,
         )
         task.data["comm_id"] = comm_id
         task.save()
 
-        return JsonResponse({"taskid": task_id})
+        return Json_response({"taskid": task_id})
 
     def post(self, request, pk):
         cluster = get_object_or_404(Cluster, pk=pk)
@@ -1025,7 +1025,7 @@ class BackendAuthUserGCP2(LoginRequiredMixin, generic.View):
         except KeyError as ke:
             logger.error("Missing POST data", exc_info=ke)
             return HttpResponseNotFound()
-        return JsonResponse({})
+        return Json_response({})
 
 
 class AuthUserGCP(LoginRequiredMixin, generic.View):

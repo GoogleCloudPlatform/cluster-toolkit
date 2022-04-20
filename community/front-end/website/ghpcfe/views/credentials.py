@@ -13,7 +13,7 @@
 # limitations under the License.
 """ credentials.py """
 
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseRedirect, Json_response
 from django.urls import reverse, reverse_lazy
 from django.views import generic
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
@@ -136,7 +136,7 @@ class CredentialViewSet(viewsets.ModelViewSet):
             credential = serializer.save()
             data = serializer.data
             data.update({"id": credential.id})
-            return JsonResponse(data)
+            return Json_response(data)
         else:
             print(serializer.errors)
             return Response(
@@ -151,5 +151,5 @@ class CredentialValidateAPIView(APIView):
         credential = request.data.__getitem__("detail").rstrip()
         result = validate_credential.validate_credential("GCP", credential)
         res = {"validated": result}
-        return JsonResponse(res)
+        return Json_response(res)
 

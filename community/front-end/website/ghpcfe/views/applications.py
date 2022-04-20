@@ -403,7 +403,7 @@ class BackendCustomAppInstall(LoginRequiredMixin, generic.View):
         c2.send_command(
             cluster_id,
             "INSTALL_APPLICATION",
-            onResponse=response,
+            on_response=response,
             data={
                 "app_id": app.id,
                 "name": app.name,
@@ -461,7 +461,7 @@ class BackendSpackInstall(LoginRequiredMixin, generic.View):
         c2.send_command(
             cluster_id,
             "SPACK_INSTALL",
-            onResponse=response,
+            on_response=response,
             data={
                 "app_id": app.id,
                 "name": app.spack_name,

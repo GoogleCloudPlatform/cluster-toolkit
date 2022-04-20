@@ -506,7 +506,7 @@ class BackendJobRun(LoginRequiredMixin, generic.View):
             message_data["gpus_per_node"] = job.partition.GPU_per_node
 
         c2.send_command(
-            cluster_id, "RUN_JOB", onResponse=response, data=message_data
+            cluster_id, "RUN_JOB", on_response=response, data=message_data
         )
         messages.success(request, "Job sent to Cluster")
         return HttpResponseRedirect(reverse("job-detail", kwargs={"pk": pk}))

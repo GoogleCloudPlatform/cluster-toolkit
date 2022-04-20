@@ -40,12 +40,12 @@ from ..models import (
 from ..forms import WorkbenchForm, WorkbenchMountPointForm
 from ..cluster_manager import cloud_info
 from ..cluster_manager import workbenchinfo
-from ..cluster_manager.create_workbench import (
+from ..cluster_manager.workbench_operations import (
     create_workbench,
     update_workbench,
+    start_workbench,
+    destroy_workbench,
 )
-from ..cluster_manager.start_workbench import start_workbench
-from ..cluster_manager.destroy_workbench import destroy_workbench
 from .asyncview import BackendAsyncView
 
 
@@ -206,7 +206,8 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
                     .values_list("pk", flat=True)
                 )
                 field.queryset = FilesystemExport.objects.filter(
-                    filesystem__in=list(fsquery))
+                    filesystem__in=list(fsquery)
+                )
             return field
 
         # This creates a new class on the fly

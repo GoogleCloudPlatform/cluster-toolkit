@@ -18,9 +18,11 @@ from django.db.models.signals import pre_save, post_delete
 from django.dispatch import receiver
 from .models import Cluster, VirtualNetwork
 
+# Pylint misses the sender decorator behaviour here
+#pylint: disable=unused-argument
 
 @receiver(pre_save, sender=VirtualNetwork)
-def sync_vnet_subnet_state(unused_sender, **kwargs):
+def sync_vnet_subnet_state(sender, **kwargs):
     vpc = kwargs["instance"]
     for sn in vpc.subnets.all():
         sn.cloud_state = vpc.cloud_state
@@ -28,7 +30,7 @@ def sync_vnet_subnet_state(unused_sender, **kwargs):
 
 
 @receiver(post_delete, sender=Cluster)
-def delete_cluster_extras(unused_sender, **kwargs):
+def delete_cluster_extras(sender, **kwargs):
     cluster = kwargs["instance"]
     cluster.shared_fs.delete()
     if cluster.controller_node:
@@ -36,7 +38,7 @@ def delete_cluster_extras(unused_sender, **kwargs):
 
 
 @receiver(pre_save, sender=Cluster)
-def sync_cluster_fs_ip(unused_sender, **kwargs):
+def sync_cluster_fs_ip(sender, **kwargs):
     cluster = kwargs["instance"]
     if cluster.subnet:
         cluster.cloud_region = cluster.subnet.cloud_region

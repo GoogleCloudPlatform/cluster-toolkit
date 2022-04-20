@@ -13,28 +13,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Pause cluster logic (not yet implemented)"""
 
-import configparser
 
 from .utils import load_cluster_info, run_terraform
 
 
 def pause_cluster(args):
-    '''
+    """
     Pause or un-pause a cluster.
 
         Parameters:
             args - an object with the following members:
                 'cluster_id' - id # of the compute cluster
                 'accessKey' - key to update database  [not really used ?]
-    '''
+    """
     load_cluster_info(args)
 
     if args.cloud == "google":
         raise NotImplementedError("Pausing on GCP not yet implemented")
-        #pause_cluster_gcp(args)
+        # pause_cluster_gcp(args)
     else:
-        raise NotImplementedError(f"Pausing on {args.cloud} not yet implemented")
+        raise NotImplementedError(
+            f"Pausing on {args.cloud} not yet implemented"
+        )
 
-    run_terraform(args.cluster_dir / 'terraform' / args.cloud, 'refresh')
-
+    run_terraform(args.cluster_dir / "terraform" / args.cloud, "refresh")
