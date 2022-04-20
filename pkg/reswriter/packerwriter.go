@@ -43,7 +43,9 @@ func (w *PackerWriter) addNumResources(value int) {
 func printPackerInstructions(grpPath string) {
 	printInstructionsPreamble("Packer", grpPath)
 	fmt.Printf("  cd %s\n", grpPath)
-	fmt.Println("  packer build image.pkr.hcl")
+	fmt.Println("  packer init .")
+	fmt.Println("  packer validate .")
+	fmt.Println("  packer build .")
 }
 
 // writeResourceLevel writes any needed files to the resource layer

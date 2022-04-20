@@ -49,6 +49,7 @@
         cmd: "{{ item }}"
         chdir: "{{ workspace }}/{{ blueprint_dir }}/packer/custom-image"
       with_items:
+      - packer init .
       - packer validate .
       - packer build .
     - name: Delete VM Image

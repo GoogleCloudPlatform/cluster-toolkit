@@ -136,6 +136,7 @@ you can use the following command to deploy a Packer-based resource group:
 
 ```shell
 cd <blueprint-directory>/<packer-group>/<custom-vm-image>
+packer init .
 packer build .
 ```
 
