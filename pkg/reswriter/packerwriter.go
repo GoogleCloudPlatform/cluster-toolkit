@@ -87,3 +87,8 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig, bpDirectory string) error {
 	return w.writeResourceLevel(yamlConfig, bpDirectory)
 }
+
+func (w PackerWriter) restoreState(bpDir string) error {
+	// TODO: implement state restoration for Packer
+	return nil
+}

@@ -17,6 +17,7 @@ limitations under the License.
 package reswriter
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
@@ -90,6 +91,7 @@ func getYamlConfigForTest() config.YamlConfig {
 	}
 	testResourceGroups := []config.ResourceGroup{
 		{
+			Name:      "test_resource_group",
 			Resources: []config.Resource{testResource, testResourceWithLabels},
 		},
 	}
@@ -104,6 +106,70 @@ func getYamlConfigForTest() config.YamlConfig {
 
 // Tests
 
+func isBlueprintDirPrepped(bpDirectoryPath string) error {
+	if _, err := os.Stat(bpDirectoryPath); os.IsNotExist(err) {
+		return fmt.Errorf("blueprint dir does not exist: %s: %w", bpDirectoryPath, err)
+	}
+
+	ghpcDir := filepath.Join(bpDirectoryPath, hiddenGhpcDirName)
+	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
+		return fmt.Errorf(".ghpc working dir does not exist: %s: %w", ghpcDir, err)
+	}
+
+	prevResourceDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
+	if _, err := os.Stat(prevResourceDir); os.IsNotExist(err) {
+		return fmt.Errorf("previous resource group directory does not exist: %s: %w", prevResourceDir, err)
+	}
+
+	return nil
+}
+
+func (s *MySuite) TestPrepBpDir(c *C) {
+
+	bpDir := filepath.Join(testDir, "bp_prep_test_dir")
+
+	// Prep a dir that does not yet exist
+	err := prepBpDir(bpDir, false /* overwrite */)
+	c.Check(err, IsNil)
+	c.Check(isBlueprintDirPrepped(bpDir), IsNil)
+
+	// Prep of existing dir fails with overwrite set to false
+	err = prepBpDir(bpDir, false /* overwrite */)
+	var e *OverwriteDeniedError
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Prep of existing dir succeeds when overwrite set true
+	err = prepBpDir(bpDir, true) /* overwrite */
+	c.Check(err, IsNil)
+	c.Check(isBlueprintDirPrepped(bpDir), IsNil)
+}
+
+func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
+	// Test with a real blueprint previously written
+	testYamlConfig := getYamlConfigForTest()
+	testYamlConfig.BlueprintName = "bp_prep__real_bp"
+	realBpDir := filepath.Join(testDir, testYamlConfig.BlueprintName)
+
+	// writes a full blueprint w/ actual resource groups
+	WriteBlueprint(&testYamlConfig, testDir)
+
+	// confirm existence of resource groups (beyond .ghpc dir)
+	files, _ := ioutil.ReadDir(realBpDir)
+	c.Check(len(files) > 1, Equals, true)
+
+	err := prepBpDir(realBpDir, true /* overwrite */)
+	c.Check(err, IsNil)
+	c.Check(isBlueprintDirPrepped(realBpDir), IsNil)
+
+	// Check prev resource groups were moved
+	prevResourceDir := filepath.Join(testDir, testYamlConfig.BlueprintName, hiddenGhpcDirName, prevResourceGroupDirName)
+	files1, _ := ioutil.ReadDir(prevResourceDir)
+	c.Check(len(files1) > 0, Equals, true)
+
+	files2, _ := ioutil.ReadDir(realBpDir)
+	c.Check(len(files2), Equals, 1)
+}
+
 // reswriter.go
 func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
@@ -117,6 +183,35 @@ func (s *MySuite) TestWriteBlueprint(c *C) {
 }
 
 // tfwriter.go
+func (s *MySuite) TestRestoreTfState(c *C) {
+	// set up dir structure
+	//
+	// └── test_restore_state
+	//    ├── .ghpc
+	//       └── previous_resource_groups
+	//          └── fake_resource_group
+	//             └── terraform.tfstate
+	//    └── fake_resource_group
+	bpDir := filepath.Join(testDir, "test_restore_state")
+	resourceGroupName := "fake_resource_group"
+
+	prevResourceGroup := filepath.Join(bpDir, hiddenGhpcDirName, prevResourceGroupDirName, resourceGroupName)
+	curResourceGroup := filepath.Join(bpDir, resourceGroupName)
+	prevStateFile := filepath.Join(prevResourceGroup, tfStateFileName)
+	os.MkdirAll(prevResourceGroup, 0755)
+	os.MkdirAll(curResourceGroup, 0755)
+	emptyFile, _ := os.Create(prevStateFile)
+	emptyFile.Close()
+
+	testWriter := TFWriter{}
+	testWriter.restoreState(bpDir)
+
+	// check state file was moved to current resource group dir
+	curStateFile := filepath.Join(curResourceGroup, tfStateFileName)
+	_, err := os.Stat(curStateFile)
+	c.Check(err, IsNil)
+}
+
 func (s *MySuite) TestGetTypeTokens(c *C) {
 	// Success Integer
 	tok := getTypeTokens(cty.NumberIntVal(-1))
