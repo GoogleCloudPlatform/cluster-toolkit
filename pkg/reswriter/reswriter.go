@@ -18,10 +18,12 @@
 package reswriter
 
 import (
+	"embed"
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/sourcereader"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -31,6 +33,7 @@ import (
 const (
 	hiddenGhpcDirName        = ".ghpc"
 	prevResourceGroupDirName = "previous_resource_groups"
+	gitignoreTemplate        = "blueprint.gitignore.tmpl"
 )
 
 // ResWriter interface for writing resources to a blueprint
@@ -45,6 +48,9 @@ var kinds = map[string]ResWriter{
 	"terraform": new(TFWriter),
 	"packer":    new(PackerWriter),
 }
+
+//go:embed *.tmpl
+var templatesFS embed.FS
 
 func factory(kind string) ResWriter {
 	writer, exists := kinds[kind]
@@ -66,6 +72,10 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFl
 	}
 
 	copySource(bpDir, &yamlConfig.ResourceGroups)
+	if err := copyFSFileToDir(gitignoreTemplate, bpDir); err != nil {
+		return fmt.Errorf("failed to create a standard gitignore file in %s: %w", bpDir, err)
+	}
+
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
 			if err := writer.writeResourceGroups(yamlConfig, outputDir); err != nil {
@@ -112,6 +122,25 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 			writer.addNumResources(1)
 		}
 	}
+}
+
+func copyFSFileToDir(src string, dst string) error {
+	srcFile, err := templatesFS.Open(src)
+	defer srcFile.Close()
+	if err != nil {
+		return err
+	}
+
+	dstFilePath := filepath.Join(dst, ".gitignore")
+	dstFile, err := os.Create(dstFilePath)
+	defer dstFile.Close()
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(dstFile, srcFile)
+
+	return err
 }
 
 func printInstructionsPreamble(kind string, path string) {
