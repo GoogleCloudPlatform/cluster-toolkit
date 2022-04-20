@@ -187,8 +187,8 @@ class ClusterPartitionForm(forms.ModelForm):
             "enable_placement",
             "enable_hyperthreads",
             "enable_node_reuse",
-            "GPU_per_node",
             "GPU_type",
+            "GPU_per_node",
         )
 
     def __init__(self, *args, **kwargs):

@@ -70,21 +70,40 @@ function updateMachineAvailability() {
                         gpuType.appendChild(option);
                     });
                     gpuType.onchange = function() {
-                        gpuCount.min = accelerators[gpuType.value]['min_count'];
-                        gpuCount.max = accelerators[gpuType.value]['max_count'];
+                        console.log("Acclerators checking for [" + gpuType.value + "] says... " + accelerators.has(gpuType.value));
+                        if ( accelerators.has(gpuType.value) ) {
+                            gpuCount.readOnly = false;
+                            gpuCount.min = accelerators.get(gpuType.value)['min_count'];
+                            gpuCount.max = accelerators.get(gpuType.value)['max_count'];
+                            if ( gpuCount.value < gpuCount.min ) {
+                                gpuCount.value = gpuCount.min;
+                            }
+                            if ( gpuCount.value > gpuCount.max ) {
+                                gpuCount.value = gpuCount.max;
+                            }
+                        } else {
+                            gpuCount.min = gpuCount.max = gpuCount.value = 0;
+                        }
+                        if ( gpuCount.min == gpuCount.max ) {
+                            gpuCount.readOnly = true;
+                        }
+                        console.log("TypeChange.  Setting GPU Counts to [" + gpuCount.min + "-" + gpuCount.max + "] - " + gpuCount.value);
                     };
                     /* If only 1 accelerator, and min_count > 0, then we must set */
                     /* Otherwise, if oldGPUType in new set, re-set it, otherwise set blank */
                     if ( ( accelerators.size == 1) && ([...accelerators][0][1].min_count > 0 ) ) {
                         gpuType.value = [...accelerators][0][0];
                         gpuCount.value = [...accelerators][0][1].min_count;
+                        gpuType.onchange();
                     } else if ( accelerators.has(oldGPUType) ) {
                         gpuType.value = oldGPUType;
+                        gpuType.onchange();
                     } else {
                         gpuType.value = "";
                         gpuCount.value = 0;
+                        gpuType.onchange();
                     }
-
+                    gpuType.readOnly = (accelerators.size == 0);
                 });
             };
             selObj.value = curVal;
