@@ -120,6 +120,16 @@ func printInstructionsPreamble(kind string, path string) {
 	fmt.Println("To deploy, run the following commands:")
 }
 
+// OverwriteDeniedError signifies when a blueprint overwrite was denied.
+type OverwriteDeniedError struct {
+	cause error
+}
+
+func (err *OverwriteDeniedError) Error() string {
+	// TODO: Update error message to reference command line flag once feature is launched
+	return fmt.Sprintf("failed to create a directory for blueprint: %v", err.cause)
+}
+
 // Prepares a blueprint directory to be written to.
 func prepBpDir(bpDir string, overwrite bool) error {
 	blueprintIO := blueprintio.GetBlueprintIOLocal()
@@ -128,15 +138,13 @@ func prepBpDir(bpDir string, overwrite bool) error {
 	// create blueprint directory
 	if err := blueprintIO.CreateDirectory(bpDir); err != nil {
 		if !overwrite {
-			// TODO: Update error message to reference command line flag once feature is launched
-			return fmt.Errorf("Blueprint direct failed to create a directory for blueprints: %w", err)
+			return &OverwriteDeniedError{err}
 		}
 
 		// Confirm we have a previously written blueprint dir before overwritting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 			return fmt.Errorf(
-				"While trying to overwrite %s, the '.ghpc/' dir could not be found: %w",
-				bpDir, err)
+				"While trying to update the blueprint directory at %s, the '.ghpc/' dir could not be found", bpDir)
 		}
 	} else {
 		blueprintIO.CreateDirectory(ghpcDir)
@@ -146,7 +154,7 @@ func prepBpDir(bpDir string, overwrite bool) error {
 	prevGroupDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
-		return fmt.Errorf("Failed to create the directory %s: %v", prevGroupDir, err)
+		return fmt.Errorf("Failed to create directory to save previous resource groups at %s: %w", prevGroupDir, err)
 	}
 
 	// move resource groups
@@ -161,7 +169,7 @@ func prepBpDir(bpDir string, overwrite bool) error {
 		src := filepath.Join(bpDir, f.Name())
 		dest := filepath.Join(prevGroupDir, f.Name())
 		if err := os.Rename(src, dest); err != nil {
-			return fmt.Errorf("Error while moving old resource groups: %w", err)
+			return fmt.Errorf("Error while moving previous resource groups: failed on %s: %w", f.Name(), err)
 		}
 	}
 	return nil

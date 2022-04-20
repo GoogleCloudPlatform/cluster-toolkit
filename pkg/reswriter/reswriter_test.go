@@ -17,6 +17,7 @@ limitations under the License.
 package reswriter
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
@@ -134,7 +135,8 @@ func (s *MySuite) TestPrepBpDir(c *C) {
 
 	// Prep of existing dir fails with overwrite set to false
 	err = prepBpDir(bpDir, false /* overwrite */)
-	c.Check(err, NotNil)
+	var e *OverwriteDeniedError
+	c.Check(errors.As(err, &e), Equals, true)
 
 	// Prep of existing dir succeeds when overwrite set true
 	err = prepBpDir(bpDir, true) /* overwrite */
