@@ -63,12 +63,22 @@ function updateMachineAvailability() {
                     oldGPUType = gpuType.value;
                     $(gpuType).empty();
                     accelerators = new Map(Object.entries(data.accelerators));
+                    var accelRequired = ( accelerators.size == 1) && ([...accelerators][0][1].min_count > 0 );
+
+                    if ( !accelRequired ) {
+                        var option = document.createElement("option");
+                        option.text = "None";
+                        option.setAttribute("value", "");
+                        gpuType.appendChild(option);
+                    }
+
                     accelerators.forEach(function(range, type, accels) {
                         var option = document.createElement("option");
                         option.text = type;
                         option.setAttribute("value", type);
                         gpuType.appendChild(option);
                     });
+
                     gpuType.onchange = function() {
                         console.log("Acclerators checking for [" + gpuType.value + "] says... " + accelerators.has(gpuType.value));
                         if ( accelerators.has(gpuType.value) ) {
@@ -89,9 +99,7 @@ function updateMachineAvailability() {
                         }
                         console.log("TypeChange.  Setting GPU Counts to [" + gpuCount.min + "-" + gpuCount.max + "] - " + gpuCount.value);
                     };
-                    /* If only 1 accelerator, and min_count > 0, then we must set */
-                    /* Otherwise, if oldGPUType in new set, re-set it, otherwise set blank */
-                    if ( ( accelerators.size == 1) && ([...accelerators][0][1].min_count > 0 ) ) {
+                    if ( accelRequired ) {
                         gpuType.value = [...accelerators][0][0];
                         gpuCount.value = [...accelerators][0][1].min_count;
                         gpuType.onchange();

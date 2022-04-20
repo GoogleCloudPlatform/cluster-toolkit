@@ -415,21 +415,22 @@ class ClusterUpdateView(UpdateView):
                             "vCPU"
                         ] // (1 if part.enable_hyperthreads else 2)
                         # Validate GPU choice
-                        try:
-                            accel_info = machine_info[part.machine_type][
-                                "accelerators"
-                            ][part.GPU_type]
-                            if (
-                                part.GPU_per_node < accel_info['min_count']
-                                or part.GPU_per_node > accel_info['max_count']
-                            ):
+                        if part.GPU_type:
+                            try:
+                                accel_info = machine_info[part.machine_type][
+                                    "accelerators"
+                                ][part.GPU_type]
+                                if (
+                                    part.GPU_per_node < accel_info["min_count"]
+                                    or part.GPU_per_node > accel_info["max_count"]
+                                ):
+                                    raise ValidationError(
+                                        f"Invalid number of GPUs of type {part.GPU_type}"
+                                    )
+                            except KeyError as err:
                                 raise ValidationError(
-                                    f"Invalid number of GPUs of type {part.GPU_type}"
-                                )
-                        except KeyError as err:
-                            raise ValidationError(
-                                f"Invalid GPU type {part.GPU_type}"
-                            ) from err
+                                    f"Invalid GPU type {part.GPU_type}"
+                                ) from err
                 except KeyError as err:
                     raise ValidationError(
                         f"Error in Partition - invalid machine type: {part.machine_type}"
