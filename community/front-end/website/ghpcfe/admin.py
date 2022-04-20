@@ -19,14 +19,14 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import *
-from .forms import UserCreationForm, UserChangeForm
+from .forms import UserCreationForm, UserUpdateForm
 
 
 class GHPCFEUserAdmin(UserAdmin):
     """Custom UserAdmin"""
 
     add_form = UserCreationForm
-    form = UserChangeForm
+    form = UserUpdateForm
     model = User
     list_display = (
         "username",
