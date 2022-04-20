@@ -29,6 +29,16 @@ resource_groups:
     id: network1
     outputs:
     - subnetwork_name
+  - source: resources/scripts/startup-script
+    kind: terraform
+    id: install_ansible
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+    outputs:
+    - startup_script
 - group: packer
   resources:
   - source: resources/packer/custom-image
@@ -38,7 +48,3 @@ resource_groups:
       use_iap: true
       omit_external_ip: true
       disk_size: 100
-      ansible_playbooks:
-      - playbook_file: ./example-playbook.yml
-        galaxy_file: ./requirements.yml
-        extra_arguments: ["-vv"]
