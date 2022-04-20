@@ -17,6 +17,7 @@
 import itertools
 import json
 import re
+import ipaddress
 from decimal import Decimal
 import uuid, dill, base64
 from django.db import models
@@ -53,7 +54,6 @@ def RESTRICT_IF_CLOUD_ACTIVE(collector, field, sub_objs, using):
     models.RESTRICT(collector, field, restrict_objs, using)
     models.SET_NULL(collector, field, set_null_objs, using)
 
-
 def RFC1035Validator(maxLength, message):
     if not maxLength:
         regex = re.compile(f'^[a-z][-a-z0-9]*[a-z0-9])$')
@@ -63,6 +63,17 @@ def RFC1035Validator(maxLength, message):
     else:
         regex = f'^[a-z]([-a-z0-9]{{0,{maxLength-2}}}[a-z0-9])$'
     return RegexValidator(regex, message=message)
+
+def CIDRValidator(value):
+    try:
+        net = ipaddress.IPv4Network(value)
+    except Exception:
+        raise ValidationError("%(value)s is not a valid CIDR. Please provide a valid CIDR.", params={'value': value})
+    if not net.is_private:
+        raise ValidationError("Only private IP addresses can be used in a VPC network.")
+    else:
+        return value
+
 
 # Create your models here.
 
@@ -320,6 +331,7 @@ class VirtualSubnet(CloudResource):
     cidr = models.CharField(
         max_length=18,
         help_text = 'CIDR for this subnet',
+        validators = [CIDRValidator],
     )
 
     def __str__(self):
