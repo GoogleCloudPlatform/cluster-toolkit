@@ -39,6 +39,21 @@ repos:
     files: ^.*\.pkr\.hcl$
     pass_filenames: true
     require_serial: true
+- repo: https://github.com/psf/black
+  rev: 22.3.0
+  hooks:
+  - id: black
+    args:
+    - -l80
+- repo: https://github.com/pycqa/pylint
+  rev: v2.13.7
+  hooks:
+  - id: pylint
+    args:
+    - --rcfile=.pylintrc
+    additional_dependencies:
+    - django
+    - pylint-django
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.0
   hooks:
