@@ -10,20 +10,26 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.1/ref/settings/
 """
 
+# At this level all errors are fatal and long lines are a fact of life
+# pylint: disable=line-too-long,broad-except
+
+
 from pathlib import Path
 import os
 import requests
 
 
 def get_listen_hosts():
-    ip_list = ['127.0.0.1']  # Start with localhost
+    ip_list = ["127.0.0.1"]  # Start with localhost
     try:
         # Try to get IP info from Google Metadata
-        metadata_headers = {'Metadata-Flavor': 'Google'}
-        base_url = 'http://metadata.google.internal/computeMetadata/v1/instance'
-        hostname_url = f'{base_url}/attributes/hostname'
-        external_ip_url = f'{base_url}/network-interfaces/0/access-configs/0/external-ip'
-        internal_ip_url = f'{base_url}/network-interfaces/0/ip'
+        metadata_headers = {"Metadata-Flavor": "Google"}
+        base_url = "http://metadata.google.internal/computeMetadata/v1/instance"
+        hostname_url = f"{base_url}/attributes/hostname"
+        external_ip_url = (
+            f"{base_url}/network-interfaces/0/access-configs/0/external-ip"
+        )
+        internal_ip_url = f"{base_url}/network-interfaces/0/ip"
 
         for url in [hostname_url, external_ip_url, internal_ip_url]:
             try:
@@ -41,9 +47,11 @@ def get_site_name():
     """Returns the GCP name of this instance, or hostname"""
     try:
         # Try to get IP info from Google Metadata
-        metadata_headers = {'Metadata-Flavor': 'Google'}
-        base_url = 'http://metadata.google.internal/computeMetadata/v1/instance/'
-        for name_type in ['name', 'hostname']:
+        metadata_headers = {"Metadata-Flavor": "Google"}
+        base_url = (
+            "http://metadata.google.internal/computeMetadata/v1/instance/"
+        )
+        for name_type in ["name", "hostname"]:
             try:
                 url = base_url + name_type
                 req = requests.get(url, headers=metadata_headers)
@@ -63,7 +71,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'qn$u0rvaae-$k=c-@^$828f(wygoh85-qdz5jc)xg&6y7imqag'
+SECRET_KEY = "qn$u0rvaae-$k=c-@^$828f(wygoh85-qdz5jc)xg&6y7imqag"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -75,61 +83,61 @@ SITE_NAME = get_site_name()
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'django.contrib.sites',
-    'django_extensions',
-    'rest_framework',
-    'rest_framework.authtoken',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
-    'ghpcfe.apps.GHPCFEConfig',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "django.contrib.sites",
+    "django_extensions",
+    "rest_framework",
+    "rest_framework.authtoken",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "ghpcfe.apps.GHPCFEConfig",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
     #    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
-ROOT_URLCONF = 'website.urls'
+ROOT_URLCONF = "website.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'website.wsgi.application'
+WSGI_APPLICATION = "website.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
 
@@ -138,29 +146,25 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME':
-            'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME':
-            'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME':
-            'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME':
-            'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
 # Internationalization
 # https://docs.djangoproject.com/en/3.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -171,75 +175,71 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.1/howto/static-files/
 
-STATIC_URL = '/static/'
+STATIC_URL = "/static/"
 
-AUTH_USER_MODEL = 'ghpcfe.User'
+AUTH_USER_MODEL = "ghpcfe.User"
 
 # Redirect to home URL after login (default redirects to /accounts/profile/)
-LOGIN_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = "/"
 
 # Allow debugging of emails from console, remove after email server set-up
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Enable authentication on APIs
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
     ],
 }
 
 AUTHENTICATION_BACKENDS = (
-    'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
 )
 SITE_ID = 1
-LOGIN_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = "/"
 SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'SCOPE': [
-            'profile',
-            'email',
+    "google": {
+        "SCOPE": [
+            "profile",
+            "email",
         ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        }
+        "AUTH_PARAMS": {
+            "access_type": "online",
+        },
     }
 }
-ACCOUNT_ADAPTER = 'ghpcfe.adapters.CustomAccountAdapter'
-SOCIALACCOUNT_ADAPTER = 'ghpcfe.adapters.CustomSocialAccountAdapter'
+ACCOUNT_ADAPTER = "ghpcfe.adapters.CustomAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "ghpcfe.adapters.CustomSocialAccountAdapter"
 
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
-#STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
+# STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
+MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
 
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'std': {
-            'format': '{levelname}:{module}:{filename}:{lineno}:{message}',
-            'style': '{',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "std": {
+            "format": "{levelname}:{module}:{filename}:{lineno}:{message}",
+            "style": "{",
         },
     },
-    'handlers': {
-        'console': {
-            'level': 'WARNING',
-            'class': 'logging.StreamHandler'
+    "handlers": {
+        "console": {"level": "WARNING", "class": "logging.StreamHandler"},
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR.parent.parent.parent.parent
+            / "run"
+            / "django.log",
+            "formatter": "std",
         },
-        'file': {
-            'class':
-                'logging.FileHandler',
-            'filename':
-                BASE_DIR.parent.parent.parent.parent / 'run' / 'django.log',
-            'formatter':
-                'std',
-        }
     },
-    'loggers': {
-        '': {
-            'handlers': ['file', 'console'],
-            'level': 'INFO',
+    "loggers": {
+        "": {
+            "handlers": ["file", "console"],
+            "level": "INFO",
         },
     },
 }

@@ -12,25 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from django.core.management.base import BaseCommand, CommandError
-from ghpcfe.models import Role, User
-from rest_framework.authtoken.models import Token
-from django.contrib.sites.models import Site
+# Import errors are expected from pylint here due to Django behaviour
+# pylint: disable=import-error
+
+"""Custom setup to add Google Oauth"""
+
 from allauth.socialaccount.models import SocialApp
-import yaml
+from django.contrib.sites.models import Site
+from django.core.management.base import BaseCommand
+from django.core.management.base import CommandError
+
+from ghpcfe.models import Role
+from ghpcfe.models import User
+
 
 class Command(BaseCommand):
-    help = 'My custom startup command'
+    """Custom setup to add google oauth"""
+
+    help = "My custom startup command"
 
     def add_arguments(self, parser):
-        parser.add_argument('client_id', type=str, help='Client ID',)
-        parser.add_argument('secret', type=str, help='Client secret key',)
-        parser.add_argument('sitename', type=str, help='Site Name for Google OAuth',)
+        parser.add_argument(
+            "client_id",
+            type=str,
+            help="Client ID",
+        )
+        parser.add_argument(
+            "secret",
+            type=str,
+            help="Client secret key",
+        )
+        parser.add_argument(
+            "sitename",
+            type=str,
+            help="Site Name for Google OAuth",
+        )
 
     def handle(self, *args, **kwargs):
-        client_id = kwargs['client_id']
-        secret = kwargs['secret']
-        site_name = kwargs['sitename']
+        client_id = kwargs["client_id"]
+        secret = kwargs["secret"]
+        site_name = kwargs["sitename"]
         try:
             # one-off database initialisation
             records = Role.objects.all()
@@ -51,8 +72,14 @@ class Command(BaseCommand):
                 site.name = site_name
                 site.domain = site_name
                 site.save()
-                socialapp = SocialApp(provider="google", name="Google API", client_id=client_id, key='', secret=secret)
+                socialapp = SocialApp(
+                    provider="google",
+                    name="Google API",
+                    client_id=client_id,
+                    key="",
+                    secret=secret,
+                )
                 socialapp.save()
                 socialapp.sites.add(site)
-        except:
-            raise CommandError('Initalization failed.')
+        except Exception as err:
+            raise CommandError("Initalization failed.") from err
