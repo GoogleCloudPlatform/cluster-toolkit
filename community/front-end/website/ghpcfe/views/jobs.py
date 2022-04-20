@@ -487,7 +487,7 @@ class BackendJobRun(LoginRequiredMixin, generic.View):
             "job_id": job.id,
             "login_uid": user_uid,
             "run_script": job.run_script,
-            "nNodes": job.number_of_nodes,
+            "num_nodes": job.number_of_nodes,
             "partition": job.partition.name,
         }
         if job.application.load_command:

@@ -197,7 +197,7 @@ class User(AbstractUser):
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def user_post_save(sender, instance=None, created=False, **kwargs): #pylint: disable=invalid-name
+def user_post_save(sender, instance=None, created=False, **kwargs): #pylint: disable=unused-argument
     """Initialise certain information for new users"""
     if created:
         # generate API token

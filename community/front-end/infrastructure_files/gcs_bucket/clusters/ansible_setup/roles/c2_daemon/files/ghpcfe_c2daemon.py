@@ -12,7 +12,7 @@ import socket
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 from functools import wraps
 from pathlib import Path
 from urllib.parse import urlparse
@@ -57,7 +57,7 @@ spack_bin = f"{spack_path}/bin/spack"
 
 pubClient = pubsub.PublisherClient()
 subscriber = pubsub.SubscriberClient()
-thread_pool = ThreadPoolExecutor()
+thread_pool = concurrent.futures.ThreadPoolExecutor()
 
 _c2_ackMap = {}
 
@@ -88,7 +88,7 @@ def cb_in_thread(func):
             logger.warning(
                 "Job had quick exception", exc_info=fut.exception(timeout=0.5)
             )
-        except TimeoutError:
+        except concurrent.futures.TimeoutError:
             # Job is still going - good.
             pass
 
@@ -827,7 +827,7 @@ def cb_run_job(message, **kwargs):
     response = {"ackid": ackid}
 
     if not _verify_params(
-        message, ["job_id", "login_uid", "run_script", "nNodes", "partition"]
+        message, ["job_id", "login_uid", "run_script", "num_nodes", "partition"]
     ):
         logger.error("NOT STARTING JOB.  Missing required field(s)")
         response["status"] = "e"
@@ -1166,7 +1166,7 @@ if __name__ == "__main__":
             while EXIT_CODE == 0:
                 try:
                     streaming_pull_future.result(timeout=10)
-                except TimeoutError:
+                except concurrent.futures.TimeoutError:
                     pass
             logger.info("Terminating with exit code %d", EXIT_CODE)
 
