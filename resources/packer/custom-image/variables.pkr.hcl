@@ -39,6 +39,12 @@ variable "zone" {
   type        = string
 }
 
+variable "network_project_id" {
+  description = "Project ID of Shared VPC network"
+  type        = string
+  default     = null
+}
+
 variable "subnetwork_name" {
   description = "Name of subnetwork in which to provision image building VM"
   type        = string

@@ -25,6 +25,7 @@ source "googlecompute" "hpc_centos_7" {
   omit_external_ip        = var.omit_external_ip
   use_internal_ip         = var.omit_external_ip
   subnetwork              = local.subnetwork_name
+  network_project_id      = var.network_project_id
   source_image            = var.source_image
   source_image_family     = var.source_image_family
   source_image_project_id = var.source_image_project_id
