@@ -43,16 +43,24 @@ build {
   name    = var.deployment_name
   sources = ["sources.googlecompute.toolkit_image"]
 
-  provisioner "shell" {
-    execute_command = "sudo -H sh -c '{{ .Vars }} {{ .Path }}'"
-    script          = "scripts/install_ansible.sh"
+  # using dynamic blocks to create provisioners ensures that there are no
+  # provisioner blocks when none are provided and we can use the none
+  # communicator when using startup-script
+
+  # provisioner "shell" blocks
+  dynamic "provisioner" {
+    labels   = ["shell"]
+    for_each = var.shell_scripts
+    content {
+      execute_command = "sudo -H sh -c '{{ .Vars }} {{ .Path }}'"
+      script          = provisioner.value
+    }
   }
 
-  # this will end up installing custom roles/collections from ansible-galaxy
-  # under /home/packer until we modify /etc/ansible/ansible.cfg to identify
-  # a directory that will remain after Packer is complete
+  # provisioner "ansible-local" blocks
+  # this installs custom roles/collections from ansible-galaxy in /home/packer
+  # which will be removed at the end; consider modifying /etc/ansible/ansible.cfg
   dynamic "provisioner" {
-    # using labels this way effectively creates 'provisioner "ansible-local"' blocks
     labels   = ["ansible-local"]
     for_each = var.ansible_playbooks
     content {

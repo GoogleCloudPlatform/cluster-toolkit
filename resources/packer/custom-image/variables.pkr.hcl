@@ -129,6 +129,12 @@ variable "ansible_playbooks" {
   default = []
 }
 
+variable "shell_scripts" {
+  description = "A list of paths to local shell scripts which will be uploaded to customize the VM image"
+  type        = list(string)
+  default     = []
+}
+
 variable "startup_script" {
   description = "Startup script (as raw string) used to build the custom VM image"
   type        = string
