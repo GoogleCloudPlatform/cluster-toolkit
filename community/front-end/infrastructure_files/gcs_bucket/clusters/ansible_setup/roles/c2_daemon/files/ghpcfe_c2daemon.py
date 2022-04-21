@@ -36,7 +36,7 @@ logger.addHandler(logging.handlers.SysLogHandler(address="/dev/log"))
 EXIT_CODE = 0
 
 # GCS metadata access
-GCS_METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024" # pylint: disable=line-too-long
+GCS_METADATA_BASEURL = "http://metadata.google.internal/computeMetadata/v1/"
 GCS_METADATA_HEADERS = {"Metadata-Flavor": "Google"}
 
 # Caching of oslogin users
@@ -316,9 +316,9 @@ def _spack_confirm_install(app_name, log_file):
         results["compiler"] = f"{compiler['name']} {compiler['version']}"
 
         arch = spack_json[0]["arch"]
-        results[
-            "spack_arch"
-        ] = f"{arch['platform']}-{arch['platform_os']}-{arch['target']['name']}"
+        results["spack_arch"] = (
+            f"{arch['platform']}-{arch['platform_os']}-{arch['target']['name']}"
+            )
 
         # Look for MPI
         for dep in spack_json[1:]:
@@ -576,7 +576,10 @@ def _verify_oslogin_user(login_uid):
         # pylint: disable=line-too-long
         # TODO - wrap in a loop with page Tokens
 
-        req = requests.get(GCS_METADATA_URL, headers=GCS_METADATA_HEADERS)
+        req = requests.get(
+                GCS_METADATA_BASEURL + "oslogin/users?pagesize=1024",
+                headers=GCS_METADATA_HEADERS
+                )
         resp = json.loads(req.text)
         _OSLOGIN_CACHE = {}
         for profile in resp["loginProfiles"]:

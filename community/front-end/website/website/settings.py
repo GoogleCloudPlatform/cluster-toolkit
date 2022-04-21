@@ -230,9 +230,7 @@ LOGGING = {
         "console": {"level": "WARNING", "class": "logging.StreamHandler"},
         "file": {
             "class": "logging.FileHandler",
-            "filename": BASE_DIR.parent.parent.parent.parent
-            / "run"
-            / "django.log",
+            "filename": BASE_DIR.parent.parent.parent.parent / "run" / "django.log",
             "formatter": "std",
         },
     },

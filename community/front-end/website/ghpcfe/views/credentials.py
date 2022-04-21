@@ -91,9 +91,8 @@ class CredentialUpdateView(SuperUserRequiredMixin, UpdateView):
 
     def get_initial(self):
         initial = super().get_initial()
-        initial[
-            "detail"
-        ] = ""  # do not show existing credential details in edit form
+        # do not show existing credential details in edit form
+        initial[ "detail" ] = ""
         return initial
 
 

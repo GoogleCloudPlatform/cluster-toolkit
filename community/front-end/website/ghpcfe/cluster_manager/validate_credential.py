@@ -40,7 +40,7 @@ def _validate_credential_gcp(credential_detail):
     try:
         info = json.loads(credential_detail)
     except Exception as err:  # pylint: disable=broad-except
-        logger.error("Failed to parse credential Json: %s", err)
+        logger.info("Failed to parse credential Json: %s", err)
         return False
 
     # I've seen different error conditions, including a warning to indicate
@@ -52,7 +52,7 @@ def _validate_credential_gcp(credential_detail):
             info
         )
     except Exception as err: #pylint: disable=broad-except
-        logger.error("Credential validation failed: %s", err)
+        logger.info("Credential validation failed: %s", err)
         return False
 
     return True
