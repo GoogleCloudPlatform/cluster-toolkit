@@ -45,6 +45,4 @@ resource_groups:
     kind: packer
     id: custom-image
     settings:
-      use_iap: true
-      omit_external_ip: true
       disk_size: 100

@@ -54,7 +54,7 @@ variable "subnetwork_name" {
 variable "omit_external_ip" {
   description = "Provision the image building VM without a public IP address"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "tags" {
@@ -105,7 +105,7 @@ EOD
 variable "use_iap" {
   description = "Use IAP proxy when connecting by SSH"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "use_os_login" {
