@@ -608,20 +608,24 @@ class ClusterLogView(generic.DetailView):
 
 
 class ClusterCostExportView(generic.DetailView):
-    """Export raw cost data as CSV"""
+    """Export raw cost data per cluster as CSV"""
 
     model = Cluster
 
     def get(self, request, *args, **kwargs):
-        response = HttpResponse(content_type='text/csv')
+        response = HttpResponse(content_type="text/csv")
         writer = csv.writer(response)
-        writer.writerow(["Job ID", "User", "Application", "Partition", "Number of Nodes", "Ranks per Node", "Runtime (sec)", "Node Price (per hour)", "Job Cost"])
+        writer.writerow(["Job ID", "User", "Application", "Partition",
+                         "Number of Nodes", "Ranks per Node", "Runtime (sec)",
+                         "Node Price (per hour)", "Job Cost"])
 
-        for job in Job.objects.filter(cluster=self.kwargs["pk"]).values_list("id", "user__username",
-            "application__name", "partition__name", "number_of_nodes", "ranks_per_node", "runtime", "node_price", "job_cost"):
+        for job in Job.objects.filter(
+                cluster=self.kwargs["pk"]).values_list("id", "user__username",
+                "application__name", "partition__name", "number_of_nodes",
+                "ranks_per_node", "runtime", "node_price", "job_cost"):
             writer.writerow(job)
 
-        response['Content-Disposition'] = 'attachment; filename="cost_report.csv"'
+        response["Content-Disposition"] = "attachment; filename='report.csv'"
         return response
 
 
