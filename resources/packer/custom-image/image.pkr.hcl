@@ -17,7 +17,7 @@ locals {
   metadata        = var.startup_script == null ? null : { startup-script = var.startup_script }
 }
 
-source "googlecompute" "hpc_centos_7" {
+source "googlecompute" "toolkit_image" {
   project_id              = var.project_id
   image_name              = "${var.deployment_name}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
   image_family            = var.deployment_name
@@ -40,8 +40,8 @@ source "googlecompute" "hpc_centos_7" {
 }
 
 build {
-  name    = "example"
-  sources = ["sources.googlecompute.hpc_centos_7"]
+  name    = var.deployment_name
+  sources = ["sources.googlecompute.toolkit_image"]
 
   provisioner "shell" {
     execute_command = "sudo -H sh -c '{{ .Vars }} {{ .Path }}'"
