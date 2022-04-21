@@ -121,6 +121,7 @@ variable "ssh_username" {
 }
 
 variable "ansible_playbooks" {
+  description = "A list of Ansible playbook configurations that will be uploaded to customize the VM image"
   type = list(object({
     playbook_file   = string
     galaxy_file     = string
