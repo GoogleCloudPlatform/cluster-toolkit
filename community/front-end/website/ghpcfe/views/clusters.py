@@ -422,10 +422,12 @@ class ClusterUpdateView(UpdateView):
                                 ][part.GPU_type]
                                 if (
                                     part.GPU_per_node < accel_info["min_count"]
-                                    or part.GPU_per_node > accel_info["max_count"]
+                                    or part.GPU_per_node
+                                    > accel_info["max_count"]
                                 ):
                                     raise ValidationError(
-                                        f"Invalid number of GPUs of type {part.GPU_type}"
+                                        "Invalid number of GPUs of type "
+                                        f"{part.GPU_type}"
                                     )
                             except KeyError as err:
                                 raise ValidationError(
@@ -433,7 +435,8 @@ class ClusterUpdateView(UpdateView):
                                 ) from err
                 except KeyError as err:
                     raise ValidationError(
-                        f"Error in Partition - invalid machine type: {part.machine_type}"
+                        "Error in Partition - invalid machine type: "
+                        f"{part.machine_type}"
                     ) from err
                 parts = partitions.save()
 

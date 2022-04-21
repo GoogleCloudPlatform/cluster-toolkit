@@ -104,12 +104,18 @@ def _get_gcp_machine_types(
     }
 
     # Grab the N1-associated Accelerators
-    accels = client.acceleratorTypes().list(project=project, zone=zone,
-                    filter="name!=nvidia-tesla-a100").execute()
-    n1_accels = {acc['name']: {
-                "min_count": 0,
-                "max_count": acc['maximumCardsPerInstance']}
-            for acc in accels.get('items', [])}
+    accels = (
+        client.acceleratorTypes()
+        .list(project=project, zone=zone, filter="name!=nvidia-tesla-a100")
+        .execute()
+    )
+    n1_accels = {
+        acc["name"]: {
+            "min_count": 0,
+            "max_count": acc["maximumCardsPerInstance"],
+        }
+        for acc in accels.get("items", [])
+    }
     for mach in data.keys():
         if data[mach]["family"] == "n1":
             data[mach]["accelerators"] = n1_accels

@@ -175,7 +175,7 @@ class ClusterPartitionForm(forms.ModelForm):
     """Form for Cluster Paritions"""
 
     machine_type = forms.ChoiceField(widget=forms.Select())
-    GPU_type = forms.ChoiceField(widget=forms.Select())
+    GPU_type = forms.ChoiceField(widget=forms.Select()) # pylint: disable=invalid-name
 
     class Meta:
         model = ClusterPartition
@@ -216,8 +216,8 @@ class ClusterPartitionForm(forms.ModelForm):
 
         # NOTE: Hack to bypass cleaning 'machine_type' & GPU_type here,
         # and do so in form_valid
-        self.fields["machine_type"].clean = lambda value: value;
-        self.fields["GPU_type"].clean = lambda value: value;
+        self.fields["machine_type"].clean = lambda value: value
+        self.fields["GPU_type"].clean = lambda value: value
 
     def clean(self):
         cleaned_data = super().clean()
