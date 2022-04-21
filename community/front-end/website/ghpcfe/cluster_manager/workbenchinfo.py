@@ -116,6 +116,7 @@ all data on this instance will be deleted.
 
 MOUNTED FILESYSTEMS:
 
+EOF
 """
             )
             for mp in self.workbench.mount_points.order_by("mount_order"):

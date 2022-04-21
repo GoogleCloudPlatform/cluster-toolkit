@@ -188,13 +188,11 @@ def _get_gcp_subnets(credentials):
     entries = results["items"]
     subnets = []
     for entry in entries:
-        # subnet in the form of https://www.googleapis.com/compute/v1/
-        # projects/<project>/regions/<region>/subnetworks/<name>
+        # subnet in the form of https://www.googleapis.com/compute/v1/projects/<project>/regions/<region>/subnetworks/<name>
         tokens = entry["subnetwork"].split("/")
         region = tokens[8]
         subnet = tokens[10]
-        # vpc in the form of https://www.googleapis.com/compute/v1/
-        # projects/<project>/global/networks/<name>
+        # vpc in the form of https://www.googleapis.com/compute/v1/projects/<project>/global/networks/<name>
         tokens = entry["network"].split("/")
         vpc = tokens[9]
         # cidr in standard form xxx.xxx.xxx.xxx/yy

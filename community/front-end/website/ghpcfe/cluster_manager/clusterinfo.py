@@ -162,8 +162,6 @@ class ClusterInfo:
         return ("\n\n".join(yaml), refs)
 
     def _prepare_ghpc_partitions(self, part_uses):
-        # TODO:  Eventually should have actual "partitions" in the Model, with a
-        # name, etc
         yaml = []
         refs = []
         uses_str = self._yaml_refs_to_uses(part_uses)
