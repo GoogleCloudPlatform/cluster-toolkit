@@ -364,6 +364,7 @@ func writeVersions(dst string) error {
 func printTerraformInstructions(grpPath string) {
 	printInstructionsPreamble("Terraform", grpPath)
 	fmt.Printf("  terraform -chdir=%s init\n", grpPath)
+	fmt.Printf("  terraform -chdir=%s validate\n", grpPath)
 	fmt.Printf("  terraform -chdir=%s apply\n", grpPath)
 }
 
