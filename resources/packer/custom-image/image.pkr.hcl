@@ -42,6 +42,7 @@ source "googlecompute" "toolkit_image" {
   use_os_login            = var.use_os_login
   zone                    = var.zone
   metadata                = local.metadata
+  startup_script_file     = var.startup_script_file
   wrap_startup_script     = var.wrap_startup_script
 }
 

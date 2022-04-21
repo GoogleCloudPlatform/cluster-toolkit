@@ -137,7 +137,13 @@ variable "shell_scripts" {
 }
 
 variable "startup_script" {
-  description = "Startup script (as raw string) used to build the custom VM image"
+  description = "Startup script (as raw string) used to build the custom VM image (overridden by var.startup_script_file if both are supplied)"
+  type        = string
+  default     = null
+}
+
+variable "startup_script_file" {
+  description = "Path to local shell script that will be uploaded as a startup script to customize the VM image"
   type        = string
   default     = null
 }
