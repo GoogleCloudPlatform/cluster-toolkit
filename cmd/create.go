@@ -18,6 +18,7 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/reswriter"
@@ -81,6 +82,11 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	}
 	blueprintConfig.ExpandConfig()
 	if err := reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory, overwriteBlueprint); err != nil {
-		log.Fatal(err)
+		var target *reswriter.OverwriteDeniedError
+		if errors.As(err, &target) {
+			fmt.Printf("\n%s\n", err.Error())
+		} else {
+			log.Fatal(err)
+		}
 	}
 }
