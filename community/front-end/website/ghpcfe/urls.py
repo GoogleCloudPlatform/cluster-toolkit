@@ -232,6 +232,11 @@ urlpatterns += [
     path(
         "cluster/cost/<int:pk>", ClusterCostView.as_view(), name="cluster-cost"
     ),
+    path(
+        "cluster/costexport/<int:pk>",
+        ClusterCostExportView.as_view(),
+        name="cluster-cost-export",
+    ),
 ]
 
 urlpatterns += [

@@ -14,7 +14,7 @@
   <p><b>Cluster:</b> {{ object.application.cluster.name }} 
     <img src="/static/img/GCP_logo.png" style="width:32px;height:32px;">
      </p>
-  <p><b>Instance Type:</b> {{ object.instance_type }}</p> 
+  <p><b>Instance Type:</b> {{ object.partition.machine_type }}</p>
   <p><b>Job Cost:</b> {% if job.status != "c" and job.status != "e" %}<={%endif%}${{ object.job_cost }}</p>
   <hr>
   <p style="text-decoration: underline; font-size: large;">Job Parameters</p>
