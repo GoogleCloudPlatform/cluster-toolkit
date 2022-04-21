@@ -167,10 +167,11 @@ type OverwriteDeniedError struct {
 }
 
 func (err *OverwriteDeniedError) Error() string {
-	return fmt.Sprintf("Failed to overwrite existing blueprint. "+
-		"Use the -w command line argument to enable overwrite. "+
+	return fmt.Sprintf("Failed to overwrite existing blueprint.\n\n"+
+		"Use the -w command line argument to enable overwrite.\n"+
 		"If overwrite is already enabled then this may be because "+
-		"you are attempting to remove a resource group, which is not supported : %v",
+		"you are attempting to remove a resource group, which is not supported.\n"+
+		"original error: %v",
 		err.cause)
 }
 
