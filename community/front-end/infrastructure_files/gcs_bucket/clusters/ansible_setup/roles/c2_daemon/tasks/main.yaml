@@ -3,13 +3,19 @@
   pip:
     executable: pip3
     name: pip
-    state: present
+    state: forcereinstall
 
 # Can't use the pip action here because we need to explicitly enable
 # a modern gcc from the dev_env role
 - name: Install FE C&C Dependencies
-  shell: . /opt/rh/devtoolset-11/enable && pip3 install requests pexpect google-cloud-storage google-cloud-pubsub
-  when: True
+  pip:
+    executable: pip3
+    name:
+    - requests
+    - pexpect
+    - google-cloud-storage
+    - google-cloud-pubsub
+    state: present
 
 - name: Install FE C&C Daemon
   copy:
