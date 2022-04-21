@@ -559,7 +559,7 @@ class BackendDestroyVPC(BackendAsyncView):
         if not vpc.in_use():
             try:
                 destroy_vpc(vpc)
-                vpc.status = "xm"
+                vpc.cloud_state = "xm"
                 vpc.save()
             except Exception as err: # pylint: disable=broad-except
                 messages.add_message(
