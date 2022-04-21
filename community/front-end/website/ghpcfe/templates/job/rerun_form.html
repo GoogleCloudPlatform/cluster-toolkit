@@ -158,7 +158,7 @@ window.onload=initPage;
     <div class="form-group">
       {{ form.partition.errors }}
       {{ form.partition.label_tag }}
-      <select name="partition" class="form-control" required id="id_partition">
+      <select name="partition" class="form-control" required id="id_partition" onchange="change_partition();">
       {% for partition in cluster.partitions.all %}
         <option value="{{partition.id}}">{{partition.name}} - {{partition.max_node_count}} of {{ partition.machine_type }}</option>
       {% endfor %}
