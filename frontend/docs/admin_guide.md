@@ -224,7 +224,7 @@ A typical workflow for creating a new cluster is as follows:
 - Click the *Save* button to store the cluster settings in the database. Continue from the *Cluster Detail* page.
 - Click the *Edit* button to make additional changes. such as creating more Slurm partitions for differnt compute node instance types, or mounting additional filesystems.
   - For filesystems, note the two existing shared filesystems defined by default. Additional ones can be mounted if they have been created earlier. Note the *Mounting order* parameter only matters if the *Mount path* parameter has dependencies.
-  - For cluster partitions, note that one *c2-standard-60* partition is defined by default. Additional partitions can be added, supporting different instance types. Enable or disable hyprethreading and node reuse as appropriate. Also, placement group can be enabled (for C2 and C2D partitions only).
+  - For cluster partitions, note that one *c2-standard-60* partition is defined by default. Additional partitions can be added, supporting different instance types. Enable or disable hyprethreading and node reuse as appropriate. Also, placement group can be enabled (for C2 and C2D partitions only). In the *image* field one can optionally supply a custom image to be used by the compute nodes. Administrators should ensure such an image is compatible to the CentOS 7 based machine image used by Slurm GCP. Otherwise additional customisation done by this system might fail.
 - Finally, save the configurations and click the *Create* button to trigger the cluster creation.
 
 ## Application Management
