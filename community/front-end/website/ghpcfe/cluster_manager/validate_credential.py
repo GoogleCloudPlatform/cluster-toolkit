@@ -13,20 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Cloud credential validation routines"""
 
+import logging
 import json
 import warnings
+
 from google.oauth2 import service_account
 
+logger = logging.getLogger(__name__)
+
+
 def validate_credential(cloud_provider, credential_detail):
-    """ communicate with a cloud provider to validate a credential """
+    """communicate with a cloud provider to validate a credential"""
 
     validated = False
-    if cloud_provider == 'GCP':
+    if cloud_provider == "GCP":
         validated = _validate_credential_gcp(credential_detail)
 
     return validated
-
 
 
 def _validate_credential_gcp(credential_detail):
@@ -34,19 +39,20 @@ def _validate_credential_gcp(credential_detail):
     # catch errors for incorrect format
     try:
         info = json.loads(credential_detail)
-    except Exception as ex:
-        print(ex)
+    except Exception as err:  # pylint: disable=broad-except
+        logger.info("Failed to parse credential Json: %s", err)
         return False
 
     # I've seen different error conditions, including a warning to indicate
     # corrupted private key. Need to catch that but not other harmless warnings.
-    warnings.simplefilter('ignore', ResourceWarning)
-    warnings.simplefilter('error', UserWarning)
+    warnings.simplefilter("ignore", ResourceWarning)
+    warnings.simplefilter("error", UserWarning)
     try:
-        credentials = service_account.Credentials.from_service_account_info(info)
-    except Exception as ex:
-        print('Invalid private key in the credential information')
-        print(ex)
+        service_account.Credentials.from_service_account_info(
+            info
+        )
+    except Exception as err: #pylint: disable=broad-except
+        logger.info("Credential validation failed: %s", err)
         return False
 
     return True

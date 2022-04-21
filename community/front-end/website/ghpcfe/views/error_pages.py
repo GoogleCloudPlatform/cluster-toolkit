@@ -12,5 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def custom_error_403(request, exception):
+"""Custom error page renderers"""
+
+from django.shortcuts import render
+
+def custom_error_403(request, unused_exception):
     return render(request, '403.html', {})

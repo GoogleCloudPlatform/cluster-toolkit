@@ -12,30 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pathlib import Path
-from . import utils 
+"""Spack package operations"""
+
+from . import utils
 import sys
 
-spack_prefix = utils.g_baseDir / 'dependencies' / 'spack'
-spack_path_lib = spack_prefix / 'lib' / 'spack'
-spack_external_libs = spack_path_lib / 'external'
+spack_prefix = utils.g_baseDir / "dependencies" / "spack"
+spack_path_lib = spack_prefix / "lib" / "spack"
+spack_external_libs = spack_path_lib / "external"
 
 sys.path.insert(0, spack_path_lib.as_posix())
 sys.path.insert(0, spack_external_libs.as_posix())
 
+#pylint: disable=wrong-import-position
 import spack.main
 import spack.repo
 import spack.version
+#pylint: enable=wrong-import-position
+
 
 def get_package_list():
     return spack.repo.all_package_names()
 
+
 def get_package_info(names):
     pkgs = [spack.repo.get(name) for name in names]
-    return ({'name': pkg.name,
-             'latest_version': str(spack.version.VersionList(pkg.versions).preferred()),
-             'versions': [str(v) for v in reversed(sorted(pkg.versions))],
-             'variants': [k for k,v in pkg.variants.items()],
-             'description': pkg.format_doc()
-            } for pkg in pkgs)
-
+    return (
+        {
+            "name": pkg.name,
+            "latest_version": str(
+                spack.version.VersionList(pkg.versions).preferred()
+            ),
+            "versions": [str(v) for v in reversed(sorted(pkg.versions))],
+            "variants": [k for k, v in pkg.variants.items()],
+            "description": pkg.format_doc(),
+        }
+        for pkg in pkgs
+    )

@@ -14,31 +14,30 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path("admin/", admin.site.urls),
 ]
 
 # add paths from the ghpcfe application
-from django.urls import include
 urlpatterns += [
-    path('', include('ghpcfe.urls')),
+    path("", include("ghpcfe.urls")),
 ]
 
 # add url mapping to serve static files
-from django.conf import settings
-from django.conf.urls.static import static
+
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 # customise admin site
-admin.site.site_header = 'HPC Toolkit FrontEnd Admin Site'  # default: "Django Administration"
-admin.site.index_title = 'Administration' # default: "Site administration"
-admin.site.site_title = 'Administration site' # default: "Django site admin"
+admin.site.site_header = "HPC Toolkit FrontEnd Admin Site"
+admin.site.index_title = "Administration"
+admin.site.site_title = "Administration site"
 
 # add Django site authentication urls (for login, logout, password management)
 urlpatterns += [
-    path('accounts/', include('django.contrib.auth.urls')),
-    path('accounts/', include('allauth.urls')),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("accounts/", include("allauth.urls")),
 ]
-

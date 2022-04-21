@@ -11,23 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """ asyncviews.py """
+import asyncio
+import functools
+import logging
 
-import asyncio, functools
 from asgiref.sync import sync_to_async
-from rest_framework import viewsets
-from rest_framework.authtoken.models import Token
-from rest_framework.authentication import SessionAuthentication, TokenAuthentication
-from rest_framework.permissions import IsAuthenticated
 from django.core import exceptions
-from django.views import generic
 from django.utils.decorators import classonlymethod
-from django.contrib import messages
-from ..models import Cluster, Role, Task, Workbench
+from django.views import generic
+from rest_framework import viewsets
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import IsAuthenticated
+
+from ..models import Cluster, Role, Task
 from ..serializers import TaskSerializer
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -39,16 +40,19 @@ class RunningTasksViewSet(viewsets.ModelViewSet):
 
 
 def _consume_task(record, task):
-    logger.info(f'{task.get_name()} done.', exc_info=task.exception())
+    logger.info("%s done.", task.get_name(), exc_info=task.exception())
     if record:
-        logger.info(f"    {record.title}, destroying.  Data: {record.data}")
+        logger.info("    %s, destroying.  Data: %s", record.title, record.data)
         asyncio.create_task(sync_to_async(record.delete)())
 
+
 class BackendAsyncView(generic.View):
+    """Template class for backend async operations"""
+
     @classonlymethod
     def as_view(cls, **initkwargs):
         view = super().as_view(**initkwargs)
-        view._is_coroutine = asyncio.coroutines._is_coroutine
+        view._is_coroutine = asyncio.coroutines._is_coroutine # pylint: disable=protected-access
         return view
 
     @sync_to_async
@@ -63,9 +67,9 @@ class BackendAsyncView(generic.View):
             raise exceptions.PermissionDenied
 
     @sync_to_async
-    def makeTaskRecord(self, user, title):
-        taskData = self.getTaskRecordData(self.request)
-        t = Task.objects.create(owner=user, title=title, data=taskData)
+    def make_task_record(self, user, title):
+        task_data = self.get_task_record_data(self.request)
+        t = Task.objects.create(owner=user, title=title, data=task_data)
         t.save()
         return t
 
@@ -83,18 +87,18 @@ class BackendAsyncView(generic.View):
         c.status = status
         c.save()
 
-    def getTaskRecordData(self, request):
-        """ Called from a syncronous context """
-        return {'status': "Contacting Cluster"}
+    def get_task_record_data(self, request):
+        """Called from a syncronous context"""
+        return {"status": "Contacting Cluster"}
 
     async def _cmd(self, *args, **kwargs):
         await sync_to_async(self.cmd, thread_sensitive=False)(*args, **kwargs)
 
-
     async def create_task(self, title, *args, **kwargs):
-        logger.info(f'Creating task {title}')
+        logger.info("Creating task %s", title)
         token = await self.get_user_token(self.request.user)
-        record = await self.makeTaskRecord(self.request.user, title=title)
+        record = await self.make_task_record(self.request.user, title=title)
         task = asyncio.create_task(self._cmd(record.pk, token, *args, **kwargs))
         task.add_done_callback(functools.partial(_consume_task, record))
         return record
+

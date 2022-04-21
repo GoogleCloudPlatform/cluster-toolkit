@@ -1,7 +1,7 @@
 {% extends "base_generic.html" %}
 
 {% block meta %}
-  {% if "c" in object.cloud_state or "t" in object.cloud_state or "d" in object.cloud_state %}
+  {% if "cm" in object.cloud_state or "dm" in object.cloud_state %}
   <meta http-equiv="refresh" content="15" />
   {% endif %}
   <script>
