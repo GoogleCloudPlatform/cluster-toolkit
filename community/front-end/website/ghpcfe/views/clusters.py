@@ -342,10 +342,6 @@ class ClusterUpdateView(UpdateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["zone_choices"] = [
-            (x, x)
-            for x in self._get_region_info()[self.get_object().cloud_region]
-        ]
         return kwargs
 
     def get_context_data(self, **kwargs):

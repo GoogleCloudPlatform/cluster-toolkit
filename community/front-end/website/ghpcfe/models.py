@@ -609,10 +609,20 @@ class Cluster(CloudResource):
         null=True,
         blank=True,
     )
+    controller_instance_type = models.CharField(
+        max_length=40,
+        help_text="GCP Instance Type name",
+        default="n2-standard-2",
+    )
     num_login_nodes = models.PositiveIntegerField(
         validators=[MinValueValidator(0)],
         help_text="The number of login nodes to create",
         default=1,
+    )
+    login_node_instance_type = models.CharField(
+        max_length=40,
+        help_text="GCP Instance Type name",
+        default="n2-standard-2",
     )
 
     def get_access_key(self):

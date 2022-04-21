@@ -289,6 +289,7 @@ resource_groups:
     id: slurm_controller
     settings:
       login_node_count: {self.cluster.num_login_nodes}
+      controller_machine_type: {self.cluster.controller_instance_type}
       controller_service_account: $(hpc_service_account.email)
       controller_startup_script: |
         #!/bin/bash
@@ -312,6 +313,7 @@ resource_groups:
     settings:
       login_node_count: {self.cluster.num_login_nodes}
       subnetwork_name: {self.cluster.subnet.cloud_id}
+      login_machine_type: {self.cluster.login_node_instance_type}
       login_service_account: $(hpc_service_account.email)
       login_scopes:
       - https://www.googleapis.com/auth/monitoring.write
