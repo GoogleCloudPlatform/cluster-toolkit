@@ -10,7 +10,7 @@ function setLimits() {
         {{ partition.id }}: {
             "name": "{{ partition.name }}",
             "instance_type": "{{ partition.machine_type }}",
-            "vcpu": {{ partition.machine_type.num_vCPU }},
+            "vcpu": {{ partition.vCPU_per_node }},
             "nodes": {{ partition.max_node_count }},
             },
         {% endfor %}
@@ -119,7 +119,6 @@ function initPage() {
 window.onload=initPage;
 </script>
 {% endblock %}
-
 {% block content %}
 
   <h2>Rerun: {{ application.name }} - {{ application.version }} on {{ cluster.name }}</h2>
