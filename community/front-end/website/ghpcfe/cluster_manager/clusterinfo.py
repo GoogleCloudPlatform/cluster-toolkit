@@ -554,7 +554,6 @@ resource_groups:
                 if len(mgmt_nodes):
                     node = mgmt_nodes[0]
                     node.save()
-                    utils.add_host_to_server_firewall(node.public_ip)
                     self.cluster.controller_node = node
                     logger.info(
                         "Created cluster controller node with IP address %s",
@@ -577,7 +576,6 @@ resource_groups:
                 for lnode in login_nodes:
                     lnode.cluster_login = self.cluster
                     lnode.save()
-                    utils.add_host_to_server_firewall(lnode.public_ip)
                     logger.info(
                         "Created login node with IP address %s",
                         lnode.public_ip
@@ -612,7 +610,6 @@ resource_groups:
             self.cluster.cloud_state = "dm"
             self.cluster.save()
 
-            # utils.remove_host_from_server_firewall(self.cluster.XXXX)
             utils.run_terraform(terraform_dir, "destroy", extra_env=extra_env)
 
             controller_sa = self.cluster.controller_node.service_account

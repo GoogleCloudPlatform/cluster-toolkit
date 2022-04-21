@@ -21,8 +21,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import googleapiclient.discovery
-
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -103,80 +101,6 @@ def _parse_tfvars(filename):
             res[current_key] = current_value.strip(' " " ')
 
     return res
-
-
-def add_host_to_server_firewall(new_host):
-    if not new_host:
-        return
-    config = load_config()
-
-    if "firewall" not in config["server"]:
-        return
-    if not config["server"]["firewall"].get("update", False):
-        return
-    firewall_name = config["server"]["firewall"].get("name", None)
-    if not firewall_name:
-        return
-    if config["server"].get("host_type", None) == "GCP":
-        project = config["server"].get("gcp_project", None)
-        if project:
-            # Only support GCP at the moment
-            try:
-                gcloud = googleapiclient.discovery.build(
-                    "compute", "v1", cache_discovery=False
-                )
-                existing_firewall = (
-                    gcloud.firewalls()
-                    .get(project=project, firewall=firewall_name)
-                    .execute()
-                )
-                patch = {"sourceRanges": existing_firewall["sourceRanges"]}
-                patch["sourceRanges"].append(f"{new_host}/32")
-                gcloud.firewalls().patch(
-                    project=project, firewall=firewall_name, body=patch
-                ).execute()
-            except Exception as err:  # pylint: disable=broad-except
-                logger.error("Exception while updating firewall state: %s", err)
-                raise
-
-
-def remove_host_from_server_firewall(target_host):
-    config = load_config()
-
-    if "firewall" not in config["server"]:
-        return
-    if not config["server"]["firewall"].get("update", False):
-        return
-    firewall_name = config["server"]["firewall"].get("name", None)
-    if not firewall_name:
-        return
-    if config["server"].get("host_type", None) == "GCP":
-        project = config["server"].get("gcp_project", None)
-        if project:
-            # Only support GCP at the moment
-            try:
-
-                gcloud = googleapiclient.discovery.build(
-                    "compute", "v1", cache_discovery=False
-                )
-                existing_firewall = (
-                    gcloud.firewalls()
-                    .get(project=project, firewall=firewall_name)
-                    .execute()
-                )
-                patch = {
-                    "sourceRanges": [
-                        x
-                        for x in existing_firewall["sourceRanges"]
-                        if x != f"{target_host}/32"
-                    ]
-                }
-                gcloud.firewalls().patch(
-                    project=project, firewall=firewall_name, body=patch
-                ).execute()
-            except Exception as err:
-                logger.error("Exception while updating firewall state: %s", err)
-                raise
 
 
 def load_cluster_info(args):
