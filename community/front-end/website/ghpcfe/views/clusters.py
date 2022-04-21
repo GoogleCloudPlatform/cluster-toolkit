@@ -14,6 +14,7 @@
 
 """ clusters.py """
 
+import csv
 import json
 from asgiref.sync import sync_to_async
 from rest_framework import viewsets
@@ -31,6 +32,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ValidationError
 from django.http import (
+    HttpResponse,
     HttpResponseRedirect,
     JsonResponse,
     HttpResponseNotFound,
@@ -603,6 +605,24 @@ class ClusterLogView(generic.DetailView):
         ]
         context["navtab"] = "cluster"
         return context
+
+
+class ClusterCostExportView(generic.DetailView):
+    """Export raw cost data as CSV"""
+
+    model = Cluster
+
+    def get(self, request, *args, **kwargs):
+        response = HttpResponse(content_type='text/csv')
+        writer = csv.writer(response)
+        writer.writerow(["Job ID", "User", "Application", "Partition", "Number of Nodes", "Ranks per Node", "Runtime (sec)", "Node Price (per hour)", "Job Cost"])
+
+        for job in Job.objects.filter(cluster=self.kwargs["pk"]).values_list("id", "user__username",
+            "application__name", "partition__name", "number_of_nodes", "ranks_per_node", "runtime", "node_price", "job_cost"):
+            writer.writerow(job)
+
+        response['Content-Disposition'] = 'attachment; filename="cost_report.csv"'
+        return response
 
 
 # For APIs
