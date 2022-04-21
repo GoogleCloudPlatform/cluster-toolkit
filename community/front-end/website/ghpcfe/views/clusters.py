@@ -340,10 +340,6 @@ class ClusterUpdateView(UpdateView):
             )
         return self.region_info
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        return kwargs
-
     def get_context_data(self, **kwargs):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
@@ -383,10 +379,69 @@ class ClusterUpdateView(UpdateView):
             self.object.cloud_region,
             self.object.cloud_zone,
         )
+        disk_info = {
+            x["name"]: x
+            for x in cloud_info.get_disk_types(
+                "GCP",
+                self.object.cloud_credential.detail,
+                self.object.cloud_region,
+                self.object.cloud_zone,
+            )
+            if x["name"].startswith("pd-")
+        }
 
         if self.object.status != "n":
             form.add_error("Running clusters cannot currently be updated!")
             return self.form_invalid(form)
+
+        # Verify Disk Types & Sizes
+        try:
+            my_info = disk_info[self.object.controller_disk_type]
+            if self.object.controller_disk_size < my_info["minSizeGB"]:
+                form.add_error(
+                    "controller_disk_size",
+                    "Minimum Disk Size for "
+                    f"{self.object.controller_disk_type} is "
+                    f"{my_info['minSizeGB']}"
+                )
+                return self.form_invalid(form)
+            if self.object.controller_disk_size > my_info["maxSizeGB"]:
+                form.add_error(
+                    "controller_disk_size",
+                    "Maximum Disk Size for "
+                    f"{self.object.controller_disk_type} is "
+                    f"{my_info['maxSizeGB']}"
+                )
+                return self.form_invalid(form)
+
+        except KeyError:
+            form.add_error("controller_disk_type", "Invalid Disk Type")
+            return self.form_invalid(form)
+
+        try:
+            my_info = disk_info[self.object.login_node_disk_type]
+            if self.object.login_node_disk_size < my_info["minSizeGB"]:
+                form.add_error(
+                    "login_node_disk_size",
+                    "Minimum Disk Size for "
+                    f"{self.object.login_node_disk_type} is "
+                    f"{my_info['minSizeGB']}"
+                )
+                return self.form_invalid(form)
+            if self.object.login_node_disk_size > my_info["maxSizeGB"]:
+                form.add_error(
+                    "login_node_disk_size",
+                    "Maximum Disk Size for "
+                    f"{self.object.login_node_disk_type} is "
+                    f"{my_info['maxSizeGB']}"
+                )
+                return self.form_invalid(form)
+
+        except KeyError:
+            form.add_error("login_node_disk_type", "Invalid Disk Type")
+            return self.form_invalid(form)
+
+
 
         # Verify formset validity (suprised there's no method to do this)
         for formset, formset_name in [
@@ -757,6 +812,43 @@ class InstanceAvailabilityViewSet(viewsets.ViewSet):
 
         return JsonResponse({})
 
+
+class DiskAvailabilityViewSet(viewsets.ViewSet):
+    """API View providing GCP disk availability across locations"""
+
+    permission_classes = (IsAuthenticated,)
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    def list(self, request):
+        cluster = get_object_or_404(
+            Cluster, pk=request.query_params.get("cluster", -1)
+        )
+        region = request.query_params.get("region", None)
+        zone = request.query_params.get("zone", None)
+
+        try:
+            region_info = cloud_info.get_region_zone_info(
+                "GCP", cluster.cloud_credential.detail
+            )
+            if zone not in region_info.get(region, []):
+                logger.info(
+                    "Unable to retrieve data for zone %s in region %s",
+                    zone,
+                    region,
+                )
+                return JsonResponse({})
+
+            info = cloud_info.get_disk_types(
+                "GCP", cluster.cloud_credential.detail, region, zone
+            )
+            return JsonResponse({"disks": info})
+
+        # Can't do a lot about API failures, just log it and move one
+        except Exception as err:  # pylint: disable=broad-except
+            logger.exception("Exception during cloud API query:", exc_info=err)
+            pass
+
+        return JsonResponse({})
 
 # Other supporting views
 

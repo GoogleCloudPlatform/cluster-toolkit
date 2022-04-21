@@ -290,6 +290,8 @@ resource_groups:
     settings:
       login_node_count: {self.cluster.num_login_nodes}
       controller_machine_type: {self.cluster.controller_instance_type}
+      boot_disk_type: {self.cluster.controller_disk_type}
+      boot_disk_size: {self.cluster.controller_disk_size}
       controller_service_account: $(hpc_service_account.email)
       controller_startup_script: |
         #!/bin/bash
@@ -314,6 +316,8 @@ resource_groups:
       login_node_count: {self.cluster.num_login_nodes}
       subnetwork_name: {self.cluster.subnet.cloud_id}
       login_machine_type: {self.cluster.login_node_instance_type}
+      boot_disk_type: {self.cluster.login_node_disk_type}
+      boot_disk_size: {self.cluster.login_node_disk_size}
       login_service_account: $(hpc_service_account.email)
       login_scopes:
       - https://www.googleapis.com/auth/monitoring.write

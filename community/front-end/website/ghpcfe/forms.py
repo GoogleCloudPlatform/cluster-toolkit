@@ -126,28 +126,38 @@ class ClusterForm(forms.ModelForm):
             for field in self.fields.keys():
                 self.field[field].disabled = True
 
-        # For machine types, will use JS to get valid types dependant on
-        # cloud zone. So bypass cleaning and choices
         self.fields["cloud_zone"].widget.choices = [
             (
                 self.instance.cloud_zone,
                 self.instance.cloud_zone
             )
         ]
-        self.fields["controller_instance_type"].widget.choices = [
-            (
-                self.instance.controller_instance_type,
-                self.instance.controller_instance_type
-            )
-        ]
-        self.fields["controller_instance_type"].clean = lambda value: value
-        self.fields["login_node_instance_type"].widget.choices = [
-            (
-                self.instance.login_node_instance_type,
-                self.instance.login_node_instance_type
-            )
-        ]
-        self.fields["login_node_instance_type"].clean = lambda value: value
+
+        # For machine types, will use JS to get valid types dependant on
+        # cloud zone. So bypass cleaning and choices
+        def prep_dynamic_select(field, value):
+            self.fields[field].widget.choices = [
+                ( value, value )
+            ]
+            self.fields[field].clean = lambda value: value
+
+        prep_dynamic_select(
+            "controller_instance_type",
+            self.instance.controller_instance_type
+        )
+        prep_dynamic_select(
+            "controller_disk_type",
+            self.instance.controller_disk_type
+        )
+        prep_dynamic_select(
+            "login_node_instance_type",
+            self.instance.login_node_instance_type
+        )
+        prep_dynamic_select(
+            "login_node_disk_type",
+            self.instance.login_node_disk_type
+        )
+
 
     class Meta:
         model = Cluster
@@ -160,8 +170,12 @@ class ClusterForm(forms.ModelForm):
             "authorised_users",
             "spackdir",
             "controller_instance_type",
+            "controller_disk_type",
+            "controller_disk_size",
             "num_login_nodes",
             "login_node_instance_type",
+            "login_node_disk_type",
+            "login_node_disk_size",
         )
 
         widgets = {
@@ -174,8 +188,20 @@ class ClusterForm(forms.ModelForm):
             "controller_instance_type": forms.Select(
                 attrs={"class": "form-control machine_type_select"}
             ),
+            "controller_disk_size": forms.NumberInput(
+                attrs={"class": "form-control"}
+            ),
+            "controller_disk_type": forms.Select(
+                attrs={"class": "form-control disk_type_select"}
+            ),
             "login_node_instance_type": forms.Select(
                 attrs={"class": "form-control machine_type_select"}
+            ),
+            "login_node_disk_size": forms.NumberInput(
+                attrs={"class": "form-control"}
+            ),
+            "login_node_disk_type": forms.Select(
+                attrs={"class": "form-control disk_type_select"}
             ),
             "num_login_nodes": forms.NumberInput(
                 attrs={"class": "form-control"}

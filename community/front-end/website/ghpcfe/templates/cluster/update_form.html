@@ -60,12 +60,57 @@ function updateMachineAvailability() {
 }
 
 
+function updateDiskAvailability() {
+    var subnet_element = document.getElementById("id_subnet");
+    var zone_element = document.getElementById("id_cloud_zone");
+    var region = subnet_map[subnet_element.value];
+    var zone = zone_element.value;
+    disk_info = $.ajax({
+        url: "{% url 'api-disktype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+        type: "GET",
+        dataType: "json",
+        headers: {'X-CSRFToken': $.cookie("csrftoken")}
+    }).done(function(data) {
+        $(".disk_type_select").each(function(pos, selObj) {
+            var curVal = selObj.value;
+            $(selObj).empty();
+            $.each(data.disks, function(i, disk_info) {
+                if ( disk_info.name.startsWith("pd-") ) { // Only Persistent Disks
+                    var option = document.createElement("option");
+                    option.text = disk_info.description;
+                    option.setAttribute("value", disk_info.name);
+                    selObj.appendChild(option);
+                }
+            });
+            var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
+            var disk_size_sel = $(selObj).parentsUntil("tbody").find("#" + id_prefix + "_disk_size")[0];
+            selObj.onchange = function() {
+                disk = data.disks.find(d => d.name == selObj.value);
+                disk_size_sel.min = disk.minSizeGB;
+                disk_size_sel.max = disk.maxSizeGB;
+                if ( Number(disk_size_sel.value) < disk_size_sel.min ) {
+                    disk_size_sel.value = disk_size_sel.min;
+                } else if ( Number(disk_size_sel.value) > disk_size_sel.max ) {
+                    disk_size_sel.value = disk_size_sel.max;
+                }
+            };
+            selObj.value = curVal;
+            selObj.onchange();
+        });
+    });
+}
+
+
+function updateZoneAvailability() {
+    updateMachineAvailability();
+    updateDiskAvailability();
+}
 
 $(document).ready(function() {
     document.getElementById("id_subnet").onchange = subnetSelected;
     subnetSelected();
-    updateMachineAvailability();
-    $("#id_cloud_zone").on("change", updateMachineAvailability);
+    updateZoneAvailability();
+    $("#id_cloud_zone").on("change", updateZoneAvailability);
 });
 
 </script>
@@ -127,28 +172,71 @@ $(document).ready(function() {
 
     <hr>
     <p style="text-decoration: underline; font-size: large;">Static Nodes</p>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr>
+            <th></th>
+            <th># Nodes</th>
+            <th>Instance Type</th>
+            <th>Boot Disk Size (GB)</th>
+            <th>Boot Disk Type</th>
+            </tr></thead>
+            <tr>
+                <th>Controller</th>
+                <td>
     <div class="form-group">
-      {{ form.controller_instance_type.errors }}
-      {{ form.controller_instance_type.label_tag }}
+        <input type="number" name="num_controller_nodes" value="1" class="form-control" disabled>
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.controller_instance_type.errors.as_ul }}
       {{ form.controller_instance_type }}
-        <small class="form-text text-muted">{{ form.controller_instance_type.help_text }}</small>
     </div>
-
-    <div style="display:flex; flex-flow:row wrap;">
-    <div style="width=64em;" class="form-group">
-      {{ form.num_login_nodes.errors }}
-      {{ form.num_login_nodes.label_tag }}
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.controller_disk_size.errors.as_ul }}
+      {{ form.controller_disk_size }}
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.controller_disk_type.errors.as_ul }}
+      {{ form.controller_disk_type }}
+    </div>
+                </td>
+            </tr>
+            <tr>
+                <th>Login Nodes</th>
+                <td>
+    <div class="form-group">
+      {{ form.num_login_nodes.errors.as_ul }}
       {{ form.num_login_nodes }}
-        <small class="form-text text-muted">{{ form.num_login_nodes.help_text }}</small>
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.login_node_instance_type.errors.as_ul }}
+      {{ form.login_node_instance_type }}
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.login_node_disk_size.errors.as_ul }}
+      {{ form.login_node_disk_size }}
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.login_node_disk_type.errors.as_ul }}
+      {{ form.login_node_disk_type }}
+    </div>
+                </td>
+            </tr>
+        </table>
     </div>
 
-    <div style="flex-grow:1" class="form-group">
-      {{ form.login_node_instance_type.errors }}
-      {{ form.login_node_instance_type.label_tag }}
-      {{ form.login_node_instance_type }}
-        <small class="form-text text-muted">{{ form.login_node_instance_type.help_text }}</small>
-    </div>
-    </div>
     <hr>
     <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
     <div class="table-responsive">

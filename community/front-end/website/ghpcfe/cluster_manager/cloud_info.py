@@ -72,6 +72,33 @@ def _get_gcp_client(credentials, service="compute", api_version="v1"):
 
 
 @lru_cache
+def _get_gcp_disk_types(
+    credentials, zone, ttl_hash=None
+):  # pylint: disable=unused-argument
+    (project, client) = _get_gcp_client(credentials)
+
+    req = client.diskTypes().list(project=project, zone=zone)
+    resp = req.execute()
+    return [
+        {
+            "description": x["description"],
+            "name": x["name"],
+            "minSizeGB": int(x["validDiskSize"].split("-")[0][:-2]),
+            "maxSizeGB": int(x["validDiskSize"].split("-")[1][:-2]),
+        }
+        for x in resp.get("items", [])
+    ]
+
+def get_disk_types(cloud_provider, credentials, unused_region, zone):
+    if cloud_provider == "GCP":
+        return _get_gcp_disk_types(
+            credentials, zone, ttl_hash=_get_ttl_hash()
+        )
+    else:
+        raise Exception(f'Unsupport Cloud Provider "{cloud_provider}"')
+
+
+@lru_cache
 def _get_gcp_machine_types(
     credentials, zone, ttl_hash=None
 ):  # pylint: disable=unused-argument
