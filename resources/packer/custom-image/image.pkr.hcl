@@ -13,11 +13,17 @@
 # limitations under the License.
 
 locals {
-  subnetwork_name = var.subnetwork_name != null ? var.subnetwork_name : "${var.deployment_name}-primary-subnet"
-  metadata        = var.startup_script == null ? null : { startup-script = var.startup_script }
+  subnetwork_name      = var.subnetwork_name != null ? var.subnetwork_name : "${var.deployment_name}-primary-subnet"
+  metadata             = var.startup_script == null ? null : { startup-script = var.startup_script }
+  no_shell_scripts     = length(var.shell_scripts) == 0
+  no_ansible_playbooks = length(var.ansible_playbooks) == 0
+  no_provisioners      = local.no_shell_scripts && local.no_ansible_playbooks
+  communicator         = local.no_provisioners ? "none" : "ssh"
+  use_iap              = local.no_provisioners ? false : var.use_iap
 }
 
 source "googlecompute" "toolkit_image" {
+  communicator            = local.communicator
   project_id              = var.project_id
   image_name              = "${var.deployment_name}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
   image_family            = var.deployment_name
@@ -32,7 +38,7 @@ source "googlecompute" "toolkit_image" {
   source_image_project_id = var.source_image_project_id
   ssh_username            = var.ssh_username
   tags                    = var.tags
-  use_iap                 = var.use_iap
+  use_iap                 = local.use_iap
   use_os_login            = var.use_os_login
   zone                    = var.zone
   metadata                = local.metadata
