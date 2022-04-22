@@ -106,7 +106,7 @@ def _get_gcp_machine_types(
     # Grab the Accelerators
     accels = (
         client.acceleratorTypes()
-        .list(project=project, zone=zone, filter="name!=nvidia-tesla-a100")
+        .list(project=project, zone=zone)
         .execute()
     )
     # Set N1-associated Accelerators
