@@ -693,6 +693,7 @@ class InstancePricingViewSet(viewsets.ViewSet):
             cluster.cloud_region,
             cluster.cloud_zone,
             instance_type,
+            (partition.GPU_type, partition.GPU_per_node),
         )
         return JsonResponse(
             {"instance": instance_type, "price": price, "currency": "USD"}

@@ -104,7 +104,7 @@ function initPage() {
     document.getElementById("id_number_of_nodes").value = 1;
     document.getElementById("id_number_of_nodes").oninput = instance_count_change;
     document.getElementById("id_wall_clock_time_limit").oninput = wallclock_limit_change;
-    document.getElementById("id_partition").onselect = change_partition;
+    document.getElementById("id_partition").onchange = change_partition;
     updateRunScriptSelection('url');
     updatePricing();
 
