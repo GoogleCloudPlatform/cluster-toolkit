@@ -31,6 +31,14 @@ const (
 # Local .terraform directories
 **/.terraform/*
 `
+	testGitignoreNewTmpl = `
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+`
 )
 
 var testDir string
@@ -70,6 +78,8 @@ func getTestFS() afero.IOFS {
 	aferoFS.MkdirAll("pkg/reswriter", 0755)
 	afero.WriteFile(
 		aferoFS, "pkg/reswriter/blueprint.gitignore.tmpl", []byte(testGitignoreTmpl), 0644)
+	afero.WriteFile(
+		aferoFS, "pkg/reswriter/blueprint_new.gitignore.tmpl", []byte(testGitignoreNewTmpl), 0644)
 	return afero.NewIOFS(aferoFS)
 }
 

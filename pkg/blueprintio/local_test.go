@@ -100,9 +100,17 @@ func (s *MySuite) TestCopyFromFS(c *C) {
 	testDstGitignore := filepath.Join(testDir, ".gitignore")
 	err := blueprintio.CopyFromFS(testFS, testSrcGitignore, testDstGitignore)
 	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(testDstGitignore)
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
+	data, err := os.ReadFile(testDstGitignore)
+	c.Assert(err, IsNil)
+	c.Assert(string(data), Equals, testGitignoreTmpl)
+
+	// Success: This truncates the file if it already exists in the destination
+	testSrcNewGitignore := "pkg/reswriter/blueprint_new.gitignore.tmpl"
+	err = blueprintio.CopyFromFS(testFS, testSrcNewGitignore, testDstGitignore)
+	c.Assert(err, IsNil)
+	newData, err := os.ReadFile(testDstGitignore)
+	c.Assert(err, IsNil)
+	c.Assert(string(newData), Equals, testGitignoreNewTmpl)
 
 	// Failure: Invalid path
 	err = blueprintio.CopyFromFS(testFS, "not/valid", testDstGitignore)

@@ -199,8 +199,13 @@ func prepBpDir(bpDir string, overwrite bool) error {
 				"While trying to update the blueprint directory at %s, the '.ghpc/' dir could not be found", bpDir)
 		}
 	} else {
-		blueprintIO.CreateDirectory(ghpcDir)
-		blueprintIO.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile)
+		if err := blueprintIO.CreateDirectory(ghpcDir); err != nil {
+			return fmt.Errorf("Failed to create directory at %s: err=%w", ghpcDir, err)
+		}
+
+		if err := blueprintIO.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile); err != nil {
+			return fmt.Errorf("Failed to copy template.gitignore file to %s: err=%w", gitignoreFile, err)
+		}
 	}
 
 	// clean up old dirs
