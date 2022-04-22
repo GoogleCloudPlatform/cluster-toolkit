@@ -148,9 +148,9 @@ class ApplicationCreateSelectView(generic.ListView):
 
         if request.POST["application-type"] == "spack":
             itemtype = "application-create-spack-cluster"
-        elif request.POST["application-itemtype"] == "custom":
+        elif request.POST["application-type"] == "custom":
             itemtype = "application-create-install"
-        elif request.POST["application-itemtype"] == "installed":
+        elif request.POST["application-type"] == "installed":
             itemtype = "application-create"
         return HttpResponseRedirect(
             reverse(itemtype, kwargs={"cluster": request.POST["cluster"]})
