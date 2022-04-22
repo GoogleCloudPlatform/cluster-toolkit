@@ -54,7 +54,7 @@ variable "subnetwork_name" {
 variable "omit_external_ip" {
   description = "Provision the image building VM without a public IP address"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "tags" {
@@ -105,7 +105,7 @@ EOD
 variable "use_iap" {
   description = "Use IAP proxy when connecting by SSH"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "use_os_login" {
@@ -121,10 +121,35 @@ variable "ssh_username" {
 }
 
 variable "ansible_playbooks" {
+  description = "A list of Ansible playbook configurations that will be uploaded to customize the VM image"
   type = list(object({
     playbook_file   = string
     galaxy_file     = string
     extra_arguments = list(string)
   }))
   default = []
+}
+
+variable "shell_scripts" {
+  description = "A list of paths to local shell scripts which will be uploaded to customize the VM image"
+  type        = list(string)
+  default     = []
+}
+
+variable "startup_script" {
+  description = "Startup script (as raw string) used to build the custom VM image (overridden by var.startup_script_file if both are supplied)"
+  type        = string
+  default     = null
+}
+
+variable "startup_script_file" {
+  description = "Path to local shell script that will be uploaded as a startup script to customize the VM image"
+  type        = string
+  default     = null
+}
+
+variable "wrap_startup_script" {
+  description = "Wrap startup script with Packer-generated wrapper"
+  type        = bool
+  default     = true
 }
