@@ -416,22 +416,25 @@ class ClusterUpdateView(UpdateView):
                         part.vCPU_per_node = machine_info[part.machine_type][
                             "vCPU"
                         ] // (1 if part.enable_hyperthreads else 2)
-                        part.GPU_per_node = 0
-                        part.GPU_type = ""
-                        for accelerator in machine_info[part.machine_type][
-                            "accelerators"
-                        ]:
-                            if not accelerator["type"].startswith(
-                                "nvidia-tesla"
-                            ):
-                                continue
-                            if part.GPU_per_node != 0:
+                        # Validate GPU choice
+                        if part.GPU_type:
+                            try:
+                                accel_info = machine_info[part.machine_type][
+                                    "accelerators"
+                                ][part.GPU_type]
+                                if (
+                                    part.GPU_per_node < accel_info["min_count"]
+                                    or part.GPU_per_node
+                                    > accel_info["max_count"]
+                                ):
+                                    raise ValidationError(
+                                        "Invalid number of GPUs of type "
+                                        f"{part.GPU_type}"
+                                    )
+                            except KeyError as err:
                                 raise ValidationError(
-                                    "Inhomogeneous GPU configurations are "
-                                    "not supported"
-                                )
-                            part.GPU_type = accelerator["type"]
-                            part.GPU_per_node = accelerator["count"]
+                                    f"Invalid GPU type {part.GPU_type}"
+                                ) from err
                 except KeyError as err:
                     raise ValidationError(
                         "Error in Partition - invalid machine type: "
@@ -714,6 +717,7 @@ class InstancePricingViewSet(viewsets.ViewSet):
             cluster.cloud_region,
             cluster.cloud_zone,
             instance_type,
+            (partition.GPU_type, partition.GPU_per_node),
         )
         return JsonResponse(
             {"instance": instance_type, "price": price, "currency": "USD"}

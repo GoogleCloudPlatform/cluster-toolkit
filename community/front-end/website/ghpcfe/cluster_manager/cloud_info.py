@@ -85,23 +85,57 @@ def _get_gcp_machine_types(
     if "items" not in resp:
         return []
 
-    return {
+    data = {
         mt["name"]: {
             "name": mt["name"],
             "family": mt["name"].split("-")[0],
             "memory": mt["memoryMb"],
             "vCPU": mt["guestCpus"],
             "arch": _get_arch_for_node_type_gcp(mt["name"]),
-            "accelerators": [
-                {
-                    "type": acc["guestAcceleratorType"],
-                    "count": acc["guestAcceleratorCount"],
+            "accelerators": {
+                acc["guestAcceleratorType"]: {
+                    "min_count": acc["guestAcceleratorCount"],
+                    "max_count": acc["guestAcceleratorCount"],
                 }
                 for acc in mt.get("accelerators", [])
-            ],
+            },
         }
         for mt in resp["items"]
     }
+
+    # Grab the Accelerators
+    accels = (
+        client.acceleratorTypes()
+        .list(project=project, zone=zone)
+        .execute()
+    )
+    # Set N1-associated Accelerators
+    n1_accels = {
+        acc["name"]: {
+            "description": acc["description"],
+            "min_count": 0,
+            "max_count": acc["maximumCardsPerInstance"],
+        }
+        for acc in accels.get("items", [])
+        if "nvidia-tesla-a100" not in acc["name"]
+    }
+    for mach in data.keys():
+        if data[mach]["family"] == "n1":
+            data[mach]["accelerators"] = n1_accels
+        # Fix up description for A100 (or others)
+        elif data[mach]["accelerators"]:
+            for acc_name in data[mach]["accelerators"].keys():
+                items = [
+                    x
+                    for x in accels.get("items", [])
+                    if x["name"] == acc_name
+                ]
+                if items:
+                    data[mach]["accelerators"][acc_name]["description"] = (
+                        items[0]["description"]
+                    )
+
+    return data
 
 
 def _get_ttl_hash(seconds=3600 * 24):
@@ -212,7 +246,13 @@ _gcp_services_list = None
 _gcp_compute_sku_list = None
 
 
-def _get_gcp_instance_pricing(credentials, region, zone, instance_type):
+def _get_gcp_instance_pricing(
+    credentials,
+    region,
+    zone,
+    instance_type,
+    gpu_info=None
+):
     global _gcp_services_list
     global _gcp_compute_sku_list
 
@@ -248,6 +288,11 @@ def _get_gcp_instance_pricing(credentials, region, zone, instance_type):
     # Compute infrastructure we're using.  We do have to look at the
     # "description" field, which feels hazardous and liable to change
 
+    def price_expr_to_unit_price(expr):
+        """Convert a "Price Expression" to a unit (hourly) price"""
+        unit = expr.tiered_rates[0].unit_price
+        return unit.units + (unit.nanos * 1e-9)
+
     def get_disk_price(disk_size, skus):
         def disk_sku_filter(elem):
             if elem.category.resource_family != "Storage":
@@ -265,9 +310,7 @@ def _get_gcp_instance_pricing(credentials, region, zone, instance_type):
         if len(disk_sku) != 1:
             raise Exception("Failed to find singular appropriate disk")
         disk_price_expression = disk_sku[0].pricing_info[0].pricing_expression
-        unit_price = (
-            disk_price_expression.tiered_rates[0].unit_price.nanos * 1e-9
-        )
+        unit_price = price_expr_to_unit_price(disk_price_expression)
         disk_cost_per_month = disk_size * unit_price
         disk_cost_per_hr = disk_cost_per_month / (24 * 30)
         return disk_cost_per_hr
@@ -313,9 +356,7 @@ def _get_gcp_instance_pricing(credentials, region, zone, instance_type):
         if len(cpu_sku) != 1:
             raise Exception("Failed to find singular appropriate cpu billing")
         cpu_price_expression = cpu_sku[0].pricing_info[0].pricing_expression
-        unit_price = (
-            cpu_price_expression.tiered_rates[0].unit_price.nanos * 1e-9
-        )
+        unit_price = price_expr_to_unit_price(cpu_price_expression)
         cpu_price_per_hr = num_cores * unit_price
         return cpu_price_per_hr
 
@@ -329,6 +370,7 @@ def _get_gcp_instance_pricing(credentials, region, zone, instance_type):
             "a2": "A2 Instance Ram",
             "m1": "Memory-optimized Instance Ram",  # ??
             "n2": "N2 Instance Ram",
+            "n1": "Custom Instance Ram", # ??
         }
         # TODO: Deal with 'Extended Instance Ram'
         instance_class = instance_type.split("-")[0]
@@ -359,27 +401,61 @@ def _get_gcp_instance_pricing(credentials, region, zone, instance_type):
         if len(mem_sku) != 1:
             raise Exception("Failed to find singular appropriate RAM billing")
         mem_price_expression = mem_sku[0].pricing_info[0].pricing_expression
-        unit_price = (
-            mem_price_expression.tiered_rates[0].unit_price.nanos * 1e-9
-        )
+        unit_price = price_expr_to_unit_price(mem_price_expression)
         ram_price_per_hr = num_gb * unit_price
         return ram_price_per_hr
 
+    def get_accel_price(gpu_description, gpu_count, skus):
+        def gpu_sku_filter(elem):
+            if elem.category.resource_family != "Compute":
+                return False
+            if elem.category.resource_group != "GPU":
+                return False
+            if elem.category.usage_type != "OnDemand":
+                return False
+            return elem.description.lower().startswith(
+                gpu_description.lower())
+
+        gpu_sku = [x for x in skus if gpu_sku_filter(x)]
+
+        if len(gpu_sku) != 1:
+            raise Exception("Failed to find singular appropriate GPU billing")
+        gpu_price_expression = gpu_sku[0].pricing_info[0].pricing_expression
+        unit_price = price_expr_to_unit_price(gpu_price_expression)
+        gpu_price_per_hr = gpu_count * unit_price
+        return gpu_price_per_hr
+
+
     machine = _get_gcp_machine_types(credentials, zone)[instance_type]
-    return (
+    instance_price = (
         get_cpu_price(machine["vCPU"], instance_type, skus)
         + get_mem_price(machine["memory"] / 1024, instance_type, skus)
+        # TODO: Actual disk size (20 is GHPC default)
         + get_disk_price(20.0, skus)
     )
+    if gpu_info:
+        (gpu_name, gpu_count) = gpu_info
+        if gpu_count:
+            # Need to map GPU name to GPU description for Pricing API
+            try:
+                gpu_desc = machine["accelerators"][gpu_name]["description"]
+                instance_price += get_accel_price(gpu_desc, gpu_count, skus)
+            except KeyError as err:
+                raise Exception(
+                    "Failed to map accelerator to instance"
+                ) from err
+
+
+    return instance_price
 
 
 def get_instance_pricing(
-    cloud_provider, credentials, region, zone, instance_type
+    cloud_provider, credentials, region, zone, instance_type, gpu_info=None
 ):
     """Return price per hour for an instance"""
     if cloud_provider == "GCP":
         return _get_gcp_instance_pricing(
-            credentials, region, zone, instance_type
+            credentials, region, zone, instance_type, gpu_info
         )
     else:
         raise Exception(f'Unsupported Cloud Provider "{cloud_provider}"')
