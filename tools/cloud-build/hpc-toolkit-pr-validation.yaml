@@ -23,7 +23,7 @@ steps:
   - '-c'
   - |
     set -e
-    pre-commit install
+    pre-commit install --install-hooks
     tools/cloud-build/split-pre-commit-hooks.sh
 - id: pre-commits1
   waitFor:
