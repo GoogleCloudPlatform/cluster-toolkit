@@ -61,6 +61,6 @@ For example, if the Frontend is in GCP Project `Alpha`, the C2 Topic will also b
 
 ## Data Storage
 
-Previous systems relied on the Frontend webserver using SSH to download log files from the clusters to display to users.  With the PubSub architecture, this needed to change. Clusters now automatically upload job logs to a GCS bucket, which is specified at cluster creation time.  The Cluster's Service Account is granted ObjectAdmin permissions in order to create and update Log files in the GCS bucket.
+Clusters automatically upload job logs to a GCS bucket, which is specified at cluster creation time.  The Cluster's Service Account is granted ObjectAdmin permissions in order to create and update Log files in the GCS bucket.
 
-The Frontend webserver now displays log files from the GCS bucket, rather than copying them from the clusters via SSH.
+The Frontend webserver displays log files from the GCS bucket.
