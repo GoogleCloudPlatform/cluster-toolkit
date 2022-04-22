@@ -1,0 +1,225 @@
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
+<script>
+{% autoescape off %}
+var subnet_map = {{ subnet_regions }};
+var region_info = {{ region_info }};
+{% endautoescape %}
+
+function subnetSelected() {
+    subnet_element = document.getElementById("id_subnet");
+    zone_element = document.getElementById("id_cloud_zone");
+    zone_element.disabled = false;
+    $("#id_cloud_zone").find('option').remove().end();
+    region_info[subnet_map[subnet_element.value]].forEach(function (item) {
+      var el = document.createElement("option");
+      el.text = item;
+      el.setAttribute("value", item) 
+      zone_element.appendChild(el);
+    });
+}
+
+function updateMachineAvailability() {
+    // Get machine Info
+    // For each select of class 'machine_type_select'...
+    //     ??Save it's value
+    //     Clear the options
+    //     Replace options
+    //     ??Restore it's value (selected)?
+
+    var subnet_element = document.getElementById("id_subnet");
+    var zone_element = document.getElementById("id_cloud_zone");
+    var region = subnet_map[subnet_element.value];
+    var zone = zone_element.value;
+    machine_info = $.ajax({
+        url: "{% url 'api-instancetype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+        type: "GET",
+        dataType: "json",
+        headers: {'X-CSRFToken': $.cookie("csrftoken")}
+    }).done(function(data) {
+        $(".machine_type_select").each(function(pos, selObj) {
+            var curVal = selObj.value;
+            $(selObj).empty();
+            $.each(data.machine_types, function(i, machineName) {
+                var option = document.createElement("option");
+                option.text = machineName;
+                option.setAttribute("value", machineName);
+                selObj.appendChild(option)
+            });
+            selObj.value = curVal;
+        });
+    });
+
+
+}
+
+
+
+$(document).ready(function() {
+    document.getElementById("id_subnet").onchange = subnetSelected;
+    updateMachineAvailability();
+    $("#id_cloud_zone").on("change", updateMachineAvailability);
+});
+
+</script>
+{% load static %}
+{% endblock %}
+
+{% block content %}
+  <h2>Update cluster</h2>  
+
+{% if form.errors %}
+{% for field in form %}
+{% for error in field.errors %}
+<div class="alert alert-danger">
+<strong>{{field.name}} {{ error|escape }}</strong>
+</div>
+{% endfor %}
+{% endfor %}
+{% for error in form.non_field_errors %}
+<div class="alert alert-danger">
+<strong>{{ error|escape }}</strong>
+</div>
+{% endfor %}
+{% endif %}
+
+  <form action="" method="post" id="clusterForm">
+    {% csrf_token %}
+
+    <input type="hidden" name="cloud_credential" class="form-control" id="id_credential" value="{{ form.cloud_credential.value }}">
+    <div class="form-group">
+      {{ form.name.errors }}
+      {{ form.name.label_tag }}
+      {{ form.name }}
+        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.subnet.errors }}
+      {{ form.subnet.label_tag }}
+      {{ form.subnet }}
+        <small class="form-text text-muted">{{ form.subnet.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.cloud_zone.errors }}
+      {{ form.cloud_zone.label_tag }}
+      {{ form.cloud_zone }}
+        <small class="form-text text-muted">{{ form.cloud_zone.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.num_login_nodes.errors }}
+      {{ form.num_login_nodes.label_tag }}
+      {{ form.num_login_nodes }}
+        <small class="form-text text-muted">{{ form.num_login_nodes.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.authorised_users.errors }}
+      {{ form.authorised_users.label_tag }}
+      {{ form.authorised_users }}
+        <small class="form-text text-muted">{{ form.authorised_users.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.spackdir.errors }}
+      {{ form.spackdir.label_tag }}
+      {{ form.spackdir }}
+        <small class="form-text text-muted">{{ form.spackdir.help_text }}</small>
+    </div>
+
+    <hr>
+    <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
+    <div class="table-responsive">
+        <table class="table align-middle">
+        {{ mountpoints_formset.management_form }}
+        {% for form in mountpoints_formset.forms %}
+          {% if forloop.first %}
+            <thead>
+            <tr>
+              {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
+            </tr>
+            </thead>
+          {% endif %}
+          <tr class="mp_formset_row">
+            {% for field in form.visible_fields %}
+              <td>
+              {% if forloop.first %}
+                {% for hidden in form.hidden_fields %}
+                  {{ hidden }}
+                {% endfor %}
+              {% endif %}
+                {{ field.errors.as_ul }}
+                {{ field }}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}    
+        </table>
+    </div>
+
+
+    <hr>
+    <p style="text-decoration: underline; font-size: large;">Partitions</p>
+    <div class="table-responsive">
+        <table class="table align-middle">
+        {% for form in cluster_partitions_formset.forms %}
+          {% if forloop.first %}
+            <thead>
+            <tr>
+              {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
+            </tr>
+            </thead>
+          {% endif %}
+          {% if form.errors %}
+            {% for error in form.non_field_errors %}
+              <div class="alert alert-danger">
+              <strong>{{ error|escape }}</strong>
+              </div>
+            {% endfor %}
+          {% endif %}
+          <tr class="part_formset_row">
+            {% for field in form.visible_fields %}
+              <td>
+              {% if forloop.first %}
+                {% for hidden in form.hidden_fields %}
+                  {{ hidden }}
+                {% endfor %}
+              {% endif %}
+                {{ field.errors.as_ul }}
+                {{ field }}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}    
+        </table>
+        {{ cluster_partitions_formset.management_form }}
+    </div>
+    <br/>  
+    <input type="submit" value="Save" class="btn btn-primary"/>
+    <button class="btn btn-primary" onclick="javascript:history.back();"/>Cancel</button>
+  </form>
+
+{% endblock %}
+
+{% block tailscript %}
+<script src="{% static 'js/jquery.formset.js' %}"></script>
+<script type="text/javascript">
+    $('.mp_formset_row').formset({
+        addText: 'add mount point',
+        /*addCssClass: 'add-row btn btn-info',*/
+        deleteText: 'remove',
+        /*deleteCssClass: 'delete-row btn btn-danger',*/
+        prefix: 'mount_points',
+        formCssClass: 'dynamic-mp',
+        hideLastAddForm: 'true'
+    });
+    $('.part_formset_row').formset({
+        addText: 'add partition',
+        deleteText: 'remove',
+        prefix: 'partitions',
+        formCssClass: 'dynamic-part',
+        hideLastAddForm: 'true',
+        added: updateMachineAvailability, // Called each time a new form is added
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,44 @@
+---
+- name: Upgrade PIP3
+  pip:
+    executable: pip3
+    name: pip
+    state: forcereinstall
+
+# Can't use the pip action here because we need to explicitly enable
+# a modern gcc from the dev_env role
+- name: Install FE C&C Dependencies
+  pip:
+    executable: pip3
+    name:
+    - requests
+    - pexpect
+    - google-cloud-storage
+    - google-cloud-pubsub
+    state: present
+
+- name: Install FE C&C Daemon
+  copy:
+    src: ghpcfe_c2daemon.py
+    dest: /usr/local/sbin/ghpcfe_c2daemon.py
+    mode: 0755
+
+- name: Install FE C&C Daemon Config
+  template:
+    src: ghpcfe_c2.yaml.j2
+    dest: /usr/local/etc/ghpcfe_c2.yaml
+    mode: 0755
+
+- name: Install FE C&C service file
+  copy:
+    src: ghpcfe_c2.service
+    dest: /etc/systemd/system/ghpcfe_c2.service
+    mode: 0644
+
+- name: Start FE C&C Daemon
+  systemd:
+    daemon_reload: True
+    state: started
+    name: ghpcfe_c2
+    enabled: True
+    masked: False

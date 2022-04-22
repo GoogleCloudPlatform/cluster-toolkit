@@ -1,0 +1,12 @@
+---
+- name: "Controller Setup"
+  hosts: localhost
+  connection: local
+  vars_files:
+  - ./vars.yaml
+  roles:
+  - common
+  - spack_install
+  - spack_setup
+  # This one should be last - has a role to check in with FE to signal ready
+  - c2_daemon
