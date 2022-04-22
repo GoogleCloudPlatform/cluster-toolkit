@@ -96,10 +96,9 @@ function updateMachineAvailability() {
                         if ( gpuCount.min == gpuCount.max ) {
                             gpuCount.readOnly = true;
                         }
+                        $(gpuType).nextAll().remove();
                         if ( newMachType.startsWith("n1-") && gpuType.value ) {
                             $(gpuType).after('<p>WARNING: N1 instances with GPUs have strict limitations that are not checked in the Frontend.  Please see <a href="https://cloud.google.com/compute/docs/gpus">the docs</a></p>');
-                        } else {
-                            $(gpuType).nextAll().remove();
                         }
                     };
                     if ( accelRequired ) {
