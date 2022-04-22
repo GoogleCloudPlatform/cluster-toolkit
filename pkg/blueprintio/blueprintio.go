@@ -14,10 +14,22 @@
 
 package blueprintio
 
+import (
+	"io/fs"
+)
+
+// BaseFS is an extension of the io.fs interface with the functionality needed
+// in CopyFromFS. Works with embed.FS and afero.FS
+type BaseFS interface {
+	ReadDir(string) ([]fs.DirEntry, error)
+	ReadFile(string) ([]byte, error)
+}
+
 // BlueprintIO interface for writing blueprints to a storage
 type BlueprintIO interface {
 	CreateDirectory(bpDirectoryPath string) error
 	CopyFromPath(src string, dst string) error
+	CopyFromFS(fs BaseFS, src string, dst string) error
 }
 
 var blueprintios = map[string]BlueprintIO{

@@ -1,0 +1,118 @@
+// Copyright 2022 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package blueprintio
+
+import (
+	"io/ioutil"
+	"log"
+	"os"
+	"path/filepath"
+
+	. "gopkg.in/check.v1"
+)
+
+func (s *MySuite) TestCreateDirectoryLocal(c *C) {
+	blueprintio := GetBlueprintIOLocal()
+
+	// Try to create the exist directory
+	err := blueprintio.CreateDirectory(testDir)
+	expErr := "The directory already exists: .*"
+	c.Assert(err, ErrorMatches, expErr)
+
+	directoryName := "dir_TestCreateDirectoryLocal"
+	createdDir := filepath.Join(testDir, directoryName)
+	err = blueprintio.CreateDirectory(createdDir)
+	c.Assert(err, IsNil)
+
+	_, err = os.Stat(createdDir)
+	c.Assert(err, IsNil)
+}
+
+func (s *MySuite) TestGetAbsSourcePath(c *C) {
+	// Already abs path
+	gotPath := getAbsSourcePath(testDir)
+	c.Assert(gotPath, Equals, testDir)
+
+	// Relative path
+	relPath := "relative/path"
+	cwd, err := os.Getwd()
+	c.Assert(err, IsNil)
+	gotPath = getAbsSourcePath(relPath)
+	c.Assert(gotPath, Equals, filepath.Join(cwd, relPath))
+}
+
+func (s *MySuite) TestCopyFromPathLocal(c *C) {
+	blueprintio := GetBlueprintIOLocal()
+	testSrcFilename := filepath.Join(testDir, "testSrc")
+	str := []byte("TestCopyFromPathLocal")
+	if err := os.WriteFile(testSrcFilename, str, 0755); err != nil {
+		log.Fatalf("blueprintio_test: failed to create %s: %v", testSrcFilename, err)
+	}
+
+	testDstFilename := filepath.Join(testDir, "testDst")
+	blueprintio.CopyFromPath(testSrcFilename, testDstFilename)
+
+	src, err := ioutil.ReadFile(testSrcFilename)
+	if err != nil {
+		log.Fatalf("blueprintio_test: failed to read %s: %v", testSrcFilename, err)
+	}
+
+	dst, err := ioutil.ReadFile(testDstFilename)
+	if err != nil {
+		log.Fatalf("blueprintio_test: failed to read %s: %v", testDstFilename, err)
+	}
+
+	c.Assert(string(src), Equals, string(dst))
+}
+
+func (s *MySuite) TestMkdirWrapper(c *C) {
+	// Success
+	testMkdirWrapperDir := filepath.Join(testDir, "testMkdirWrapperDir")
+	err := mkdirWrapper(testMkdirWrapperDir)
+	c.Assert(err, IsNil)
+
+	// Failure: Path is not a directory
+	badMkdirWrapperDir := filepath.Join(testDir, "NotADir")
+	_, err = os.Create(badMkdirWrapperDir)
+	c.Assert(err, IsNil)
+	err = mkdirWrapper(badMkdirWrapperDir)
+	expErr := "Failed to create the directory .*"
+	c.Assert(err, ErrorMatches, expErr)
+}
+
+func (s *MySuite) TestCopyFromFS(c *C) {
+	// Success
+	blueprintio := GetBlueprintIOLocal()
+	testFS := getTestFS()
+	testSrcGitignore := "pkg/reswriter/blueprint.gitignore.tmpl"
+	testDstGitignore := filepath.Join(testDir, ".gitignore")
+	err := blueprintio.CopyFromFS(testFS, testSrcGitignore, testDstGitignore)
+	c.Assert(err, IsNil)
+	data, err := os.ReadFile(testDstGitignore)
+	c.Assert(err, IsNil)
+	c.Assert(string(data), Equals, testGitignoreTmpl)
+
+	// Success: This truncates the file if it already exists in the destination
+	testSrcNewGitignore := "pkg/reswriter/blueprint_new.gitignore.tmpl"
+	err = blueprintio.CopyFromFS(testFS, testSrcNewGitignore, testDstGitignore)
+	c.Assert(err, IsNil)
+	newData, err := os.ReadFile(testDstGitignore)
+	c.Assert(err, IsNil)
+	c.Assert(string(newData), Equals, testGitignoreNewTmpl)
+
+	// Failure: Invalid path
+	err = blueprintio.CopyFromFS(testFS, "not/valid", testDstGitignore)
+	c.Assert(err, ErrorMatches, "*file does not exist")
+}
