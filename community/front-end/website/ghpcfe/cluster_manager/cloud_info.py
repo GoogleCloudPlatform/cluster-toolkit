@@ -288,6 +288,11 @@ def _get_gcp_instance_pricing(
     # Compute infrastructure we're using.  We do have to look at the
     # "description" field, which feels hazardous and liable to change
 
+    def price_expr_to_unit_price(expr):
+        """Convert a "Price Expression" to a unit (hourly) price"""
+        unit = expr.tiered_rates[0].unit_price
+        return unit.units + (unit.nanos * 1e-9)
+
     def get_disk_price(disk_size, skus):
         def disk_sku_filter(elem):
             if elem.category.resource_family != "Storage":
@@ -305,9 +310,7 @@ def _get_gcp_instance_pricing(
         if len(disk_sku) != 1:
             raise Exception("Failed to find singular appropriate disk")
         disk_price_expression = disk_sku[0].pricing_info[0].pricing_expression
-        unit_price = (
-            disk_price_expression.tiered_rates[0].unit_price.nanos * 1e-9
-        )
+        unit_price = price_expr_to_unit_price(disk_price_expression)
         disk_cost_per_month = disk_size * unit_price
         disk_cost_per_hr = disk_cost_per_month / (24 * 30)
         return disk_cost_per_hr
@@ -353,9 +356,7 @@ def _get_gcp_instance_pricing(
         if len(cpu_sku) != 1:
             raise Exception("Failed to find singular appropriate cpu billing")
         cpu_price_expression = cpu_sku[0].pricing_info[0].pricing_expression
-        unit_price = (
-            cpu_price_expression.tiered_rates[0].unit_price.nanos * 1e-9
-        )
+        unit_price = price_expr_to_unit_price(cpu_price_expression)
         cpu_price_per_hr = num_cores * unit_price
         return cpu_price_per_hr
 
@@ -400,9 +401,7 @@ def _get_gcp_instance_pricing(
         if len(mem_sku) != 1:
             raise Exception("Failed to find singular appropriate RAM billing")
         mem_price_expression = mem_sku[0].pricing_info[0].pricing_expression
-        unit_price = (
-            mem_price_expression.tiered_rates[0].unit_price.nanos * 1e-9
-        )
+        unit_price = price_expr_to_unit_price(mem_price_expression)
         ram_price_per_hr = num_gb * unit_price
         return ram_price_per_hr
 
@@ -422,9 +421,7 @@ def _get_gcp_instance_pricing(
         if len(gpu_sku) != 1:
             raise Exception("Failed to find singular appropriate GPU billing")
         gpu_price_expression = gpu_sku[0].pricing_info[0].pricing_expression
-        unit_price = (
-            gpu_price_expression.tiered_rates[0].unit_price.nanos * 1e-9
-        )
+        unit_price = price_expr_to_unit_price(gpu_price_expression)
         gpu_price_per_hr = gpu_count * unit_price
         return gpu_price_per_hr
 
@@ -436,7 +433,6 @@ def _get_gcp_instance_pricing(
         # TODO: Actual disk size (20 is GHPC default)
         + get_disk_price(20.0, skus)
     )
-
     if gpu_info:
         (gpu_name, gpu_count) = gpu_info
         if gpu_count:
