@@ -22,7 +22,7 @@ vars:
   zone: us-central1-c
 
 resource_groups:
-- group: network
+- group: builder-env
   resources:
   - source: resources/network/vpc
     kind: terraform

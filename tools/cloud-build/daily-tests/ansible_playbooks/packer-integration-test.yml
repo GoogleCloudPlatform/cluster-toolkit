@@ -35,7 +35,7 @@
     - name: Create Network with Terraform
       command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/network"
+        chdir: "{{ workspace }}/{{ blueprint_dir }}/builder-env"
       args:
         creates: "{{ workspace }}/{{ blueprint_dir }}/.terraform"
       environment:
@@ -66,4 +66,4 @@
         TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve -no-color
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/network"
+        chdir: "{{ workspace }}/{{ blueprint_dir }}/builder-env"

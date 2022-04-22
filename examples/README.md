@@ -5,7 +5,7 @@ to create a blueprint.
 
 ## Instructions
 
-Ensure your project_id is set and other deployment variables such as zone and
+Ensure your project\_id is set and other deployment variables such as zone and
 region are set correctly under `vars` before creating and deploying an example
 config.
 
@@ -154,10 +154,11 @@ All nodes mount a filestore instance on `/home`.
 
 ### image-builder.yaml
 
-This Blueprint helps create custom VM images by applying necessary software and
-configurations to existing images, such as the [HPC VM Image][hpcimage].
-Using a custom VM image can be more scalable than installing software using
-boot-time startup scripts because
+This Blueprint uses the [Packer template resource][pkr] to create custom VM
+images by applying software and configurations to existing images. By default,
+it uses the [HPC VM Image][hpcimage] as a source image. Using a custom VM image
+can be more scalable than installing software using boot-time startup scripts
+because
 
 * it avoids reliance on continued availability of package repositories
 * VMs will join an HPC cluster and execute workloads more rapidly due to reduced
@@ -167,11 +168,12 @@ boot-time startup scripts because
   relative to other based upon their creation time!
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[pkr]: ../resources/packer/custom-image/README.md
 
 **Note**:  this example relies on the default behavior of the Toolkit to derive
 naming convention for networks and other resources from the `deployment_name`.
 
-#### Custom Network (resource group)
+#### Custom Network (resource group 1)
 
 A tool called [Packer](https://packer.io) builds custom VM images by creating
 short-lived VMs, executing scripts on them, and saving the boot disk as an
@@ -189,12 +191,36 @@ connections without exposing the machine to the internet on a public IP address.
 [cloudnat]: https://cloud.google.com/nat/docs/overview
 [iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
 
-#### Packer Template (resource group)
+#### Toolkit Runners (resource group 1)
 
-The Packer template in this resource group accepts a list of Ansible playbooks
-which will be run on the VM to customize it.  Although it defaults to creating
-VMs with a public IP address, it can be easily set to use [IAP][iap] for SSH
-tunneling following the [example in its README](../resources/packer/custom-image/README.md).
+The Toolkit [startup-script](../resources/scripts/startup-script/README.md)
+module supports boot-time configuration of VMs using "runners." Runners are
+configured as a series of scripts uploaded to Cloud Storage. A simple, standard
+[VM startup script][cloudstartup] runs at boot-time, downloads the scripts from
+Cloud Storage and executes them in sequence.
+
+The standard bash startup script is exported as a string by the startup-script
+module.
+
+[vmstartup]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
+
+#### Packer Template (resource group 2)
+
+The Packer template in this resource group accepts [several methods for
+executing custom scripts][pkr]. To pass the exported startup string to it, you
+must collect it from the Terraform module and provide it to the Packer template.
+After running `terraform -chdir=image-builder/builder-env apply` as instructed
+by `ghpc`, execute the following:
+
+```shell
+terraform -chdir=image-builder/builder-env \
+  output -raw startup_script_install_ansible > \
+  image-builder/packer/custom-image/startup_script.sh
+cd image-builder/packer/custom-image
+packer init .
+packer validate -var startup_script_file=startup_script.sh .
+packer build -var startup_script_file=startup_script.sh .
+```
 
 ## Config Schema
 
