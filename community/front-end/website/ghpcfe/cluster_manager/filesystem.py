@@ -113,7 +113,7 @@ def _run_ghpc(target_dir: Path) -> None:
 
 def start_filesystem(fs: Filesystem) -> None:
     """Effectively, just 'terraform apply'"""
-    fs.status = "cm"
+    fs.cloud_state = "cm"
     fs.save()
     try:
         _run_ghpc(_base_dir_for_fs(fs))

@@ -36,7 +36,7 @@
         <td>{{ fs.cloud_id }}</td>
         <td>{{ fs.cloud_zone }}</td>
         <td>
-          {% if "c" in fs.cloud_state == "c" %}
+          {% if "c" in fs.cloud_state or "d" in fs.cloud_state %}
           <img src="/static/img/loading.gif" style="width:32px;height:32px;">
           {% endif %}
           {% if "i" in fs.cloud_state or fs.cloud_state == "m" %}
@@ -45,7 +45,7 @@
           {% if "n" in fs.cloud_state %}
           <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
           {% endif %}
-          {% if "d" in fs.cloud_state %}
+          {% if "x" in fs.cloud_state %}
           <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
           {% endif %}
           {{ fs.get_cloud_state_display }}
