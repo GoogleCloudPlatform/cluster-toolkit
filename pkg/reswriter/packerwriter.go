@@ -43,7 +43,9 @@ func (w *PackerWriter) addNumResources(value int) {
 func printPackerInstructions(grpPath string) {
 	printInstructionsPreamble("Packer", grpPath)
 	fmt.Printf("  cd %s\n", grpPath)
-	fmt.Println("  packer build image.pkr.hcl")
+	fmt.Println("  packer init .")
+	fmt.Println("  packer validate .")
+	fmt.Println("  packer build .")
 }
 
 // writeResourceLevel writes any needed files to the resource layer
@@ -86,4 +88,9 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 // of the blueprint
 func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig, bpDirectory string) error {
 	return w.writeResourceLevel(yamlConfig, bpDirectory)
+}
+
+func (w PackerWriter) restoreState(bpDir string) error {
+	// TODO: implement state restoration for Packer
+	return nil
 }

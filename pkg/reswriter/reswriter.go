@@ -22,9 +22,15 @@ import (
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/sourcereader"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+)
+
+const (
+	hiddenGhpcDirName        = ".ghpc"
+	prevResourceGroupDirName = "previous_resource_groups"
 )
 
 // ResWriter interface for writing resources to a blueprint
@@ -32,6 +38,7 @@ type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
 	writeResourceGroups(*config.YamlConfig, string) error
+	restoreState(bpDir string) error
 }
 
 var kinds = map[string]ResWriter{
@@ -47,6 +54,29 @@ func factory(kind string) ResWriter {
 				"kind must be in (terraform, blueprint-controller).", kind)
 	}
 	return writer
+}
+
+// WriteBlueprint writes the blueprint using resources defined in config.
+func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFlag bool) error {
+	bpDir := filepath.Join(outputDir, yamlConfig.BlueprintName)
+
+	overwrite := isOverwriteAllowed(bpDir, yamlConfig, overwriteFlag)
+	if err := prepBpDir(bpDir, overwrite); err != nil {
+		return err
+	}
+
+	copySource(bpDir, &yamlConfig.ResourceGroups)
+	for _, writer := range kinds {
+		if writer.getNumResources() > 0 {
+			if err := writer.writeResourceGroups(yamlConfig, outputDir); err != nil {
+				return fmt.Errorf("error writing resources to blueprint: %w", err)
+			}
+			if err := writer.restoreState(bpDir); err != nil {
+				return fmt.Errorf("Error trying to restore terraform state: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
@@ -89,21 +119,103 @@ func printInstructionsPreamble(kind string, path string) {
 	fmt.Println("To deploy, run the following commands:")
 }
 
-// WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig, bpDirectory string) {
-	blueprintio := blueprintio.GetBlueprintIOLocal()
-	bpDirectoryPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName)
-	if err := blueprintio.CreateDirectory(bpDirectoryPath); err != nil {
-		log.Fatalf("failed to create a directory for blueprints: %v", err)
+// Determines if overwrite is allowed
+func isOverwriteAllowed(bpDir string, overwritingConfig *config.YamlConfig, overwriteFlag bool) bool {
+	if !overwriteFlag {
+		return false
 	}
 
-	copySource(bpDirectoryPath, &yamlConfig.ResourceGroups)
-	for _, writer := range kinds {
-		if writer.getNumResources() > 0 {
-			err := writer.writeResourceGroups(yamlConfig, bpDirectory)
-			if err != nil {
-				log.Fatalf("error writing resources to blueprint: %v", err)
-			}
+	files, err := ioutil.ReadDir(bpDir)
+	if err != nil {
+		return false
+	}
+
+	// build list of previous and current resource groups
+	var prevGroups []string
+	for _, f := range files {
+		if f.IsDir() && f.Name() != hiddenGhpcDirName {
+			prevGroups = append(prevGroups, f.Name())
 		}
 	}
+
+	var curGroups []string
+	for _, group := range overwritingConfig.ResourceGroups {
+		curGroups = append(curGroups, group.Name)
+	}
+
+	return isSubset(prevGroups, curGroups)
+}
+
+func isSubset(sub, super []string) bool {
+	// build set (map keys) from slice
+	superM := make(map[string]bool)
+	for _, item := range super {
+		superM[item] = true
+	}
+
+	for _, item := range sub {
+		if _, found := superM[item]; !found {
+			return false
+		}
+	}
+	return true
+}
+
+// OverwriteDeniedError signifies when a blueprint overwrite was denied.
+type OverwriteDeniedError struct {
+	cause error
+}
+
+func (err *OverwriteDeniedError) Error() string {
+	return fmt.Sprintf("Failed to overwrite existing blueprint.\n\n"+
+		"Use the -w command line argument to enable overwrite.\n"+
+		"If overwrite is already enabled then this may be because "+
+		"you are attempting to remove a resource group, which is not supported.\n"+
+		"original error: %v",
+		err.cause)
+}
+
+// Prepares a blueprint directory to be written to.
+func prepBpDir(bpDir string, overwrite bool) error {
+	blueprintIO := blueprintio.GetBlueprintIOLocal()
+	ghpcDir := filepath.Join(bpDir, hiddenGhpcDirName)
+
+	// create blueprint directory
+	if err := blueprintIO.CreateDirectory(bpDir); err != nil {
+		if !overwrite {
+			return &OverwriteDeniedError{err}
+		}
+
+		// Confirm we have a previously written blueprint dir before overwritting.
+		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
+			return fmt.Errorf(
+				"While trying to update the blueprint directory at %s, the '.ghpc/' dir could not be found", bpDir)
+		}
+	} else {
+		blueprintIO.CreateDirectory(ghpcDir)
+	}
+
+	// clean up old dirs
+	prevGroupDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
+	os.RemoveAll(prevGroupDir)
+	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
+		return fmt.Errorf("Failed to create directory to save previous resource groups at %s: %w", prevGroupDir, err)
+	}
+
+	// move resource groups
+	files, err := ioutil.ReadDir(bpDir)
+	if err != nil {
+		return fmt.Errorf("Error trying to read directories in %s, %w", bpDir, err)
+	}
+	for _, f := range files {
+		if !f.IsDir() || f.Name() == hiddenGhpcDirName {
+			continue
+		}
+		src := filepath.Join(bpDir, f.Name())
+		dest := filepath.Join(prevGroupDir, f.Name())
+		if err := os.Rename(src, dest); err != nil {
+			return fmt.Errorf("Error while moving previous resource groups: failed on %s: %w", f.Name(), err)
+		}
+	}
+	return nil
 }

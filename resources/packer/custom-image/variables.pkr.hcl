@@ -1,25 +1,31 @@
-// Copyright 2021 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+variable "deployment_name" {
+  description = "HPC Toolkit deployment name"
+  type        = string
+}
 
 variable "project_id" {
-  type = string
+  description = "Project in which to create VM and image"
+  type        = string
 }
 
 variable "machine_type" {
   description = "VM machine type on which to build new image"
   type        = string
-  default     = "n2d-standard-4"
+  default     = "n2-standard-4"
 }
 
 variable "disk_size" {
@@ -33,9 +39,16 @@ variable "zone" {
   type        = string
 }
 
-variable "subnetwork" {
+variable "network_project_id" {
+  description = "Project ID of Shared VPC network"
+  type        = string
+  default     = null
+}
+
+variable "subnetwork_name" {
   description = "Name of subnetwork in which to provision image building VM"
   type        = string
+  default     = null
 }
 
 variable "omit_external_ip" {

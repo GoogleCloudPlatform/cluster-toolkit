@@ -49,6 +49,7 @@ var errorMessages = map[string]string{
 	"settingsLabelType": "labels in resources settings are not a map",
 	"invalidVar":        "invalid variable definition in",
 	"varNotFound":       "Could not find source of variable",
+	"varInAnotherGroup": "References to other groups are not yet supported",
 	"noOutput":          "Output not found for a variable",
 	// validator
 	"emptyID":         "a resource id cannot be empty",
@@ -253,20 +254,21 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 }
 
 // ExportYamlConfig exports the internal representation of a blueprint config
-func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) []byte {
+func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) ([]byte, error) {
 	d, err := yaml.Marshal(&bc.Config)
 	if err != nil {
-		log.Fatalf("%s: %v", errorMessages["yamlMarshalError"], err)
+		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
 	if outputFilename == "" {
-		return d
+		return d, nil
 	}
 	err = ioutil.WriteFile(outputFilename, d, 0644)
 	if err != nil {
-		log.Fatalf("%s, Filename: %s",
-			errorMessages["fileSaveError"], outputFilename)
+		// hitting this error writing yaml
+		return d, fmt.Errorf("%s, Filename: %s: %w",
+			errorMessages["fileSaveError"], outputFilename, err)
 	}
-	return nil
+	return nil, nil
 }
 
 func createResourceInfo(

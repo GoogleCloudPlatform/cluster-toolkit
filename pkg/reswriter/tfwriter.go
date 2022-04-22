@@ -18,6 +18,7 @@ package reswriter
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,6 +30,11 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/sourcereader"
+)
+
+const (
+	tfStateFileName       = "terraform.tfstate"
+	tfStateBackupFileName = "terraform.tfstate.backup"
 )
 
 // TFWriter writes terraform to the blueprint folder
@@ -358,6 +364,7 @@ func writeVersions(dst string) error {
 func printTerraformInstructions(grpPath string) {
 	printInstructionsPreamble("Terraform", grpPath)
 	fmt.Printf("  terraform -chdir=%s init\n", grpPath)
+	fmt.Printf("  terraform -chdir=%s validate\n", grpPath)
 	fmt.Printf("  terraform -chdir=%s apply\n", grpPath)
 }
 
@@ -422,6 +429,32 @@ func (w TFWriter) writeResourceGroups(
 		}
 
 		printTerraformInstructions(writePath)
+	}
+	return nil
+}
+
+// Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
+func (w TFWriter) restoreState(bpDir string) error {
+	prevResourceGroupPath := filepath.Join(bpDir, hiddenGhpcDirName, prevResourceGroupDirName)
+	files, err := ioutil.ReadDir(prevResourceGroupPath)
+	if err != nil {
+		return fmt.Errorf("Error trying to read previous resources in %s, %w", prevResourceGroupPath, err)
+	}
+
+	for _, f := range files {
+		var tfStateFiles = []string{tfStateFileName, tfStateBackupFileName}
+		for _, stateFile := range tfStateFiles {
+			src := filepath.Join(prevResourceGroupPath, f.Name(), stateFile)
+			dest := filepath.Join(bpDir, f.Name(), tfStateFileName)
+
+			if bytesRead, err := ioutil.ReadFile(src); err == nil {
+				err = ioutil.WriteFile(dest, bytesRead, 0644)
+				if err != nil {
+					return fmt.Errorf("Failed to write previous state file %s, %w", dest, err)
+				}
+			}
+		}
+
 	}
 	return nil
 }
