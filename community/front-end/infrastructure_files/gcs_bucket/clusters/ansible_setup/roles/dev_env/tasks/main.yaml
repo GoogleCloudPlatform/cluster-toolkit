@@ -2,6 +2,7 @@
 - name: Install CentOS Software Collections
   yum:
     name: centos-release-scl
+  when: ansible_distribution == 'CentOS'
 
 - name: Install Dev Tools
   yum:
@@ -11,6 +12,7 @@
     - cmake
     - python2-devel
     - python36-devel
+  when: ansible_distribution == 'CentOS'
 
 
 - name: Add DevTools to default shells
@@ -21,3 +23,10 @@
     owner: root
     mode: 0755
     force: False
+  when: ansible_distribution == 'CentOS'
+
+- name: Install Debian Dev tools
+  apt:
+    name:
+    - cmake
+  when: ansible_distribution == 'Debian'

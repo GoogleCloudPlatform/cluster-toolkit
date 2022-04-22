@@ -167,7 +167,6 @@ class ClusterInfo:
         uses_str = self._yaml_refs_to_uses(part_uses)
         for (count, part) in enumerate(self.cluster.partitions.all()):
             part_id = f"partition_{count}"
-            image_str = f"image: {part.image}\n" if part.image else ""
             yaml.append(
                 f"""
   - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
@@ -181,25 +180,30 @@ class ClusterInfo:
       enable_placement: {part.enable_placement}
       image_hyperthreads: {part.enable_hyperthreads}
       exclusive: {part.enable_placement or not part.enable_node_reuse}
-      {image_str}\
 """
             )
+
+            if part.image:
+                yaml[-1] += (
+                    f"""\
+      image: {part.image}
+"""
+                )
+
             # Temporarily hack in some A100 support
             if part.GPU_per_node > 0:
-                yaml.append(
+                yamli[-1] += (
                     f"""\
       gpu_count: {part.GPU_per_node}
       gpu_type: {part.GPU_type}\
 """
                 )
-            yaml.append(
+            yaml[-1] += (
                 f"""\
     use:
 {uses_str}
 """
             )
-            if part.image:
-                yaml.append("      image: {part.image}\n")
 
             refs.append(part_id)
 

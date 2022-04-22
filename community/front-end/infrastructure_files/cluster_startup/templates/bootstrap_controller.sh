@@ -13,7 +13,11 @@ echo "This is the startup script for the controller on cluster ${CLUSTER_ID}"
 
 set -x
 set -e
-yum install -y ansible
+if [[ $(type -P yum) ]]; then
+    yum install -y ansible
+else
+    apt install -y ansible
+fi
 
 cd /tmp
 gsutil -m cp -r "gs://${BUCKET}/clusters/ansible_setup" /tmp
