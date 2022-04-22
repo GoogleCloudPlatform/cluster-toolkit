@@ -80,7 +80,6 @@ function updateMachineAvailability() {
                     });
 
                     gpuType.onchange = function() {
-                        console.log("Acclerators checking for [" + gpuType.value + "] says... " + accelerators.has(gpuType.value));
                         if ( accelerators.has(gpuType.value) ) {
                             gpuCount.readOnly = false;
                             gpuCount.min = accelerators.get(gpuType.value)['min_count'];
@@ -97,7 +96,11 @@ function updateMachineAvailability() {
                         if ( gpuCount.min == gpuCount.max ) {
                             gpuCount.readOnly = true;
                         }
-                        console.log("TypeChange.  Setting GPU Counts to [" + gpuCount.min + "-" + gpuCount.max + "] - " + gpuCount.value);
+                        if ( newMachType.startsWith("n1-") && gpuType.value ) {
+                            $(gpuType).after('<p>WARNING: N1 instances with GPUs have strict CPU/GPU limitations that are not checked in the Frontend.  Please see <a href="https://cloud.google.com/compute/docs/gpus">the docs</a></p>');
+                        } else {
+                            $(gpuType).nextAll().remove();
+                        }
                     };
                     if ( accelRequired ) {
                         gpuType.value = [...accelerators][0][0];
