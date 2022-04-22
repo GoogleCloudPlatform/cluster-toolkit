@@ -23,7 +23,6 @@ import (
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/sourcereader"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -72,9 +71,6 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFl
 	}
 
 	copySource(bpDir, &yamlConfig.ResourceGroups)
-	if err := copyFSFileToDir(gitignoreTemplate, bpDir); err != nil {
-		return fmt.Errorf("failed to create a standard gitignore file in %s: %w", bpDir, err)
-	}
 
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
@@ -122,25 +118,6 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 			writer.addNumResources(1)
 		}
 	}
-}
-
-func copyFSFileToDir(src string, dst string) error {
-	srcFile, err := templatesFS.Open(src)
-	defer srcFile.Close()
-	if err != nil {
-		return err
-	}
-
-	dstFilePath := filepath.Join(dst, ".gitignore")
-	dstFile, err := os.Create(dstFilePath)
-	defer dstFile.Close()
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(dstFile, srcFile)
-
-	return err
 }
 
 func printInstructionsPreamble(kind string, path string) {
@@ -208,6 +185,7 @@ func (err *OverwriteDeniedError) Error() string {
 func prepBpDir(bpDir string, overwrite bool) error {
 	blueprintIO := blueprintio.GetBlueprintIOLocal()
 	ghpcDir := filepath.Join(bpDir, hiddenGhpcDirName)
+	gitignoreFile := filepath.Join(bpDir, ".gitignore")
 
 	// create blueprint directory
 	if err := blueprintIO.CreateDirectory(bpDir); err != nil {
@@ -222,6 +200,7 @@ func prepBpDir(bpDir string, overwrite bool) error {
 		}
 	} else {
 		blueprintIO.CreateDirectory(ghpcDir)
+		blueprintIO.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile)
 	}
 
 	// clean up old dirs

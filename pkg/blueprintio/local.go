@@ -63,3 +63,13 @@ func (b *Local) CopyFromPath(src string, dst string) error {
 	absPath := getAbsSourcePath(src)
 	return copy.Copy(absPath, dst)
 }
+
+// CopyFromFS copyes the embedded source file to the destination file
+func (b *Local) CopyFromFS(fs BaseFS, src string, dst string) error {
+	data, err := fs.ReadFile(src)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(dst, data, 0644)
+}
