@@ -31,6 +31,7 @@ func init() {
 	expandCmd.Flags().StringVarP(&outputFilename, "out", "o", "expanded.yaml",
 		"Output file for the expanded yaml.")
 	expandCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
+	expandCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
 	expandCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
 	rootCmd.AddCommand(expandCmd)
@@ -59,6 +60,9 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
 	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
+	}
+	if err := blueprintConfig.SetBackendConfig(cliBEConfigVars); err != nil {
+		log.Fatalf("Failed to set the backend config at CLI: %v", err)
 	}
 	if err := blueprintConfig.SetValidationLevel(validationLevel); err != nil {
 		log.Fatal(err)
