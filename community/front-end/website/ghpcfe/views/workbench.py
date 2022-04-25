@@ -202,7 +202,7 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
                         impl_type=FilesystemImpl.BUILT_IN
                     )
                     .filter(cloud_state__in=["m", "i"])
-                    .filter(subnet__vpc=workbench.subnet.vpc)
+                    .filter(vpc=workbench.subnet.vpc)
                     .values_list("pk", flat=True)
                 )
                 field.queryset = FilesystemExport.objects.filter(
