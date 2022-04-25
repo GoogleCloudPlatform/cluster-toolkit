@@ -38,7 +38,7 @@ resource_groups:
       local_mount: /home
       fs_type: nfs
 
-  - source: resources/project/service-account
+  - source: ./community/resources/project/service-account
     kind: terraform
     id: service_acct
     settings:
@@ -49,7 +49,7 @@ resource_groups:
       - "compute.instanceAdmin.v1"
 
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
     use: [network1]
@@ -58,7 +58,7 @@ resource_groups:
       network_storage:
       - $(homefs.network_storage)
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm
     use: [network1]

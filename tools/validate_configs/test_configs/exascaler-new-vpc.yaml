@@ -29,7 +29,7 @@ resource_groups:
     kind: terraform
     id: network1
 
-  - source: resources/third-party/file-system/DDN-EXAScaler
+  - source: ./community/resources/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     use: [network1]

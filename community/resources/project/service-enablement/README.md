@@ -5,7 +5,7 @@ Allows management of multiple API services for a Google Cloud Platform project.
 ### Example
 
 ```yaml
-- source: ./resources/service-enablement
+- source: ./community/resources/project/service-enablement
   kind: terraform
   id: services-api
   settings:

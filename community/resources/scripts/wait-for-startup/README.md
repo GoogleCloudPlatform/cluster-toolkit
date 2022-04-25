@@ -15,7 +15,7 @@ up a node.
 ### Example
 
 ```yaml
-- source: ./resources/scripts/wait-for-startup
+- source: ./community/resources/scripts/wait-for-startup
   kind: terraform
   id: wait
   settings:

@@ -365,8 +365,9 @@ resume.py ERROR: ... "Quota 'C2_CPUS' exceeded. Limit: 300.0 in region europe-we
 
 The solution here is to [request more of the specified quota](#gcp-quotas),
 `C2 CPUs` in the example above. Alternatively, you could switch the partition's
-[machine_type](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/resources/third-party/compute/SchedMD-slurm-on-gcp-partition#input_machine_type)
-, to one which has sufficient quota.
+[machine type][partition-machine-type], to one which has sufficient quota.
+
+[partition-machine-type]: community/resources/compute/SchedMD-slurm-on-gcp-partition/README.md#input_machine_type
 
 #### Placement Groups
 
@@ -384,9 +385,10 @@ $ cat /var/log/slurm/resume.log
 resume.py ERROR: group operation failed: Requested minimum count of 6 VMs could not be created.
 ```
 
-One way to resolve this is to set
-[enable_placement](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/resources/third-party/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement)
+One way to resolve this is to set [enable_placement][partition-enable-placement]
 to `false` on the partition in question.
+
+[partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/resources/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
 
 ### Terraform Deployment
 

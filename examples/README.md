@@ -86,7 +86,7 @@ File systems:
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
 * The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../resources/third-party/file-system/DDN-EXAScaler/README.md)
+  [DDN Exascaler Lustre](../community/resources/file-system/DDN-EXAScaler/README.md)
   file system designed for high IO performance. The capacity is ~10TiB.
 
 There are two partitions in this example: `low_cost` and `compute`. The

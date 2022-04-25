@@ -42,7 +42,7 @@ resource_groups:
       local_mount: /home
 
   # Explicitly picking the local version of the resource
-  - source: ./resources/third-party/file-system/DDN-EXAScaler
+  - source: ./community/resources/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     settings:
@@ -63,7 +63,7 @@ resource_groups:
       name_prefix: test-workstation
       machine_type: c2-standard-4
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
@@ -74,7 +74,7 @@ resource_groups:
       max_node_count: 2
       partition_name: compute
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
@@ -83,7 +83,7 @@ resource_groups:
     - scratchfs
     - compute_partition
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:

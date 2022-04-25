@@ -31,7 +31,7 @@ resource_groups:
     settings:
       network_name: monitoring-net
 
-  - source: resources/file-system/nfs-server
+  - source: ./community/resources/file-system/nfs-server
     kind: terraform
     id: homefs
     use: [network]

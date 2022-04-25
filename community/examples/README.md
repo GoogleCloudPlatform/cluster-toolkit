@@ -31,76 +31,6 @@ terraform_backend_defaults:
 
 ## Config Descriptions
 
-### hpc-cluster-small.yaml
-
-Creates a basic auto-scaling SLURM cluster with mostly default settings. The
-blueprint also creates a new VPC network, and a filestore instance mounted to
-`/home`.
-
-There are 2 partitions in this example: `debug` and `compute`. The `debug`
-partition uses `n2-standard-2` VMs, which should work out of the box without
-needing to request additional quota. The purpose of the `debug` partition is to
-make sure that first time users are not immediately blocked by quota
-limitations.
-
-#### Compute Partition
-
-There is a `compute` partition that achieves higher performance. Any
-performance analysis should be done on the `compute` partition. By default it
-uses `c2-standard-60` VMs with placement groups enabled. You may need to request
-additional quota for `C2 CPUs` in the region you are deploying in. You can
-select the compute partition using the `srun -p compute` argument.
-
-Quota required for this example:
-
-* Cloud Filestore API: Basic SSD (Premium) capacity (GB) per region: **2660 GB**
-* Compute Engine API: Persistent Disk SSD (GB): **~10 GB**
-* Compute Engine API: N2 CPUs: **12**
-* Compute Engine API: C2 CPUs: **60/node** up to 1200 - _only needed for
-  `compute` partition_
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-### hpc-cluster-high-io.yaml
-
-Creates a slurm cluster with tiered file systems for higher performance. It
-connects to the default VPC of the project and creates two partitions and a
-login node.
-
-File systems:
-
-* The homefs mounted at `/home` is a default "PREMIUM" tier filestore with
-  2.5TiB of capacity
-* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-  instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../resources/third-party/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-There are two partitions in this example: `low_cost` and `compute`. The
-`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
-debugging and workloads that do not require high performance.
-
-Similar to the small example, there is a
-[compute partition](#compute-partition) that should be used for any performance
-analysis.
-
-Quota required for this example:
-
-* Cloud Filestore API: Basic SSD (Premium) capacity (GB) per region: **2660 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10240 GiB** - _min
-  quota request is 61440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14000 GB**
-* Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **60/node** up to 12,000 - _only needed for
-  `compute` partition_
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
 ### spack-gromacs.yaml
 
 Spack is a HPC software package manager. This example creates a small slurm
@@ -151,50 +81,6 @@ Creates a simple omnia cluster, with an
 omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
-
-### image-builder.yaml
-
-This Blueprint helps create custom VM images by applying necessary software and
-configurations to existing images, such as the [HPC VM Image][hpcimage].
-Using a custom VM image can be more scalable than installing software using
-boot-time startup scripts because
-
-* it avoids reliance on continued availability of package repositories
-* VMs will join an HPC cluster and execute workloads more rapidly due to reduced
-  boot-time configuration
-* machines are guaranteed to boot with a static set of packages available when
-  the custom image was created. No potential for some machines to be upgraded
-  relative to other based upon their creation time!
-
-[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-
-**Note**: it is important _not to modify_ the subnetwork name in either of the
-two resource groups without modifying them both. These _must_ match!
-
-#### Custom Network (resource group)
-
-A tool called [Packer](https://packer.io) builds custom VM images by creating
-short-lived VMs, executing scripts on them, and saving the boot disk as an
-image that can be used by future VMs. The short-lived VM must operate in a
-network that
-
-* has outbound access to the internet for downloading software
-* has SSH access from the machine running Packer so that local files/scripts
-  can be copied to the VM
-
-This resource group creates such a network, while using [Cloud Nat][cloudnat]
-and [Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
-connections without exposing the machine to the internet on a public IP address.
-
-[cloudnat]: https://cloud.google.com/nat/docs/overview
-[iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
-
-#### Packer Template (resource group)
-
-The Packer template in this resource group accepts a list of Ansible playbooks
-which will be run on the VM to customize it.  Although it defaults to creating
-VMs with a public IP address, it can be easily set to use [IAP][iap] for SSH
-tunneling following the [example in its README](../resources/packer/custom-image/README.md).
 
 ## Config Schema
 
