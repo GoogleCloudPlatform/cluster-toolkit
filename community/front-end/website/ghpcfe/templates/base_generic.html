@@ -35,7 +35,7 @@
           <li>
             <span style="color: white;">
             {% if user.is_authenticated %}
-            Logged in as {{ user.get_username }}
+            Logged in as {% if loggedin_user %} {{ loggedin_user }} {% else %} {{ user.get_username }} {% endif %}
             {% else %}
             <a href="{% url 'login'%}?next={{ request.path }}" style="color: white;">Login</a>
             {% endif %}
@@ -45,7 +45,11 @@
 
             <a class="nav-link dropdown-toggle" href="{% url 'login'%}?next={{ request.path }}" id="navbarDropdownMenuLink" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
             {% if user.is_authenticated %}
+              {% if loggedin_user %}
+            <img src="{{ loggedin_user.get_avatar_url }}" width="32" style="border-radius: 50%;">
+              {% else %}
             <img src="{{ user.get_avatar_url }}" width="32" style="border-radius: 50%;">
+              {% endif %}
             {% else %}
             <img src="/static/img/unknown_user.png" width="32" style="border-radius: 50%;">
             {% endif %}
