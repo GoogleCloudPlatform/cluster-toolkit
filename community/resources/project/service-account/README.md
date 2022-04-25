@@ -5,7 +5,7 @@ Allows creation of service accounts for a Google Cloud Platform project.
 ### Example
 
 ```yaml
-- source: ./resources/service-account
+- source: ./community/resources/project/service-account
   kind: terraform
   id: service_acct
   settings:

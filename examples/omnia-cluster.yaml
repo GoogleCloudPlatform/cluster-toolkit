@@ -40,7 +40,7 @@ resource_groups:
       local_mount: "/home"
 
   ## Installation Scripts
-  - source: resources/scripts/omnia-install
+  - source: ./community/resources/scripts/omnia-install
     kind: terraform
     id: omnia
     outputs: [inventory_file, omnia_user_warning]
@@ -98,7 +98,7 @@ resource_groups:
       instance_count: 2
 
   # This resource simply makes terraform wait until the startup script is complete
-  - source: resources/scripts/wait-for-startup
+  - source: ./community/resources/scripts/wait-for-startup
     kind: terraform
     id: wait
     use:

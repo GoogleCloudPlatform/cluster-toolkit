@@ -48,7 +48,7 @@ resource_groups:
       local_mount: $(vars.local_mount)  # automatic, added here for clarity
       fs_type: nfs
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
     use:
@@ -57,7 +57,7 @@ resource_groups:
     settings:
       partition_name: compute
 
-  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm
     use:

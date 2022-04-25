@@ -31,7 +31,7 @@ resource_groups:
     outputs:
     - name
 
-  - source: resources/database/slurm-cloudsql-federation
+  - source: ./community/resources/database/slurm-cloudsql-federation
     kind: terraform
     id: sql
     outputs:
@@ -50,7 +50,7 @@ resource_groups:
     - network_storage
     - install_nfs_client
 
-  - source: resources/file-system/nfs-server
+  - source: ./community/resources/file-system/nfs-server
     kind: terraform
     id: nfs
     outputs:
@@ -91,7 +91,7 @@ resource_groups:
     - subnetwork_address
     - nat_ips
 
-  - source: resources/project/new-project
+  - source: ./community/resources/project/new-project
     kind: terraform
     id: new-project
     outputs:
@@ -117,7 +117,7 @@ resource_groups:
       billing_account: "111110-M2N704-854685"  # random billing number
       org_id: 123456789  # random org id
 
-  - source: resources/project/service-account
+  - source: ./community/resources/project/service-account
     kind: terraform
     id: sa
     outputs:
@@ -138,7 +138,7 @@ resource_groups:
       project_roles:
       - "compute.instanceAdmin.v1"
 
-  - source: resources/scripts/spack-install
+  - source: ./community/resources/scripts/spack-install
     kind: terraform
     id: spack
     outputs:
@@ -151,7 +151,7 @@ resource_groups:
     outputs:
     - startup_script
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: partition
     use: [vpc]
@@ -160,7 +160,7 @@ resource_groups:
     settings:
       partition_name: compute
 
-  - source: resources/third-party/file-system/DDN-EXAScaler
+  - source: ./community/resources/file-system/DDN-EXAScaler
     kind: terraform
     id: lustre
     outputs:
@@ -170,7 +170,7 @@ resource_groups:
     - http_console
     - network_storage
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: controller
     use:

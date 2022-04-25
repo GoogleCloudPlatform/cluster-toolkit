@@ -13,7 +13,7 @@ Create a partition resource with a max node count of 200, named "compute",
 connected to a resource subnetwork and with homefs mounted.
 
 ```yaml
-- source: ./resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+- source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
   kind: terraform
   id: compute_partition
   settings:

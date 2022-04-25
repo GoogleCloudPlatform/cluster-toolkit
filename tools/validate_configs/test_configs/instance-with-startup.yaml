@@ -62,7 +62,7 @@ resource_groups:
       metadata:
         startup-script: $(startup.startup_script)
 
-  - source: ./resources/scripts/wait-for-startup
+  - source: ./community/resources/scripts/wait-for-startup
     kind: terraform
     id: wait
     settings:
