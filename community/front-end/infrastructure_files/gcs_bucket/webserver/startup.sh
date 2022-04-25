@@ -46,7 +46,8 @@ dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
 	rsync nginx bind-utils policycoreutils-python-utils \
-	terraform packer supervisor python3-certbot-nginx
+	terraform packer supervisor python3-certbot-nginx \
+	grafana
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
 chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
@@ -182,6 +183,13 @@ sudo su - gcluster -c /bin/bash <<EOF
 
 EOF
 
+# Tweak Grafana settings
+
+sed -i \
+	-e 's/serve_from_sub_path = false/serve_from_sub_path = true/g' \
+	-e 's/root_url = \(.*\)\/$/root_url = \1\/grafana\//g' \
+	/etc/grafana/grafana.ini
+
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]
 process_name=%(program_name)s_%(process_num)02d
@@ -196,7 +204,7 @@ stdout_logfile=/opt/gcluster/run/supvisor.log" >/etc/supervisord.d/gcluster.ini
 printf "Creating systemd service..."
 echo "[Unit]
 Description=GCluster: The GCP HPC Cluster deployment tool
-Requires=supervisord.service
+Requires=supervisord.service grafana-server.service
 
 
 [Service]
