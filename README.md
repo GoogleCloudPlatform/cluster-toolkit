@@ -330,11 +330,11 @@ Quotas can be inspected and requested at `IAM & Admin` > `Quotas`.
 You can view your billing reports for your HPC cluster on the [Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports) page. ​​To view the Cloud Billing reports for your Cloud Billing account, including viewing the cost information for all of the Cloud projects that are linked to the account, you need a role that includes the `billing.accounts.getSpendingInformation` permission on your Cloud Billing account.
 
 To view the Cloud Billing reports for your Cloud Billing account:
-1. In the Google Cloud Console, go to [Navigation Menu] > [Billing].
+1. In the Google Cloud Console, go to [Navigation Menu] > [[Billing](https://console.cloud.google.com/billing/overview)].
 2. At the prompt, choose the Cloud Billing account for which you'd like to view reports. The Billing Overview page opens for the selected billing account.
 3. In the Billing navigation menu, select Reports.
 
-Once you select `Group by: ghpc_role` in the Filters panel, you can view your billing reports on resources tagged `ghpc_role`.
+In the right side, expand the Filters view and then filter by label, specifying the key `ghpc_deployment` (or `ghpc_blueprint`) and the desired value.
 
 ## Troubleshooting
 
