@@ -14,7 +14,7 @@
 * limitations under the License.
  */
 
-// Package reswriter writes resources to a blueprint directory
+// Package reswriter writes modules to a blueprint directory
 package reswriter
 
 import (
@@ -33,7 +33,7 @@ const (
 	prevResourceGroupDirName = "previous_resource_groups"
 )
 
-// ResWriter interface for writing resources to a blueprint
+// ResWriter interface for writing modules to a blueprint
 type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
@@ -50,7 +50,7 @@ func factory(kind string) ResWriter {
 	writer, exists := kinds[kind]
 	if !exists {
 		log.Fatalf(
-			"reswriter: Resource kind (%s) is not valid. "+
+			"reswriter: Module kind (%s) is not valid. "+
 				"kind must be in (terraform, blueprint-controller).", kind)
 	}
 	return writer
@@ -73,7 +73,7 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFl
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
 			if err := writer.writeResourceGroups(yamlConfig, outputDir); err != nil {
-				return fmt.Errorf("error writing resources to blueprint: %w", err)
+				return fmt.Errorf("error writing modules to deployment: %w", err)
 			}
 			if err := writer.restoreState(deploymentDir); err != nil {
 				return fmt.Errorf("Error trying to restore terraform state: %w", err)
@@ -108,7 +108,7 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 
 			reader := sourcereader.Factory(resource.Source)
 			if err := reader.GetResource(resource.Source, destPath); err != nil {
-				log.Fatalf("failed to get resource from %s to %s: %v", resource.Source, destPath, err)
+				log.Fatalf("failed to get module from %s to %s: %v", resource.Source, destPath, err)
 			}
 
 			/* Create resource level files */
@@ -174,7 +174,7 @@ func (err *OverwriteDeniedError) Error() string {
 	return fmt.Sprintf("Failed to overwrite existing blueprint.\n\n"+
 		"Use the -w command line argument to enable overwrite.\n"+
 		"If overwrite is already enabled then this may be because "+
-		"you are attempting to remove a resource group, which is not supported.\n"+
+		"you are attempting to remove a deployment group, which is not supported.\n"+
 		"original error: %v",
 		err.cause)
 }
@@ -203,7 +203,7 @@ func prepBpDir(bpDir string, overwrite bool) error {
 	prevGroupDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
-		return fmt.Errorf("Failed to create directory to save previous resource groups at %s: %w", prevGroupDir, err)
+		return fmt.Errorf("Failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
 	}
 
 	// move resource groups
@@ -218,7 +218,7 @@ func prepBpDir(bpDir string, overwrite bool) error {
 		src := filepath.Join(bpDir, f.Name())
 		dest := filepath.Join(prevGroupDir, f.Name())
 		if err := os.Rename(src, dest); err != nil {
-			return fmt.Errorf("Error while moving previous resource groups: failed on %s: %w", f.Name(), err)
+			return fmt.Errorf("Error while moving previous deployment groups: failed on %s: %w", f.Name(), err)
 		}
 	}
 	return nil

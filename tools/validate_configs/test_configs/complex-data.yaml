@@ -41,13 +41,13 @@ vars:
 resource_groups:
 - group: infrastructure
   resources:
-  - source: resources/network/vpc
+  - source: modules/network/vpc
     kind: terraform
     id: network
     settings:
       network_name: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network]
@@ -59,7 +59,7 @@ resource_groups:
         ghpc_role: storage-home
         number_label: 44
 
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -74,7 +74,7 @@ resource_groups:
         source: "modules/startup-script/examples/mount.yaml"
         destination: mount.yaml
 
-  - source: resources/compute/simple-instance
+  - source: modules/compute/simple-instance
     kind: terraform
     id: license-server-1
     use: [network]

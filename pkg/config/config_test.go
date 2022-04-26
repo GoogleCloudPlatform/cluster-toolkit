@@ -50,7 +50,7 @@ terraform_backend_defaults:
 resource_groups:
 - group: group1
   resources:
-  - source: ./resources/network/vpc
+  - source: ./modules/network/vpc
     kind: terraform
     id: "vpc"
     settings:
@@ -59,7 +59,7 @@ resource_groups:
 `)
 	testResources = []Resource{
 		{
-			Source:           "./resources/network/vpc",
+			Source:           "./modules/network/vpc",
 			Kind:             "terraform",
 			ID:               "vpc",
 			WrapSettingsWith: make(map[string][]string),
@@ -122,11 +122,11 @@ func setup() {
 	resourceDir := filepath.Join(tmpTestDir, "resource")
 	err = os.Mkdir(resourceDir, 0755)
 	if err != nil {
-		log.Fatalf("failed to create test resource dir: %v", err)
+		log.Fatalf("failed to create test module dir: %v", err)
 	}
 	varFile, err := os.Create(filepath.Join(resourceDir, "variables.tf"))
 	if err != nil {
-		log.Fatalf("failed to create variables.tf in test resource dir: %v", err)
+		log.Fatalf("failed to create variables.tf in test module dir: %v", err)
 	}
 	testVariablesTF := `
 	variable "test_variable" {
@@ -135,7 +135,7 @@ func setup() {
 	}`
 	_, err = varFile.WriteString(testVariablesTF)
 	if err != nil {
-		log.Fatalf("failed to write variables.tf in test resource dir: %v", err)
+		log.Fatalf("failed to write variables.tf in test module dir: %v", err)
 	}
 }
 

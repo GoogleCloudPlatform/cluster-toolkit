@@ -48,13 +48,13 @@ output "test_output" {
 
 func getTestFS() afero.IOFS {
 	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("resources/network/vpc", 0755)
+	aferoFS.MkdirAll("modules/network/vpc", 0755)
 	afero.WriteFile(
-		aferoFS, "resources/network/vpc/main.tf", []byte(testMainTf), 0644)
+		aferoFS, "modules/network/vpc/main.tf", []byte(testMainTf), 0644)
 	afero.WriteFile(
-		aferoFS, "resources/network/vpc/variables.tf", []byte(testVariablesTf), 0644)
+		aferoFS, "modules/network/vpc/variables.tf", []byte(testVariablesTf), 0644)
 	afero.WriteFile(
-		aferoFS, "resources/network/vpc/output.tf", []byte(testOutputsTf), 0644)
+		aferoFS, "modules/network/vpc/output.tf", []byte(testOutputsTf), 0644)
 	return afero.NewIOFS(aferoFS)
 }
 
@@ -67,7 +67,7 @@ func (s *MySuite) TestCopyDirFromResources(c *C) {
 	}
 
 	// Success
-	err := copyDirFromResources(testResFS, "resources/network/vpc", copyDir)
+	err := copyDirFromResources(testResFS, "modules/network/vpc", copyDir)
 	c.Assert(err, IsNil)
 	fInfo, err := os.Stat(filepath.Join(copyDir, "main.tf"))
 	c.Assert(err, IsNil)
@@ -76,7 +76,7 @@ func (s *MySuite) TestCopyDirFromResources(c *C) {
 	c.Assert(fInfo.IsDir(), Equals, false)
 
 	// Success: copy files AND dirs
-	err = copyDirFromResources(testResFS, "resources/network/", copyDir)
+	err = copyDirFromResources(testResFS, "modules/network/", copyDir)
 	c.Assert(err, IsNil)
 	fInfo, err = os.Stat(filepath.Join(copyDir, "vpc/main.tf"))
 	c.Assert(err, IsNil)
@@ -94,7 +94,7 @@ func (s *MySuite) TestCopyDirFromResources(c *C) {
 	c.Assert(err, ErrorMatches, "*file does not exist")
 
 	// Failure: File Already Exists
-	err = copyDirFromResources(testResFS, "resources/network/", copyDir)
+	err = copyDirFromResources(testResFS, "modules/network/", copyDir)
 	c.Assert(err, ErrorMatches, "*file exists")
 }
 
@@ -103,7 +103,7 @@ func (s *MySuite) TestCopyFSToTempDir(c *C) {
 	testResFS := getTestFS()
 
 	// Success
-	testDir, err := copyFSToTempDir(testResFS, "resources/")
+	testDir, err := copyFSToTempDir(testResFS, "modules/")
 	defer os.RemoveAll(testDir)
 	c.Assert(err, IsNil)
 	fInfo, err := os.Stat(filepath.Join(testDir, "network/vpc/main.tf"))
@@ -123,19 +123,19 @@ func (s *MySuite) TestGetResourceInfo_Embedded(c *C) {
 	reader := EmbeddedSourceReader{}
 
 	// Success
-	resourceInfo, err := reader.GetResourceInfo("resources/network/vpc", tfKindString)
+	resourceInfo, err := reader.GetResourceInfo("modules/network/vpc", tfKindString)
 	c.Assert(err, IsNil)
 	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
 	c.Assert(resourceInfo.Outputs[0].Name, Equals, "test_output")
 
 	// Invalid: No embedded resource
-	badEmbeddedRes := "resources/does/not/exist"
+	badEmbeddedRes := "modules/does/not/exist"
 	resourceInfo, err = reader.GetResourceInfo(badEmbeddedRes, tfKindString)
-	expectedErr := "failed to copy embedded resource at .*"
+	expectedErr := "failed to copy embedded module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	resourceInfo, err = reader.GetResourceInfo(badSource, tfKindString)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -147,11 +147,11 @@ func (s *MySuite) TestGetResource_Embedded(c *C) {
 
 	// Success
 	dest := filepath.Join(testDir, "TestGetResource_Embedded")
-	err := reader.GetResource("resources/network", dest)
+	err := reader.GetResource("modules/network", dest)
 	c.Assert(err, IsNil)
 
 	// Invalid: Write to the same dest directory again
-	err = reader.GetResource("resources/network", dest)
+	err = reader.GetResource("modules/network", dest)
 	expectedErr := "The directory already exists: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
@@ -168,13 +168,13 @@ func (s *MySuite) TestGetResource_Embedded(c *C) {
 	c.Assert(fInfo.IsDir(), Equals, true)
 
 	// Invalid: No embedded resource
-	badEmbeddedRes := "resources/does/not/exist"
+	badEmbeddedRes := "modules/does/not/exist"
 	err = reader.GetResource(badEmbeddedRes, dest)
-	expectedErr = "failed to copy embedded resource at .*"
+	expectedErr = "failed to copy embedded module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Resource Source by EmbeddedSourceReader
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	err = reader.GetResource(badSource, dest)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)

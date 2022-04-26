@@ -30,7 +30,7 @@ func createTmpResource() {
 	terraformDir = filepath.Join(testDir, "terraformResource")
 	err = os.Mkdir(terraformDir, 0755)
 	if err != nil {
-		log.Fatalf("error creating test terraform resource dir: %e", err)
+		log.Fatalf("error creating test terraform module dir: %e", err)
 	}
 
 	// main.tf file
@@ -68,7 +68,7 @@ func createTmpResource() {
 	packerDir = filepath.Join(testDir, "packerResource")
 	err = os.Mkdir(packerDir, 0755)
 	if err != nil {
-		log.Fatalf("error creating test packer resource dir: %e", err)
+		log.Fatalf("error creating test packer module dir: %e", err)
 	}
 
 	// main.pkr.hcl file
@@ -105,11 +105,11 @@ func (s *MySuite) TestGetResourceInfo_Local(c *C) {
 	// Invalid source path - path does not exists
 	badLocalRes := "./not/a/real/path"
 	resourceInfo, err = reader.GetResourceInfo(badLocalRes, tfKindString)
-	expectedErr := "failed to get info using tfconfig for terraform resource at .*"
+	expectedErr := "failed to get info using tfconfig for terraform module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	resourceInfo, err = reader.GetResourceInfo(badSource, tfKindString)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -138,11 +138,11 @@ func (s *MySuite) TestGetResource_Local(c *C) {
 	// Invalid: No local resource
 	badLocalRes := "./resources/does/not/exist"
 	err = reader.GetResource(badLocalRes, dest)
-	expectedErr = "Local resource doesn't exist at .*"
+	expectedErr = "Local module doesn't exist at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Resource Source by LocalSourceReader
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	err = reader.GetResource(badSource, dest)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)

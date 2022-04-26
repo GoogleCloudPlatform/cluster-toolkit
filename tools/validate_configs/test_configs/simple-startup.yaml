@@ -25,11 +25,11 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: ./resources/network/pre-existing-vpc
+  - source: ./modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: ./resources/scripts/startup-script
+  - source: ./modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -48,14 +48,14 @@ resource_groups:
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
 
-  - source: ./resources/compute/simple-instance
+  - source: ./modules/compute/simple-instance
     kind: terraform
     id: instance
     use: [network1, startup]
     settings:
       machine_type: e2-standard-4
 
-  - source: ./community/resources/scripts/wait-for-startup
+  - source: ./community/modules/scripts/wait-for-startup
     kind: terraform
     id: waiter
     settings:

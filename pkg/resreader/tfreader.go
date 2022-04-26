@@ -18,7 +18,7 @@ package resreader
 
 import "fmt"
 
-// TFReader implements ResReader for terraform resources
+// TFReader implements ResReader for terraform modules
 type TFReader struct {
 	allResInfo map[string]ResourceInfo
 }
@@ -36,7 +36,7 @@ func (r TFReader) GetInfo(source string) (ResourceInfo, error) {
 	resInfo, err := getHCLInfo(source)
 	if err != nil {
 		return resInfo, fmt.Errorf(
-			"failed to get info using tfconfig for terraform resource at %s: %v",
+			"failed to get info using tfconfig for terraform module at %s: %v",
 			source, err)
 	}
 	r.allResInfo[source] = resInfo
