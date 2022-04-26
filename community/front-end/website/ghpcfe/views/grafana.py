@@ -14,13 +14,28 @@
 
 """ Grafana integration views """
 
+from django.views.generic import base
 from revproxy.views import ProxyView
 
 class GrafanaProxyView(ProxyView):
-    upstream = 'http://127.0.0.1:3000/'
+    """Proxy View"""
+    upstream = "http://127.0.0.1:3000/"
 
     def get_proxy_request_headers(self, request):
         headers = super().get_proxy_request_headers(request)
-        headers['X-WEBAUTH-USER'] = request.user.email
+        headers["X-WEBAUTH-USER"] = request.user.email
         return headers
 
+    def dispatch(self, request, path):
+        response = super().dispatch(request, path)
+        response.headers["X-Frame-Options"] = (
+            "allow from https://c422.forkit.org"
+        )
+        return response
+
+class GrafanaView(base.TemplateView):
+    template_name = "grafana.html"
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        context["navtab"] = "grafana"

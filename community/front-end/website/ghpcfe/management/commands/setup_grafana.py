@@ -19,6 +19,7 @@
 
 import os
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
 
@@ -50,8 +51,11 @@ class Command(BaseCommand):
             # one-off user/admin initialisation
             api = GrafanaFace(auth=("admin", "admin"), host="localhost:3000")
             # Change password
-            api.admin.change_user_password(1, password)
-            api = GrafanaFace(auth=("admin", password), host="localhost:3000")
+            api.admin.change_user_password(1, settings.SECRET_KEY)
+            api = GrafanaFace(
+                auth=("admin", settings.SECRET_KEY),
+                host="localhost:3000"
+            )
             user = api.admin.create_user(
                 {
                     "name": username,
@@ -61,8 +65,14 @@ class Command(BaseCommand):
                     "OrgId": 1
                 }
             )
-            # Make user an admin
+            # Make user an admin and org Admin
             api.admin.change_user_permissions(user.id, True)
+            api.organization.update_user_current_organization(
+                user_id = user["id"],
+                user = {
+                    "role": "Admin",
+                }
+            )
 
             # Add Datasource for our own self
             api.datasource.create_datasource(
