@@ -13,8 +13,8 @@ and intends to address the HPC deployment needs of a broad range of customers.
 ## Installation
 
 These instructions assume you are using
-[Cloud Shell](https://cloud.google.com/shell) which comes with the above
-dependencies pre-installed (minus Packer which is not needed for this example).
+[Cloud Shell](https://cloud.google.com/shell) which comes with the
+[dependencies](#dependencies) pre-installed.
 
 To use the HPC-Toolkit, you must clone the project from GitHub and build the
 `ghpc` binary.
