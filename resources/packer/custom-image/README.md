@@ -1,71 +1,161 @@
-## Description
+# Custom Images in the HPC Toolkit
+
+## Introduction
 
 This resource is an example of creating an image with Packer using the HPC
-Toolkit. Packer operates by provisioning a short-lived VM in Google Cloud and
-executing scripts to customize the VM for repeated usage. This Packer "template"
-installs Ansible and supports the execution of user-specified Ansible playbooks
-to customize the VM.
+Toolkit. Packer operates by provisioning a short-lived VM in Google Cloud on
+which it executes scripts to customize the boot disk for repeated use. The VM's
+boot disk is specified from a source image that defaults to the [HPC VM
+Image][hpcimage]. This Packer "template" supports customization by the
+following approaches following a [recommended use](#recommended-use):
 
-### Example
+* [startup-script metadata][startup-metadata] from [raw string][sss] or
+  [file][ssf]
+* [Shell scripts][shell] uploaded from the Packer execution
+  environment to the VM
+* [Ansible playbooks][ansible] uploaded from the Packer
+  execution environment to the VM
 
-The following example assumes operation in Cloud Region us-central1 and
-in zone us-central1-c. You may substitute your own preferred region and zone.
-You will need a Cloud VPC Network that allows
+They can be specified independently of one another, so that anywhere from 1 to
+3 solutions can be used simultaneously. In the case that 0 scripts are supplied,
+the source boot disk is effectively copied to your project without
+customization. This can be useful in scenarios where increased control over the
+image maintenance lifecycle is desired or when policies restrict the use of
+images to internal projects.
 
-* either public IP addresses or Identity-Aware Proxy (IAP) tunneling of SSH
-  connections
-* outbound connections to the public internet
+[sss]: #input_startup_script
+[ssf]: #input_startup_script_file
+[shell]: #input_shell_scripts
+[ansible]: #input_ansible_playbooks
+[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
-If you already have such a network, identify its subnetwork in us-central1 or
-your region of choice. If not, you can create one with this simple blueprint:
+## Order of execution
 
-```yaml
----
-blueprint_name: image-builder
+The startup script specified in metadata execute in parallel with the other
+supported methods. However, the remaining methods execute in a well-defined
+order relative to one another.
 
-vars:
-  project_id: ## Set Project ID here ##
-  deployment_name: image-builder-001
-  region: us-central1
-  zone: us-central1-c
+1. All shell scripts will execute in the configured order
+1. After shell scripts complete, all Ansible playbooks will execute in the
+   configured order
 
-resource_groups:
-- group: network
-  resources:
-  - source: resources/network/vpc
-    kind: terraform
-    id: network1
-    outputs:
-    - subnetwork_name
-```
+_NOTE_: if both [startup\_script][sss] and [startup\_script\_file][ssf] are
+specified, then [startup\_script\_file][ssf] takes precedence.
 
-The subnetwork name will be printed to the terminal after running `terraform
-apply`. The following parameters will create a 100GB image without exposing the
-build VM on the public internet. Create a file `input.auto.pkvars.hcl`:
+## Recommended use
+
+Because the [metadata startup script executes in parallel](#order-of-execution)
+with the other solutions, conflicts can arise, especially when package managers
+(`yum` or `apt`) lock their databases during package installation. Therefore,
+it is recommended to choose one of the following approaches:
+
+1. Specify _either_ [startup\_script][sss] _or_ [startup\_script\_file][ssf]
+   and do not specify [shell\_scripts][shell] or [ansible\_playbooks][ansible].
+   * This can be especially useful in [environments that restrict SSH access](#environments-without-ssh-access)
+2. Specify any combination of [shell\_scripts][shell] and
+   [ansible\_playbooks][ansible] and do not specify [startup\_script][sss] or
+   [startup\_script\_file][ssf].
+
+If any of the [shell\_scripts][shell] or [ansible\_playbooks][ansible] fail by
+returning a code other than 0, Packer will determine that the build has failed
+and refuse to save the resulting disk.
+
+_NOTE_: there an [existing issue][startup-script-issue] that can cause failures
+of the [startup\_script][sss] or [startup\_script\_file][ssf] not to be
+detected as failures by Packer.
+
+[startup-script-issue]: https://github.com/hashicorp/packer-plugin-googlecompute/issues/45
+[metaorder]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux#order_of_execution_of_linux_startup_scripts
+
+## External access with SSH
+
+The [shell scripts][shell] and [Ansible playbooks][ansible] customization
+solutions both require SSH access to the VM from the Packer execution
+environment. SSH access can be enabled one of 2 ways:
+
+1. The VM is created without a public IP address and SSH tunnels are created
+   using [Identity-Aware Proxy (IAP)][iaptunnel].
+   * Allow [use\_iap](#input_use_iap) to take on its default value of `true`
+1. The VM is created with an IP address on the public internet and firewall
+   rules allow SSH access from the Packer execution environment.
+   * Set `omit_external_ip = false` (or `omit_external_ip: false` in a YAML
+   Toolkit Blueprint)
+   * Add firewall rules that open SSH to the VM
+
+The Packer template defaults to using to the 1st IAP-based solution because it
+is more secure (no exposure to public internet) and because the [Toolkit VPC
+module](../../network/vpc/README.md) automatically sets up all necessary
+firewall rules for SSH tunneling and outbound-only access to the internet
+through [Cloud NAT][cloudnat].
+
+In either SSH solution, customization scripts should be supplied as files in
+the [shell\_scripts][shell] and [ansible\_playbooks][ansible] settings.
+
+[iaptunnel]: https://cloud.google.com/iap/docs/using-tcp-forwarding
+[cloudnat]: https://cloud.google.com/nat/docs/overview
+
+## Environments without SSH access
+
+Many network environments disallow SSH access to VMs. In these environments, the
+[metadata-based startup script][startup-metadata] are appropriate because they
+execute entirely independently of the Packer execution environment.
+
+In this scenario, a single scripts should be supplied in the form of a string to
+the [startup\_script][sss] input variable. This solution integrates well with
+Toolkit runners. Runners operate by using a single startup script whose
+behavior is extended by downloading and executing a customizable set of runners
+from Cloud Storage at startup.
+
+_NOTE_: Packer will attempt to use SSH if either [shell\_scripts][shell] or
+[ansible\_playbooks][ansible] are set to non-empty values. Leave them at their
+default, empty values to ensure access by SSH is disabled.
+
+## Supplying startup script as a string
+
+The [startup\_script][sss] parameter accepts scripts formatted as strings. In
+Packer and Terraform, multi-line strings can be specified using [heredoc
+syntax](https://www.terraform.io/language/expressions/strings#heredoc-strings)
+in an input [Packer variables file][pkrvars] (`*.pkrvars.hcl`) For example,
+the following snippet defines a multi-line bash script followed by an integer
+representing the size, in GiB, of the resulting image:
 
 ```hcl
-project_id = "## Set Project ID here ##"
-zone       = "us-central1-c"
-subnetwork = "## Set Subnetwork here ##"
-use_iap          = true
-omit_external_ip = true
-disk_size        = 100
+startup_script = <<-EOT
+  #!/bin/bash
+  yum install -y epel-release
+  yum install -y jq
+  EOT
 
-ansible_playbooks = [
-  {
-    playbook_file   = "./example-playbook.yml"
-    galaxy_file     = "./requirements.yml"
-    extra_arguments = ["-vv"]
-  }
-]
+disk_size = 100
 ```
 
-Substitute appropriate values for `project_id`, `zone`, and `subnetwork`.
-Then execute
+In the YAML-formatted Toolkit Blueprints, the equivalent syntax is:
 
-```shell
-packer build .
+```yaml
+...
+    settings:
+      startup_script: |
+        #!/bin/bash
+        yum install -y epel-release
+        yum install -y jq
+      disk_size: 100
+...
 ```
+
+[pkrvars]: https://www.packer.io/guides/hcl/variables#from-a-file
+
+## Example
+
+The [included blueprint](../../../examples/image-builder.yaml) demonstrates a
+solution that builds an image using:
+
+* The [HPC VM Image][hpcimage] as a base upon which to customize
+* A VPC network with firewall rules that allow IAP-based SSH tunnels
+* Toolkit runners that install Ansible
+
+Please review the [examples README](../../../examples/README.md#image-builderyaml)
+for usage instructions.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -88,21 +178,27 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | n/a | <pre>list(object({<br>    playbook_file   = string<br>    galaxy_file     = string<br>    extra_arguments = list(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | A list of Ansible playbook configurations that will be uploaded to customize the VM image | <pre>list(object({<br>    playbook_file   = string<br>    galaxy_file     = string<br>    extra_arguments = list(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
-| <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2d-standard-4"` | no |
-| <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `false` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | n/a | `string` | n/a | yes |
+| <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2-standard-4"` | no |
+| <a name="input_network_project_id"></a> [network\_project\_id](#input\_network\_project\_id) | Project ID of Shared VPC network | `string` | `null` | no |
+| <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `true` | no |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which to create VM and image | `string` | n/a | yes |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The service account email to use. If null or 'default', then the default Compute Engine service account will be used. | `string` | `null` | no |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Service account scopes to attach to the instance. See<br>https://cloud.google.com/compute/docs/access/service-accounts. | `list(string)` | `null` | no |
+| <a name="input_shell_scripts"></a> [shell\_scripts](#input\_shell\_scripts) | A list of paths to local shell scripts which will be uploaded to customize the VM image | `list(string)` | `[]` | no |
 | <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Source OS image to build from | `string` | `null` | no |
 | <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternative to source\_image. Specify image family to build from latest image in family | `string` | `"hpc-centos-7"` | no |
 | <a name="input_source_image_project_id"></a> [source\_image\_project\_id](#input\_source\_image\_project\_id) | A list of project IDs to search for the source image. Packer will search the<br>first project ID in the list first, and fall back to the next in the list,<br>until it finds the source image. | `list(string)` | <pre>[<br>  "cloud-hpc-image-public"<br>]</pre> | no |
 | <a name="input_ssh_username"></a> [ssh\_username](#input\_ssh\_username) | Username to use for SSH access to VM | `string` | `"packer"` | no |
-| <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | Name of subnetwork in which to provision image building VM | `string` | n/a | yes |
+| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script (as raw string) used to build the custom VM image (overridden by var.startup\_script\_file if both are supplied) | `string` | `null` | no |
+| <a name="input_startup_script_file"></a> [startup\_script\_file](#input\_startup\_script\_file) | Path to local shell script that will be uploaded as a startup script to customize the VM image | `string` | `null` | no |
+| <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | Name of subnetwork in which to provision image building VM | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Assign network tags to apply firewall rules to VM instance | `list(string)` | `null` | no |
-| <a name="input_use_iap"></a> [use\_iap](#input\_use\_iap) | Use IAP proxy when connecting by SSH | `bool` | `false` | no |
+| <a name="input_use_iap"></a> [use\_iap](#input\_use\_iap) | Use IAP proxy when connecting by SSH | `bool` | `true` | no |
 | <a name="input_use_os_login"></a> [use\_os\_login](#input\_use\_os\_login) | Use OS Login when connecting by SSH | `bool` | `false` | no |
+| <a name="input_wrap_startup_script"></a> [wrap\_startup\_script](#input\_wrap\_startup\_script) | Wrap startup script with Packer-generated wrapper | `bool` | `true` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Cloud zone in which to provision image building VM | `string` | n/a | yes |
 
 ## Outputs

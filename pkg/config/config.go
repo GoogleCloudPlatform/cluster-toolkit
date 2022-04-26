@@ -49,6 +49,7 @@ var errorMessages = map[string]string{
 	"settingsLabelType": "labels in resources settings are not a map",
 	"invalidVar":        "invalid variable definition in",
 	"varNotFound":       "Could not find source of variable",
+	"varInAnotherGroup": "References to other groups are not yet supported",
 	"noOutput":          "Output not found for a variable",
 	// validator
 	"emptyID":         "a resource id cannot be empty",
@@ -253,20 +254,21 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 }
 
 // ExportYamlConfig exports the internal representation of a blueprint config
-func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) []byte {
+func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) ([]byte, error) {
 	d, err := yaml.Marshal(&bc.Config)
 	if err != nil {
-		log.Fatalf("%s: %v", errorMessages["yamlMarshalError"], err)
+		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
 	if outputFilename == "" {
-		return d
+		return d, nil
 	}
 	err = ioutil.WriteFile(outputFilename, d, 0644)
 	if err != nil {
-		log.Fatalf("%s, Filename: %s",
-			errorMessages["fileSaveError"], outputFilename)
+		// hitting this error writing yaml
+		return d, fmt.Errorf("%s, Filename: %s: %w",
+			errorMessages["fileSaveError"], outputFilename, err)
 	}
-	return nil
+	return nil, nil
 }
 
 func createResourceInfo(
@@ -454,12 +456,10 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 
 // ResolveGlobalVariables given a map of strings to cty.Value types, will examine
 // all cty.Values that are of type cty.String. If they are literal global variables,
-// then they are replaces by the cty.Value of the corresponding entry in yc.Vars
-// the cty.Value types that are string literal global variables to their value
+// then they are replaced by the cty.Value of the corresponding entry in
+// yc.Vars. All other cty.Values are unmodified.
 // ERROR: if conversion from yc.Vars to map[string]cty.Value fails
-// ERROR: if (somehow) the cty.String cannot be covnerted to a Go string
-// ERROR: if there are literal variables which are not globals
-//        (this will be a use case we should consider)
+// ERROR: if (somehow) the cty.String cannot be converted to a Go string
 // ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global variable
 //        being resolved does not exist in yc.Vars
 func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error {
@@ -477,7 +477,8 @@ func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error 
 				return err
 			}
 			ctx, varName, found := IdentifyLiteralVariable(valString)
-			// confirm literal and that it is global
+			// only attempt resolution on global literal variables
+			// leave all other strings alone (including non-global)
 			if found && ctx == "var" {
 				varTraversal := hcl.Traversal{
 					hcl.TraverseRoot{Name: ctx},
@@ -488,8 +489,6 @@ func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error 
 					return diags
 				}
 				ctyMap[key] = newVal
-			} else {
-				return fmt.Errorf("%s was not a literal global variable ((var.name))", valString)
 			}
 		}
 	}

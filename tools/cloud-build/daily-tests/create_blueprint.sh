@@ -67,5 +67,13 @@ sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/" "${EXAMPLE_YAML}" ||
 	}
 
 ## Create blueprint and create artifact
-./ghpc create -c "${EXAMPLE_YAML}"
-tar -czf "${BLUEPRINT_DIR}.tgz" "${BLUEPRINT_DIR}"
+./ghpc create "${EXAMPLE_YAML}" ||
+	{
+		echo "could not write blueprint"
+		exit 1
+	}
+tar -czf "${BLUEPRINT_DIR}.tgz" "${BLUEPRINT_DIR}" ||
+	{
+		echo "could not tarball blueprint"
+		exit 1
+	}

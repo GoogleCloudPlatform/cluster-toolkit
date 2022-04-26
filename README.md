@@ -92,6 +92,7 @@ appear similar to:
 
 ```shell
 terraform -chdir=hpc-cluster-small/primary init
+terraform -chdir=hpc-cluster-small/primary validate
 terraform -chdir=hpc-cluster-small/primary apply
 ```
 
@@ -136,6 +137,8 @@ you can use the following command to deploy a Packer-based resource group:
 
 ```shell
 cd <blueprint-directory>/<packer-group>/<custom-vm-image>
+packer init .
+packer validate .
 packer build .
 ```
 

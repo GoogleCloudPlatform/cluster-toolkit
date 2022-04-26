@@ -340,7 +340,8 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 	// Return bytes
 	bc := BlueprintConfig{}
 	bc.Config = expectedSimpleYamlConfig
-	obtainedYaml := bc.ExportYamlConfig("")
+	obtainedYaml, err := bc.ExportYamlConfig("")
+	c.Assert(err, IsNil)
 	c.Assert(obtainedYaml, Not(IsNil))
 
 	// Write file
@@ -505,49 +506,51 @@ func (s *MySuite) TestConvertMapToCty(c *C) {
 
 func (s *MySuite) TestResolveGlobalVariables(c *C) {
 	var err error
-	var testkey = "testkey"
+	var testkey1 = "testkey1"
+	var testkey2 = "testkey2"
+	var testkey3 = "testkey3"
 	bc := getBlueprintConfigForTest()
 	ctyMap := make(map[string]cty.Value)
 	err = bc.Config.ResolveGlobalVariables(ctyMap)
 	c.Assert(err, IsNil)
 
-	// confirm that a plain string (non-variable) is unchanged and errors
+	// confirm plain string is unchanged and does not error
 	testCtyString := cty.StringVal("testval")
-	ctyMap[testkey] = testCtyString
+	ctyMap[testkey1] = testCtyString
 	err = bc.Config.ResolveGlobalVariables(ctyMap)
-	c.Assert(err, NotNil)
-	c.Assert(ctyMap[testkey], Equals, testCtyString)
+	c.Assert(err, IsNil)
+	c.Assert(ctyMap[testkey1], Equals, testCtyString)
 
-	// confirm that a literal, but not global, variable is unchanged and errors
+	// confirm literal, non-global, variable is unchanged and does not error
 	testCtyString = cty.StringVal("((module.testval))")
-	ctyMap[testkey] = testCtyString
+	ctyMap[testkey1] = testCtyString
 	err = bc.Config.ResolveGlobalVariables(ctyMap)
-	c.Assert(err, NotNil)
-	c.Assert(ctyMap[testkey], Equals, testCtyString)
+	c.Assert(err, IsNil)
+	c.Assert(ctyMap[testkey1], Equals, testCtyString)
 
 	// confirm failed resolution of a literal global
 	testCtyString = cty.StringVal("((var.test_global_var))")
-	ctyMap[testkey] = testCtyString
+	ctyMap[testkey1] = testCtyString
 	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Matches, ".*Unsupported attribute;.*")
 
-	// confirm successful resolution a literal global string
-	testGlobalVar := "test_global_var"
-	testGlobalVarString := "testval"
-	bc.Config.Vars[testGlobalVar] = testGlobalVarString
-	testCtyString = cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVar))
-	ctyMap[testkey] = testCtyString
+	// confirm successful resolution of literal globals in presence of other strings
+	testGlobalVarString := "test_global_string"
+	testGlobalValString := "testval"
+	testGlobalVarBool := "test_global_bool"
+	testGlobalValBool := "testval"
+	testPlainString := "plain-string"
+	bc.Config.Vars[testGlobalVarString] = testGlobalValString
+	bc.Config.Vars[testGlobalVarBool] = testGlobalValBool
+	testCtyString = cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarString))
+	testCtyBool := cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarBool))
+	ctyMap[testkey1] = testCtyString
+	ctyMap[testkey2] = testCtyBool
+	ctyMap[testkey3] = cty.StringVal(testPlainString)
 	err = bc.Config.ResolveGlobalVariables(ctyMap)
 	c.Assert(err, IsNil)
-	c.Assert(ctyMap[testkey], Equals, cty.StringVal(testGlobalVarString))
-
-	// confirm successful resolution a literal global boolean
-	testGlobalVar = "test_global_var"
-	testGlobalVarBool := true
-	bc.Config.Vars[testGlobalVar] = testGlobalVarBool
-	testCtyString = cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVar))
-	ctyMap[testkey] = testCtyString
-	err = bc.Config.ResolveGlobalVariables(ctyMap)
-	c.Assert(err, IsNil)
-	c.Assert(ctyMap[testkey], Equals, cty.BoolVal(testGlobalVarBool))
+	c.Assert(ctyMap[testkey1], Equals, cty.StringVal(testGlobalValString))
+	c.Assert(ctyMap[testkey2], Equals, cty.StringVal(testGlobalValBool))
+	c.Assert(ctyMap[testkey3], Equals, cty.StringVal(testPlainString))
 }

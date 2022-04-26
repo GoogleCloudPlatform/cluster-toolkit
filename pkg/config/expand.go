@@ -414,7 +414,8 @@ func expandSimpleVariable(
 			errorMessages["varNotFound"], varSource)
 	}
 	if refGrpIndex != context.groupIndex {
-		log.Fatalf("Unimplemented: references to other groups are not yet supported")
+		return "", fmt.Errorf("%s: resource %s was defined in group %d and called from group %d",
+			errorMessages["varInAnotherGroup"], varSource, refGrpIndex, context.groupIndex)
 	}
 
 	// Get the resource info
