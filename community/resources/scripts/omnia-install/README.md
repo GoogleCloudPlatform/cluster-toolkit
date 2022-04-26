@@ -3,7 +3,7 @@
 This resource will install [DellHPC Omnia](https://github.com/dellhpc/omnia)
 onto a cluster supporting a slurm controller and compute nodes. To see a full
 example using omnia-install, see the
-[omnia-cluster example](../../../examples/omnia-cluster.yaml).
+[omnia-cluster example](../../../community/examples/omnia-cluster.yaml).
 
 **Warning**: This resource will create a user named "omnia" by default which has
 sudo permissions. You may want to remove this user and/or it's permissions from
