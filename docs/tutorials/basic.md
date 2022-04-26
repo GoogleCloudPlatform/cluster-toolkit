@@ -18,18 +18,31 @@ Once you have selected a project, click START.
 
 Talk with your tutorial leader to see if Google Cloud credits are available.
 
-## Enable APIs
+## Enable APIs & Permissions
 
 In a new Google Cloud project there are several apis that must be enabled to
 deploy your HPC cluster. These will be caught when you perform `terraform apply`
 but you can save time by enabling them now by running:
 
-```bash
-gcloud services enable --project {{project-id}} file.googleapis.com compute.googleapis.com 
-```
-
 <!-- Tried the native way to do this and it timed out. Leaving comment here for future reference. -->
 <!-- <walkthrough-enable-apis apis="file.googleapis.com,compute.googleapis.com"></walkthrough-enable-apis> -->
+
+```bash
+gcloud services enable --project <walkthrough-project-id/> file.googleapis.com compute.googleapis.com 
+```
+
+We also need to grant the default compute service account project edit access so
+the slurm controller can perform actions such as auto-scaling.
+
+<!-- Tried getting PROJECT_NUMBER using <walkthrough-project-number/> but returns empty string. -->
+
+```bash
+PROJECT_NUMBER=$(gcloud projects list --filter=<walkthrough-project-id/> --format='value(PROJECT_NUMBER)')
+
+echo "granting roles/editor to $PROJECT_NUMBER-compute@developer.gserviceaccount.com"
+
+gcloud projects add-iam-policy-binding <walkthrough-project-id/> --member=serviceAccount:"$PROJECT_NUMBER"-compute@developer.gserviceaccount.com --role=roles/editor
+```
 
 ## Build the Toolkit Binary
 
@@ -69,7 +82,7 @@ This file describes the cluster you will deploy. After you have inspected the
 file, use the ghpc binary to create a blueprint by running:
 
 ```bash
-./ghpc create examples/hpc-cluster-small.yaml --vars "project_id={{project-id}}"
+./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=<walkthrough-project-id/>"
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the YAML
@@ -114,27 +127,27 @@ run a job:
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >
    `VM instances` in the Google Cloud Console:
 
-<!-- Note: Cannot embed links in Google Cloud tutorial. Tried markdown and html -->
+   <!-- Note: Cannot embed links in Google Cloud tutorial. Tried markdown and html -->
 
-```text
-https://console.cloud.google.com/compute
-```
+   ```text
+   https://console.cloud.google.com/compute
+   ```
 
-<!-- Note: gcloud ssh does not work for cloud shell for google internal projects. -->
-<!-- Tutorial opts to use UI instead -->
+   <!-- Note: gcloud ssh does not work for cloud shell for google internal projects. -->
+   <!-- Tutorial opts to use UI instead -->
 
 1. Click on the `SSH` button associated with the `slurm-hpc-small-login0`
    instance.
 
-This will open a separate pop up window with a terminal into our newly created
-Slurm login VM.
+   This will open a separate pop up window with a terminal into our newly created
+   Slurm login VM.
 
 1. Next you will run the `hostname` command across 3 nodes. Do this by running
    the following command in the shell popup:
 
-```shell
-srun -N 3 hostname
-```
+   ```shell
+   srun -N 3 hostname
+   ```
 
 This may take a minute while Slurm auto-scales to create the nodes. If you are
 curious you can refresh the `Compute Engine` > `VM instances` page and see that
