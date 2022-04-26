@@ -227,7 +227,7 @@ gcloud auth application-default set-quota-project ${PROJECT-ID}
 
 In virtualized settings, the cloud credentials of accounts can be attached
 directly to the execution environment. For example: a VM or a container can
-have [service accounts][https://cloud.google.com/iam/docs/service-accounts]
+have [service accounts](https://cloud.google.com/iam/docs/service-accounts)
 attached to them. The Google [Cloud Shell][cloud-shell] is an interactive
 command line environment which inherits the credentials of the user logged in
 to the Google Cloud Console.
@@ -326,6 +326,16 @@ Required quotas will be based on your custom HPC configuration. Minimum quotas
 have been [documented](examples/README.md#example-configs) for the provided examples.
 
 Quotas can be inspected and requested at `IAM & Admin` > `Quotas`.
+
+## Billing Reports
+You can view your billing reports for your HPC cluster on the [Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports) page. ​​To view the Cloud Billing reports for your Cloud Billing account, including viewing the cost information for all of the Cloud projects that are linked to the account, you need a role that includes the `billing.accounts.getSpendingInformation` permission on your Cloud Billing account.
+
+To view the Cloud Billing reports for your Cloud Billing account:
+1. In the Google Cloud Console, go to [Navigation Menu] > [[Billing](https://console.cloud.google.com/billing/overview)].
+2. At the prompt, choose the Cloud Billing account for which you'd like to view reports. The Billing Overview page opens for the selected billing account.
+3. In the Billing navigation menu, select Reports.
+
+In the right side, expand the Filters view and then filter by label, specifying the key `ghpc_deployment` (or `ghpc_blueprint`) and the desired value.
 
 ## Troubleshooting
 
