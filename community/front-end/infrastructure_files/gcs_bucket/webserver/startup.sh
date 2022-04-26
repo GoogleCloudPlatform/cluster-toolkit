@@ -171,6 +171,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nSet up static contents..."
   python manage.py collectstatic
   python manage.py seed_workbench_presets
+  DJANGO_SUPERUSER_PASSWORD=$DJANGO_PASSWORD python manage.py setup_grafana --username $DJANGO_USERNAME --email $DJANGO_EMAIL
   popd
 
   printf "\nUpdating nginx config...\n"
@@ -186,8 +187,11 @@ EOF
 # Tweak Grafana settings
 
 sed -i \
-	-e 's/serve_from_sub_path = false/serve_from_sub_path = true/g' \
-	-e 's/root_url = \(.*\)\/$/root_url = \1\/grafana\//g' \
+	-e '/^\[server]/,/^\[/{s/serve_from_sub_path = false/serve_from_sub_path = true/}' \
+	-e '/^\[server]/,/^\[/{s/root_url = \(.*\)\/$/root_url = \1\/grafana\//}' \
+	-e '/^\[auth.proxy]/,/^\[/{s/enabled = false/enabled = true/}' \
+	-e '/^\[auth.proxy]/,/^\[/{s/whitelist =.*/whitelist = 127.0.0.1/}' \
+	-e '/^\[auth.proxy]/,/^\[/{s/header_property =.*/header_property = email/}' \
 	/etc/grafana/grafana.ini
 
 printf "Creating supervisord service..."
