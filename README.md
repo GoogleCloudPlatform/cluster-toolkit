@@ -55,7 +55,8 @@ Optionally, you can run `./ghpc --version` to verify the build.
 ## Quick Start
 
 To create a blueprint, an input YAML file needs to be written or adapted from
-one of the [examples](examples/).
+one of the [core examples](examples/) or
+[community examples](community/examples/).
 
 These instructions will use
 [examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml), which is a
