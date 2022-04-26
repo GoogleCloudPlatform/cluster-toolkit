@@ -49,9 +49,13 @@ func printPackerInstructions(grpPath string) {
 }
 
 // writeResourceLevel writes any needed files to the resource layer
-func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig, bpDirectory string) error {
+func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig, outputDir string) error {
 	for _, grp := range yamlConfig.ResourceGroups {
-		groupPath := filepath.Join(bpDirectory, yamlConfig.BlueprintName, grp.Name)
+		deploymentName, err := yamlConfig.DeploymentName()
+		if err != nil {
+			return err
+		}
+		groupPath := filepath.Join(outputDir, deploymentName, grp.Name)
 		for _, res := range grp.Resources {
 			if res.Kind != "packer" {
 				continue
@@ -86,11 +90,11 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 
 // writeResourceGroups writes any needed files to the top and resource levels
 // of the blueprint
-func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig, bpDirectory string) error {
-	return w.writeResourceLevel(yamlConfig, bpDirectory)
+func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig, outputDir string) error {
+	return w.writeResourceLevel(yamlConfig, outputDir)
 }
 
-func (w PackerWriter) restoreState(bpDir string) error {
+func (w PackerWriter) restoreState(deploymentDir string) error {
 	// TODO: implement state restoration for Packer
 	return nil
 }
