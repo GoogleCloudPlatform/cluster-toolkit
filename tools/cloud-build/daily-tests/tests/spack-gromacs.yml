@@ -17,7 +17,7 @@
 deployment_name: "spack-gromacs-{{ build }}"
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/spack-gromacs.yaml"
+blueprint_yaml: "{{ workspace }}/community/examples/spack-gromacs.yaml"
 blueprint_dir: spack-gromacs
 network: "default"
 max_nodes: 5
