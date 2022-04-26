@@ -371,9 +371,12 @@ func printTerraformInstructions(grpPath string) {
 // writeTopLevel writes any needed files to the top layer of the blueprint
 func (w TFWriter) writeResourceGroups(
 	yamlConfig *config.YamlConfig,
-	bpDirectory string,
+	outputDir string,
 ) error {
-	bpName := yamlConfig.BlueprintName
+	deploymentName, err := yamlConfig.DeploymentName()
+	if err != nil {
+		return err
+	}
 	ctyVars, err := config.ConvertMapToCty(yamlConfig.Vars)
 	if err != nil {
 		return fmt.Errorf(
@@ -383,7 +386,7 @@ func (w TFWriter) writeResourceGroups(
 		if !resGroup.HasKind("terraform") {
 			continue
 		}
-		writePath := filepath.Join(bpDirectory, bpName, resGroup.Name)
+		writePath := filepath.Join(outputDir, deploymentName, resGroup.Name)
 
 		// Write main.tf file
 		if err := writeMain(
@@ -434,8 +437,8 @@ func (w TFWriter) writeResourceGroups(
 }
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
-func (w TFWriter) restoreState(bpDir string) error {
-	prevResourceGroupPath := filepath.Join(bpDir, hiddenGhpcDirName, prevResourceGroupDirName)
+func (w TFWriter) restoreState(deploymentDir string) error {
+	prevResourceGroupPath := filepath.Join(deploymentDir, hiddenGhpcDirName, prevResourceGroupDirName)
 	files, err := ioutil.ReadDir(prevResourceGroupPath)
 	if err != nil {
 		return fmt.Errorf("Error trying to read previous resources in %s, %w", prevResourceGroupPath, err)
@@ -445,7 +448,7 @@ func (w TFWriter) restoreState(bpDir string) error {
 		var tfStateFiles = []string{tfStateFileName, tfStateBackupFileName}
 		for _, stateFile := range tfStateFiles {
 			src := filepath.Join(prevResourceGroupPath, f.Name(), stateFile)
-			dest := filepath.Join(bpDir, f.Name(), tfStateFileName)
+			dest := filepath.Join(deploymentDir, f.Name(), tfStateFileName)
 
 			if bytesRead, err := ioutil.ReadFile(src); err == nil {
 				err = ioutil.WriteFile(dest, bytesRead, 0644)
