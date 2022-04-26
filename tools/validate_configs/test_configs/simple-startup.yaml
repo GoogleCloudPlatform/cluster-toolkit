@@ -55,7 +55,7 @@ resource_groups:
     settings:
       machine_type: e2-standard-4
 
-  - source: ./resources/scripts/wait-for-startup
+  - source: ./community/resources/scripts/wait-for-startup
     kind: terraform
     id: waiter
     settings:

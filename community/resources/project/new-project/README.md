@@ -9,7 +9,7 @@ This module is meant for use with Terraform 0.13.
 ### Example
 
 ```yaml
-- source: ./resources/project/new-project
+- source: ./community/resources/project/new-project
   kind: terraform
   id: project
   settings:

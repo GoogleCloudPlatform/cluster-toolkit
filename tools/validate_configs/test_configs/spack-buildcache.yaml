@@ -29,7 +29,7 @@ resource_groups:
     kind: terraform
     id: network1
 
-  - source: resources/scripts/spack-install
+  - source: ./community/resources/scripts/spack-install
     kind: terraform
     id: spack
     settings:

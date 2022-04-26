@@ -11,7 +11,7 @@ resource.
 ### Example
 
 ```yaml
-- source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+- source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-login-node
   kind: terraform
   id: slurm_login
   settings:

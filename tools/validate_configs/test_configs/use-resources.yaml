@@ -41,12 +41,12 @@ resource_groups:
       network_name: $(network1.network_name)
 
 
-  - source: resources/file-system/nfs-server
+  - source: ./community/resources/file-system/nfs-server
     kind: terraform
     id: projectsfs
     use: [network1]
 
-  - source: resources/third-party/file-system/DDN-EXAScaler
+  - source: ./community/resources/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     settings:
@@ -55,7 +55,7 @@ resource_groups:
       subnetwork_self_link: $(network1.subnetwork_self_link)
       subnetwork_address: $(network1.subnetwork_address)
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
@@ -66,7 +66,7 @@ resource_groups:
       max_node_count: 200
       partition_name: compute
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
@@ -74,7 +74,7 @@ resource_groups:
     - compute_partition
     - network1
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:

@@ -37,14 +37,14 @@ resource_groups:
       name: appsfs
       local_mount: /apps
 
-  - source: resources/file-system/nfs-server
+  - source: ./community/resources/file-system/nfs-server
     kind: terraform
     id: nfs
     use: [network1]
     settings:
       image: rocky-linux-cloud/rocky-linux-8
 
-  - source: ./resources/scripts/spack-install
+  - source: ./community//resources/scripts/spack-install
     kind: terraform
     id: spack
     settings:

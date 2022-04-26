@@ -19,7 +19,7 @@ blueprint_name: new_project
 resource_groups:
 - group: primary
   resources:
-  - source: ./resources/project/new-project
+  - source: ./community/resources/project/new-project
     kind: terraform
     id: project
     settings:

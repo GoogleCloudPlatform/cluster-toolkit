@@ -35,11 +35,11 @@ https://www.googleapis.com/auth/devstorage.read_write
 As an example, the below is a possible definition of a spack installation.
 
 ```yaml
-  - source: ./resources/scripts/spack-install
+  - source: ./community/resources/scripts/spack-install
     kind: terraform
     id: spack
     settings:
-      install_dir: /apps/spack
+      install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.0
       spack_cache_url:
@@ -47,14 +47,14 @@ As an example, the below is a possible definition of a spack installation.
         mirror_url: gs://example-buildcache/linux-centos7
       configs:
       - type: 'single-config'
-        value: 'config:install_tree:/apps/spack/opt'
+        value: 'config:install_tree:/sw/spack/opt'
         scope: 'site'
       - type: 'file'
         scope: 'site'
         value: |
           config:
             build_stage:
-              - /apps/spack/stage
+              - /sw/spack/stage
       - type: 'file'
         scope: 'site'
         value: |
@@ -91,7 +91,7 @@ Following the above description of this resource, it can be added to a Slurm
 deployment via the following:
 
 ```yaml
-- source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+- source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use: [spack]
@@ -116,7 +116,7 @@ Alternatively, it can be added as a startup script via:
         destination: install_spack_deps.yml
       - type: shell
         content: $(spack.startup_script)
-        destination: "/apps/spack-install.sh"
+        destination: "/sw/spack-install.sh"
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
