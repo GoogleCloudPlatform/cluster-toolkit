@@ -130,7 +130,7 @@ run a job:
    <!-- Note: Cannot embed links in Google Cloud tutorial. Tried markdown and html -->
 
    ```text
-   https://console.cloud.google.com/compute
+   https://console.cloud.google.com/compute?project=<walkthrough-project-id/>
    ```
 
    <!-- Note: gcloud ssh does not work for cloud shell for google internal projects. -->
@@ -141,6 +141,10 @@ run a job:
 
    This will open a separate pop up window with a terminal into our newly created
    Slurm login VM.
+
+   > **_NOTE:_** If you see a message saying:
+   > _`Slurm is currently being configured in the background`_, then re-launch
+   > the pop up after a minute. This gives time for Slurm to become ready.
 
 1. Next you will run the `hostname` command across 3 nodes. Do this by running
    the following command in the shell popup:
@@ -164,7 +168,11 @@ $ srun -N 3 hostname
 
 Running the same job again will run much faster as Slurm will reuse the nodes.
 
-The auto-scaled nodes will destroy themselves after several minutes.
+The auto-scaled nodes will be automatically destroyed by the Slurm controller if
+left idle for several minutes.
+
+> **_NOTE:_** If the Slurm controller is shut down before the auto-scale nodes
+> are destroyed then they will be left running.
 
 ## Destroy the Cluster
 
