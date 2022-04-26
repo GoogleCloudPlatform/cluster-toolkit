@@ -147,8 +147,8 @@ func (s *MySuite) TestPrepBpDir(c *C) {
 func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
 	// Test with a real blueprint previously written
 	testYamlConfig := getYamlConfigForTest()
-	testYamlConfig.BlueprintName = "bp_prep__real_bp"
-	realBpDir := filepath.Join(testDir, testYamlConfig.BlueprintName)
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
+	realBpDir := filepath.Join(testDir, testYamlConfig.Vars["deployment_name"].(string))
 
 	// writes a full blueprint w/ actual resource groups
 	WriteBlueprint(&testYamlConfig, testDir, false /* overwrite */)
@@ -162,7 +162,7 @@ func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
 	c.Check(isBlueprintDirPrepped(realBpDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevResourceDir := filepath.Join(testDir, testYamlConfig.BlueprintName, hiddenGhpcDirName, prevResourceGroupDirName)
+	prevResourceDir := filepath.Join(testDir, testYamlConfig.Vars["deployment_name"].(string), hiddenGhpcDirName, prevResourceGroupDirName)
 	files1, _ := ioutil.ReadDir(prevResourceDir)
 	c.Check(len(files1) > 0, Equals, true)
 
@@ -213,8 +213,7 @@ func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 // reswriter.go
 func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
-	blueprintName := "blueprints_TestWriteBlueprint"
-	testYamlConfig.BlueprintName = blueprintName
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
 	err := WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the blueprint fails
@@ -223,6 +222,27 @@ func (s *MySuite) TestWriteBlueprint(c *C) {
 	// Overwriting the blueprint succeeds with flag
 	err = WriteBlueprint(&testYamlConfig, testDir, true /* overwriteFlag */)
 	c.Check(err, IsNil)
+}
+
+func (s *MySuite) TestWriteBlueprint_BadDeploymentName(c *C) {
+	testYamlConfig := getYamlConfigForTest()
+	var e *config.DeploymentNameError
+
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": 100}
+	err := WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	c.Check(errors.As(err, &e), Equals, true)
+
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": false}
+	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	c.Check(errors.As(err, &e), Equals, true)
+
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": ""}
+	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	c.Check(errors.As(err, &e), Equals, true)
+
+	testYamlConfig.Vars = map[string]interface{}{}
+	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	c.Check(errors.As(err, &e), Equals, true)
 }
 
 // tfwriter.go
@@ -575,13 +595,13 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	testWriter.writeResourceLevel(&testYamlConfig, testDir)
 
-	blueprintName := "blueprints_TestWriteResourceLevel_PackerWriter"
-	testYamlConfig.BlueprintName = blueprintName
-	blueprintDir := filepath.Join(testDir, blueprintName)
-	if err := blueprintio.CreateDirectory(blueprintDir); err != nil {
+	deploymentName := "deployment_TestWriteResourceLevel_PackerWriter"
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": deploymentName}
+	deploymentDir := filepath.Join(testDir, deploymentName)
+	if err := blueprintio.CreateDirectory(deploymentDir); err != nil {
 		log.Fatal(err)
 	}
-	groupDir := filepath.Join(blueprintDir, "packerGroup")
+	groupDir := filepath.Join(deploymentDir, "packerGroup")
 	if err := blueprintio.CreateDirectory(groupDir); err != nil {
 		log.Fatal(err)
 	}

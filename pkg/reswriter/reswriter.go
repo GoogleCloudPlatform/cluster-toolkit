@@ -40,7 +40,7 @@ type ResWriter interface {
 	getNumResources() int
 	addNumResources(int)
 	writeResourceGroups(*config.YamlConfig, string) error
-	restoreState(bpDir string) error
+	restoreState(deploymentDir string) error
 }
 
 var kinds = map[string]ResWriter{
@@ -61,23 +61,26 @@ func factory(kind string) ResWriter {
 	return writer
 }
 
-// WriteBlueprint writes the blueprint using resources defined in config.
+// WriteBlueprint writes a deployment directory using resources defined the environment blueprint.
 func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFlag bool) error {
-	bpDir := filepath.Join(outputDir, yamlConfig.BlueprintName)
+	deploymentName, err := yamlConfig.DeploymentName()
+	if err != nil {
+		return err
+	}
+	deploymentDir := filepath.Join(outputDir, deploymentName)
 
-	overwrite := isOverwriteAllowed(bpDir, yamlConfig, overwriteFlag)
-	if err := prepBpDir(bpDir, overwrite); err != nil {
+	overwrite := isOverwriteAllowed(deploymentDir, yamlConfig, overwriteFlag)
+	if err := prepBpDir(deploymentDir, overwrite); err != nil {
 		return err
 	}
 
-	copySource(bpDir, &yamlConfig.ResourceGroups)
-
+	copySource(deploymentDir, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
 		if writer.getNumResources() > 0 {
 			if err := writer.writeResourceGroups(yamlConfig, outputDir); err != nil {
 				return fmt.Errorf("error writing resources to blueprint: %w", err)
 			}
-			if err := writer.restoreState(bpDir); err != nil {
+			if err := writer.restoreState(deploymentDir); err != nil {
 				return fmt.Errorf("Error trying to restore terraform state: %w", err)
 			}
 		}

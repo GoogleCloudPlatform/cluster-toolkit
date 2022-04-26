@@ -522,3 +522,30 @@ func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error 
 	}
 	return nil
 }
+
+// DeploymentNameError signifies a problem with the blueprint deployment name.
+type DeploymentNameError struct {
+	cause string
+}
+
+func (err *DeploymentNameError) Error() string {
+	return fmt.Sprintf("deployment_name must be a string and cannot be empty, cause: %v", err.cause)
+}
+
+// DeploymentName returns the deployment_name from the config and does approperate checks.
+func (yc *YamlConfig) DeploymentName() (string, error) {
+	nameInterface, found := yc.Vars["deployment_name"]
+	if !found {
+		return "", &DeploymentNameError{"deployment_name variable not defined."}
+	}
+
+	deploymentName, ok := nameInterface.(string)
+	if !ok {
+		return "", &DeploymentNameError{"deployment_name was not of type string."}
+	}
+
+	if len(deploymentName) == 0 {
+		return "", &DeploymentNameError{"deployment_name was an empty string."}
+	}
+	return deploymentName, nil
+}
