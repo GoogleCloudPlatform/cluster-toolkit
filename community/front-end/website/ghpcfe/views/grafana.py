@@ -14,10 +14,11 @@
 
 """ Grafana integration views """
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import base
 from revproxy.views import ProxyView
 
-class GrafanaProxyView(ProxyView):
+class GrafanaProxyView(LoginRequiredMixin, ProxyView):
     """Proxy View"""
     upstream = "http://127.0.0.1:3000/"
 
@@ -33,7 +34,7 @@ class GrafanaProxyView(ProxyView):
         )
         return response
 
-class GrafanaView(base.TemplateView):
+class GrafanaView(LoginRequiredMixin, base.TemplateView):
     template_name = "grafana.html"
 
     def get_context_data(self, *args, **kwargs):

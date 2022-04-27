@@ -134,7 +134,7 @@ def create_cluster_dashboard(cluster):
             "targets": [
                 {
                     "metricQuery": {
-                        "aliasBy": "{{resource.label.instance_id}}",
+                        "aliasBy": "{{resource.label.instance_id}} - {{metric.label.state}}",
                         "alignmentPeriod": "cloud-monitoring-auto",
                         "crossSeriesReducer": "REDUCE_NONE",
                         "editorMode": "visual",

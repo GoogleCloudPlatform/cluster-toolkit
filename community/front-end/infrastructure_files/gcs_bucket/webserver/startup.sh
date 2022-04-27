@@ -171,7 +171,6 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nSet up static contents..."
   python manage.py collectstatic
   python manage.py seed_workbench_presets
-  DJANGO_SUPERUSER_PASSWORD=$DJANGO_PASSWORD python manage.py setup_grafana --username $DJANGO_USERNAME --email $DJANGO_EMAIL
   popd
 
   printf "\nUpdating nginx config...\n"
@@ -209,6 +208,7 @@ printf "Creating systemd service..."
 echo "[Unit]
 Description=GCluster: The GCP HPC Cluster deployment tool
 Requires=supervisord.service grafana-server.service
+After=supervisord.service grafana-server.service
 
 
 [Service]
@@ -227,6 +227,13 @@ systemctl daemon-reload
 systemctl enable gcluster.service
 systemctl start gcluster.service
 systemctl status gcluster.service
+
+# Now that Grafana and Django are running, initialize integration
+sudo su - gcluster -c /bin/bash <<EOF
+  source /opt/gcluster/django-env/bin/activate
+  cd /opt/gcluster/hpc-toolkit/community/front-end/website
+  python manage.py setup_grafana "${DJANGO_EMAIL}"
+EOF
 
 # IF we have a hostname, configure for TLS
 if [ -n "${SERVER_HOSTNAME}" ]; then

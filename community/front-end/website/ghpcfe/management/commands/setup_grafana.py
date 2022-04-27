@@ -17,11 +17,8 @@
 
 """Custom setup to add Google Oauth"""
 
-import os
-
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.core.management.base import CommandError
 
 from grafana_api.grafana_face import GrafanaFace
 
@@ -32,61 +29,53 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "username",
-            type=str,
-        )
-        parser.add_argument(
             "email",
             type=str,
         )
 
     def handle(self, *args, **kwargs):
-        username = kwargs["username"]
         email = kwargs["email"]
-        password = os.getenv("DJANGO_SUPERUSER_PASSWORD", None)
-        if not password:
-            raise CommandError("Please set env var DJANGO_SUPERUSER_PASSWORD")
 
-        try:
-            # one-off user/admin initialisation
-            api = GrafanaFace(auth=("admin", "admin"), host="localhost:3000")
-            # Change password
-            api.admin.change_user_password(1, settings.SECRET_KEY)
-            api = GrafanaFace(
-                auth=("admin", settings.SECRET_KEY),
-                host="localhost:3000"
-            )
-            user = api.admin.create_user(
-                {
-                    "name": username,
-                    "email": email,
-                    "login": username,
-                    "password": password,
-                    "OrgId": 1
+        # one-off user/admin initialisation
+        api = GrafanaFace(auth=("admin", "admin"), host="localhost:3000")
+        # Change password
+        api.admin.change_user_password(1, settings.SECRET_KEY)
+        api = GrafanaFace(
+            auth=("admin", settings.SECRET_KEY),
+            host="localhost:3000"
+        )
+
+        # Create SuperUser
+        user = api.admin.create_user(
+            {
+                "name": "",
+                "email": email,
+                "login": email,
+                # We use Proxy-Auth, but must have a non-blank password
+                "password": "NotUsed1234",
+                "OrgId": 1
+            }
+        )
+
+        # Make SuperUser an admin and org Admin
+        api.admin.change_user_permissions(user["id"], True)
+        api.organization.update_user_current_organization(
+            user_id = user["id"],
+            user = {
+                "role": "Admin",
+            }
+        )
+
+        # Add Datasource for our own self
+        api.datasource.create_datasource(
+            {
+                "name": "default",
+                "type": "stackdriver",
+                "isDefault": True,
+                "access": "proxy",
+                "jsonData": {
+                    "authenticationType": "gce",
                 }
-            )
-            # Make user an admin and org Admin
-            api.admin.change_user_permissions(user.id, True)
-            api.organization.update_user_current_organization(
-                user_id = user["id"],
-                user = {
-                    "role": "Admin",
-                }
-            )
+            }
+        )
 
-            # Add Datasource for our own self
-            api.datasource.create_datasource(
-                {
-                    "name": "default",
-                    "type": "stackdriver",
-                    "isDefault": True,
-                    "access": "proxy",
-                    "jsonData": {
-                        "authenticationType": "gce",
-                    }
-                }
-            )
-
-
-        except Exception as err:
-            raise CommandError("Initalization failed.") from err
