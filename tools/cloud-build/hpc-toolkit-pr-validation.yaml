@@ -37,6 +37,11 @@ steps:
     set -e -x
     time tflint --init
     export SKIP=$(cat hooks1.txt)
+    tmp_dir=$$(mktemp -d -t pre-commit-group-1-XXXXX)
+    echo "Running pre-commit group 1 in $${tmp_dir}"
+    git worktree add $$tmp_dir/group1
+    cd $$tmp_dir/group1
+    export PRE_COMMIT_HOME=$$tmp_dir
     echo skipping: $$SKIP
     time pre-commit run --all-files
 - id: pre-commits2
@@ -51,6 +56,11 @@ steps:
     set -e
     time tflint --init
     export SKIP=$(cat hooks2.txt)
+    tmp_dir=$$(mktemp -d -t pre-commit-group-2-XXXXX)
+    echo "Running pre-commit group 2 in $${tmp_dir}"
+    git worktree add $$tmp_dir/group2
+    cd $$tmp_dir/group2
+    export PRE_COMMIT_HOME=$$tmp_dir
     echo skipping: $$SKIP
     time pre-commit run --all-files
 - id: pre-commits3
@@ -65,6 +75,11 @@ steps:
     set -e
     time tflint --init
     export SKIP=$(cat hooks3.txt)
+    tmp_dir=$$(mktemp -d -t pre-commit-group-3-XXXXX)
+    echo "Running pre-commit group 3 in $${tmp_dir}"
+    git worktree add $$tmp_dir/group3
+    cd $$tmp_dir/group3
+    export PRE_COMMIT_HOME=$$tmp_dir
     echo skipping: $$SKIP
     time pre-commit run --all-files
 - id: make-tests
