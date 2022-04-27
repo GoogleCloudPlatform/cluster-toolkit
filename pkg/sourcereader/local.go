@@ -40,7 +40,7 @@ func (r LocalSourceReader) GetResource(resPath string, copyPath string) error {
 	}
 
 	if _, err := os.Stat(resPath); os.IsNotExist(err) {
-		return fmt.Errorf("Local resource doesn't exist at %s", resPath)
+		return fmt.Errorf("Local module doesn't exist at %s", resPath)
 	}
 
 	return copyFromPath(resPath, copyPath)

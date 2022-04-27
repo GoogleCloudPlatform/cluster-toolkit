@@ -32,7 +32,7 @@ terraform_backend_defaults:
 resource_groups:
 - group: onboarding
   resources:
-  - source: ./community/resources/project/new-project
+  - source: ./community/modules/project/new-project
     kind: terraform
     id: project
     settings:
@@ -41,7 +41,7 @@ resource_groups:
       billing_account: "111110-M2N704-854685"  # random billing number
       org_id: 123456789  # random org id
 
-  - source: ./community/resources/project/service-enablement
+  - source: ./community/modules/project/service-enablement
     kind: terraform
     id: enable-apis
     use: [project]
@@ -52,21 +52,21 @@ resource_groups:
 
 - group: primary
   resources:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/vpc
-  - source: resources/network/vpc
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - source: modules/network/vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
     settings:
       local_mount: /home
 
-  - source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
@@ -78,7 +78,7 @@ resource_groups:
       enable_placement: false
       max_node_count: 20
 
-  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
@@ -88,7 +88,7 @@ resource_groups:
     settings:
       login_node_count: 1
 
-  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:

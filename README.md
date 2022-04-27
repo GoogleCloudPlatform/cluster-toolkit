@@ -133,8 +133,8 @@ By default, this runs the job on the `debug` partition. See details in
 [examples/](examples/README.md#compute-partition) for how to run on the more
 performant `compute` partition.
 
-This example does not contain any Packer-based resources but for completeness,
-you can use the following command to deploy a Packer-based resource group:
+This example does not contain any Packer-based modules but for completeness,
+you can use the following command to deploy a Packer-based deployment group:
 
 ```shell
 cd <blueprint-directory>/<packer-group>/<custom-vm-image>
@@ -156,7 +156,7 @@ graph LR
     end
     B --> D
     subgraph Advanced Customizations
-    C(3. Resources, eg. Terraform, Scripts) --> D(4. ghpc Engine)
+    C(3. Modules, eg. Terraform, Scripts) --> D(4. ghpc Engine)
     D --> E(5. Deployment Blueprint)
     end
     E --> F(6. HPC environment on GCP)
@@ -167,20 +167,20 @@ graph LR
    blueprint for a cluster or as a starting point for creating a custom
    blueprint.
 2. **Configuration YAML** – The primary interface to the HPC Toolkit is an input
-   YAML file that defines which resources to use and how to customize them.
+   YAML file that defines which modules to use and how to customize them.
 3. **gHPC Engine** – The gHPC engine converts the configuration YAML into a self-contained blueprint directory.
-4. **Resources** – The building blocks of a blueprint directory are the
-   resources. Resources can be found in the resources directory. They are
-   composed of terraform, packer and/or script files that meet the expectations
-   of the gHPC engine.
+4. **HPC Modules** – The building blocks of a blueprint directory are the
+   modules. Modules can be found in the ./modules and community/modules
+   directories. They are composed of terraform, packer and/or script files that
+   meet the expectations of the gHPC engine.
 5. **Deployment Blueprint** – A self-contained directory that can be used to
    deploy a cluster onto Google Cloud. This is the output of the gHPC engine.
 6. **HPC environment on GCP** – After deployment of a blueprint, an HPC environment will be available in Google Cloud.
 
-Users can configure a set of resources, and using the gHPC Engine of the HPC
+Users can configure a set of modules, and using the gHPC Engine of the HPC
 Toolkit, they can produce a blueprint and deployment instructions for creating
-those resources. Terraform is the primary method for defining the resources
-behind the HPC cluster, but other resources based on tools like ansible and
+those modules. Terraform is the primary method for defining the modules
+behind the HPC cluster, but other modules based on tools like ansible and
 Packer are available.
 
 The HPC Toolkit can provide extra flexibility to configure a cluster to the
@@ -319,7 +319,7 @@ List of APIs to enable ([instructions](https://cloud.google.com/apis/docs/gettin
 ## GCP Quotas
 
 You may need to request additional quota to be able to deploy and use your HPC
-cluster. For example, by default the `SchedMD-slurm-on-gcp-partition` resource
+cluster. For example, by default the `SchedMD-slurm-on-gcp-partition` module
 uses `c2-standard-60` VMs for compute nodes. Default quota for C2 CPUs may be as
 low as 8, which would prevent even a single node from being started.
 
@@ -363,7 +363,7 @@ The solution here is to [request more of the specified quota](#gcp-quotas),
 `C2 CPUs` in the example above. Alternatively, you could switch the partition's
 [machine type][partition-machine-type], to one which has sufficient quota.
 
-[partition-machine-type]: community/resources/compute/SchedMD-slurm-on-gcp-partition/README.md#input_machine_type
+[partition-machine-type]: community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md#input_machine_type
 
 #### Placement Groups
 
@@ -384,7 +384,7 @@ resume.py ERROR: group operation failed: Requested minimum count of 6 VMs could 
 One way to resolve this is to set [enable_placement][partition-enable-placement]
 to `false` on the partition in question.
 
-[partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/resources/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
+[partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
 
 ### Terraform Deployment
 
@@ -445,10 +445,10 @@ drop-down menu at the top-left.
 ## Inspecting the Blueprint
 
 The blueprint is created in the directory matching the provided blueprint\_name
-variable in the config. Within this directory are all the resources needed to
+variable in the config. Within this directory are all the modules needed to
 create a deployment. The blueprint directory will contain subdirectories
-representing the resource groups defined in the config YAML. Most example
-configurations contain a single resource group.
+representing the deployment groups defined in the config YAML. Most example
+configurations contain a single deployment group.
 
 From the [example above](#basic-usage) we get the following blueprint:
 
@@ -569,15 +569,15 @@ Now pre-commit is configured to automatically run before you commit.
 
 ### Packer Documentation
 
-Auto-generated READMEs are created for Packer resources similar to Terraform
-resources. These docs are generated as part of a pre-commit hook (packer-readme)
+Auto-generated READMEs are created for Packer modules similar to Terraform
+modules. These docs are generated as part of a pre-commit hook (packer-readme)
 which searches for `*.pkr.hcl` files. If a packer config is written in another
 file, for instance JSON, terraform docs should be run manually against the
-resource directory before pushing changes. To generate the documentation, run
+module directory before pushing changes. To generate the documentation, run
 the following script against the packer config file:
 
 ```shell
-tools/autodoc/terraform_docs.sh resources/packer/new_resource/image.json
+tools/autodoc/terraform_docs.sh modules/packer/new_resource/image.json
 ```
 
 ### Contributing

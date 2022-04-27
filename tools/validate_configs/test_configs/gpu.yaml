@@ -25,14 +25,14 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/vpc
-  - source: resources/network/pre-existing-vpc
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: ./resources/compute/simple-instance
+  - source: ./modules/compute/simple-instance
     kind: terraform
     id: workstation
     use:

@@ -25,13 +25,13 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: resources/compute/simple-instance
+  - source: modules/compute/simple-instance
     kind: terraform
     id: instance
     outputs:
     - name
 
-  - source: ./community/resources/database/slurm-cloudsql-federation
+  - source: ./community/modules/database/slurm-cloudsql-federation
     kind: terraform
     id: sql
     outputs:
@@ -42,7 +42,7 @@ resource_groups:
       nat_ips:
       - ip
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: filestore
     use: [vpc]
@@ -50,14 +50,14 @@ resource_groups:
     - network_storage
     - install_nfs_client
 
-  - source: ./community/resources/file-system/nfs-server
+  - source: ./community/modules/file-system/nfs-server
     kind: terraform
     id: nfs
     outputs:
     - network_storage
     - install_nfs_client
 
-  - source: resources/file-system/pre-existing-network-storage
+  - source: modules/file-system/pre-existing-network-storage
     kind: terraform
     id: pre-existing-storage
     outputs:
@@ -68,7 +68,7 @@ resource_groups:
       local_mount: /home
       fs_type: nfs
 
-  - source: resources/network/pre-existing-vpc
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: pre-existing-vpc
     outputs:
@@ -79,7 +79,7 @@ resource_groups:
     - subnetwork_self_link
     - subnetwork_address
 
-  - source: resources/network/vpc
+  - source: modules/network/vpc
     kind: terraform
     id: vpc
     outputs:
@@ -91,7 +91,7 @@ resource_groups:
     - subnetwork_address
     - nat_ips
 
-  - source: ./community/resources/project/new-project
+  - source: ./community/modules/project/new-project
     kind: terraform
     id: new-project
     outputs:
@@ -117,7 +117,7 @@ resource_groups:
       billing_account: "111110-M2N704-854685"  # random billing number
       org_id: 123456789  # random org id
 
-  - source: ./community/resources/project/service-account
+  - source: ./community/modules/project/service-account
     kind: terraform
     id: sa
     outputs:
@@ -138,20 +138,20 @@ resource_groups:
       project_roles:
       - "compute.instanceAdmin.v1"
 
-  - source: ./community/resources/scripts/spack-install
+  - source: ./community/modules/scripts/spack-install
     kind: terraform
     id: spack
     outputs:
     - startup_script
     - controller_startup_script
 
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup
     outputs:
     - startup_script
 
-  - source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: partition
     use: [vpc]
@@ -160,7 +160,7 @@ resource_groups:
     settings:
       partition_name: compute
 
-  - source: ./community/resources/file-system/DDN-EXAScaler
+  - source: ./community/modules/file-system/DDN-EXAScaler
     kind: terraform
     id: lustre
     outputs:
@@ -170,7 +170,7 @@ resource_groups:
     - http_console
     - network_storage
 
-  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: controller
     use:

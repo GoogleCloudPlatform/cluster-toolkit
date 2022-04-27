@@ -39,7 +39,7 @@ func addTfExtension(filename string) {
 	newFilename := fmt.Sprintf("%s.tf", filename)
 	if err := os.Rename(filename, newFilename); err != nil {
 		log.Fatalf(
-			"failed to add .tf extension to %s needed to get info on packer resource: %e",
+			"failed to add .tf extension to %s needed to get info on packer module: %e",
 			filename, err)
 	}
 }

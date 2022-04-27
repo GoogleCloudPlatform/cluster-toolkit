@@ -25,19 +25,19 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: resources/network/pre-existing-vpc
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
   ## Filesystems
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: appsfs
     use: [network1]
     settings:
       local_mount: /sw
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
@@ -45,7 +45,7 @@ resource_groups:
       local_mount: /home
 
   ## Install Scripts
-  - source: ./community/resources/scripts/spack-install
+  - source: ./community/modules/scripts/spack-install
     kind: terraform
     id: spack
     settings:
@@ -79,7 +79,7 @@ resource_groups:
       # - mirror_name: gcs_cache
       #   mirror_url: gs://bucket-name/...
 
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: spack-startup
     settings:
@@ -90,7 +90,7 @@ resource_groups:
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
 
-  - source: ./community/resources/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
@@ -101,7 +101,7 @@ resource_groups:
       partition_name: compute
       max_node_count: 20
 
-  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
@@ -112,7 +112,7 @@ resource_groups:
     settings:
       login_node_count: 1
 
-  - source: ./community/resources/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:

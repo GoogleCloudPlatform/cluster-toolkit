@@ -29,7 +29,7 @@ one manager node and eight compute nodes that share a `/home` mounted filestore
 instance. The pre-existing default VPC network is used.
 
 **instance_with_startup.yaml**: Creates a simple cluster with one
-simple-instance and filestore using the startup-script resource to setup and
+simple-instance and filestore using the startup-script module to setup and
 mount the filestore instance.
 
 **packer.yaml**: Creates a network for Packer to create a custom VM image.

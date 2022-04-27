@@ -118,7 +118,7 @@ func isBlueprintDirPrepped(bpDirectoryPath string) error {
 
 	prevResourceDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
 	if _, err := os.Stat(prevResourceDir); os.IsNotExist(err) {
-		return fmt.Errorf("previous resource group directory does not exist: %s: %w", prevResourceDir, err)
+		return fmt.Errorf("previous deployment group directory does not exist: %s: %w", prevResourceDir, err)
 	}
 
 	return nil

@@ -101,9 +101,9 @@ func (s *MySuite) TestFactory(c *C) {
 // hcl_utils.go
 func getTestFS() afero.IOFS {
 	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("resources/network/vpc", 0755)
+	aferoFS.MkdirAll("modules/network/vpc", 0755)
 	afero.WriteFile(
-		aferoFS, "resources/network/vpc/main.tf", []byte(testMainTf), 0644)
+		aferoFS, "modules/network/vpc/main.tf", []byte(testMainTf), 0644)
 	return afero.NewIOFS(aferoFS)
 }
 
@@ -111,12 +111,12 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
 	_, err := getHCLInfo(fakePath)
-	expectedErr := "Source to resource does not exist: .*"
+	expectedErr := "Source to module does not exist: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 	// Invalid source path - points to a file
 	pathToFile := filepath.Join(terraformDir, "main.tf")
 	_, err = getHCLInfo(pathToFile)
-	expectedErr = "Source of resource must be a directory: .*"
+	expectedErr = "Source of module must be a directory: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid source path - points to directory with no .tf files
@@ -169,14 +169,14 @@ func createTmpResource() {
 	tmpResourceDir, err = ioutil.TempDir("", "resreader_tests_*")
 	if err != nil {
 		log.Fatalf(
-			"Failed to create temp dir for resource in resreader_test, %v", err)
+			"Failed to create temp dir for module in resreader_test, %v", err)
 	}
 
-	// Create terraform resource dir
+	// Create terraform module dir
 	terraformDir = filepath.Join(tmpResourceDir, "terraformResource")
 	err = os.Mkdir(terraformDir, 0755)
 	if err != nil {
-		log.Fatalf("error creating test terraform resource dir: %e", err)
+		log.Fatalf("error creating test terraform module dir: %e", err)
 	}
 
 	// main.tf file
@@ -210,11 +210,11 @@ func createTmpResource() {
 		log.Fatalf("resreader_test: Failed to write outputs.tf test file. %v", err)
 	}
 
-	// Create packer resource dir
+	// Create packer module dir
 	packerDir = filepath.Join(tmpResourceDir, "packerResource")
 	err = os.Mkdir(packerDir, 0755)
 	if err != nil {
-		log.Fatalf("error creating test packer resource dir: %e", err)
+		log.Fatalf("error creating test packer module dir: %e", err)
 	}
 
 	// main.pkr.hcl file

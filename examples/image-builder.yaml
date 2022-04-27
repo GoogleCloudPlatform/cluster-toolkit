@@ -24,12 +24,12 @@ vars:
 resource_groups:
 - group: builder-env
   resources:
-  - source: resources/network/vpc
+  - source: modules/network/vpc
     kind: terraform
     id: network1
     outputs:
     - subnetwork_name
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: install_ansible
     settings:
@@ -41,7 +41,7 @@ resource_groups:
     - startup_script
 - group: packer
   resources:
-  - source: resources/packer/custom-image
+  - source: modules/packer/custom-image
     kind: packer
     id: custom-image
     settings:

@@ -22,7 +22,7 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: ./community/resources/project/new-project
+  - source: ./community/modules/project/new-project
     kind: terraform
     id: project
     settings:
