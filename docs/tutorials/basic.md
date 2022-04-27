@@ -41,6 +41,8 @@ PROJECT_NUMBER=$(gcloud projects list --filter=<walkthrough-project-id/> --forma
 
 echo "granting roles/editor to $PROJECT_NUMBER-compute@developer.gserviceaccount.com"
 
+gcloud iam service-accounts enable --project <walkthrough-project-id/> "$PROJECT_NUMBER"-compute@developer.gserviceaccount.com
+
 gcloud projects add-iam-policy-binding <walkthrough-project-id/> --member=serviceAccount:"$PROJECT_NUMBER"-compute@developer.gserviceaccount.com --role=roles/editor
 ```
 
