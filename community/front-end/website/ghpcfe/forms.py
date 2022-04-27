@@ -274,9 +274,9 @@ class ClusterPartitionForm(forms.ModelForm):
         cleaned_data = super().clean()
         if cleaned_data["enable_placement"] and cleaned_data[
             "machine_type"
-        ].split("-")[0] not in ["c2", "c2d"]:
+        ].split("-")[0] not in ["c2"]:
             raise ValidationError(
-                "Placement Groups are only valid for C2 and C2D instance types"
+                "SlurmGCP v4 supports Placement Groups for C2 instance types"
             )
         return cleaned_data
 
