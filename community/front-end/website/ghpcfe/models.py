@@ -614,6 +614,11 @@ class Cluster(CloudResource):
         help_text="The number of login nodes to create",
         default=1,
     )
+    grafana_dashboard_url = models.CharField(
+        max_length=512,
+        null=True,
+        blank=True,
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)

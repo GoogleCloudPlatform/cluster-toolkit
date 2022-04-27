@@ -33,6 +33,7 @@ from . import c2
 from . import cloud_info
 from . import utils
 
+from .. import grafana
 from ..models import Cluster, ApplicationInstallationLocation, ComputeInstance
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,10 @@ class ClusterInfo:
             self._run_ghpc()
             self._initialize_terraform()
             self._apply_terraform()
+
+            dash = grafana.create_cluster_dashboard(self.cluster)
+            self.cluster.grafana_dashboard_url = dash.get("url", "")
+            self.cluster.save()
 
         # Not a lot we can do if terraform fails, it's on the admin user to
         # investigate and fix the errors shown in the log
@@ -192,7 +197,7 @@ class ClusterInfo:
 
             # Temporarily hack in some A100 support
             if part.GPU_per_node > 0:
-                yamli[-1] += (
+                yaml[-1] += (
                     f"""\
       gpu_count: {part.GPU_per_node}
       gpu_type: {part.GPU_type}\

@@ -48,6 +48,9 @@ window.onload=function(event) {
          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
       {% endif %}
       {{ object.get_status_display }}
+      {% if object.grafana_dashboard_url %}
+        &nbsp;&nbsp;&nbsp;<a href="{{object.grafana_dashboard_url}}" target="_blank">Grafana Dashboard</a>
+      {% endif %}
     </p>
 
     <hr>
