@@ -27,3 +27,19 @@
     line: session    [success=ok default=ignore] pam_mkhomedir.so
     state: present
     insertafter: EOF
+
+- name: Dowload OpsAgent installer
+  get_url:
+    url: https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+    dest: /root/add-google-cloud-ops-agent-repo.sh
+    mode: '0755'
+  register: install_ops
+
+- name: Install OpsAgent
+  command:
+    argv:
+    - /root/add-google-cloud-ops-agent-repo.sh
+    - --also-install
+    - --uninstall-standalone-logging-agent
+    - --uninstall-standalone-monitoring-agent
+  when: install_ops.changed # noqa no-handler
