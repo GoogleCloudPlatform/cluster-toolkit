@@ -24,12 +24,13 @@ import (
 )
 
 func init() {
-	expandCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
-		"Configuration file for the new blueprints")
+	expandCmd.Flags().StringVarP(&bpFilename, "config", "c", "",
+		"HPC Environment Blueprint file to be expanded.")
 	cobra.CheckErr(expandCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
+
 	expandCmd.Flags().StringVarP(&outputFilename, "out", "o", "expanded.yaml",
-		"Output file for the expanded yaml.")
+		"Output file for the expanded HPC Environment Definition.")
 	expandCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
 	expandCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
@@ -40,23 +41,23 @@ var (
 	outputFilename string
 	expandCmd      = &cobra.Command{
 		Use:   "expand",
-		Short: "Expand the YAML Config.",
-		Long:  "Updates the YAML Config in the same way as create, but without writing the blueprint.",
+		Short: "Expand the Environment Blueprint.",
+		Long:  "Updates the Environment Blueprint in the same way as create, but without writing the deployment.",
 		Run:   runExpandCmd,
 	}
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	if yamlFilename == "" {
+	if bpFilename == "" {
 		if len(args) == 0 {
 			fmt.Println(cmd.UsageString())
 			return
 		}
 
-		yamlFilename = args[0]
+		bpFilename = args[0]
 	}
 
-	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
+	blueprintConfig := config.NewBlueprintConfig(bpFilename)
 	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
 	}
@@ -66,5 +67,5 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 	blueprintConfig.ExpandConfig()
 	blueprintConfig.ExportYamlConfig(outputFilename)
 	fmt.Printf(
-		"Expanded config created successfully, saved as %s.\n", outputFilename)
+		"Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)
 }
