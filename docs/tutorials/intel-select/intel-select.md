@@ -124,8 +124,18 @@ Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 
 ## Run a Job on the Cluster
 
-Once the blueprint has successfully been deployed, take the following steps to
-run a job:
+Although the blueprint has been successfully deployed, the startup scripts that
+install Intel Parallel Studio take time to complete. Typically, this can be
+around 8 minutes on the controller and 2-3 minutes on the login and compute
+nodes.
+
+If you SSH into the login node following the instructions below, you should
+logout and give more time for the startup script to complete.
+
+> _`Slurm is currently being configured in the background`_
+
+Once the startup script has completed and Slurm reports readiness, take the
+following steps to run a job:
 
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >
    `VM instances` in the Google Cloud Console:
@@ -144,10 +154,6 @@ run a job:
 
    This will open a separate pop up window with a terminal into our newly created
    Slurm login VM.
-
-   > **_NOTE:_** If you see a message saying:
-   > _`Slurm is currently being configured in the background`_, then re-launch
-   > the pop up after a minute. This gives time for Slurm to become ready.
 
 1. Next you will run the `hostname` command across 3 nodes. Do this by running
    the following command in the shell popup:
