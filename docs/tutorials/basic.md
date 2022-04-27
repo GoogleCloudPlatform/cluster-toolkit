@@ -182,7 +182,7 @@ To avoid incurring ongoing charges we will want to destroy our cluster. Run the
 following command in the cloud shell terminal (not in the pop-up):
 
 ```bash
-terraform -chdir=hpc-cluster-small/primary destroy --auto-approve
+terraform -chdir=hpc-cluster-small/primary destroy -auto-approve
 ```
 
 When complete you should see something like:
