@@ -172,7 +172,7 @@ graph LR
 4. **HPC Modules** – The building blocks of a blueprint directory are the
    modules. Modules can be found in the ./modules and community/modules
    directories. They are composed of terraform, packer and/or script files that
-   meet the expectationsof the gHPC engine.
+   meet the expectations of the gHPC engine.
 5. **Deployment Blueprint** – A self-contained directory that can be used to
    deploy a cluster onto Google Cloud. This is the output of the gHPC engine.
 6. **HPC environment on GCP** – After deployment of a blueprint, an HPC environment will be available in Google Cloud.
