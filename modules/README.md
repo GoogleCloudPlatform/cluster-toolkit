@@ -104,7 +104,7 @@ matching names, and the setting has no explicit value, then it will be set to
 the used module's output. For example, see the following YAML:
 
 ```yaml
-resources:
+modules:
 - source: modules/network/vpc
   kind: terraform
   id: network1

@@ -21,9 +21,9 @@ vars:
   region: us-central1
   zone: us-central1-c
 
-resource_groups:
+deployment_groups:
 - group: builder-env
-  resources:
+  modules:
   - source: modules/network/vpc
     kind: terraform
     id: network1
@@ -40,7 +40,7 @@ resource_groups:
     outputs:
     - startup_script
 - group: packer
-  resources:
+  modules:
   - source: modules/packer/custom-image
     kind: packer
     id: custom-image

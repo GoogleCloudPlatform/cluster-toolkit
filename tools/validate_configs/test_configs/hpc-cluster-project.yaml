@@ -29,9 +29,9 @@ terraform_backend_defaults:
     bucket: a_bucket
     impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
 
-resource_groups:
+deployment_groups:
 - group: onboarding
-  resources:
+  modules:
   - source: ./community/modules/project/new-project
     kind: terraform
     id: project
@@ -51,7 +51,7 @@ resource_groups:
       - "compute.googleapis.com"
 
 - group: primary
-  resources:
+  modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc

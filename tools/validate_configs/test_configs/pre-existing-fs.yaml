@@ -24,9 +24,9 @@ vars:
   local_mount: /home
   network_name: default
 
-resource_groups:
+deployment_groups:
 - group: storage
-  resources:
+  modules:
   # the pre-existing-vpc is not needed here, since filestore will use the
   # network-name from global vars
   - source: modules/file-system/filestore
@@ -34,7 +34,7 @@ resource_groups:
     id: homefs-filestore
 
 - group: compute
-  resources:
+  modules:
   - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1

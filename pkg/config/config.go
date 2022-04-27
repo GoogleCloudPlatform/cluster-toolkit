@@ -68,7 +68,7 @@ var errorMessages = map[string]string{
 type ResourceGroup struct {
 	Name             string           `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
-	Resources        []Resource
+	Resources        []Resource       `yaml:"modules"`
 }
 
 func (g ResourceGroup) getResourceByID(resID string) Resource {
@@ -187,7 +187,7 @@ type YamlConfig struct {
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     map[string]interface{}
-	ResourceGroups           []ResourceGroup  `yaml:"resource_groups"`
+	ResourceGroups           []ResourceGroup  `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`
 }
 

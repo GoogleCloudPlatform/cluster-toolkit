@@ -38,9 +38,9 @@ vars:
     - val1
     - 43.5
 
-resource_groups:
+deployment_groups:
 - group: infrastructure
-  resources:
+  modules:
   - source: modules/network/vpc
     kind: terraform
     id: network

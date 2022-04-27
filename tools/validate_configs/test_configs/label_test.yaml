@@ -25,9 +25,9 @@ vars:
     "ghpc_custom": "custom_label"
     "ghpc_deployment": "custom_deployment"
 
-resource_groups:
+deployment_groups:
 - group: infrastructure
-  resources:
+  modules:
   - source: modules/network/vpc
     kind: terraform
     id: network
