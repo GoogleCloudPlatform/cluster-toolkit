@@ -72,7 +72,7 @@ sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/" "${EXAMPLE_YAML}" ||
 		echo "could not write blueprint"
 		exit 1
 	}
-tar -czf "${BLUEPRINT_DIR}.tgz" "${BLUEPRINT_DIR}" ||
+tar -czf "${DEPLOYMENT_NAME}.tgz" "${DEPLOYMENT_NAME}" ||
 	{
 		echo "could not tarball blueprint"
 		exit 1
