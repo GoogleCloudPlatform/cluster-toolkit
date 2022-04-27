@@ -20,4 +20,4 @@ split -l "$sl" hooks.txt
 echo go-unit-tests >>xaa && cat xaa xab | sort | uniq | xargs | sed -e 's/ /,/g' >hooks1.txt
 echo go-unit-tests >>xab && cat xab xac | sort | uniq | xargs | sed -e 's/ /,/g' >hooks2.txt
 echo go-unit-tests >>xac && cat xac xaa | sort | uniq | xargs | sed -e 's/ /,/g' >hooks3.txt
-echo "created hooks1.txt hooks2.txt and hooks3.txt with three lists of hooks to skp"
+echo "created hooks1.txt hooks2.txt and hooks3.txt with three lists of hooks to skip"
