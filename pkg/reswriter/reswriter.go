@@ -18,6 +18,7 @@
 package reswriter
 
 import (
+	"embed"
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
@@ -31,6 +32,7 @@ import (
 const (
 	hiddenGhpcDirName        = ".ghpc"
 	prevResourceGroupDirName = "previous_resource_groups"
+	gitignoreTemplate        = "blueprint.gitignore.tmpl"
 )
 
 // ResWriter interface for writing modules to a blueprint
@@ -45,6 +47,9 @@ var kinds = map[string]ResWriter{
 	"terraform": new(TFWriter),
 	"packer":    new(PackerWriter),
 }
+
+//go:embed *.tmpl
+var templatesFS embed.FS
 
 func factory(kind string) ResWriter {
 	writer, exists := kinds[kind]
@@ -183,6 +188,7 @@ func (err *OverwriteDeniedError) Error() string {
 func prepBpDir(bpDir string, overwrite bool) error {
 	blueprintIO := blueprintio.GetBlueprintIOLocal()
 	ghpcDir := filepath.Join(bpDir, hiddenGhpcDirName)
+	gitignoreFile := filepath.Join(bpDir, ".gitignore")
 
 	// create blueprint directory
 	if err := blueprintIO.CreateDirectory(bpDir); err != nil {
@@ -196,7 +202,13 @@ func prepBpDir(bpDir string, overwrite bool) error {
 				"While trying to update the blueprint directory at %s, the '.ghpc/' dir could not be found", bpDir)
 		}
 	} else {
-		blueprintIO.CreateDirectory(ghpcDir)
+		if err := blueprintIO.CreateDirectory(ghpcDir); err != nil {
+			return fmt.Errorf("Failed to create directory at %s: err=%w", ghpcDir, err)
+		}
+
+		if err := blueprintIO.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile); err != nil {
+			return fmt.Errorf("Failed to copy template.gitignore file to %s: err=%w", gitignoreFile, err)
+		}
 	}
 
 	// clean up old dirs

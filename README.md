@@ -13,37 +13,32 @@ and intends to address the HPC deployment needs of a broad range of customers.
 ## Installation
 
 These instructions assume you are using
-[Cloud Shell](https://cloud.google.com/shell) which comes with the above
-dependencies pre-installed (minus Packer which is not needed for this example).
+[Cloud Shell](https://cloud.google.com/shell) which comes with the
+[dependencies](#dependencies) pre-installed.
 
 To use the HPC-Toolkit, you must clone the project from GitHub and build the
 `ghpc` binary.
 
-You must first set up Cloud Shell to authenticate with GitHub. We will use an
-SSH key.
+1. Execute `gh auth login`
+   * Select GitHub.com
+   * Select HTTPS
+   * Select Yes for "Authenticate Git with your GitHub credentials?"
+   * Select "Login with a web browser"
+   * Copy the one time code presented in the terminal
+   * Press [enter]
+   * Click the link https://github.com/login/device presented in the terminal
 
-> **_NOTE:_** You can skip this step if you have previously set up cloud shell
-> with GitHub.\
-> **_NOTE:_** You can find much more detailed instructions for this step in the
-> [GitHub docs](https://docs.github.com/en/authentication/connecting-to-github-with-ssh).\
-> **_NOTE:_** This step is only required during the private preview of the
-> HPC-Toolkit.
+A web browser will open, paste the one time code into the web browser prompt.
+Continue to log into GitHub, then return to the terminal. You should see a
+message that includes "Authentication complete."
 
-```shell
-# On Cloud Shell
-ssh-keygen -t ed25519 -C "your_email@example.com"  # follow prompts
-cat ~/.ssh/id_ed25519.pub                          # copy output
-```
-
-Use the output to add your Cloud Shell SSH key to GitHub by pasting your key [here](https://github.com/settings/ssh/new).
-
-Next you will clone the HPC-Toolkit repo from GitHub.
+You can now clone the Toolkit:
 
 ```shell
-git clone git@github.com:GoogleCloudPlatform/hpc-toolkit.git
+gh repo clone GoogleCloudPlatform/hpc-toolkit
 ```
 
-Finally you build the toolkit.
+Finally, build the toolkit.
 
 ```shell
 cd hpc-toolkit && make
@@ -228,7 +223,7 @@ gcloud auth application-default set-quota-project ${PROJECT-ID}
 
 In virtualized settings, the cloud credentials of accounts can be attached
 directly to the execution environment. For example: a VM or a container can
-have [service accounts][https://cloud.google.com/iam/docs/service-accounts]
+have [service accounts](https://cloud.google.com/iam/docs/service-accounts)
 attached to them. The Google [Cloud Shell][cloud-shell] is an interactive
 command line environment which inherits the credentials of the user logged in
 to the Google Cloud Console.
@@ -327,6 +322,16 @@ Required quotas will be based on your custom HPC configuration. Minimum quotas
 have been [documented](examples/README.md#example-configs) for the provided examples.
 
 Quotas can be inspected and requested at `IAM & Admin` > `Quotas`.
+
+## Billing Reports
+You can view your billing reports for your HPC cluster on the [Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports) page. ​​To view the Cloud Billing reports for your Cloud Billing account, including viewing the cost information for all of the Cloud projects that are linked to the account, you need a role that includes the `billing.accounts.getSpendingInformation` permission on your Cloud Billing account.
+
+To view the Cloud Billing reports for your Cloud Billing account:
+1. In the Google Cloud Console, go to [Navigation Menu] > [[Billing](https://console.cloud.google.com/billing/overview)].
+2. At the prompt, choose the Cloud Billing account for which you'd like to view reports. The Billing Overview page opens for the selected billing account.
+3. In the Billing navigation menu, select Reports.
+
+In the right side, expand the Filters view and then filter by label, specifying the key `ghpc_deployment` (or `ghpc_blueprint`) and the desired value.
 
 ## Troubleshooting
 

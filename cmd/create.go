@@ -28,6 +28,7 @@ import (
 )
 
 const msgCLIVars = "Comma-separated list of name=value variables to override YAML configuration. Can be invoked multiple times."
+const msgCLIBackendConfig = "Comma-separated list of name=value variables to set Terraform backend configuration. Can be invoked multiple times."
 
 func init() {
 	createCmd.Flags().StringVarP(&bpFilename, "config", "c", "",
@@ -38,6 +39,7 @@ func init() {
 	createCmd.Flags().StringVarP(&outputDir, "out", "o", "",
 		"Output dir under which the HPC deployment dir will be created")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
+	createCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
 	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
 	createCmd.Flags().BoolVarP(&overwriteDeployment, "overwrite-deployment", "w", false,
@@ -49,9 +51,11 @@ func init() {
 }
 
 var (
-	bpFilename          string
-	outputDir           string
-	cliVariables        []string
+	bpFilename   string
+	outputDir    string
+	cliVariables []string
+
+	cliBEConfigVars     []string
 	overwriteDeployment bool
 	validationLevel     string
 	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
@@ -76,6 +80,9 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	blueprintConfig := config.NewBlueprintConfig(bpFilename)
 	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
+	}
+	if err := blueprintConfig.SetBackendConfig(cliBEConfigVars); err != nil {
+		log.Fatalf("Failed to set the backend config at CLI: %v", err)
 	}
 	if err := blueprintConfig.SetValidationLevel(validationLevel); err != nil {
 		log.Fatal(err)

@@ -29,6 +29,16 @@ terraform_backend_defaults:
     impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
 ```
 
+You can set the configuration at CLI as well like below:
+
+```shell
+./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --backend-config "bucket=${GCS_BUCKET}"
+```
+
+> **_NOTE:_** The `--backend-config` argument supports comma-separated list of name=value
+> variables to set Terraform Backend configuration in blueprints. This feature only supports
+> variables of string type. If you set configuration by both Yaml and CLI, the tool uses values at CLI. "gcs" is set as type by default.
+
 ## Config Descriptions
 
 ### hpc-cluster-small.yaml

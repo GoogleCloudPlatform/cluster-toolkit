@@ -393,6 +393,34 @@ func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
 	return nil
 }
 
+// SetBackendConfig sets the backend config variables at CLI
+func (bc *BlueprintConfig) SetBackendConfig(cliBEConfigVars []string) error {
+	// Set "gcs" as default value when --backend-config is specified at CLI
+	if len(cliBEConfigVars) > 0 {
+		bc.Config.TerraformBackendDefaults.Type = "gcs"
+		bc.Config.TerraformBackendDefaults.Configuration = make(map[string]interface{})
+	}
+
+	for _, config := range cliBEConfigVars {
+		arr := strings.SplitN(config, "=", 2)
+
+		if len(arr) != 2 {
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", config)
+		}
+
+		key, value := arr[0], arr[1]
+		switch key {
+		case "type":
+			bc.Config.TerraformBackendDefaults.Type = value
+		default:
+			bc.Config.TerraformBackendDefaults.Configuration[key] = value
+		}
+
+	}
+
+	return nil
+}
+
 // IsLiteralVariable returns true if string matches variable ((ctx.name))
 func IsLiteralVariable(str string) bool {
 	match, err := regexp.MatchString(literalExp, str)

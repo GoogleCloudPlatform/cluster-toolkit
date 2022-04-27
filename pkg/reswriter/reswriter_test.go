@@ -167,7 +167,7 @@ func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
 	c.Check(len(files1) > 0, Equals, true)
 
 	files2, _ := ioutil.ReadDir(realBpDir)
-	c.Check(len(files2), Equals, 1)
+	c.Check(len(files2), Equals, 2) // .ghpc and .gitignore
 }
 
 func (s *MySuite) TestIsSubset(c *C) {

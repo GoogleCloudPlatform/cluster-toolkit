@@ -398,6 +398,46 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	c.Assert(bc.Config.Vars["project_id"], IsNil)
 }
 
+func (s *MySuite) TestSetBackendConfig(c *C) {
+	// Success
+	bc := getBlueprintConfigForTest()
+	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, "")
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["bucket"], IsNil)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], IsNil)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["prefix"], IsNil)
+
+	cliBEType := "gcs"
+	cliBEBucket := "a_bucket"
+	cliBESA := "a_bucket_reader@project.iam.gserviceaccount.com"
+	cliBEPrefix := "test/prefix"
+	cliBEConfigVars := []string{
+		fmt.Sprintf("type=%s", cliBEType),
+		fmt.Sprintf("bucket=%s", cliBEBucket),
+		fmt.Sprintf("impersonate_service_account=%s", cliBESA),
+		fmt.Sprintf("prefix=%s", cliBEPrefix),
+	}
+	err := bc.SetBackendConfig(cliBEConfigVars)
+
+	c.Assert(err, IsNil)
+	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, cliBEType)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["bucket"], Equals, cliBEBucket)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], Equals, cliBESA)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["prefix"], Equals, cliBEPrefix)
+
+	// Failure: Variable without '='
+	bc = getBlueprintConfigForTest()
+	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, "")
+
+	invalidNonEQVars := []string{
+		fmt.Sprintf("type%s", cliBEType),
+		fmt.Sprintf("bucket%s", cliBEBucket),
+	}
+	err = bc.SetBackendConfig(invalidNonEQVars)
+
+	expErr := "invalid format: .*"
+	c.Assert(err, ErrorMatches, expErr)
+}
+
 func TestMain(m *testing.M) {
 	setup()
 	code := m.Run()
