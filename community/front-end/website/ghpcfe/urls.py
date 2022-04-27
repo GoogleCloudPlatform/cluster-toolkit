@@ -364,6 +364,11 @@ router.register(
     InstanceAvailabilityViewSet,
     basename="api-instancetype",
 )  # Specify pk=ClusterID, zone, region
+router.register(
+    r"api/disks_available",
+    DiskAvailabilityViewSet,
+    basename="api-disktype",
+)  # Specify pk=ClusterID, zone, region
 router.register(r"api/vpcs", VPCViewSet, basename="api-vpcs")
 router.register(r"api/subnets", VirtualSubnetViewSet, basename="api-subnets")
 

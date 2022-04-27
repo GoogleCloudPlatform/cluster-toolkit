@@ -609,10 +609,42 @@ class Cluster(CloudResource):
         null=True,
         blank=True,
     )
+    controller_instance_type = models.CharField(
+        max_length=40,
+        help_text="GCP Instance Type name for the controller",
+        default="n2-standard-2",
+    )
+    controller_disk_type = models.CharField(
+        max_length=30,
+        help_text="GCP Persistend Disk type",
+        default="pd-standard",
+    )
+    controller_disk_size = models.PositiveIntegerField(
+        validators=[MinValueValidator(10)],
+        help_text="Boot disk size (in GB)",
+        default=50,
+        blank=True,
+    )
     num_login_nodes = models.PositiveIntegerField(
         validators=[MinValueValidator(0)],
         help_text="The number of login nodes to create",
         default=1,
+    )
+    login_node_instance_type = models.CharField(
+        max_length=40,
+        help_text="GCP Instance Type name for the login nodes",
+        default="n2-standard-2",
+    )
+    login_node_disk_type = models.CharField(
+        max_length=30,
+        help_text="GCP Persistend Disk type",
+        default="pd-standard",
+    )
+    login_node_disk_size = models.PositiveIntegerField(
+        validators=[MinValueValidator(10)],
+        help_text="Boot disk size (in GB)",
+        default=20,
+        blank=True,
     )
 
     def get_access_key(self):
