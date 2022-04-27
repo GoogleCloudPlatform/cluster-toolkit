@@ -623,6 +623,7 @@ class Cluster(CloudResource):
         validators=[MinValueValidator(10)],
         help_text="Boot disk size (in GB)",
         default=50,
+        blank=True,
     )
     num_login_nodes = models.PositiveIntegerField(
         validators=[MinValueValidator(0)],
@@ -643,6 +644,7 @@ class Cluster(CloudResource):
         validators=[MinValueValidator(10)],
         help_text="Boot disk size (in GB)",
         default=20,
+        blank=True,
     )
 
     def get_access_key(self):
