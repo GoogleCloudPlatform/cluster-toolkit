@@ -611,7 +611,7 @@ class Cluster(CloudResource):
     )
     controller_instance_type = models.CharField(
         max_length=40,
-        help_text="GCP Instance Type name",
+        help_text="GCP Instance Type name for the controller",
         default="n2-standard-2",
     )
     controller_disk_type = models.CharField(
@@ -631,7 +631,7 @@ class Cluster(CloudResource):
     )
     login_node_instance_type = models.CharField(
         max_length=40,
-        help_text="GCP Instance Type name",
+        help_text="GCP Instance Type name for the login nodes",
         default="n2-standard-2",
     )
     login_node_disk_type = models.CharField(
