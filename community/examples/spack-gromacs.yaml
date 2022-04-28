@@ -51,23 +51,24 @@ deployment_groups:
     settings:
       install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
-      spack_ref: v0.17.1
+      spack_ref: v0.18.0
       log_file: /var/log/spack.log
       configs:
       - type: single-config
         scope: defaults
-        value: "config:build_stage:/sw/spack/spack-stage"
+        content: "config:build_stage:/sw/spack/spack-stage"
       - type: file
         scope: defaults
-        value: |
+        content: |
           modules:
-            tcl:
-              hash_length: 0
-              all:
-                conflict:
-                  - '{name}'
-              projections:
-                all: '{name}/{version}-{compiler.name}-{compiler.version}'
+            default:
+              tcl:
+                hash_length: 0
+                all:
+                  conflict:
+                    - '{name}'
+                projections:
+                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
