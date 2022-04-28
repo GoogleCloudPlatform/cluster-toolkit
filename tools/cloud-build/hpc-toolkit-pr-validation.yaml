@@ -23,9 +23,9 @@ steps:
   - '-c'
   - |
     set -e
-    pre-commit install
-    tools/cloud-build/split-pre-commit-hooks.sh
-- id: pre-commits1
+    pre-commit install --install-hooks
+    time tflint --init
+- id: pre-commit-run
   waitFor:
   - pre-commits-setup
   name: >-
@@ -33,40 +33,7 @@ steps:
   entrypoint: /bin/bash
   args:
   - '-c'
-  - |
-    set -e -x
-    time tflint --init
-    export SKIP=$(cat hooks1.txt)
-    echo skipping: $$SKIP
-    time pre-commit run --all-files
-- id: pre-commits2
-  waitFor:
-  - pre-commits-setup
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  args:
-  - '-c'
-  - |
-    set -e
-    time tflint --init
-    export SKIP=$(cat hooks2.txt)
-    echo skipping: $$SKIP
-    time pre-commit run --all-files
-- id: pre-commits3
-  waitFor:
-  - pre-commits-setup
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  args:
-  - '-c'
-  - |
-    set -e
-    time tflint --init
-    export SKIP=$(cat hooks3.txt)
-    echo skipping: $$SKIP
-    time pre-commit run --all-files
+  - SKIP=go-unit-tests pre-commit run --all-files
 - id: make-tests
   waitFor:
   - pre-commits-setup
