@@ -171,7 +171,7 @@ following steps to run a job:
    This will open a separate pop up window with a terminal into our newly created
    Slurm login VM.
 
-   **The rest of the commands in this step should be run on the login node.**
+   **The commands below should be run on the login node.**
 
 1. Next you will create a default ssh key to be able to ssh between nodes:
 
