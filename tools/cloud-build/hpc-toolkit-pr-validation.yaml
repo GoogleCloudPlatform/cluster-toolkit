@@ -80,6 +80,6 @@ steps:
     export PROJECT=build-project
     time addlicense -check . || { echo "addlicense failed"; exit 1; }
     time make tests
-timeout: "1200s"
+timeout: "600s"
 options:
   machineType: N1_HIGHCPU_8
