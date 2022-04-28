@@ -1,13 +1,13 @@
-# Example Configs
+# Example Blueprints
 
-This directory contains a set of example YAML files that can be fed into gHPC
-to create a blueprint.
+This directory contains a set of example blueprint files that can be fed into
+gHPC to create a deployment.
 
 ## Instructions
 
 Ensure your project\_id is set and other deployment variables such as zone and
 region are set correctly under `vars` before creating and deploying an example
-config.
+blueprint.
 
 Please note that global variables defined under `vars` are automatically
 passed to modules if the modules have an input that matches the variable name.
@@ -17,9 +17,9 @@ passed to modules if the modules have an input that matches the variable name.
 The following block will configure terraform to point to an existing GCS bucket
 to store and manage the terraform state. Add your own bucket name and
 (optionally) a service account in the configuration. If not set, the terraform
-state will be stored locally within the generated blueprint.
+state will be stored locally within the generated deployment directory.
 
-Add this block to the top-level of your input YAML:
+Add this block to the top-level of your blueprint:
 
 ```yaml
 terraform_backend_defaults:
@@ -35,11 +35,13 @@ You can set the configuration at CLI as well like below:
 ./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --backend-config "bucket=${GCS_BUCKET}"
 ```
 
-> **_NOTE:_** The `--backend-config` argument supports comma-separated list of name=value
-> variables to set Terraform Backend configuration in blueprints. This feature only supports
-> variables of string type. If you set configuration by both Yaml and CLI, the tool uses values at CLI. "gcs" is set as type by default.
+> **_NOTE:_** The `--backend-config` argument supports comma-separated list of
+> name=value variables to set Terraform Backend configuration in blueprints.
+> This feature only supports variables of string type. If you set configuration
+> in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
+> type by default.
 
-## Config Descriptions
+## Blueprint Descriptions
 
 ### hpc-cluster-small.yaml
 
@@ -202,7 +204,7 @@ sudo tail -f /var/log/messages
 ```
 
 Spack specific installation logs will be sent to the spack_log as configured in
-your YAML, by default /var/log/spack.log in the login node.
+your blueprint, by default /var/log/spack.log in the login node.
 
 ```shell
 sudo tail -f /var/log/spack.log
@@ -233,13 +235,12 @@ omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
 
-## Config Schema
+## Blueprint Schema
 
-A user defined config should follow the following schema:
+A user defined blueprint should follow the following schema:
 
 ```yaml
-# Required: Name your blueprint, this will also be the name of the directory
-# the blueprint created in.
+# Required: Name your blueprint.
 blueprint_name: MyBlueprintName
 
 # Top-level variables, these will be pulled from if a required variable is not
@@ -247,6 +248,8 @@ blueprint_name: MyBlueprintName
 # labels will be treated differently as they will be applied to all created
 # GCP resources.
 vars:
+  # Required: This will also be the name of the created deployment directory.
+  deployment_name: first_deployment
   project_id: GCP_PROJECT_ID
 
 # https://cloud.google.com/compute/docs/regions-zones
@@ -288,14 +291,15 @@ deployment_groups:
   - source: github.com/org/repo//modules/role/module-name
 ```
 
-## Writing Config YAML
+## Writing An HPC Blueprint
 
-The input YAML is composed of 3 primary parts, top-level parameters, global
+The blueprint file is composed of 3 primary parts, top-level parameters, global
 variables and deployment groups. These are described in more detail below.
 
 ### Top Level Parameters
 
-* **blueprint_name** (required): Name of this set of blueprints. This also defines the name of the directory the blueprints will be created into.
+* **blueprint_name** (required): This name can be used to track resources and
+  usage across multiple deployments that come from the same blueprint.
 
 ### Global Variables
 
@@ -307,9 +311,9 @@ vars:
   ...
 ```
 
-Global variables are set under the vars field at the top level of the YAML.
-These variables can be explicitly referenced in modules as
-[Config Variables](#config-variables). Any module setting (inputs) not
+Global variables are set under the vars field at the top level of the blueprint
+file. These variables can be explicitly referenced in modules as
+[Blueprint Variables](#blueprint-variables). Any module setting (inputs) not
 explicitly provided and matching exactly a global variable name will
 automatically be set to these values.
 
@@ -329,7 +333,7 @@ These are set automatically, but can be overridden through global vars or
 module settings. They include:
 
 * ghpc_blueprint: The name of the blueprint the deployment was created from
-* ghpc_deployment: The name of the specific deployment of the blueprint
+* ghpc_deployment: The name of the specific deployment
 * ghpc_role: The role of a given module, e.g. compute, network, or
   file-system. By default, it will be taken from the folder immediately
   containing the module. Example: A module with the source path of
@@ -351,26 +355,25 @@ more detail below.
 #### Group
 
 Defines the name of the group. Each group must have a unique name. The name will
-be used to create the subdirectory in the blueprint directory that the deployment
-group will be defined in.
+be used to create the subdirectory in the deployment directory.
 
 #### Modules
 
-Modules are the building blocks of an HPC environment. They can be composed to
-create complex deployments using the config YAML. Several modules are provided
-by default in the [modules](../modules/README.md) folder.
+Modules are the building blocks of an HPC environment. They can be composed in a
+blueprint file to create complex deployments. Several modules are provided by
+default in the [modules](../modules/README.md) folder.
 
-To learn more about how to refer to a module in a YAML, please consult the
+To learn more about how to refer to a module in a blueprint file, please consult the
 [modules README file.](../modules/README.md)
 
 ## Variables
 
-Variables can be used to refer both to values defined elsewhere in the config
+Variables can be used to refer both to values defined elsewhere in the blueprint
 and to the output and structure of other modules.
 
-### Config Variables
+### Blueprint Variables
 
-Variables in a ghpc config YAML can refer to global variables or the outputs of
+Variables in a blueprint file can refer to global variables or the outputs of
 other modules. For global and module variables, the syntax is as follows:
 
 ```yaml
@@ -409,23 +412,23 @@ something that exists.
 
 Literal variables are occasionally needed when referring to the data structure
 of the underlying module. For example, take the
-[hpc-cluster-high-io.yaml](./hpc-cluster-high-io.yaml) example config. The
-DDN-EXAScaler module requires a subnetwork self link, which is not currently
-an output of either network module, therefore it is necessary to refer to the
+[hpc-cluster-high-io.yaml](./hpc-cluster-high-io.yaml) example blueprint. The
+DDN-EXAScaler module requires a subnetwork self link, which is not currently an
+output of either network module, therefore it is necessary to refer to the
 primary network self link through terraform itself:
 
 ```yaml
 subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
 ```
 
-Here the network1 module is referenced, the terraform module name is the same
-as the ID in the `ghpc` config. From the module we can refer to it's underlying
+Here the network1 module is referenced, the terraform module name is the same as
+the ID in the blueprint file. From the module we can refer to it's underlying
 variables as deep as we need, in this case the self_link for it's
 primary_subnetwork.
 
 The entire text of the variable is wrapped in double parentheses indicating that
 everything inside will be provided as is to the module.
 
-Whenever possible, config variables are preferred over literal variables. `ghpc`
-will perform basic validation making sure all config variables are defined
-before creating a blueprint making debugging quicker and easier.
+Whenever possible, blueprint variables are preferred over literal variables.
+`ghpc` will perform basic validation making sure all blueprint variables are
+defined before creating a deployment, making debugging quicker and easier.

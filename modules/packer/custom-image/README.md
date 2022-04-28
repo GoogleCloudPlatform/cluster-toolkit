@@ -79,8 +79,8 @@ environment. SSH access can be enabled one of 2 ways:
    * Allow [use\_iap](#input_use_iap) to take on its default value of `true`
 1. The VM is created with an IP address on the public internet and firewall
    rules allow SSH access from the Packer execution environment.
-   * Set `omit_external_ip = false` (or `omit_external_ip: false` in a YAML
-   Toolkit Blueprint)
+   * Set `omit_external_ip = false` (or `omit_external_ip: false` in a
+     blueprint)
    * Add firewall rules that open SSH to the VM
 
 The Packer template defaults to using to the 1st IAP-based solution because it
@@ -130,7 +130,7 @@ startup_script = <<-EOT
 disk_size = 100
 ```
 
-In the YAML-formatted Toolkit Blueprints, the equivalent syntax is:
+In a blueprint, the equivalent syntax is:
 
 ```yaml
 ...

@@ -49,20 +49,20 @@ Optionally, you can run `./ghpc --version` to verify the build.
 
 ## Quick Start
 
-To create a blueprint, an input YAML file needs to be written or adapted from
-one of the [core examples](examples/) or
+To create an HPC deployment, an HPC blueprint file needs to be written or
+adapted from one of the [core examples](examples/) or
 [community examples](community/examples/).
 
 These instructions will use
 [examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml), which is a
-good starting point and creates a blueprint containing:
+good starting point and creates a deployment containing:
 
 * a new network
 * a filestore instance
 * a slurm login node
 * a slurm controller
 
-> **_NOTE:_** More information on the example configs can be found in
+> **_NOTE:_** More information on the example blueprints can be found in
 > [examples/README.md](examples/README.md).
 
 These instructions assume you are using
@@ -77,10 +77,10 @@ Run the ghpc binary with the following command:
 ```
 
 > **_NOTE:_** The `--vars` argument supports comma-separated list of name=value
-> variables to override YAML configuration variables. This feature only supports
+> variables to override blueprint variables. This feature only supports
 > variables of string type.
 
-This will create a blueprint directory named `hpc-cluster-small/`.
+This will create a deployment directory named `hpc-small/`.
 
 After successfully running `ghpc create`, a short message displaying how to
 proceed is displayed. For the `hpc-cluster-small` example, the message will
@@ -111,7 +111,7 @@ Apply complete! Resources: 13 added, 0 changed, 0 destroyed.
 > above can be used, although [dependencies](#dependencies) will need to be
 > installed first.
 
-Once the blueprint has successfully been deployed, take the following steps to run a job:
+Once successfully deployed, take the following steps to run a job:
 
 * First navigate to `Compute Engine` > `VM instances` in the Google Cloud Console.
 * Next click on the `SSH` button associated with the `slurm-hpc-small-login0` instance.
@@ -132,7 +132,7 @@ This example does not contain any Packer-based modules but for completeness,
 you can use the following command to deploy a Packer-based deployment group:
 
 ```shell
-cd <blueprint-directory>/<packer-group>/<custom-vm-image>
+cd <deployment-directory>/<packer-group>/<custom-vm-image>
 packer init .
 packer validate .
 packer build .
@@ -146,41 +146,46 @@ individual components of the HPC toolkit.
 
 ```mermaid
 graph LR
-    subgraph Basic Customizations
-    A(1. GCP-provided reference configs.) --> B(2. Configuration YAML)
+    subgraph HPC Environment Configuration
+    A(1. GCP-provided Blueprint Examples) --> B(2. HPC Blueprint)
     end
     B --> D
-    subgraph Advanced Customizations
+    subgraph Creating an HPC Deployment
     C(3. Modules, eg. Terraform, Scripts) --> D(4. ghpc Engine)
-    D --> E(5. Deployment Blueprint)
+    D --> E(5. Deployment Directory)
     end
+    subgraph Google Cloud
     E --> F(6. HPC environment on GCP)
+    end
 ```
 
-1. **GCP-provided reference configs** – A set of vetted reference configs can be
-   found in the examples directory. These can be used to create a predefined
-   blueprint for a cluster or as a starting point for creating a custom
-   blueprint.
-2. **Configuration YAML** – The primary interface to the HPC Toolkit is an input
-   YAML file that defines which modules to use and how to customize them.
-3. **gHPC Engine** – The gHPC engine converts the configuration YAML into a self-contained blueprint directory.
-4. **HPC Modules** – The building blocks of a blueprint directory are the
+1. **GCP-provided Blueprint Examples** – A set of vetted reference blueprints
+   can be found in the examples directory. These can be used to create a
+   predefined deployment for a cluster or as a starting point for creating a
+   custom deployment.
+2. **HPC Blueprint** – The primary interface to the HPC Toolkit is an HPC
+   Blueprint file. This is a YAML file that defines which modules to use and how
+   to customize them.
+3. **gHPC Engine** – The gHPC engine converts the blueprint file into a
+   self-contained deployment directory.
+4. **HPC Modules** – The building blocks of a deployment directory are the
    modules. Modules can be found in the ./modules and community/modules
    directories. They are composed of terraform, packer and/or script files that
    meet the expectations of the gHPC engine.
-5. **Deployment Blueprint** – A self-contained directory that can be used to
+5. **Deployment Directory** – A self-contained directory that can be used to
    deploy a cluster onto Google Cloud. This is the output of the gHPC engine.
-6. **HPC environment on GCP** – After deployment of a blueprint, an HPC environment will be available in Google Cloud.
+6. **HPC environment on GCP** – After deployment, an HPC environment will be
+   available in Google Cloud.
 
 Users can configure a set of modules, and using the gHPC Engine of the HPC
-Toolkit, they can produce a blueprint and deployment instructions for creating
-those modules. Terraform is the primary method for defining the modules
-behind the HPC cluster, but other modules based on tools like ansible and
-Packer are available.
+Toolkit, they can produce a deployment directory with instructions for
+deploying. Terraform is the primary method for defining the modules behind the
+HPC cluster, but other modules based on tools like ansible and Packer are
+available.
 
 The HPC Toolkit can provide extra flexibility to configure a cluster to the
-specifications of a customer by making the blueprints directly available and
-editable before deployment. Any HPC customer seeking a quick on-ramp to building
+specifications of a customer by making the deployment directory available and
+editable before deploying. Any HPC customer seeking a quick on-ramp to building
 out their infrastructure on GCP can benefit from this.
 
 ## GCP Credentials
@@ -277,14 +282,14 @@ validators: []
 They can also be set to 3 differing levels of behavior using the command-line
 `--validation-level` flag` for the `create` and `expand` commands:
 
-* `"ERROR"`: If any validator fails, the blueprint will not be
-    written. Error messages will be printed to the screen that indicate which
-    validator(s) failed and how.
-* `"WARNING"` (default): The blueprint will be written even if any validators
-    fail. Warning messages will be printed to the screen that indicate which
-    validator(s) failed and how.
-* `"IGNORE"`: Do not execute any validators, even if they are explicitly
-    defined in a `validators` block or the default set is implicitly added.
+* `"ERROR"`: If any validator fails, the deployment directory will not be
+  written. Error messages will be printed to the screen that indicate which
+  validator(s) failed and how.
+* `"WARNING"` (default): The deployment directory will be written even if any
+  validators fail. Warning messages will be printed to the screen that indicate
+  which validator(s) failed and how.
+* `"IGNORE"`: Do not execute any validators, even if they are explicitly defined
+  in a `validators` block or the default set is implicitly added.
 
 For example, this command will set all validators to `WARNING` behavior:
 
@@ -319,16 +324,26 @@ uses `c2-standard-60` VMs for compute nodes. Default quota for C2 CPUs may be as
 low as 8, which would prevent even a single node from being started.
 
 Required quotas will be based on your custom HPC configuration. Minimum quotas
-have been [documented](examples/README.md#example-configs) for the provided examples.
+have been [documented](examples/README.md#example-blueprints) for the provided examples.
 
 Quotas can be inspected and requested at `IAM & Admin` > `Quotas`.
 
 ## Billing Reports
-You can view your billing reports for your HPC cluster on the [Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports) page. ​​To view the Cloud Billing reports for your Cloud Billing account, including viewing the cost information for all of the Cloud projects that are linked to the account, you need a role that includes the `billing.accounts.getSpendingInformation` permission on your Cloud Billing account.
+
+You can view your billing reports for your HPC cluster on the
+[Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports)
+page. ​​To view the Cloud Billing reports for your Cloud Billing account,
+including viewing the cost information for all of the Cloud projects that are
+linked to the account, you need a role that includes the
+`billing.accounts.getSpendingInformation` permission on your Cloud Billing
+account.
 
 To view the Cloud Billing reports for your Cloud Billing account:
-1. In the Google Cloud Console, go to [Navigation Menu] > [[Billing](https://console.cloud.google.com/billing/overview)].
-2. At the prompt, choose the Cloud Billing account for which you'd like to view reports. The Billing Overview page opens for the selected billing account.
+
+1. In the Google Cloud Console, go to `Navigation Menu` >
+   [`Billing`](https://console.cloud.google.com/billing/overview).
+2. At the prompt, choose the Cloud Billing account for which you'd like to view
+   reports. The Billing Overview page opens for the selected billing account.
 3. In the Billing navigation menu, select Reports.
 
 In the right side, expand the Filters view and then filter by label, specifying the key `ghpc_deployment` (or `ghpc_blueprint`) and the desired value.
@@ -447,18 +462,18 @@ drop-down menu at the top-left.
 [cc-vms]: https://console.cloud.google.com/compute/instances
 [cc-firewall]:  https://console.cloud.google.com/networking/firewalls/list
 
-## Inspecting the Blueprint
+## Inspecting the Deployment
 
-The blueprint is created in the directory matching the provided blueprint\_name
-variable in the config. Within this directory are all the modules needed to
-create a deployment. The blueprint directory will contain subdirectories
-representing the deployment groups defined in the config YAML. Most example
-configurations contain a single deployment group.
+The deployment is created in the directory matching the provided
+`deployment_name` variable in the blueprint. Within this directory are all the
+modules needed to deploy your cluster. The deployment directory will contain
+subdirectories representing the deployment groups defined in the blueprint file.
+Most example configurations contain a single deployment group.
 
-From the [example above](#basic-usage) we get the following blueprint:
+From the [example above](#quick-start) we get the following deployment directory:
 
 ```text
-hpc-cluster-small/
+hpc-small/
   primary/
     main.tf
     variables.tf
@@ -476,30 +491,33 @@ hpc-cluster-small/
 ### Create
 
 ``` shell
-./ghpc create <environment-definition.yaml>
+./ghpc create <blueprint.yaml>
 ```
 
-The create command is the primary interface for the HPC Toolkit. This command takes the path to a environment definition file as input and creates a blueprint based on it. Further information on creating this config file, see [Writing Config YAML](examples/README.md#writing-config-yaml).
+The create command is the primary interface for the HPC Toolkit. This command
+takes the path to a blueprint file as an input and creates a deployment based on
+it. Further information on creating this blueprint file, see
+[Writing an HPC Blueprint](examples/README.md#writing-an-hpc-blueprint).
 
-By default, the blueprint directory will be created in the same directory as the
-`ghpc` binary and will have the name specified by the `blueprint_name` field
-from the input config. Optionally, the output directory can be specified with
+By default, the deployment directory will be created in the same directory as
+the `ghpc` binary and will have the name specified by the `deployment_name`
+field from the blueprint. Optionally, the output directory can be specified with
 the `-o` flag as shown in the following example.
 
 ```shell
-./ghpc create examples/hpc-cluster-small.yaml -o blueprints/
+./ghpc create examples/hpc-cluster-small.yaml -o deployments/
 ```
 
 ### Expand
 
 ```shell
-./ghpc expand <config.yaml> –out <expanded-config.yaml>
+./ghpc expand <blueprint.yaml> –out <expanded-blueprint.yaml>
 ```
 
-The expand command creates an expanded config file with all settings explicitly
-listed and variables expanded. This can be a useful tool for creating explicit,
-detailed examples and for debugging purposes. The expanded yaml is still valid
-as input to [`ghpc create`](#create) to create the blueprint.
+The expand command creates an expanded blueprint file with all settings
+explicitly listed and variables expanded. This can be a useful tool for creating
+explicit, detailed examples and for debugging purposes. The expanded blueprint
+is still valid as input to [`ghpc create`](#create) to create the deployment.
 
 ### Completion
 
@@ -507,13 +525,16 @@ as input to [`ghpc create`](#create) to create the blueprint.
 ./ghpc completion [bash|zsh|fish|powershell]
 ```
 
-The completion command creates a shell completion config file for the specified shell. To apply the configuration file created by the command, it is required to set up for each shell. For example, loading the completion config by .bashrc is required for Bash.
+The completion command creates a shell completion config file for the specified
+shell. To apply the configuration file created by the command, it is required to
+set up for each shell. For example, loading the completion config by .bashrc is
+required for Bash.
 
 Call `ghpc completion --help` for shell specific setup instructions.
 
 ## Dependencies
 
-Much of the HPC Toolkit blueprint is built using Terraform and Packer, and
+Much of the HPC Toolkit deployment is built using Terraform and Packer, and
 therefore they must be available in the same machine calling the toolkit. In
 addition, building the HPC Toolkit from source requires git, make, and Go to be
 installed.
