@@ -203,7 +203,11 @@ clck -F intel_hpc_platform_compat-hpc-2018.0
 
 Notice this job took ~2-3 minutes to start, since all compute nodes have to install the packages at boot time. In a real production system, this would be part of the slurm image (wich is also possible with the HPC Toolkit).
 
-Since we used the compute partition (`#SBATCH --partition=compute`), the job ran on [Compute Optimized instances](https://cloud.google.com/compute/docs/compute-optimized-machines), using Intel 3.9 GHz Cascade Lake processors and with placement groups enabled. Nodes will not be re-used across jobs and will be immediately destroyed after the job is completed.
+Since we used the compute partition, the job ran on [Compute Optimized
+instances](https://cloud.google.com/compute/docs/compute-optimized-machines),
+using Intel 3.9 GHz Cascade Lake processors and with placement groups enabled.
+Nodes will not be re-used across jobs and will be immediately destroyed after
+the job is completed.
 
 The results of the run will be stored in `clck_results.log`.
 
