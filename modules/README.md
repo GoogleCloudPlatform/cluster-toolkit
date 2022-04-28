@@ -4,6 +4,113 @@ This directory contains a set of modules built for the HPC Toolkit. Modules
 describe the building blocks of an HPC deployment. The expected fields in a
 module are listed in more detail below.
 
+## Available Modules
+
+[core-badge]: https://img.shields.io/badge/-core-blue?style=plastic
+[community-badge]: https://img.shields.io/badge/-community-%23b8def4?style=plastic
+[stable-badge]: https://img.shields.io/badge/-stable-lightgrey?style=plastic
+[experimental-badge]: https://img.shields.io/badge/-experimental-%23febfa2?style=plastic
+
+Compute
+
+* **[simple-instance]** ![core-badge] : Creates one or more simple VM instances.
+* **[SchedMD-slurm-on-gcp-partition]** ![community-badge] : Creates a partition
+  to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
+
+[simple-instance]: compute/simple-instance/README.md
+[schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
+
+Database
+
+* **[slurm-cloudsql-federation]** ![community-badge] ![experimental-badge] :
+  Creates a [Google SQL Instance](https://cloud.google.com/sql/) meant to be
+  integrated with a [slurm-controller][schedmd-slurm-on-gcp-controller].
+
+[slurm-cloudsql-federation]: ../community/modules/database/slurm-cloudsql-federation/README.md
+
+File System
+
+* **[filestore]** ![core-badge] : Creates a [filestore](https://cloud.google.com/filestore) file system.
+* **[pre-existing-network-storage]** ![core-badge] : Specifies a
+  pre-existing file system to be mounted..
+* **[DDN-EXAScaler]** ![community-badge] : Creates
+  a [DDN Exascaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
+  file system. This module has
+  [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
+* **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
+  configures an NFS server that can be mounted by other VM.
+
+[filestore]: file-system/filestore/README.md
+[pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
+[ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
+[nfs-server]: ../community/modules/file-system/nfs-server/README.md
+
+Monitoring
+
+* **[dashboard]** ![core-badge] : Creates a
+  [monitoring dashboard](https://cloud.google.com/monitoring/dashboards) for
+  visually tracking a HPC Toolkit deployment.
+
+[dashboard]: monitoring/dashboard/README.md
+
+Network
+
+* **[vpc]** ![core-badge] : Creates a
+  [Virtual Private Cloud (VPC)](https://cloud.google.com/vpc) network with
+  regional subnetworks and firewall rules.
+* **[pre-existing-vpc]** ![core-badge] : Used to connect newly
+  built components to a pre-existing VPC network.
+
+[vpc]: network/vpc/README.md
+[pre-existing-vpc]: network/pre-existing-vpc/README.md
+
+Packer
+
+* **[custom-image]** ![core-badge] : Creates a custom VM Image
+  based on the GCP HPC VM image.
+
+[custom-image]: packer/custom-image/README.md
+
+Project
+
+* **[new-project]** ![community-badge] ![experimental-badge] : Creates a Google Cloud
+  Projects.
+* **[service-account]** ![community-badge] ![experimental-badge] : Creates [service
+  accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
+  project.
+* **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
+  various APIs for a Google Cloud Project.
+
+[new-project]: ../community/modules/project/new-project/README.md
+[service-account]: ../community/modules/project/service-account/README.md
+[service-enablement]: ../community/modules/project/service-enablement/README.md
+
+Scheduler
+
+* **[SchedMD-slurm-on-gcp-controller]** ![community-badge] : Creates a SLURM controller node using
+  [slurm-gcp](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
+* **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a SLURM login node using
+  [slurm-gcp](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login)
+
+[schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
+[schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
+
+Scripts
+
+* **[startup-script]** ![core-badge] : Creates a customizable startup script
+  that can be fed into compute VMS.
+* **[omnia-install]** ![community-badge] ![experimental-badge] : Installs SLURM
+  via omnia onto a cluster of compute VMs.
+* **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
+  startup script to install spack on an instance or the slurm controller.
+* **[wait-for-startup]** ![community-badge] ![experimental-badge] : Waits for
+  successful completion of a startup script on a compute VM.
+
+[startup-script]: scripts/startup-script/README.md
+[omnia-install]: ../community/modules/scripts/omnia-install/README.md
+[spack-install]: ../community/modules/scripts/spack-install/README.md
+[wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
+
 ## Module Fields
 
 ### Source (Required)
@@ -250,101 +357,3 @@ Any Terraform based modules in the HPC Toolkit repo should implement the followi
 * The order for parameters in outputs should be:
   * description
   * value
-
-## Available Modules
-
-### Compute
-
-* [**simple-instance**](./compute/simple-instance/README.md): Creates one or
-  more simple VM instances.
-
-### Database
-
-*
-  [**slurm-cloudsql-federation**](./database/slurm-cloudsql-federation/README.md):
-  Creates a [Google SQL Instance](https://cloud.google.com/sql/) meant to be
-  integrated with a
-  [slurm controller](./third-pary/scheduler/SchedMD-slurm-on-gcp-controller/README.md).
-
-### File System
-
-* [**filestore**](file-system/filestore/README.md): Creates a
-  [filestore](https://cloud.google.com/filestore) file system
-
-* [**nfs-server**](file-system/nfs-server/README.md): Creates a VM instance and
-  configures an NFS server that can be mounted by other VM instances.
-
-*
-  [**pre-existing-network-storage**](file-system/pre-existing-network-storage/README.md):
-  Used when specifying a pre-existing file system to be mounted by
-  simple_instances and slurm modules.
-
-### Monitoring
-
-* [**dashboard**](monitoring/dashboard/README.md): Creates a
-  [monitoring dashboard](https://cloud.google.com/monitoring/dashboards) for
-  visually tracking a HPC Toolkit deployment.
-
-### Network
-
-* [**vpc**](network/vpc/README.md): Creates a
-  [Virtual Private Cloud (VPC)](https://cloud.google.com/vpc) network with
-  regional subnetworks and firewall rules.
-
-* [**pre-existing-vpc**](network/pre-existing-vpc/README.md): Connects to a
-  pre-existing VPC network. Useful for connecting newly built components to an
-  existing network.
-
-### Packer
-
-* [**custom-image**](packer/custom-image/README.md): Creates a custom VM Image
-  based on the GCP HPC VM image
-
-### Project
-
-* [**new-project**](project/new-project/README.md): Creates a Google Cloud Projects
-
-* [**service-account**](project/service-account/README.md): Creates [service
-  accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP project.
-
-* [**service-enablement**](project/service-enablement/README.md): Allows
-  enabling various APIs for a Google Cloud Project
-
-### Scripts
-
-* [**omnia-install**](scripts/omnia-install/README.md): Installs SLURM via omnia
-  onto a cluster of compute VMs
-
-* [**spack-install**](scripts/spack-install/README.md): Creates a startup script
-  to install spack on an instance or the slurm controller
-
-* [**startup-script**](scripts/startup-script/README.md): Creates a customizable
-  startup script that can be fed into compute VMS
-
-* [**wait-for-startup**](scripts/wait-for-startup/README.md): Waits for
-  successful completion of a startup script on a compute VM
-
-### Third Party
-
-#### Compute (third party)
-
-* [**SchedMD-slurm-on-gcp-partition**](third-party/compute/SchedMD-slurm-on-gcp-partition/README.md):
-  Creates a SLURM partition that can be used by the
-  SchedMD-slurm_on_gcp_controller.
-
-#### Scheduler
-
-* [**SchedMD-slurm-on-gcp-controller**](third-party/scheduler/SchedMD-slurm-on-gcp-controller/README.md):
-  Creates a SLURM controller node using
-  [slurm-gcp](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
-
-* [**SchedMD-slurm-on-gcp-login-node**](third-party/scheduler/SchedMD-slurm-on-gcp-login-node/README.md):
-  Creates a SLURM login node using
-  [slurm-gcp](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login)
-
-#### File System (third party)
-
-* [**DDN-EXAScaler**](third-party/file-system/DDN-EXAScaler/README.md): Creates
-  a DDN Exascaler lustre](<https://www.ddn.com/partners/google-cloud-platform/>)
-  file system. This module has
-  [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
