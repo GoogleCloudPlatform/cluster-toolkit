@@ -346,8 +346,8 @@ class WorkbenchForm(forms.ModelForm):
             # append final preset instance type from loop
             choices_list.append((category, tuple(instance_list)))
         self.fields["machine_type"].widget.choices = choices_list
-        self.fields["attached_cluster"].queryset= Cluster.objects.exclude(
-                cloud_state__in=["dm", "xm"]
+        self.fields["attached_cluster"].queryset= Cluster.objects.filter(
+                cloud_state="m"
                 )
 
     class Meta:

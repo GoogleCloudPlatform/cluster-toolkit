@@ -368,27 +368,9 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
                 logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
             if err.stderr:
                 logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
-            try:
-                logger.error("Attempting to clean up with Terraform destroy")
-                self.workbench.status = "t"
-                self.workbench.cloud_state = "dm"
-                self.workbench.save()
-                utils.run_terraform(terraform_dir / self.cloud_dir, "destroy")
-            except subprocess.CalledProcessError as err2:
-                logger.error("Terraform destroy failed", exc_info=err2)
-                if err2.stdout:
-                    logger.info("TF stdout:\n%s\n", err2.stdout.decode("utf-8"))
-                if err2.stderr:
-                    logger.info("TF stderr:\n%s\n", err2.stderr.decode("utf-8"))
-                logger.error("Resources may still exist - check manually!")
-                self.workbench.cloud_state = "um"
-                self.workbench.save()
-                raise
-            else:
-                logger.error("Terraform destroy succeeded")
-                self.workbench.cloud_state = "xm"
-                self.workbench.save()
-            raise
+
+            logger.error("Attempting to clean up with Terraform destroy")
+            self._terraform_destroy()
 
 
     def _terraform_destroy(self):
@@ -415,6 +397,7 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
             self.workbench.save()
             raise
 
+        logger.info("Terraform destroy succeeded")
         self.workbench.status = "d"
         self.workbench.cloud_state = "xm"
         self.workbench.save()

@@ -23,10 +23,10 @@ function subnetSelected() {
 
       $("#id_cloud_zone").find('option').remove().end();
       region_info[subnet_map[subnet_element.value]].forEach(function (item) {
-	var el = document.createElement("option");
-	el.text = item;
-	el.setAttribute("value", item) 
-	zone_element.appendChild(el);
+        var el = document.createElement("option");
+        el.text = item;
+        el.setAttribute("value", item) 
+        zone_element.appendChild(el);
       });
       
       var el = document.createElement("option");
@@ -34,11 +34,11 @@ function subnetSelected() {
       el.setAttribute("value", "");
       cluster_element.appendChild(el);
       Object.entries(cluster_subnets[subnet_element.value]).forEach(function (item) {
-	const [cid, cname] = item;
-	var el = document.createElement("option");
-	el.text = "Cluster " + cid + " '" + cname + "'";
-	el.setAttribute("value", cid);
-	cluster_element.appendChild(el);
+        const [cid, cname] = item;
+        var el = document.createElement("option");
+        el.text = "Cluster " + cid + " '" + cname + "'";
+        el.setAttribute("value", cid);
+        cluster_element.appendChild(el);
       });
     } else {
       zone_element.disabled = true;

@@ -129,10 +129,11 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
             hasattr(self.object, "attached_cluster") and
             self.object.attached_cluster
         ):
-            if self.object.subnet != self.object.attached_cluster.subnet:
-                form.add_error(
-                    None, "Cluster and workbench must share a subnet"
-                )
+            if (
+                self.object.subnet.vpc !=
+                self.object.attached_cluster.subnet.vpc
+            ):
+                form.add_error(None, "Cluster and workbench must share a vpc")
                 return self.form_invalid(form)
 
             for cluster_mp in self.object.attached_cluster.mount_points.all():

@@ -643,7 +643,7 @@ class Cluster(CloudResource):
 
     def __str__(self):
         """String for representing the Model object."""
-        return f"Cluster {self.id} '{self.name}'"
+        return f"Cluster '{self.name}'"
 
 
 class ComputeInstance(CloudResource):
@@ -1291,7 +1291,7 @@ class Workbench(CloudResource):
     )
     attached_cluster = models.ForeignKey(
         Cluster,
-        related_name="workbench_cluster",
+        related_name="attached_workbenches",
         help_text="Cluster to which jobs may be submitted",
         on_delete=RESTRICT_IF_CLOUD_ACTIVE,
         null=True,
