@@ -181,42 +181,31 @@ following steps to run a job:
    chmod 0600 ~/.ssh/authorized_keys
    ```
 
-1. In the login-node, create a job file `job_sgemm.sh` with the following content:
+1. Execute the following commands to activate Intel software components and
+   allocate machines to run the Intel Cluster Checker:
 
 ```shell
-cat >job_sgemm.sh <<EOF
-#!/bin/bash
-#SBATCH --nodes=4
-#SBATCH --ntasks-per-node=30
-#SBATCH --time=01:00:00
-#SBATCH --job-name=clckjob
-#SBATCH --output=job_%j.log
-#SBATCH --partition=compute
-
-. /apps/clck/2019.10/bin/clckvars.sh
-
-FWD=sgemm_cpu_performance
-clck -D \${FWD}.db -F \${FWD} -l \debug
-EOF
-```
-
-1. Finally, submit a job with:
-
-```shell
-sbatch job_sgemm.sh
+export PATH=/apps/intelpython3/bin/:/sbin:/bin:/usr/sbin:/usr/bin:$PATH
+source /apps/clck/2019.10/bin/clckvars.sh
+source /apps/psxe_runtime/linux/bin/psxevars.sh
+salloc -N4 -p compute
 ```
 
 This may take a minute while Slurm auto-scales to create the nodes. If you are
 curious you can refresh the `Compute Engine` > `VM instances` page and see that
 additional VMs have been created.
 
-You can also inspect the job status by running `squeue`, and use `sinfo` to see information about the different nodes and partitions.
+1. Once the allocation is complete, you will be presented with a shell. Run:
+
+```shell
+clck -F intel_hpc_platform_compat-hpc-2018.0
+```
 
 Notice this job took ~2-3 minutes to start, since all compute nodes have to install the packages at boot time. In a real production system, this would be part of the slurm image (wich is also possible with the HPC Toolkit).
 
 Since we used the compute partition (`#SBATCH --partition=compute`), the job ran on [Compute Optimized instances](https://cloud.google.com/compute/docs/compute-optimized-machines), using Intel 3.9 GHz Cascade Lake processors and with placement groups enabled. Nodes will not be re-used across jobs and will be immediately destroyed after the job is completed.
 
-The results of the run will be store on the file `job_1.log`.
+The results of the run will be stored in `clck_results.log`.
 
 > **_NOTE:_** If the Slurm controller is shut down before the auto-scale nodes
 > are destroyed then they will be left running.
