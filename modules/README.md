@@ -208,7 +208,7 @@ The `use` field is a powerful way of linking a module to one or more other
 modules. When a module "uses" another module, the outputs of the used
 module are compared to the settings of the current module. If they have
 matching names, and the setting has no explicit value, then it will be set to
-the used module's output. For example, see the following YAML:
+the used module's output. For example, see the following blueprint snippet:
 
 ```yaml
 resources:
@@ -236,7 +236,7 @@ of the same names.
 The order of precedence that `ghpc` uses in determining when to infer a setting
 value is the following:
 
-1. Explicitly set in the config by the user
+1. Explicitly set in the blueprint by the user
 1. Output from a used module, taken in the order provided in the `use` list
 1. Global variable (`vars`) of the same name
 1. Default value for the setting
@@ -253,7 +253,7 @@ have in the
 ## Common Settings
 
 The following common naming conventions should be used to decrease the verbosity
-needed to define a blueprint via YAML. This is intentional to allow multiple
+needed to define a blueprint. This is intentional to allow multiple
 modules to share inferred settings from global variables. For example, if all
 modules are to be created in a single region, that region can be defined as a
 global variable, which is shared between all moduels without an explicit

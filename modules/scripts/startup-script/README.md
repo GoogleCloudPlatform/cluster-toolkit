@@ -20,11 +20,11 @@ runner receives the following attributes:
   `source` is not. This data can be used by subsequent runners or simply made
   available on the VM for later use.
 - `source`: (Optional) A path to the file or data you want to upload. Must be
-  defined if `content` is not. The source path is relative to the deployment group
-  directory in the blueprint. Scripts distributed as part of modules should
-  start with modules/ followed by the name of the module used (not to be
-  confused with the module ID) and the path to the script. Examples shown
-  below. To reference any other source file, an absolute path must be used.
+  defined if `content` is not. The source path is relative to the deployment
+  group directory. Scripts distributed as part of modules should start with
+  modules/ followed by the name of the module used (not to be confused with the
+  module ID) and the path to the script. Examples shown below. To reference any
+  other source file, an absolute path must be used.
 - `args`: (Optional) Arguments to be passed to shell scripts. This will not be
   used for other runner types.
 

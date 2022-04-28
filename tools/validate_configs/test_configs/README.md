@@ -1,16 +1,16 @@
 
-# Integration Test Configs
+# Integration Test Blueprints
 
-This directory contains a set of test YAML files that can be fed into gHPC
-to create a blueprint. These configs are used to run integration tests against
-`ghpc`. These configs can also be used independently and locally to verify a
-local `ghpc` build.
+This directory contains a set of test blueprint files that can be fed into gHPC
+to create a deployment. These blueprints are used to run integration tests
+against `ghpc`. These blueprints can also be used independently and locally to
+verify a local `ghpc` build.
 
-## Config Descriptions
+## Blueprint Descriptions
 
 **hpc-cluster-simple.yaml**: Creates a simple cluster with a single compute VM,
 filestore as a /home directory and a network. This has been used as a demo
-config when presenting the toolkit.
+blueprint when presenting the toolkit.
 
 **hpc-cluster-high-io-remote-state.yaml**: Creates a cluster with high
 performance IO system with all Terraform state stored remotely.
