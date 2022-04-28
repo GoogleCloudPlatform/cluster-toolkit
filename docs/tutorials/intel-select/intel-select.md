@@ -134,13 +134,15 @@ logout and give more time for the startup script to complete.
 > _`Slurm is currently being configured in the background`_
 
 Running the folowing command will allow monitoring the startup scripts on the controller:
+
 ```bash
 gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> slurm-hpc-intel-select-controller | grep startup-script
 ```
 
 And the login node:
+
 ```bash
-gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> slurm-hpc-intel-select-controller | grep startup-script
+gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> slurm-hpc-intel-select-login0 | grep startup-script
 ```
 
 The following line would indicate that the startup script completed on the controller:
@@ -199,6 +201,7 @@ EOF
 ```
 
 1. Finally, submit a job with:
+
 ```shell
 sbatch job_sgemm.sh
 ```
