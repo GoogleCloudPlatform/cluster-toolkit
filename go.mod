@@ -5,7 +5,6 @@ go 1.16
 require (
 	cloud.google.com/go/compute v1.5.0
 	cloud.google.com/go/iam v0.3.0 // indirect
-	cloud.google.com/go/resourcemanager v1.2.0
 	github.com/hashicorp/go-getter v1.5.11
 	github.com/hashicorp/hcl/v2 v2.10.1
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20210625153042-09f34846faab
