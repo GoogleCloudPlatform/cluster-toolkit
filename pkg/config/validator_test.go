@@ -66,7 +66,7 @@ func (s *MySuite) TestValidateVars(c *C) {
 }
 
 func (s *MySuite) TestValidateResouceSettings(c *C) {
-	testSource := filepath.Join(tmpTestDir, "resource")
+	testSource := filepath.Join(tmpTestDir, "module")
 	testSettings := map[string]interface{}{
 		"test_variable": "test_value",
 	}

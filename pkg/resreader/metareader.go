@@ -20,7 +20,7 @@ import (
 	"fmt"
 )
 
-// MetaReader implements ResReader for meta resources
+// MetaReader implements ResReader for meta modules
 type MetaReader struct {
 }
 

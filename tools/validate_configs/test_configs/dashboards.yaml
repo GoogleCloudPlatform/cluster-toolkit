@@ -25,7 +25,7 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: resources/monitoring/dashboard
+  - source: modules/monitoring/dashboard
     kind: terraform
     id: hpc_dash
     settings:
@@ -46,7 +46,7 @@ resource_groups:
             },
             "title": "HPC Toolkit - TEST 2"
           }
-  - source: resources/monitoring/dashboard
+  - source: modules/monitoring/dashboard
     kind: terraform
     id: empty_dash
     settings:

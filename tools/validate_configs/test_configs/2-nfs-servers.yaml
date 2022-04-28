@@ -25,18 +25,18 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: resources/network/pre-existing-vpc
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/nfs-server
+  - source: ./community/modules/file-system/nfs-server
     kind: terraform
     id: homefs
     use: [network1]
     settings:
       local_mounts: ["/home"]
 
-  - source: resources/file-system/nfs-server
+  - source: ./community/modules/file-system/nfs-server
     kind: terraform
     id: appsfs
     use: [network1]

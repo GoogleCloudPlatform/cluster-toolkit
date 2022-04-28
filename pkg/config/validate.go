@@ -167,7 +167,7 @@ func validateOutputs(res Resource, resInfo resreader.ResourceInfo) error {
 	// Ensure output exists in the underlying resource
 	for _, output := range res.Outputs {
 		if _, ok := outputsMap[output]; !ok {
-			return fmt.Errorf("%s, resource: %s output: %s",
+			return fmt.Errorf("%s, module: %s output: %s",
 				errorMessages["invalidOutput"], res.ID, output)
 		}
 	}
@@ -210,7 +210,7 @@ func validateSettings(
 	// Make sure we only define variables that exist
 	for k := range res.Settings {
 		if _, ok := cVars.Inputs[k]; !ok {
-			return fmt.Errorf("%s: Resource.ID: %s Setting: %s",
+			return fmt.Errorf("%s: Module ID: %s Setting: %s",
 				errorMessages["extraSetting"], res.ID, k)
 		}
 	}
@@ -225,11 +225,11 @@ func (bc BlueprintConfig) validateResourceSettings() error {
 			reader := sourcereader.Factory(res.Source)
 			info, err := reader.GetResourceInfo(res.Source, res.Kind)
 			if err != nil {
-				errStr := "failed to get info for resource at %s while validating resource settings"
+				errStr := "failed to get info for module at %s while validating module settings"
 				return errors.Wrapf(err, errStr, res.Source)
 			}
 			if err = validateSettings(res, info); err != nil {
-				errStr := "found an issue while validating settings for resource at %s"
+				errStr := "found an issue while validating settings for module at %s"
 				return errors.Wrapf(err, errStr, res.Source)
 			}
 		}

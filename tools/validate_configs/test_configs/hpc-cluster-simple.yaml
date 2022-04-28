@@ -25,11 +25,11 @@ vars:
 resource_groups:
 - group: primary
   resources:
-  - source: resources/network/pre-existing-vpc
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
@@ -38,7 +38,7 @@ resource_groups:
       labels:
         ghpc_role: storage-home
 
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -53,7 +53,7 @@ resource_groups:
         source: "modules/startup-script/examples/mount.yaml"
         destination: mount.yaml
 
-  - source: resources/compute/simple-instance
+  - source: modules/compute/simple-instance
     kind: terraform
     id: workstation
     use:

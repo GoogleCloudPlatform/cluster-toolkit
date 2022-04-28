@@ -44,24 +44,24 @@ var errorMessages = map[string]string{
 	"yamlMarshalError":   "failed to marshal the yaml config",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
-	"missingSetting":    "a required setting is missing from a resource",
+	"missingSetting":    "a required setting is missing from a module",
 	"globalLabelType":   "global labels are not a map",
-	"settingsLabelType": "labels in resources settings are not a map",
+	"settingsLabelType": "labels in module settings are not a map",
 	"invalidVar":        "invalid variable definition in",
 	"varNotFound":       "Could not find source of variable",
 	"varInAnotherGroup": "References to other groups are not yet supported",
 	"noOutput":          "Output not found for a variable",
 	// validator
-	"emptyID":         "a resource id cannot be empty",
-	"emptySource":     "a resource source cannot be empty",
-	"wrongKind":       "a resource kind is invalid",
-	"extraSetting":    "a setting was added that is not found in the resource",
-	"mixedResourcees": "mixing resources of differing kinds in a resource group is not supported",
-	"duplicateGroup":  "group names must be unique",
-	"duplicateID":     "resource IDs must be unique",
-	"emptyGroupName":  "group name must be set for each resource group",
-	"illegalChars":    "invalid character(s) found in group name",
-	"invalidOutput":   "requested output was not found in the resource",
+	"emptyID":        "a module id cannot be empty",
+	"emptySource":    "a module source cannot be empty",
+	"wrongKind":      "a module kind is invalid",
+	"extraSetting":   "a setting was added that is not found in the module",
+	"mixedModules":   "mixing modules of differing kinds in a deployment group is not supported",
+	"duplicateGroup": "group names must be unique",
+	"duplicateID":    "module IDs must be unique",
+	"emptyGroupName": "group name must be set for each deployment group",
+	"illegalChars":   "invalid character(s) found in group name",
+	"invalidOutput":  "requested output was not found in the module",
 }
 
 // ResourceGroup defines a group of Resource that are all executed together
@@ -280,7 +280,7 @@ func createResourceInfo(
 			ri, err := reader.GetResourceInfo(res.Source, res.Kind)
 			if err != nil {
 				log.Fatalf(
-					"failed to get info for resource at %s while setting bc.ResourcesInfo: %e",
+					"failed to get info for module at %s while setting bc.ResourcesInfo: %e",
 					res.Source, err)
 			}
 			resInfo[res.Source] = ri
@@ -333,8 +333,8 @@ func checkResourceAndGroupNames(
 				groupKind = res.Kind
 			} else if groupKind != res.Kind {
 				return resourceToGroup, fmt.Errorf(
-					"%s: resource group %s, got: %s, wanted: %s",
-					errorMessages["mixedResources"],
+					"%s: deployment group %s, got: %s, wanted: %s",
+					errorMessages["mixedModule"],
 					grp.Name, groupKind, res.Kind)
 			}
 		}
@@ -351,12 +351,12 @@ func checkUsedResourceNames(
 			for _, usedRes := range res.Use {
 				// Check if resource even exists
 				if _, ok := idToGroup[usedRes]; !ok {
-					return fmt.Errorf("used resource ID %s does not exist", usedRes)
+					return fmt.Errorf("used module ID %s does not exist", usedRes)
 				}
 				// Ensure resource is from the correct group
 				if idToGroup[usedRes] != iGrp {
 					return fmt.Errorf(
-						"used resource ID %s not found in this Resource Group", usedRes)
+						"used module ID %s not found in this Deployment Group", usedRes)
 				}
 			}
 		}
@@ -521,4 +521,31 @@ func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error 
 		}
 	}
 	return nil
+}
+
+// DeploymentNameError signifies a problem with the blueprint deployment name.
+type DeploymentNameError struct {
+	cause string
+}
+
+func (err *DeploymentNameError) Error() string {
+	return fmt.Sprintf("deployment_name must be a string and cannot be empty, cause: %v", err.cause)
+}
+
+// DeploymentName returns the deployment_name from the config and does approperate checks.
+func (yc *YamlConfig) DeploymentName() (string, error) {
+	nameInterface, found := yc.Vars["deployment_name"]
+	if !found {
+		return "", &DeploymentNameError{"deployment_name variable not defined."}
+	}
+
+	deploymentName, ok := nameInterface.(string)
+	if !ok {
+		return "", &DeploymentNameError{"deployment_name was not of type string."}
+	}
+
+	if len(deploymentName) == 0 {
+		return "", &DeploymentNameError{"deployment_name was an empty string."}
+	}
+	return deploymentName, nil
 }
