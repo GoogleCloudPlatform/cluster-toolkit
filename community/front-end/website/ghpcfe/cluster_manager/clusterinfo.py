@@ -298,6 +298,9 @@ resource_groups:
     id: slurm_controller
     settings:
       login_node_count: {self.cluster.num_login_nodes}
+      controller_machine_type: {self.cluster.controller_instance_type}
+      boot_disk_type: {self.cluster.controller_disk_type}
+      boot_disk_size: {self.cluster.controller_disk_size}
       controller_service_account: $(hpc_service_account.email)
       controller_startup_script: |
         #!/bin/bash
@@ -321,6 +324,9 @@ resource_groups:
     settings:
       login_node_count: {self.cluster.num_login_nodes}
       subnetwork_name: {self.cluster.subnet.cloud_id}
+      login_machine_type: {self.cluster.login_node_instance_type}
+      boot_disk_type: {self.cluster.login_node_disk_type}
+      boot_disk_size: {self.cluster.login_node_disk_size}
       login_service_account: $(hpc_service_account.email)
       login_scopes:
       - https://www.googleapis.com/auth/monitoring.write
@@ -563,7 +569,6 @@ resource_groups:
                 if len(mgmt_nodes):
                     node = mgmt_nodes[0]
                     node.save()
-                    utils.add_host_to_server_firewall(node.public_ip)
                     self.cluster.controller_node = node
                     logger.info(
                         "Created cluster controller node with IP address %s",
@@ -586,7 +591,6 @@ resource_groups:
                 for lnode in login_nodes:
                     lnode.cluster_login = self.cluster
                     lnode.save()
-                    utils.add_host_to_server_firewall(lnode.public_ip)
                     logger.info(
                         "Created login node with IP address %s",
                         lnode.public_ip
@@ -621,7 +625,6 @@ resource_groups:
             self.cluster.cloud_state = "dm"
             self.cluster.save()
 
-            # utils.remove_host_from_server_firewall(self.cluster.XXXX)
             utils.run_terraform(terraform_dir, "destroy", extra_env=extra_env)
 
             controller_sa = self.cluster.controller_node.service_account

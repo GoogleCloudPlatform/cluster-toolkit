@@ -12,12 +12,15 @@ var region_info = {{ region_info }};
 function subnetSelected() {
     subnet_element = document.getElementById("id_subnet");
     zone_element = document.getElementById("id_cloud_zone");
-    zone_element.disabled = false;
-    $("#id_cloud_zone").find('option').remove().end();
+    old_zone = zone_element.value;
+    $(zone_element).find('option').remove().end();
     region_info[subnet_map[subnet_element.value]].forEach(function (item) {
       var el = document.createElement("option");
       el.text = item;
       el.setAttribute("value", item) 
+      if (old_zone == item) {
+          el.setAttribute("selected", true);
+      }
       zone_element.appendChild(el);
     });
 }
@@ -126,11 +129,57 @@ function updateMachineAvailability() {
 }
 
 
+function updateDiskAvailability() {
+    var subnet_element = document.getElementById("id_subnet");
+    var zone_element = document.getElementById("id_cloud_zone");
+    var region = subnet_map[subnet_element.value];
+    var zone = zone_element.value;
+    disk_info = $.ajax({
+        url: "{% url 'api-disktype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+        type: "GET",
+        dataType: "json",
+        headers: {'X-CSRFToken': $.cookie("csrftoken")}
+    }).done(function(data) {
+        $(".disk_type_select").each(function(pos, selObj) {
+            var curVal = selObj.value;
+            $(selObj).empty();
+            $.each(data.disks, function(i, disk_info) {
+                if ( disk_info.name.startsWith("pd-") ) { // Only Persistent Disks
+                    var option = document.createElement("option");
+                    option.text = disk_info.description;
+                    option.setAttribute("value", disk_info.name);
+                    selObj.appendChild(option);
+                }
+            });
+            var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
+            var disk_size_sel = $(selObj).parentsUntil("tbody").find("#" + id_prefix + "_disk_size")[0];
+            selObj.onchange = function() {
+                disk = data.disks.find(d => d.name == selObj.value);
+                disk_size_sel.min = disk.minSizeGB;
+                disk_size_sel.max = disk.maxSizeGB;
+                if ( Number(disk_size_sel.value) < disk_size_sel.min ) {
+                    disk_size_sel.value = disk_size_sel.min;
+                } else if ( Number(disk_size_sel.value) > disk_size_sel.max ) {
+                    disk_size_sel.value = disk_size_sel.max;
+                }
+            };
+            selObj.value = curVal;
+            selObj.onchange();
+        });
+    });
+}
+
+
+function updateZoneAvailability() {
+    updateMachineAvailability();
+    updateDiskAvailability();
+}
 
 $(document).ready(function() {
     document.getElementById("id_subnet").onchange = subnetSelected;
-    updateMachineAvailability();
-    $("#id_cloud_zone").on("change", updateMachineAvailability);
+    subnetSelected();
+    updateZoneAvailability();
+    $("#id_cloud_zone").on("change", updateZoneAvailability);
 });
 
 </script>
@@ -178,12 +227,6 @@ $(document).ready(function() {
         <small class="form-text text-muted">{{ form.cloud_zone.help_text }}</small>
     </div>
     <div class="form-group">
-      {{ form.num_login_nodes.errors }}
-      {{ form.num_login_nodes.label_tag }}
-      {{ form.num_login_nodes }}
-        <small class="form-text text-muted">{{ form.num_login_nodes.help_text }}</small>
-    </div>
-    <div class="form-group">
       {{ form.authorised_users.errors }}
       {{ form.authorised_users.label_tag }}
       {{ form.authorised_users }}
@@ -194,6 +237,73 @@ $(document).ready(function() {
       {{ form.spackdir.label_tag }}
       {{ form.spackdir }}
         <small class="form-text text-muted">{{ form.spackdir.help_text }}</small>
+    </div>
+
+    <hr>
+    <p style="text-decoration: underline; font-size: large;">Static Nodes</p>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr>
+            <th></th>
+            <th># Nodes</th>
+            <th>Instance Type</th>
+            <th>Boot Disk Size (GB)</th>
+            <th>Boot Disk Type</th>
+            </tr></thead>
+            <tr>
+                <th>Controller</th>
+                <td>
+    <div class="form-group">
+        <input type="number" name="num_controller_nodes" value="1" class="form-control" disabled>
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.controller_instance_type.errors.as_ul }}
+      {{ form.controller_instance_type }}
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.controller_disk_size.errors.as_ul }}
+      {{ form.controller_disk_size }}
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.controller_disk_type.errors.as_ul }}
+      {{ form.controller_disk_type }}
+    </div>
+                </td>
+            </tr>
+            <tr>
+                <th>Login Nodes</th>
+                <td>
+    <div class="form-group">
+      {{ form.num_login_nodes.errors.as_ul }}
+      {{ form.num_login_nodes }}
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.login_node_instance_type.errors.as_ul }}
+      {{ form.login_node_instance_type }}
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.login_node_disk_size.errors.as_ul }}
+      {{ form.login_node_disk_size }}
+    </div>
+                </td>
+                <td>
+    <div class="form-group">
+      {{ form.login_node_disk_type.errors.as_ul }}
+      {{ form.login_node_disk_type }}
+    </div>
+                </td>
+            </tr>
+        </table>
     </div>
 
     <hr>

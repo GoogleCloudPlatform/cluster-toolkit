@@ -114,26 +114,50 @@ class ClusterForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
 
-        zone_choices = None
-        if "zone_choices" in kwargs:
-            zone_choices = kwargs.pop("zone_choices")
-
         super().__init__(*args, **kwargs)
         credential = self._get_creds(kwargs)
 
         self.fields["subnet"].queryset = VirtualSubnet.objects.filter(
             cloud_credential=credential
         ).filter(Q(cloud_state="i") | Q(cloud_state="m"))
-        if zone_choices:
-            # We set this on the widget, because we will be changing the
-            # widget's field in the template via javascript
-            self.fields["cloud_zone"].widget.choices = zone_choices
 
-        if "n" not in self.instance.cloud_state:
-            # Need to disable certain widgets
-            self.fields["subnet"].disabled = True
-            self.fields["cloud_zone"].disabled = True
-            self.fields["spackdir"].disabled = True
+        if self.instance.cloud_state not in ["nm"]:
+            # Need to disable things
+            for field in self.fields.keys():
+                self.field[field].disabled = True
+
+        self.fields["cloud_zone"].widget.choices = [
+            (
+                self.instance.cloud_zone,
+                self.instance.cloud_zone
+            )
+        ]
+
+        # For machine types, will use JS to get valid types dependant on
+        # cloud zone. So bypass cleaning and choices
+        def prep_dynamic_select(field, value):
+            self.fields[field].widget.choices = [
+                ( value, value )
+            ]
+            self.fields[field].clean = lambda value: value
+
+        prep_dynamic_select(
+            "controller_instance_type",
+            self.instance.controller_instance_type
+        )
+        prep_dynamic_select(
+            "controller_disk_type",
+            self.instance.controller_disk_type
+        )
+        prep_dynamic_select(
+            "login_node_instance_type",
+            self.instance.login_node_instance_type
+        )
+        prep_dynamic_select(
+            "login_node_disk_type",
+            self.instance.login_node_disk_type
+        )
+
 
     class Meta:
         model = Cluster
@@ -145,7 +169,13 @@ class ClusterForm(forms.ModelForm):
             "cloud_credential",
             "authorised_users",
             "spackdir",
+            "controller_instance_type",
+            "controller_disk_type",
+            "controller_disk_size",
             "num_login_nodes",
+            "login_node_instance_type",
+            "login_node_disk_type",
+            "login_node_disk_size",
         )
 
         widgets = {
@@ -155,6 +185,27 @@ class ClusterForm(forms.ModelForm):
             ),
             "subnet": forms.Select(attrs={"class": "form-control"}),
             "cloud_zone": forms.Select(attrs={"class": "form-control"}),
+            "controller_instance_type": forms.Select(
+                attrs={"class": "form-control machine_type_select"}
+            ),
+            "controller_disk_size": forms.NumberInput(
+                attrs={"class": "form-control"}
+            ),
+            "controller_disk_type": forms.Select(
+                attrs={"class": "form-control disk_type_select"}
+            ),
+            "login_node_instance_type": forms.Select(
+                attrs={"class": "form-control machine_type_select"}
+            ),
+            "login_node_disk_size": forms.NumberInput(
+                attrs={"class": "form-control"}
+            ),
+            "login_node_disk_type": forms.Select(
+                attrs={"class": "form-control disk_type_select"}
+            ),
+            "num_login_nodes": forms.NumberInput(
+                attrs={"class": "form-control"}
+            ),
         }
 
 
@@ -223,9 +274,9 @@ class ClusterPartitionForm(forms.ModelForm):
         cleaned_data = super().clean()
         if cleaned_data["enable_placement"] and cleaned_data[
             "machine_type"
-        ].split("-")[0] not in ["c2", "c2d"]:
+        ].split("-")[0] not in ["c2"]:
             raise ValidationError(
-                "Placement Groups are only valid for C2 and C2D instance types"
+                "SlurmGCP v4 supports Placement Groups for C2 instance types"
             )
         return cleaned_data
 
