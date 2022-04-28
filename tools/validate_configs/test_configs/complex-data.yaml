@@ -74,7 +74,7 @@ deployment_groups:
         source: "modules/startup-script/examples/mount.yaml"
         destination: mount.yaml
 
-  - source: modules/compute/simple-instance
+  - source: modules/compute/vm-instance
     kind: terraform
     id: license-server-1
     use: [network]

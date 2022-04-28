@@ -6,7 +6,7 @@ This module creates one or more simple
 ### Example
 
 ```yaml
-- source: ./modules/compute/simple-instance
+- source: ./modules/compute/vm-instance
   kind: terraform
   id: compute
   settings:

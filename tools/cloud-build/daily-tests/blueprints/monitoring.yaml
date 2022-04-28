@@ -53,7 +53,7 @@ deployment_groups:
       - $(homefs.install_nfs_client_runner)
       - $(homefs.mount_runner)
 
-  - source: ./modules/compute/simple-instance
+  - source: ./modules/compute/vm-instance
     kind: terraform
     id: workstation
     use:

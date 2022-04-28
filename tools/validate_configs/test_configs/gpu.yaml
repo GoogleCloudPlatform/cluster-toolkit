@@ -32,7 +32,7 @@ deployment_groups:
     kind: terraform
     id: network1
 
-  - source: ./modules/compute/simple-instance
+  - source: ./modules/compute/vm-instance
     kind: terraform
     id: workstation
     use:

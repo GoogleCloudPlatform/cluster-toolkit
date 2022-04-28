@@ -54,7 +54,7 @@ resource "google_compute_disk" "boot_disk" {
 
 resource "google_compute_resource_policy" "placement_policy" {
   count = var.placement_policy != null ? 1 : 0
-  name  = "${local.resource_prefix}-simple-instance-placement"
+  name  = "${local.resource_prefix}-vm-instance-placement"
   group_placement_policy {
     vm_count                  = var.placement_policy.vm_count
     availability_domain_count = var.placement_policy.availability_domain_count

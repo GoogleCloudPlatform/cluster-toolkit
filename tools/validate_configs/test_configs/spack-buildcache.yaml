@@ -80,7 +80,7 @@ deployment_groups:
         destination: shutdown.sh
         content: shutdown -h
 
-  - source: modules/compute/simple-instance
+  - source: modules/compute/vm-instance
     kind: terraform
     id: spack-build
     use:
