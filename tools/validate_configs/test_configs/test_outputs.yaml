@@ -25,7 +25,7 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/compute/simple-instance
+  - source: modules/compute/vm-instance
     kind: terraform
     id: instance
     outputs:

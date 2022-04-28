@@ -83,7 +83,7 @@ sudo journalctl -u google-startup-scripts.service
           tar zxvf /tmp/$1 -C /
         args: "bar.tgz 'Expanding file'"
 
-- source: ./modules/compute/simple-instance
+- source: ./modules/compute/vm-instance
   kind: terraform
   id: compute-cluster
   settings:

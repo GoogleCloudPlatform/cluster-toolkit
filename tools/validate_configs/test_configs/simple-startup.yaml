@@ -48,7 +48,7 @@ deployment_groups:
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
 
-  - source: ./modules/compute/simple-instance
+  - source: ./modules/compute/vm-instance
     kind: terraform
     id: instance
     use: [network1, startup]

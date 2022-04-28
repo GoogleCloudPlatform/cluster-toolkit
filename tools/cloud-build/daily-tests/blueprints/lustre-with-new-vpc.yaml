@@ -51,8 +51,8 @@ deployment_groups:
       subnetwork_self_link: $(network1.subnetwork_self_link)
       subnetwork_address: $(network1.subnetwork_address)
 
-  # Create a separate workstation to catch regressions in simple-instance
-  - source: ./modules/compute/simple-instance
+  # Create a separate workstation to catch regressions in vm-instance
+  - source: ./modules/compute/vm-instance
     kind: terraform
     id: workstation
     use:

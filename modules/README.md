@@ -13,11 +13,11 @@ module are listed in more detail below.
 
 Compute
 
-* **[simple-instance]** ![core-badge] : Creates one or more simple VM instances.
+* **[vm-instance]** ![core-badge] : Creates one or more simple VM instances.
 * **[SchedMD-slurm-on-gcp-partition]** ![community-badge] : Creates a partition
   to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
 
-[simple-instance]: compute/simple-instance/README.md
+[vm-instance]: compute/vm-instance/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 
 Database
@@ -216,7 +216,7 @@ modules:
   kind: terraform
   id: network1
 
-- resource: modules/compute/simple-instance
+- resource: modules/compute/vm-instance
   kind: terraform
   id: workstation
   use: [network1]
@@ -228,7 +228,7 @@ In this snippet, the simple instance, `workstation`, uses the outputs of vpc
 `network1`.
 
 In this case both `network_self_link` and `subnetwork_self_link` in the
-[`workstation` settings](compute/simple-instance/README.md#Inputs) will be set
+[`workstation` settings](compute/vm-instance/README.md#Inputs) will be set
 to `$(network1.network_self_link)` and `$(network1.subnetwork_self_link)` which
 refer to the [`network1` outputs](network/vpc/README#Outputs)
 of the same names.
@@ -325,7 +325,7 @@ Below we show a few of the modules and their roles (as parent folders).
 ```text
 modules/
 ├── compute
-│   └── simple-instance
+│   └── vm-instance
 ├── file-system
 │   └── filestore
 ├── network
