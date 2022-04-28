@@ -14,6 +14,7 @@
 """ workbench.py """
 
 import json
+from collections import defaultdict
 from asgiref.sync import sync_to_async
 
 from django.shortcuts import get_object_or_404
@@ -29,9 +30,11 @@ from django.db import transaction
 from django.forms import inlineformset_factory
 
 from ..models import (
+    Cluster,
     Credential,
     Workbench,
     VirtualSubnet,
+    MountPoint,
     WorkbenchMountPoint,
     Filesystem,
     FilesystemExport,
@@ -39,13 +42,7 @@ from ..models import (
 )
 from ..forms import WorkbenchForm, WorkbenchMountPointForm
 from ..cluster_manager import cloud_info
-from ..cluster_manager import workbenchinfo
-from ..cluster_manager.workbench_operations import (
-    create_workbench,
-    update_workbench,
-    start_workbench,
-    destroy_workbench,
-)
+from ..cluster_manager.workbenchinfo import WorkbenchInfo
 from .asyncview import BackendAsyncView
 
 
@@ -77,14 +74,6 @@ class WorkbenchDetailView(LoginRequiredMixin, generic.DetailView):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
         context["navtab"] = "workbench"
-        workbench_info = workbenchinfo.WorkbenchInfo(context["object"])
-
-        if (
-            context["object"].proxy_uri == ""
-            or context["object"].status == "c"
-            or context["object"].status == "i"
-        ):
-            workbench_info.get_workbench_proxy_uri()
 
         return context
 
@@ -135,9 +124,32 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
+        mountpoints = []
+        if (
+            hasattr(self.object, "attached_cluster") and
+            self.object.attached_cluster
+        ):
+            if (
+                self.object.subnet.vpc !=
+                self.object.attached_cluster.subnet.vpc
+            ):
+                form.add_error(None, "Cluster and workbench must share a vpc")
+                return self.form_invalid(form)
+
+            for cluster_mp in self.object.attached_cluster.mount_points.all():
+                wb_mp = WorkbenchMountPoint()
+                wb_mp.export = cluster_mp.export
+                wb_mp.workbench = self.object
+                wb_mp.mount_order = cluster_mp.mount_order
+                wb_mp.mount_path = cluster_mp.mount_path
+                mountpoints.append(wb_mp)
+
+
         self.object.owner = self.request.user
         self.object.cloud_region = self.object.subnet.cloud_region
         self.object.save()
+        for wb_mp in mountpoints:
+            wb_mp.save()
         form.save_m2m()
         messages.success(
             self.request,
@@ -160,9 +172,17 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
             .filter(Q(cloud_state="i") | Q(cloud_state="m"))
             .all()
         }
+
+        cluster_subnets = defaultdict(dict)
+        for icluster in Cluster.objects.all():
+            if icluster.cloud_state == "xm":
+                continue
+            cluster_subnets[icluster.subnet.id][icluster.id] = icluster.name
+
+        context["cluster_subnets"] = dict(cluster_subnets)
         context["subnet_regions"] = json.dumps(subnet_regions)
         context["region_info"] = json.dumps(region_info)
-        context["navtab"] = "Workbench"
+        context["navtab"] = "workbench"
         return context
 
     def get_success_url(self):
@@ -197,17 +217,28 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
             field = model_field.formfield(**kwargs)
             if model_field.name == "export":
                 workbench = self.object
-                fsquery = (
-                    Filesystem.objects.exclude(
+                fsquery = list(
+                    Filesystem.objects.all()
+                    .exclude(
                         impl_type=FilesystemImpl.BUILT_IN
                     )
                     .filter(cloud_state__in=["m", "i"])
                     .filter(vpc=workbench.subnet.vpc)
                     .values_list("pk", flat=True)
                 )
-                field.queryset = FilesystemExport.objects.filter(
-                    filesystem__in=list(fsquery)
+                export_qs = FilesystemExport.objects.filter(
+                   filesystem__in=fsquery
                 )
+                if hasattr(self.object, "attached_cluster"):
+                    exp_ids = [x.export.id for x in MountPoint.objects.filter(
+                        cluster=self.object.attached_cluster
+                    )]
+                    export_qs = export_qs | FilesystemExport.objects.filter(
+                            id__in=exp_ids
+                    )
+
+                field.queryset = export_qs
+
             return field
 
         # This creates a new class on the fly
@@ -291,9 +322,9 @@ class BackendCreateWorkbench(BackendAsyncView):
         creds = workbench.cloud_credential.detail
         return (workbench, creds)
 
-    def cmd(self, unused_task_id, token, workbench, creds):
+    def cmd(self, unused_task_id, unused_token, workbench, creds):
 
-        create_workbench(workbench, token, credentials=creds)
+        WorkbenchInfo(workbench).create_workbench_dir(creds)
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
@@ -317,9 +348,9 @@ class BackendStartWorkbench(BackendAsyncView):
         workbench = Workbench.objects.get(pk=workbench_id)
         return (workbench,)
 
-    def cmd(self, unused_task_id, token, workbench):
+    def cmd(self, unused_task_id, unused_token, workbench):
 
-        start_workbench(workbench, token)
+        WorkbenchInfo(workbench).start()
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
@@ -343,9 +374,9 @@ class BackendDestroyWorkbench(BackendAsyncView):
         workbench = Workbench.objects.get(pk=workbench_id)
         return (workbench,)
 
-    def cmd(self, unused_task_id, token, workbench):
+    def cmd(self, unused_task_id, unused_token, workbench):
 
-        destroy_workbench(workbench, token)
+        WorkbenchInfo(workbench).terminate()
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
@@ -371,7 +402,7 @@ class BackendUpdateWorkbench(BackendAsyncView):
 
     def cmd(self, unused_task_id, unused_token, workbench):
 
-        update_workbench(workbench)
+        WorkbenchInfo(workbench).copy_startup_script()
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""

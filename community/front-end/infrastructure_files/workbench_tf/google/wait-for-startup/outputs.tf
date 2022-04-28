@@ -14,22 +14,3 @@
  * limitations under the License.
  */
 
-output "deployment_id" {
-  description = "RADLab Module Deployment ID"
-  value       = local.random_id
-}
-
-output "project_radlab_ds_analytics_id" {
-  description = "Analytics Project ID"
-  value       = local.project.project_id
-}
-
-output "notebook_instance_names" {
-  description = "Notebook Instance Names"
-  value       = [for nb in google_notebooks_instance.ai_notebook : nb.name]
-}
-
-output "notebook_proxy_uris" {
-  description = "Notebook Proxy URIs"
-  value       = [for nb in google_notebooks_instance.ai_notebook : nb.proxy_uri]
-}
