@@ -647,11 +647,11 @@ class Cluster(CloudResource):
         default=20,
         blank=True,
     )
-     grafana_dashboard_url = models.CharField(
+    grafana_dashboard_url = models.CharField(
         max_length=512,
         null=True,
         blank=True,
-     )
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
