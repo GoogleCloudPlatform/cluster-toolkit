@@ -40,9 +40,14 @@ class RunningTasksViewSet(viewsets.ModelViewSet):
 
 
 def _consume_task(record, task):
-    logger.info("%s done.", task.get_name(), exc_info=task.exception())
+    logger.info("Task %s complete.", task.get_name(), exc_info=task.exception())
     if record:
-        logger.info("    %s, destroying.  Data: %s", record.title, record.data)
+        logger.info(
+            "    destroying task record %d-%s.  Data: %s",
+            record.id,
+            record.title,
+            record.data
+        )
         asyncio.create_task(sync_to_async(record.delete)())
 
 
@@ -89,7 +94,7 @@ class BackendAsyncView(generic.View):
 
     def get_task_record_data(self, request):
         """Called from a syncronous context"""
-        return {"status": "Contacting Cluster"}
+        return {}
 
     async def _cmd(self, *args, **kwargs):
         await sync_to_async(self.cmd, thread_sensitive=False)(*args, **kwargs)

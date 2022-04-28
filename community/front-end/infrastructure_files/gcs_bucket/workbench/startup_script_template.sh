@@ -35,3 +35,5 @@ WantedBy=multi-user.target
 echo "reloading and restarting service" | tee -a /tmp/startup.log
 systemctl daemon-reload
 service jupyter restart
+
+echo BRINGUP COMPLETE

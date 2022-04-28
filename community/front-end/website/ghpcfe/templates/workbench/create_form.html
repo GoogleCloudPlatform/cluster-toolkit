@@ -6,21 +6,49 @@ function subnetSelected() {
     {% autoescape off %}
     var subnet_map = {{ subnet_regions }};
     var region_info = {{ region_info }};
+    var cluster_subnets = {{ cluster_subnets }};
     {% endautoescape %}
+
     subnet_element = document.getElementById("id_subnet");
     zone_element = document.getElementById("id_cloud_zone");
-    zone_element.disabled = false;
+    cluster_element = document.getElementById("id_attached_cluster");
+
     $("#id_cloud_zone").find('option').remove().end();
-    region_info[subnet_map[subnet_element.value]].forEach(function (item) {
+  
+    $("#id_attached_cluster").find('option').remove().end();
+
+    if ($('#id_subnet').val()){
+      zone_element.disabled = false;
+      cluster_element.disabled = false;
+
+      $("#id_cloud_zone").find('option').remove().end();
+      region_info[subnet_map[subnet_element.value]].forEach(function (item) {
+        var el = document.createElement("option");
+        el.text = item;
+        el.setAttribute("value", item) 
+        zone_element.appendChild(el);
+      });
+      
       var el = document.createElement("option");
-      el.text = item;
-      el.setAttribute("value", item) 
-      zone_element.appendChild(el);
-    });
+      el.text = "---";
+      el.setAttribute("value", "");
+      cluster_element.appendChild(el);
+      Object.entries(cluster_subnets[subnet_element.value]).forEach(function (item) {
+        const [cid, cname] = item;
+        var el = document.createElement("option");
+        el.text = "Cluster " + cid + " '" + cname + "'";
+        el.setAttribute("value", cid);
+        cluster_element.appendChild(el);
+      });
+    } else {
+      zone_element.disabled = true;
+      cluster_element.disabled = true;
+    }
 }
 
 function initPage() {
     document.getElementById("id_subnet").onchange = subnetSelected;
+    subnetSelected();
 }
 
 window.onload=initPage;
@@ -104,6 +132,13 @@ window.onload=initPage;
       {{ form.image_family.label_tag }}
       {{ form.image_family }}
         <small class="form-text text-muted">{{ form.image_family.help_text }}</small>
+    </div>
+
+    <div class="form-group">
+      {{ form.attached_cluster.errors }}
+      {{ form.attached_cluster.label_tag }}
+      {{ form.attached_cluster }}
+        <small class="form-text text-muted">{{ form.attached_cluster.help_text }}</small>
     </div>
 
     <br/>

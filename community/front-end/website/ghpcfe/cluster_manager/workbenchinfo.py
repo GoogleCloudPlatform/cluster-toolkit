@@ -17,10 +17,9 @@
 
 import logging
 import json
-import os
 import shutil
 import subprocess
-from datetime import datetime, timedelta
+from retry import retry
 
 from . import utils
 
@@ -61,6 +60,43 @@ class WorkbenchInfo:
         with credfile.open("w") as fp:
             fp.write(creds)
 
+    def start(self):
+        try:
+            self.workbench.cloud_state = "nm"
+            self.workbench.status = "c"
+            self.workbench.save()
+
+            self._terraform_init()
+            self._terraform_create()
+            self.workbench.cloud_state = "m"
+            self.workbench.status = "i"
+            self.workbench.save()
+
+            # Wait for uri to appear
+            self._get_proxy_uri()
+
+            self.workbench.status = "r"
+            self.workbench.save()
+        except Exception as err: # pylint: disable=broad-except
+            logger.error(
+                "Encountered error while deploying workbench %d-%s",
+                self.workbench.id,
+                self.workbench.name,
+                exc_info=err
+            )
+
+
+    def terminate(self):
+        try:
+            self._terraform_destroy()
+        except Exception as err: # pylint: disable=broad-except
+            logger.error(
+                "Encountered error while destroying workbench %d-%s",
+                self.workbench.id,
+                self.workbench.name,
+                exc_info=err
+            )
+
     def copy_terraform(self):
         terraform_dir = self.workbench_dir / "terraform"
         shutil.copytree(
@@ -85,6 +121,46 @@ USER=$(curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?
         .[].username' 2>&- | tr -d '"')
 """
 
+        slurm_config_segment = ""
+        try:
+            cid = self.workbench.attached_cluster.cloud_id
+            slurm_config_segment=f"""\
+apt-get install -y munge libmunge-dev
+
+
+mkdir -p /mnt/clustermunge
+mkdir -p /etc/munge
+mount slurm-{cid}-controller:/etc/munge /mnt/clustermunge
+cp /mnt/clustermunge/munge.key /etc/munge/munge.key
+chmod 400 /etc/munge/munge.key
+chown munge:munge /etc/munge/munge.key
+umount /mnt/clustermunge
+rmdir /mnt/clustermunge
+systemctl restart munge
+
+useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
+echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
+
+tmpdir=$(mktemp -d)
+currdir=$PWD
+cd $tmpdir
+wget https://download.schedmd.com/slurm/slurm-21.08.7.tar.bz2
+tar xf slurm-21.08.7.tar.bz2
+cd slurm-21.08.7
+./configure --prefix=/usr/local --sysconfdir=/etc/slurm
+make -j $(nproc)
+make install
+
+cd $currdir
+rm -r $tmpdir
+
+
+mkdir -p /etc/slurm
+mount slurm-{cid}-controller:/usr/local/etc/slurm /etc/slurm
+"""
+        except AttributeError:
+            pass
+
         startup_script = self.workbench_dir / "startup_script.sh"
         with startup_script.open("w") as f:
             f.write(
@@ -95,6 +171,8 @@ echo "Getting username..." | tee -a /tmp/startup.log
 
 echo "Setting up storage" | tee -a /tmp/startup.log
 sudo apt-get -y update && sudo apt-get install -y nfs-common
+
+{slurm_config_segment}
 
 mkdir /tmp/jupyterhome
 chown $USER:$USER /tmp/jupyterhome
@@ -117,8 +195,12 @@ all data on this instance will be deleted.
 MOUNTED FILESYSTEMS:
 
 EOF
+
 """
             )
+
+
+
             for mp in self.workbench.mount_points.order_by("mount_order"):
                 if (
                     self.workbench.id == mp.workbench.id
@@ -215,13 +297,15 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
     def get_workbench_access_key(self):
         return self.workbench.get_access_key()
 
-    def initialize_terraform(self):
+    def _terraform_init(self):
         terraform_dir = self.workbench_dir / "terraform"
         extra_env = {
             "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
         }
 
         try:
+            self.workbench.cloud_state = "cm"
+            self.workbench.save()
             utils.run_terraform(terraform_dir / self.cloud_dir, "init")
             utils.run_terraform(
                 terraform_dir / self.cloud_dir, "validate", extra_env=extra_env
@@ -234,9 +318,11 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
                 print(cpe.stdout.decode("utf-8"))
             if cpe.stderr:
                 print(cpe.stderr.decode("utf-8"))
+            self.workbench.status = "e"
+            self.workbench.save()
             raise
 
-    def run_terraform(self):
+    def _terraform_create(self):
         terraform_dir = self.workbench_dir / "terraform"
         extra_env = {
             "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
@@ -248,10 +334,23 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
             # Look for Management Public IP in terraform.tfstate
             tf_state_file = terraform_dir / self.cloud_dir / "terraform.tfstate"
             with tf_state_file.open("r") as statefp:
-                state = json.load(statefp)
-                workbench_name = state["outputs"]["workbench_id"]["value"]
+                outputs = json.load(statefp)["outputs"]
+                wb_name = "UNKNOWN"
+                try:
+                    wb_name = outputs["notebook_instance_names"]["value"][0]
+                except KeyError:
+                    logger.error(
+                        "Failed to parse workbench instance name from TF state"
+                    )
+                    try:
+                        deployment_id = outputs["deployment_id"]["value"]
+                        wb_name = f"notebooks-instance-{deployment_id}-0"
+                    except KeyError:
+                        logger.error(
+                            "Failed to parse deployment ID from TF state"
+                        )
                 # workbench is now being initialized
-                self.workbench.internal_name = workbench_name
+                self.workbench.internal_name = wb_name
                 self.workbench.cloud_state = "m"
                 self.workbench.status = "i"
 
@@ -261,27 +360,50 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
         except subprocess.CalledProcessError as err:
             # We can error during provisioning, in which case Terraform
             # doesn't tear things down.  Run a `destroy`, just in case
+            self.workbench.status = "e"
+            self.workbench.cloud_state = "um"
+            self.workbench.save()
             logger.error("Terraform apply failed", exc_info=err)
             if err.stdout:
                 logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
             if err.stderr:
                 logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
-            try:
-                logger.error("Attempting to clean up with Terraform destroy")
-                utils.run_terraform(terraform_dir / self.cloud_dir, "destroy")
-            except subprocess.CalledProcessError as err2:
-                logger.error("Terraform destroy failed", exc_info=err2)
-                if err2.stdout:
-                    logger.info("TF stdout:\n%s\n", err2.stdout.decode("utf-8"))
-                if err2.stderr:
-                    logger.info("TF stderr:\n%s\n", err2.stderr.decode("utf-8"))
-                logger.error("Resources may still exist - check manually!")
-                raise
-            else:
-                logger.error("Terraform destroy succeeded")
+
+            logger.error("Attempting to clean up with Terraform destroy")
+            self._terraform_destroy()
+
+
+    def _terraform_destroy(self):
+        terraform_dir = self.workbench_dir / "terraform"
+        extra_env = {
+            "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
+        }
+        self.workbench.status = "t"
+        self.workbench.cloud_state = "dm"
+        self.workbench.save()
+        try:
+            utils.run_terraform(
+                terraform_dir / self.cloud_dir, "destroy", extra_env=extra_env
+            )
+        except subprocess.CalledProcessError as err:
+            logger.error("Terraform destroy failed", exc_info=err)
+            if err.stdout:
+                logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
+            if err.stderr:
+                logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
+            logger.error("Resources may still exist - check manually!")
+            self.workbench.cloud_state = "um"
+            self.workbench.status = "e"
+            self.workbench.save()
             raise
 
-    def get_workbench_proxy_uri(self):
+        logger.info("Terraform destroy succeeded")
+        self.workbench.status = "d"
+        self.workbench.cloud_state = "xm"
+        self.workbench.save()
+
+    @retry(ValueError, tries=10, delay=30, logger=logger)
+    def _get_proxy_uri(self):
         # set terraform dir
         terraform_dir = self.workbench_dir / "terraform"
         extra_env = {
@@ -289,43 +411,12 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
         }
 
         try:
-            tf_state_file = terraform_dir / self.cloud_dir / "terraform.tfstate"
-            if os.path.exists(tf_state_file):
-                file_time = datetime.utcfromtimestamp(
-                    os.path.getmtime(tf_state_file)
-                )
-                check_time = datetime.utcnow() - timedelta(seconds=60)
-
-                if file_time < check_time:
-                    utils.run_terraform(
-                        terraform_dir / self.cloud_dir,
-                        "apply",
-                        ["-refresh-only"],
-                        extra_env=extra_env,
-                    )
-
-                    with tf_state_file.open("r") as statefp:
-                        state = json.load(statefp)
-                        try:
-                            self.workbench.proxy_uri = state["resources"][3][
-                                "instances"
-                            ][0]["attributes"]["proxy_uri"]
-                            if (
-                                state["resources"][3]["instances"][0][
-                                    "attributes"
-                                ]["state"]
-                                == "ACTIVE"
-                            ):
-                                self.workbench.status = "r"
-
-                        except Exception as err:  # pylint: disable=broad-except
-                            logger.error(
-                                "Failed to read terraform state file: %s", err
-                            )
-                            raise
-
-                        self.workbench.save()
-
+            utils.run_terraform(
+                terraform_dir / self.cloud_dir,
+                "apply",
+                ["-refresh-only"],
+                extra_env=extra_env,
+            )
         except subprocess.CalledProcessError as err:
             logger.error("Terraform refresh failed", exc_info=err)
             if err.stdout:
@@ -333,3 +424,25 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
             if err.stderr:
                 logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
             raise
+
+        tf_state_file = terraform_dir / self.cloud_dir / "terraform.tfstate"
+        with tf_state_file.open("r") as statefp:
+            outputs = json.load(statefp)["outputs"]
+            try:
+                wb_uri = outputs["notebook_proxy_uris"]["value"][0]
+            except KeyError:
+                logger.error(
+                    "Failed to get workbench uri from TF output"
+                )
+                raise
+
+        if not wb_uri:
+            logger.info("Awaiting workbench uri update (got \"%s\")", wb_uri)
+            raise ValueError("Got empty URI")
+
+        logger.info("Got workbench_uri: %s", wb_uri)
+        self.workbench.proxy_uri = wb_uri
+        self.workbench.save()
+
+
+
