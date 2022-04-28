@@ -128,7 +128,7 @@ install the additional required software take time to complete. Typically, this 
 around 8 minutes on the controller and 2-3 minutes on the login and compute
 nodes.
 
-If you SSH into the login node following the instructions below, you should
+If you see the following message when you SSH into the login node following the instructions in the next step, you should
 logout and give more time for the startup script to complete.
 
 > _`Slurm is currently being configured in the background`_
@@ -148,10 +148,9 @@ gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --
 The following line would indicate that the startup script completed on the controller:
 >_`slurm-hpc-intel-select-controller google_metadata_script_runner: startup-script exit status 0`_
 
-## Run a Job on the Cluster
+## Connecting to the login node
 
-Once the startup script has completed and Slurm reports readiness, take the
-following steps to run a job:
+Once the startup script has completed and Slurm reports readiness, connect to the login node.
 
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >
    `VM instances` in the Google Cloud Console:
@@ -171,9 +170,11 @@ following steps to run a job:
    This will open a separate pop up window with a terminal into our newly created
    Slurm login VM.
 
+## Run a Job on the Cluster
+
    **The commands below should be run on the login node.**
 
-1. Next you will create a default ssh key to be able to ssh between nodes:
+1. Create a default ssh key to be able to ssh between nodes:
 
    ```shell
    ssh-keygen -N '' -f ~/.ssh/id_rsa
@@ -214,7 +215,7 @@ using Intel 3.9 GHz Cascade Lake processors and with placement groups enabled.
 Nodes will not be re-used across jobs and will be immediately destroyed after
 the job is completed.
 
-The results of the run will be stored in `clck_results.log`.
+The outputs of `clck` will be stored in `clck_execution_warnings.log` and `clck_results.log`.
 
 > **_NOTE:_** If the Slurm controller is shut down before the auto-scale nodes
 > are destroyed then they will be left running.
