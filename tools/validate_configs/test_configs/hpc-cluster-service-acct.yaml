@@ -22,9 +22,9 @@ vars:
   region: europe-west4
   zone: europe-west4-a
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
+  modules:
   - source: modules/network/vpc
     kind: terraform
     id: network1

@@ -22,16 +22,16 @@ vars:
   region: europe-west4
   zone: europe-west4-a
 
-resource_groups:
+deployment_groups:
 - group: network
-  resources:
+  modules:
   - source: modules/network/vpc
     kind: terraform
     id: network1
     settings:
       network_name: $(vars.deployment_name)
 - group: packer
-  resources:
+  modules:
   - source: modules/packer/custom-image
     kind: packer
     id: my-custom-image

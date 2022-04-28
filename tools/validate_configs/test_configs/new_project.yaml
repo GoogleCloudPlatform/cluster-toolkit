@@ -19,9 +19,9 @@ blueprint_name: new_project
 vars:
   deployment_name: new_project_deployment
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
+  modules:
   - source: ./community/modules/project/new-project
     kind: terraform
     id: project

@@ -28,9 +28,9 @@ terraform_backend_defaults:
     bucket: a_bucket
     impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
+  modules:
   - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1

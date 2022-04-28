@@ -22,9 +22,9 @@ vars:
   region: us-central1
   zone: us-central1-a
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
+  modules:
   - source: modules/network/vpc
     kind: terraform
     id: network1

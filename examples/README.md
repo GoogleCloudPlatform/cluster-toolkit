@@ -258,9 +258,9 @@ vars:
     global_label: label_value
 
 # Many modules can be added from local and remote directories.
-resource_groups:
+deployment_groups:
 - group: groupName
-  resources:
+  modules:
 
   # Local source, prefixed with ./ (/ and ../ also accepted)
   - source: ./modules/role/module-name # Required: Points to the module directory.
@@ -377,9 +377,9 @@ other modules. For global and module variables, the syntax is as follows:
 vars:
   zone: us-central1-a
 
-resource_groups:
+deployment_groups:
   - group: primary
-     resources:
+     modules:
        - source: path/to/module/1
          id: resource1
          ...

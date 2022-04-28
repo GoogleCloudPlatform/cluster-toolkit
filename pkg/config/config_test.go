@@ -47,9 +47,9 @@ terraform_backend_defaults:
   type: gcs
   configuration:
     bucket: hpc-toolkit-tf-state
-resource_groups:
+deployment_groups:
 - group: group1
-  resources:
+  modules:
   - source: ./modules/network/vpc
     kind: terraform
     id: "vpc"
