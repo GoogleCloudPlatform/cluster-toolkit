@@ -36,6 +36,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_project_radlab_ds_analytics"></a> [project\_radlab\_ds\_analytics](#module\_project\_radlab\_ds\_analytics) | terraform-google-modules/project-factory/google | ~> 11.0 |
 | <a name="module_vpc_ai_notebook"></a> [vpc\_ai\_notebook](#module\_vpc\_ai\_notebook) | terraform-google-modules/network/google | ~> 3.0 |
+| <a name="module_waitforstartup"></a> [waitforstartup](#module\_waitforstartup) | ./wait-for-startup | n/a |
 
 ## Resources
 
@@ -93,6 +94,7 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_deployment_id"></a> [deployment\_id](#output\_deployment\_id) | RADLab Module Deployment ID |
-| <a name="output_notebooks_instance_names"></a> [notebooks\_instance\_names](#output\_notebooks\_instance\_names) | Notebook Instance Names |
+| <a name="output_notebook_instance_names"></a> [notebook\_instance\_names](#output\_notebook\_instance\_names) | Notebook Instance Names |
+| <a name="output_notebook_proxy_uris"></a> [notebook\_proxy\_uris](#output\_notebook\_proxy\_uris) | Notebook Proxy URIs |
 | <a name="output_project_radlab_ds_analytics_id"></a> [project\_radlab\_ds\_analytics\_id](#output\_project\_radlab\_ds\_analytics\_id) | Analytics Project ID |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

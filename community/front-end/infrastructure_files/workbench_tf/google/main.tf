@@ -201,6 +201,17 @@ resource "google_notebooks_instance" "ai_notebook" {
     terraform  = "true"
     proxy-mode = "mail"
   }
-  depends_on = [time_sleep.wait_120_seconds]
 
+}
+
+module "waitforstartup" {
+
+  source = "./wait-for-startup"
+
+  count = length(google_notebooks_instance.ai_notebook)
+
+  instance_name = google_notebooks_instance.ai_notebook[count.index].name
+  zone          = google_notebooks_instance.ai_notebook[count.index].location
+  project_id    = google_notebooks_instance.ai_notebook[count.index].project
+  timeout       = 1200
 }

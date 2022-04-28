@@ -41,6 +41,7 @@ CLOUD_RESOURCE_MGMT_STATUS = (
     ("m", "Managed/Running"),  # Created, operational, managed
     ("dm", "Destroying"),  # In the process of deleting, managed
     ("xm", "Destroyed"),  # Deleted, managed
+    ("um", "Unknown"),  # Unknown, following error
 )
 
 
@@ -642,7 +643,7 @@ class Cluster(CloudResource):
 
     def __str__(self):
         """String for representing the Model object."""
-        return f"Cluster '{self.name}'"
+        return f"Cluster {self.id} '{self.name}'"
 
 
 class ComputeInstance(CloudResource):
@@ -1288,6 +1289,14 @@ class Workbench(CloudResource):
         null=True,
         blank=True,
     )
+    attached_cluster = models.ForeignKey(
+        Cluster,
+        related_name="workbench_cluster",
+        help_text="Cluster to which jobs may be submitted",
+        on_delete=RESTRICT_IF_CLOUD_ACTIVE,
+        null=True,
+        blank=True,
+    )
     WORKBENCH_STATUS = (
         ("n", "Workbench is being newly configured by user"),
         ("c", "Workbench is being created"),
@@ -1331,12 +1340,14 @@ class Workbench(CloudResource):
         help_text="Select primary user authorised to use this workbench",
         on_delete=models.RESTRICT,
     )
+    # pylint: disable=line-too-long
     WORKBENCH_IMAGEFAMILIES = (
-        ("common-cpu-notebooks", "Base Python 3 (with Intel MKL)"),
-        ("tf-latest-cpu", "TensorFlow Enterprise (Intel® MKL-DNN/MKL)"),
-        ("pytorch-latest-cpu", "PyTorch"),
-        ("r-latest-cpu-experimental", "R (Experimental)"),
+        ("common-cpu-notebooks-ubuntu-2004", "Base Python 3 (with Intel MKL)"),
+        ("tf-latest-cpu-ubuntu-2004", "TensorFlow Enterprise (Intel® MKL-DNN/MKL)"),
+        ("pytorch-latest-cpu-ubuntu-2004", "PyTorch"),
+        ("r-latest-cpu-experimental-ubuntu-2004", "R (Experimental)"),
     )
+    # pylint: enable=line-too-long
     image_family = models.CharField(
         max_length=32,
         choices=WORKBENCH_IMAGEFAMILIES,

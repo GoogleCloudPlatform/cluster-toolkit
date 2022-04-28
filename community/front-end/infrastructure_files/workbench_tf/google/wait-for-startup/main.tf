@@ -13,23 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-output "deployment_id" {
-  description = "RADLab Module Deployment ID"
-  value       = local.random_id
+locals {
+  retries = var.timeout / 30
 }
-
-output "project_radlab_ds_analytics_id" {
-  description = "Analytics Project ID"
-  value       = local.project.project_id
-}
-
-output "notebook_instance_names" {
-  description = "Notebook Instance Names"
-  value       = [for nb in google_notebooks_instance.ai_notebook : nb.name]
-}
-
-output "notebook_proxy_uris" {
-  description = "Notebook Proxy URIs"
-  value       = [for nb in google_notebooks_instance.ai_notebook : nb.proxy_uri]
+resource "null_resource" "wait_for_startup" {
+  provisioner "local-exec" {
+    command = "/bin/bash ${path.module}/scripts/wait-for-startup-status.sh"
+    environment = {
+      INSTANCE_NAME = var.instance_name
+      ZONE          = var.zone
+      PROJECT_ID    = var.project_id
+      RETRIES       = local.retries
+    }
+  }
 }

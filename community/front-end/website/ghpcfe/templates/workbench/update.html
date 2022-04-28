@@ -59,6 +59,12 @@
         {{ form.image_family }}
           <small class="form-text text-muted">{{ form.image_family.help_text }}</small>
       </div>
+      <div class="form-group">
+        {{ form.attached_cluster.errors }}
+        {{ form.attached_cluster.label_tag }}
+        {{ form.attached_cluster }}
+          <small class="form-text text-muted">{{ form.attached_cluster.help_text }}</small>
+      </div>
   
       <br/>
 

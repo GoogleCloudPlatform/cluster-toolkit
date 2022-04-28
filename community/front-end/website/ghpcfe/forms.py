@@ -287,13 +287,12 @@ class WorkbenchForm(forms.ModelForm):
             # Need to disable certain widgets
             self.fields["subnet"].disabled = True
             self.fields["cloud_zone"].disabled = True
+            self.fields["attached_cluster"].disabled = True
 
         self.workbench_zones = cloud_info.get_gcp_workbench_region_zone_info(
             credential.detail
         )
-        if "n" not in self.instance.cloud_state:
-            # Need to disable certain widgets
-            self.fields["subnet"].disabled = True
+
         # Pull instance types from cloud_info
         instance_types = cloud_info.get_machine_types(
             "GCP", credential.detail, "europe-west4", "europe-west4-a"
@@ -347,6 +346,9 @@ class WorkbenchForm(forms.ModelForm):
             # append final preset instance type from loop
             choices_list.append((category, tuple(instance_list)))
         self.fields["machine_type"].widget.choices = choices_list
+        self.fields["attached_cluster"].queryset= Cluster.objects.exclude(
+                cloud_state__in=["dm", "xm"]
+                )
 
     class Meta:
         model = Workbench
@@ -361,6 +363,7 @@ class WorkbenchForm(forms.ModelForm):
             "boot_disk_type",
             "boot_disk_capacity",
             "image_family",
+            "attached_cluster",
         )
 
         widgets = {
@@ -372,6 +375,7 @@ class WorkbenchForm(forms.ModelForm):
             "machine_type": forms.Select(attrs={"class": "form-control"}),
             "cloud_zone": forms.Select(attrs={"class": "form-control"}),
             "trusted_users": forms.Select(attrs={"class": "form-control"}),
+            "attached_cluster": forms.Select(attrs={"class": "form-control"}),
         }
 
 
