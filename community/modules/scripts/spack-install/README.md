@@ -36,7 +36,7 @@ see this module used in a full blueprint, see the [spack-gromacs.yaml] example.
     settings:
       install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
-      spack_ref: v0.17.0
+      spack_ref: v0.18.0
       spack_cache_url:
       - mirror_name: 'gcs_cache'
         mirror_url: gs://example-buildcache/linux-centos7
@@ -48,23 +48,49 @@ see this module used in a full blueprint, see the [spack-gromacs.yaml] example.
         scope: defaults
         value: |
           modules:
-            tcl:
-              hash_length: 0
-              all:
-                conflict:
-                  - '{name}'
-              projections:
-                all: '{name}/{version}-{compiler.name}-{compiler.version}'
+            default:
+              tcl:
+                hash_length: 0
+                all:
+                  conflict:
+                    - '{name}'
+                projections:
+                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
       - cmake%gcc@10.3.0 target=x86_64
       environments:
       - name: main-env
+        type: packages
         packages:
         - intel-mkl%gcc@10.3.0 target=skylake
         - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
         - fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5 target=x86_64
+      - name: explicit-env
+        type: file
+        value: |
+          spack:
+            definitions:
+            - compilers:
+              - gcc@10.3.0
+            - mpis:
+              - intel-mpi@2018.4.274
+            - packages:
+              - intel-mkl
+            - mpi_packages:
+              - fftw
+            specs:
+            - matrix:
+              - - $packages
+              - - $%compilers
+            - matrix:
+              - - $mpis
+              - - $%compilers
+            - matrix:
+              - - $mpi_packages
+              - - $%compilers
+              - - $^mpis
 ```
 
 Following the above description of this module, it can be added to a Slurm
@@ -139,16 +165,18 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_caches_to_populate"></a> [caches\_to\_populate](#input\_caches\_to\_populate) | Defines caches which will be populated with the installed packages.<br>  Each cache must specify a type (either directory, or mirror).<br>  Each cache must also specify a path. For directory caches, this path<br>  must be on a local file system (i.e. file:///path/to/cache). For<br>  mirror paths, this can be any valid URL that spack accepts.<br><br>  NOTE: GPG Keys should be installed before trying to populate a cache<br>  with packages.<br><br>  NOTE: The gpg\_keys variable can be used to install existing GPG keys<br>  and create new GPG keys, both of which are acceptable for populating a<br>  cache. | `list(map(any))` | `[]` | no |
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | Defines compilers for spack to install before installing packages. | `list(string)` | `[]` | no |
+| <a name="input_concretize_flags"></a> [concretize\_flags](#input\_concretize\_flags) | Defines the flags to pass into `spack concretize` | `string` | `""` | no |
 | <a name="input_configs"></a> [configs](#input\_configs) | List of configuration options to set within spack.<br>    Configs can be of type 'single-config' or 'file'.<br>    All configs must specify a value, and a<br>    a scope. | `list(map(any))` | `[]` | no |
-| <a name="input_environments"></a> [environments](#input\_environments) | Defines a spack environment to configure. | <pre>list(object({<br>    name     = string<br>    packages = list(string)<br>  }))</pre> | `null` | no |
+| <a name="input_environments"></a> [environments](#input\_environments) | Defines a spack environment to configure. | `list(map(any))` | `[]` | no |
 | <a name="input_gpg_keys"></a> [gpg\_keys](#input\_gpg\_keys) | GPG Keys to trust within spack.<br>  Each key must define a type. Valid types are 'file' and 'new'.<br>  Keys of type 'file' must define a path to the key that<br>  should be trusted.<br>  Keys of type 'new' must define a 'name' and 'email' to create<br>  the key with. | `list(map(any))` | `[]` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory to install spack into. | `string` | `"/sw/spack"` | no |
+| <a name="input_install_flags"></a> [install\_flags](#input\_install\_flags) | Defines the flags to pass into `spack install` | `string` | `""` | no |
 | <a name="input_licenses"></a> [licenses](#input\_licenses) | List of software licenses to install within spack. | <pre>list(object({<br>    source = string<br>    dest   = string<br>  }))</pre> | `null` | no |
 | <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Defines the logfile that script output will be written to | `string` | `"/dev/null"` | no |
 | <a name="input_packages"></a> [packages](#input\_packages) | Defines root packages for spack to install (in order). | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | List of buildcaches for spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
-| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"develop"` | no |
+| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.18.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | The GCP zone where the instance is running. | `string` | n/a | yes |
 

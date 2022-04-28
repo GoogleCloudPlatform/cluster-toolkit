@@ -39,7 +39,7 @@ variable "spack_url" {
 variable "spack_ref" {
   description = "Git ref to checkout for spack."
   type        = string
-  default     = "develop"
+  default     = "v0.18.0"
 }
 
 variable "spack_cache_url" {
@@ -105,6 +105,18 @@ variable "packages" {
   description = "Defines root packages for spack to install (in order)."
   default     = []
   type        = list(string)
+}
+
+variable "install_flags" {
+  description = "Defines the flags to pass into `spack install`"
+  default     = ""
+  type        = string
+}
+
+variable "concretize_flags" {
+  description = "Defines the flags to pass into `spack concretize`"
+  default     = ""
+  type        = string
 }
 
 variable "gpg_keys" {
@@ -178,11 +190,32 @@ EOT
 
 variable "environments" {
   description = "Defines a spack environment to configure."
-  default     = null
-  type = list(object({
-    name     = string
-    packages = list(string)
-  }))
+  default     = []
+  type        = list(map(any))
+  validation {
+    condition = alltrue([
+      for e in var.environments : (contains(keys(e), "name") && contains(keys(e), "type"))
+    ])
+    error_message = "All environments must have a name and type."
+  }
+  validation {
+    condition = alltrue([
+      for e in var.environments : (e["type"] == "file" || e["type"] == "packages")
+    ])
+    error_message = "Valid environment types are 'file' and 'packages'."
+  }
+  validation {
+    condition = alltrue([
+      for e in var.environments : ((e["type"] == "packages" && contains(keys(e), "packages")) || e["type"] == "file")
+    ])
+    error_message = "Environments of type 'packages' require a packages list."
+  }
+  validation {
+    condition = alltrue([
+      for e in var.environments : (e["type"] == "packages" || (e["type"] == "file" && contains(keys(e), "value")))
+    ])
+    error_message = "Environments of type 'file' require a 'value' string."
+  }
 }
 
 variable "log_file" {

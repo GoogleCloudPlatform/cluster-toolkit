@@ -37,7 +37,7 @@ if [ ! -d ${INSTALL_DIR} ]; then
 
     %{if c.type == "file" ~}
       {
-      cat <<EOF > ${INSTALL_DIR}/spack_conf.yaml
+      cat << 'EOF' > ${INSTALL_DIR}/spack_conf.yaml
 ${c.value}
 EOF
 
@@ -77,7 +77,7 @@ echo "$PREFIX Installing licenses..."
 echo "$PREFIX Installing compilers..."
 %{for c in COMPILERS ~}
   {
-    spack install ${c};
+    spack install ${INSTALL_FLAGS} ${c};
     spack load ${c};
     spack clean -s
   } &>> ${LOG_FILE}
@@ -87,26 +87,39 @@ spack compiler find --scope site >> ${LOG_FILE} 2>&1
 
 echo "$PREFIX Installing root spack specs..."
 %{for p in PACKAGES ~}
-  spack install ${p} >> ${LOG_FILE} 2>&1
+  spack install ${INSTALL_FLAGS} ${p} >> ${LOG_FILE} 2>&1
   spack clean -s
 %{endfor ~}
 
 echo "$PREFIX Configuring spack environments"
 %{for e in ENVIRONMENTS ~}
-  {
-    spack env create ${e.name};
-    spack env activate ${e.name};
-  } &>> ${LOG_FILE}
+  %{if e.type == "file" ~}
+    {
+      cat << 'EOF' > ${INSTALL_DIR}/spack_env.yaml
+${e.value}
+EOF
+      spack env create ${e.name} ${INSTALL_DIR}/spack_env.yaml
+      rm -f ${INSTALL_DIR}/spack_env.yaml
+      spack env activate ${e.name}
+    } &>> ${LOG_FILE} 2>&1
+  %{endif ~}
 
-  echo "$PREFIX    Configuring spack environment ${e.name}"
-  %{for p in e.packages ~}
-    spack add ${p} >> ${LOG_FILE} 2>&1
-  %{endfor ~}
+  %{if e.type == "packages" ~}
+    {
+      spack env create ${e.name};
+      spack env activate ${e.name};
+    } &>> ${LOG_FILE}
+
+    echo "$PREFIX    Configuring spack environment ${e.name}"
+    %{for p in e.packages ~}
+      spack add ${p} >> ${LOG_FILE} 2>&1
+    %{endfor ~}
+  %{endif ~}
 
   echo "$PREFIX    Concretizing spack environment ${e.name}"
-  spack concretize >> ${LOG_FILE} 2>&1
+  spack concretize ${CONCRETIZE_FLAGS} >> ${LOG_FILE} 2>&1
   echo "$PREFIX    Installing packages for spack environment ${e.name}"
-  spack install >> ${LOG_FILE} 2>&1
+  spack install ${INSTALL_FLAGS} >> ${LOG_FILE} 2>&1
 
   spack env deactivate >> ${LOG_FILE} 2>&1
   spack clean -s

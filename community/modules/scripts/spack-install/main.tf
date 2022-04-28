@@ -27,6 +27,8 @@ locals {
       CONFIGS            = var.configs == null ? [] : var.configs
       LICENSES           = var.licenses == null ? [] : var.licenses
       PACKAGES           = var.packages == null ? [] : var.packages
+      INSTALL_FLAGS      = var.install_flags == null ? "" : var.install_flags
+      CONCRETIZE_FLAGS   = var.concretize_flags == null ? "" : var.concretize_flags
       ENVIRONMENTS       = var.environments == null ? [] : var.environments
       MIRRORS            = var.spack_cache_url == null ? [] : var.spack_cache_url
       GPG_KEYS           = var.gpg_keys == null ? [] : var.gpg_keys
