@@ -16,6 +16,13 @@
   <!-- Add additional CSS in static file -->
   {% load static %}
   <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+  <style type="text/css">
+    li.nav-item a img {
+        display: inline-block;
+        margin-right: 20px;
+        width: 24px;
+    }
+  </style>
 
   {% block extrameta %}{% endblock %}
 </head>
@@ -76,46 +83,52 @@
 
   <div class="container-fluid">
     <div class="row" style="background-color: #fbfbfb;">
-      <div class="col-sm-2 text-white" style="background-color: #306dc1; flex: 1;">
-        <nav class="navbar">
+      <div class="col-sm-2 text-white" style="background-color: #306dc1; flex: 1; min-height: calc(100vh - 57px);">
+        <div class="d-flex flex-column h-100">
+        <nav class="navbar flex-grow-1 align-content-start">
           <ul class="navbar-nav">
             <li id="navtab-home" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'index' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-home.png" width="24">Home</a>
+              <a class="nav-link" style="color: white;" href="{% url 'index' %}"><img src="/static/img/white-home.png">Home</a>
             </li>
             <li id="navtab-user" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'users' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-user.png" width="24">Users</a>
+              <a class="nav-link" style="color: white;" href="{% url 'users' %}"><img src="/static/img/white-user.png">Users</a>
             </li>
             <li id="navtab-credential" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'credentials' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-credential.png" width="24">Credentials</a>
+              <a class="nav-link" style="color: white;" href="{% url 'credentials' %}"><img src="/static/img/white-credential.png">Credentials</a>
             </li>
             <li id="navtab-vpc" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'vpcs' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-network.png" width="24">Networks</a>
+              <a class="nav-link" style="color: white;" href="{% url 'vpcs' %}"><img src="/static/img/white-network.png">Networks</a>
             </li>
             <li id="navtab-fs" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'filesystems' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-filesystem.png" width="24">Filesystems</a>
+              <a class="nav-link" style="color: white;" href="{% url 'filesystems' %}"><img src="/static/img/white-filesystem.png">Filesystems</a>
             </li>
             <li id="navtab-cluster" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'clusters' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-cluster.png" width="24">Clusters</a>
+              <a class="nav-link" style="color: white;" href="{% url 'clusters' %}"><img src="/static/img/white-cluster.png">Clusters</a>
             </li>
             <li id="navtab-application" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'applications' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-application.png" width="24">Applications</a>
+              <a class="nav-link" style="color: white;" href="{% url 'applications' %}"><img src="/static/img/white-application.png">Applications</a>
             </li>
             <li id="navtab-job" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'jobs' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-job.png" width="24">Jobs</a>
+              <a class="nav-link" style="color: white;" href="{% url 'jobs' %}"><img src="/static/img/white-job.png">Jobs</a>
             </li>
             <li id="navtab-workbench" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'workbench' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/workbench-white.png" width="24">Workbench</a>
+              <a class="nav-link" style="color: white;" href="{% url 'workbench' %}"><img src="/static/img/workbench-white.png">Workbench</a>
             </li>
             <li id="navtab-benchmark" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'benchmarks' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-benchmark.png" width="24">Benchmarks</a>
+              <a class="nav-link" style="color: white;" href="{% url 'benchmarks' %}"><img src="/static/img/white-benchmark.png">Benchmarks</a>
             </li>
             <li id="navtab-grafana" class="nav-item">
-              <a class="nav-link" style="color: white;" href="{% url 'grafana' %}"><img style="display: inline-block; margin-right: 20px;" src="/static/img/white-benchmark.png" width="24">Grafana</a>
+              <a class="nav-link" style="color: white;" href="{% url 'grafana' %}"><img src="/static/img/white-grafana.png">Grafana</a>
             </li>
           </ul>
         </nav>  
+        <div class="col-1 align-bottom mb-5 ml-5"> <!-- fixed-bottom -->
+          <img src="/static/img/white-servers.png" width="128">
+        </div>
+        </div>
       </div>
-      <div class="col-sm-10 mt-3" style="min-height:100vh; flex:1;">
+      {% block padded_content %}
+      <div class="col-sm-10 mt-3" style="flex:1;">
         {% if messages %}
           {% for message in messages %}
             <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>
@@ -123,13 +136,9 @@
         {% endif %}
         {% block content %}{% endblock %}
       </div>
+      {% endblock %}
     </div>
 
-    <div class="row" >
-       <div class="col-1 fixed-bottom mb-5 ml-5">
-          <img src="/static/img/white-servers.png" width="128">
-        </div>
-    </div>
   </div>
 
   <script language="javascript">

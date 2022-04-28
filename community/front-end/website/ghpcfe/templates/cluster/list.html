@@ -72,7 +72,7 @@
               {% if cluster.status == "n" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-start-cluster' cluster.id %}">Create</a>
               {% endif %}
-              {% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s"  %}
+              {% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s" or cluster.status == "e" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-destroy' cluster.id %}">Destroy</a>
               {% endif %}
               {% if cluster.status == "r" %}
