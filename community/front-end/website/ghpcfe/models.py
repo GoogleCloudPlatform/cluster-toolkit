@@ -1381,7 +1381,7 @@ class Workbench(CloudResource):
     )
     # pylint: enable=line-too-long
     image_family = models.CharField(
-        max_length=32,
+        max_length=64,
         choices=WORKBENCH_IMAGEFAMILIES,
         default="base-cpu",
         help_text="Select the image family that you wish to use",
