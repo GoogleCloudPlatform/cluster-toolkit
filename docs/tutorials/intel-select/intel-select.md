@@ -195,6 +195,11 @@ This may take a minute while Slurm auto-scales to create the nodes. If you are
 curious you can refresh the `Compute Engine` > `VM instances` page and see that
 additional VMs have been created.
 
+If the allocation fails, try submitting the job to the debug partition,
+by removing the `-p compute` parameter to `salloc`. The message `salloc:
+PrologSlurmctld failed, job killed` most likely indicates that your project does
+not have sufficient quota for C2 instances in your region.
+
 1. Once the allocation is complete, you will be presented with a shell. Run:
 
 ```shell
