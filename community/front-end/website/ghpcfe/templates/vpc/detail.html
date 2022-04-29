@@ -91,7 +91,7 @@
       {% else %}
       <tr>
         <td colspan="3">
-          {% if "c" not in object.cloud_state %}
+          {% if "nm" == object.cloud_state %}
           Click the <b>Edit Subnets</b> button below to configure subnets.</td> 
           {% endif %}
       </tr>
