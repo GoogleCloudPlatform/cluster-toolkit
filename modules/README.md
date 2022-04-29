@@ -224,7 +224,7 @@ modules:
     ...
 ```
 
-In this snippet, the simple instance, `workstation`, uses the outputs of vpc
+In this snippet, the VM instance `workstation` uses the outputs of vpc
 `network1`.
 
 In this case both `network_self_link` and `subnetwork_self_link` in the
