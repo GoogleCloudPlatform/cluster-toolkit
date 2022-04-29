@@ -593,18 +593,22 @@ successfully passing.
 
 Now pre-commit is configured to automatically run before you commit.
 
-### Packer Documentation
+### Packer
 
-Auto-generated READMEs are created for Packer modules similar to Terraform
-modules. These docs are generated as part of a pre-commit hook (packer-readme)
-which searches for `*.pkr.hcl` files. If a packer config is written in another
-file, for instance JSON, terraform docs should be run manually against the
-module directory before pushing changes. To generate the documentation, run
-the following script against the packer config file:
+The Toolkit supports Packer templates in the contemporary [HCL2 file
+format][pkrhcl2] and not in the legacy JSON file format. We require the use of
+Packer 1.7 or above, and recommend using the latest release.
 
-```shell
-tools/autodoc/terraform_docs.sh modules/packer/new_resource/image.json
-```
+The Toolkit's [Packer template module documentation][pkrmodreadme] describes
+input variables and their behavior. An [image-building example][pkrexample]
+and [usage instructions][pkrexamplereadme] are provided. The example integrates
+Packer, Terraform and Toolkit Runners to demonstrate the power of customizing
+images using the same scripts that can be applied at boot-time.
+
+[pkrhcl2]: https://www.packer.io/guides/hcl
+[pkrmodreadme]: modules/packer/custom-image/README.md
+[pkrexamplereadme]: examples/README.md#image-builderyaml
+[pkrexample]: examples/image-builder.yaml
 
 ### Contributing
 

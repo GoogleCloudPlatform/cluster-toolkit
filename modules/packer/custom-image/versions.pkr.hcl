@@ -13,6 +13,8 @@
 #  limitations under the License.
 
 packer {
+  required_version = "~> 1.7"
+
   required_plugins {
     googlecompute = {
       version = "~> 1.0"
