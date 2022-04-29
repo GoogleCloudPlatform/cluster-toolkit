@@ -14,7 +14,7 @@ the HPC environment
 
 The integration test yml, either `slurm-integration-tests` or
 `basic-integration-tests`, under ansible_playbooks, in turn calls the creation
-of the blueprint (create_blueprints.sh) and the post_deploy_tests.
+of the blueprint (create_deployment.sh) and the post_deploy_tests.
 
 To run the tests on your own project, with your own files, use:
 

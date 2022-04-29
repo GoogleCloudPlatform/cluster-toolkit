@@ -30,8 +30,8 @@
       path: "/builder/home/.ssh/id_rsa"
 
   ## Create cluster
-  - name: Create blueprint
-    command: "{{ scripts_dir }}/create_blueprint.sh"
+  - name: Create Deployment Directory
+    command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
       MAX_NODES: "{{ max_nodes }}"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"

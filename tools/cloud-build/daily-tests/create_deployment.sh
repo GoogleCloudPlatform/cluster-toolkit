@@ -42,19 +42,9 @@ cd "$ROOT_DIR" ||
 make
 
 ## Customize config yaml
-sed -i "s/project_id: .*/project_id: ${PROJECT_ID}/" "${EXAMPLE_YAML}" ||
-	{
-		echo "could not set project_id"
-		exit 1
-	}
 sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT_DIR}/" "${EXAMPLE_YAML}" ||
 	{
 		echo "could not set blueprint_name"
-		exit 1
-	}
-sed -i "s/deployment_name: .*/deployment_name: ${DEPLOYMENT_NAME}/" "${EXAMPLE_YAML}" ||
-	{
-		echo "could not set deployment_name"
 		exit 1
 	}
 sed -i "s/network_name: .*/network_name: ${NETWORK}/" "${EXAMPLE_YAML}" ||
@@ -67,7 +57,8 @@ sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/" "${EXAMPLE_YAML}" ||
 	}
 
 ## Create blueprint and create artifact
-./ghpc create "${EXAMPLE_YAML}" ||
+./ghpc create "${EXAMPLE_YAML}" \
+	--vars project_id="${PROJECT_ID}",deployment_name="${DEPLOYMENT_NAME}" ||
 	{
 		echo "could not write blueprint"
 		exit 1

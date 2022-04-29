@@ -19,9 +19,9 @@
   vars:
     scripts_dir: "{{ workspace }}/tools/cloud-build/daily-tests"
   tasks:
-  ## Create blueprint
-  - name: Create blueprint
-    command: "{{ scripts_dir }}/create_blueprint.sh"
+  ## Create Deployment
+  - name: Create Deployment Directory
+    command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
