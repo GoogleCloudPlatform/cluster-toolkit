@@ -14,11 +14,16 @@
  * limitations under the License.
 */
 
+data "google_compute_image" "compute_image" {
+  family  = var.instance_image.family
+  project = var.instance_image.project
+}
+
 module "slurm_cluster_controller" {
   source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.1.5"
   boot_disk_size                = var.boot_disk_size
   boot_disk_type                = var.boot_disk_type
-  image                         = var.controller_image
+  image                         = data.google_compute_image.compute_image.self_link
   instance_template             = var.controller_instance_template
   cluster_name                  = var.cluster_name != null ? var.cluster_name : "slurm-${var.deployment_name}"
   compute_node_scopes           = var.compute_node_scopes
