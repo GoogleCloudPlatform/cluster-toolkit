@@ -40,21 +40,21 @@ func (s *MySuite) TestExpandBackends(c *C) {
 	bc.Config.TerraformBackendDefaults = *tfBackend
 	err = bc.expandBackends()
 	c.Assert(err, IsNil)
-	grp := bc.Config.ResourceGroups[0]
+	grp := bc.Config.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix := grp.TerraformBackend.Configuration["prefix"]
 	expPrefix := fmt.Sprintf("%s/%s", bc.Config.BlueprintName, grp.Name)
 	c.Assert(gotPrefix, Equals, expPrefix)
 
 	// Add a new resource group, ensure each group name is included
-	newGroup := ResourceGroup{
+	newGroup := DeploymentGroup{
 		Name: "group2",
 	}
-	bc.Config.ResourceGroups = append(bc.Config.ResourceGroups, newGroup)
+	bc.Config.DeploymentGroups = append(bc.Config.DeploymentGroups, newGroup)
 	bc.Config.Vars["deployment_name"] = "testDeployment"
 	err = bc.expandBackends()
 	c.Assert(err, IsNil)
-	newGrp := bc.Config.ResourceGroups[1]
+	newGrp := bc.Config.DeploymentGroups[1]
 	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix = newGrp.TerraformBackend.Configuration["prefix"]
 	expPrefix = fmt.Sprintf("%s/%s/%s", bc.Config.BlueprintName,
@@ -171,12 +171,12 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	c.Assert(err, IsNil)
 
 	// Has Use Modules
-	bc.Config.ResourceGroups[0].Modules = append(
-		bc.Config.ResourceGroups[0].Modules, usingModule)
-	bc.Config.ResourceGroups[0].Modules = append(
-		bc.Config.ResourceGroups[0].Modules, usedModule)
+	bc.Config.DeploymentGroups[0].Modules = append(
+		bc.Config.DeploymentGroups[0].Modules, usingModule)
+	bc.Config.DeploymentGroups[0].Modules = append(
+		bc.Config.DeploymentGroups[0].Modules, usedModule)
 
-	grpName := bc.Config.ResourceGroups[0].Name
+	grpName := bc.Config.DeploymentGroups[0].Name
 	usingInfo := bc.ModulesInfo[grpName][usingModuleSource]
 	usedInfo := bc.ModulesInfo[grpName][usedModuleSource]
 	usingInfo.Inputs = []resreader.VarInfo{sharedVar}
@@ -185,8 +185,8 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	c.Assert(err, IsNil)
 
 	// Use ID doesn't exists (fail)
-	modLen := len(bc.Config.ResourceGroups[0].Modules)
-	bc.Config.ResourceGroups[0].Modules[modLen-1].ID = "wrongID"
+	modLen := len(bc.Config.DeploymentGroups[0].Modules)
+	bc.Config.DeploymentGroups[0].Modules[modLen-1].ID = "wrongID"
 	err = bc.applyUseModules()
 	c.Assert(err, ErrorMatches, "could not find module .* used by .* in group .*")
 
@@ -267,10 +267,10 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	c.Assert(ghpcDeployment, Equals, "undefined")
 
 	// Was "labels" created for the module with no settings?
-	_, exists = bc.Config.ResourceGroups[0].Modules[0].Settings["labels"]
+	_, exists = bc.Config.DeploymentGroups[0].Modules[0].Settings["labels"]
 	c.Assert(exists, Equals, true)
 
-	moduleLabels := bc.Config.ResourceGroups[0].Modules[0].
+	moduleLabels := bc.Config.DeploymentGroups[0].Modules[0].
 		Settings["labels"].(map[interface{}]interface{})
 
 	// Was the role created correctly?
@@ -289,7 +289,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	bc := getBlueprintConfigForTest()
-	testModule := bc.Config.ResourceGroups[0].Modules[0]
+	testModule := bc.Config.DeploymentGroups[0].Modules[0]
 
 	// Test no inputs, none required
 	err := bc.applyGlobalVariables()
@@ -309,11 +309,11 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	err = bc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 	c.Assert(
-		bc.Config.ResourceGroups[0].Modules[0].Settings[requiredVar.Name],
+		bc.Config.DeploymentGroups[0].Modules[0].Settings[requiredVar.Name],
 		Equals, fmt.Sprintf("((var.%s))", requiredVar.Name))
 
 	// Test one input, one required
-	bc.Config.ResourceGroups[0].Modules[0].Settings[requiredVar.Name] = "val"
+	bc.Config.DeploymentGroups[0].Modules[0].Settings[requiredVar.Name] = "val"
 	err = bc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 
@@ -388,7 +388,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	testYamlConfig := YamlConfig{
 		BlueprintName: "",
 		Vars:          make(map[string]interface{}),
-		ResourceGroups: []ResourceGroup{{
+		DeploymentGroups: []DeploymentGroup{{
 			Name:             "",
 			TerraformBackend: TerraformBackend{},
 			Modules:          []Module{testModule},

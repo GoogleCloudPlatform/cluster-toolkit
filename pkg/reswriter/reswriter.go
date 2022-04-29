@@ -30,16 +30,16 @@ import (
 )
 
 const (
-	hiddenGhpcDirName        = ".ghpc"
-	prevResourceGroupDirName = "previous_resource_groups"
-	gitignoreTemplate        = "blueprint.gitignore.tmpl"
+	hiddenGhpcDirName          = ".ghpc"
+	prevDeploymentGroupDirName = "previous_resource_groups"
+	gitignoreTemplate          = "blueprint.gitignore.tmpl"
 )
 
 // ModWriter interface for writing modules to a blueprint
 type ModWriter interface {
 	getNumModules() int
 	addNumModules(int)
-	writeResourceGroups(*config.YamlConfig, string) error
+	writeDeploymentGroups(*config.YamlConfig, string) error
 	restoreState(deploymentDir string) error
 }
 
@@ -74,10 +74,10 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFl
 		return err
 	}
 
-	copySource(deploymentDir, &yamlConfig.ResourceGroups)
+	copySource(deploymentDir, &yamlConfig.DeploymentGroups)
 	for _, writer := range kinds {
 		if writer.getNumModules() > 0 {
-			if err := writer.writeResourceGroups(yamlConfig, outputDir); err != nil {
+			if err := writer.writeDeploymentGroups(yamlConfig, outputDir); err != nil {
 				return fmt.Errorf("error writing modules to deployment: %w", err)
 			}
 			if err := writer.restoreState(deploymentDir); err != nil {
@@ -88,8 +88,8 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFl
 	return nil
 }
 
-func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
-	for iGrp, grp := range *resourceGroups {
+func copySource(blueprintPath string, deploymentGroups *[]config.DeploymentGroup) {
+	for iGrp, grp := range *deploymentGroups {
 		for iMod, module := range grp.Modules {
 			if sourcereader.IsGitHubPath(module.Source) {
 				continue
@@ -97,7 +97,7 @@ func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 
 			/* Copy source files */
 			moduleName := filepath.Base(module.Source)
-			(*resourceGroups)[iGrp].Modules[iMod].ModuleName = moduleName
+			(*deploymentGroups)[iGrp].Modules[iMod].ModuleName = moduleName
 			basePath := filepath.Join(blueprintPath, grp.Name)
 			var destPath string
 			switch module.Kind {
@@ -148,7 +148,7 @@ func isOverwriteAllowed(bpDir string, overwritingConfig *config.YamlConfig, over
 	}
 
 	var curGroups []string
-	for _, group := range overwritingConfig.ResourceGroups {
+	for _, group := range overwritingConfig.DeploymentGroups {
 		curGroups = append(curGroups, group.Name)
 	}
 
@@ -212,7 +212,7 @@ func prepBpDir(bpDir string, overwrite bool) error {
 	}
 
 	// clean up old dirs
-	prevGroupDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
+	prevGroupDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
 		return fmt.Errorf("Failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)

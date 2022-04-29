@@ -74,9 +74,9 @@ deployment_groups:
 		"deployment_name": "deployment_name",
 	}
 	expectedSimpleYamlConfig YamlConfig = YamlConfig{
-		BlueprintName:  "simple",
-		Vars:           map[string]interface{}{"labels": defaultLabels},
-		ResourceGroups: []ResourceGroup{{Name: "ResourceGroup1", TerraformBackend: TerraformBackend{}, Modules: testModules}},
+		BlueprintName:    "simple",
+		Vars:             map[string]interface{}{"labels": defaultLabels},
+		DeploymentGroups: []DeploymentGroup{{Name: "DeploymentGroup1", TerraformBackend: TerraformBackend{}, Modules: testModules}},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
 			Configuration: map[string]interface{}{},
@@ -193,7 +193,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 			Type:          "",
 			Configuration: map[string]interface{}{},
 		},
-		ResourceGroups: []ResourceGroup{
+		DeploymentGroups: []DeploymentGroup{
 			{
 				Name: "group1",
 				TerraformBackend: TerraformBackend{
@@ -218,7 +218,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 
 func getBasicBlueprintConfigWithTestModule() BlueprintConfig {
 	testModuleSource := filepath.Join(tmpTestDir, "module")
-	testResourceGroup := ResourceGroup{
+	testDeploymentGroup := DeploymentGroup{
 		Name: "primary",
 		Modules: []Module{
 			{
@@ -231,8 +231,8 @@ func getBasicBlueprintConfigWithTestModule() BlueprintConfig {
 	}
 	return BlueprintConfig{
 		Config: YamlConfig{
-			Vars:           make(map[string]interface{}),
-			ResourceGroups: []ResourceGroup{testResourceGroup},
+			Vars:             make(map[string]interface{}),
+			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
 		},
 	}
 }
@@ -251,14 +251,14 @@ func (s *MySuite) TestSetModulesInfo(c *C) {
 
 func (s *MySuite) TestCreateModuleInfo(c *C) {
 	bc := getBasicBlueprintConfigWithTestModule()
-	createModuleInfo(bc.Config.ResourceGroups[0])
+	createModuleInfo(bc.Config.DeploymentGroups[0])
 }
 
 func (s *MySuite) TestGetResouceByID(c *C) {
 	testID := "testID"
 
 	// No Modules
-	rg := ResourceGroup{}
+	rg := DeploymentGroup{}
 	got := rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, Module{})
 
@@ -276,7 +276,7 @@ func (s *MySuite) TestGetResouceByID(c *C) {
 
 func (s *MySuite) TestHasKind(c *C) {
 	// No Modules
-	rg := ResourceGroup{}
+	rg := DeploymentGroup{}
 	c.Assert(rg.HasKind("terraform"), Equals, false)
 	c.Assert(rg.HasKind("packer"), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
@@ -310,8 +310,8 @@ func (s *MySuite) TestHasKind(c *C) {
 
 func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 	bc := getBlueprintConfigForTest()
-	checkModuleAndGroupNames(bc.Config.ResourceGroups)
-	testModID := bc.Config.ResourceGroups[0].Modules[0].ID
+	checkModuleAndGroupNames(bc.Config.DeploymentGroups)
+	testModID := bc.Config.DeploymentGroups[0].Modules[0].ID
 	c.Assert(bc.ModuleToGroup[testModID], Equals, 0)
 }
 
@@ -332,8 +332,8 @@ func (s *MySuite) TestImportYamlConfig(c *C) {
 		Equals,
 		len(expectedSimpleYamlConfig.Vars["labels"].(map[string]interface{})),
 	)
-	c.Assert(obtainedYamlConfig.ResourceGroups[0].Modules[0].ID,
-		Equals, expectedSimpleYamlConfig.ResourceGroups[0].Modules[0].ID)
+	c.Assert(obtainedYamlConfig.DeploymentGroups[0].Modules[0].ID,
+		Equals, expectedSimpleYamlConfig.DeploymentGroups[0].Modules[0].ID)
 }
 
 func (s *MySuite) TestExportYamlConfig(c *C) {

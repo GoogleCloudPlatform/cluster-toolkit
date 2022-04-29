@@ -70,13 +70,13 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 	testSettings := map[string]interface{}{
 		"test_variable": "test_value",
 	}
-	testResourceGroup := ResourceGroup{
+	testDeploymentGroup := DeploymentGroup{
 		Name:             "",
 		TerraformBackend: TerraformBackend{},
 		Modules:          []Module{{Kind: "terraform", Source: testSource, Settings: testSettings}},
 	}
 	bc := BlueprintConfig{
-		Config:        YamlConfig{ResourceGroups: []ResourceGroup{testResourceGroup}},
+		Config:        YamlConfig{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
 		ModulesInfo:   map[string]map[string]resreader.ModuleInfo{},
 		ModuleToGroup: map[string]int{},
 		expanded:      false,

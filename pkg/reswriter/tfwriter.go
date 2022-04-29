@@ -368,7 +368,7 @@ func printTerraformInstructions(grpPath string) {
 }
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
-func (w TFWriter) writeResourceGroups(
+func (w TFWriter) writeDeploymentGroups(
 	yamlConfig *config.YamlConfig,
 	outputDir string,
 ) error {
@@ -381,53 +381,53 @@ func (w TFWriter) writeResourceGroups(
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %v", err)
 	}
-	for _, resGroup := range yamlConfig.ResourceGroups {
-		if !resGroup.HasKind("terraform") {
+	for _, depGroup := range yamlConfig.DeploymentGroups {
+		if !depGroup.HasKind("terraform") {
 			continue
 		}
-		writePath := filepath.Join(outputDir, deploymentName, resGroup.Name)
+		writePath := filepath.Join(outputDir, deploymentName, depGroup.Name)
 
 		// Write main.tf file
 		if err := writeMain(
-			resGroup.Modules, resGroup.TerraformBackend, writePath,
+			depGroup.Modules, depGroup.TerraformBackend, writePath,
 		); err != nil {
 			return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
-				resGroup.Name, err)
+				depGroup.Name, err)
 		}
 
 		// Write variables.tf file
 		if err := writeVariables(ctyVars, writePath); err != nil {
 			return fmt.Errorf(
 				"error writing variables.tf file for deployment group %s: %v",
-				resGroup.Name, err)
+				depGroup.Name, err)
 		}
 
 		// Write outputs.tf file
-		if err := writeOutputs(resGroup.Modules, writePath); err != nil {
+		if err := writeOutputs(depGroup.Modules, writePath); err != nil {
 			return fmt.Errorf(
 				"error writing outputs.tf file for deployment group %s: %v",
-				resGroup.Name, err)
+				depGroup.Name, err)
 		}
 
 		// Write terraform.tfvars file
 		if err := writeTfvars(ctyVars, writePath); err != nil {
 			return fmt.Errorf(
 				"error writing terraform.tfvars file for deployment group %s: %v",
-				resGroup.Name, err)
+				depGroup.Name, err)
 		}
 
 		// Write providers.tf file
 		if err := writeProviders(ctyVars, writePath); err != nil {
 			return fmt.Errorf(
 				"error writing providers.tf file for deployment group %s: %v",
-				resGroup.Name, err)
+				depGroup.Name, err)
 		}
 
 		// Write versions.tf file
 		if err := writeVersions(writePath); err != nil {
 			return fmt.Errorf(
 				"error writing versions.tf file for deployment group %s: %v",
-				resGroup.Name, err)
+				depGroup.Name, err)
 		}
 
 		printTerraformInstructions(writePath)
@@ -437,16 +437,19 @@ func (w TFWriter) writeResourceGroups(
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
 func (w TFWriter) restoreState(deploymentDir string) error {
-	prevResourceGroupPath := filepath.Join(deploymentDir, hiddenGhpcDirName, prevResourceGroupDirName)
-	files, err := ioutil.ReadDir(prevResourceGroupPath)
+	prevDeploymentGroupPath := filepath.Join(
+		deploymentDir, hiddenGhpcDirName, prevDeploymentGroupDirName)
+	files, err := ioutil.ReadDir(prevDeploymentGroupPath)
 	if err != nil {
-		return fmt.Errorf("Error trying to read previous modules in %s, %w", prevResourceGroupPath, err)
+		return fmt.Errorf(
+			"Error trying to read previous modules in %s, %w",
+			prevDeploymentGroupPath, err)
 	}
 
 	for _, f := range files {
 		var tfStateFiles = []string{tfStateFileName, tfStateBackupFileName}
 		for _, stateFile := range tfStateFiles {
-			src := filepath.Join(prevResourceGroupPath, f.Name(), stateFile)
+			src := filepath.Join(prevDeploymentGroupPath, f.Name(), stateFile)
 			dest := filepath.Join(deploymentDir, f.Name(), tfStateFileName)
 
 			if bytesRead, err := ioutil.ReadFile(src); err == nil {

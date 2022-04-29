@@ -89,16 +89,16 @@ func getYamlConfigForTest() config.YamlConfig {
 			"moduleLabel": "moduleLabelValue",
 		},
 	}
-	testResourceGroups := []config.ResourceGroup{
+	testDeploymentGroups := []config.DeploymentGroup{
 		{
 			Name:    "test_resource_group",
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
 	testYamlConfig := config.YamlConfig{
-		BlueprintName:  "simple",
-		Vars:           map[string]interface{}{},
-		ResourceGroups: testResourceGroups,
+		BlueprintName:    "simple",
+		Vars:             map[string]interface{}{},
+		DeploymentGroups: testDeploymentGroups,
 	}
 
 	return testYamlConfig
@@ -116,7 +116,7 @@ func isBlueprintDirPrepped(bpDirectoryPath string) error {
 		return fmt.Errorf(".ghpc working dir does not exist: %s: %w", ghpcDir, err)
 	}
 
-	prevModuleDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
+	prevModuleDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
 	if _, err := os.Stat(prevModuleDir); os.IsNotExist(err) {
 		return fmt.Errorf("previous deployment group directory does not exist: %s: %w", prevModuleDir, err)
 	}
@@ -162,7 +162,7 @@ func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
 	c.Check(isBlueprintDirPrepped(realBpDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, testYamlConfig.Vars["deployment_name"].(string), hiddenGhpcDirName, prevResourceGroupDirName)
+	prevModuleDir := filepath.Join(testDir, testYamlConfig.Vars["deployment_name"].(string), hiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
@@ -189,14 +189,14 @@ func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 	os.MkdirAll(module2, 0755)
 
 	supersetConfig := config.YamlConfig{
-		ResourceGroups: []config.ResourceGroup{
+		DeploymentGroups: []config.DeploymentGroup{
 			{Name: "group1"},
 			{Name: "group2"},
 			{Name: "group3"},
 		},
 	}
 	swapConfig := config.YamlConfig{
-		ResourceGroups: []config.ResourceGroup{
+		DeploymentGroups: []config.DeploymentGroup{
 			{Name: "group1"},
 			{Name: "group4"},
 		},
@@ -256,13 +256,14 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	//             └── terraform.tfstate
 	//    └── fake_resource_group
 	bpDir := filepath.Join(testDir, "test_restore_state")
-	resourceGroupName := "fake_resource_group"
+	deploymentGroupName := "fake_resource_group"
 
-	prevResourceGroup := filepath.Join(bpDir, hiddenGhpcDirName, prevResourceGroupDirName, resourceGroupName)
-	curResourceGroup := filepath.Join(bpDir, resourceGroupName)
-	prevStateFile := filepath.Join(prevResourceGroup, tfStateFileName)
-	os.MkdirAll(prevResourceGroup, 0755)
-	os.MkdirAll(curResourceGroup, 0755)
+	prevDeploymentGroup := filepath.Join(
+		bpDir, hiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
+	curDeploymentGroup := filepath.Join(bpDir, deploymentGroupName)
+	prevStateFile := filepath.Join(prevDeploymentGroup, tfStateFileName)
+	os.MkdirAll(prevDeploymentGroup, 0755)
+	os.MkdirAll(curDeploymentGroup, 0755)
 	emptyFile, _ := os.Create(prevStateFile)
 	emptyFile.Close()
 
@@ -270,7 +271,7 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	testWriter.restoreState(bpDir)
 
 	// check state file was moved to current resource group dir
-	curStateFile := filepath.Join(curResourceGroup, tfStateFileName)
+	curStateFile := filepath.Join(curDeploymentGroup, tfStateFileName)
 	_, err := os.Stat(curStateFile)
 	c.Check(err, IsNil)
 }
@@ -614,8 +615,8 @@ func (s *MySuite) TestWriteModuleLevel_PackerWriter(c *C) {
 		Kind: "packer",
 		ID:   "testPackerModule",
 	}
-	testYamlConfig.ResourceGroups = append(testYamlConfig.ResourceGroups,
-		config.ResourceGroup{
+	testYamlConfig.DeploymentGroups = append(testYamlConfig.DeploymentGroups,
+		config.DeploymentGroup{
 			Name:    "packerGroup",
 			Modules: []config.Module{testPackerModule},
 		})

@@ -64,14 +64,14 @@ var errorMessages = map[string]string{
 	"invalidOutput":  "requested output was not found in the module",
 }
 
-// ResourceGroup defines a group of Modules that are all executed together
-type ResourceGroup struct {
+// DeploymentGroup defines a group of Modules that are all executed together
+type DeploymentGroup struct {
 	Name             string           `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
 	Modules          []Module         `yaml:"modules"`
 }
 
-func (g ResourceGroup) getModuleByID(modID string) Module {
+func (g DeploymentGroup) getModuleByID(modID string) Module {
 	for i := range g.Modules {
 		mod := g.Modules[i]
 		if g.Modules[i].ID == modID {
@@ -147,9 +147,9 @@ type validatorConfig struct {
 }
 
 // HasKind checks to see if a resource group contains any modules of the given
-// kind. Note that a resourceGroup should never have more than one kind, this
+// kind. Note that a DeploymentGroup should never have more than one kind, this
 // function is used in the validation step to ensure that is true.
-func (g ResourceGroup) HasKind(kind string) bool {
+func (g DeploymentGroup) HasKind(kind string) bool {
 	for _, mod := range g.Modules {
 		if mod.Kind == kind {
 			return true
@@ -187,8 +187,8 @@ type YamlConfig struct {
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     map[string]interface{}
-	ResourceGroups           []ResourceGroup  `yaml:"deployment_groups"`
-	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`
+	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
+	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
 // BlueprintConfig is a container for the imported YAML data and supporting data for
@@ -272,9 +272,9 @@ func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) ([]byte, error
 }
 
 func createModuleInfo(
-	resourceGroup ResourceGroup) map[string]resreader.ModuleInfo {
+	deploymentGroup DeploymentGroup) map[string]resreader.ModuleInfo {
 	modInfo := make(map[string]resreader.ModuleInfo)
-	for _, mod := range resourceGroup.Modules {
+	for _, mod := range deploymentGroup.Modules {
 		if _, exists := modInfo[mod.Source]; !exists {
 			reader := sourcereader.Factory(mod.Source)
 			ri, err := reader.GetModuleInfo(mod.Source, mod.Kind)
@@ -292,7 +292,7 @@ func createModuleInfo(
 // setModulesInfo populates needed information from modules
 func (bc *BlueprintConfig) setModulesInfo() {
 	bc.ModulesInfo = make(map[string]map[string]resreader.ModuleInfo)
-	for _, grp := range bc.Config.ResourceGroups {
+	for _, grp := range bc.Config.DeploymentGroups {
 		bc.ModulesInfo[grp.Name] = createModuleInfo(grp)
 	}
 }
@@ -314,10 +314,10 @@ func validateGroupName(name string, usedNames map[string]bool) {
 // checkModuleAndGroupNames checks and imports module and resource group IDs
 // and names respectively.
 func checkModuleAndGroupNames(
-	resGroups []ResourceGroup) (map[string]int, error) {
+	depGroups []DeploymentGroup) (map[string]int, error) {
 	moduleToGroup := make(map[string]int)
 	groupNames := make(map[string]bool)
-	for iGrp, grp := range resGroups {
+	for iGrp, grp := range depGroups {
 		validateGroupName(grp.Name, groupNames)
 		var groupKind string
 		for _, mod := range grp.Modules {
@@ -345,8 +345,8 @@ func checkModuleAndGroupNames(
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
 func checkUsedModuleNames(
-	resGroups []ResourceGroup, idToGroup map[string]int) error {
-	for iGrp, grp := range resGroups {
+	depGroups []DeploymentGroup, idToGroup map[string]int) error {
+	for iGrp, grp := range depGroups {
 		for _, mod := range grp.Modules {
 			for _, usedMod := range mod.Use {
 				// Check if module even exists
@@ -366,13 +366,13 @@ func checkUsedModuleNames(
 
 // validateConfig runs a set of simple early checks on the imported input YAML
 func (bc *BlueprintConfig) validateConfig() {
-	moduleToGroup, err := checkModuleAndGroupNames(bc.Config.ResourceGroups)
+	moduleToGroup, err := checkModuleAndGroupNames(bc.Config.DeploymentGroups)
 	if err != nil {
 		log.Fatal(err)
 	}
 	bc.ModuleToGroup = moduleToGroup
 	if err = checkUsedModuleNames(
-		bc.Config.ResourceGroups, bc.ModuleToGroup); err != nil {
+		bc.Config.DeploymentGroups, bc.ModuleToGroup); err != nil {
 		log.Fatal(err)
 	}
 }

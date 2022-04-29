@@ -176,7 +176,7 @@ func validateOutputs(mod Module, modInfo resreader.ModuleInfo) error {
 
 // validateModules ensures parameters set in modules are set correctly.
 func (bc BlueprintConfig) validateModules() error {
-	for _, grp := range bc.Config.ResourceGroups {
+	for _, grp := range bc.Config.DeploymentGroups {
 		for _, mod := range grp.Modules {
 			if err := validateModule(mod); err != nil {
 				return err
@@ -220,7 +220,7 @@ func validateSettings(
 // validateModuleSettings verifies that no additional settings are provided
 // that don't have a counterpart variable in the module
 func (bc BlueprintConfig) validateModuleSettings() error {
-	for _, grp := range bc.Config.ResourceGroups {
+	for _, grp := range bc.Config.DeploymentGroups {
 		for _, mod := range grp.Modules {
 			reader := sourcereader.Factory(mod.Source)
 			info, err := reader.GetModuleInfo(mod.Source, mod.Kind)

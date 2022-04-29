@@ -50,7 +50,7 @@ func printPackerInstructions(grpPath string) {
 
 // writeModuleLevel writes any needed files to the module layer
 func (w PackerWriter) writeModuleLevel(yamlConfig *config.YamlConfig, outputDir string) error {
-	for _, grp := range yamlConfig.ResourceGroups {
+	for _, grp := range yamlConfig.DeploymentGroups {
 		deploymentName, err := yamlConfig.DeploymentName()
 		if err != nil {
 			return err
@@ -88,9 +88,9 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 	return err
 }
 
-// writeResourceGroups writes any needed files to the top and module levels
+// writeDeploymentGroups writes any needed files to the top and module levels
 // of the blueprint
-func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig, outputDir string) error {
+func (w PackerWriter) writeDeploymentGroups(yamlConfig *config.YamlConfig, outputDir string) error {
 	return w.writeModuleLevel(yamlConfig, outputDir)
 }
 

@@ -72,10 +72,10 @@ func (bc *BlueprintConfig) expand() {
 }
 
 func (bc *BlueprintConfig) addSettingsToModules() {
-	for iGrp, grp := range bc.Config.ResourceGroups {
+	for iGrp, grp := range bc.Config.DeploymentGroups {
 		for iMod, mod := range grp.Modules {
 			if mod.Settings == nil {
-				bc.Config.ResourceGroups[iGrp].Modules[iMod].Settings =
+				bc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings =
 					make(map[string]interface{})
 			}
 		}
@@ -91,8 +91,8 @@ func (bc *BlueprintConfig) expandBackends() error {
 	// 3. In all cases, add a prefix for GCS backends if one is not defined
 	yamlConfig := &bc.Config
 	if yamlConfig.TerraformBackendDefaults.Type != "" {
-		for i := range yamlConfig.ResourceGroups {
-			grp := &yamlConfig.ResourceGroups[i]
+		for i := range yamlConfig.DeploymentGroups {
+			grp := &yamlConfig.DeploymentGroups[i]
 			if grp.TerraformBackend.Type == "" {
 				grp.TerraformBackend.Type = yamlConfig.TerraformBackendDefaults.Type
 				grp.TerraformBackend.Configuration = make(map[string]interface{})
@@ -170,8 +170,8 @@ func useModule(
 // applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
 func (bc *BlueprintConfig) applyUseModules() error {
-	for iGrp := range bc.Config.ResourceGroups {
-		group := &bc.Config.ResourceGroups[iGrp]
+	for iGrp := range bc.Config.DeploymentGroups {
+		group := &bc.Config.DeploymentGroups[iGrp]
 		for iMod := range group.Modules {
 			mod := &group.Modules[iMod]
 			modInfo := bc.ModulesInfo[group.Name][mod.Source]
@@ -192,8 +192,8 @@ func (bc *BlueprintConfig) applyUseModules() error {
 }
 
 func (bc BlueprintConfig) moduleHasInput(
-	resGroup string, source string, inputName string) bool {
-	for _, input := range bc.ModulesInfo[resGroup][source].Inputs {
+	depGroup string, source string, inputName string) bool {
+	for _, input := range bc.ModulesInfo[depGroup][source].Inputs {
 		if input.Name == inputName {
 			return true
 		}
@@ -274,7 +274,7 @@ func (bc *BlueprintConfig) combineLabels() error {
 		globalLabels[deploymentLabel] = defaultLabels[deploymentLabel]
 	}
 
-	for iGrp, grp := range bc.Config.ResourceGroups {
+	for iGrp, grp := range bc.Config.DeploymentGroups {
 		for iMod, mod := range grp.Modules {
 			// Check if labels are set for this module
 			if !bc.moduleHasInput(grp.Name, mod.Source, labels) {
@@ -300,7 +300,7 @@ func (bc *BlueprintConfig) combineLabels() error {
 			if _, exists := modLabels[roleLabel]; !exists {
 				modLabels[roleLabel] = getRole(mod.Source)
 			}
-			bc.Config.ResourceGroups[iGrp].Modules[iMod].Settings[labels] =
+			bc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings[labels] =
 				modLabels
 		}
 	}
@@ -309,10 +309,10 @@ func (bc *BlueprintConfig) combineLabels() error {
 }
 
 func applyGlobalVarsInGroup(
-	resourceGroup ResourceGroup,
+	deploymentGroup DeploymentGroup,
 	modInfo map[string]resreader.ModuleInfo,
 	globalVars map[string]interface{}) error {
-	for _, mod := range resourceGroup.Modules {
+	for _, mod := range deploymentGroup.Modules {
 		for _, input := range modInfo[mod.Source].Inputs {
 
 			// Module setting exists? Nothing more needs to be done.
@@ -357,7 +357,7 @@ func (bc *BlueprintConfig) applyGlobalVariables() error {
 		return err
 	}
 
-	for _, grp := range bc.Config.ResourceGroups {
+	for _, grp := range bc.Config.DeploymentGroups {
 		err := applyGlobalVarsInGroup(
 			grp, bc.ModulesInfo[grp.Name], bc.Config.Vars)
 		if err != nil {
@@ -374,7 +374,7 @@ type varContext struct {
 	yamlConfig YamlConfig
 }
 
-// Needs ResourceGroups, variable string, current group,
+// Needs DeploymentGroups, variable string, current group,
 func expandSimpleVariable(
 	context varContext,
 	modToGrp map[string]int) (string, error) {
@@ -419,7 +419,7 @@ func expandSimpleVariable(
 	}
 
 	// Get the module info
-	refGrp := context.yamlConfig.ResourceGroups[refGrpIndex]
+	refGrp := context.yamlConfig.DeploymentGroups[refGrpIndex]
 	refModIndex := -1
 	for i := range refGrp.Modules {
 		if refGrp.Modules[i].ID == varSource {
@@ -563,7 +563,7 @@ func (bc *BlueprintConfig) expandVariables() {
 		}
 	}
 
-	for iGrp, grp := range bc.Config.ResourceGroups {
+	for iGrp, grp := range bc.Config.DeploymentGroups {
 		for iMod := range grp.Modules {
 			context := varContext{
 				groupIndex: iGrp,
@@ -572,7 +572,7 @@ func (bc *BlueprintConfig) expandVariables() {
 			}
 			err := updateVariables(
 				context,
-				bc.Config.ResourceGroups[iGrp].Modules[iMod].Settings,
+				bc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings,
 				bc.ModuleToGroup)
 			if err != nil {
 				log.Fatalf("expandVariables: %v", err)
