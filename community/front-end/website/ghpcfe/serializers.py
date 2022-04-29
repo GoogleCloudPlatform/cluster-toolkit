@@ -37,9 +37,16 @@ class CredentialSerializer(serializers.ModelSerializer):
 
 
 class MountPointSerializer(serializers.ModelSerializer):
+    """Custom ModelSerializer for MountPoint model"""
+
     class Meta:
         model = MountPoint
-        fields = ("mount_path", "fstype", "mount_source", "mount_options")
+        fields = (
+            "export",
+            "mount_order",
+            "mount_options",
+            "mount_path",
+        )
 
 
 class ClusterSerializer(serializers.ModelSerializer):
@@ -62,15 +69,10 @@ class ClusterSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "name",
-            "internal_name",
             "cloud_region",
             "cloud_zone",
-            "head_node_ip",
-            "head_node_internal_ip",
             "status",
             "cloud_credential",
-            "advanced_networking",
-            "ansible_branch",
             "cloud_vpc",
             "cloud_subnet",
             "spackdir",
@@ -84,10 +86,13 @@ class ApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Application
         fields = (
+            "id",
+            "name",
             "version",
-            "spack_name",
-            "spack_spec",
-            "spack_hash",
+            "cluster",
+            "install_loc",
+            "install_partition",
+            "installed_architecture",
             "load_command",
             "compiler",
             "mpi",
@@ -99,32 +104,31 @@ class JobSerializer(serializers.ModelSerializer):
     """Custom ModelSerializer for Job model"""
 
     user = serializers.CharField(source="user.username", read_only=True)
-    instance_type = serializers.CharField(
-        source="instance_type", read_only=True
-    )
 
     class Meta:
         model = Job
         fields = (
             "application",
-            "user",
+            "cluster",
             "name",
             "date_time_submission",
-            "instance_type",
+            "user",
+            "partition",
             "number_of_nodes",
             "ranks_per_node",
             "threads_per_rank",
             "wall_clock_time_limit",
             "run_script",
-            "image_id",
             "input_data",
             "result_data",
-            "cleanup_choice",
             "status",
             "runtime",
-            "cost",
+            "node_price",
+            "job_cost",
             "result_unit",
             "result_value",
+            "cleanup_choice",
+            "benchmark",
         )
 
 
@@ -149,9 +153,22 @@ class TaskSerializer(serializers.ModelSerializer):
 class VirtualNetworkSerializer(serializers.ModelSerializer):
     """Custom ModelSerializer for VirtualNetwork model"""
 
+    subnets = serializers.SerializerMethodField()
+
+    def get_subnets(self, instance):
+        subnets = instance.subnets.all()
+        return VirtualSubnetSerializer(subnets, many=True, read_only=True).data
+
+
     class Meta:
         model = VirtualNetwork
-        fields = ("name", "cloud_id", "cloud_region")
+        fields = (
+            "name",
+            "cloud_id",
+            "cloud_region",
+            "cloud_state",
+            "subnets",
+        )
 
 
 class VirtualSubnetSerializer(serializers.ModelSerializer):
@@ -161,4 +178,11 @@ class VirtualSubnetSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = VirtualSubnet
-        fields = ("name", "vpc", "cidr", "cloud_id", "cloud_region")
+        fields = (
+            "name",
+            "vpc",
+            "cidr",
+            "cloud_id",
+            "cloud_region",
+            "cloud_state",
+        )
