@@ -20,13 +20,14 @@ locals {
   no_provisioners      = local.no_shell_scripts && local.no_ansible_playbooks
   communicator         = local.no_provisioners ? "none" : "ssh"
   use_iap              = local.no_provisioners ? false : var.use_iap
+  built_image_family   = var.built_image_family != null ? var.built_image_family : var.deployment_name
 }
 
 source "googlecompute" "toolkit_image" {
   communicator            = local.communicator
   project_id              = var.project_id
-  image_name              = "${var.deployment_name}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
-  image_family            = var.deployment_name
+  image_name              = "${local.built_image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
+  image_family            = local.built_image_family
   machine_type            = var.machine_type
   disk_size               = var.disk_size
   omit_external_ip        = var.omit_external_ip
