@@ -25,10 +25,16 @@ variable "boot_disk_type" {
   default     = "pd-standard"
 }
 
-variable "controller_image" {
+variable "instance_image" {
   description = "Slurm image to use for the controller instance"
-  type        = string
-  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-4-hpc-centos-7"
+  type = object({
+    family  = string,
+    project = string
+  })
+  default = {
+    family  = "schedmd-slurm-21-08-4-hpc-centos-7"
+    project = "schedmd-slurm-public"
+  }
 }
 
 variable "controller_instance_template" {

@@ -26,10 +26,16 @@ variable "boot_disk_type" {
   default     = "pd-standard"
 }
 
-variable "login_image" {
+variable "instance_image" {
   description = "Disk OS image with Slurm preinstalled to use for login node"
-  type        = string
-  default     = "projects/schedmd-slurm-public/global/images/family/schedmd-slurm-21-08-4-hpc-centos-7"
+  type = object({
+    family  = string,
+    project = string
+  })
+  default = {
+    family  = "schedmd-slurm-21-08-4-hpc-centos-7"
+    project = "schedmd-slurm-public"
+  }
 }
 
 variable "login_instance_template" {
