@@ -33,7 +33,7 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 )
 
-const expectedVarFormat = "$(vars.var_name) or $(resource_id.var_name)"
+const expectedVarFormat = "$(vars.var_name) or $(module_id.var_name)"
 
 var errorMessages = map[string]string{
 	// general
@@ -64,21 +64,21 @@ var errorMessages = map[string]string{
 	"invalidOutput":  "requested output was not found in the module",
 }
 
-// ResourceGroup defines a group of Resource that are all executed together
+// ResourceGroup defines a group of Modules that are all executed together
 type ResourceGroup struct {
 	Name             string           `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
-	Resources        []Resource       `yaml:"modules"`
+	Modules          []Module         `yaml:"modules"`
 }
 
-func (g ResourceGroup) getResourceByID(resID string) Resource {
-	for i := range g.Resources {
-		res := g.Resources[i]
-		if g.Resources[i].ID == resID {
-			return res
+func (g ResourceGroup) getModuleByID(modID string) Module {
+	for i := range g.Modules {
+		mod := g.Modules[i]
+		if g.Modules[i].ID == modID {
+			return mod
 		}
 	}
-	return Resource{}
+	return Module{}
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
@@ -146,24 +146,24 @@ type validatorConfig struct {
 	Inputs    map[string]interface{}
 }
 
-// HasKind checks to see if a resource group contains any resources of the given
+// HasKind checks to see if a resource group contains any modules of the given
 // kind. Note that a resourceGroup should never have more than one kind, this
 // function is used in the validation step to ensure that is true.
 func (g ResourceGroup) HasKind(kind string) bool {
-	for _, res := range g.Resources {
-		if res.Kind == kind {
+	for _, mod := range g.Modules {
+		if mod.Kind == kind {
 			return true
 		}
 	}
 	return false
 }
 
-// Resource stores YAML definition of a resource
-type Resource struct {
+// Module stores YAML definition of an HPC cluster component defined in a blueprint
+type Module struct {
 	Source           string
 	Kind             string
 	ID               string
-	ResourceName     string
+	ModuleName       string
 	Use              []string
 	WrapSettingsWith map[string][]string
 	Outputs          []string `yaml:"outputs,omitempty"`
@@ -172,7 +172,7 @@ type Resource struct {
 
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
 // a new map is created.
-func (r *Resource) createWrapSettingsWith() {
+func (r *Module) createWrapSettingsWith() {
 	if r.WrapSettingsWith == nil {
 		r.WrapSettingsWith = make(map[string][]string)
 	}
@@ -195,16 +195,16 @@ type YamlConfig struct {
 // creating the blueprint from it
 type BlueprintConfig struct {
 	Config YamlConfig
-	// Indexed by Resource Group name and Resource Source
-	ResourcesInfo map[string]map[string]resreader.ResourceInfo
-	// Maps resource ID to group index
-	ResourceToGroup map[string]int
-	expanded        bool
+	// Indexed by Resource Group name and Module Source
+	ModulesInfo map[string]map[string]resreader.ModuleInfo
+	// Maps module ID to group index
+	ModuleToGroup map[string]int
+	expanded      bool
 }
 
 // ExpandConfig expands the yaml config in place
 func (bc *BlueprintConfig) ExpandConfig() {
-	bc.setResourcesInfo()
+	bc.setModulesInfo()
 	bc.validateConfig()
 	bc.expand()
 	bc.validate()
@@ -271,29 +271,29 @@ func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) ([]byte, error
 	return nil, nil
 }
 
-func createResourceInfo(
-	resourceGroup ResourceGroup) map[string]resreader.ResourceInfo {
-	resInfo := make(map[string]resreader.ResourceInfo)
-	for _, res := range resourceGroup.Resources {
-		if _, exists := resInfo[res.Source]; !exists {
-			reader := sourcereader.Factory(res.Source)
-			ri, err := reader.GetResourceInfo(res.Source, res.Kind)
+func createModuleInfo(
+	resourceGroup ResourceGroup) map[string]resreader.ModuleInfo {
+	modInfo := make(map[string]resreader.ModuleInfo)
+	for _, mod := range resourceGroup.Modules {
+		if _, exists := modInfo[mod.Source]; !exists {
+			reader := sourcereader.Factory(mod.Source)
+			ri, err := reader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
 				log.Fatalf(
-					"failed to get info for module at %s while setting bc.ResourcesInfo: %e",
-					res.Source, err)
+					"failed to get info for module at %s while setting bc.ModulesInfo: %e",
+					mod.Source, err)
 			}
-			resInfo[res.Source] = ri
+			modInfo[mod.Source] = ri
 		}
 	}
-	return resInfo
+	return modInfo
 }
 
-// setResourcesInfo populates needed information from resources.
-func (bc *BlueprintConfig) setResourcesInfo() {
-	bc.ResourcesInfo = make(map[string]map[string]resreader.ResourceInfo)
+// setModulesInfo populates needed information from modules
+func (bc *BlueprintConfig) setModulesInfo() {
+	bc.ModulesInfo = make(map[string]map[string]resreader.ModuleInfo)
 	for _, grp := range bc.Config.ResourceGroups {
-		bc.ResourcesInfo[grp.Name] = createResourceInfo(grp)
+		bc.ModulesInfo[grp.Name] = createModuleInfo(grp)
 	}
 }
 
@@ -311,52 +311,52 @@ func validateGroupName(name string, usedNames map[string]bool) {
 	usedNames[name] = true
 }
 
-// checkResourceAndGroupNames checks and imports resource and resource group IDs
+// checkModuleAndGroupNames checks and imports module and resource group IDs
 // and names respectively.
-func checkResourceAndGroupNames(
+func checkModuleAndGroupNames(
 	resGroups []ResourceGroup) (map[string]int, error) {
-	resourceToGroup := make(map[string]int)
+	moduleToGroup := make(map[string]int)
 	groupNames := make(map[string]bool)
 	for iGrp, grp := range resGroups {
 		validateGroupName(grp.Name, groupNames)
 		var groupKind string
-		for _, res := range grp.Resources {
-			// Verify no duplicate resource names
-			if _, ok := resourceToGroup[res.ID]; ok {
-				return resourceToGroup, fmt.Errorf(
-					"%s: %s used more than once", errorMessages["duplicateID"], res.ID)
+		for _, mod := range grp.Modules {
+			// Verify no duplicate module names
+			if _, ok := moduleToGroup[mod.ID]; ok {
+				return moduleToGroup, fmt.Errorf(
+					"%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
 			}
-			resourceToGroup[res.ID] = iGrp
+			moduleToGroup[mod.ID] = iGrp
 
-			// Verify Resource Kind matches group Kind
+			// Verify Module Kind matches group Kind
 			if groupKind == "" {
-				groupKind = res.Kind
-			} else if groupKind != res.Kind {
-				return resourceToGroup, fmt.Errorf(
+				groupKind = mod.Kind
+			} else if groupKind != mod.Kind {
+				return moduleToGroup, fmt.Errorf(
 					"%s: deployment group %s, got: %s, wanted: %s",
 					errorMessages["mixedModule"],
-					grp.Name, groupKind, res.Kind)
+					grp.Name, groupKind, mod.Kind)
 			}
 		}
 	}
-	return resourceToGroup, nil
+	return moduleToGroup, nil
 }
 
-// checkUsedResourceNames verifies that any used resources have valid names and
+// checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
-func checkUsedResourceNames(
+func checkUsedModuleNames(
 	resGroups []ResourceGroup, idToGroup map[string]int) error {
 	for iGrp, grp := range resGroups {
-		for _, res := range grp.Resources {
-			for _, usedRes := range res.Use {
-				// Check if resource even exists
-				if _, ok := idToGroup[usedRes]; !ok {
-					return fmt.Errorf("used module ID %s does not exist", usedRes)
+		for _, mod := range grp.Modules {
+			for _, usedMod := range mod.Use {
+				// Check if module even exists
+				if _, ok := idToGroup[usedMod]; !ok {
+					return fmt.Errorf("used module ID %s does not exist", usedMod)
 				}
-				// Ensure resource is from the correct group
-				if idToGroup[usedRes] != iGrp {
+				// Ensure module is from the correct group
+				if idToGroup[usedMod] != iGrp {
 					return fmt.Errorf(
-						"used module ID %s not found in this Deployment Group", usedRes)
+						"used module ID %s not found in this Deployment Group", usedMod)
 				}
 			}
 		}
@@ -366,13 +366,13 @@ func checkUsedResourceNames(
 
 // validateConfig runs a set of simple early checks on the imported input YAML
 func (bc *BlueprintConfig) validateConfig() {
-	resourceToGroup, err := checkResourceAndGroupNames(bc.Config.ResourceGroups)
+	moduleToGroup, err := checkModuleAndGroupNames(bc.Config.ResourceGroups)
 	if err != nil {
 		log.Fatal(err)
 	}
-	bc.ResourceToGroup = resourceToGroup
-	if err = checkUsedResourceNames(
-		bc.Config.ResourceGroups, bc.ResourceToGroup); err != nil {
+	bc.ModuleToGroup = moduleToGroup
+	if err = checkUsedModuleNames(
+		bc.Config.ResourceGroups, bc.ModuleToGroup); err != nil {
 		log.Fatal(err)
 	}
 }

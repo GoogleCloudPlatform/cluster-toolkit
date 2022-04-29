@@ -39,17 +39,17 @@ const (
 
 // TFWriter writes terraform to the blueprint folder
 type TFWriter struct {
-	numResources int
+	numModules int
 }
 
-// GetNumResources getter for resource count
-func (w *TFWriter) getNumResources() int {
-	return w.numResources
+// GetNumModules getter for module count of kind terraform
+func (w *TFWriter) getNumModules() int {
+	return w.numModules
 }
 
-// AddNumResources add value to resource count
-func (w *TFWriter) addNumResources(value int) {
-	w.numResources += value
+// AddNumModules add value to module count
+func (w *TFWriter) addNumModules(value int) {
+	w.numModules += value
 }
 
 // createBaseFile creates a baseline file for all terraform/hcl including a
@@ -82,7 +82,7 @@ func appendHCLToFile(path string, hclBytes []byte) error {
 }
 
 func writeOutputs(
-	resources []config.Resource,
+	modules []config.Module,
 	dst string,
 ) error {
 	// Create file
@@ -96,17 +96,17 @@ func writeOutputs(
 	hclBody := hclFile.Body()
 
 	// Add all outputs from each module
-	for _, res := range resources {
-		for _, output := range res.Outputs {
+	for _, mod := range modules {
+		for _, output := range mod.Outputs {
 			// Create output block
-			outputName := fmt.Sprintf("%s_%s", output, res.ID)
+			outputName := fmt.Sprintf("%s_%s", output, mod.ID)
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
 			// Add attributes (description, value)
-			desc := fmt.Sprintf("Generated output from module '%s'", res.ID)
+			desc := fmt.Sprintf("Generated output from module '%s'", mod.ID)
 			blockBody.SetAttributeValue("description", cty.StringVal(desc))
-			value := fmt.Sprintf("((module.%s.%s))", res.ID, output)
+			value := fmt.Sprintf("((module.%s.%s))", mod.ID, output)
 			blockBody.SetAttributeValue("value", cty.StringVal(value))
 			hclBody.AppendNewline()
 		}
@@ -191,7 +191,7 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 }
 
 func writeMain(
-	resources []config.Resource,
+	modules []config.Module,
 	tfBackend config.TerraformBackend,
 	dst string,
 ) error {
@@ -221,26 +221,25 @@ func writeMain(
 		hclBody.AppendNewline()
 	}
 
-	// For each resource:
-	for _, res := range resources {
+	for _, mod := range modules {
 		// Convert settings to cty.Value
-		ctySettings, err := config.ConvertMapToCty(res.Settings)
+		ctySettings, err := config.ConvertMapToCty(mod.Settings)
 		if err != nil {
 			return fmt.Errorf(
 				"error converting setting in module %s to cty when writing main.tf: %v",
-				res.ID, err)
+				mod.ID, err)
 		}
 
 		// Add block
-		moduleBlock := hclBody.AppendNewBlock("module", []string{res.ID})
+		moduleBlock := hclBody.AppendNewBlock("module", []string{mod.ID})
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
 		var moduleSource cty.Value
-		if sourcereader.IsGitHubPath(res.Source) {
-			moduleSource = cty.StringVal(res.Source)
+		if sourcereader.IsGitHubPath(mod.Source) {
+			moduleSource = cty.StringVal(mod.Source)
 		} else {
-			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", res.ResourceName))
+			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", mod.ModuleName))
 		}
 
 		moduleBody.SetAttributeValue("source", moduleSource)
@@ -248,7 +247,7 @@ func writeMain(
 		// For each Setting
 		for setting, value := range ctySettings {
 			if setting == "labels" {
-				// Manually compose merge(var.labels, {res.labels}) using tokens
+				// Manually compose merge(var.labels, {mod.labels}) using tokens
 				mergeBytes := []byte("merge(var.labels, ")
 
 				labelsStr := flattenHCLLabelsMap(
@@ -264,11 +263,11 @@ func writeMain(
 				continue
 			}
 
-			if wrap, ok := res.WrapSettingsWith[setting]; ok {
+			if wrap, ok := mod.WrapSettingsWith[setting]; ok {
 				if len(wrap) != 2 {
 					return fmt.Errorf(
 						"invalid length of WrapSettingsWith for %s.%s, expected 2 got %d",
-						res.ID, setting, len(wrap))
+						mod.ID, setting, len(wrap))
 				}
 				wrapBytes := []byte(wrap[0])
 				endBytes := []byte(wrap[1])
@@ -390,7 +389,7 @@ func (w TFWriter) writeResourceGroups(
 
 		// Write main.tf file
 		if err := writeMain(
-			resGroup.Resources, resGroup.TerraformBackend, writePath,
+			resGroup.Modules, resGroup.TerraformBackend, writePath,
 		); err != nil {
 			return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
 				resGroup.Name, err)
@@ -404,7 +403,7 @@ func (w TFWriter) writeResourceGroups(
 		}
 
 		// Write outputs.tf file
-		if err := writeOutputs(resGroup.Resources, writePath); err != nil {
+		if err := writeOutputs(resGroup.Modules, writePath); err != nil {
 			return fmt.Errorf(
 				"error writing outputs.tf file for deployment group %s: %v",
 				resGroup.Name, err)

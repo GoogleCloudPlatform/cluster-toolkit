@@ -35,15 +35,15 @@ const (
 	gitignoreTemplate        = "blueprint.gitignore.tmpl"
 )
 
-// ResWriter interface for writing modules to a blueprint
-type ResWriter interface {
-	getNumResources() int
-	addNumResources(int)
+// ModWriter interface for writing modules to a blueprint
+type ModWriter interface {
+	getNumModules() int
+	addNumModules(int)
 	writeResourceGroups(*config.YamlConfig, string) error
 	restoreState(deploymentDir string) error
 }
 
-var kinds = map[string]ResWriter{
+var kinds = map[string]ModWriter{
 	"terraform": new(TFWriter),
 	"packer":    new(PackerWriter),
 }
@@ -51,7 +51,7 @@ var kinds = map[string]ResWriter{
 //go:embed *.tmpl
 var templatesFS embed.FS
 
-func factory(kind string) ResWriter {
+func factory(kind string) ModWriter {
 	writer, exists := kinds[kind]
 	if !exists {
 		log.Fatalf(
@@ -61,7 +61,7 @@ func factory(kind string) ResWriter {
 	return writer
 }
 
-// WriteBlueprint writes a deployment directory using resources defined the environment blueprint.
+// WriteBlueprint writes a deployment directory using modules defined the environment blueprint.
 func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFlag bool) error {
 	deploymentName, err := yamlConfig.DeploymentName()
 	if err != nil {
@@ -76,7 +76,7 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFl
 
 	copySource(deploymentDir, &yamlConfig.ResourceGroups)
 	for _, writer := range kinds {
-		if writer.getNumResources() > 0 {
+		if writer.getNumModules() > 0 {
 			if err := writer.writeResourceGroups(yamlConfig, outputDir); err != nil {
 				return fmt.Errorf("error writing modules to deployment: %w", err)
 			}
@@ -90,35 +90,35 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFl
 
 func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
 	for iGrp, grp := range *resourceGroups {
-		for iRes, resource := range grp.Resources {
-			if sourcereader.IsGitHubPath(resource.Source) {
+		for iMod, module := range grp.Modules {
+			if sourcereader.IsGitHubPath(module.Source) {
 				continue
 			}
 
 			/* Copy source files */
-			resourceName := filepath.Base(resource.Source)
-			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
+			moduleName := filepath.Base(module.Source)
+			(*resourceGroups)[iGrp].Modules[iMod].ModuleName = moduleName
 			basePath := filepath.Join(blueprintPath, grp.Name)
 			var destPath string
-			switch resource.Kind {
+			switch module.Kind {
 			case "terraform":
-				destPath = filepath.Join(basePath, "modules", resourceName)
+				destPath = filepath.Join(basePath, "modules", moduleName)
 			case "packer":
-				destPath = filepath.Join(basePath, resource.ID)
+				destPath = filepath.Join(basePath, module.ID)
 			}
 			_, err := os.Stat(destPath)
 			if err == nil {
 				continue
 			}
 
-			reader := sourcereader.Factory(resource.Source)
-			if err := reader.GetResource(resource.Source, destPath); err != nil {
-				log.Fatalf("failed to get module from %s to %s: %v", resource.Source, destPath, err)
+			reader := sourcereader.Factory(module.Source)
+			if err := reader.GetModule(module.Source, destPath); err != nil {
+				log.Fatalf("failed to get module from %s to %s: %v", module.Source, destPath, err)
 			}
 
-			/* Create resource level files */
-			writer := factory(resource.Kind)
-			writer.addNumResources(1)
+			/* Create module level files */
+			writer := factory(module.Kind)
+			writer.addNumModules(1)
 		}
 	}
 }

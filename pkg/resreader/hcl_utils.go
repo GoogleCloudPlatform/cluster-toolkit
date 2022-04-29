@@ -24,8 +24,8 @@ import (
 // getHCLInfo is wrapped by SourceReader interface which supports multiple
 // sources and stores remote modules locally, so the given source parameter to
 // getHCLInfo is only a local path.
-func getHCLInfo(source string) (ResourceInfo, error) {
-	ret := ResourceInfo{}
+func getHCLInfo(source string) (ModuleInfo, error) {
+	ret := ModuleInfo{}
 
 	fileInfo, err := os.Stat(source)
 	if os.IsNotExist(err) {

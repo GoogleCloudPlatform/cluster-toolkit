@@ -45,10 +45,10 @@ func (bc BlueprintConfig) validate() {
 		log.Fatal(err)
 	}
 
-	if err := bc.validateResources(); err != nil {
+	if err := bc.validateModules(); err != nil {
 		log.Fatal(err)
 	}
-	if err := bc.validateResourceSettings(); err != nil {
+	if err := bc.validateModuleSettings(); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -134,20 +134,20 @@ func (bc BlueprintConfig) validateVars() error {
 	return nil
 }
 
-func resource2String(c Resource) string {
+func module2String(c Module) string {
 	cBytes, _ := yaml.Marshal(&c)
 	return string(cBytes)
 }
 
-func validateResource(c Resource) error {
+func validateModule(c Module) error {
 	if c.ID == "" {
-		return fmt.Errorf("%s\n%s", errorMessages["emptyID"], resource2String(c))
+		return fmt.Errorf("%s\n%s", errorMessages["emptyID"], module2String(c))
 	}
 	if c.Source == "" {
-		return fmt.Errorf("%s\n%s", errorMessages["emptySource"], resource2String(c))
+		return fmt.Errorf("%s\n%s", errorMessages["emptySource"], module2String(c))
 	}
 	if !resreader.IsValidKind(c.Kind) {
-		return fmt.Errorf("%s\n%s", errorMessages["wrongKind"], resource2String(c))
+		return fmt.Errorf("%s\n%s", errorMessages["wrongKind"], module2String(c))
 	}
 	return nil
 }
@@ -156,33 +156,33 @@ func hasIllegalChars(name string) bool {
 	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
 }
 
-func validateOutputs(res Resource, resInfo resreader.ResourceInfo) error {
+func validateOutputs(mod Module, modInfo resreader.ModuleInfo) error {
 
 	// Only get the map if needed
 	var outputsMap map[string]resreader.VarInfo
-	if len(res.Outputs) > 0 {
-		outputsMap = resInfo.GetOutputsAsMap()
+	if len(mod.Outputs) > 0 {
+		outputsMap = modInfo.GetOutputsAsMap()
 	}
 
-	// Ensure output exists in the underlying resource
-	for _, output := range res.Outputs {
+	// Ensure output exists in the underlying modules
+	for _, output := range mod.Outputs {
 		if _, ok := outputsMap[output]; !ok {
 			return fmt.Errorf("%s, module: %s output: %s",
-				errorMessages["invalidOutput"], res.ID, output)
+				errorMessages["invalidOutput"], mod.ID, output)
 		}
 	}
 	return nil
 }
 
-// validateResources ensures parameters set in resources are set correctly.
-func (bc BlueprintConfig) validateResources() error {
+// validateModules ensures parameters set in modules are set correctly.
+func (bc BlueprintConfig) validateModules() error {
 	for _, grp := range bc.Config.ResourceGroups {
-		for _, res := range grp.Resources {
-			if err := validateResource(res); err != nil {
+		for _, mod := range grp.Modules {
+			if err := validateModule(mod); err != nil {
 				return err
 			}
-			resInfo := bc.ResourcesInfo[grp.Name][res.Source]
-			if err := validateOutputs(res, resInfo); err != nil {
+			modInfo := bc.ModulesInfo[grp.Name][mod.Source]
+			if err := validateOutputs(mod, modInfo); err != nil {
 				return err
 			}
 		}
@@ -190,16 +190,16 @@ func (bc BlueprintConfig) validateResources() error {
 	return nil
 }
 
-type resourceVariables struct {
+type moduleVariables struct {
 	Inputs  map[string]bool
 	Outputs map[string]bool
 }
 
 func validateSettings(
-	res Resource,
-	info resreader.ResourceInfo) error {
+	mod Module,
+	info resreader.ModuleInfo) error {
 
-	var cVars = resourceVariables{
+	var cVars = moduleVariables{
 		Inputs:  map[string]bool{},
 		Outputs: map[string]bool{},
 	}
@@ -208,29 +208,29 @@ func validateSettings(
 		cVars.Inputs[input.Name] = input.Required
 	}
 	// Make sure we only define variables that exist
-	for k := range res.Settings {
+	for k := range mod.Settings {
 		if _, ok := cVars.Inputs[k]; !ok {
 			return fmt.Errorf("%s: Module ID: %s Setting: %s",
-				errorMessages["extraSetting"], res.ID, k)
+				errorMessages["extraSetting"], mod.ID, k)
 		}
 	}
 	return nil
 }
 
-// validateResourceSettings verifies that no additional settings are provided
-// that don't have a counterpart variable in the resource.
-func (bc BlueprintConfig) validateResourceSettings() error {
+// validateModuleSettings verifies that no additional settings are provided
+// that don't have a counterpart variable in the module
+func (bc BlueprintConfig) validateModuleSettings() error {
 	for _, grp := range bc.Config.ResourceGroups {
-		for _, res := range grp.Resources {
-			reader := sourcereader.Factory(res.Source)
-			info, err := reader.GetResourceInfo(res.Source, res.Kind)
+		for _, mod := range grp.Modules {
+			reader := sourcereader.Factory(mod.Source)
+			info, err := reader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
 				errStr := "failed to get info for module at %s while validating module settings"
-				return errors.Wrapf(err, errStr, res.Source)
+				return errors.Wrapf(err, errStr, mod.Source)
 			}
-			if err = validateSettings(res, info); err != nil {
+			if err = validateSettings(mod, info); err != nil {
 				errStr := "found an issue while validating settings for module at %s"
-				return errors.Wrapf(err, errStr, res.Source)
+				return errors.Wrapf(err, errStr, mod.Source)
 			}
 		}
 	}

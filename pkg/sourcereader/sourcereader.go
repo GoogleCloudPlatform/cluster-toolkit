@@ -27,15 +27,15 @@ const (
 	github
 )
 
-// SourceReader interface for reading resources from a source
+// SourceReader interface for reading modules from a source
 type SourceReader interface {
-	// GetResourceInfo would leverage resreader.GetInfo for the given kind.
-	// GetResourceInfo would operate over the source without creating a local copy.
-	// This would be very dependent on the kind of resource.
-	GetResourceInfo(resPath string, kind string) (resreader.ResourceInfo, error)
+	// GetModuleInfo would leverage resreader.GetInfo for the given kind.
+	// GetModuleInfo would operate over the source without creating a local copy.
+	// This would be very dependent on the kind of module.
+	GetModuleInfo(modPath string, kind string) (resreader.ModuleInfo, error)
 
-	// GetResource copies the source to a provided local destination (the blueprint directory).
-	GetResource(resPath string, copyPath string) error
+	// GetModule copies the source to a provided local destination (the blueprint directory).
+	GetModule(modPath string, copyPath string) error
 }
 
 var readers = map[int]SourceReader{
@@ -51,7 +51,7 @@ func IsLocalPath(source string) bool {
 		strings.HasPrefix(source, "/")
 }
 
-// IsEmbeddedPath checks if a source path points to an embedded resources
+// IsEmbeddedPath checks if a source path points to an embedded modules
 func IsEmbeddedPath(source string) bool {
 	return strings.HasPrefix(source, "modules/")
 }
@@ -61,24 +61,24 @@ func IsGitHubPath(source string) bool {
 	return strings.HasPrefix(source, "github.com") || strings.HasPrefix(source, "git@github.com")
 }
 
-// Factory returns a SourceReader of resource path
-func Factory(resPath string) SourceReader {
+// Factory returns a SourceReader of module path
+func Factory(modPath string) SourceReader {
 	switch {
-	case IsLocalPath(resPath):
+	case IsLocalPath(modPath):
 		return readers[local]
-	case IsEmbeddedPath(resPath):
+	case IsEmbeddedPath(modPath):
 		return readers[embedded]
-	case IsGitHubPath(resPath):
+	case IsGitHubPath(modPath):
 		return readers[github]
 	default:
 		log.Fatalf("Source (%s) not valid, should begin with /, ./, ../, modules/, git@ or github.com",
-			resPath)
+			modPath)
 	}
 
 	return nil
 }
 
-func copyFromPath(resPath string, copyPath string) error {
+func copyFromPath(modPath string, copyPath string) error {
 	// currently supporting only local blueprint directory
 	blueprintio := blueprintio.GetBlueprintIOLocal()
 
@@ -86,5 +86,5 @@ func copyFromPath(resPath string, copyPath string) error {
 		return err
 	}
 
-	return blueprintio.CopyFromPath(resPath, copyPath)
+	return blueprintio.CopyFromPath(modPath, copyPath)
 }

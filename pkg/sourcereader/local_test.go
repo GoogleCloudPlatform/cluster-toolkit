@@ -23,11 +23,11 @@ import (
 )
 
 // Util Functions
-func createTmpResource() {
+func createTmpModule() {
 	var err error
 
-	// Create terraform resource dir
-	terraformDir = filepath.Join(testDir, "terraformResource")
+	// Create terraform module dir
+	terraformDir = filepath.Join(testDir, "terraformModule")
 	err = os.Mkdir(terraformDir, 0755)
 	if err != nil {
 		log.Fatalf("error creating test terraform module dir: %e", err)
@@ -64,8 +64,8 @@ func createTmpResource() {
 		log.Fatalf("sourcereader_local_test: Failed to write outputs.tf test file. %v", err)
 	}
 
-	// Create packer resource dir
-	packerDir = filepath.Join(testDir, "packerResource")
+	// Create packer module dir
+	packerDir = filepath.Join(testDir, "packerModule")
 	err = os.Mkdir(packerDir, 0755)
 	if err != nil {
 		log.Fatalf("error creating test packer module dir: %e", err)
@@ -93,38 +93,38 @@ func createTmpResource() {
 	}
 }
 
-func (s *MySuite) TestGetResourceInfo_Local(c *C) {
+func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 	reader := LocalSourceReader{}
 
 	// Success
-	resourceInfo, err := reader.GetResourceInfo(terraformDir, tfKindString)
+	moduleInfo, err := reader.GetModuleInfo(terraformDir, tfKindString)
 	c.Assert(err, IsNil)
-	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
-	c.Assert(resourceInfo.Outputs[0].Name, Equals, "test_output")
+	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
+	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
 
 	// Invalid source path - path does not exists
-	badLocalRes := "./not/a/real/path"
-	resourceInfo, err = reader.GetResourceInfo(badLocalRes, tfKindString)
+	badLocalMod := "./not/a/real/path"
+	moduleInfo, err = reader.GetModuleInfo(badLocalMod, tfKindString)
 	expectedErr := "failed to get info using tfconfig for terraform module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
-	// Invalid: Unsupported Resource Source
+	// Invalid: Unsupported Module Source
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
-	resourceInfo, err = reader.GetResourceInfo(badSource, tfKindString)
+	moduleInfo, err = reader.GetModuleInfo(badSource, tfKindString)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
 
-func (s *MySuite) TestGetResource_Local(c *C) {
+func (s *MySuite) TestGetModule_Local(c *C) {
 	reader := LocalSourceReader{}
 
 	// Success
-	dest := filepath.Join(testDir, "TestGetResource_Local")
-	err := reader.GetResource(terraformDir, dest)
+	dest := filepath.Join(testDir, "TestGetModule_Local")
+	err := reader.GetModule(terraformDir, dest)
 	c.Assert(err, IsNil)
 
 	// Invalid: Write to the same dest directory again
-	err = reader.GetResource(terraformDir, dest)
+	err = reader.GetModule(terraformDir, dest)
 	expectedErr := "The directory already exists: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
@@ -135,15 +135,15 @@ func (s *MySuite) TestGetResource_Local(c *C) {
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
 
-	// Invalid: No local resource
-	badLocalRes := "./resources/does/not/exist"
-	err = reader.GetResource(badLocalRes, dest)
+	// Invalid: No local module
+	badLocalMod := "./modules/does/not/exist"
+	err = reader.GetModule(badLocalMod, dest)
 	expectedErr = "Local module doesn't exist at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
-	// Invalid: Unsupported Resource Source by LocalSourceReader
+	// Invalid: Unsupported Module Source by LocalSourceReader
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
-	err = reader.GetResource(badSource, dest)
+	err = reader.GetModule(badSource, dest)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }

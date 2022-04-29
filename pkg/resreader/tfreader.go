@@ -18,27 +18,27 @@ package resreader
 
 import "fmt"
 
-// TFReader implements ResReader for terraform modules
+// TFReader implements ModReader for terraform modules
 type TFReader struct {
-	allResInfo map[string]ResourceInfo
+	allModInfo map[string]ModuleInfo
 }
 
-// SetInfo sets the resource info for a resource key'd by the source string
-func (r TFReader) SetInfo(source string, resInfo ResourceInfo) {
-	r.allResInfo[source] = resInfo
+// SetInfo sets the module info for a module key'd by the source string
+func (r TFReader) SetInfo(source string, modInfo ModuleInfo) {
+	r.allModInfo[source] = modInfo
 }
 
-// GetInfo reads the ResourceInfo for a terraform module
-func (r TFReader) GetInfo(source string) (ResourceInfo, error) {
-	if resInfo, ok := r.allResInfo[source]; ok {
-		return resInfo, nil
+// GetInfo reads the ModuleInfo for a terraform module
+func (r TFReader) GetInfo(source string) (ModuleInfo, error) {
+	if modInfo, ok := r.allModInfo[source]; ok {
+		return modInfo, nil
 	}
-	resInfo, err := getHCLInfo(source)
+	modInfo, err := getHCLInfo(source)
 	if err != nil {
-		return resInfo, fmt.Errorf(
+		return modInfo, fmt.Errorf(
 			"failed to get info using tfconfig for terraform module at %s: %v",
 			source, err)
 	}
-	r.allResInfo[source] = resInfo
-	return resInfo, nil
+	r.allModInfo[source] = modInfo
+	return modInfo, nil
 }

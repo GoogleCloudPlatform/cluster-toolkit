@@ -43,7 +43,7 @@ const (
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
 func (bc *BlueprintConfig) expand() {
-	bc.addSettingsToResources()
+	bc.addSettingsToModules()
 	if err := bc.expandBackends(); err != nil {
 		log.Fatalf("failed to apply default backend to deployment groups: %v", err)
 	}
@@ -58,7 +58,7 @@ func (bc *BlueprintConfig) expand() {
 			"failed to update module labels when expanding the config: %v", err)
 	}
 
-	if err := bc.applyUseResources(); err != nil {
+	if err := bc.applyUseModules(); err != nil {
 		log.Fatalf(
 			"failed to apply \"use\" modules when expanding the config: %v", err)
 	}
@@ -71,11 +71,11 @@ func (bc *BlueprintConfig) expand() {
 	bc.expandVariables()
 }
 
-func (bc *BlueprintConfig) addSettingsToResources() {
+func (bc *BlueprintConfig) addSettingsToModules() {
 	for iGrp, grp := range bc.Config.ResourceGroups {
-		for iRes, res := range grp.Resources {
-			if res.Settings == nil {
-				bc.Config.ResourceGroups[iGrp].Resources[iRes].Settings =
+		for iMod, mod := range grp.Modules {
+			if mod.Settings == nil {
+				bc.Config.ResourceGroups[iGrp].Modules[iMod].Settings =
 					make(map[string]interface{})
 			}
 		}
@@ -114,28 +114,28 @@ func (bc *BlueprintConfig) expandBackends() error {
 	return nil
 }
 
-func getResourceVarName(resID string, varName string) string {
-	return fmt.Sprintf("$(%s.%s)", resID, varName)
+func getModuleVarName(modID string, varName string) string {
+	return fmt.Sprintf("$(%s.%s)", modID, varName)
 }
 
-func getResourceInputMap(inputs []resreader.VarInfo) map[string]string {
-	resInputs := make(map[string]string)
+func getModuleInputMap(inputs []resreader.VarInfo) map[string]string {
+	modInputs := make(map[string]string)
 	for _, input := range inputs {
-		resInputs[input.Name] = input.Type
+		modInputs[input.Name] = input.Type
 	}
-	return resInputs
+	return modInputs
 }
 
-func useResource(
-	res *Resource,
-	useRes Resource,
-	resInputs map[string]string,
+func useModule(
+	mod *Module,
+	useMod Module,
+	modInputs map[string]string,
 	useOutputs []resreader.VarInfo,
 	changedSettings map[string]bool,
 ) {
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
-		_, isAlreadySet := res.Settings[settingName]
+		_, isAlreadySet := mod.Settings[settingName]
 		_, hasChanged := changedSettings[settingName]
 
 		// Skip settings explicitly defined by users
@@ -144,56 +144,56 @@ func useResource(
 		}
 
 		// This output corresponds to an input that was not explicitly set by the user
-		if inputType, ok := resInputs[settingName]; ok {
-			resVarName := getResourceVarName(useRes.ID, settingName)
+		if inputType, ok := modInputs[settingName]; ok {
+			modVarName := getModuleVarName(useMod.ID, settingName)
 			isInputList := strings.HasPrefix(inputType, "list")
 			if isInputList {
 				if !isAlreadySet {
 					// Input is a list, create an outer list for it
-					res.Settings[settingName] = []interface{}{}
+					mod.Settings[settingName] = []interface{}{}
 					changedSettings[settingName] = true
-					res.createWrapSettingsWith()
-					res.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
+					mod.createWrapSettingsWith()
+					mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
 				}
 				// Append value list to the outer list
-				res.Settings[settingName] = append(
-					res.Settings[settingName].([]interface{}), resVarName)
+				mod.Settings[settingName] = append(
+					mod.Settings[settingName].([]interface{}), modVarName)
 			} else if !isAlreadySet {
 				// If input is not a list, set value if not already set and continue
-				res.Settings[settingName] = resVarName
+				mod.Settings[settingName] = modVarName
 				changedSettings[settingName] = true
 			}
 		}
 	}
 }
 
-// applyUseResources applies variables from resources listed in the "use" field
+// applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
-func (bc *BlueprintConfig) applyUseResources() error {
+func (bc *BlueprintConfig) applyUseModules() error {
 	for iGrp := range bc.Config.ResourceGroups {
 		group := &bc.Config.ResourceGroups[iGrp]
-		for iRes := range group.Resources {
-			res := &group.Resources[iRes]
-			resInfo := bc.ResourcesInfo[group.Name][res.Source]
-			resInputs := getResourceInputMap(resInfo.Inputs)
+		for iMod := range group.Modules {
+			mod := &group.Modules[iMod]
+			modInfo := bc.ModulesInfo[group.Name][mod.Source]
+			modInputs := getModuleInputMap(modInfo.Inputs)
 			changedSettings := make(map[string]bool)
-			for _, useResID := range res.Use {
-				useRes := group.getResourceByID(useResID)
-				useInfo := bc.ResourcesInfo[group.Name][useRes.Source]
-				if useRes.ID == "" {
+			for _, useModID := range mod.Use {
+				useMod := group.getModuleByID(useModID)
+				useInfo := bc.ModulesInfo[group.Name][useMod.Source]
+				if useMod.ID == "" {
 					return fmt.Errorf("could not find module %s used by %s in group %s",
-						useResID, res.ID, group.Name)
+						useModID, mod.ID, group.Name)
 				}
-				useResource(res, useRes, resInputs, useInfo.Outputs, changedSettings)
+				useModule(mod, useMod, modInputs, useInfo.Outputs, changedSettings)
 			}
 		}
 	}
 	return nil
 }
 
-func (bc BlueprintConfig) resourceHasInput(
+func (bc BlueprintConfig) moduleHasInput(
 	resGroup string, source string, inputName string) bool {
-	for _, input := range bc.ResourcesInfo[resGroup][source].Inputs {
+	for _, input := range bc.ModulesInfo[resGroup][source].Inputs {
 		if input.Name == inputName {
 			return true
 		}
@@ -242,8 +242,8 @@ func toStringInterfaceMap(i interface{}) (map[string]interface{}, error) {
 }
 
 // combineLabels sets defaults for labels based on other variables and merges
-// the global labels defined in Vars with resource setting labels. It also
-// determines the role and sets it for each resource independently.
+// the global labels defined in Vars with module setting labels. It also
+// determines the role and sets it for each module independently.
 func (bc *BlueprintConfig) combineLabels() error {
 	defaultLabels := map[string]interface{}{
 		blueprintLabel:  bc.Config.BlueprintName,
@@ -275,33 +275,33 @@ func (bc *BlueprintConfig) combineLabels() error {
 	}
 
 	for iGrp, grp := range bc.Config.ResourceGroups {
-		for iRes, res := range grp.Resources {
-			// Check if labels are set for this resource
-			if !bc.resourceHasInput(grp.Name, res.Source, labels) {
+		for iMod, mod := range grp.Modules {
+			// Check if labels are set for this module
+			if !bc.moduleHasInput(grp.Name, mod.Source, labels) {
 				continue
 			}
 
-			var resLabels map[interface{}]interface{}
+			var modLabels map[interface{}]interface{}
 			var ok bool
 			// If labels aren't already set, prefill them with globals
-			if _, exists := res.Settings[labels]; !exists {
-				resLabels = make(map[interface{}]interface{})
+			if _, exists := mod.Settings[labels]; !exists {
+				modLabels = make(map[interface{}]interface{})
 			} else {
 				// Cast into map so we can index into them
-				resLabels, ok = res.Settings[labels].(map[interface{}]interface{})
+				modLabels, ok = mod.Settings[labels].(map[interface{}]interface{})
 
 				if !ok {
 					return fmt.Errorf("%s, Module %s, labels type: %T",
-						errorMessages["settingsLabelType"], res.ID, res.Settings[labels])
+						errorMessages["settingsLabelType"], mod.ID, mod.Settings[labels])
 				}
 			}
 
 			// Add the role (e.g. compute, network, etc)
-			if _, exists := resLabels[roleLabel]; !exists {
-				resLabels[roleLabel] = getRole(res.Source)
+			if _, exists := modLabels[roleLabel]; !exists {
+				modLabels[roleLabel] = getRole(mod.Source)
 			}
-			bc.Config.ResourceGroups[iGrp].Resources[iRes].Settings[labels] =
-				resLabels
+			bc.Config.ResourceGroups[iGrp].Modules[iMod].Settings[labels] =
+				modLabels
 		}
 	}
 	bc.Config.Vars[labels] = globalLabels
@@ -310,19 +310,19 @@ func (bc *BlueprintConfig) combineLabels() error {
 
 func applyGlobalVarsInGroup(
 	resourceGroup ResourceGroup,
-	resInfo map[string]resreader.ResourceInfo,
+	modInfo map[string]resreader.ModuleInfo,
 	globalVars map[string]interface{}) error {
-	for _, res := range resourceGroup.Resources {
-		for _, input := range resInfo[res.Source].Inputs {
+	for _, mod := range resourceGroup.Modules {
+		for _, input := range modInfo[mod.Source].Inputs {
 
-			// Resource setting exists? Nothing more needs to be done.
-			if _, ok := res.Settings[input.Name]; ok {
+			// Module setting exists? Nothing more needs to be done.
+			if _, ok := mod.Settings[input.Name]; ok {
 				continue
 			}
 
 			// If it's not set, is there a global we can use?
 			if _, ok := globalVars[input.Name]; ok {
-				res.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
+				mod.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
 				continue
 			}
 
@@ -330,9 +330,9 @@ func applyGlobalVarsInGroup(
 				// It's not explicitly set, and not global is set
 				// Fail if no default has been set
 				return fmt.Errorf("%s: Module ID: %s Setting: %s",
-					errorMessages["missingSetting"], res.ID, input.Name)
+					errorMessages["missingSetting"], mod.ID, input.Name)
 			}
-			// Default exists, the resource will handle it
+			// Default exists, the module will handle it
 		}
 	}
 	return nil
@@ -350,7 +350,7 @@ func updateGlobalVarTypes(vars map[string]interface{}) error {
 }
 
 // applyGlobalVariables takes any variables defined at the global level and
-// applies them to resources settings if not already set.
+// applies them to module settings if not already set.
 func (bc *BlueprintConfig) applyGlobalVariables() error {
 	// Update global variable types to match
 	if err := updateGlobalVarTypes(bc.Config.Vars); err != nil {
@@ -359,7 +359,7 @@ func (bc *BlueprintConfig) applyGlobalVariables() error {
 
 	for _, grp := range bc.Config.ResourceGroups {
 		err := applyGlobalVarsInGroup(
-			grp, bc.ResourcesInfo[grp.Name], bc.Config.Vars)
+			grp, bc.ModulesInfo[grp.Name], bc.Config.Vars)
 		if err != nil {
 			return err
 		}
@@ -370,14 +370,14 @@ func (bc *BlueprintConfig) applyGlobalVariables() error {
 type varContext struct {
 	varString  string
 	groupIndex int
-	resIndex   int
+	modIndex   int
 	yamlConfig YamlConfig
 }
 
 // Needs ResourceGroups, variable string, current group,
 func expandSimpleVariable(
 	context varContext,
-	resToGrp map[string]int) (string, error) {
+	modToGrp map[string]int) (string, error) {
 
 	// Get variable contents
 	re := regexp.MustCompile(simpleVariableExp)
@@ -406,9 +406,9 @@ func expandSimpleVariable(
 		return fmt.Sprintf("((var.%s))", varValue), nil
 	}
 
-	// Resource variable
-	// Verify resource exists
-	refGrpIndex, ok := resToGrp[varSource]
+	// Module variable
+	// Verify module exists
+	refGrpIndex, ok := modToGrp[varSource]
 	if !ok {
 		return "", fmt.Errorf("%s: module %s was not found",
 			errorMessages["varNotFound"], varSource)
@@ -418,31 +418,31 @@ func expandSimpleVariable(
 			errorMessages["varInAnotherGroup"], varSource, refGrpIndex, context.groupIndex)
 	}
 
-	// Get the resource info
+	// Get the module info
 	refGrp := context.yamlConfig.ResourceGroups[refGrpIndex]
-	refResIndex := -1
-	for i := range refGrp.Resources {
-		if refGrp.Resources[i].ID == varSource {
-			refResIndex = i
+	refModIndex := -1
+	for i := range refGrp.Modules {
+		if refGrp.Modules[i].ID == varSource {
+			refModIndex = i
 			break
 		}
 	}
-	if refResIndex == -1 {
+	if refModIndex == -1 {
 		log.Fatalf("Could not find module referenced by variable %s",
 			context.varString)
 	}
-	refRes := refGrp.Resources[refResIndex]
-	reader := sourcereader.Factory(refRes.Source)
-	resInfo, err := reader.GetResourceInfo(refRes.Source, refRes.Kind)
+	refMod := refGrp.Modules[refModIndex]
+	reader := sourcereader.Factory(refMod.Source)
+	modInfo, err := reader.GetModuleInfo(refMod.Source, refMod.Kind)
 	if err != nil {
 		log.Fatalf(
 			"failed to get info for module at %s while expanding variables: %e",
-			refRes.Source, err)
+			refMod.Source, err)
 	}
 
-	// Verify output exists in resource
+	// Verify output exists in module
 	found := false
-	for _, output := range resInfo.Outputs {
+	for _, output := range modInfo.Outputs {
 		if output.Name == varValue {
 			found = true
 			break
@@ -450,14 +450,14 @@ func expandSimpleVariable(
 	}
 	if !found {
 		return "", fmt.Errorf("%s: module %s did not have output %s",
-			errorMessages["noOutput"], refRes.ID, varValue)
+			errorMessages["noOutput"], refMod.ID, varValue)
 	}
 	return fmt.Sprintf("((module.%s.%s))", varSource, varValue), nil
 }
 
 func expandVariable(
 	context varContext,
-	resToGrp map[string]int) (string, error) {
+	modToGrp map[string]int) (string, error) {
 	return "", fmt.Errorf("%s: expandVariable", errorMessages["notImplemented"])
 }
 
@@ -482,15 +482,15 @@ func hasVariable(str string) bool {
 func handleVariable(
 	prim interface{},
 	context varContext,
-	resToGrp map[string]int) (interface{}, error) {
+	modToGrp map[string]int) (interface{}, error) {
 	switch val := prim.(type) {
 	case string:
 		context.varString = val
 		if hasVariable(val) {
 			if isSimpleVariable(val) {
-				return expandSimpleVariable(context, resToGrp)
+				return expandSimpleVariable(context, modToGrp)
 			}
-			return expandVariable(context, resToGrp)
+			return expandVariable(context, modToGrp)
 		}
 		return val, nil
 	default:
@@ -501,7 +501,7 @@ func handleVariable(
 func updateVariableType(
 	value interface{},
 	context varContext,
-	resToGrp map[string]int) (interface{}, error) {
+	modToGrp map[string]int) (interface{}, error) {
 	var err error
 	switch typedValue := value.(type) {
 	case []interface{}:
@@ -509,7 +509,7 @@ func updateVariableType(
 		{
 			for i := 0; i < len(interfaceSlice); i++ {
 				interfaceSlice[i], err = updateVariableType(
-					interfaceSlice[i], context, resToGrp)
+					interfaceSlice[i], context, modToGrp)
 				if err != nil {
 					return interfaceSlice, err
 				}
@@ -519,7 +519,7 @@ func updateVariableType(
 	case map[string]interface{}:
 		retMap := map[string]interface{}{}
 		for k, v := range typedValue {
-			retMap[k], err = updateVariableType(v, context, resToGrp)
+			retMap[k], err = updateVariableType(v, context, modToGrp)
 			if err != nil {
 				return retMap, err
 			}
@@ -528,23 +528,23 @@ func updateVariableType(
 	case map[interface{}]interface{}:
 		retMap := map[string]interface{}{}
 		for k, v := range typedValue {
-			retMap[k.(string)], err = updateVariableType(v, context, resToGrp)
+			retMap[k.(string)], err = updateVariableType(v, context, modToGrp)
 			if err != nil {
 				return retMap, err
 			}
 		}
 		return retMap, err
 	default:
-		return handleVariable(value, context, resToGrp)
+		return handleVariable(value, context, modToGrp)
 	}
 }
 
 func updateVariables(
 	context varContext,
 	interfaceMap map[string]interface{},
-	resToGrp map[string]int) error {
+	modToGrp map[string]int) error {
 	for key, value := range interfaceMap {
-		updatedVal, err := updateVariableType(value, context, resToGrp)
+		updatedVal, err := updateVariableType(value, context, modToGrp)
 		if err != nil {
 			return err
 		}
@@ -564,16 +564,16 @@ func (bc *BlueprintConfig) expandVariables() {
 	}
 
 	for iGrp, grp := range bc.Config.ResourceGroups {
-		for iRes := range grp.Resources {
+		for iMod := range grp.Modules {
 			context := varContext{
 				groupIndex: iGrp,
-				resIndex:   iRes,
+				modIndex:   iMod,
 				yamlConfig: bc.Config,
 			}
 			err := updateVariables(
 				context,
-				bc.Config.ResourceGroups[iGrp].Resources[iRes].Settings,
-				bc.ResourceToGroup)
+				bc.Config.ResourceGroups[iGrp].Modules[iMod].Settings,
+				bc.ModuleToGroup)
 			if err != nil {
 				log.Fatalf("expandVariables: %v", err)
 			}

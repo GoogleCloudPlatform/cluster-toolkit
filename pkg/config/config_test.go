@@ -57,7 +57,7 @@ deployment_groups:
       network_name: $"${var.deployment_name}_net
       project_id: project_name
 `)
-	testResources = []Resource{
+	testModules = []Module{
 		{
 			Source:           "./modules/network/vpc",
 			Kind:             "terraform",
@@ -76,7 +76,7 @@ deployment_groups:
 	expectedSimpleYamlConfig YamlConfig = YamlConfig{
 		BlueprintName:  "simple",
 		Vars:           map[string]interface{}{"labels": defaultLabels},
-		ResourceGroups: []ResourceGroup{{Name: "ResourceGroup1", TerraformBackend: TerraformBackend{}, Resources: testResources}},
+		ResourceGroups: []ResourceGroup{{Name: "ResourceGroup1", TerraformBackend: TerraformBackend{}, Modules: testModules}},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
 			Configuration: map[string]interface{}{},
@@ -114,17 +114,17 @@ func setup() {
 	simpleYamlFilename = simpleYamlFile.Name()
 	simpleYamlFile.Close()
 
-	// Create test directory with simple resources
+	// Create test directory with simple modules
 	tmpTestDir, err = ioutil.TempDir("", "ghpc_config_tests_*")
 	if err != nil {
 		log.Fatalf("failed to create temp dir for config tests: %e", err)
 	}
-	resourceDir := filepath.Join(tmpTestDir, "resource")
-	err = os.Mkdir(resourceDir, 0755)
+	moduleDir := filepath.Join(tmpTestDir, "module")
+	err = os.Mkdir(moduleDir, 0755)
 	if err != nil {
 		log.Fatalf("failed to create test module dir: %v", err)
 	}
-	varFile, err := os.Create(filepath.Join(resourceDir, "variables.tf"))
+	varFile, err := os.Create(filepath.Join(moduleDir, "variables.tf"))
 	if err != nil {
 		log.Fatalf("failed to create variables.tf in test module dir: %v", err)
 	}
@@ -161,28 +161,28 @@ func cleanErrorRegexp(errRegexp string) string {
 }
 
 func getBlueprintConfigForTest() BlueprintConfig {
-	testResourceSource := "testSource"
-	testResource := Resource{
-		Source:           testResourceSource,
+	testModuleSource := "testSource"
+	testModule := Module{
+		Source:           testModuleSource,
 		Kind:             "terraform",
-		ID:               "testResource",
+		ID:               "testModule",
 		Use:              []string{},
 		WrapSettingsWith: make(map[string][]string),
 		Settings:         make(map[string]interface{}),
 	}
-	testResourceSourceWithLabels := "./role/source"
-	testResourceWithLabels := Resource{
-		Source:           testResourceSourceWithLabels,
-		ID:               "testResourceWithLabels",
+	testModuleSourceWithLabels := "./role/source"
+	testModuleWithLabels := Module{
+		Source:           testModuleSourceWithLabels,
+		ID:               "testModuleWithLabels",
 		Kind:             "terraform",
 		Use:              []string{},
 		WrapSettingsWith: make(map[string][]string),
 		Settings: map[string]interface{}{
-			"resourceLabel": "resourceLabelValue",
+			"moduleLabel": "moduleLabelValue",
 		},
 	}
 	testLabelVarInfo := resreader.VarInfo{Name: "labels"}
-	testResourceInfo := resreader.ResourceInfo{
+	testModuleInfo := resreader.ModuleInfo{
 		Inputs: []resreader.VarInfo{testLabelVarInfo},
 	}
 	testYamlConfig := YamlConfig{
@@ -200,31 +200,31 @@ func getBlueprintConfigForTest() BlueprintConfig {
 					Type:          "",
 					Configuration: map[string]interface{}{},
 				},
-				Resources: []Resource{testResource, testResourceWithLabels},
+				Modules: []Module{testModule, testModuleWithLabels},
 			},
 		},
 	}
 
 	return BlueprintConfig{
 		Config: testYamlConfig,
-		ResourcesInfo: map[string]map[string]resreader.ResourceInfo{
+		ModulesInfo: map[string]map[string]resreader.ModuleInfo{
 			"group1": {
-				testResourceSource:           testResourceInfo,
-				testResourceSourceWithLabels: testResourceInfo,
+				testModuleSource:           testModuleInfo,
+				testModuleSourceWithLabels: testModuleInfo,
 			},
 		},
 	}
 }
 
-func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
-	testResourceSource := filepath.Join(tmpTestDir, "resource")
+func getBasicBlueprintConfigWithTestModule() BlueprintConfig {
+	testModuleSource := filepath.Join(tmpTestDir, "module")
 	testResourceGroup := ResourceGroup{
 		Name: "primary",
-		Resources: []Resource{
+		Modules: []Module{
 			{
-				ID:       "TestResource",
+				ID:       "TestModule",
 				Kind:     "terraform",
-				Source:   testResourceSource,
+				Source:   testModuleSource,
 				Settings: map[string]interface{}{"test_variable": "test_value"},
 			},
 		},
@@ -240,79 +240,79 @@ func getBasicBlueprintConfigWithTestResource() BlueprintConfig {
 /* Tests */
 // config.go
 func (s *MySuite) TestExpandConfig(c *C) {
-	bc := getBasicBlueprintConfigWithTestResource()
+	bc := getBasicBlueprintConfigWithTestModule()
 	bc.ExpandConfig()
 }
 
-func (s *MySuite) TestSetResourcesInfo(c *C) {
-	bc := getBasicBlueprintConfigWithTestResource()
-	bc.setResourcesInfo()
+func (s *MySuite) TestSetModulesInfo(c *C) {
+	bc := getBasicBlueprintConfigWithTestModule()
+	bc.setModulesInfo()
 }
 
-func (s *MySuite) TestCreateResourceInfo(c *C) {
-	bc := getBasicBlueprintConfigWithTestResource()
-	createResourceInfo(bc.Config.ResourceGroups[0])
+func (s *MySuite) TestCreateModuleInfo(c *C) {
+	bc := getBasicBlueprintConfigWithTestModule()
+	createModuleInfo(bc.Config.ResourceGroups[0])
 }
 
 func (s *MySuite) TestGetResouceByID(c *C) {
 	testID := "testID"
 
-	// No Resources
+	// No Modules
 	rg := ResourceGroup{}
-	got := rg.getResourceByID(testID)
-	c.Assert(got, DeepEquals, Resource{})
+	got := rg.getModuleByID(testID)
+	c.Assert(got, DeepEquals, Module{})
 
 	// No Match
-	rg.Resources = []Resource{{ID: "NoMatch"}}
-	got = rg.getResourceByID(testID)
-	c.Assert(got, DeepEquals, Resource{})
+	rg.Modules = []Module{{ID: "NoMatch"}}
+	got = rg.getModuleByID(testID)
+	c.Assert(got, DeepEquals, Module{})
 
 	// Match
-	expected := Resource{ID: testID}
-	rg.Resources = []Resource{expected}
-	got = rg.getResourceByID(testID)
+	expected := Module{ID: testID}
+	rg.Modules = []Module{expected}
+	got = rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, expected)
 }
 
 func (s *MySuite) TestHasKind(c *C) {
-	// No resources
+	// No Modules
 	rg := ResourceGroup{}
 	c.Assert(rg.HasKind("terraform"), Equals, false)
 	c.Assert(rg.HasKind("packer"), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
-	// One terraform resources
-	rg.Resources = append(rg.Resources, Resource{Kind: "terraform"})
+	// One terraform module
+	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
 	c.Assert(rg.HasKind("terraform"), Equals, true)
 	c.Assert(rg.HasKind("packer"), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
-	// Multiple terraform resources
-	rg.Resources = append(rg.Resources, Resource{Kind: "terraform"})
-	rg.Resources = append(rg.Resources, Resource{Kind: "terraform"})
+	// Multiple terraform modules
+	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
+	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
 	c.Assert(rg.HasKind("terraform"), Equals, true)
 	c.Assert(rg.HasKind("packer"), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One packer kind
-	rg.Resources = []Resource{{Kind: "packer"}}
+	rg.Modules = []Module{{Kind: "packer"}}
 	c.Assert(rg.HasKind("terraform"), Equals, false)
 	c.Assert(rg.HasKind("packer"), Equals, true)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One packer, one terraform
-	rg.Resources = append(rg.Resources, Resource{Kind: "terraform"})
+	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
 	c.Assert(rg.HasKind("terraform"), Equals, true)
 	c.Assert(rg.HasKind("packer"), Equals, true)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 }
 
-func (s *MySuite) TestCheckResourceAndGroupNames(c *C) {
+func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 	bc := getBlueprintConfigForTest()
-	checkResourceAndGroupNames(bc.Config.ResourceGroups)
-	testResID := bc.Config.ResourceGroups[0].Resources[0].ID
-	c.Assert(bc.ResourceToGroup[testResID], Equals, 0)
+	checkModuleAndGroupNames(bc.Config.ResourceGroups)
+	testModID := bc.Config.ResourceGroups[0].Modules[0].ID
+	c.Assert(bc.ModuleToGroup[testModID], Equals, 0)
 }
 
 func (s *MySuite) TestNewBlueprint(c *C) {
@@ -332,8 +332,8 @@ func (s *MySuite) TestImportYamlConfig(c *C) {
 		Equals,
 		len(expectedSimpleYamlConfig.Vars["labels"].(map[string]interface{})),
 	)
-	c.Assert(obtainedYamlConfig.ResourceGroups[0].Resources[0].ID,
-		Equals, expectedSimpleYamlConfig.ResourceGroups[0].Resources[0].ID)
+	c.Assert(obtainedYamlConfig.ResourceGroups[0].Modules[0].ID,
+		Equals, expectedSimpleYamlConfig.ResourceGroups[0].Modules[0].ID)
 }
 
 func (s *MySuite) TestExportYamlConfig(c *C) {
@@ -357,7 +357,7 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 
 func (s *MySuite) TestSetCLIVariables(c *C) {
 	// Success
-	bc := getBasicBlueprintConfigWithTestResource()
+	bc := getBasicBlueprintConfigWithTestModule()
 	c.Assert(bc.Config.Vars["project_id"], IsNil)
 	c.Assert(bc.Config.Vars["deployment_name"], IsNil)
 	c.Assert(bc.Config.Vars["region"], IsNil)
@@ -385,7 +385,7 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	c.Assert(bc.Config.Vars["kv"], Equals, cliKeyVal)
 
 	// Failure: Variable without '='
-	bc = getBasicBlueprintConfigWithTestResource()
+	bc = getBasicBlueprintConfigWithTestModule()
 	c.Assert(bc.Config.Vars["project_id"], IsNil)
 
 	invalidNonEQVars := []string{

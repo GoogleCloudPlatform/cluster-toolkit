@@ -52,9 +52,9 @@ output "test_output" {
 )
 
 var (
-	tmpResourceDir string
-	terraformDir   string
-	packerDir      string
+	tmpModuleDir string
+	terraformDir string
+	packerDir    string
 )
 
 // Setup GoCheck
@@ -78,15 +78,15 @@ func (s *MySuite) TestIsValidKind(c *C) {
 
 func (s *MySuite) TestGetOutputsAsMap(c *C) {
 	// Simple: empty outputs
-	resInfo := ResourceInfo{}
-	outputMap := resInfo.GetOutputsAsMap()
+	modInfo := ModuleInfo{}
+	outputMap := modInfo.GetOutputsAsMap()
 	c.Assert(len(outputMap), Equals, 0)
 
 	testDescription := "This is a test description"
 	testName := "testName"
 	varInfo := VarInfo{Name: testName, Description: testDescription}
-	resInfo.Outputs = []VarInfo{varInfo}
-	outputMap = resInfo.GetOutputsAsMap()
+	modInfo.Outputs = []VarInfo{varInfo}
+	outputMap = modInfo.GetOutputsAsMap()
 	c.Assert(len(outputMap), Equals, 1)
 	c.Assert(outputMap[testName].Description, Equals, testDescription)
 }
@@ -132,26 +132,26 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 
 // tfreader.go
 func (s *MySuite) TestGetInfo_TFWriter(c *C) {
-	reader := TFReader{allResInfo: make(map[string]ResourceInfo)}
-	resourceInfo, err := reader.GetInfo(terraformDir)
+	reader := TFReader{allModInfo: make(map[string]ModuleInfo)}
+	moduleInfo, err := reader.GetInfo(terraformDir)
 	c.Assert(err, IsNil)
-	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
-	c.Assert(resourceInfo.Outputs[0].Name, Equals, "test_output")
+	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
+	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
 }
 
 // packerreader.go
 func (s *MySuite) TestGetInfo_PackerReader(c *C) {
 	// Didn't already exist, succeeds
-	reader := PackerReader{allResInfo: make(map[string]ResourceInfo)}
-	resourceInfo, err := reader.GetInfo(packerDir)
+	reader := PackerReader{allModInfo: make(map[string]ModuleInfo)}
+	moduleInfo, err := reader.GetInfo(packerDir)
 	c.Assert(err, IsNil)
-	c.Assert(resourceInfo.Inputs[0].Name, Equals, "test_variable")
+	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
 
 	// Already exists, succeeds
-	existingResourceInfo, err := reader.GetInfo(packerDir)
+	existingModuleInfo, err := reader.GetInfo(packerDir)
 	c.Assert(err, IsNil)
 	c.Assert(
-		existingResourceInfo.Inputs[0].Name, Equals, resourceInfo.Inputs[0].Name)
+		existingModuleInfo.Inputs[0].Name, Equals, moduleInfo.Inputs[0].Name)
 }
 
 // metareader.go
@@ -164,16 +164,16 @@ func (s *MySuite) TestGetInfo_MetaReader(c *C) {
 }
 
 // Util Functions
-func createTmpResource() {
+func createTmpModule() {
 	var err error
-	tmpResourceDir, err = ioutil.TempDir("", "resreader_tests_*")
+	tmpModuleDir, err = ioutil.TempDir("", "resreader_tests_*")
 	if err != nil {
 		log.Fatalf(
 			"Failed to create temp dir for module in resreader_test, %v", err)
 	}
 
 	// Create terraform module dir
-	terraformDir = filepath.Join(tmpResourceDir, "terraformResource")
+	terraformDir = filepath.Join(tmpModuleDir, "terraformModule")
 	err = os.Mkdir(terraformDir, 0755)
 	if err != nil {
 		log.Fatalf("error creating test terraform module dir: %e", err)
@@ -211,7 +211,7 @@ func createTmpResource() {
 	}
 
 	// Create packer module dir
-	packerDir = filepath.Join(tmpResourceDir, "packerResource")
+	packerDir = filepath.Join(tmpModuleDir, "packerModule")
 	err = os.Mkdir(packerDir, 0755)
 	if err != nil {
 		log.Fatalf("error creating test packer module dir: %e", err)
@@ -239,18 +239,18 @@ func createTmpResource() {
 	}
 }
 
-func teardownTmpResource() {
-	err := os.RemoveAll(tmpResourceDir)
+func teardownTmpModule() {
+	err := os.RemoveAll(tmpModuleDir)
 	if err != nil {
 		log.Fatalf(
 			"resreader_test: Failed to delete contents of test directory %s, %v",
-			tmpResourceDir, err)
+			tmpModuleDir, err)
 	}
 }
 
 func TestMain(m *testing.M) {
-	createTmpResource()
+	createTmpModule()
 	code := m.Run()
-	teardownTmpResource()
+	teardownTmpModule()
 	os.Exit(code)
 }

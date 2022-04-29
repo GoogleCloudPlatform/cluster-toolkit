@@ -33,9 +33,9 @@ const (
 	undefinedGlobalVariableRegex = ".* was not defined$"
 )
 
-func (s *MySuite) TestValidateResources(c *C) {
+func (s *MySuite) TestValidateModules(c *C) {
 	bc := getBlueprintConfigForTest()
-	bc.validateResources()
+	bc.validateModules()
 }
 
 func (s *MySuite) TestValidateVars(c *C) {
@@ -65,7 +65,7 @@ func (s *MySuite) TestValidateVars(c *C) {
 	c.Assert(err, ErrorMatches, "vars.labels must be a map")
 }
 
-func (s *MySuite) TestValidateResouceSettings(c *C) {
+func (s *MySuite) TestValidateModuleSettings(c *C) {
 	testSource := filepath.Join(tmpTestDir, "module")
 	testSettings := map[string]interface{}{
 		"test_variable": "test_value",
@@ -73,28 +73,28 @@ func (s *MySuite) TestValidateResouceSettings(c *C) {
 	testResourceGroup := ResourceGroup{
 		Name:             "",
 		TerraformBackend: TerraformBackend{},
-		Resources:        []Resource{{Kind: "terraform", Source: testSource, Settings: testSettings}},
+		Modules:          []Module{{Kind: "terraform", Source: testSource, Settings: testSettings}},
 	}
 	bc := BlueprintConfig{
-		Config:          YamlConfig{ResourceGroups: []ResourceGroup{testResourceGroup}},
-		ResourcesInfo:   map[string]map[string]resreader.ResourceInfo{},
-		ResourceToGroup: map[string]int{},
-		expanded:        false,
+		Config:        YamlConfig{ResourceGroups: []ResourceGroup{testResourceGroup}},
+		ModulesInfo:   map[string]map[string]resreader.ModuleInfo{},
+		ModuleToGroup: map[string]int{},
+		expanded:      false,
 	}
-	bc.validateResourceSettings()
+	bc.validateModuleSettings()
 }
 
 func (s *MySuite) TestValidateSettings(c *C) {
 	// Succeeds: No settings, no variables
-	res := Resource{}
-	info := resreader.ResourceInfo{}
-	err := validateSettings(res, info)
+	mod := Module{}
+	info := resreader.ModuleInfo{}
+	err := validateSettings(mod, info)
 	c.Assert(err, IsNil)
 
 	// Failes One required variable, no settings
-	res.Settings = make(map[string]interface{})
-	res.Settings["TestSetting"] = "TestValue"
-	err = validateSettings(res, info)
+	mod.Settings = make(map[string]interface{})
+	mod.Settings["TestSetting"] = "TestValue"
+	err = validateSettings(mod, info)
 	expErr := fmt.Sprintf("%s: .*", errorMessages["extraSetting"])
 	c.Assert(err, ErrorMatches, expErr)
 
@@ -102,66 +102,66 @@ func (s *MySuite) TestValidateSettings(c *C) {
 	info.Inputs = []resreader.VarInfo{
 		{Name: "TestSetting", Required: true},
 	}
-	err = validateSettings(res, info)
+	err = validateSettings(mod, info)
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestValidateResource(c *C) {
+func (s *MySuite) TestValidateModule(c *C) {
 	// Catch no ID
-	testResource := Resource{
+	testModule := Module{
 		ID:     "",
 		Source: "testSource",
 	}
-	err := validateResource(testResource)
+	err := validateModule(testModule)
 	expectedErrorStr := fmt.Sprintf(
-		"%s\n%s", errorMessages["emptyID"], resource2String(testResource))
+		"%s\n%s", errorMessages["emptyID"], module2String(testModule))
 	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Catch no Source
-	testResource.ID = "testResource"
-	testResource.Source = ""
-	err = validateResource(testResource)
+	testModule.ID = "testModule"
+	testModule.Source = ""
+	err = validateModule(testModule)
 	expectedErrorStr = fmt.Sprintf(
-		"%s\n%s", errorMessages["emptySource"], resource2String(testResource))
+		"%s\n%s", errorMessages["emptySource"], module2String(testModule))
 	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Catch invalid kind
-	testResource.Source = "testSource"
-	testResource.Kind = ""
-	err = validateResource(testResource)
+	testModule.Source = "testSource"
+	testModule.Kind = ""
+	err = validateModule(testModule)
 	expectedErrorStr = fmt.Sprintf(
-		"%s\n%s", errorMessages["wrongKind"], resource2String(testResource))
+		"%s\n%s", errorMessages["wrongKind"], module2String(testModule))
 	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Successful validation
-	testResource.Kind = "terraform"
-	err = validateResource(testResource)
+	testModule.Kind = "terraform"
+	err = validateModule(testModule)
 	c.Assert(err, IsNil)
 }
 
 func (s *MySuite) TestValidateOutputs(c *C) {
 	// Simple case, no outputs in either
-	testRes := Resource{ID: "testRes"}
-	testInfo := resreader.ResourceInfo{Outputs: []resreader.VarInfo{}}
-	err := validateOutputs(testRes, testInfo)
+	testMod := Module{ID: "testMod"}
+	testInfo := resreader.ModuleInfo{Outputs: []resreader.VarInfo{}}
+	err := validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
-	// Output in varInfo, nothing in resource
+	// Output in varInfo, nothing in module
 	matchingName := "match"
 	testVarInfo := resreader.VarInfo{Name: matchingName}
 	testInfo.Outputs = append(testInfo.Outputs, testVarInfo)
-	err = validateOutputs(testRes, testInfo)
+	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
-	// Output matches between varInfo and resource
-	testRes.Outputs = []string{matchingName}
-	err = validateOutputs(testRes, testInfo)
+	// Output matches between varInfo and module
+	testMod.Outputs = []string{matchingName}
+	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
-	// Addition output found in resources, not in varinfo
+	// Addition output found in modules, not in varinfo
 	missingName := "missing"
-	testRes.Outputs = append(testRes.Outputs, missingName)
-	err = validateOutputs(testRes, testInfo)
+	testMod.Outputs = append(testMod.Outputs, missingName)
+	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, Not(IsNil))
 	expErr := fmt.Sprintf("%s.*", errorMessages["invalidOutput"])
 	c.Assert(err, ErrorMatches, expErr)

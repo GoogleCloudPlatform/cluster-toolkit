@@ -21,7 +21,7 @@ import (
 	"log"
 )
 
-// VarInfo stores information about a resource's input or output variables
+// VarInfo stores information about a module's input or output variables
 type VarInfo struct {
 	Name        string
 	Type        string
@@ -30,14 +30,14 @@ type VarInfo struct {
 	Required    bool
 }
 
-// ResourceInfo stores information about a resource
-type ResourceInfo struct {
+// ModuleInfo stores information about a module
+type ModuleInfo struct {
 	Inputs  []VarInfo
 	Outputs []VarInfo
 }
 
 // GetOutputsAsMap returns the outputs list as a map for quicker access
-func (ri ResourceInfo) GetOutputsAsMap() map[string]VarInfo {
+func (ri ModuleInfo) GetOutputsAsMap() map[string]VarInfo {
 	outputsMap := make(map[string]VarInfo)
 	for _, output := range ri.Outputs {
 		outputsMap[output.Name] = output
@@ -45,15 +45,15 @@ func (ri ResourceInfo) GetOutputsAsMap() map[string]VarInfo {
 	return outputsMap
 }
 
-// ResReader is a resource reader interface
-type ResReader interface {
-	GetInfo(path string) (ResourceInfo, error)
-	SetInfo(path string, resInfo ResourceInfo)
+// ModReader is a module reader interface
+type ModReader interface {
+	GetInfo(path string) (ModuleInfo, error)
+	SetInfo(path string, modInfo ModuleInfo)
 }
 
-var kinds = map[string]ResReader{
-	"terraform": TFReader{allResInfo: make(map[string]ResourceInfo)},
-	"packer":    PackerReader{allResInfo: make(map[string]ResourceInfo)},
+var kinds = map[string]ModReader{
+	"terraform": TFReader{allModInfo: make(map[string]ModuleInfo)},
+	"packer":    PackerReader{allModInfo: make(map[string]ModuleInfo)},
 }
 
 // IsValidKind returns true if the kind input is valid
@@ -66,8 +66,8 @@ func IsValidKind(input string) bool {
 	return false
 }
 
-// Factory returns a ResReader of type 'kind'
-func Factory(kind string) ResReader {
+// Factory returns a ModReader of type 'kind'
+func Factory(kind string) ModReader {
 	for k, v := range kinds {
 		if kind == k {
 			return v
