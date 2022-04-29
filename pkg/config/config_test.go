@@ -160,7 +160,7 @@ func cleanErrorRegexp(errRegexp string) string {
 	return errRegexp
 }
 
-func getBlueprintConfigForTest() BlueprintConfig {
+func getDeploymentConfigForTest() DeploymentConfig {
 	testModuleSource := "testSource"
 	testModule := Module{
 		Source:           testModuleSource,
@@ -205,7 +205,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 		},
 	}
 
-	return BlueprintConfig{
+	return DeploymentConfig{
 		Config: testYamlConfig,
 		ModulesInfo: map[string]map[string]resreader.ModuleInfo{
 			"group1": {
@@ -216,7 +216,7 @@ func getBlueprintConfigForTest() BlueprintConfig {
 	}
 }
 
-func getBasicBlueprintConfigWithTestModule() BlueprintConfig {
+func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	testModuleSource := filepath.Join(tmpTestDir, "module")
 	testDeploymentGroup := DeploymentGroup{
 		Name: "primary",
@@ -229,7 +229,7 @@ func getBasicBlueprintConfigWithTestModule() BlueprintConfig {
 			},
 		},
 	}
-	return BlueprintConfig{
+	return DeploymentConfig{
 		Config: YamlConfig{
 			Vars:             make(map[string]interface{}),
 			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
@@ -240,18 +240,18 @@ func getBasicBlueprintConfigWithTestModule() BlueprintConfig {
 /* Tests */
 // config.go
 func (s *MySuite) TestExpandConfig(c *C) {
-	bc := getBasicBlueprintConfigWithTestModule()
-	bc.ExpandConfig()
+	dc := getBasicDeploymentConfigWithTestModule()
+	dc.ExpandConfig()
 }
 
 func (s *MySuite) TestSetModulesInfo(c *C) {
-	bc := getBasicBlueprintConfigWithTestModule()
-	bc.setModulesInfo()
+	dc := getBasicDeploymentConfigWithTestModule()
+	dc.setModulesInfo()
 }
 
 func (s *MySuite) TestCreateModuleInfo(c *C) {
-	bc := getBasicBlueprintConfigWithTestModule()
-	createModuleInfo(bc.Config.DeploymentGroups[0])
+	dc := getBasicDeploymentConfigWithTestModule()
+	createModuleInfo(dc.Config.DeploymentGroups[0])
 }
 
 func (s *MySuite) TestGetResouceByID(c *C) {
@@ -309,18 +309,18 @@ func (s *MySuite) TestHasKind(c *C) {
 }
 
 func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
-	bc := getBlueprintConfigForTest()
-	checkModuleAndGroupNames(bc.Config.DeploymentGroups)
-	testModID := bc.Config.DeploymentGroups[0].Modules[0].ID
-	c.Assert(bc.ModuleToGroup[testModID], Equals, 0)
+	dc := getDeploymentConfigForTest()
+	checkModuleAndGroupNames(dc.Config.DeploymentGroups)
+	testModID := dc.Config.DeploymentGroups[0].Modules[0].ID
+	c.Assert(dc.ModuleToGroup[testModID], Equals, 0)
 }
 
 func (s *MySuite) TestNewBlueprint(c *C) {
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
-	bc.ExportYamlConfig(outFile)
-	newBC := NewBlueprintConfig(outFile)
-	c.Assert(bc.Config, DeepEquals, newBC.Config)
+	dc.ExportYamlConfig(outFile)
+	newDC := NewDeploymentConfig(outFile)
+	c.Assert(dc.Config, DeepEquals, newDC.Config)
 }
 
 func (s *MySuite) TestImportYamlConfig(c *C) {
@@ -338,16 +338,16 @@ func (s *MySuite) TestImportYamlConfig(c *C) {
 
 func (s *MySuite) TestExportYamlConfig(c *C) {
 	// Return bytes
-	bc := BlueprintConfig{}
-	bc.Config = expectedSimpleYamlConfig
-	obtainedYaml, err := bc.ExportYamlConfig("")
+	dc := DeploymentConfig{}
+	dc.Config = expectedSimpleYamlConfig
+	obtainedYaml, err := dc.ExportYamlConfig("")
 	c.Assert(err, IsNil)
 	c.Assert(obtainedYaml, Not(IsNil))
 
 	// Write file
 	outFilename := "out_TestExportYamlConfig.yaml"
 	outFile := filepath.Join(tmpTestDir, outFilename)
-	bc.ExportYamlConfig(outFile)
+	dc.ExportYamlConfig(outFile)
 	fileInfo, err := os.Stat(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(fileInfo.Name(), Equals, outFilename)
@@ -357,11 +357,11 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 
 func (s *MySuite) TestSetCLIVariables(c *C) {
 	// Success
-	bc := getBasicBlueprintConfigWithTestModule()
-	c.Assert(bc.Config.Vars["project_id"], IsNil)
-	c.Assert(bc.Config.Vars["deployment_name"], IsNil)
-	c.Assert(bc.Config.Vars["region"], IsNil)
-	c.Assert(bc.Config.Vars["zone"], IsNil)
+	dc := getBasicDeploymentConfigWithTestModule()
+	c.Assert(dc.Config.Vars["project_id"], IsNil)
+	c.Assert(dc.Config.Vars["deployment_name"], IsNil)
+	c.Assert(dc.Config.Vars["region"], IsNil)
+	c.Assert(dc.Config.Vars["zone"], IsNil)
 
 	cliProjectID := "cli_test_project_id"
 	cliDeploymentName := "cli_deployment_name"
@@ -375,36 +375,36 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 		fmt.Sprintf("zone=%s", cliZone),
 		fmt.Sprintf("kv=%s", cliKeyVal),
 	}
-	err := bc.SetCLIVariables(cliVars)
+	err := dc.SetCLIVariables(cliVars)
 
 	c.Assert(err, IsNil)
-	c.Assert(bc.Config.Vars["project_id"], Equals, cliProjectID)
-	c.Assert(bc.Config.Vars["deployment_name"], Equals, cliDeploymentName)
-	c.Assert(bc.Config.Vars["region"], Equals, cliRegion)
-	c.Assert(bc.Config.Vars["zone"], Equals, cliZone)
-	c.Assert(bc.Config.Vars["kv"], Equals, cliKeyVal)
+	c.Assert(dc.Config.Vars["project_id"], Equals, cliProjectID)
+	c.Assert(dc.Config.Vars["deployment_name"], Equals, cliDeploymentName)
+	c.Assert(dc.Config.Vars["region"], Equals, cliRegion)
+	c.Assert(dc.Config.Vars["zone"], Equals, cliZone)
+	c.Assert(dc.Config.Vars["kv"], Equals, cliKeyVal)
 
 	// Failure: Variable without '='
-	bc = getBasicBlueprintConfigWithTestModule()
-	c.Assert(bc.Config.Vars["project_id"], IsNil)
+	dc = getBasicDeploymentConfigWithTestModule()
+	c.Assert(dc.Config.Vars["project_id"], IsNil)
 
 	invalidNonEQVars := []string{
 		fmt.Sprintf("project_id%s", cliProjectID),
 	}
-	err = bc.SetCLIVariables(invalidNonEQVars)
+	err = dc.SetCLIVariables(invalidNonEQVars)
 
 	expErr := "invalid format: .*"
 	c.Assert(err, ErrorMatches, expErr)
-	c.Assert(bc.Config.Vars["project_id"], IsNil)
+	c.Assert(dc.Config.Vars["project_id"], IsNil)
 }
 
 func (s *MySuite) TestSetBackendConfig(c *C) {
 	// Success
-	bc := getBlueprintConfigForTest()
-	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, "")
-	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["bucket"], IsNil)
-	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], IsNil)
-	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["prefix"], IsNil)
+	dc := getDeploymentConfigForTest()
+	c.Assert(dc.Config.TerraformBackendDefaults.Type, Equals, "")
+	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["bucket"], IsNil)
+	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], IsNil)
+	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["prefix"], IsNil)
 
 	cliBEType := "gcs"
 	cliBEBucket := "a_bucket"
@@ -416,23 +416,23 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 		fmt.Sprintf("impersonate_service_account=%s", cliBESA),
 		fmt.Sprintf("prefix=%s", cliBEPrefix),
 	}
-	err := bc.SetBackendConfig(cliBEConfigVars)
+	err := dc.SetBackendConfig(cliBEConfigVars)
 
 	c.Assert(err, IsNil)
-	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, cliBEType)
-	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["bucket"], Equals, cliBEBucket)
-	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], Equals, cliBESA)
-	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["prefix"], Equals, cliBEPrefix)
+	c.Assert(dc.Config.TerraformBackendDefaults.Type, Equals, cliBEType)
+	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["bucket"], Equals, cliBEBucket)
+	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], Equals, cliBESA)
+	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["prefix"], Equals, cliBEPrefix)
 
 	// Failure: Variable without '='
-	bc = getBlueprintConfigForTest()
-	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, "")
+	dc = getDeploymentConfigForTest()
+	c.Assert(dc.Config.TerraformBackendDefaults.Type, Equals, "")
 
 	invalidNonEQVars := []string{
 		fmt.Sprintf("type%s", cliBEType),
 		fmt.Sprintf("bucket%s", cliBEBucket),
 	}
-	err = bc.SetBackendConfig(invalidNonEQVars)
+	err = dc.SetBackendConfig(invalidNonEQVars)
 
 	expErr := "invalid format: .*"
 	c.Assert(err, ErrorMatches, expErr)
@@ -448,16 +448,16 @@ func TestMain(m *testing.M) {
 func (s *MySuite) TestValidationLevels(c *C) {
 	var err error
 	var ok bool
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 	validLevels := []string{"ERROR", "WARNING", "IGNORE"}
 	for idx, level := range validLevels {
-		err = bc.SetValidationLevel(level)
+		err = dc.SetValidationLevel(level)
 		c.Assert(err, IsNil)
 		ok = isValidValidationLevel(idx)
 		c.Assert(ok, Equals, true)
 	}
 
-	err = bc.SetValidationLevel("INVALID")
+	err = dc.SetValidationLevel("INVALID")
 	c.Assert(err, NotNil)
 
 	// check that our test for iota enum is working
@@ -549,29 +549,29 @@ func (s *MySuite) TestResolveGlobalVariables(c *C) {
 	var testkey1 = "testkey1"
 	var testkey2 = "testkey2"
 	var testkey3 = "testkey3"
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 	ctyMap := make(map[string]cty.Value)
-	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	err = dc.Config.ResolveGlobalVariables(ctyMap)
 	c.Assert(err, IsNil)
 
 	// confirm plain string is unchanged and does not error
 	testCtyString := cty.StringVal("testval")
 	ctyMap[testkey1] = testCtyString
-	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	err = dc.Config.ResolveGlobalVariables(ctyMap)
 	c.Assert(err, IsNil)
 	c.Assert(ctyMap[testkey1], Equals, testCtyString)
 
 	// confirm literal, non-global, variable is unchanged and does not error
 	testCtyString = cty.StringVal("((module.testval))")
 	ctyMap[testkey1] = testCtyString
-	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	err = dc.Config.ResolveGlobalVariables(ctyMap)
 	c.Assert(err, IsNil)
 	c.Assert(ctyMap[testkey1], Equals, testCtyString)
 
 	// confirm failed resolution of a literal global
 	testCtyString = cty.StringVal("((var.test_global_var))")
 	ctyMap[testkey1] = testCtyString
-	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	err = dc.Config.ResolveGlobalVariables(ctyMap)
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Matches, ".*Unsupported attribute;.*")
 
@@ -581,14 +581,14 @@ func (s *MySuite) TestResolveGlobalVariables(c *C) {
 	testGlobalVarBool := "test_global_bool"
 	testGlobalValBool := "testval"
 	testPlainString := "plain-string"
-	bc.Config.Vars[testGlobalVarString] = testGlobalValString
-	bc.Config.Vars[testGlobalVarBool] = testGlobalValBool
+	dc.Config.Vars[testGlobalVarString] = testGlobalValString
+	dc.Config.Vars[testGlobalVarBool] = testGlobalValBool
 	testCtyString = cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarString))
 	testCtyBool := cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarBool))
 	ctyMap[testkey1] = testCtyString
 	ctyMap[testkey2] = testCtyBool
 	ctyMap[testkey3] = cty.StringVal(testPlainString)
-	err = bc.Config.ResolveGlobalVariables(ctyMap)
+	err = dc.Config.ResolveGlobalVariables(ctyMap)
 	c.Assert(err, IsNil)
 	c.Assert(ctyMap[testkey1], Equals, cty.StringVal(testGlobalValString))
 	c.Assert(ctyMap[testkey2], Equals, cty.StringVal(testGlobalValBool))

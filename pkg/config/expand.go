@@ -42,54 +42,54 @@ const (
 
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
-func (bc *BlueprintConfig) expand() {
-	bc.addSettingsToModules()
-	if err := bc.expandBackends(); err != nil {
+func (dc *DeploymentConfig) expand() {
+	dc.addSettingsToModules()
+	if err := dc.expandBackends(); err != nil {
 		log.Fatalf("failed to apply default backend to deployment groups: %v", err)
 	}
 
-	if err := bc.addDefaultValidators(); err != nil {
+	if err := dc.addDefaultValidators(); err != nil {
 		log.Fatalf(
 			"failed to update validators when expanding the config: %v", err)
 	}
 
-	if err := bc.combineLabels(); err != nil {
+	if err := dc.combineLabels(); err != nil {
 		log.Fatalf(
 			"failed to update module labels when expanding the config: %v", err)
 	}
 
-	if err := bc.applyUseModules(); err != nil {
+	if err := dc.applyUseModules(); err != nil {
 		log.Fatalf(
 			"failed to apply \"use\" modules when expanding the config: %v", err)
 	}
 
-	if err := bc.applyGlobalVariables(); err != nil {
+	if err := dc.applyGlobalVariables(); err != nil {
 		log.Fatalf(
 			"failed to apply global variables in modules when expanding the config: %v",
 			err)
 	}
-	bc.expandVariables()
+	dc.expandVariables()
 }
 
-func (bc *BlueprintConfig) addSettingsToModules() {
-	for iGrp, grp := range bc.Config.DeploymentGroups {
+func (dc *DeploymentConfig) addSettingsToModules() {
+	for iGrp, grp := range dc.Config.DeploymentGroups {
 		for iMod, mod := range grp.Modules {
 			if mod.Settings == nil {
-				bc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings =
+				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings =
 					make(map[string]interface{})
 			}
 		}
 	}
 }
 
-func (bc *BlueprintConfig) expandBackends() error {
+func (dc *DeploymentConfig) expandBackends() error {
 	// 1. DEFAULT: use TerraformBackend configuration (if supplied) in each
 	//    resource group
 	// 2. If top-level TerraformBackendDefaults is defined, insert that
 	//    backend into resource groups which have no explicit
 	//    TerraformBackend
 	// 3. In all cases, add a prefix for GCS backends if one is not defined
-	yamlConfig := &bc.Config
+	yamlConfig := &dc.Config
 	if yamlConfig.TerraformBackendDefaults.Type != "" {
 		for i := range yamlConfig.DeploymentGroups {
 			grp := &yamlConfig.DeploymentGroups[i]
@@ -169,17 +169,17 @@ func useModule(
 
 // applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
-func (bc *BlueprintConfig) applyUseModules() error {
-	for iGrp := range bc.Config.DeploymentGroups {
-		group := &bc.Config.DeploymentGroups[iGrp]
+func (dc *DeploymentConfig) applyUseModules() error {
+	for iGrp := range dc.Config.DeploymentGroups {
+		group := &dc.Config.DeploymentGroups[iGrp]
 		for iMod := range group.Modules {
 			mod := &group.Modules[iMod]
-			modInfo := bc.ModulesInfo[group.Name][mod.Source]
+			modInfo := dc.ModulesInfo[group.Name][mod.Source]
 			modInputs := getModuleInputMap(modInfo.Inputs)
 			changedSettings := make(map[string]bool)
 			for _, useModID := range mod.Use {
 				useMod := group.getModuleByID(useModID)
-				useInfo := bc.ModulesInfo[group.Name][useMod.Source]
+				useInfo := dc.ModulesInfo[group.Name][useMod.Source]
 				if useMod.ID == "" {
 					return fmt.Errorf("could not find module %s used by %s in group %s",
 						useModID, mod.ID, group.Name)
@@ -191,9 +191,9 @@ func (bc *BlueprintConfig) applyUseModules() error {
 	return nil
 }
 
-func (bc BlueprintConfig) moduleHasInput(
+func (dc DeploymentConfig) moduleHasInput(
 	depGroup string, source string, inputName string) bool {
-	for _, input := range bc.ModulesInfo[depGroup][source].Inputs {
+	for _, input := range dc.ModulesInfo[depGroup][source].Inputs {
 		if input.Name == inputName {
 			return true
 		}
@@ -244,26 +244,26 @@ func toStringInterfaceMap(i interface{}) (map[string]interface{}, error) {
 // combineLabels sets defaults for labels based on other variables and merges
 // the global labels defined in Vars with module setting labels. It also
 // determines the role and sets it for each module independently.
-func (bc *BlueprintConfig) combineLabels() error {
+func (dc *DeploymentConfig) combineLabels() error {
 	defaultLabels := map[string]interface{}{
-		blueprintLabel:  bc.Config.BlueprintName,
-		deploymentLabel: getDeploymentName(bc.Config.Vars),
+		blueprintLabel:  dc.Config.BlueprintName,
+		deploymentLabel: getDeploymentName(dc.Config.Vars),
 	}
 	labels := "labels"
 	var globalLabels map[string]interface{}
 
 	// Add defaults to global labels if they don't already exist
-	if _, exists := bc.Config.Vars[labels]; !exists {
-		bc.Config.Vars[labels] = defaultLabels
+	if _, exists := dc.Config.Vars[labels]; !exists {
+		dc.Config.Vars[labels] = defaultLabels
 	}
 
 	// Cast global labels so we can index into them
-	globalLabels, err := toStringInterfaceMap(bc.Config.Vars[labels])
+	globalLabels, err := toStringInterfaceMap(dc.Config.Vars[labels])
 	if err != nil {
 		return fmt.Errorf(
 			"%s: found %T",
 			errorMessages["globalLabelType"],
-			bc.Config.Vars[labels])
+			dc.Config.Vars[labels])
 	}
 
 	// Add both default labels if they don't already exist
@@ -274,10 +274,10 @@ func (bc *BlueprintConfig) combineLabels() error {
 		globalLabels[deploymentLabel] = defaultLabels[deploymentLabel]
 	}
 
-	for iGrp, grp := range bc.Config.DeploymentGroups {
+	for iGrp, grp := range dc.Config.DeploymentGroups {
 		for iMod, mod := range grp.Modules {
 			// Check if labels are set for this module
-			if !bc.moduleHasInput(grp.Name, mod.Source, labels) {
+			if !dc.moduleHasInput(grp.Name, mod.Source, labels) {
 				continue
 			}
 
@@ -300,11 +300,11 @@ func (bc *BlueprintConfig) combineLabels() error {
 			if _, exists := modLabels[roleLabel]; !exists {
 				modLabels[roleLabel] = getRole(mod.Source)
 			}
-			bc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings[labels] =
+			dc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings[labels] =
 				modLabels
 		}
 	}
-	bc.Config.Vars[labels] = globalLabels
+	dc.Config.Vars[labels] = globalLabels
 	return nil
 }
 
@@ -351,15 +351,15 @@ func updateGlobalVarTypes(vars map[string]interface{}) error {
 
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to module settings if not already set.
-func (bc *BlueprintConfig) applyGlobalVariables() error {
+func (dc *DeploymentConfig) applyGlobalVariables() error {
 	// Update global variable types to match
-	if err := updateGlobalVarTypes(bc.Config.Vars); err != nil {
+	if err := updateGlobalVarTypes(dc.Config.Vars); err != nil {
 		return err
 	}
 
-	for _, grp := range bc.Config.DeploymentGroups {
+	for _, grp := range dc.Config.DeploymentGroups {
 		err := applyGlobalVarsInGroup(
-			grp, bc.ModulesInfo[grp.Name], bc.Config.Vars)
+			grp, dc.ModulesInfo[grp.Name], dc.Config.Vars)
 		if err != nil {
 			return err
 		}
@@ -555,25 +555,25 @@ func updateVariables(
 
 // expandVariables recurses through the data structures in the yaml config and
 // expands all variables
-func (bc *BlueprintConfig) expandVariables() {
-	for _, validator := range bc.Config.Validators {
-		err := updateVariables(varContext{yamlConfig: bc.Config}, validator.Inputs, make(map[string]int))
+func (dc *DeploymentConfig) expandVariables() {
+	for _, validator := range dc.Config.Validators {
+		err := updateVariables(varContext{yamlConfig: dc.Config}, validator.Inputs, make(map[string]int))
 		if err != nil {
 			log.Fatalf("expandVariables: %v", err)
 		}
 	}
 
-	for iGrp, grp := range bc.Config.DeploymentGroups {
+	for iGrp, grp := range dc.Config.DeploymentGroups {
 		for iMod := range grp.Modules {
 			context := varContext{
 				groupIndex: iGrp,
 				modIndex:   iMod,
-				yamlConfig: bc.Config,
+				yamlConfig: dc.Config,
 			}
 			err := updateVariables(
 				context,
-				bc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings,
-				bc.ModuleToGroup)
+				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings,
+				dc.ModuleToGroup)
 			if err != nil {
 				log.Fatalf("expandVariables: %v", err)
 			}
@@ -583,15 +583,15 @@ func (bc *BlueprintConfig) expandVariables() {
 
 // this function adds default validators to the blueprint if none have been
 // defined. default validators are only added for global variables that exist
-func (bc *BlueprintConfig) addDefaultValidators() error {
-	if bc.Config.Validators != nil {
+func (dc *DeploymentConfig) addDefaultValidators() error {
+	if dc.Config.Validators != nil {
 		return nil
 	}
-	bc.Config.Validators = []validatorConfig{}
+	dc.Config.Validators = []validatorConfig{}
 
-	_, projectIDExists := bc.Config.Vars["project_id"]
-	_, regionExists := bc.Config.Vars["region"]
-	_, zoneExists := bc.Config.Vars["zone"]
+	_, projectIDExists := dc.Config.Vars["project_id"]
+	_, regionExists := dc.Config.Vars["region"]
+	_, zoneExists := dc.Config.Vars["zone"]
 
 	if projectIDExists {
 		v := validatorConfig{
@@ -600,7 +600,7 @@ func (bc *BlueprintConfig) addDefaultValidators() error {
 				"project_id": "$(vars.project_id)",
 			},
 		}
-		bc.Config.Validators = append(bc.Config.Validators, v)
+		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
 
 	if projectIDExists && regionExists {
@@ -611,7 +611,7 @@ func (bc *BlueprintConfig) addDefaultValidators() error {
 				"region":     "$(vars.region)",
 			},
 		}
-		bc.Config.Validators = append(bc.Config.Validators, v)
+		dc.Config.Validators = append(dc.Config.Validators, v)
 
 	}
 
@@ -623,7 +623,7 @@ func (bc *BlueprintConfig) addDefaultValidators() error {
 				"zone":       "$(vars.zone)",
 			},
 		}
-		bc.Config.Validators = append(bc.Config.Validators, v)
+		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
 
 	if projectIDExists && regionExists && zoneExists {
@@ -635,7 +635,7 @@ func (bc *BlueprintConfig) addDefaultValidators() error {
 				"zone":       "$(vars.zone)",
 			},
 		}
-		bc.Config.Validators = append(bc.Config.Validators, v)
+		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
 	return nil
 }

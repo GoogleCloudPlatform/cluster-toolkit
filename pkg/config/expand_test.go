@@ -22,43 +22,43 @@ import (
 )
 
 func (s *MySuite) TestExpand(c *C) {
-	bc := getBlueprintConfigForTest()
-	bc.expand()
+	dc := getDeploymentConfigForTest()
+	dc.expand()
 }
 
 func (s *MySuite) TestExpandBackends(c *C) {
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 
 	// Simple test: Does Nothing
-	err := bc.expandBackends()
+	err := dc.expandBackends()
 	c.Assert(err, IsNil)
 
 	tfBackend := &TerraformBackend{
 		Type:          "gcs",
 		Configuration: make(map[string]interface{}),
 	}
-	bc.Config.TerraformBackendDefaults = *tfBackend
-	err = bc.expandBackends()
+	dc.Config.TerraformBackendDefaults = *tfBackend
+	err = dc.expandBackends()
 	c.Assert(err, IsNil)
-	grp := bc.Config.DeploymentGroups[0]
+	grp := dc.Config.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix := grp.TerraformBackend.Configuration["prefix"]
-	expPrefix := fmt.Sprintf("%s/%s", bc.Config.BlueprintName, grp.Name)
+	expPrefix := fmt.Sprintf("%s/%s", dc.Config.BlueprintName, grp.Name)
 	c.Assert(gotPrefix, Equals, expPrefix)
 
 	// Add a new resource group, ensure each group name is included
 	newGroup := DeploymentGroup{
 		Name: "group2",
 	}
-	bc.Config.DeploymentGroups = append(bc.Config.DeploymentGroups, newGroup)
-	bc.Config.Vars["deployment_name"] = "testDeployment"
-	err = bc.expandBackends()
+	dc.Config.DeploymentGroups = append(dc.Config.DeploymentGroups, newGroup)
+	dc.Config.Vars["deployment_name"] = "testDeployment"
+	err = dc.expandBackends()
 	c.Assert(err, IsNil)
-	newGrp := bc.Config.DeploymentGroups[1]
+	newGrp := dc.Config.DeploymentGroups[1]
 	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix = newGrp.TerraformBackend.Configuration["prefix"]
-	expPrefix = fmt.Sprintf("%s/%s/%s", bc.Config.BlueprintName,
-		bc.Config.Vars["deployment_name"], newGrp.Name)
+	expPrefix = fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName,
+		dc.Config.Vars["deployment_name"], newGrp.Name)
 	c.Assert(gotPrefix, Equals, expPrefix)
 }
 
@@ -166,28 +166,28 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	}
 
 	// Simple Case
-	bc := getBlueprintConfigForTest()
-	err := bc.applyUseModules()
+	dc := getDeploymentConfigForTest()
+	err := dc.applyUseModules()
 	c.Assert(err, IsNil)
 
 	// Has Use Modules
-	bc.Config.DeploymentGroups[0].Modules = append(
-		bc.Config.DeploymentGroups[0].Modules, usingModule)
-	bc.Config.DeploymentGroups[0].Modules = append(
-		bc.Config.DeploymentGroups[0].Modules, usedModule)
+	dc.Config.DeploymentGroups[0].Modules = append(
+		dc.Config.DeploymentGroups[0].Modules, usingModule)
+	dc.Config.DeploymentGroups[0].Modules = append(
+		dc.Config.DeploymentGroups[0].Modules, usedModule)
 
-	grpName := bc.Config.DeploymentGroups[0].Name
-	usingInfo := bc.ModulesInfo[grpName][usingModuleSource]
-	usedInfo := bc.ModulesInfo[grpName][usedModuleSource]
+	grpName := dc.Config.DeploymentGroups[0].Name
+	usingInfo := dc.ModulesInfo[grpName][usingModuleSource]
+	usedInfo := dc.ModulesInfo[grpName][usedModuleSource]
 	usingInfo.Inputs = []resreader.VarInfo{sharedVar}
 	usedInfo.Outputs = []resreader.VarInfo{sharedVar}
-	err = bc.applyUseModules()
+	err = dc.applyUseModules()
 	c.Assert(err, IsNil)
 
 	// Use ID doesn't exists (fail)
-	modLen := len(bc.Config.DeploymentGroups[0].Modules)
-	bc.Config.DeploymentGroups[0].Modules[modLen-1].ID = "wrongID"
-	err = bc.applyUseModules()
+	modLen := len(dc.Config.DeploymentGroups[0].Modules)
+	dc.Config.DeploymentGroups[0].Modules[modLen-1].ID = "wrongID"
+	err = dc.applyUseModules()
 	c.Assert(err, ErrorMatches, "could not find module .* used by .* in group .*")
 
 }
@@ -246,20 +246,20 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 }
 
 func (s *MySuite) TestCombineLabels(c *C) {
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 
-	err := bc.combineLabels()
+	err := dc.combineLabels()
 	c.Assert(err, IsNil)
 
 	// Were global labels created?
-	_, exists := bc.Config.Vars["labels"]
+	_, exists := dc.Config.Vars["labels"]
 	c.Assert(exists, Equals, true)
 
 	// Was the ghpc_blueprint label set correctly?
-	globalLabels := bc.Config.Vars["labels"].(map[string]interface{})
+	globalLabels := dc.Config.Vars["labels"].(map[string]interface{})
 	ghpcBlueprint, exists := globalLabels[blueprintLabel]
 	c.Assert(exists, Equals, true)
-	c.Assert(ghpcBlueprint, Equals, bc.Config.BlueprintName)
+	c.Assert(ghpcBlueprint, Equals, dc.Config.BlueprintName)
 
 	// Was the ghpc_deployment label set correctly?
 	ghpcDeployment, exists := globalLabels[deploymentLabel]
@@ -267,10 +267,10 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	c.Assert(ghpcDeployment, Equals, "undefined")
 
 	// Was "labels" created for the module with no settings?
-	_, exists = bc.Config.DeploymentGroups[0].Modules[0].Settings["labels"]
+	_, exists = dc.Config.DeploymentGroups[0].Modules[0].Settings["labels"]
 	c.Assert(exists, Equals, true)
 
-	moduleLabels := bc.Config.DeploymentGroups[0].Modules[0].
+	moduleLabels := dc.Config.DeploymentGroups[0].Modules[0].
 		Settings["labels"].(map[interface{}]interface{})
 
 	// Was the role created correctly?
@@ -279,47 +279,47 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	c.Assert(ghpcRole, Equals, "other")
 
 	// Test invalid labels
-	bc.Config.Vars["labels"] = "notAMap"
-	err = bc.combineLabels()
+	dc.Config.Vars["labels"] = "notAMap"
+	err = dc.combineLabels()
 	expectedErrorStr := fmt.Sprintf("%s: found %T",
-		errorMessages["globalLabelType"], bc.Config.Vars["labels"])
+		errorMessages["globalLabelType"], dc.Config.Vars["labels"])
 	c.Assert(err, ErrorMatches, expectedErrorStr)
 
 }
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {
-	bc := getBlueprintConfigForTest()
-	testModule := bc.Config.DeploymentGroups[0].Modules[0]
+	dc := getDeploymentConfigForTest()
+	testModule := dc.Config.DeploymentGroups[0].Modules[0]
 
 	// Test no inputs, none required
-	err := bc.applyGlobalVariables()
+	err := dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 
 	// Test no inputs, one required, doesn't exist in globals
-	bc.ModulesInfo["group1"][testModule.Source] = resreader.ModuleInfo{
+	dc.ModulesInfo["group1"][testModule.Source] = resreader.ModuleInfo{
 		Inputs: []resreader.VarInfo{requiredVar},
 	}
-	err = bc.applyGlobalVariables()
+	err = dc.applyGlobalVariables()
 	expectedErrorStr := fmt.Sprintf("%s: Module ID: %s Setting: %s",
 		errorMessages["missingSetting"], testModule.ID, requiredVar.Name)
 	c.Assert(err, ErrorMatches, expectedErrorStr)
 
 	// Test no input, one required, exists in globals
-	bc.Config.Vars[requiredVar.Name] = "val"
-	err = bc.applyGlobalVariables()
+	dc.Config.Vars[requiredVar.Name] = "val"
+	err = dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 	c.Assert(
-		bc.Config.DeploymentGroups[0].Modules[0].Settings[requiredVar.Name],
+		dc.Config.DeploymentGroups[0].Modules[0].Settings[requiredVar.Name],
 		Equals, fmt.Sprintf("((var.%s))", requiredVar.Name))
 
 	// Test one input, one required
-	bc.Config.DeploymentGroups[0].Modules[0].Settings[requiredVar.Name] = "val"
-	err = bc.applyGlobalVariables()
+	dc.Config.DeploymentGroups[0].Modules[0].Settings[requiredVar.Name] = "val"
+	err = dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 
 	// Test one input, none required, exists in globals
-	bc.ModulesInfo["group1"][testModule.Source].Inputs[0].Required = false
-	err = bc.applyGlobalVariables()
+	dc.ModulesInfo["group1"][testModule.Source].Inputs[0].Required = false
+	err = dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 }
 

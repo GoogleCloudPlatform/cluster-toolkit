@@ -111,14 +111,14 @@ func isValidValidationLevel(level int) bool {
 }
 
 // SetValidationLevel allows command-line tools to set the validation level
-func (bc *BlueprintConfig) SetValidationLevel(level string) error {
+func (dc *DeploymentConfig) SetValidationLevel(level string) error {
 	switch level {
 	case "ERROR":
-		bc.Config.ValidationLevel = validationError
+		dc.Config.ValidationLevel = validationError
 	case "WARNING":
-		bc.Config.ValidationLevel = validationWarning
+		dc.Config.ValidationLevel = validationWarning
 	case "IGNORE":
-		bc.Config.ValidationLevel = validationIgnore
+		dc.Config.ValidationLevel = validationIgnore
 	default:
 		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
 	}
@@ -172,9 +172,9 @@ type Module struct {
 
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
 // a new map is created.
-func (r *Module) createWrapSettingsWith() {
-	if r.WrapSettingsWith == nil {
-		r.WrapSettingsWith = make(map[string][]string)
+func (m *Module) createWrapSettingsWith() {
+	if m.WrapSettingsWith == nil {
+		m.WrapSettingsWith = make(map[string][]string)
 	}
 }
 
@@ -191,9 +191,9 @@ type YamlConfig struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
-// BlueprintConfig is a container for the imported YAML data and supporting data for
+// DeploymentConfig is a container for the imported YAML data and supporting data for
 // creating the blueprint from it
-type BlueprintConfig struct {
+type DeploymentConfig struct {
 	Config YamlConfig
 	// Indexed by Resource Group name and Module Source
 	ModulesInfo map[string]map[string]resreader.ModuleInfo
@@ -203,20 +203,20 @@ type BlueprintConfig struct {
 }
 
 // ExpandConfig expands the yaml config in place
-func (bc *BlueprintConfig) ExpandConfig() {
-	bc.setModulesInfo()
-	bc.validateConfig()
-	bc.expand()
-	bc.validate()
-	bc.expanded = true
+func (dc *DeploymentConfig) ExpandConfig() {
+	dc.setModulesInfo()
+	dc.validateConfig()
+	dc.expand()
+	dc.validate()
+	dc.expanded = true
 }
 
-// NewBlueprintConfig is a constructor for BlueprintConfig
-func NewBlueprintConfig(configFilename string) BlueprintConfig {
-	newBlueprintConfig := BlueprintConfig{
+// NewDeploymentConfig is a constructor for DeploymentConfig
+func NewDeploymentConfig(configFilename string) DeploymentConfig {
+	newDeploymentConfig := DeploymentConfig{
 		Config: importYamlConfig(configFilename),
 	}
-	return newBlueprintConfig
+	return newDeploymentConfig
 }
 
 // ImportYamlConfig imports the blueprint configuration provided.
@@ -254,8 +254,8 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 }
 
 // ExportYamlConfig exports the internal representation of a blueprint config
-func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) ([]byte, error) {
-	d, err := yaml.Marshal(&bc.Config)
+func (dc DeploymentConfig) ExportYamlConfig(outputFilename string) ([]byte, error) {
+	d, err := yaml.Marshal(&dc.Config)
 	if err != nil {
 		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
@@ -280,7 +280,7 @@ func createModuleInfo(
 			ri, err := reader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
 				log.Fatalf(
-					"failed to get info for module at %s while setting bc.ModulesInfo: %e",
+					"failed to get info for module at %s while setting dc.ModulesInfo: %e",
 					mod.Source, err)
 			}
 			modInfo[mod.Source] = ri
@@ -290,10 +290,10 @@ func createModuleInfo(
 }
 
 // setModulesInfo populates needed information from modules
-func (bc *BlueprintConfig) setModulesInfo() {
-	bc.ModulesInfo = make(map[string]map[string]resreader.ModuleInfo)
-	for _, grp := range bc.Config.DeploymentGroups {
-		bc.ModulesInfo[grp.Name] = createModuleInfo(grp)
+func (dc *DeploymentConfig) setModulesInfo() {
+	dc.ModulesInfo = make(map[string]map[string]resreader.ModuleInfo)
+	for _, grp := range dc.Config.DeploymentGroups {
+		dc.ModulesInfo[grp.Name] = createModuleInfo(grp)
 	}
 }
 
@@ -365,20 +365,20 @@ func checkUsedModuleNames(
 }
 
 // validateConfig runs a set of simple early checks on the imported input YAML
-func (bc *BlueprintConfig) validateConfig() {
-	moduleToGroup, err := checkModuleAndGroupNames(bc.Config.DeploymentGroups)
+func (dc *DeploymentConfig) validateConfig() {
+	moduleToGroup, err := checkModuleAndGroupNames(dc.Config.DeploymentGroups)
 	if err != nil {
 		log.Fatal(err)
 	}
-	bc.ModuleToGroup = moduleToGroup
+	dc.ModuleToGroup = moduleToGroup
 	if err = checkUsedModuleNames(
-		bc.Config.DeploymentGroups, bc.ModuleToGroup); err != nil {
+		dc.Config.DeploymentGroups, dc.ModuleToGroup); err != nil {
 		log.Fatal(err)
 	}
 }
 
 // SetCLIVariables sets the variables at CLI
-func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
+func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 	for _, cliVar := range cliVariables {
 		arr := strings.SplitN(cliVar, "=", 2)
 
@@ -387,18 +387,18 @@ func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
 		}
 
 		key, value := arr[0], arr[1]
-		bc.Config.Vars[key] = value
+		dc.Config.Vars[key] = value
 	}
 
 	return nil
 }
 
 // SetBackendConfig sets the backend config variables at CLI
-func (bc *BlueprintConfig) SetBackendConfig(cliBEConfigVars []string) error {
+func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
 	// Set "gcs" as default value when --backend-config is specified at CLI
 	if len(cliBEConfigVars) > 0 {
-		bc.Config.TerraformBackendDefaults.Type = "gcs"
-		bc.Config.TerraformBackendDefaults.Configuration = make(map[string]interface{})
+		dc.Config.TerraformBackendDefaults.Type = "gcs"
+		dc.Config.TerraformBackendDefaults.Configuration = make(map[string]interface{})
 	}
 
 	for _, config := range cliBEConfigVars {
@@ -411,9 +411,9 @@ func (bc *BlueprintConfig) SetBackendConfig(cliBEConfigVars []string) error {
 		key, value := arr[0], arr[1]
 		switch key {
 		case "type":
-			bc.Config.TerraformBackendDefaults.Type = value
+			dc.Config.TerraformBackendDefaults.Type = value
 		default:
-			bc.Config.TerraformBackendDefaults.Configuration[key] = value
+			dc.Config.TerraformBackendDefaults.Configuration[key] = value
 		}
 
 	}

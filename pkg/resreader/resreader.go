@@ -37,9 +37,9 @@ type ModuleInfo struct {
 }
 
 // GetOutputsAsMap returns the outputs list as a map for quicker access
-func (ri ModuleInfo) GetOutputsAsMap() map[string]VarInfo {
+func (i ModuleInfo) GetOutputsAsMap() map[string]VarInfo {
 	outputsMap := make(map[string]VarInfo)
-	for _, output := range ri.Outputs {
+	for _, output := range i.Outputs {
 		outputsMap[output.Name] = output
 	}
 	return outputsMap
