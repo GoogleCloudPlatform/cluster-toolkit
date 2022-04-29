@@ -20,25 +20,12 @@ run_test() {
 	tmpdir="$(mktemp -d)"
 	exampleFile=$(basename "$example")
 	DEPLOYMENT="${exampleFile%.yaml}-$(basename "${tmpdir##*.}")"
+	PROJECT="invalid-project"
 
 	echo "testing ${example} in ${tmpdir}"
 	cp "${example}" "${tmpdir}/"
-	cd "${tmpdir}"
-	sed -i "s/deployment_name: .*/deployment_name: ${DEPLOYMENT}/" "${exampleFile}" ||
-		{
-			echo "*** ERROR: could not set deployment_name in ${example}"
-			exit 1
-		}
-
-	PROJECT="invalid-project"
-
-	sed -i "s/project_id: .*/project_id: ${PROJECT}/" "${exampleFile}" ||
-		{
-			echo "*** ERROR: could not set project_id in ${example}"
-			exit 1
-		}
 	cd "${cwd}"
-	./ghpc create -l IGNORE "${tmpdir}"/"${exampleFile}" >/dev/null ||
+	./ghpc create -l IGNORE --vars "project_id=${PROJECT},deployment_name=${DEPLOYMENT}" "${tmpdir}"/"${exampleFile}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
 			exit 1

@@ -115,11 +115,58 @@ Quota required for this example:
 
 ### image-builder.yaml
 
-This Blueprint uses the [Packer template module][pkr] to create custom VM
-images by applying software and configurations to existing images. By default,
-it uses the [HPC VM Image][hpcimage] as a source image. Using a custom VM image
-can be more scalable than installing software using boot-time startup scripts
-because
+This Blueprint uses the [Packer template module][pkr] to create custom VM images
+by applying software and configurations to existing images.
+
+This example performs the following:
+
+1. Creates a network needed to build the image (see
+   [Custom Network](#custom-network-deployment-group-1)).
+2. Sets up a script that will be used to configure the image (see
+   [Toolkit Runners](#toolkit-runners-deployment-group-1)).
+3. Builds a new image by modifying the Slurm image (see
+   [Packer Template](#packer-template-deployment-group-2)).
+4. Deploys a Slurm cluster using the newly built image (see
+   [Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
+
+> **Note**: this example relies on the default behavior of the Toolkit to derive
+> naming convention for networks and other modules from the `deployment_name`.
+
+The commands needed to run through this example would look like:
+
+```bash
+# Create a deployment from the blueprint
+./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+
+# Deploy the network for packer (1) and generate the startup script (2)
+terraform -chdir=image-builder-001/builder-env init
+terraform -chdir=image-builder-001/builder-env validate
+terraform -chdir=image-builder-001/builder-env apply
+
+# Provide startup script to Packer
+terraform -chdir=image-builder-001/builder-env output \
+-raw startup_script_scripts_for_image > \
+image-builder-001/packer/custom-image/startup_script.sh
+
+# Build image (3)
+cd image-builder-001/packer/custom-image
+packer init .
+packer validate -var startup_script_file=startup_script.sh .
+packer build -var startup_script_file=startup_script.sh .
+
+# Deploy Slurm cluster (4)
+cd -
+terraform -chdir=image-builder-001/cluster init
+terraform -chdir=image-builder-001/cluster validate
+terraform -chdir=image-builder-001/cluster apply
+
+# When you are done you can clean up the resources
+terraform -chdir=image-builder-001/builder-env destroy --auto-approve
+terraform -chdir=image-builder-001/cluster destroy --auto-approve
+```
+
+Using a custom VM image can be more scalable than installing software using
+boot-time startup scripts because:
 
 * it avoids reliance on continued availability of package repositories
 * VMs will join an HPC cluster and execute workloads more rapidly due to reduced
@@ -130,9 +177,6 @@ because
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [pkr]: ../modules/packer/custom-image/README.md
-
-**Note**:  this example relies on the default behavior of the Toolkit to derive
-naming convention for networks and other modules from the `deployment_name`.
 
 #### Custom Network (deployment group 1)
 
@@ -163,6 +207,10 @@ Cloud Storage and executes them in sequence.
 The standard bash startup script is exported as a string by the startup-script
 module.
 
+The script in this example is performing the trivial task of creating a file in
+the image's home directory just to demonstrate the capability. You can expand
+the startup-script module to install more complex dependencies.
+
 [vmstartup]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
 #### Packer Template (deployment group 2)
@@ -170,18 +218,33 @@ module.
 The Packer template in this deployment group accepts [several methods for
 executing custom scripts][pkr]. To pass the exported startup string to it, you
 must collect it from the Terraform module and provide it to the Packer template.
-After running `terraform -chdir=image-builder/builder-env apply` as instructed
-by `ghpc`, execute the following:
+After running `terraform -chdir=image-builder-001/builder-env apply` as
+instructed by `ghpc`, execute the following:
 
 ```shell
-terraform -chdir=image-builder/builder-env \
+terraform -chdir=image-builder-001/builder-env \
   output -raw startup_script_install_ansible > \
-  image-builder/packer/custom-image/startup_script.sh
-cd image-builder/packer/custom-image
+  image-builder-001/packer/custom-image/startup_script.sh
+cd image-builder-001/packer/custom-image
 packer init .
 packer validate -var startup_script_file=startup_script.sh .
 packer build -var startup_script_file=startup_script.sh .
 ```
+
+#### Slurm Cluster Based on Custom Image (deployment group 3)
+
+Once the Slurm cluster has been deployed we can test that our Slurm compute
+partition is now using the image we built. It should contain the `hello.txt`
+file that was added during image build:
+
+1. SSH into the login node `slurm-image-builder-001-login0`.
+2. Run a job that prints the contents of the added file:
+
+  ```bash
+  $ srun -N 2 cat /home/hello.txt
+  Hello World
+  Hello World
+  ```
 
 ### (Community) spack-gromacs.yaml
 

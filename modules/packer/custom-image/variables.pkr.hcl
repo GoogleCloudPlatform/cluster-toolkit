@@ -63,6 +63,12 @@ variable "tags" {
   default     = null
 }
 
+variable "image_family" {
+  description = "The family name of the image to be built. Image name will also be derived from this value. Defaults to `deployment_name`"
+  type        = string
+  default     = null
+}
+
 variable "source_image_project_id" {
   description = <<EOD
 A list of project IDs to search for the source image. Packer will search the
