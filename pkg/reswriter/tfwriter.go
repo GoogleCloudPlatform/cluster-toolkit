@@ -369,19 +369,19 @@ func printTerraformInstructions(grpPath string) {
 
 // writeTopLevel writes any needed files to the top layer of the blueprint
 func (w TFWriter) writeDeploymentGroups(
-	yamlConfig *config.YamlConfig,
+	blueprint *config.Blueprint,
 	outputDir string,
 ) error {
-	deploymentName, err := yamlConfig.DeploymentName()
+	deploymentName, err := blueprint.DeploymentName()
 	if err != nil {
 		return err
 	}
-	ctyVars, err := config.ConvertMapToCty(yamlConfig.Vars)
+	ctyVars, err := config.ConvertMapToCty(blueprint.Vars)
 	if err != nil {
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %v", err)
 	}
-	for _, depGroup := range yamlConfig.DeploymentGroups {
+	for _, depGroup := range blueprint.DeploymentGroups {
 		if !depGroup.HasKind("terraform") {
 			continue
 		}

@@ -69,7 +69,7 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 	deploymentConfig.ExpandConfig()
-	deploymentConfig.ExportYamlConfig(outputFilename)
+	deploymentConfig.ExportBlueprint(outputFilename)
 	fmt.Printf(
 		"Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)
 }

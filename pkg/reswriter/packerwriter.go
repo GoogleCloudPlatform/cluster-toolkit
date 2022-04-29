@@ -49,9 +49,9 @@ func printPackerInstructions(grpPath string) {
 }
 
 // writeModuleLevel writes any needed files to the module layer
-func (w PackerWriter) writeModuleLevel(yamlConfig *config.YamlConfig, outputDir string) error {
-	for _, grp := range yamlConfig.DeploymentGroups {
-		deploymentName, err := yamlConfig.DeploymentName()
+func (w PackerWriter) writeModuleLevel(blueprint *config.Blueprint, outputDir string) error {
+	for _, grp := range blueprint.DeploymentGroups {
+		deploymentName, err := blueprint.DeploymentName()
 		if err != nil {
 			return err
 		}
@@ -67,7 +67,7 @@ func (w PackerWriter) writeModuleLevel(yamlConfig *config.YamlConfig, outputDir 
 				return fmt.Errorf(
 					"error converting global vars to cty for writing: %v", err)
 			}
-			err = yamlConfig.ResolveGlobalVariables(ctySettings)
+			err = blueprint.ResolveGlobalVariables(ctySettings)
 			if err != nil {
 				return err
 			}
@@ -90,8 +90,8 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 
 // writeDeploymentGroups writes any needed files to the top and module levels
 // of the blueprint
-func (w PackerWriter) writeDeploymentGroups(yamlConfig *config.YamlConfig, outputDir string) error {
-	return w.writeModuleLevel(yamlConfig, outputDir)
+func (w PackerWriter) writeDeploymentGroups(blueprint *config.Blueprint, outputDir string) error {
+	return w.writeModuleLevel(blueprint, outputDir)
 }
 
 func (w PackerWriter) restoreState(deploymentDir string) error {

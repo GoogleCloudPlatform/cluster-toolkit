@@ -39,7 +39,7 @@ const (
 type ModWriter interface {
 	getNumModules() int
 	addNumModules(int)
-	writeDeploymentGroups(*config.YamlConfig, string) error
+	writeDeploymentGroups(*config.Blueprint, string) error
 	restoreState(deploymentDir string) error
 }
 
@@ -62,22 +62,22 @@ func factory(kind string) ModWriter {
 }
 
 // WriteBlueprint writes a deployment directory using modules defined the environment blueprint.
-func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFlag bool) error {
-	deploymentName, err := yamlConfig.DeploymentName()
+func WriteBlueprint(blueprint *config.Blueprint, outputDir string, overwriteFlag bool) error {
+	deploymentName, err := blueprint.DeploymentName()
 	if err != nil {
 		return err
 	}
 	deploymentDir := filepath.Join(outputDir, deploymentName)
 
-	overwrite := isOverwriteAllowed(deploymentDir, yamlConfig, overwriteFlag)
+	overwrite := isOverwriteAllowed(deploymentDir, blueprint, overwriteFlag)
 	if err := prepBpDir(deploymentDir, overwrite); err != nil {
 		return err
 	}
 
-	copySource(deploymentDir, &yamlConfig.DeploymentGroups)
+	copySource(deploymentDir, &blueprint.DeploymentGroups)
 	for _, writer := range kinds {
 		if writer.getNumModules() > 0 {
-			if err := writer.writeDeploymentGroups(yamlConfig, outputDir); err != nil {
+			if err := writer.writeDeploymentGroups(blueprint, outputDir); err != nil {
 				return fmt.Errorf("error writing modules to deployment: %w", err)
 			}
 			if err := writer.restoreState(deploymentDir); err != nil {
@@ -129,7 +129,7 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // Determines if overwrite is allowed
-func isOverwriteAllowed(bpDir string, overwritingConfig *config.YamlConfig, overwriteFlag bool) bool {
+func isOverwriteAllowed(bpDir string, overwritingConfig *config.Blueprint, overwriteFlag bool) bool {
 	if !overwriteFlag {
 		return false
 	}

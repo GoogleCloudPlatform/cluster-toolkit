@@ -89,20 +89,20 @@ func (dc *DeploymentConfig) expandBackends() error {
 	//    backend into resource groups which have no explicit
 	//    TerraformBackend
 	// 3. In all cases, add a prefix for GCS backends if one is not defined
-	yamlConfig := &dc.Config
-	if yamlConfig.TerraformBackendDefaults.Type != "" {
-		for i := range yamlConfig.DeploymentGroups {
-			grp := &yamlConfig.DeploymentGroups[i]
+	blueprint := &dc.Config
+	if blueprint.TerraformBackendDefaults.Type != "" {
+		for i := range blueprint.DeploymentGroups {
+			grp := &blueprint.DeploymentGroups[i]
 			if grp.TerraformBackend.Type == "" {
-				grp.TerraformBackend.Type = yamlConfig.TerraformBackendDefaults.Type
+				grp.TerraformBackend.Type = blueprint.TerraformBackendDefaults.Type
 				grp.TerraformBackend.Configuration = make(map[string]interface{})
-				for k, v := range yamlConfig.TerraformBackendDefaults.Configuration {
+				for k, v := range blueprint.TerraformBackendDefaults.Configuration {
 					grp.TerraformBackend.Configuration[k] = v
 				}
 			}
 			if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration["prefix"] == nil {
-				DeploymentName := yamlConfig.Vars["deployment_name"]
-				prefix := yamlConfig.BlueprintName
+				DeploymentName := blueprint.Vars["deployment_name"]
+				prefix := blueprint.BlueprintName
 				if DeploymentName != nil {
 					prefix += "/" + DeploymentName.(string)
 				}
@@ -371,7 +371,7 @@ type varContext struct {
 	varString  string
 	groupIndex int
 	modIndex   int
-	yamlConfig YamlConfig
+	blueprint  Blueprint
 }
 
 // Needs DeploymentGroups, variable string, current group,
@@ -399,7 +399,7 @@ func expandSimpleVariable(
 
 	if varSource == "vars" { // Global variable
 		// Verify global variable exists
-		if _, ok := context.yamlConfig.Vars[varValue]; !ok {
+		if _, ok := context.blueprint.Vars[varValue]; !ok {
 			return "", fmt.Errorf("%s: %s is not a global variable",
 				errorMessages["varNotFound"], context.varString)
 		}
@@ -419,7 +419,7 @@ func expandSimpleVariable(
 	}
 
 	// Get the module info
-	refGrp := context.yamlConfig.DeploymentGroups[refGrpIndex]
+	refGrp := context.blueprint.DeploymentGroups[refGrpIndex]
 	refModIndex := -1
 	for i := range refGrp.Modules {
 		if refGrp.Modules[i].ID == varSource {
@@ -557,7 +557,7 @@ func updateVariables(
 // expands all variables
 func (dc *DeploymentConfig) expandVariables() {
 	for _, validator := range dc.Config.Validators {
-		err := updateVariables(varContext{yamlConfig: dc.Config}, validator.Inputs, make(map[string]int))
+		err := updateVariables(varContext{blueprint: dc.Config}, validator.Inputs, make(map[string]int))
 		if err != nil {
 			log.Fatalf("expandVariables: %v", err)
 		}
@@ -568,7 +568,7 @@ func (dc *DeploymentConfig) expandVariables() {
 			context := varContext{
 				groupIndex: iGrp,
 				modIndex:   iMod,
-				yamlConfig: dc.Config,
+				blueprint:  dc.Config,
 			}
 			err := updateVariables(
 				context,

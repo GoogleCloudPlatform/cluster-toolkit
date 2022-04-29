@@ -385,7 +385,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 		Kind:   "terraform",
 		Source: "./module/testpath",
 	}
-	testYamlConfig := YamlConfig{
+	testBlueprint := Blueprint{
 		BlueprintName: "",
 		Vars:          make(map[string]interface{}),
 		DeploymentGroups: []DeploymentGroup{{
@@ -396,7 +396,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 		TerraformBackendDefaults: TerraformBackend{},
 	}
 	testVarContext := varContext{
-		yamlConfig: testYamlConfig,
+		blueprint:  testBlueprint,
 		modIndex:   0,
 		groupIndex: 0,
 	}
@@ -415,7 +415,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Success
-	testVarContext.yamlConfig.Vars["globalExists"] = "existsValue"
+	testVarContext.blueprint.Vars["globalExists"] = "existsValue"
 	testVarContext.varString = "$(vars.globalExists)"
 	got, err := expandSimpleVariable(testVarContext, testModToGrp)
 	c.Assert(err, IsNil)

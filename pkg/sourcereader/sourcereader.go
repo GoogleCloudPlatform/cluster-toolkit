@@ -34,7 +34,7 @@ type SourceReader interface {
 	// This would be very dependent on the kind of module.
 	GetModuleInfo(modPath string, kind string) (resreader.ModuleInfo, error)
 
-	// GetModule copies the source to a provided local destination (the blueprint directory).
+	// GetModule copies the source to a provided local destination (the deployment directory).
 	GetModule(modPath string, copyPath string) error
 }
 

@@ -72,7 +72,7 @@ func teardown() {
 }
 
 // Test Data Producers
-func getYamlConfigForTest() config.YamlConfig {
+func getBlueprintForTest() config.Blueprint {
 	testModuleSource := filepath.Join(testDir, terraformModuleDir)
 	testModule := config.Module{
 		Source:   testModuleSource,
@@ -95,13 +95,13 @@ func getYamlConfigForTest() config.YamlConfig {
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
-	testYamlConfig := config.YamlConfig{
+	testBlueprint := config.Blueprint{
 		BlueprintName:    "simple",
 		Vars:             map[string]interface{}{},
 		DeploymentGroups: testDeploymentGroups,
 	}
 
-	return testYamlConfig
+	return testBlueprint
 }
 
 // Tests
@@ -146,12 +146,12 @@ func (s *MySuite) TestPrepBpDir(c *C) {
 
 func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
 	// Test with a real blueprint previously written
-	testYamlConfig := getYamlConfigForTest()
-	testYamlConfig.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
-	realBpDir := filepath.Join(testDir, testYamlConfig.Vars["deployment_name"].(string))
+	testBlueprint := getBlueprintForTest()
+	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
+	realBpDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string))
 
 	// writes a full blueprint w/ actual resource groups
-	WriteBlueprint(&testYamlConfig, testDir, false /* overwrite */)
+	WriteBlueprint(&testBlueprint, testDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
 	files, _ := ioutil.ReadDir(realBpDir)
@@ -162,7 +162,7 @@ func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
 	c.Check(isBlueprintDirPrepped(realBpDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, testYamlConfig.Vars["deployment_name"].(string), hiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string), hiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
@@ -188,14 +188,14 @@ func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 	os.MkdirAll(module1, 0755)
 	os.MkdirAll(module2, 0755)
 
-	supersetConfig := config.YamlConfig{
+	supersetConfig := config.Blueprint{
 		DeploymentGroups: []config.DeploymentGroup{
 			{Name: "group1"},
 			{Name: "group2"},
 			{Name: "group3"},
 		},
 	}
-	swapConfig := config.YamlConfig{
+	swapConfig := config.Blueprint{
 		DeploymentGroups: []config.DeploymentGroup{
 			{Name: "group1"},
 			{Name: "group4"},
@@ -212,36 +212,36 @@ func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 
 // reswriter.go
 func (s *MySuite) TestWriteBlueprint(c *C) {
-	testYamlConfig := getYamlConfigForTest()
-	testYamlConfig.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
-	err := WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	testBlueprint := getBlueprintForTest()
+	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
+	err := WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the blueprint fails
-	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	err = WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
 	// Overwriting the blueprint succeeds with flag
-	err = WriteBlueprint(&testYamlConfig, testDir, true /* overwriteFlag */)
+	err = WriteBlueprint(&testBlueprint, testDir, true /* overwriteFlag */)
 	c.Check(err, IsNil)
 }
 
 func (s *MySuite) TestWriteBlueprint_BadDeploymentName(c *C) {
-	testYamlConfig := getYamlConfigForTest()
+	testBlueprint := getBlueprintForTest()
 	var e *config.DeploymentNameError
 
-	testYamlConfig.Vars = map[string]interface{}{"deployment_name": 100}
-	err := WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	testBlueprint.Vars = map[string]interface{}{"deployment_name": 100}
+	err := WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
-	testYamlConfig.Vars = map[string]interface{}{"deployment_name": false}
-	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	testBlueprint.Vars = map[string]interface{}{"deployment_name": false}
+	err = WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
-	testYamlConfig.Vars = map[string]interface{}{"deployment_name": ""}
-	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	testBlueprint.Vars = map[string]interface{}{"deployment_name": ""}
+	err = WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
-	testYamlConfig.Vars = map[string]interface{}{}
-	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	testBlueprint.Vars = map[string]interface{}{}
+	err = WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 }
 
@@ -590,14 +590,14 @@ func (s *MySuite) TestWriteModuleLevel_PackerWriter(c *C) {
 	blueprintio := blueprintio.GetBlueprintIOLocal()
 	testWriter := PackerWriter{}
 	// Empty Config
-	testWriter.writeModuleLevel(&config.YamlConfig{}, testDir)
+	testWriter.writeModuleLevel(&config.Blueprint{}, testDir)
 
 	// No Packer modules
-	testYamlConfig := getYamlConfigForTest()
-	testWriter.writeModuleLevel(&testYamlConfig, testDir)
+	testBlueprint := getBlueprintForTest()
+	testWriter.writeModuleLevel(&testBlueprint, testDir)
 
 	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
-	testYamlConfig.Vars = map[string]interface{}{"deployment_name": deploymentName}
+	testBlueprint.Vars = map[string]interface{}{"deployment_name": deploymentName}
 	deploymentDir := filepath.Join(testDir, deploymentName)
 	if err := blueprintio.CreateDirectory(deploymentDir); err != nil {
 		log.Fatal(err)
@@ -615,20 +615,20 @@ func (s *MySuite) TestWriteModuleLevel_PackerWriter(c *C) {
 		Kind: "packer",
 		ID:   "testPackerModule",
 	}
-	testYamlConfig.DeploymentGroups = append(testYamlConfig.DeploymentGroups,
+	testBlueprint.DeploymentGroups = append(testBlueprint.DeploymentGroups,
 		config.DeploymentGroup{
 			Name:    "packerGroup",
 			Modules: []config.Module{testPackerModule},
 		})
-	testWriter.writeModuleLevel(&testYamlConfig, testDir)
+	testWriter.writeModuleLevel(&testBlueprint, testDir)
 	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 
 func (s *MySuite) TestWritePackerAutoVars(c *C) {
-	testYamlConfig := getYamlConfigForTest()
-	testYamlConfig.Vars["testkey"] = "testval"
-	ctyVars, _ := config.ConvertMapToCty(testYamlConfig.Vars)
+	testBlueprint := getBlueprintForTest()
+	testBlueprint.Vars["testkey"] = "testval"
+	ctyVars, _ := config.ConvertMapToCty(testBlueprint.Vars)
 
 	// fail writing to a bad path
 	badDestPath := "not/a/real/path"

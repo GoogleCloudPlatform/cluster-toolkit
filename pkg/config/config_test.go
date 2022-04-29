@@ -73,7 +73,7 @@ deployment_groups:
 		"ghpc_blueprint":  "simple",
 		"deployment_name": "deployment_name",
 	}
-	expectedSimpleYamlConfig YamlConfig = YamlConfig{
+	expectedSimpleBlueprint Blueprint = Blueprint{
 		BlueprintName:    "simple",
 		Vars:             map[string]interface{}{"labels": defaultLabels},
 		DeploymentGroups: []DeploymentGroup{{Name: "DeploymentGroup1", TerraformBackend: TerraformBackend{}, Modules: testModules}},
@@ -185,7 +185,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testModuleInfo := resreader.ModuleInfo{
 		Inputs: []resreader.VarInfo{testLabelVarInfo},
 	}
-	testYamlConfig := YamlConfig{
+	testBlueprint := Blueprint{
 		BlueprintName: "simple",
 		Validators:    []validatorConfig{},
 		Vars:          map[string]interface{}{},
@@ -206,7 +206,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	}
 
 	return DeploymentConfig{
-		Config: testYamlConfig,
+		Config: testBlueprint,
 		ModulesInfo: map[string]map[string]resreader.ModuleInfo{
 			"group1": {
 				testModuleSource:           testModuleInfo,
@@ -230,7 +230,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 		},
 	}
 	return DeploymentConfig{
-		Config: YamlConfig{
+		Config: Blueprint{
 			Vars:             make(map[string]interface{}),
 			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
 		},
@@ -318,36 +318,36 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
-	dc.ExportYamlConfig(outFile)
+	dc.ExportBlueprint(outFile)
 	newDC := NewDeploymentConfig(outFile)
 	c.Assert(dc.Config, DeepEquals, newDC.Config)
 }
 
-func (s *MySuite) TestImportYamlConfig(c *C) {
-	obtainedYamlConfig := importYamlConfig(simpleYamlFilename)
-	c.Assert(obtainedYamlConfig.BlueprintName,
-		Equals, expectedSimpleYamlConfig.BlueprintName)
+func (s *MySuite) TestImportBlueprint(c *C) {
+	obtainedBlueprint := importBlueprint(simpleYamlFilename)
+	c.Assert(obtainedBlueprint.BlueprintName,
+		Equals, expectedSimpleBlueprint.BlueprintName)
 	c.Assert(
-		len(obtainedYamlConfig.Vars["labels"].(map[interface{}]interface{})),
+		len(obtainedBlueprint.Vars["labels"].(map[interface{}]interface{})),
 		Equals,
-		len(expectedSimpleYamlConfig.Vars["labels"].(map[string]interface{})),
+		len(expectedSimpleBlueprint.Vars["labels"].(map[string]interface{})),
 	)
-	c.Assert(obtainedYamlConfig.DeploymentGroups[0].Modules[0].ID,
-		Equals, expectedSimpleYamlConfig.DeploymentGroups[0].Modules[0].ID)
+	c.Assert(obtainedBlueprint.DeploymentGroups[0].Modules[0].ID,
+		Equals, expectedSimpleBlueprint.DeploymentGroups[0].Modules[0].ID)
 }
 
-func (s *MySuite) TestExportYamlConfig(c *C) {
+func (s *MySuite) TestExportBlueprint(c *C) {
 	// Return bytes
 	dc := DeploymentConfig{}
-	dc.Config = expectedSimpleYamlConfig
-	obtainedYaml, err := dc.ExportYamlConfig("")
+	dc.Config = expectedSimpleBlueprint
+	obtainedYaml, err := dc.ExportBlueprint("")
 	c.Assert(err, IsNil)
 	c.Assert(obtainedYaml, Not(IsNil))
 
 	// Write file
-	outFilename := "out_TestExportYamlConfig.yaml"
+	outFilename := "out_TestExportBlueprint.yaml"
 	outFile := filepath.Join(tmpTestDir, outFilename)
-	dc.ExportYamlConfig(outFile)
+	dc.ExportBlueprint(outFile)
 	fileInfo, err := os.Stat(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(fileInfo.Name(), Equals, outFilename)

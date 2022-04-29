@@ -106,7 +106,7 @@ func (r EmbeddedSourceReader) GetModuleInfo(modPath string, kind string) (resrea
 	return reader.GetInfo(modDir)
 }
 
-// GetModule copies the embedded source to a provided destination (the blueprint directory)
+// GetModule copies the embedded source to a provided destination (the deployment directory)
 func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
 	if !IsEmbeddedPath(modPath) {
 		return fmt.Errorf("Source is not valid: %s", modPath)

@@ -33,7 +33,7 @@ func (r LocalSourceReader) GetModuleInfo(modPath string, kind string) (resreader
 	return reader.GetInfo(modPath)
 }
 
-// GetModule copies the local source to a provided destination (the blueprint directory)
+// GetModule copies the local source to a provided destination (the deployment directory)
 func (r LocalSourceReader) GetModule(modPath string, copyPath string) error {
 	if !IsLocalPath(modPath) {
 		return fmt.Errorf("Source is not valid: %s", modPath)

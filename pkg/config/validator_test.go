@@ -76,7 +76,7 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 		Modules:          []Module{{Kind: "terraform", Source: testSource, Settings: testSettings}},
 	}
 	dc := DeploymentConfig{
-		Config:        YamlConfig{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
+		Config:        Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
 		ModulesInfo:   map[string]map[string]resreader.ModuleInfo{},
 		ModuleToGroup: map[string]int{},
 		expanded:      false,

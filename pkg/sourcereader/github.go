@@ -78,7 +78,7 @@ func (r GitHubSourceReader) GetModuleInfo(modPath string, kind string) (resreade
 	return reader.GetInfo(writeDir)
 }
 
-// GetModule copies the GitHub source to a provided destination (the blueprint directory)
+// GetModule copies the GitHub source to a provided destination (the deployment directory)
 func (r GitHubSourceReader) GetModule(modPath string, copyPath string) error {
 	if !IsGitHubPath(modPath) {
 		return fmt.Errorf("Source is not valid: %s", modPath)

@@ -178,11 +178,11 @@ func (m *Module) createWrapSettingsWith() {
 	}
 }
 
-// YamlConfig stores the contents on the User YAML
+// Blueprint stores the contents on the User YAML
 // omitempty on validation_level ensures that expand will not expose the setting
 // unless it has been set to a non-default value; the implementation as an
 // integer is primarily for internal purposes even if it can be set in blueprint
-type YamlConfig struct {
+type Blueprint struct {
 	BlueprintName            string `yaml:"blueprint_name"`
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
@@ -194,7 +194,7 @@ type YamlConfig struct {
 // DeploymentConfig is a container for the imported YAML data and supporting data for
 // creating the blueprint from it
 type DeploymentConfig struct {
-	Config YamlConfig
+	Config Blueprint
 	// Indexed by Resource Group name and Module Source
 	ModulesInfo map[string]map[string]resreader.ModuleInfo
 	// Maps module ID to group index
@@ -214,47 +214,47 @@ func (dc *DeploymentConfig) ExpandConfig() {
 // NewDeploymentConfig is a constructor for DeploymentConfig
 func NewDeploymentConfig(configFilename string) DeploymentConfig {
 	newDeploymentConfig := DeploymentConfig{
-		Config: importYamlConfig(configFilename),
+		Config: importBlueprint(configFilename),
 	}
 	return newDeploymentConfig
 }
 
-// ImportYamlConfig imports the blueprint configuration provided.
-func importYamlConfig(yamlConfigFilename string) YamlConfig {
-	yamlConfigText, err := ioutil.ReadFile(yamlConfigFilename)
+// ImportBlueprint imports the blueprint configuration provided.
+func importBlueprint(blueprintFilename string) Blueprint {
+	blueprintText, err := ioutil.ReadFile(blueprintFilename)
 	if err != nil {
 		log.Fatalf("%s, filename=%s: %v",
-			errorMessages["fileLoadError"], yamlConfigFilename, err)
+			errorMessages["fileLoadError"], blueprintFilename, err)
 	}
 
-	var yamlConfig YamlConfig
-	err = yaml.UnmarshalStrict(yamlConfigText, &yamlConfig)
+	var blueprint Blueprint
+	err = yaml.UnmarshalStrict(blueprintText, &blueprint)
 
 	if err != nil {
 		log.Fatalf("%s filename=%s: %v",
-			errorMessages["yamlUnmarshalError"], yamlConfigFilename, err)
+			errorMessages["yamlUnmarshalError"], blueprintFilename, err)
 	}
 
 	// Ensure Vars is not a nil map if not set by the user
-	if len(yamlConfig.Vars) == 0 {
-		yamlConfig.Vars = make(map[string]interface{})
+	if len(blueprint.Vars) == 0 {
+		blueprint.Vars = make(map[string]interface{})
 	}
 
-	if len(yamlConfig.Vars) == 0 {
-		yamlConfig.Vars = make(map[string]interface{})
+	if len(blueprint.Vars) == 0 {
+		blueprint.Vars = make(map[string]interface{})
 	}
 
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
-	if !isValidValidationLevel(yamlConfig.ValidationLevel) {
-		yamlConfig.ValidationLevel = validationError
+	if !isValidValidationLevel(blueprint.ValidationLevel) {
+		blueprint.ValidationLevel = validationError
 	}
 
-	return yamlConfig
+	return blueprint
 }
 
-// ExportYamlConfig exports the internal representation of a blueprint config
-func (dc DeploymentConfig) ExportYamlConfig(outputFilename string) ([]byte, error) {
+// ExportBlueprint exports the internal representation of a blueprint config
+func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error) {
 	d, err := yaml.Marshal(&dc.Config)
 	if err != nil {
 		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
@@ -485,13 +485,13 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 // ResolveGlobalVariables given a map of strings to cty.Value types, will examine
 // all cty.Values that are of type cty.String. If they are literal global variables,
 // then they are replaced by the cty.Value of the corresponding entry in
-// yc.Vars. All other cty.Values are unmodified.
-// ERROR: if conversion from yc.Vars to map[string]cty.Value fails
+// b.Vars. All other cty.Values are unmodified.
+// ERROR: if conversion from b.Vars to map[string]cty.Value fails
 // ERROR: if (somehow) the cty.String cannot be converted to a Go string
 // ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global variable
-//        being resolved does not exist in yc.Vars
-func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error {
-	ctyVars, err := ConvertMapToCty(yc.Vars)
+//        being resolved does not exist in b.Vars
+func (b *Blueprint) ResolveGlobalVariables(ctyMap map[string]cty.Value) error {
+	ctyVars, err := ConvertMapToCty(b.Vars)
 	if err != nil {
 		return fmt.Errorf("could not convert global variables to cty map")
 	}
@@ -533,8 +533,8 @@ func (err *DeploymentNameError) Error() string {
 }
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.
-func (yc *YamlConfig) DeploymentName() (string, error) {
-	nameInterface, found := yc.Vars["deployment_name"]
+func (b *Blueprint) DeploymentName() (string, error) {
+	nameInterface, found := b.Vars["deployment_name"]
 	if !found {
 		return "", &DeploymentNameError{"deployment_name variable not defined."}
 	}
