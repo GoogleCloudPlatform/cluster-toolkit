@@ -63,7 +63,7 @@ variable "tags" {
   default     = null
 }
 
-variable "built_image_family" {
+variable "image_family" {
   description = "The family name of the image to be built. Image name will also be derived from this value. Defaults to `deployment_name`"
   type        = string
   default     = null

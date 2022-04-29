@@ -49,7 +49,7 @@ deployment_groups:
       disk_size: 20
       source_image_project_id: [schedmd-slurm-public]
       source_image_family: schedmd-slurm-21-08-4-hpc-centos-7
-      built_image_family: $(vars.new_image_family)
+      image_family: $(vars.new_image_family)
 
 - group: cluster
   modules:

@@ -179,9 +179,9 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | A list of Ansible playbook configurations that will be uploaded to customize the VM image | <pre>list(object({<br>    playbook_file   = string<br>    galaxy_file     = string<br>    extra_arguments = list(string)<br>  }))</pre> | `[]` | no |
-| <a name="input_built_image_family"></a> [built\_image\_family](#input\_built\_image\_family) | The family name of the image to be built. Image name will also be derived from this value. Defaults to `deployment_name` | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
+| <a name="input_image_family"></a> [image\_family](#input\_image\_family) | The family name of the image to be built. Image name will also be derived from this value. Defaults to `deployment_name` | `string` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2-standard-4"` | no |
 | <a name="input_network_project_id"></a> [network\_project\_id](#input\_network\_project\_id) | Project ID of Shared VPC network | `string` | `null` | no |
 | <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `true` | no |
