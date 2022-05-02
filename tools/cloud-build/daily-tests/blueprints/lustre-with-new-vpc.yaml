@@ -42,7 +42,7 @@ deployment_groups:
       local_mount: /home
 
   # Explicitly picking the local version of the module
-  - source: ./community/modules/file-system/DDN-EXAScaler
+  - source: community/modules/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     settings:
@@ -74,7 +74,7 @@ deployment_groups:
       max_node_count: 2
       partition_name: compute
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:

@@ -37,7 +37,7 @@ deployment_groups:
       name: appsfs
       local_mount: /apps
 
-  - source: ./community/modules/file-system/nfs-server
+  - source: community/modules/file-system/nfs-server
     kind: terraform
     id: nfs
     use: [network1]

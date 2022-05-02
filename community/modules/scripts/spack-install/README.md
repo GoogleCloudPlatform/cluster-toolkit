@@ -35,7 +35,7 @@ https://www.googleapis.com/auth/devstorage.read_write
 As an example, the below is a possible definition of a spack installation.
 
 ```yaml
-  - source: ./community/modules/scripts/spack-install
+  - source: community/modules/scripts/spack-install
     kind: terraform
     id: spack
     settings:
@@ -91,7 +91,7 @@ Following the above description of this module, it can be added to a Slurm
 deployment via the following:
 
 ```yaml
-- source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+- source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use: [spack]

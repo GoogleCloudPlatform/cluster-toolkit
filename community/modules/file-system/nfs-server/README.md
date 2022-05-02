@@ -10,7 +10,7 @@ files with other clients over a network via the
 ### Example
 
 ```yaml
-- source: ./community/modules/file-system/nfs-server
+- source: community/modules/file-system/nfs-server
   kind: terraform
   id: homefs
   settings:

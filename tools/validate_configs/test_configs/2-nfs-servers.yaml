@@ -29,7 +29,7 @@ deployment_groups:
     kind: terraform
     id: network1
 
-  - source: ./community/modules/file-system/nfs-server
+  - source: community/modules/file-system/nfs-server
     kind: terraform
     id: homefs
     use: [network1]

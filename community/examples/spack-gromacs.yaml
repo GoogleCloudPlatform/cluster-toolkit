@@ -45,7 +45,7 @@ deployment_groups:
       local_mount: /home
 
   ## Install Scripts
-  - source: ./community/modules/scripts/spack-install
+  - source: community/modules/scripts/spack-install
     kind: terraform
     id: spack
     settings:
@@ -90,7 +90,7 @@ deployment_groups:
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
 
-  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
@@ -101,7 +101,7 @@ deployment_groups:
       partition_name: compute
       max_node_count: 20
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
@@ -112,7 +112,7 @@ deployment_groups:
     settings:
       login_node_count: 1
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:
