@@ -69,10 +69,12 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created | `string` | `"default"` | no |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
+| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region where Cloud NAT and Cloud Router will be configured | `string` | n/a | yes |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the subnetwork to returned, will use network name if null. | `string` | `null` | no |
+| <a name="input_use_default_network"></a> [use\_default\_network](#input\_use\_default\_network) | If no values for network\_name or subnetwork\_name are supplied, use 'default' GCP network rather than Toolkit defaults based on deployment\_name | `bool` | `true` | no |
 
 ## Outputs
 

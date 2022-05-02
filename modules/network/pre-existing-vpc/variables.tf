@@ -19,10 +19,21 @@ variable "project_id" {
   type        = string
 }
 
+variable "deployment_name" {
+  description = "The name of the current deployment"
+  type        = string
+}
+
+variable "use_default_network" {
+  description = "If no values for network_name or subnetwork_name are supplied, use 'default' GCP network rather than Toolkit defaults based on deployment_name"
+  type        = bool
+  default     = true
+}
+
 variable "network_name" {
   description = "The name of the network to be created"
   type        = string
-  default     = "default"
+  default     = null
 }
 
 variable "subnetwork_name" {

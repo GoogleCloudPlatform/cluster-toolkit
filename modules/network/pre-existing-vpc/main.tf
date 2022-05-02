@@ -14,14 +14,20 @@
  * limitations under the License.
 */
 
+locals {
+  default_network_name    = var.use_default_network ? "default" : "${var.deployment_name}-net"
+  default_subnetwork_name = var.use_default_network ? "default" : "${var.deployment_name}-primary-subnet"
+  network_name            = var.network_name == null ? local.default_network_name : var.network_name
+  subnetwork_name         = var.subnetwork_name == null ? local.default_subnetwork_name : var.subnetwork_name
+}
 
 data "google_compute_network" "vpc" {
-  name    = var.network_name
+  name    = local.network_name
   project = var.project_id
 }
 
 data "google_compute_subnetwork" "primary_subnetwork" {
-  name    = var.subnetwork_name != null ? var.subnetwork_name : var.network_name
+  name    = local.subnetwork_name
   region  = var.region
   project = var.project_id
 }
