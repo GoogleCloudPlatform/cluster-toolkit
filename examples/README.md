@@ -160,9 +160,9 @@ terraform -chdir=image-builder-001/cluster init
 terraform -chdir=image-builder-001/cluster validate
 terraform -chdir=image-builder-001/cluster apply
 
-# When you are done you can clean up the resources
-terraform -chdir=image-builder-001/builder-env destroy --auto-approve
+# When you are done you can clean up the resources in reverse order of creation
 terraform -chdir=image-builder-001/cluster destroy --auto-approve
+terraform -chdir=image-builder-001/builder-env destroy --auto-approve
 ```
 
 Using a custom VM image can be more scalable than installing software using
