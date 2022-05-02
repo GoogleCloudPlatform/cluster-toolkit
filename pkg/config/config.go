@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 
@@ -219,6 +220,16 @@ func NewBlueprintConfig(configFilename string) BlueprintConfig {
 	return newBlueprintConfig
 }
 
+func deprecatedSchema070a() {
+	os.Stderr.WriteString("*****************************************************************************************\n\n")
+	os.Stderr.WriteString("Our schemas have recently changed. Key changes:\n")
+	os.Stderr.WriteString("  'resource_groups'       becomes 'deployment_groups'\n")
+	os.Stderr.WriteString("  'resources'             becomes 'modules'\n")
+	os.Stderr.WriteString("  'source: resources/...' becomes 'source: modules/...'\n")
+	os.Stderr.WriteString("https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/examples#blueprint-schema\n")
+	os.Stderr.WriteString("*****************************************************************************************\n\n")
+}
+
 // ImportYamlConfig imports the blueprint configuration provided.
 func importYamlConfig(yamlConfigFilename string) YamlConfig {
 	yamlConfigText, err := ioutil.ReadFile(yamlConfigFilename)
@@ -231,6 +242,7 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 	err = yaml.UnmarshalStrict(yamlConfigText, &yamlConfig)
 
 	if err != nil {
+		deprecatedSchema070a()
 		log.Fatalf("%s filename=%s: %v",
 			errorMessages["yamlUnmarshalError"], yamlConfigFilename, err)
 	}
