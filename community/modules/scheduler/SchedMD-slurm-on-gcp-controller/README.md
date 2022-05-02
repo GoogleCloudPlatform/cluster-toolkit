@@ -9,7 +9,7 @@ More information about Slurm On GCP can be found at the [project's GitHub page](
 ### Example
 
 ```yaml
-- source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+- source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
   kind: terraform
   id: slurm_controller
   settings:
