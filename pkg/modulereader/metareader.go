@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package resreader
+package modulereader
 
 import (
 	"fmt"
 )
 
-// MetaReader implements ResReader for meta modules
+// MetaReader implements Modulereader for meta modules
 type MetaReader struct {
 }
 

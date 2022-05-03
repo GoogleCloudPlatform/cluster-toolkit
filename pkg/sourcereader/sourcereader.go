@@ -16,7 +16,7 @@ package sourcereader
 
 import (
 	"hpc-toolkit/pkg/deploymentio"
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"log"
 	"strings"
 )
@@ -29,10 +29,10 @@ const (
 
 // SourceReader interface for reading modules from a source
 type SourceReader interface {
-	// GetModuleInfo would leverage resreader.GetInfo for the given kind.
+	// GetModuleInfo would leverage modulereader.GetInfo for the given kind.
 	// GetModuleInfo would operate over the source without creating a local copy.
 	// This would be very dependent on the kind of module.
-	GetModuleInfo(modPath string, kind string) (resreader.ModuleInfo, error)
+	GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error)
 
 	// GetModule copies the source to a provided local destination (the deployment directory).
 	GetModule(modPath string, copyPath string) error

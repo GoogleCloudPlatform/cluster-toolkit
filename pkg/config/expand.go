@@ -22,7 +22,7 @@ import (
 
 	"path/filepath"
 
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 )
 
@@ -118,7 +118,7 @@ func getModuleVarName(modID string, varName string) string {
 	return fmt.Sprintf("$(%s.%s)", modID, varName)
 }
 
-func getModuleInputMap(inputs []resreader.VarInfo) map[string]string {
+func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
 	modInputs := make(map[string]string)
 	for _, input := range inputs {
 		modInputs[input.Name] = input.Type
@@ -130,7 +130,7 @@ func useModule(
 	mod *Module,
 	useMod Module,
 	modInputs map[string]string,
-	useOutputs []resreader.VarInfo,
+	useOutputs []modulereader.VarInfo,
 	changedSettings map[string]bool,
 ) {
 	for _, useOutput := range useOutputs {
@@ -310,7 +310,7 @@ func (dc *DeploymentConfig) combineLabels() error {
 
 func applyGlobalVarsInGroup(
 	deploymentGroup DeploymentGroup,
-	modInfo map[string]resreader.ModuleInfo,
+	modInfo map[string]modulereader.ModuleInfo,
 	globalVars map[string]interface{}) error {
 	for _, mod := range deploymentGroup.Modules {
 		for _, input := range modInfo[mod.Source].Inputs {

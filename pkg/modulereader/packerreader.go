@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package resreader
+package modulereader
 
 import (
 	"fmt"
@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 )
 
-// PackerReader implements ResReader for packer modules
+// PackerReader implements Modulereader for packer modules
 type PackerReader struct {
 	allModInfo map[string]ModuleInfo
 }

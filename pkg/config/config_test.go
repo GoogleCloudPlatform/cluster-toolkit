@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
@@ -83,7 +83,7 @@ deployment_groups:
 		},
 	}
 	// For expand.go
-	requiredVar = resreader.VarInfo{
+	requiredVar = modulereader.VarInfo{
 		Name:        "reqVar",
 		Type:        "string",
 		Description: "A test required variable",
@@ -181,9 +181,9 @@ func getDeploymentConfigForTest() DeploymentConfig {
 			"moduleLabel": "moduleLabelValue",
 		},
 	}
-	testLabelVarInfo := resreader.VarInfo{Name: "labels"}
-	testModuleInfo := resreader.ModuleInfo{
-		Inputs: []resreader.VarInfo{testLabelVarInfo},
+	testLabelVarInfo := modulereader.VarInfo{Name: "labels"}
+	testModuleInfo := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{testLabelVarInfo},
 	}
 	testBlueprint := Blueprint{
 		BlueprintName: "simple",
@@ -207,7 +207,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 
 	return DeploymentConfig{
 		Config: testBlueprint,
-		ModulesInfo: map[string]map[string]resreader.ModuleInfo{
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
 			"group1": {
 				testModuleSource:           testModuleInfo,
 				testModuleSourceWithLabels: testModuleInfo,

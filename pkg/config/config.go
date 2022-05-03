@@ -30,7 +30,7 @@ import (
 	ctyJson "github.com/zclconf/go-cty/cty/json"
 	"gopkg.in/yaml.v2"
 
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 )
 
@@ -198,7 +198,7 @@ type Blueprint struct {
 type DeploymentConfig struct {
 	Config Blueprint
 	// Indexed by Resource Group name and Module Source
-	ModulesInfo map[string]map[string]resreader.ModuleInfo
+	ModulesInfo map[string]map[string]modulereader.ModuleInfo
 	// Maps module ID to group index
 	ModuleToGroup map[string]int
 	expanded      bool
@@ -285,8 +285,8 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error
 }
 
 func createModuleInfo(
-	deploymentGroup DeploymentGroup) map[string]resreader.ModuleInfo {
-	modInfo := make(map[string]resreader.ModuleInfo)
+	deploymentGroup DeploymentGroup) map[string]modulereader.ModuleInfo {
+	modInfo := make(map[string]modulereader.ModuleInfo)
 	for _, mod := range deploymentGroup.Modules {
 		if _, exists := modInfo[mod.Source]; !exists {
 			reader := sourcereader.Factory(mod.Source)
@@ -304,7 +304,7 @@ func createModuleInfo(
 
 // setModulesInfo populates needed information from modules
 func (dc *DeploymentConfig) setModulesInfo() {
-	dc.ModulesInfo = make(map[string]map[string]resreader.ModuleInfo)
+	dc.ModulesInfo = make(map[string]map[string]modulereader.ModuleInfo)
 	for _, grp := range dc.Config.DeploymentGroups {
 		dc.ModulesInfo[grp.Name] = createModuleInfo(grp)
 	}
