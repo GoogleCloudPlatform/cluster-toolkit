@@ -18,6 +18,8 @@ is enabled.
 **WARNING**: This file system has a license cost as described in the pricing
 section of the [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
 
+More information about the architecture can be found at [Architecture: Lustre file system in Google Cloud using DDN EXAScaler](https://cloud.google.com/architecture/lustre-architecture).
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
