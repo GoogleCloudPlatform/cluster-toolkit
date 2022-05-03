@@ -253,7 +253,7 @@ cluster with software installed with
 [Spack](../community/modules/scripts/spack-install/README.md) The controller
 will install and configure spack, and install
 [gromacs](https://www.gromacs.org/) using spack. Spack is installed in a shared
-location (/apps) via filestore. This build leverages the startup-script module
+location (/sw) via filestore. This build leverages the startup-script module
 and can be applied in any cluster by using the output of spack-install or
 startup-script modules.
 
@@ -278,7 +278,7 @@ node. To use spack in the controller or compute nodes, the following command
 must be run first:
 
 ```shell
-source /apps/spack/share/spack/setup-env.sh
+source /sw/spack/share/spack/setup-env.sh
 ```
 
 To load the gromacs module, use spack:

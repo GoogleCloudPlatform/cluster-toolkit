@@ -27,7 +27,7 @@ variable "project_id" {
 variable "install_dir" {
   description = "Directory to install spack into."
   type        = string
-  default     = "/apps/spack"
+  default     = "/sw/spack"
 }
 
 variable "spack_url" {
