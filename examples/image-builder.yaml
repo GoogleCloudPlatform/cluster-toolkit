@@ -56,7 +56,7 @@ deployment_groups:
   - source: modules/network/pre-existing-vpc
     kind: terraform
     id: cluster-network
-  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use: [cluster-network]
@@ -65,7 +65,7 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use: [cluster-network, compute_partition]
@@ -74,7 +74,7 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use: [cluster-network, slurm_controller]

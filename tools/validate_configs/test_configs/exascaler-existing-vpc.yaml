@@ -29,7 +29,7 @@ deployment_groups:
     kind: terraform
     id: network1
 
-  - source: ./community/modules/file-system/DDN-EXAScaler
+  - source: community/modules/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     use: [network1]

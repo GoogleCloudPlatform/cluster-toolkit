@@ -11,7 +11,7 @@ module.
 ### Example
 
 ```yaml
-- source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+- source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
   kind: terraform
   id: slurm_login
   settings:

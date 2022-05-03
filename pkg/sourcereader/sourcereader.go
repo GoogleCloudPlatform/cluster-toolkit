@@ -53,7 +53,7 @@ func IsLocalPath(source string) bool {
 
 // IsEmbeddedPath checks if a source path points to an embedded modules
 func IsEmbeddedPath(source string) bool {
-	return strings.HasPrefix(source, "modules/")
+	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/")
 }
 
 // IsGitHubPath checks if a source path points to GitHub

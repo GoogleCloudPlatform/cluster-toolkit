@@ -22,7 +22,7 @@ import (
 	"os"
 )
 
-//go:embed modules
+//go:embed modules community/modules
 var moduleFS embed.FS
 
 func main() {

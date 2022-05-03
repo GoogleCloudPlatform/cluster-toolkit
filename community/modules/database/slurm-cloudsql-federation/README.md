@@ -8,7 +8,7 @@ used to integrate with the slurm cluster to enable accounting data storage.
 ### Example
 
 ```yaml
-- source: ./community/modules/database/cloudsql-federation
+- source: community/modules/database/cloudsql-federation
   kind: terraform
   id: project
   settings:

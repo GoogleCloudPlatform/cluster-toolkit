@@ -63,7 +63,7 @@ deployment_groups:
       metadata:
         startup-script: $(startup.startup_script)
 
-  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
     use:

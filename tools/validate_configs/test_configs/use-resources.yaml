@@ -41,12 +41,12 @@ deployment_groups:
       network_name: $(network1.network_name)
 
 
-  - source: ./community/modules/file-system/nfs-server
+  - source: community/modules/file-system/nfs-server
     kind: terraform
     id: projectsfs
     use: [network1]
 
-  - source: ./community/modules/file-system/DDN-EXAScaler
+  - source: community/modules/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     settings:
@@ -55,7 +55,7 @@ deployment_groups:
       subnetwork_self_link: $(network1.subnetwork_self_link)
       subnetwork_address: $(network1.subnetwork_address)
 
-  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:

@@ -69,7 +69,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created | `string` | `"default"` | no |
+| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network whose attributes will be found | `string` | `"default"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region where Cloud NAT and Cloud Router will be configured | `string` | n/a | yes |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the subnetwork to returned, will use network name if null. | `string` | `null` | no |
