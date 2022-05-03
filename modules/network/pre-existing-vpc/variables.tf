@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "network_name" {
-  description = "The name of the network to be created"
+  description = "The name of the network whose attributes will be found"
   type        = string
   default     = "default"
 }
