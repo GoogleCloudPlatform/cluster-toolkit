@@ -20,18 +20,24 @@ variable "project_id" {
 }
 
 variable "deployment_name" {
-  description = "The name of the current deployment"
+  description = <<EOT
+    The name of the current deployment; default values for network_name and
+    subnetwork_name will be derived in manner identical to Toolkit VPC module.
+    EOT
   type        = string
 }
 
 variable "use_default_network" {
-  description = "If no values for network_name or subnetwork_name are supplied, use 'default' GCP network rather than Toolkit defaults based on deployment_name"
+  description = <<EOT
+    If no values for network_name or subnetwork_name are supplied, use 'default'
+    GCP network rather than Toolkit defaults based on deployment_name
+    EOT
   type        = bool
   default     = true
 }
 
 variable "network_name" {
-  description = "The name of the network to be created"
+  description = "The name of the network whose attributes will be found"
   type        = string
   default     = null
 }
