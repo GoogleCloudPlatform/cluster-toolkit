@@ -22,14 +22,14 @@ vars:
   region: europe-west4
   zone: europe-west4-a
 
-resource_groups:
+deployment_groups:
 - group: infrastructure
-  resources:
-  - source: ./resources/network/vpc
+  modules:
+  - source: ./modules/network/vpc
     kind: terraform
     id: network
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network]
@@ -39,7 +39,7 @@ resource_groups:
       labels:
         ghpc_role: storage-home
 
-  - source: ./resources/file-system/filestore
+  - source: ./modules/file-system/filestore
     kind: terraform
     id: apps
     use: [network]
@@ -49,7 +49,7 @@ resource_groups:
       labels:
         ghpc_role: storage-apps
 
-  - source: ./resources/scripts/startup-script
+  - source: ./modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -64,7 +64,7 @@ resource_groups:
         source: "modules/startup-script/examples/mount.yaml"
         destination: "mount.yaml"
 
-  - source: ./resources/compute/simple-instance
+  - source: ./modules/compute/vm-instance
     kind: terraform
     id: license-server-1
     use: [network]
@@ -74,7 +74,7 @@ resource_groups:
       labels:
         ghpc_role: license
 
-  - source: resources/compute/simple-instance
+  - source: modules/compute/vm-instance
     kind: terraform
     id: license-server-2
     use: [network]
@@ -84,7 +84,7 @@ resource_groups:
       labels:
         ghpc_role: license
 
-  - source: resources/compute/simple-instance
+  - source: modules/compute/vm-instance
     kind: terraform
     id: head-node
     use:
@@ -99,7 +99,7 @@ resource_groups:
       metadata:
         startup-script: $(startup.startup_script)
 
-  - source: resources/compute/simple-instance
+  - source: modules/compute/vm-instance
     kind: terraform
     id: compute
     use:

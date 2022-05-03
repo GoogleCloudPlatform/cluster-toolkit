@@ -61,7 +61,7 @@ rule "terraform_module_version" {
 rule "terraform_workspace_remote" {
   enabled = true
 }
-// Disable because many of our resources do not have nor need main.tf files
+// Disable because many of our HPC modules do not have nor need main.tf files
 rule "terraform_standard_module_structure" {
   enabled = false
 }

@@ -22,14 +22,14 @@ vars:
   region: europe-west4
   zone: europe-west4-a
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: resources/network/vpc
+  modules:
+  - source: modules/network/vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/pre-existing-network-storage
+  - source: modules/file-system/pre-existing-network-storage
     kind: terraform
     id: homefs
     settings:
@@ -38,7 +38,7 @@ resource_groups:
       local_mount: /home
       fs_type: nfs
 
-  - source: resources/project/service-account
+  - source: ./community/modules/project/service-account
     kind: terraform
     id: service_acct
     settings:
@@ -49,7 +49,7 @@ resource_groups:
       - "compute.instanceAdmin.v1"
 
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
     use: [network1]
@@ -58,7 +58,7 @@ resource_groups:
       network_storage:
       - $(homefs.network_storage)
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm
     use: [network1]

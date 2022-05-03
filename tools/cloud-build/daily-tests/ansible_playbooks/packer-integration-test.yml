@@ -19,9 +19,9 @@
   vars:
     scripts_dir: "{{ workspace }}/tools/cloud-build/daily-tests"
   tasks:
-  ## Create blueprint
-  - name: Create blueprint
-    command: "{{ scripts_dir }}/create_blueprint.sh"
+  ## Create Deployment
+  - name: Create Deployment Directory
+    command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
@@ -29,15 +29,15 @@
       BLUEPRINT_DIR: "{{ blueprint_dir }}"
       DEPLOYMENT_NAME: "{{ deployment_name }}"
     args:
-      creates: "{{ workspace }}/{{ blueprint_dir }}.tgz"
+      creates: "{{ workspace }}/{{ deployment_name }}.tgz"
   - name: Create Infrastructure and test
     block:
     - name: Create Network with Terraform
       command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/network"
+        chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"
       args:
-        creates: "{{ workspace }}/{{ blueprint_dir }}/.terraform"
+        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
       environment:
         TF_IN_AUTOMATION: "TRUE"
       with_items:
@@ -47,15 +47,16 @@
     - name: Create VM image with Packer
       command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/packer/custom-image"
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
       with_items:
+      - packer init .
       - packer validate .
       - packer build .
     - name: Delete VM Image
       ansible.builtin.shell: |
         gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
       args:
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/packer/custom-image"
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
     ## Always cleanup network
     always:
     - name: Tear Down Network
@@ -65,4 +66,4 @@
         TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve -no-color
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/network"
+        chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"

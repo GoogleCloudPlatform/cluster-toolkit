@@ -19,9 +19,7 @@ import (
 	"fmt"
 
 	compute "cloud.google.com/go/compute/apiv1"
-	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
-	resourcemanagerpb "google.golang.org/genproto/googleapis/cloud/resourcemanager/v3"
 )
 
 const projectError = "project ID %s does not exist or your credentials do not have permission to access it"
@@ -32,17 +30,17 @@ const zoneInRegionError = "zone %s is not in region %s in project ID %s or your 
 // TestProjectExists whether projectID exists / is accessible with credentials
 func TestProjectExists(projectID string) error {
 	ctx := context.Background()
-	c, err := resourcemanager.NewProjectsClient(ctx)
+	c, err := compute.NewProjectsRESTClient(ctx)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 
-	req := &resourcemanagerpb.GetProjectRequest{
-		Name: "projects/" + projectID,
+	req := &computepb.GetProjectRequest{
+		Project: projectID,
 	}
 
-	_, err = c.GetProject(ctx, req)
+	_, err = c.Get(ctx, req)
 	if err != nil {
 		return fmt.Errorf(projectError, projectID)
 	}

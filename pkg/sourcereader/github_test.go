@@ -56,11 +56,11 @@ func (s *MySuite) TestGetResourceInfo_GitHub(c *C) {
 	// Invalid GitHub repository - path does not exists
 	badGitRepo := "github.com:not/exist.git"
 	_, err := reader.GetResourceInfo(badGitRepo, tfKindString)
-	expectedErr := "failed to clone GitHub resource at .*"
+	expectedErr := "failed to clone GitHub module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	_, err = reader.GetResourceInfo(badSource, tfKindString)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -72,11 +72,11 @@ func (s *MySuite) TestGetResource_GitHub(c *C) {
 	// Invalid GitHub repository - path does not exists
 	badGitRepo := "github.com:not/exist.git"
 	err := reader.GetResource(badGitRepo, tfKindString)
-	expectedErr := "failed to clone GitHub resource at .*"
+	expectedErr := "failed to clone GitHub module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	err = reader.GetResource(badSource, tfKindString)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)

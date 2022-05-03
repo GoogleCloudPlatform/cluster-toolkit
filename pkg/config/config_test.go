@@ -47,10 +47,10 @@ terraform_backend_defaults:
   type: gcs
   configuration:
     bucket: hpc-toolkit-tf-state
-resource_groups:
+deployment_groups:
 - group: group1
-  resources:
-  - source: ./resources/network/vpc
+  modules:
+  - source: ./modules/network/vpc
     kind: terraform
     id: "vpc"
     settings:
@@ -59,7 +59,7 @@ resource_groups:
 `)
 	testResources = []Resource{
 		{
-			Source:           "./resources/network/vpc",
+			Source:           "./modules/network/vpc",
 			Kind:             "terraform",
 			ID:               "vpc",
 			WrapSettingsWith: make(map[string][]string),
@@ -122,11 +122,11 @@ func setup() {
 	resourceDir := filepath.Join(tmpTestDir, "resource")
 	err = os.Mkdir(resourceDir, 0755)
 	if err != nil {
-		log.Fatalf("failed to create test resource dir: %v", err)
+		log.Fatalf("failed to create test module dir: %v", err)
 	}
 	varFile, err := os.Create(filepath.Join(resourceDir, "variables.tf"))
 	if err != nil {
-		log.Fatalf("failed to create variables.tf in test resource dir: %v", err)
+		log.Fatalf("failed to create variables.tf in test module dir: %v", err)
 	}
 	testVariablesTF := `
 	variable "test_variable" {
@@ -135,7 +135,7 @@ func setup() {
 	}`
 	_, err = varFile.WriteString(testVariablesTF)
 	if err != nil {
-		log.Fatalf("failed to write variables.tf in test resource dir: %v", err)
+		log.Fatalf("failed to write variables.tf in test module dir: %v", err)
 	}
 }
 
@@ -340,7 +340,8 @@ func (s *MySuite) TestExportYamlConfig(c *C) {
 	// Return bytes
 	bc := BlueprintConfig{}
 	bc.Config = expectedSimpleYamlConfig
-	obtainedYaml := bc.ExportYamlConfig("")
+	obtainedYaml, err := bc.ExportYamlConfig("")
+	c.Assert(err, IsNil)
 	c.Assert(obtainedYaml, Not(IsNil))
 
 	// Write file
@@ -395,6 +396,46 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	expErr := "invalid format: .*"
 	c.Assert(err, ErrorMatches, expErr)
 	c.Assert(bc.Config.Vars["project_id"], IsNil)
+}
+
+func (s *MySuite) TestSetBackendConfig(c *C) {
+	// Success
+	bc := getBlueprintConfigForTest()
+	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, "")
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["bucket"], IsNil)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], IsNil)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["prefix"], IsNil)
+
+	cliBEType := "gcs"
+	cliBEBucket := "a_bucket"
+	cliBESA := "a_bucket_reader@project.iam.gserviceaccount.com"
+	cliBEPrefix := "test/prefix"
+	cliBEConfigVars := []string{
+		fmt.Sprintf("type=%s", cliBEType),
+		fmt.Sprintf("bucket=%s", cliBEBucket),
+		fmt.Sprintf("impersonate_service_account=%s", cliBESA),
+		fmt.Sprintf("prefix=%s", cliBEPrefix),
+	}
+	err := bc.SetBackendConfig(cliBEConfigVars)
+
+	c.Assert(err, IsNil)
+	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, cliBEType)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["bucket"], Equals, cliBEBucket)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], Equals, cliBESA)
+	c.Assert(bc.Config.TerraformBackendDefaults.Configuration["prefix"], Equals, cliBEPrefix)
+
+	// Failure: Variable without '='
+	bc = getBlueprintConfigForTest()
+	c.Assert(bc.Config.TerraformBackendDefaults.Type, Equals, "")
+
+	invalidNonEQVars := []string{
+		fmt.Sprintf("type%s", cliBEType),
+		fmt.Sprintf("bucket%s", cliBEBucket),
+	}
+	err = bc.SetBackendConfig(invalidNonEQVars)
+
+	expErr := "invalid format: .*"
+	c.Assert(err, ErrorMatches, expErr)
 }
 
 func TestMain(m *testing.M) {

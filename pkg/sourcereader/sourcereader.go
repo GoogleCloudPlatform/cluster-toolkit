@@ -53,7 +53,7 @@ func IsLocalPath(source string) bool {
 
 // IsEmbeddedPath checks if a source path points to an embedded resources
 func IsEmbeddedPath(source string) bool {
-	return strings.HasPrefix(source, "resources/")
+	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/")
 }
 
 // IsGitHubPath checks if a source path points to GitHub
@@ -71,7 +71,7 @@ func Factory(resPath string) SourceReader {
 	case IsGitHubPath(resPath):
 		return readers[github]
 	default:
-		log.Fatalf("Source (%s) not valid, should begin with /, ./, ../, resources/, git@ or github.com",
+		log.Fatalf("Source (%s) not valid, should begin with /, ./, ../, modules/, git@ or github.com",
 			resPath)
 	}
 

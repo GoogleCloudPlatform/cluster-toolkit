@@ -22,24 +22,24 @@ vars:
   region: us-central1
   zone: us-central1-c
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/pre-existing-vpc
-  - source: resources/network/pre-existing-vpc
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/pre-existing-vpc
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
     settings:
       local_mount: /home
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: projectsfs
     use: [network1]
@@ -48,14 +48,14 @@ resource_groups:
       size_gb: 10240
       local_mount: /projects
 
-  - source: resources/third-party/file-system/DDN-EXAScaler
+  - source: community/modules/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     use: [network1]
     settings:
       local_mount: /scratch
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: low_cost_partition
     use:
@@ -71,7 +71,7 @@ resource_groups:
       machine_type: n2-standard-4
 
   # This compute_partition is far more performant than low_cost_partition.
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
@@ -83,7 +83,7 @@ resource_groups:
       max_node_count: 200
       partition_name: compute
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
@@ -94,7 +94,7 @@ resource_groups:
     - low_cost_partition  # low cost partition will be default as it is listed first
     - compute_partition
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:
@@ -106,7 +106,7 @@ resource_groups:
     settings:
       login_machine_type: n2-standard-4
 
-  - source: resources/monitoring/dashboard
+  - source: modules/monitoring/dashboard
     kind: terraform
     id: hpc_dashboard
     outputs: [instructions]

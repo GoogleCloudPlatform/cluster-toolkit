@@ -14,25 +14,25 @@
 
 ---
 
-blueprint_name: use-resources
+blueprint_name: use-modules
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm-use-resources
+  deployment_name: hpc-slurm-use-modules
   region: us-central1
   zone: us-central1-a
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../,
-  # / as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/pre-existing-vpc
-  - source: resources/network/pre-existing-vpc
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../,
+  # / as a prefix. To refer to a local module, prefix with ./, ../ or /
+  # Example - ./modules/network/pre-existing-vpc
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
@@ -41,12 +41,12 @@ resource_groups:
       network_name: $(network1.network_name)
 
 
-  - source: resources/file-system/nfs-server
+  - source: community/modules/file-system/nfs-server
     kind: terraform
     id: projectsfs
     use: [network1]
 
-  - source: resources/third-party/file-system/DDN-EXAScaler
+  - source: community/modules/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     settings:
@@ -55,7 +55,7 @@ resource_groups:
       subnetwork_self_link: $(network1.subnetwork_self_link)
       subnetwork_address: $(network1.subnetwork_address)
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
@@ -66,7 +66,7 @@ resource_groups:
       max_node_count: 200
       partition_name: compute
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
@@ -74,7 +74,7 @@ resource_groups:
     - compute_partition
     - network1
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:

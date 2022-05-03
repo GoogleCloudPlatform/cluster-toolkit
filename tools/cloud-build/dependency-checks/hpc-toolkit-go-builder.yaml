@@ -70,7 +70,7 @@ steps:
   - |
     make tests
     tflint --init
-    echo "# TEST COMMENT" >> resources/network/vpc/main.tf
+    echo "# TEST COMMENT" >> modules/network/vpc/main.tf
     git add -u
     pre-commit run
     git reset --hard HEAD
@@ -101,7 +101,7 @@ steps:
   - |
     make
     git status
-    echo "# TEST COMMENT" >> resources/packer/custom-image/image.pkr.hcl
+    echo "# TEST COMMENT" >> modules/packer/custom-image/image.pkr.hcl
     git add -u
     pre-commit run
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-partial-build:packer

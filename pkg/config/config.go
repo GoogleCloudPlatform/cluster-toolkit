@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 
@@ -44,31 +45,31 @@ var errorMessages = map[string]string{
 	"yamlMarshalError":   "failed to marshal the yaml config",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
-	"missingSetting":    "a required setting is missing from a resource",
+	"missingSetting":    "a required setting is missing from a module",
 	"globalLabelType":   "global labels are not a map",
-	"settingsLabelType": "labels in resources settings are not a map",
+	"settingsLabelType": "labels in module settings are not a map",
 	"invalidVar":        "invalid variable definition in",
 	"varNotFound":       "Could not find source of variable",
 	"varInAnotherGroup": "References to other groups are not yet supported",
 	"noOutput":          "Output not found for a variable",
 	// validator
-	"emptyID":         "a resource id cannot be empty",
-	"emptySource":     "a resource source cannot be empty",
-	"wrongKind":       "a resource kind is invalid",
-	"extraSetting":    "a setting was added that is not found in the resource",
-	"mixedResourcees": "mixing resources of differing kinds in a resource group is not supported",
-	"duplicateGroup":  "group names must be unique",
-	"duplicateID":     "resource IDs must be unique",
-	"emptyGroupName":  "group name must be set for each resource group",
-	"illegalChars":    "invalid character(s) found in group name",
-	"invalidOutput":   "requested output was not found in the resource",
+	"emptyID":        "a module id cannot be empty",
+	"emptySource":    "a module source cannot be empty",
+	"wrongKind":      "a module kind is invalid",
+	"extraSetting":   "a setting was added that is not found in the module",
+	"mixedModules":   "mixing modules of differing kinds in a deployment group is not supported",
+	"duplicateGroup": "group names must be unique",
+	"duplicateID":    "module IDs must be unique",
+	"emptyGroupName": "group name must be set for each deployment group",
+	"illegalChars":   "invalid character(s) found in group name",
+	"invalidOutput":  "requested output was not found in the module",
 }
 
 // ResourceGroup defines a group of Resource that are all executed together
 type ResourceGroup struct {
 	Name             string           `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
-	Resources        []Resource
+	Resources        []Resource       `yaml:"modules"`
 }
 
 func (g ResourceGroup) getResourceByID(resID string) Resource {
@@ -187,7 +188,7 @@ type YamlConfig struct {
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     map[string]interface{}
-	ResourceGroups           []ResourceGroup  `yaml:"resource_groups"`
+	ResourceGroups           []ResourceGroup  `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`
 }
 
@@ -219,6 +220,16 @@ func NewBlueprintConfig(configFilename string) BlueprintConfig {
 	return newBlueprintConfig
 }
 
+func deprecatedSchema070a() {
+	os.Stderr.WriteString("*****************************************************************************************\n\n")
+	os.Stderr.WriteString("Our schemas have recently changed. Key changes:\n")
+	os.Stderr.WriteString("  'resource_groups'       becomes 'deployment_groups'\n")
+	os.Stderr.WriteString("  'resources'             becomes 'modules'\n")
+	os.Stderr.WriteString("  'source: resources/...' becomes 'source: modules/...'\n")
+	os.Stderr.WriteString("https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/examples#blueprint-schema\n")
+	os.Stderr.WriteString("*****************************************************************************************\n\n")
+}
+
 // ImportYamlConfig imports the blueprint configuration provided.
 func importYamlConfig(yamlConfigFilename string) YamlConfig {
 	yamlConfigText, err := ioutil.ReadFile(yamlConfigFilename)
@@ -231,6 +242,7 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 	err = yaml.UnmarshalStrict(yamlConfigText, &yamlConfig)
 
 	if err != nil {
+		deprecatedSchema070a()
 		log.Fatalf("%s filename=%s: %v",
 			errorMessages["yamlUnmarshalError"], yamlConfigFilename, err)
 	}
@@ -254,20 +266,21 @@ func importYamlConfig(yamlConfigFilename string) YamlConfig {
 }
 
 // ExportYamlConfig exports the internal representation of a blueprint config
-func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) []byte {
+func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) ([]byte, error) {
 	d, err := yaml.Marshal(&bc.Config)
 	if err != nil {
-		log.Fatalf("%s: %v", errorMessages["yamlMarshalError"], err)
+		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
 	if outputFilename == "" {
-		return d
+		return d, nil
 	}
 	err = ioutil.WriteFile(outputFilename, d, 0644)
 	if err != nil {
-		log.Fatalf("%s, Filename: %s",
-			errorMessages["fileSaveError"], outputFilename)
+		// hitting this error writing yaml
+		return d, fmt.Errorf("%s, Filename: %s: %w",
+			errorMessages["fileSaveError"], outputFilename, err)
 	}
-	return nil
+	return nil, nil
 }
 
 func createResourceInfo(
@@ -279,7 +292,7 @@ func createResourceInfo(
 			ri, err := reader.GetResourceInfo(res.Source, res.Kind)
 			if err != nil {
 				log.Fatalf(
-					"failed to get info for resource at %s while setting bc.ResourcesInfo: %e",
+					"failed to get info for module at %s while setting bc.ResourcesInfo: %e",
 					res.Source, err)
 			}
 			resInfo[res.Source] = ri
@@ -332,8 +345,8 @@ func checkResourceAndGroupNames(
 				groupKind = res.Kind
 			} else if groupKind != res.Kind {
 				return resourceToGroup, fmt.Errorf(
-					"%s: resource group %s, got: %s, wanted: %s",
-					errorMessages["mixedResources"],
+					"%s: deployment group %s, got: %s, wanted: %s",
+					errorMessages["mixedModule"],
 					grp.Name, groupKind, res.Kind)
 			}
 		}
@@ -350,12 +363,12 @@ func checkUsedResourceNames(
 			for _, usedRes := range res.Use {
 				// Check if resource even exists
 				if _, ok := idToGroup[usedRes]; !ok {
-					return fmt.Errorf("used resource ID %s does not exist", usedRes)
+					return fmt.Errorf("used module ID %s does not exist", usedRes)
 				}
 				// Ensure resource is from the correct group
 				if idToGroup[usedRes] != iGrp {
 					return fmt.Errorf(
-						"used resource ID %s not found in this Resource Group", usedRes)
+						"used module ID %s not found in this Deployment Group", usedRes)
 				}
 			}
 		}
@@ -387,6 +400,34 @@ func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
 
 		key, value := arr[0], arr[1]
 		bc.Config.Vars[key] = value
+	}
+
+	return nil
+}
+
+// SetBackendConfig sets the backend config variables at CLI
+func (bc *BlueprintConfig) SetBackendConfig(cliBEConfigVars []string) error {
+	// Set "gcs" as default value when --backend-config is specified at CLI
+	if len(cliBEConfigVars) > 0 {
+		bc.Config.TerraformBackendDefaults.Type = "gcs"
+		bc.Config.TerraformBackendDefaults.Configuration = make(map[string]interface{})
+	}
+
+	for _, config := range cliBEConfigVars {
+		arr := strings.SplitN(config, "=", 2)
+
+		if len(arr) != 2 {
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", config)
+		}
+
+		key, value := arr[0], arr[1]
+		switch key {
+		case "type":
+			bc.Config.TerraformBackendDefaults.Type = value
+		default:
+			bc.Config.TerraformBackendDefaults.Configuration[key] = value
+		}
+
 	}
 
 	return nil
@@ -492,4 +533,31 @@ func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error 
 		}
 	}
 	return nil
+}
+
+// DeploymentNameError signifies a problem with the blueprint deployment name.
+type DeploymentNameError struct {
+	cause string
+}
+
+func (err *DeploymentNameError) Error() string {
+	return fmt.Sprintf("deployment_name must be a string and cannot be empty, cause: %v", err.cause)
+}
+
+// DeploymentName returns the deployment_name from the config and does approperate checks.
+func (yc *YamlConfig) DeploymentName() (string, error) {
+	nameInterface, found := yc.Vars["deployment_name"]
+	if !found {
+		return "", &DeploymentNameError{"deployment_name variable not defined."}
+	}
+
+	deploymentName, ok := nameInterface.(string)
+	if !ok {
+		return "", &DeploymentNameError{"deployment_name was not of type string."}
+	}
+
+	if len(deploymentName) == 0 {
+		return "", &DeploymentNameError{"deployment_name was an empty string."}
+	}
+	return deploymentName, nil
 }

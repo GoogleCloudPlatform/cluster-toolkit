@@ -45,7 +45,7 @@ const (
 func (bc *BlueprintConfig) expand() {
 	bc.addSettingsToResources()
 	if err := bc.expandBackends(); err != nil {
-		log.Fatalf("failed to apply default backend to resource groups: %v", err)
+		log.Fatalf("failed to apply default backend to deployment groups: %v", err)
 	}
 
 	if err := bc.addDefaultValidators(); err != nil {
@@ -55,17 +55,17 @@ func (bc *BlueprintConfig) expand() {
 
 	if err := bc.combineLabels(); err != nil {
 		log.Fatalf(
-			"failed to update resources labels when expanding the config: %v", err)
+			"failed to update module labels when expanding the config: %v", err)
 	}
 
 	if err := bc.applyUseResources(); err != nil {
 		log.Fatalf(
-			"failed to apply \"use\" resources when expanding the config: %v", err)
+			"failed to apply \"use\" modules when expanding the config: %v", err)
 	}
 
 	if err := bc.applyGlobalVariables(); err != nil {
 		log.Fatalf(
-			"failed to apply global variables in resources when expanding the config: %v",
+			"failed to apply global variables in modules when expanding the config: %v",
 			err)
 	}
 	bc.expandVariables()
@@ -181,7 +181,7 @@ func (bc *BlueprintConfig) applyUseResources() error {
 				useRes := group.getResourceByID(useResID)
 				useInfo := bc.ResourcesInfo[group.Name][useRes.Source]
 				if useRes.ID == "" {
-					return fmt.Errorf("could not find resource %s used by %s in group %s",
+					return fmt.Errorf("could not find module %s used by %s in group %s",
 						useResID, res.ID, group.Name)
 				}
 				useResource(res, useRes, resInputs, useInfo.Outputs, changedSettings)
@@ -291,7 +291,7 @@ func (bc *BlueprintConfig) combineLabels() error {
 				resLabels, ok = res.Settings[labels].(map[interface{}]interface{})
 
 				if !ok {
-					return fmt.Errorf("%s, Resource %s, labels type: %T",
+					return fmt.Errorf("%s, Module %s, labels type: %T",
 						errorMessages["settingsLabelType"], res.ID, res.Settings[labels])
 				}
 			}
@@ -329,7 +329,7 @@ func applyGlobalVarsInGroup(
 			if input.Required {
 				// It's not explicitly set, and not global is set
 				// Fail if no default has been set
-				return fmt.Errorf("%s: Resource.ID: %s Setting: %s",
+				return fmt.Errorf("%s: Module ID: %s Setting: %s",
 					errorMessages["missingSetting"], res.ID, input.Name)
 			}
 			// Default exists, the resource will handle it
@@ -410,11 +410,11 @@ func expandSimpleVariable(
 	// Verify resource exists
 	refGrpIndex, ok := resToGrp[varSource]
 	if !ok {
-		return "", fmt.Errorf("%s: resource %s was not found",
+		return "", fmt.Errorf("%s: module %s was not found",
 			errorMessages["varNotFound"], varSource)
 	}
 	if refGrpIndex != context.groupIndex {
-		return "", fmt.Errorf("%s: resource %s was defined in group %d and called from group %d",
+		return "", fmt.Errorf("%s: module %s was defined in group %d and called from group %d",
 			errorMessages["varInAnotherGroup"], varSource, refGrpIndex, context.groupIndex)
 	}
 
@@ -428,7 +428,7 @@ func expandSimpleVariable(
 		}
 	}
 	if refResIndex == -1 {
-		log.Fatalf("Could not find resource referenced by variable %s",
+		log.Fatalf("Could not find module referenced by variable %s",
 			context.varString)
 	}
 	refRes := refGrp.Resources[refResIndex]
@@ -436,7 +436,7 @@ func expandSimpleVariable(
 	resInfo, err := reader.GetResourceInfo(refRes.Source, refRes.Kind)
 	if err != nil {
 		log.Fatalf(
-			"failed to get info for resource at %s while expanding variables: %e",
+			"failed to get info for module at %s while expanding variables: %e",
 			refRes.Source, err)
 	}
 
@@ -449,7 +449,7 @@ func expandSimpleVariable(
 		}
 	}
 	if !found {
-		return "", fmt.Errorf("%s: resource %s did not have output %s",
+		return "", fmt.Errorf("%s: module %s did not have output %s",
 			errorMessages["noOutput"], refRes.ID, varValue)
 	}
 	return fmt.Sprintf("((module.%s.%s))", varSource, varValue), nil

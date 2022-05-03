@@ -25,14 +25,14 @@ vars:
     "ghpc_custom": "custom_label"
     "ghpc_deployment": "custom_deployment"
 
-resource_groups:
+deployment_groups:
 - group: infrastructure
-  resources:
-  - source: resources/network/vpc
+  modules:
+  - source: modules/network/vpc
     kind: terraform
     id: network
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network]
@@ -44,7 +44,7 @@ resource_groups:
         local_custom: "some_value"
         ghpc_deployment: "deployment_override"
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs1
     use: [network]

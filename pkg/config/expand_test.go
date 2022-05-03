@@ -188,7 +188,7 @@ func (s *MySuite) TestApplyUseResources(c *C) {
 	resLen := len(bc.Config.ResourceGroups[0].Resources)
 	bc.Config.ResourceGroups[0].Resources[resLen-1].ID = "wrongID"
 	err = bc.applyUseResources()
-	c.Assert(err, ErrorMatches, "could not find resource .* used by .* in group .*")
+	c.Assert(err, ErrorMatches, "could not find module .* used by .* in group .*")
 
 }
 
@@ -300,7 +300,7 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 		Inputs: []resreader.VarInfo{requiredVar},
 	}
 	err = bc.applyGlobalVariables()
-	expectedErrorStr := fmt.Sprintf("%s: Resource.ID: %s Setting: %s",
+	expectedErrorStr := fmt.Sprintf("%s: Module ID: %s Setting: %s",
 		errorMessages["missingSetting"], testResource.ID, requiredVar.Name)
 	c.Assert(err, ErrorMatches, expectedErrorStr)
 
@@ -383,7 +383,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	testResource := Resource{
 		ID:     testResID,
 		Kind:   "terraform",
-		Source: "./resource/testpath",
+		Source: "./module/testpath",
 	}
 	testYamlConfig := YamlConfig{
 		BlueprintName: "",
@@ -435,7 +435,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	fakeOutput := "doesntExist"
 	testVarContext.varString = fmt.Sprintf("$(%s.%s)", testResource.ID, fakeOutput)
 	_, err = expandSimpleVariable(testVarContext, testResToGrp)
-	expectedErr = fmt.Sprintf("%s: resource %s did not have output %s",
+	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
 		errorMessages["noOutput"], testResID, fakeOutput)
 	c.Assert(err, ErrorMatches, expectedErr)
 

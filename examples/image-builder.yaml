@@ -20,25 +20,65 @@ vars:
   deployment_name: image-builder-001
   region: us-central1
   zone: us-central1-c
+  new_image_family: my-slurm-image
 
-resource_groups:
-- group: network
-  resources:
-  - source: resources/network/vpc
+deployment_groups:
+- group: builder-env
+  modules:
+  - source: modules/network/vpc
     kind: terraform
     id: network1
-    outputs:
-    - subnetwork_name
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: scripts_for_image
+    settings:
+      runners:
+      - type: shell
+        destination: generate_hello.sh
+        content: |
+          #!/bin/sh
+          echo "Hello World" > /home/hello.txt
+    outputs: [startup_script]
+
 - group: packer
-  resources:
-  - source: resources/packer/custom-image
+  modules:
+  - source: modules/packer/custom-image
     kind: packer
     id: custom-image
     settings:
-      use_iap: true
-      omit_external_ip: true
-      disk_size: 100
-      ansible_playbooks:
-      - playbook_file: ./example-playbook.yml
-        galaxy_file: ./requirements.yml
-        extra_arguments: ["-vv"]
+      disk_size: 20
+      source_image_project_id: [schedmd-slurm-public]
+      source_image_family: schedmd-slurm-21-08-4-hpc-centos-7
+      image_family: $(vars.new_image_family)
+
+- group: cluster
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    id: cluster-network
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    id: compute_partition
+    use: [cluster-network]
+    settings:
+      partition_name: compute
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    kind: terraform
+    id: slurm_controller
+    use: [cluster-network, compute_partition]
+    settings:
+      login_node_count: 1
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    kind: terraform
+    id: slurm_login
+    use: [cluster-network, slurm_controller]
+    settings:
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)

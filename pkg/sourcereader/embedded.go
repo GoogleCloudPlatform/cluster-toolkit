@@ -97,7 +97,7 @@ func (r EmbeddedSourceReader) GetResourceInfo(resPath string, kind string) (resr
 	resDir, err := copyFSToTempDir(ResourceFS, resPath)
 	defer os.RemoveAll(resDir)
 	if err != nil {
-		err = fmt.Errorf("failed to copy embedded resource at %s to tmp dir %s: %v",
+		err = fmt.Errorf("failed to copy embedded module at %s to tmp dir %s: %v",
 			resPath, resDir, err)
 		return resreader.ResourceInfo{}, err
 	}
@@ -115,7 +115,7 @@ func (r EmbeddedSourceReader) GetResource(resPath string, copyPath string) error
 	resDir, err := copyFSToTempDir(ResourceFS, resPath)
 	defer os.RemoveAll(resDir)
 	if err != nil {
-		err = fmt.Errorf("failed to copy embedded resource at %s to tmp dir %s: %v",
+		err = fmt.Errorf("failed to copy embedded module at %s to tmp dir %s: %v",
 			resPath, resDir, err)
 		return err
 	}

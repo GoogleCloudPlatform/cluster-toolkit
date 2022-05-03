@@ -16,10 +16,13 @@
 
 blueprint_name: new_project
 
-resource_groups:
+vars:
+  deployment_name: new_project_deployment
+
+deployment_groups:
 - group: primary
-  resources:
-  - source: ./resources/project/new-project
+  modules:
+  - source: ./community/modules/project/new-project
     kind: terraform
     id: project
     settings:

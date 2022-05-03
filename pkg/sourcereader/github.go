@@ -70,7 +70,7 @@ func (r GitHubSourceReader) GetResourceInfo(resPath string, kind string) (resrea
 	}
 
 	if err := copyGitHubResources(resPath, writeDir); err != nil {
-		return resreader.ResourceInfo{}, fmt.Errorf("failed to clone GitHub resource at %s to tmp dir %s: %v",
+		return resreader.ResourceInfo{}, fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
 			resPath, writeDir, err)
 	}
 
@@ -92,7 +92,7 @@ func (r GitHubSourceReader) GetResource(resPath string, copyPath string) error {
 	}
 
 	if err := copyGitHubResources(resPath, writeDir); err != nil {
-		return fmt.Errorf("failed to clone GitHub resource at %s to tmp dir %s: %v",
+		return fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
 			resPath, writeDir, err)
 	}
 

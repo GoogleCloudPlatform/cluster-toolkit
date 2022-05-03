@@ -19,33 +19,20 @@ run_test() {
 	example=$1
 	tmpdir="$(mktemp -d)"
 	exampleFile=$(basename "$example")
-	BLUEPRINT="${exampleFile%.yaml}-$(basename "${tmpdir##*.}")"
+	DEPLOYMENT="${exampleFile%.yaml}-$(basename "${tmpdir##*.}")"
+	PROJECT="invalid-project"
 
 	echo "testing ${example} in ${tmpdir}"
 	cp "${example}" "${tmpdir}/"
-	cd "${tmpdir}"
-	sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT}/" "${exampleFile}" ||
-		{
-			echo "*** ERROR: could not set blueprint_name in ${example}"
-			exit 1
-		}
-
-	PROJECT="invalid-project"
-
-	sed -i "s/project_id: .*/project_id: ${PROJECT}/" "${exampleFile}" ||
-		{
-			echo "*** ERROR: could not set project_id in ${example}"
-			exit 1
-		}
 	cd "${cwd}"
-	./ghpc create -l IGNORE "${tmpdir}"/"${exampleFile}" >/dev/null ||
+	./ghpc create -l IGNORE --vars "project_id=${PROJECT},deployment_name=${DEPLOYMENT}" "${tmpdir}"/"${exampleFile}" >/dev/null ||
 		{
-			echo "*** ERROR: error creating blueprint with ghpc for ${exampleFile}"
+			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
 			exit 1
 		}
-	mv "${BLUEPRINT}" "${tmpdir}"
-	cd "${tmpdir}"/"${BLUEPRINT}" || {
-		echo "*** ERROR: can't cd into the blueprint folder ${BLUEPRINT}"
+	mv "${DEPLOYMENT}" "${tmpdir}"
+	cd "${tmpdir}"/"${DEPLOYMENT}" || {
+		echo "*** ERROR: can't cd into the deployment folder ${DEPLOYMENT}"
 		exit 1
 	}
 	for folder in ./*; do
@@ -75,13 +62,13 @@ run_test() {
 					}
 			done
 		else
-			echo "neither packer nor terraform found in folder ${BLUEPRINT}/${folder}. Skipping."
+			echo "neither packer nor terraform found in folder ${DEPLOYMENT}/${folder}. Skipping."
 		fi
-		cd .. # back to blueprint folder
+		cd .. # back to deployment folder
 	done
 	cd ..
-	rm -rf "${BLUEPRINT}" || {
-		echo "*** ERROR: could not remove blueprint folder from $(pwd)"
+	rm -rf "${DEPLOYMENT}" || {
+		echo "*** ERROR: could not remove deployment folder from $(pwd)"
 		exit 1
 	}
 	cd "${cwd}"
@@ -113,7 +100,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ tools/validate_configs/test_configs/ -name "*.yaml" -type f)
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ -name "*.yaml" -type f)
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"

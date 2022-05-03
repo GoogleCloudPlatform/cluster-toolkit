@@ -19,11 +19,26 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
+)
+
+const (
+	testGitignoreTmpl = `
+# Local .terraform directories
+**/.terraform/*
+`
+	testGitignoreNewTmpl = `
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+`
 )
 
 var testDir string
@@ -58,76 +73,17 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func getTestFS() afero.IOFS {
+	aferoFS := afero.NewMemMapFs()
+	aferoFS.MkdirAll("pkg/reswriter", 0755)
+	afero.WriteFile(
+		aferoFS, "pkg/reswriter/blueprint.gitignore.tmpl", []byte(testGitignoreTmpl), 0644)
+	afero.WriteFile(
+		aferoFS, "pkg/reswriter/blueprint_new.gitignore.tmpl", []byte(testGitignoreNewTmpl), 0644)
+	return afero.NewIOFS(aferoFS)
+}
+
 func (s *MySuite) TestGetBlueprintIOLocal(c *C) {
 	blueprintio := GetBlueprintIOLocal()
 	c.Assert(blueprintio, Equals, blueprintios["local"])
-}
-
-func (s *MySuite) TestCreateDirectoryLocal(c *C) {
-	blueprintio := GetBlueprintIOLocal()
-
-	// Try to create the exist directory
-	err := blueprintio.CreateDirectory(testDir)
-	expErr := "The directory already exists: .*"
-	c.Assert(err, ErrorMatches, expErr)
-
-	directoryName := "dir_TestCreateDirectoryLocal"
-	createdDir := filepath.Join(testDir, directoryName)
-	err = blueprintio.CreateDirectory(createdDir)
-	c.Assert(err, IsNil)
-
-	_, err = os.Stat(createdDir)
-	c.Assert(err, IsNil)
-}
-
-func (s *MySuite) TestGetAbsSourcePath(c *C) {
-	// Already abs path
-	gotPath := getAbsSourcePath(testDir)
-	c.Assert(gotPath, Equals, testDir)
-
-	// Relative path
-	relPath := "relative/path"
-	cwd, err := os.Getwd()
-	c.Assert(err, IsNil)
-	gotPath = getAbsSourcePath(relPath)
-	c.Assert(gotPath, Equals, filepath.Join(cwd, relPath))
-}
-
-func (s *MySuite) TestCopyFromPathLocal(c *C) {
-	blueprintio := GetBlueprintIOLocal()
-	testSrcFilename := filepath.Join(testDir, "testSrc")
-	str := []byte("TestCopyFromPathLocal")
-	if err := os.WriteFile(testSrcFilename, str, 0755); err != nil {
-		log.Fatalf("blueprintio_test: failed to create %s: %v", testSrcFilename, err)
-	}
-
-	testDstFilename := filepath.Join(testDir, "testDst")
-	blueprintio.CopyFromPath(testSrcFilename, testDstFilename)
-
-	src, err := ioutil.ReadFile(testSrcFilename)
-	if err != nil {
-		log.Fatalf("blueprintio_test: failed to read %s: %v", testSrcFilename, err)
-	}
-
-	dst, err := ioutil.ReadFile(testDstFilename)
-	if err != nil {
-		log.Fatalf("blueprintio_test: failed to read %s: %v", testDstFilename, err)
-	}
-
-	c.Assert(string(src), Equals, string(dst))
-}
-
-func (s *MySuite) TestMkdirWrapper(c *C) {
-	// Success
-	testMkdirWrapperDir := filepath.Join(testDir, "testMkdirWrapperDir")
-	err := mkdirWrapper(testMkdirWrapperDir)
-	c.Assert(err, IsNil)
-
-	// Failure: Path is not a directory
-	badMkdirWrapperDir := filepath.Join(testDir, "NotADir")
-	_, err = os.Create(badMkdirWrapperDir)
-	c.Assert(err, IsNil)
-	err = mkdirWrapper(badMkdirWrapperDir)
-	expErr := "Failed to create the directory .*"
-	c.Assert(err, ErrorMatches, expErr)
 }

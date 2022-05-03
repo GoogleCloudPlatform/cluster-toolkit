@@ -17,6 +17,7 @@ limitations under the License.
 package reswriter
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
@@ -90,6 +91,7 @@ func getYamlConfigForTest() config.YamlConfig {
 	}
 	testResourceGroups := []config.ResourceGroup{
 		{
+			Name:      "test_resource_group",
 			Resources: []config.Resource{testResource, testResourceWithLabels},
 		},
 	}
@@ -104,19 +106,175 @@ func getYamlConfigForTest() config.YamlConfig {
 
 // Tests
 
+func isBlueprintDirPrepped(bpDirectoryPath string) error {
+	if _, err := os.Stat(bpDirectoryPath); os.IsNotExist(err) {
+		return fmt.Errorf("blueprint dir does not exist: %s: %w", bpDirectoryPath, err)
+	}
+
+	ghpcDir := filepath.Join(bpDirectoryPath, hiddenGhpcDirName)
+	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
+		return fmt.Errorf(".ghpc working dir does not exist: %s: %w", ghpcDir, err)
+	}
+
+	prevResourceDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
+	if _, err := os.Stat(prevResourceDir); os.IsNotExist(err) {
+		return fmt.Errorf("previous deployment group directory does not exist: %s: %w", prevResourceDir, err)
+	}
+
+	return nil
+}
+
+func (s *MySuite) TestPrepBpDir(c *C) {
+
+	bpDir := filepath.Join(testDir, "bp_prep_test_dir")
+
+	// Prep a dir that does not yet exist
+	err := prepBpDir(bpDir, false /* overwrite */)
+	c.Check(err, IsNil)
+	c.Check(isBlueprintDirPrepped(bpDir), IsNil)
+
+	// Prep of existing dir fails with overwrite set to false
+	err = prepBpDir(bpDir, false /* overwrite */)
+	var e *OverwriteDeniedError
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Prep of existing dir succeeds when overwrite set true
+	err = prepBpDir(bpDir, true) /* overwrite */
+	c.Check(err, IsNil)
+	c.Check(isBlueprintDirPrepped(bpDir), IsNil)
+}
+
+func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
+	// Test with a real blueprint previously written
+	testYamlConfig := getYamlConfigForTest()
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
+	realBpDir := filepath.Join(testDir, testYamlConfig.Vars["deployment_name"].(string))
+
+	// writes a full blueprint w/ actual resource groups
+	WriteBlueprint(&testYamlConfig, testDir, false /* overwrite */)
+
+	// confirm existence of resource groups (beyond .ghpc dir)
+	files, _ := ioutil.ReadDir(realBpDir)
+	c.Check(len(files) > 1, Equals, true)
+
+	err := prepBpDir(realBpDir, true /* overwrite */)
+	c.Check(err, IsNil)
+	c.Check(isBlueprintDirPrepped(realBpDir), IsNil)
+
+	// Check prev resource groups were moved
+	prevResourceDir := filepath.Join(testDir, testYamlConfig.Vars["deployment_name"].(string), hiddenGhpcDirName, prevResourceGroupDirName)
+	files1, _ := ioutil.ReadDir(prevResourceDir)
+	c.Check(len(files1) > 0, Equals, true)
+
+	files2, _ := ioutil.ReadDir(realBpDir)
+	c.Check(len(files2), Equals, 2) // .ghpc and .gitignore
+}
+
+func (s *MySuite) TestIsSubset(c *C) {
+	baseConfig := []string{"group1", "group2", "group3"}
+	subsetConfig := []string{"group1", "group2"}
+	swapConfig := []string{"group1", "group4", "group3"}
+	c.Check(isSubset(subsetConfig, baseConfig), Equals, true)
+	c.Check(isSubset(baseConfig, subsetConfig), Equals, false)
+	c.Check(isSubset(baseConfig, swapConfig), Equals, false)
+}
+
+func (s *MySuite) TestIsOverwriteAllowed(c *C) {
+	bpDir := filepath.Join(testDir, "overwrite_test")
+	ghpcDir := filepath.Join(bpDir, hiddenGhpcDirName)
+	resource1 := filepath.Join(bpDir, "group1")
+	resource2 := filepath.Join(bpDir, "group2")
+	os.MkdirAll(ghpcDir, 0755)
+	os.MkdirAll(resource1, 0755)
+	os.MkdirAll(resource2, 0755)
+
+	supersetConfig := config.YamlConfig{
+		ResourceGroups: []config.ResourceGroup{
+			{Name: "group1"},
+			{Name: "group2"},
+			{Name: "group3"},
+		},
+	}
+	swapConfig := config.YamlConfig{
+		ResourceGroups: []config.ResourceGroup{
+			{Name: "group1"},
+			{Name: "group4"},
+		},
+	}
+
+	// overwrite allowed when new resource group is added
+	c.Check(isOverwriteAllowed(bpDir, &supersetConfig, true /* overwriteFlag */), Equals, true)
+	// overwrite fails when resource group is deleted
+	c.Check(isOverwriteAllowed(bpDir, &swapConfig, true /* overwriteFlag */), Equals, false)
+	// overwrite fails when overwrite is false
+	c.Check(isOverwriteAllowed(bpDir, &supersetConfig, false /* overwriteFlag */), Equals, false)
+}
+
 // reswriter.go
 func (s *MySuite) TestWriteBlueprint(c *C) {
 	testYamlConfig := getYamlConfigForTest()
-	blueprintName := "blueprints_TestWriteBlueprint"
-	testYamlConfig.BlueprintName = blueprintName
-	err := WriteBlueprint(&testYamlConfig, testDir)
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
+	err := WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the blueprint fails
-	err = WriteBlueprint(&testYamlConfig, testDir)
+	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
+	// Overwriting the blueprint succeeds with flag
+	err = WriteBlueprint(&testYamlConfig, testDir, true /* overwriteFlag */)
+	c.Check(err, IsNil)
+}
+
+func (s *MySuite) TestWriteBlueprint_BadDeploymentName(c *C) {
+	testYamlConfig := getYamlConfigForTest()
+	var e *config.DeploymentNameError
+
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": 100}
+	err := WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	c.Check(errors.As(err, &e), Equals, true)
+
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": false}
+	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	c.Check(errors.As(err, &e), Equals, true)
+
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": ""}
+	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	c.Check(errors.As(err, &e), Equals, true)
+
+	testYamlConfig.Vars = map[string]interface{}{}
+	err = WriteBlueprint(&testYamlConfig, testDir, false /* overwriteFlag */)
+	c.Check(errors.As(err, &e), Equals, true)
 }
 
 // tfwriter.go
+func (s *MySuite) TestRestoreTfState(c *C) {
+	// set up dir structure
+	//
+	// └── test_restore_state
+	//    ├── .ghpc
+	//       └── previous_resource_groups
+	//          └── fake_resource_group
+	//             └── terraform.tfstate
+	//    └── fake_resource_group
+	bpDir := filepath.Join(testDir, "test_restore_state")
+	resourceGroupName := "fake_resource_group"
+
+	prevResourceGroup := filepath.Join(bpDir, hiddenGhpcDirName, prevResourceGroupDirName, resourceGroupName)
+	curResourceGroup := filepath.Join(bpDir, resourceGroupName)
+	prevStateFile := filepath.Join(prevResourceGroup, tfStateFileName)
+	os.MkdirAll(prevResourceGroup, 0755)
+	os.MkdirAll(curResourceGroup, 0755)
+	emptyFile, _ := os.Create(prevStateFile)
+	emptyFile.Close()
+
+	testWriter := TFWriter{}
+	testWriter.restoreState(bpDir)
+
+	// check state file was moved to current resource group dir
+	curStateFile := filepath.Join(curResourceGroup, tfStateFileName)
+	_, err := os.Stat(curStateFile)
+	c.Check(err, IsNil)
+}
+
 func (s *MySuite) TestGetTypeTokens(c *C) {
 	// Success Integer
 	tok := getTypeTokens(cty.NumberIntVal(-1))
@@ -437,13 +595,13 @@ func (s *MySuite) TestWriteResourceLevel_PackerWriter(c *C) {
 	testYamlConfig := getYamlConfigForTest()
 	testWriter.writeResourceLevel(&testYamlConfig, testDir)
 
-	blueprintName := "blueprints_TestWriteResourceLevel_PackerWriter"
-	testYamlConfig.BlueprintName = blueprintName
-	blueprintDir := filepath.Join(testDir, blueprintName)
-	if err := blueprintio.CreateDirectory(blueprintDir); err != nil {
+	deploymentName := "deployment_TestWriteResourceLevel_PackerWriter"
+	testYamlConfig.Vars = map[string]interface{}{"deployment_name": deploymentName}
+	deploymentDir := filepath.Join(testDir, deploymentName)
+	if err := blueprintio.CreateDirectory(deploymentDir); err != nil {
 		log.Fatal(err)
 	}
-	groupDir := filepath.Join(blueprintDir, "packerGroup")
+	groupDir := filepath.Join(deploymentDir, "packerGroup")
 	if err := blueprintio.CreateDirectory(groupDir); err != nil {
 		log.Fatal(err)
 	}
