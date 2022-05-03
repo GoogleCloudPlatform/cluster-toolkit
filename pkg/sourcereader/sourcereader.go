@@ -53,7 +53,7 @@ func IsLocalPath(source string) bool {
 
 // IsEmbeddedPath checks if a source path points to an embedded modules
 func IsEmbeddedPath(source string) bool {
-	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/")
+	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
 }
 
 // IsGitHubPath checks if a source path points to GitHub
@@ -63,6 +63,11 @@ func IsGitHubPath(source string) bool {
 
 // Factory returns a SourceReader of module path
 func Factory(modPath string) SourceReader {
+	validPrefixes := []string{
+		"/", "./", "../",
+		"modules/", "community/modules/",
+		"git@", "github.com",
+	}
 	switch {
 	case IsLocalPath(modPath):
 		return readers[local]
@@ -71,8 +76,9 @@ func Factory(modPath string) SourceReader {
 	case IsGitHubPath(modPath):
 		return readers[github]
 	default:
-		log.Fatalf("Source (%s) not valid, should begin with /, ./, ../, modules/, git@ or github.com",
-			modPath)
+		log.Fatalf(
+			"Source (%s) not valid, must begin with one of: %s",
+			modPath, strings.Join(validPrefixes, ", "))
 	}
 
 	return nil
