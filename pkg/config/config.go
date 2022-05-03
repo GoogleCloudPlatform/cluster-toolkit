@@ -456,7 +456,7 @@ func IdentifyLiteralVariable(str string) (string, string, bool) {
 	return contents[1], contents[2], true
 }
 
-// HandleLiteralVariable is exported for use in reswriter as well
+// HandleLiteralVariable is exported for use in modulewriter as well
 func HandleLiteralVariable(str string) string {
 	re := regexp.MustCompile(literalExp)
 	contents := re.FindStringSubmatch(str)

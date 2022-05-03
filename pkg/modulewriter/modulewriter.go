@@ -14,8 +14,8 @@
 * limitations under the License.
  */
 
-// Package reswriter writes modules to a blueprint directory
-package reswriter
+// Package modulewriter writes modules to a deployment directory
+package modulewriter
 
 import (
 	"embed"
@@ -32,11 +32,11 @@ import (
 const (
 	hiddenGhpcDirName          = ".ghpc"
 	prevDeploymentGroupDirName = "previous_resource_groups"
-	gitignoreTemplate          = "blueprint.gitignore.tmpl"
+	gitignoreTemplate          = "deployment.gitignore.tmpl"
 )
 
-// ModWriter interface for writing modules to a blueprint
-type ModWriter interface {
+// ModuleWriter interface for writing modules to a deployment
+type ModuleWriter interface {
 	getNumModules() int
 	addNumModules(int)
 	writeDeploymentGroup(
@@ -47,7 +47,7 @@ type ModWriter interface {
 	restoreState(deploymentDir string) error
 }
 
-var kinds = map[string]ModWriter{
+var kinds = map[string]ModuleWriter{
 	"terraform": new(TFWriter),
 	"packer":    new(PackerWriter),
 }
@@ -55,18 +55,19 @@ var kinds = map[string]ModWriter{
 //go:embed *.tmpl
 var templatesFS embed.FS
 
-func factory(kind string) ModWriter {
+func factory(kind string) ModuleWriter {
 	writer, exists := kinds[kind]
 	if !exists {
 		log.Fatalf(
-			"reswriter: Module kind (%s) is not valid. "+
-				"kind must be in (terraform, blueprint-controller).", kind)
+			"modulewriter: Module kind (%s) is not valid. "+
+				"kind must be in (terraform, packer).", kind)
 	}
 	return writer
 }
 
-// WriteBlueprint writes a deployment directory using modules defined the environment blueprint.
-func WriteBlueprint(blueprint *config.Blueprint, outputDir string, overwriteFlag bool) error {
+// WriteDeployment writes a deployment directory using modules defined the
+// environment blueprint.
+func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFlag bool) error {
 	deploymentName, err := blueprint.DeploymentName()
 	if err != nil {
 		return err
@@ -74,7 +75,7 @@ func WriteBlueprint(blueprint *config.Blueprint, outputDir string, overwriteFlag
 	deploymentDir := filepath.Join(outputDir, deploymentName)
 
 	overwrite := isOverwriteAllowed(deploymentDir, blueprint, overwriteFlag)
-	if err := prepBpDir(deploymentDir, overwrite); err != nil {
+	if err := prepDepDir(deploymentDir, overwrite); err != nil {
 		return err
 	}
 
@@ -111,7 +112,7 @@ func WriteBlueprint(blueprint *config.Blueprint, outputDir string, overwriteFlag
 	return nil
 }
 
-func copySource(blueprintPath string, deploymentGroups *[]config.DeploymentGroup) {
+func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) {
 	for iGrp, grp := range *deploymentGroups {
 		for iMod, module := range grp.Modules {
 			if sourcereader.IsGitHubPath(module.Source) {
@@ -121,7 +122,7 @@ func copySource(blueprintPath string, deploymentGroups *[]config.DeploymentGroup
 			/* Copy source files */
 			moduleName := filepath.Base(module.Source)
 			(*deploymentGroups)[iGrp].Modules[iMod].ModuleName = moduleName
-			basePath := filepath.Join(blueprintPath, grp.Name)
+			basePath := filepath.Join(deploymentPath, grp.Name)
 			var destPath string
 			switch module.Kind {
 			case "terraform":
@@ -152,12 +153,12 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // Determines if overwrite is allowed
-func isOverwriteAllowed(bpDir string, overwritingConfig *config.Blueprint, overwriteFlag bool) bool {
+func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, overwriteFlag bool) bool {
 	if !overwriteFlag {
 		return false
 	}
 
-	files, err := ioutil.ReadDir(bpDir)
+	files, err := ioutil.ReadDir(depDir)
 	if err != nil {
 		return false
 	}
@@ -193,13 +194,13 @@ func isSubset(sub, super []string) bool {
 	return true
 }
 
-// OverwriteDeniedError signifies when a blueprint overwrite was denied.
+// OverwriteDeniedError signifies when a deployment overwrite was denied.
 type OverwriteDeniedError struct {
 	cause error
 }
 
 func (err *OverwriteDeniedError) Error() string {
-	return fmt.Sprintf("Failed to overwrite existing blueprint.\n\n"+
+	return fmt.Sprintf("Failed to overwrite existing deployment.\n\n"+
 		"Use the -w command line argument to enable overwrite.\n"+
 		"If overwrite is already enabled then this may be because "+
 		"you are attempting to remove a deployment group, which is not supported.\n"+
@@ -207,22 +208,22 @@ func (err *OverwriteDeniedError) Error() string {
 		err.cause)
 }
 
-// Prepares a blueprint directory to be written to.
-func prepBpDir(bpDir string, overwrite bool) error {
+// Prepares a deployment directory to be written to.
+func prepDepDir(depDir string, overwrite bool) error {
 	deploymentio := deploymentio.GetDeploymentioLocal()
-	ghpcDir := filepath.Join(bpDir, hiddenGhpcDirName)
-	gitignoreFile := filepath.Join(bpDir, ".gitignore")
+	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	gitignoreFile := filepath.Join(depDir, ".gitignore")
 
-	// create blueprint directory
-	if err := deploymentio.CreateDirectory(bpDir); err != nil {
+	// create deployment directory
+	if err := deploymentio.CreateDirectory(depDir); err != nil {
 		if !overwrite {
 			return &OverwriteDeniedError{err}
 		}
 
-		// Confirm we have a previously written blueprint dir before overwritting.
+		// Confirm we have a previously written deployment dir before overwritting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 			return fmt.Errorf(
-				"While trying to update the blueprint directory at %s, the '.ghpc/' dir could not be found", bpDir)
+				"While trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
 		}
 	} else {
 		if err := deploymentio.CreateDirectory(ghpcDir); err != nil {
@@ -242,15 +243,15 @@ func prepBpDir(bpDir string, overwrite bool) error {
 	}
 
 	// move resource groups
-	files, err := ioutil.ReadDir(bpDir)
+	files, err := ioutil.ReadDir(depDir)
 	if err != nil {
-		return fmt.Errorf("Error trying to read directories in %s, %w", bpDir, err)
+		return fmt.Errorf("Error trying to read directories in %s, %w", depDir, err)
 	}
 	for _, f := range files {
 		if !f.IsDir() || f.Name() == hiddenGhpcDirName {
 			continue
 		}
-		src := filepath.Join(bpDir, f.Name())
+		src := filepath.Join(depDir, f.Name())
 		dest := filepath.Join(prevGroupDir, f.Name())
 		if err := os.Rename(src, dest); err != nil {
 			return fmt.Errorf("Error while moving previous deployment groups: failed on %s: %w", f.Name(), err)

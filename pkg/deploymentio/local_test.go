@@ -96,7 +96,7 @@ func (s *MySuite) TestCopyFromFS(c *C) {
 	// Success
 	deploymentio := GetDeploymentioLocal()
 	testFS := getTestFS()
-	testSrcGitignore := "pkg/reswriter/blueprint.gitignore.tmpl"
+	testSrcGitignore := "pkg/modulewriter/deployment.gitignore.tmpl"
 	testDstGitignore := filepath.Join(testDir, ".gitignore")
 	err := deploymentio.CopyFromFS(testFS, testSrcGitignore, testDstGitignore)
 	c.Assert(err, IsNil)
@@ -105,7 +105,7 @@ func (s *MySuite) TestCopyFromFS(c *C) {
 	c.Assert(string(data), Equals, testGitignoreTmpl)
 
 	// Success: This truncates the file if it already exists in the destination
-	testSrcNewGitignore := "pkg/reswriter/blueprint_new.gitignore.tmpl"
+	testSrcNewGitignore := "pkg/modulewriter/deployment_new.gitignore.tmpl"
 	err = deploymentio.CopyFromFS(testFS, testSrcNewGitignore, testDstGitignore)
 	c.Assert(err, IsNil)
 	newData, err := os.ReadFile(testDstGitignore)

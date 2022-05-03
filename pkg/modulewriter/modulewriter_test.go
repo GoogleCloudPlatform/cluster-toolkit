@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reswriter
+package modulewriter
 
 import (
 	"errors"
@@ -52,10 +52,10 @@ func Test(t *testing.T) {
 
 func setup() {
 	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_reswriter_test_%s", t.Format(time.RFC3339))
+	dirName := fmt.Sprintf("ghpc_modulewriter_test_%s", t.Format(time.RFC3339))
 	dir, err := ioutil.TempDir("", dirName)
 	if err != nil {
-		log.Fatalf("reswriter_test: %v", err)
+		log.Fatalf("modulewriter_test: %v", err)
 	}
 	testDir = dir
 
@@ -107,12 +107,12 @@ func getBlueprintForTest() config.Blueprint {
 
 // Tests
 
-func isBlueprintDirPrepped(bpDirectoryPath string) error {
-	if _, err := os.Stat(bpDirectoryPath); os.IsNotExist(err) {
-		return fmt.Errorf("blueprint dir does not exist: %s: %w", bpDirectoryPath, err)
+func isDeploymentDirPrepped(depDirectoryPath string) error {
+	if _, err := os.Stat(depDirectoryPath); os.IsNotExist(err) {
+		return fmt.Errorf("deloyment dir does not exist: %s: %w", depDirectoryPath, err)
 	}
 
-	ghpcDir := filepath.Join(bpDirectoryPath, hiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDirectoryPath, hiddenGhpcDirName)
 	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 		return fmt.Errorf(".ghpc working dir does not exist: %s: %w", ghpcDir, err)
 	}
@@ -125,49 +125,49 @@ func isBlueprintDirPrepped(bpDirectoryPath string) error {
 	return nil
 }
 
-func (s *MySuite) TestPrepBpDir(c *C) {
+func (s *MySuite) TestPrepDepDir(c *C) {
 
-	bpDir := filepath.Join(testDir, "bp_prep_test_dir")
+	depDir := filepath.Join(testDir, "dep_prep_test_dir")
 
 	// Prep a dir that does not yet exist
-	err := prepBpDir(bpDir, false /* overwrite */)
+	err := prepDepDir(depDir, false /* overwrite */)
 	c.Check(err, IsNil)
-	c.Check(isBlueprintDirPrepped(bpDir), IsNil)
+	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 
 	// Prep of existing dir fails with overwrite set to false
-	err = prepBpDir(bpDir, false /* overwrite */)
+	err = prepDepDir(depDir, false /* overwrite */)
 	var e *OverwriteDeniedError
 	c.Check(errors.As(err, &e), Equals, true)
 
 	// Prep of existing dir succeeds when overwrite set true
-	err = prepBpDir(bpDir, true) /* overwrite */
+	err = prepDepDir(depDir, true) /* overwrite */
 	c.Check(err, IsNil)
-	c.Check(isBlueprintDirPrepped(bpDir), IsNil)
+	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 }
 
-func (s *MySuite) TestPrepBpDir_OverwriteRealBp(c *C) {
-	// Test with a real blueprint previously written
+func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
+	// Test with a real deployment previously written
 	testBlueprint := getBlueprintForTest()
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
-	realBpDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string))
+	realDepDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string))
 
-	// writes a full blueprint w/ actual resource groups
-	WriteBlueprint(&testBlueprint, testDir, false /* overwrite */)
+	// writes a full deployment w/ actual resource groups
+	WriteDeployment(&testBlueprint, testDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
-	files, _ := ioutil.ReadDir(realBpDir)
+	files, _ := ioutil.ReadDir(realDepDir)
 	c.Check(len(files) > 1, Equals, true)
 
-	err := prepBpDir(realBpDir, true /* overwrite */)
+	err := prepDepDir(realDepDir, true /* overwrite */)
 	c.Check(err, IsNil)
-	c.Check(isBlueprintDirPrepped(realBpDir), IsNil)
+	c.Check(isDeploymentDirPrepped(realDepDir), IsNil)
 
 	// Check prev resource groups were moved
 	prevModuleDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string), hiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
-	files2, _ := ioutil.ReadDir(realBpDir)
+	files2, _ := ioutil.ReadDir(realDepDir)
 	c.Check(len(files2), Equals, 2) // .ghpc and .gitignore
 }
 
@@ -181,10 +181,10 @@ func (s *MySuite) TestIsSubset(c *C) {
 }
 
 func (s *MySuite) TestIsOverwriteAllowed(c *C) {
-	bpDir := filepath.Join(testDir, "overwrite_test")
-	ghpcDir := filepath.Join(bpDir, hiddenGhpcDirName)
-	module1 := filepath.Join(bpDir, "group1")
-	module2 := filepath.Join(bpDir, "group2")
+	depDir := filepath.Join(testDir, "overwrite_test")
+	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	module1 := filepath.Join(depDir, "group1")
+	module2 := filepath.Join(depDir, "group2")
 	os.MkdirAll(ghpcDir, 0755)
 	os.MkdirAll(module1, 0755)
 	os.MkdirAll(module2, 0755)
@@ -204,45 +204,45 @@ func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 	}
 
 	// overwrite allowed when new resource group is added
-	c.Check(isOverwriteAllowed(bpDir, &supersetConfig, true /* overwriteFlag */), Equals, true)
+	c.Check(isOverwriteAllowed(depDir, &supersetConfig, true /* overwriteFlag */), Equals, true)
 	// overwrite fails when resource group is deleted
-	c.Check(isOverwriteAllowed(bpDir, &swapConfig, true /* overwriteFlag */), Equals, false)
+	c.Check(isOverwriteAllowed(depDir, &swapConfig, true /* overwriteFlag */), Equals, false)
 	// overwrite fails when overwrite is false
-	c.Check(isOverwriteAllowed(bpDir, &supersetConfig, false /* overwriteFlag */), Equals, false)
+	c.Check(isOverwriteAllowed(depDir, &supersetConfig, false /* overwriteFlag */), Equals, false)
 }
 
-// reswriter.go
-func (s *MySuite) TestWriteBlueprint(c *C) {
+// modulewriter.go
+func (s *MySuite) TestWriteDeployment(c *C) {
 	testBlueprint := getBlueprintForTest()
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
-	err := WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
+	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
-	// Overwriting the blueprint fails
-	err = WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
+	// Overwriting the deployment fails
+	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
-	// Overwriting the blueprint succeeds with flag
-	err = WriteBlueprint(&testBlueprint, testDir, true /* overwriteFlag */)
+	// Overwriting the deployment succeeds with flag
+	err = WriteDeployment(&testBlueprint, testDir, true /* overwriteFlag */)
 	c.Check(err, IsNil)
 }
 
-func (s *MySuite) TestWriteBlueprint_BadDeploymentName(c *C) {
+func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
 	testBlueprint := getBlueprintForTest()
 	var e *config.DeploymentNameError
 
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": 100}
-	err := WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
+	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": false}
-	err = WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": ""}
-	err = WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
 	testBlueprint.Vars = map[string]interface{}{}
-	err = WriteBlueprint(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 }
 
@@ -256,12 +256,12 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	//          └── fake_resource_group
 	//             └── terraform.tfstate
 	//    └── fake_resource_group
-	bpDir := filepath.Join(testDir, "test_restore_state")
+	depDir := filepath.Join(testDir, "test_restore_state")
 	deploymentGroupName := "fake_resource_group"
 
 	prevDeploymentGroup := filepath.Join(
-		bpDir, hiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
-	curDeploymentGroup := filepath.Join(bpDir, deploymentGroupName)
+		depDir, hiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
+	curDeploymentGroup := filepath.Join(depDir, deploymentGroupName)
 	prevStateFile := filepath.Join(prevDeploymentGroup, tfStateFileName)
 	os.MkdirAll(prevDeploymentGroup, 0755)
 	os.MkdirAll(curDeploymentGroup, 0755)
@@ -269,7 +269,7 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	emptyFile.Close()
 
 	testWriter := TFWriter{}
-	testWriter.restoreState(bpDir)
+	testWriter.restoreState(depDir)
 
 	// check state file was moved to current resource group dir
 	curStateFile := filepath.Join(curDeploymentGroup, tfStateFileName)

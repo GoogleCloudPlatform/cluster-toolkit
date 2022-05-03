@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package reswriter
+package modulewriter
 
 const license string = `/**
   * Copyright 2022 Google LLC

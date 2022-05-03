@@ -27,7 +27,7 @@ type BaseFS interface {
 
 // Deploymentio interface for writing blueprints to a storage
 type Deploymentio interface {
-	CreateDirectory(bpDirectoryPath string) error
+	CreateDirectory(DepDirectoryPath string) error
 	CopyFromPath(src string, dst string) error
 	CopyFromFS(fs BaseFS, src string, dst string) error
 }
