@@ -20,8 +20,8 @@ package reswriter
 import (
 	"embed"
 	"fmt"
-	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
@@ -209,12 +209,12 @@ func (err *OverwriteDeniedError) Error() string {
 
 // Prepares a blueprint directory to be written to.
 func prepBpDir(bpDir string, overwrite bool) error {
-	blueprintIO := blueprintio.GetBlueprintIOLocal()
+	deploymentio := deploymentio.GetDeploymentioLocal()
 	ghpcDir := filepath.Join(bpDir, hiddenGhpcDirName)
 	gitignoreFile := filepath.Join(bpDir, ".gitignore")
 
 	// create blueprint directory
-	if err := blueprintIO.CreateDirectory(bpDir); err != nil {
+	if err := deploymentio.CreateDirectory(bpDir); err != nil {
 		if !overwrite {
 			return &OverwriteDeniedError{err}
 		}
@@ -225,11 +225,11 @@ func prepBpDir(bpDir string, overwrite bool) error {
 				"While trying to update the blueprint directory at %s, the '.ghpc/' dir could not be found", bpDir)
 		}
 	} else {
-		if err := blueprintIO.CreateDirectory(ghpcDir); err != nil {
+		if err := deploymentio.CreateDirectory(ghpcDir); err != nil {
 			return fmt.Errorf("Failed to create directory at %s: err=%w", ghpcDir, err)
 		}
 
-		if err := blueprintIO.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile); err != nil {
+		if err := deploymentio.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile); err != nil {
 			return fmt.Errorf("Failed to copy template.gitignore file to %s: err=%w", gitignoreFile, err)
 		}
 	}

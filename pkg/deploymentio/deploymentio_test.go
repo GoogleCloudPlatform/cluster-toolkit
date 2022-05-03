@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package blueprintio
+package deploymentio
 
 import (
 	"fmt"
@@ -54,7 +54,7 @@ func Test(t *testing.T) {
 
 func setup() {
 	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_blueprintio_test_%s", t.Format(time.RFC3339))
+	dirName := fmt.Sprintf("ghpc_deploymentio_test_%s", t.Format(time.RFC3339))
 	dir, err := ioutil.TempDir("", dirName)
 	if err != nil {
 		log.Fatalf("reswriter_test: %v", err)
@@ -83,7 +83,7 @@ func getTestFS() afero.IOFS {
 	return afero.NewIOFS(aferoFS)
 }
 
-func (s *MySuite) TestGetBlueprintIOLocal(c *C) {
-	blueprintio := GetBlueprintIOLocal()
-	c.Assert(blueprintio, Equals, blueprintios["local"])
+func (s *MySuite) TestGetDeploymentioLocal(c *C) {
+	deploymentio := GetDeploymentioLocal()
+	c.Assert(deploymentio, Equals, deploymentios["local"])
 }

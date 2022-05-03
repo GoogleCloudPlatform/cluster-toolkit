@@ -15,7 +15,7 @@
 package sourcereader
 
 import (
-	"hpc-toolkit/pkg/blueprintio"
+	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/resreader"
 	"log"
 	"strings"
@@ -80,11 +80,11 @@ func Factory(modPath string) SourceReader {
 
 func copyFromPath(modPath string, copyPath string) error {
 	// currently supporting only local blueprint directory
-	blueprintio := blueprintio.GetBlueprintIOLocal()
+	deploymentio := deploymentio.GetDeploymentioLocal()
 
-	if err := blueprintio.CreateDirectory(copyPath); err != nil {
+	if err := deploymentio.CreateDirectory(copyPath); err != nil {
 		return err
 	}
 
-	return blueprintio.CopyFromPath(modPath, copyPath)
+	return deploymentio.CopyFromPath(modPath, copyPath)
 }

@@ -19,8 +19,8 @@ package reswriter
 import (
 	"errors"
 	"fmt"
-	"hpc-toolkit/pkg/blueprintio"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/deploymentio"
 	"io/ioutil"
 	"log"
 	"os"
@@ -587,23 +587,23 @@ func (s *MySuite) TestNumModules_PackerWriter(c *C) {
 	c.Assert(testWriter.getNumModules(), Equals, 1)
 }
 
-func (s *MySuite) TestWriteResourceGroup_PackerWriter(c *C) {
-	blueprintio := blueprintio.GetBlueprintIOLocal()
+func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
+	deploymentio := deploymentio.GetDeploymentioLocal()
 	testWriter := PackerWriter{}
 
 	// No Packer modules
 	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
 	testVars := map[string]interface{}{"deployment_name": deploymentName}
 	deploymentDir := filepath.Join(testDir, deploymentName)
-	if err := blueprintio.CreateDirectory(deploymentDir); err != nil {
+	if err := deploymentio.CreateDirectory(deploymentDir); err != nil {
 		log.Fatal(err)
 	}
 	groupDir := filepath.Join(deploymentDir, "packerGroup")
-	if err := blueprintio.CreateDirectory(groupDir); err != nil {
+	if err := deploymentio.CreateDirectory(groupDir); err != nil {
 		log.Fatal(err)
 	}
 	moduleDir := filepath.Join(groupDir, "testPackerModule")
-	if err := blueprintio.CreateDirectory(moduleDir); err != nil {
+	if err := deploymentio.CreateDirectory(moduleDir); err != nil {
 		log.Fatal(err)
 	}
 
