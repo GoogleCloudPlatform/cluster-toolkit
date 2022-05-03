@@ -60,7 +60,7 @@ variable "local_mount" {
 variable "size_gb" {
   description = "Storage size of the filestore instance in GB."
   type        = number
-  default     = 2660
+  default     = 2560
 }
 
 variable "filestore_tier" {
