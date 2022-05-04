@@ -36,10 +36,10 @@ var goGetterGetters = map[string]getter.Getter{
 
 var goGetterDecompressors = map[string]getter.Decompressor{}
 
-// GitHubSourceReader reads resources from a GitHub repository
+// GitHubSourceReader reads modules from a GitHub repository
 type GitHubSourceReader struct{}
 
-func copyGitHubResources(srcPath string, destPath string) error {
+func copyGitHubModules(srcPath string, destPath string) error {
 	client := getter.Client{
 		Src: srcPath,
 		Dst: destPath,
@@ -56,44 +56,44 @@ func copyGitHubResources(srcPath string, destPath string) error {
 	return err
 }
 
-// GetResourceInfo gets resreader.ResourceInfo for the given kind from the GitHub source
-func (r GitHubSourceReader) GetResourceInfo(resPath string, kind string) (resreader.ResourceInfo, error) {
-	if !IsGitHubPath(resPath) {
-		return resreader.ResourceInfo{}, fmt.Errorf("Source is not valid: %s", resPath)
+// GetModuleInfo gets resreader.ModuleInfo for the given kind from the GitHub source
+func (r GitHubSourceReader) GetModuleInfo(modPath string, kind string) (resreader.ModuleInfo, error) {
+	if !IsGitHubPath(modPath) {
+		return resreader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
-	resDir, err := ioutil.TempDir("", "git-module-*")
-	defer os.RemoveAll(resDir)
-	writeDir := filepath.Join(resDir, "mod")
+	modDir, err := ioutil.TempDir("", "git-module-*")
+	defer os.RemoveAll(modDir)
+	writeDir := filepath.Join(modDir, "mod")
 	if err != nil {
-		return resreader.ResourceInfo{}, err
+		return resreader.ModuleInfo{}, err
 	}
 
-	if err := copyGitHubResources(resPath, writeDir); err != nil {
-		return resreader.ResourceInfo{}, fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
-			resPath, writeDir, err)
+	if err := copyGitHubModules(modPath, writeDir); err != nil {
+		return resreader.ModuleInfo{}, fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
+			modPath, writeDir, err)
 	}
 
 	reader := resreader.Factory(kind)
 	return reader.GetInfo(writeDir)
 }
 
-// GetResource copies the GitHub source to a provided destination (the blueprint directory)
-func (r GitHubSourceReader) GetResource(resPath string, copyPath string) error {
-	if !IsGitHubPath(resPath) {
-		return fmt.Errorf("Source is not valid: %s", resPath)
+// GetModule copies the GitHub source to a provided destination (the deployment directory)
+func (r GitHubSourceReader) GetModule(modPath string, copyPath string) error {
+	if !IsGitHubPath(modPath) {
+		return fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
-	resDir, err := ioutil.TempDir("", "git-module-*")
-	defer os.RemoveAll(resDir)
-	writeDir := filepath.Join(resDir, "mod")
+	modDir, err := ioutil.TempDir("", "git-module-*")
+	defer os.RemoveAll(modDir)
+	writeDir := filepath.Join(modDir, "mod")
 	if err != nil {
 		return err
 	}
 
-	if err := copyGitHubResources(resPath, writeDir); err != nil {
+	if err := copyGitHubModules(modPath, writeDir); err != nil {
 		return fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
-			resPath, writeDir, err)
+			modPath, writeDir, err)
 	}
 
 	return copyFromPath(writeDir, copyPath)

@@ -23,10 +23,10 @@ import (
 )
 
 //go:embed modules community/modules
-var resourceFS embed.FS
+var moduleFS embed.FS
 
 func main() {
-	sourcereader.ResourceFS = resourceFS
+	sourcereader.ModuleFS = moduleFS
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

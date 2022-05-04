@@ -29,15 +29,15 @@ const packerAutoVarFilename = "defaults.auto.pkrvars.hcl"
 
 // PackerWriter writes packer to the blueprint folder
 type PackerWriter struct {
-	numResources int
+	numModules int
 }
 
-func (w *PackerWriter) getNumResources() int {
-	return w.numResources
+func (w *PackerWriter) getNumModules() int {
+	return w.numModules
 }
 
-func (w *PackerWriter) addNumResources(value int) {
-	w.numResources += value
+func (w *PackerWriter) addNumModules(value int) {
+	w.numModules += value
 }
 
 func printPackerInstructions(grpPath string) {
@@ -48,35 +48,35 @@ func printPackerInstructions(grpPath string) {
 	fmt.Println("  packer build .")
 }
 
-// writeResourceLevel writes any needed files to the resource layer
-func (w PackerWriter) writeResourceLevel(yamlConfig *config.YamlConfig, outputDir string) error {
-	for _, grp := range yamlConfig.ResourceGroups {
-		deploymentName, err := yamlConfig.DeploymentName()
+// writeModuleLevel writes any needed files to the module layer
+func (w PackerWriter) writeModuleLevel(blueprint *config.Blueprint, outputDir string) error {
+	for _, grp := range blueprint.DeploymentGroups {
+		deploymentName, err := blueprint.DeploymentName()
 		if err != nil {
 			return err
 		}
 		groupPath := filepath.Join(outputDir, deploymentName, grp.Name)
-		for _, res := range grp.Resources {
-			if res.Kind != "packer" {
+		for _, mod := range grp.Modules {
+			if mod.Kind != "packer" {
 				continue
 			}
 
-			ctySettings, err := config.ConvertMapToCty(res.Settings)
+			ctySettings, err := config.ConvertMapToCty(mod.Settings)
 
 			if err != nil {
 				return fmt.Errorf(
 					"error converting global vars to cty for writing: %v", err)
 			}
-			err = yamlConfig.ResolveGlobalVariables(ctySettings)
+			err = blueprint.ResolveGlobalVariables(ctySettings)
 			if err != nil {
 				return err
 			}
-			resPath := filepath.Join(groupPath, res.ID)
-			err = writePackerAutovars(ctySettings, resPath)
+			modPath := filepath.Join(groupPath, mod.ID)
+			err = writePackerAutovars(ctySettings, modPath)
 			if err != nil {
 				return err
 			}
-			printPackerInstructions(resPath)
+			printPackerInstructions(modPath)
 		}
 	}
 	return nil
@@ -88,10 +88,10 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 	return err
 }
 
-// writeResourceGroups writes any needed files to the top and resource levels
+// writeDeploymentGroups writes any needed files to the top and module levels
 // of the blueprint
-func (w PackerWriter) writeResourceGroups(yamlConfig *config.YamlConfig, outputDir string) error {
-	return w.writeResourceLevel(yamlConfig, outputDir)
+func (w PackerWriter) writeDeploymentGroups(blueprint *config.Blueprint, outputDir string) error {
+	return w.writeModuleLevel(blueprint, outputDir)
 }
 
 func (w PackerWriter) restoreState(deploymentDir string) error {

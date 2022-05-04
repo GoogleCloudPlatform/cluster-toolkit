@@ -35,39 +35,39 @@ const (
 )
 
 // validate is the top-level function for running the validation suite.
-func (bc BlueprintConfig) validate() {
-	if err := bc.validateVars(); err != nil {
+func (dc DeploymentConfig) validate() {
+	if err := dc.validateVars(); err != nil {
 		log.Fatal(err)
 	}
 
 	// variables should be validated before running validators
-	if err := bc.executeValidators(); err != nil {
+	if err := dc.executeValidators(); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := bc.validateResources(); err != nil {
+	if err := dc.validateModules(); err != nil {
 		log.Fatal(err)
 	}
-	if err := bc.validateResourceSettings(); err != nil {
+	if err := dc.validateModuleSettings(); err != nil {
 		log.Fatal(err)
 	}
 }
 
 // performs validation of global variables
-func (bc BlueprintConfig) executeValidators() error {
+func (dc DeploymentConfig) executeValidators() error {
 	var errored, warned bool
-	implementedValidators := bc.getValidators()
+	implementedValidators := dc.getValidators()
 
-	if bc.Config.ValidationLevel == validationIgnore {
+	if dc.Config.ValidationLevel == validationIgnore {
 		return nil
 	}
 
-	for _, validator := range bc.Config.Validators {
+	for _, validator := range dc.Config.Validators {
 		if f, ok := implementedValidators[validator.Validator]; ok {
 			err := f(validator)
 			if err != nil {
 				var prefix string
-				switch bc.Config.ValidationLevel {
+				switch dc.Config.ValidationLevel {
 				case validationWarning:
 					warned = true
 					prefix = "warning: "
@@ -108,8 +108,8 @@ func (bc BlueprintConfig) executeValidators() error {
 }
 
 // validateVars checks the global variables for viable types
-func (bc BlueprintConfig) validateVars() error {
-	vars := bc.Config.Vars
+func (dc DeploymentConfig) validateVars() error {
+	vars := dc.Config.Vars
 	nilErr := "global variable %s was not set"
 
 	// Check for project_id
@@ -134,20 +134,20 @@ func (bc BlueprintConfig) validateVars() error {
 	return nil
 }
 
-func resource2String(c Resource) string {
+func module2String(c Module) string {
 	cBytes, _ := yaml.Marshal(&c)
 	return string(cBytes)
 }
 
-func validateResource(c Resource) error {
+func validateModule(c Module) error {
 	if c.ID == "" {
-		return fmt.Errorf("%s\n%s", errorMessages["emptyID"], resource2String(c))
+		return fmt.Errorf("%s\n%s", errorMessages["emptyID"], module2String(c))
 	}
 	if c.Source == "" {
-		return fmt.Errorf("%s\n%s", errorMessages["emptySource"], resource2String(c))
+		return fmt.Errorf("%s\n%s", errorMessages["emptySource"], module2String(c))
 	}
 	if !resreader.IsValidKind(c.Kind) {
-		return fmt.Errorf("%s\n%s", errorMessages["wrongKind"], resource2String(c))
+		return fmt.Errorf("%s\n%s", errorMessages["wrongKind"], module2String(c))
 	}
 	return nil
 }
@@ -156,33 +156,33 @@ func hasIllegalChars(name string) bool {
 	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
 }
 
-func validateOutputs(res Resource, resInfo resreader.ResourceInfo) error {
+func validateOutputs(mod Module, modInfo resreader.ModuleInfo) error {
 
 	// Only get the map if needed
 	var outputsMap map[string]resreader.VarInfo
-	if len(res.Outputs) > 0 {
-		outputsMap = resInfo.GetOutputsAsMap()
+	if len(mod.Outputs) > 0 {
+		outputsMap = modInfo.GetOutputsAsMap()
 	}
 
-	// Ensure output exists in the underlying resource
-	for _, output := range res.Outputs {
+	// Ensure output exists in the underlying modules
+	for _, output := range mod.Outputs {
 		if _, ok := outputsMap[output]; !ok {
 			return fmt.Errorf("%s, module: %s output: %s",
-				errorMessages["invalidOutput"], res.ID, output)
+				errorMessages["invalidOutput"], mod.ID, output)
 		}
 	}
 	return nil
 }
 
-// validateResources ensures parameters set in resources are set correctly.
-func (bc BlueprintConfig) validateResources() error {
-	for _, grp := range bc.Config.ResourceGroups {
-		for _, res := range grp.Resources {
-			if err := validateResource(res); err != nil {
+// validateModules ensures parameters set in modules are set correctly.
+func (dc DeploymentConfig) validateModules() error {
+	for _, grp := range dc.Config.DeploymentGroups {
+		for _, mod := range grp.Modules {
+			if err := validateModule(mod); err != nil {
 				return err
 			}
-			resInfo := bc.ResourcesInfo[grp.Name][res.Source]
-			if err := validateOutputs(res, resInfo); err != nil {
+			modInfo := dc.ModulesInfo[grp.Name][mod.Source]
+			if err := validateOutputs(mod, modInfo); err != nil {
 				return err
 			}
 		}
@@ -190,16 +190,16 @@ func (bc BlueprintConfig) validateResources() error {
 	return nil
 }
 
-type resourceVariables struct {
+type moduleVariables struct {
 	Inputs  map[string]bool
 	Outputs map[string]bool
 }
 
 func validateSettings(
-	res Resource,
-	info resreader.ResourceInfo) error {
+	mod Module,
+	info resreader.ModuleInfo) error {
 
-	var cVars = resourceVariables{
+	var cVars = moduleVariables{
 		Inputs:  map[string]bool{},
 		Outputs: map[string]bool{},
 	}
@@ -208,41 +208,41 @@ func validateSettings(
 		cVars.Inputs[input.Name] = input.Required
 	}
 	// Make sure we only define variables that exist
-	for k := range res.Settings {
+	for k := range mod.Settings {
 		if _, ok := cVars.Inputs[k]; !ok {
 			return fmt.Errorf("%s: Module ID: %s Setting: %s",
-				errorMessages["extraSetting"], res.ID, k)
+				errorMessages["extraSetting"], mod.ID, k)
 		}
 	}
 	return nil
 }
 
-// validateResourceSettings verifies that no additional settings are provided
-// that don't have a counterpart variable in the resource.
-func (bc BlueprintConfig) validateResourceSettings() error {
-	for _, grp := range bc.Config.ResourceGroups {
-		for _, res := range grp.Resources {
-			reader := sourcereader.Factory(res.Source)
-			info, err := reader.GetResourceInfo(res.Source, res.Kind)
+// validateModuleSettings verifies that no additional settings are provided
+// that don't have a counterpart variable in the module
+func (dc DeploymentConfig) validateModuleSettings() error {
+	for _, grp := range dc.Config.DeploymentGroups {
+		for _, mod := range grp.Modules {
+			reader := sourcereader.Factory(mod.Source)
+			info, err := reader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
 				errStr := "failed to get info for module at %s while validating module settings"
-				return errors.Wrapf(err, errStr, res.Source)
+				return errors.Wrapf(err, errStr, mod.Source)
 			}
-			if err = validateSettings(res, info); err != nil {
+			if err = validateSettings(mod, info); err != nil {
 				errStr := "found an issue while validating settings for module at %s"
-				return errors.Wrapf(err, errStr, res.Source)
+				return errors.Wrapf(err, errStr, mod.Source)
 			}
 		}
 	}
 	return nil
 }
 
-func (bc *BlueprintConfig) getValidators() map[string]func(validatorConfig) error {
+func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) error {
 	allValidators := map[string]func(validatorConfig) error{
-		testProjectExistsName.String(): bc.testProjectExists,
-		testRegionExistsName.String():  bc.testRegionExists,
-		testZoneExistsName.String():    bc.testZoneExists,
-		testZoneInRegionName.String():  bc.testZoneInRegion,
+		testProjectExistsName.String(): dc.testProjectExists,
+		testRegionExistsName.String():  dc.testRegionExists,
+		testZoneExistsName.String():    dc.testZoneExists,
+		testZoneInRegionName.String():  dc.testZoneInRegion,
 	}
 	return allValidators
 }
@@ -270,7 +270,7 @@ func testInputList(function string, inputs map[string]interface{}, requiredInput
 	return nil
 }
 
-func (bc *BlueprintConfig) testProjectExists(validator validatorConfig) error {
+func (dc *DeploymentConfig) testProjectExists(validator validatorConfig) error {
 	requiredInputs := []string{"project_id"}
 	funcName := testProjectExistsName.String()
 	funcErrorMsg := fmt.Sprintf("validator %s failed", funcName)
@@ -285,7 +285,7 @@ func (bc *BlueprintConfig) testProjectExists(validator validatorConfig) error {
 		return err
 	}
 
-	projectID, err := bc.getStringValue(validator.Inputs["project_id"])
+	projectID, err := dc.getStringValue(validator.Inputs["project_id"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -299,7 +299,7 @@ func (bc *BlueprintConfig) testProjectExists(validator validatorConfig) error {
 	return err
 }
 
-func (bc *BlueprintConfig) testRegionExists(validator validatorConfig) error {
+func (dc *DeploymentConfig) testRegionExists(validator validatorConfig) error {
 	requiredInputs := []string{"project_id", "region"}
 	funcName := testRegionExistsName.String()
 	funcErrorMsg := fmt.Sprintf("validator %s failed", funcName)
@@ -313,12 +313,12 @@ func (bc *BlueprintConfig) testRegionExists(validator validatorConfig) error {
 		return err
 	}
 
-	projectID, err := bc.getStringValue(validator.Inputs["project_id"])
+	projectID, err := dc.getStringValue(validator.Inputs["project_id"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
-	region, err := bc.getStringValue(validator.Inputs["region"])
+	region, err := dc.getStringValue(validator.Inputs["region"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -332,7 +332,7 @@ func (bc *BlueprintConfig) testRegionExists(validator validatorConfig) error {
 	return err
 }
 
-func (bc *BlueprintConfig) testZoneExists(validator validatorConfig) error {
+func (dc *DeploymentConfig) testZoneExists(validator validatorConfig) error {
 	requiredInputs := []string{"project_id", "zone"}
 	funcName := testZoneExistsName.String()
 	funcErrorMsg := fmt.Sprintf("validator %s failed", funcName)
@@ -346,12 +346,12 @@ func (bc *BlueprintConfig) testZoneExists(validator validatorConfig) error {
 		return err
 	}
 
-	projectID, err := bc.getStringValue(validator.Inputs["project_id"])
+	projectID, err := dc.getStringValue(validator.Inputs["project_id"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
-	zone, err := bc.getStringValue(validator.Inputs["zone"])
+	zone, err := dc.getStringValue(validator.Inputs["zone"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -365,7 +365,7 @@ func (bc *BlueprintConfig) testZoneExists(validator validatorConfig) error {
 	return err
 }
 
-func (bc *BlueprintConfig) testZoneInRegion(validator validatorConfig) error {
+func (dc *DeploymentConfig) testZoneInRegion(validator validatorConfig) error {
 	requiredInputs := []string{"project_id", "region", "zone"}
 	funcName := testZoneInRegionName.String()
 	funcErrorMsg := fmt.Sprintf("validator %s failed", funcName)
@@ -379,17 +379,17 @@ func (bc *BlueprintConfig) testZoneInRegion(validator validatorConfig) error {
 		return err
 	}
 
-	projectID, err := bc.getStringValue(validator.Inputs["project_id"])
+	projectID, err := dc.getStringValue(validator.Inputs["project_id"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
-	zone, err := bc.getStringValue(validator.Inputs["zone"])
+	zone, err := dc.getStringValue(validator.Inputs["zone"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
-	region, err := bc.getStringValue(validator.Inputs["region"])
+	region, err := dc.getStringValue(validator.Inputs["region"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -407,7 +407,7 @@ func (bc *BlueprintConfig) testZoneInRegion(validator validatorConfig) error {
 // variable inputReference in form ((var.project_id))
 // if it is a literal global variable defined as a string, return value as string
 // in all other cases, return empty string and error
-func (bc *BlueprintConfig) getStringValue(inputReference interface{}) (string, error) {
+func (dc *DeploymentConfig) getStringValue(inputReference interface{}) (string, error) {
 	varRef, ok := inputReference.(string)
 	if !ok {
 		return "", fmt.Errorf("the value %s cannot be cast to a string", inputReference)
@@ -422,7 +422,7 @@ func (bc *BlueprintConfig) getStringValue(inputReference interface{}) (string, e
 		// checked for existence. handle if user has explicitly passed
 		// ((var.does_not_exit)) or ((not_a_varsrc.not_a_var))
 		if varSrc == "var" {
-			if val, ok := bc.Config.Vars[varName]; ok {
+			if val, ok := dc.Config.Vars[varName]; ok {
 				valString, ok := val.(string)
 				if ok {
 					return valString, nil
