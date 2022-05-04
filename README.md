@@ -406,6 +406,78 @@ to `false` on the partition in question.
 
 [partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
 
+#### Insufficient Service Account Permissions
+
+By default, the slurm controller, login and compute nodes use the
+[Google Compute Engine Service Account (GCE SA)][def-compute-sa]. If this
+service account or a custom SA used by the Slurm modules does not have
+sufficient permissions, configuring the controller or running a job in Slurm may
+fail.
+
+If configuration of the Slurm controller fails, the error can be
+seen by viewing the startup script on the controller:
+
+```shell
+sudo journalctl -u google-startup-scripts.service | less
+```
+
+An error similar to the following indicates missing permissions for the serivce
+account:
+
+```shell
+Required 'compute.machineTypes.get' permission for ...
+```
+
+To solve this error, ensure your service account has the
+`compute.instanceAdmin.v1` IAM role:
+
+```shell
+SA_ADDRESS=<SET SERVICE ACCOUNT ADDRESS HERE>
+
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member=serviceAccount:${SA_ADDRESS} --role=roles/compute.instanceAdmin.v1
+```
+
+If Slurm failed to run a job, view the resume log on the controller instance
+with the following command:
+
+```shell
+sudo cat /var/log/slurm/resume.log
+```
+
+An error in `resume.log` simlar to the following indicates a permissions issue
+as well:
+
+```shell
+The user does not have access to service account 'PROJECT_NUMBER-compute@developer.gserviceaccount.com'.  User: ''.  Ask a project owner to grant you the iam.serviceAccountUser role on the service account": ['slurm-hpc-small-compute-0-0']
+```
+
+As indicated, the service account must have the compute.serviceAccountUser IAM
+role. This can be set with the following command:
+
+```shell
+SA_ADDRESS=<SET SERVICE ACCOUNT ADDRESS HERE>
+
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member=serviceAccount:${SA_ADDRESS} --role=roles/iam.serviceAccountUser
+```
+
+If the GCE SA is being used and cannot be updated, a new service account can be
+created and used with the correct permissions. Instructions for how to do this
+can be found in the [Slurm on Google Cloud User Guide][slurm-on-gcp-ug],
+specifically the section titled "Create Service Accounts".
+
+After creating the service account, it can be set via the
+"compute_node_service_account" and "controller_service_account" settings on the
+[slurm-on-gcp controller module][slurm-on-gcp-con] and the
+"login_service_account" setting on the
+[slurm-on-gcp login module][slurm-on-gcp-login].
+
+[def-compute-sa]: https://cloud.google.com/compute/docs/access/service-accounts#default_service_account
+[slurm-on-gcp-ug]: https://goo.gle/slurm-gcp-user-guide
+[slurm-on-gcp-con]: community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
+[slurm-on-gcp-login]: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
+
 ### Terraform Deployment
 
 When `terraform apply` fails, Terraform generally provides a useful error
