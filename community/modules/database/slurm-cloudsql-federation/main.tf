@@ -31,6 +31,7 @@ locals {
 }
 
 resource "google_sql_database_instance" "instance" {
+  project             = local.project_id
   depends_on          = [var.nat_ips]
   name                = local.sql_instance_name
   region              = local.region
@@ -58,11 +59,13 @@ resource "google_sql_database_instance" "instance" {
 }
 
 resource "google_sql_database" "database" {
+  project  = local.project_id
   name     = "slurm_accounting"
   instance = google_sql_database_instance.instance.name
 }
 
 resource "google_sql_user" "users" {
+  project  = local.project_id
   name     = var.sql_username
   instance = google_sql_database_instance.instance.name
   password = local.sql_password

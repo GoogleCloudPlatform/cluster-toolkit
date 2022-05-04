@@ -43,6 +43,8 @@ data "google_compute_image" "compute_image" {
 }
 
 resource "google_compute_disk" "boot_disk" {
+  project = var.project_id
+
   count = var.instance_count
 
   name   = "${local.resource_prefix}-boot-disk-${count.index}"
@@ -53,6 +55,8 @@ resource "google_compute_disk" "boot_disk" {
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
+  project = var.project_id
+
   count = var.placement_policy != null ? 1 : 0
   name  = "${local.resource_prefix}-vm-instance-placement"
   group_placement_policy {
@@ -63,6 +67,7 @@ resource "google_compute_resource_policy" "placement_policy" {
 }
 
 resource "google_compute_instance" "compute_vm" {
+  project  = var.project_id
   provider = google-beta
 
   count = var.instance_count

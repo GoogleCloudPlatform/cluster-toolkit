@@ -14,6 +14,11 @@
  * limitations under the License.
 */
 
+variable "project_id" {
+  description = "Project in which the HPC deployment will be created"
+  type        = string
+}
+
 variable "instance_count" {
   description = "Number of instances"
   type        = number

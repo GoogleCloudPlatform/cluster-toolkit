@@ -35,12 +35,13 @@ locals {
 data "google_compute_default_service_account" "default" {}
 
 resource "google_compute_disk" "attached_disk" {
-  name   = "${local.name}-nfs-instance-disk"
-  image  = var.image
-  size   = var.disk_size
-  type   = var.type
-  zone   = var.zone
-  labels = var.labels
+  project = var.project_id
+  name    = "${local.name}-nfs-instance-disk"
+  image   = var.image
+  size    = var.disk_size
+  type    = var.type
+  zone    = var.zone
+  labels  = var.labels
 }
 
 resource "google_compute_instance" "compute_instance" {
