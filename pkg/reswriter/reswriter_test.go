@@ -92,6 +92,7 @@ func getBlueprintForTest() config.Blueprint {
 	testDeploymentGroups := []config.DeploymentGroup{
 		{
 			Name:    "test_resource_group",
+			Kind:    "terraform",
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
@@ -586,18 +587,13 @@ func (s *MySuite) TestNumModules_PackerWriter(c *C) {
 	c.Assert(testWriter.getNumModules(), Equals, 1)
 }
 
-func (s *MySuite) TestWriteModuleLevel_PackerWriter(c *C) {
+func (s *MySuite) TestWriteResourceGroup_PackerWriter(c *C) {
 	blueprintio := blueprintio.GetBlueprintIOLocal()
 	testWriter := PackerWriter{}
-	// Empty Config
-	testWriter.writeModuleLevel(&config.Blueprint{}, testDir)
 
 	// No Packer modules
-	testBlueprint := getBlueprintForTest()
-	testWriter.writeModuleLevel(&testBlueprint, testDir)
-
 	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": deploymentName}
+	testVars := map[string]interface{}{"deployment_name": deploymentName}
 	deploymentDir := filepath.Join(testDir, deploymentName)
 	if err := blueprintio.CreateDirectory(deploymentDir); err != nil {
 		log.Fatal(err)
@@ -615,12 +611,11 @@ func (s *MySuite) TestWriteModuleLevel_PackerWriter(c *C) {
 		Kind: "packer",
 		ID:   "testPackerModule",
 	}
-	testBlueprint.DeploymentGroups = append(testBlueprint.DeploymentGroups,
-		config.DeploymentGroup{
-			Name:    "packerGroup",
-			Modules: []config.Module{testPackerModule},
-		})
-	testWriter.writeModuleLevel(&testBlueprint, testDir)
+	testDeploymentGroup := config.DeploymentGroup{
+		Name:    "packerGroup",
+		Modules: []config.Module{testPackerModule},
+	}
+	testWriter.writeDeploymentGroup(testDeploymentGroup, testVars, deploymentDir)
 	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }

@@ -551,27 +551,31 @@ func (s *MySuite) TestResolveGlobalVariables(c *C) {
 	var testkey3 = "testkey3"
 	dc := getDeploymentConfigForTest()
 	ctyMap := make(map[string]cty.Value)
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
+	ctyVars, err := ConvertMapToCty(dc.Config.Vars)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = ResolveGlobalVariables(ctyMap, ctyVars)
 	c.Assert(err, IsNil)
 
 	// confirm plain string is unchanged and does not error
 	testCtyString := cty.StringVal("testval")
 	ctyMap[testkey1] = testCtyString
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
+	err = ResolveGlobalVariables(ctyMap, ctyVars)
 	c.Assert(err, IsNil)
 	c.Assert(ctyMap[testkey1], Equals, testCtyString)
 
 	// confirm literal, non-global, variable is unchanged and does not error
 	testCtyString = cty.StringVal("((module.testval))")
 	ctyMap[testkey1] = testCtyString
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
+	err = ResolveGlobalVariables(ctyMap, ctyVars)
 	c.Assert(err, IsNil)
 	c.Assert(ctyMap[testkey1], Equals, testCtyString)
 
 	// confirm failed resolution of a literal global
 	testCtyString = cty.StringVal("((var.test_global_var))")
 	ctyMap[testkey1] = testCtyString
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
+	err = ResolveGlobalVariables(ctyMap, ctyVars)
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Matches, ".*Unsupported attribute;.*")
 
@@ -583,12 +587,16 @@ func (s *MySuite) TestResolveGlobalVariables(c *C) {
 	testPlainString := "plain-string"
 	dc.Config.Vars[testGlobalVarString] = testGlobalValString
 	dc.Config.Vars[testGlobalVarBool] = testGlobalValBool
+	ctyVars, err = ConvertMapToCty(dc.Config.Vars)
+	if err != nil {
+		log.Fatal(err)
+	}
 	testCtyString = cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarString))
 	testCtyBool := cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarBool))
 	ctyMap[testkey1] = testCtyString
 	ctyMap[testkey2] = testCtyBool
 	ctyMap[testkey3] = cty.StringVal(testPlainString)
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
+	err = ResolveGlobalVariables(ctyMap, ctyVars)
 	c.Assert(err, IsNil)
 	c.Assert(ctyMap[testkey1], Equals, cty.StringVal(testGlobalValString))
 	c.Assert(ctyMap[testkey2], Equals, cty.StringVal(testGlobalValBool))
