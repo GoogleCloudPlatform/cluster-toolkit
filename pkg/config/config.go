@@ -494,21 +494,21 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 	return cMap, nil
 }
 
-// ResolveGlobalVariables is given two maps of strings to cty.Value types, one
+// ResolveVariables is given two maps of strings to cty.Value types, one
 // representing a list of settings or variables to resolve (ctyMap) and other
-// representing global variables used to resolve (ctyVars). This function will
+// representing variables used to resolve (origin). This function will
 // examine all cty.Values that are of type cty.String. If they are literal
 // global variables, then they are replaced by the cty.Value of the
-// corresponding entry in the ctyVars. All other cty.Values are unmodified.
+// corresponding entry in the origin. All other cty.Values are unmodified.
 // ERROR: if (somehow) the cty.String cannot be converted to a Go string
 // ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global variable
 //        being resolved does not exist in b.Vars
-func ResolveGlobalVariables(
+func ResolveVariables(
 	ctyMap map[string]cty.Value,
-	ctyVars map[string]cty.Value,
+	origin map[string]cty.Value,
 ) error {
 	evalCtx := &hcl.EvalContext{
-		Variables: map[string]cty.Value{"var": cty.ObjectVal(ctyVars)},
+		Variables: map[string]cty.Value{"var": cty.ObjectVal(origin)},
 	}
 	for key, val := range ctyMap {
 		if val.Type() == cty.String {
@@ -542,6 +542,17 @@ type DeploymentNameError struct {
 
 func (err *DeploymentNameError) Error() string {
 	return fmt.Sprintf("deployment_name must be a string and cannot be empty, cause: %v", err.cause)
+}
+
+// ResolveGlobalVariables will resolve literal variables "((var.*))" in the
+// provided map to their corresponding value in the global variables of the
+// Blueprint.
+func (b Blueprint) ResolveGlobalVariables(ctyVars map[string]cty.Value) error {
+	origin, err := ConvertMapToCty(b.Vars)
+	if err != nil {
+		return fmt.Errorf("error converting global variables to cty: %w", err)
+	}
+	return ResolveVariables(ctyVars, origin)
 }
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.

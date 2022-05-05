@@ -61,7 +61,7 @@ func (w PackerWriter) writeDeploymentGroup(
 	globalVars map[string]interface{},
 	deployDir string,
 ) error {
-	ctyVars, err := config.ConvertMapToCty(globalVars)
+	ctyGlobals, err := config.ConvertMapToCty(globalVars)
 	if err != nil {
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %w", err)
@@ -75,7 +75,7 @@ func (w PackerWriter) writeDeploymentGroup(
 			return fmt.Errorf(
 				"error converting packer module settings to cty for writing: %w", err)
 		}
-		err = config.ResolveGlobalVariables(ctySettings, ctyVars)
+		err = config.ResolveVariables(ctySettings, ctyGlobals)
 		if err != nil {
 			return err
 		}
