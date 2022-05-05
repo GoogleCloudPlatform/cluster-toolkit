@@ -33,7 +33,7 @@ variable "static_node_count" {
 variable "max_node_count" {
   description = "Maximum number of nodes allowed in this partition"
   type        = number
-  default     = 10
+  default     = 50
 }
 
 variable "zone" {

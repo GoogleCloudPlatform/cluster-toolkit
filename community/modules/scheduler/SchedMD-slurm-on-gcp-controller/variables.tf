@@ -20,9 +20,17 @@ variable "boot_disk_size" {
 }
 
 variable "boot_disk_type" {
-  description = "Type of boot disk to create for the cluster controller node"
+  description = <<-EOT
+  Type of boot disk to create for the cluster controller node.
+  Choose from: pd-ssd, pd-standard, pd-balanced, pd-extreme.
+  pd-ssd is recommended if the controller is hosting the SlurmDB and NFS share.
+  If SlurmDB and NFS share are not running on the controller, pd-standard is
+  recommended. See "Controller configuration recommendations" in the Slurm on
+  Google Cloud User Guide for more information:
+  https://goo.gle/slurm-gcp-user-guide
+  EOT
   type        = string
-  default     = "pd-standard"
+  default     = "pd-ssd"
 }
 
 variable "instance_image" {
@@ -95,9 +103,14 @@ variable "login_node_count" {
 }
 
 variable "controller_machine_type" {
-  description = "Compute Platform machine type to use in controller node creation"
+  description = <<-EOT
+  Compute Platform machine type to use in controller node creation. `c2-standard-4`
+  is recommended for clusters up to 50 nodes, for larger clusters see
+  "Controller configuration recommendations" in the Slurm on Google Cloud User
+  Guide: https://goo.gle/slurm-gcp-user-guide
+  EOT
   type        = string
-  default     = "n2-standard-2"
+  default     = "c2-standard-4"
 }
 
 variable "munge_key" {
@@ -113,7 +126,7 @@ variable "jwt_key" {
 }
 
 variable "network_storage" {
-  description = " An array of network attached storage mounts to be configured on all instances."
+  description = "An array of network attached storage mounts to be configured on all instances."
   type = list(object({
     server_ip     = string,
     remote_mount  = string,
