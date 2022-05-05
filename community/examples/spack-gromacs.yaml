@@ -56,7 +56,7 @@ deployment_groups:
       configs:
       - type: single-config
         scope: defaults
-        value: "config:build_stage:/apps/spack/spack-stage"
+        value: "config:build_stage:/sw/spack/spack-stage"
       - type: file
         scope: defaults
         value: |
