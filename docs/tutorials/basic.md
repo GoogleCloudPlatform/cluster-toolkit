@@ -61,13 +61,13 @@ build run:
 
 This should show you the version of the HPC Toolkit you are using.
 
-## Generate a Blueprint
+## Generate a Deployment
 
-To create a blueprint, an input YAML file needs to be written or adapted from
-one of the examples found in the `examples/` directory.
+To create a deployment, an input blueprint file needs to be written or adapted
+from one of the examples found in the `examples/` directory.
 
 This tutorial will use examples/hpc-cluster-small.yaml, which is a good starting
-point and creates a blueprint containing:
+point and creates a deployment containing:
 
 * a new network
 * a filestore instance
@@ -79,16 +79,16 @@ The blueprint examples/hpc-cluster-small.yaml should be open in the Cloud Shell
 Editor (on the left).
 
 This file describes the cluster you will deploy. After you have inspected the
-file, use the ghpc binary to create a blueprint by running:
+file, use the ghpc binary to create a deployment directory by running:
 
 ```bash
 ./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=<walkthrough-project-id/>"
 ```
 
-> **_NOTE:_** The `--vars` argument is used to override `project_id` in the YAML
-> configuration variables.
+> **_NOTE:_** The `--vars` argument is used to override `project_id` in the
+> blueprint variables.
 
-This will create a blueprint directory named `hpc-cluster-small/`, which
+This will create a deployment directory named `hpc-small/`, which
 contains the terraform needed to deploy your cluster.
 
 ## Deploy the Cluster
@@ -96,8 +96,8 @@ contains the terraform needed to deploy your cluster.
 Use the following commands to run terraform and deploy your cluster.
 
 ```bash
-terraform -chdir=hpc-cluster-small/primary init
-terraform -chdir=hpc-cluster-small/primary apply
+terraform -chdir=hpc-small/primary init
+terraform -chdir=hpc-small/primary apply
 ```
 
 The `terraform apply` command will generate a _plan_ that describes the Google
@@ -121,7 +121,7 @@ Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 
 ## Run a Job on the Cluster
 
-Once the blueprint has successfully been deployed, take the following steps to
+Once the cluster has successfully been deployed, take the following steps to
 run a job:
 
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >
@@ -180,7 +180,7 @@ To avoid incurring ongoing charges we will want to destroy our cluster. Run the
 following command in the cloud shell terminal (not in the pop-up):
 
 ```bash
-terraform -chdir=hpc-cluster-small/primary destroy --auto-approve
+terraform -chdir=hpc-cluster-small/primary destroy -auto-approve
 ```
 
 When complete you should see something like:

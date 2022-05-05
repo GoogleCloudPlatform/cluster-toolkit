@@ -22,11 +22,11 @@ import (
 	"os"
 )
 
-//go:embed resources
-var resourceFS embed.FS
+//go:embed modules community/modules
+var moduleFS embed.FS
 
 func main() {
-	sourcereader.ResourceFS = resourceFS
+	sourcereader.ModuleFS = moduleFS
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

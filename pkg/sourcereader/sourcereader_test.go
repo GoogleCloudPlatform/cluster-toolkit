@@ -63,7 +63,7 @@ func teardown() {
 
 func TestMain(m *testing.M) {
 	setup()
-	createTmpResource()
+	createTmpModule()
 	code := m.Run()
 	teardown()
 	os.Exit(code)
@@ -71,75 +71,75 @@ func TestMain(m *testing.M) {
 
 func (s *MySuite) TestIsEmbeddedPath(c *C) {
 	// True: Is an embedded path
-	ret := IsEmbeddedPath("resources/anything/else")
+	ret := IsEmbeddedPath("modules/anything/else")
 	c.Assert(ret, Equals, true)
 
 	// False: Local path
-	ret = IsEmbeddedPath("./anything/else")
+	ret = IsEmbeddedPath("./modules/else")
 	c.Assert(ret, Equals, false)
 
-	ret = IsEmbeddedPath("./resources")
+	ret = IsEmbeddedPath("./modules")
 	c.Assert(ret, Equals, false)
 
-	ret = IsEmbeddedPath("../resources/")
+	ret = IsEmbeddedPath("../modules/")
 	c.Assert(ret, Equals, false)
 
 	// False, other
-	ret = IsEmbeddedPath("github.com/resources")
+	ret = IsEmbeddedPath("github.com/modules")
 	c.Assert(ret, Equals, false)
 }
 
 func (s *MySuite) TestIsLocalPath(c *C) {
 	// False: Embedded Path
-	ret := IsLocalPath("resources/anything/else")
+	ret := IsLocalPath("modules/anything/else")
 	c.Assert(ret, Equals, false)
 
 	// True: Local path
 	ret = IsLocalPath("./anything/else")
 	c.Assert(ret, Equals, true)
 
-	ret = IsLocalPath("./resources")
+	ret = IsLocalPath("./modules")
 	c.Assert(ret, Equals, true)
 
-	ret = IsLocalPath("../resources/")
+	ret = IsLocalPath("../modules/")
 	c.Assert(ret, Equals, true)
 
 	// False, other
-	ret = IsLocalPath("github.com/resources")
+	ret = IsLocalPath("github.com/modules")
 	c.Assert(ret, Equals, false)
 }
 
 func (s *MySuite) TestIsGitHubRepository(c *C) {
 	// False: Is an embedded path
-	ret := IsGitHubPath("resources/anything/else")
+	ret := IsGitHubPath("modules/anything/else")
 	c.Assert(ret, Equals, false)
 
 	// False: Local path
 	ret = IsGitHubPath("./anything/else")
 	c.Assert(ret, Equals, false)
 
-	ret = IsGitHubPath("./resources")
+	ret = IsGitHubPath("./modules")
 	c.Assert(ret, Equals, false)
 
-	ret = IsGitHubPath("../resources/")
+	ret = IsGitHubPath("../modules/")
 	c.Assert(ret, Equals, false)
 
 	// True, other
-	ret = IsGitHubPath("github.com/resources")
+	ret = IsGitHubPath("github.com/modules")
 	c.Assert(ret, Equals, true)
 }
 
 func (s *MySuite) TestFactory(c *C) {
-	// Local resources
-	locSrcReader := Factory("./resources/anything/else")
+	// Local modules
+	locSrcReader := Factory("./modules/anything/else")
 	c.Assert(reflect.TypeOf(locSrcReader), Equals, reflect.TypeOf(LocalSourceReader{}))
 
-	// Embedded resources
-	embSrcReader := Factory("resources/anything/else")
+	// Embedded modules
+	embSrcReader := Factory("modules/anything/else")
 	c.Assert(reflect.TypeOf(embSrcReader), Equals, reflect.TypeOf(EmbeddedSourceReader{}))
 
-	// GitHub resources
-	ghSrcString := Factory("github.com/resources")
+	// GitHub modules
+	ghSrcString := Factory("github.com/modules")
 	c.Assert(reflect.TypeOf(ghSrcString), Equals, reflect.TypeOf(GitHubSourceReader{}))
 }
 

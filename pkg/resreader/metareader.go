@@ -20,11 +20,11 @@ import (
 	"fmt"
 )
 
-// MetaReader implements ResReader for meta resources
+// MetaReader implements ResReader for meta modules
 type MetaReader struct {
 }
 
-// GetInfo reades ResourceInfo for a meta resource
-func (r MetaReader) GetInfo(source string) (ResourceInfo, error) {
-	return ResourceInfo{}, fmt.Errorf("Meta GetInfo not implemented: %s", source)
+// GetInfo reades ModuleInfo for a meta module
+func (r MetaReader) GetInfo(source string) (ModuleInfo, error) {
+	return ModuleInfo{}, fmt.Errorf("Meta GetInfo not implemented: %s", source)
 }

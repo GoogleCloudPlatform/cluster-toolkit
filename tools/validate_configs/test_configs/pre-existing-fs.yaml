@@ -24,22 +24,22 @@ vars:
   local_mount: /home
   network_name: default
 
-resource_groups:
+deployment_groups:
 - group: storage
-  resources:
+  modules:
   # the pre-existing-vpc is not needed here, since filestore will use the
   # network-name from global vars
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs-filestore
 
 - group: compute
-  resources:
-  - source: resources/network/pre-existing-vpc
+  modules:
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/pre-existing-network-storage
+  - source: modules/file-system/pre-existing-network-storage
     kind: terraform
     id: homefs
     settings:
@@ -48,7 +48,7 @@ resource_groups:
       local_mount: $(vars.local_mount)  # automatic, added here for clarity
       fs_type: nfs
 
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute-partition
     use:
@@ -57,7 +57,7 @@ resource_groups:
     settings:
       partition_name: compute
 
-  - source: ./resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm
     use:

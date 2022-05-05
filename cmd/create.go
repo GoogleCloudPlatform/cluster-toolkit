@@ -31,19 +31,19 @@ const msgCLIVars = "Comma-separated list of name=value variables to override YAM
 const msgCLIBackendConfig = "Comma-separated list of name=value variables to set Terraform backend configuration. Can be invoked multiple times."
 
 func init() {
-	createCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
-		"Configuration file for the new blueprints")
+	createCmd.Flags().StringVarP(&bpFilename, "config", "c", "",
+		"HPC Environment Blueprint file to be used to create an HPC deployment dir.")
 	cobra.CheckErr(createCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
 
-	createCmd.Flags().StringVarP(&bpDirectory, "out", "o", "",
-		"Output directory for the new blueprints")
+	createCmd.Flags().StringVarP(&outputDir, "out", "o", "",
+		"Output dir under which the HPC deployment dir will be created")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
 	createCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
 	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
-	createCmd.Flags().BoolVarP(&overwriteBlueprint, "overwrite-blueprint", "w", false,
-		"if set, an existing blueprint dir can be overwritten by the created blueprint. \n"+
+	createCmd.Flags().BoolVarP(&overwriteDeployment, "overwrite-deployment", "w", false,
+		"if set, an existing deployment dir can be overwritten by the newly created deployment. \n"+
 			"Note: Terraform state IS preserved. \n"+
 			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
 			"Note: Packer is NOT supported.")
@@ -51,43 +51,44 @@ func init() {
 }
 
 var (
-	yamlFilename        string
-	bpDirectory         string
-	cliVariables        []string
+	bpFilename   string
+	outputDir    string
+	cliVariables []string
+
 	cliBEConfigVars     []string
-	overwriteBlueprint  bool
+	overwriteDeployment bool
 	validationLevel     string
 	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
 	createCmd           = &cobra.Command{
 		Use:   "create FILENAME",
-		Short: "Create a new blueprint.",
-		Long:  "Create a new blueprint based on a provided YAML config.",
+		Short: "Create a new deployment.",
+		Long:  "Create a new deployment based on a provided blueprint.",
 		Run:   runCreateCmd,
 	}
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	if yamlFilename == "" {
+	if bpFilename == "" {
 		if len(args) == 0 {
 			fmt.Println(cmd.UsageString())
 			return
 		}
 
-		yamlFilename = args[0]
+		bpFilename = args[0]
 	}
 
-	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
-	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
+	deploymentConfig := config.NewDeploymentConfig(bpFilename)
+	if err := deploymentConfig.SetCLIVariables(cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
 	}
-	if err := blueprintConfig.SetBackendConfig(cliBEConfigVars); err != nil {
+	if err := deploymentConfig.SetBackendConfig(cliBEConfigVars); err != nil {
 		log.Fatalf("Failed to set the backend config at CLI: %v", err)
 	}
-	if err := blueprintConfig.SetValidationLevel(validationLevel); err != nil {
+	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
 		log.Fatal(err)
 	}
-	blueprintConfig.ExpandConfig()
-	if err := reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory, overwriteBlueprint); err != nil {
+	deploymentConfig.ExpandConfig()
+	if err := reswriter.WriteBlueprint(&deploymentConfig.Config, outputDir, overwriteDeployment); err != nil {
 		var target *reswriter.OverwriteDeniedError
 		if errors.As(err, &target) {
 			fmt.Printf("\n%s\n", err.Error())

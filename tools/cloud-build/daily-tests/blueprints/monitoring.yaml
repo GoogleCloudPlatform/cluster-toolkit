@@ -22,16 +22,16 @@ vars:
   region: us-central1
   zone: us-central1-c
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: resources/network/vpc
+  modules:
+  - source: modules/network/vpc
     kind: terraform
     id: network
     settings:
       network_name: monitoring-net
 
-  - source: resources/file-system/nfs-server
+  - source: community/modules/file-system/nfs-server
     kind: terraform
     id: homefs
     use: [network]
@@ -39,7 +39,7 @@ resource_groups:
       local_mounts: [/home]
       auto_delete_disk: true
 
-  - source: ./resources/scripts/startup-script
+  - source: ./modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -53,7 +53,7 @@ resource_groups:
       - $(homefs.install_nfs_client_runner)
       - $(homefs.mount_runner)
 
-  - source: ./resources/compute/simple-instance
+  - source: ./modules/compute/vm-instance
     kind: terraform
     id: workstation
     use:
@@ -65,7 +65,7 @@ resource_groups:
       metadata:
         enable-oslogin: TRUE
 
-  - source: ./resources/monitoring/dashboard
+  - source: ./modules/monitoring/dashboard
     kind: terraform
     id: hpc-dash
     settings:

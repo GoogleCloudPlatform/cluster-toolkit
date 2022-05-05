@@ -22,14 +22,14 @@ vars:
   region: us-central1
   zone: us-central1-a
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: ./resources/network/pre-existing-vpc
+  modules:
+  - source: ./modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: appsfs
     use: [network1]
@@ -37,14 +37,14 @@ resource_groups:
       name: appsfs
       local_mount: /apps
 
-  - source: resources/file-system/nfs-server
+  - source: community/modules/file-system/nfs-server
     kind: terraform
     id: nfs
     use: [network1]
     settings:
       image: rocky-linux-cloud/rocky-linux-8
 
-  - source: ./resources/scripts/spack-install
+  - source: ./community//modules/scripts/spack-install
     kind: terraform
     id: spack
     settings:
@@ -64,7 +64,7 @@ resource_groups:
         fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5
         target=x86_64
 
-  - source: ./resources/scripts/startup-script
+  - source: ./modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -101,7 +101,7 @@ resource_groups:
         content: $(spack.startup_script)
         destination: "/apps/spack-install.sh"
 
-  - source: ./resources/compute/simple-instance
+  - source: ./modules/compute/vm-instance
     kind: terraform
     id: instance
     use: [network1, startup, nfs, appsfs]

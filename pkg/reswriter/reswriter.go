@@ -14,7 +14,7 @@
 * limitations under the License.
  */
 
-// Package reswriter writes resources to a blueprint directory
+// Package reswriter writes modules to a blueprint directory
 package reswriter
 
 import (
@@ -30,20 +30,20 @@ import (
 )
 
 const (
-	hiddenGhpcDirName        = ".ghpc"
-	prevResourceGroupDirName = "previous_resource_groups"
-	gitignoreTemplate        = "blueprint.gitignore.tmpl"
+	hiddenGhpcDirName          = ".ghpc"
+	prevDeploymentGroupDirName = "previous_resource_groups"
+	gitignoreTemplate          = "blueprint.gitignore.tmpl"
 )
 
-// ResWriter interface for writing resources to a blueprint
-type ResWriter interface {
-	getNumResources() int
-	addNumResources(int)
-	writeResourceGroups(*config.YamlConfig, string) error
-	restoreState(bpDir string) error
+// ModWriter interface for writing modules to a blueprint
+type ModWriter interface {
+	getNumModules() int
+	addNumModules(int)
+	writeDeploymentGroups(*config.Blueprint, string) error
+	restoreState(deploymentDir string) error
 }
 
-var kinds = map[string]ResWriter{
+var kinds = map[string]ModWriter{
 	"terraform": new(TFWriter),
 	"packer":    new(PackerWriter),
 }
@@ -51,33 +51,36 @@ var kinds = map[string]ResWriter{
 //go:embed *.tmpl
 var templatesFS embed.FS
 
-func factory(kind string) ResWriter {
+func factory(kind string) ModWriter {
 	writer, exists := kinds[kind]
 	if !exists {
 		log.Fatalf(
-			"reswriter: Resource kind (%s) is not valid. "+
+			"reswriter: Module kind (%s) is not valid. "+
 				"kind must be in (terraform, blueprint-controller).", kind)
 	}
 	return writer
 }
 
-// WriteBlueprint writes the blueprint using resources defined in config.
-func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFlag bool) error {
-	bpDir := filepath.Join(outputDir, yamlConfig.BlueprintName)
+// WriteBlueprint writes a deployment directory using modules defined the environment blueprint.
+func WriteBlueprint(blueprint *config.Blueprint, outputDir string, overwriteFlag bool) error {
+	deploymentName, err := blueprint.DeploymentName()
+	if err != nil {
+		return err
+	}
+	deploymentDir := filepath.Join(outputDir, deploymentName)
 
-	overwrite := isOverwriteAllowed(bpDir, yamlConfig, overwriteFlag)
-	if err := prepBpDir(bpDir, overwrite); err != nil {
+	overwrite := isOverwriteAllowed(deploymentDir, blueprint, overwriteFlag)
+	if err := prepBpDir(deploymentDir, overwrite); err != nil {
 		return err
 	}
 
-	copySource(bpDir, &yamlConfig.ResourceGroups)
-
+	copySource(deploymentDir, &blueprint.DeploymentGroups)
 	for _, writer := range kinds {
-		if writer.getNumResources() > 0 {
-			if err := writer.writeResourceGroups(yamlConfig, outputDir); err != nil {
-				return fmt.Errorf("error writing resources to blueprint: %w", err)
+		if writer.getNumModules() > 0 {
+			if err := writer.writeDeploymentGroups(blueprint, outputDir); err != nil {
+				return fmt.Errorf("error writing modules to deployment: %w", err)
 			}
-			if err := writer.restoreState(bpDir); err != nil {
+			if err := writer.restoreState(deploymentDir); err != nil {
 				return fmt.Errorf("Error trying to restore terraform state: %w", err)
 			}
 		}
@@ -85,37 +88,37 @@ func WriteBlueprint(yamlConfig *config.YamlConfig, outputDir string, overwriteFl
 	return nil
 }
 
-func copySource(blueprintPath string, resourceGroups *[]config.ResourceGroup) {
-	for iGrp, grp := range *resourceGroups {
-		for iRes, resource := range grp.Resources {
-			if sourcereader.IsGitHubPath(resource.Source) {
+func copySource(blueprintPath string, deploymentGroups *[]config.DeploymentGroup) {
+	for iGrp, grp := range *deploymentGroups {
+		for iMod, module := range grp.Modules {
+			if sourcereader.IsGitHubPath(module.Source) {
 				continue
 			}
 
 			/* Copy source files */
-			resourceName := filepath.Base(resource.Source)
-			(*resourceGroups)[iGrp].Resources[iRes].ResourceName = resourceName
+			moduleName := filepath.Base(module.Source)
+			(*deploymentGroups)[iGrp].Modules[iMod].ModuleName = moduleName
 			basePath := filepath.Join(blueprintPath, grp.Name)
 			var destPath string
-			switch resource.Kind {
+			switch module.Kind {
 			case "terraform":
-				destPath = filepath.Join(basePath, "modules", resourceName)
+				destPath = filepath.Join(basePath, "modules", moduleName)
 			case "packer":
-				destPath = filepath.Join(basePath, resource.ID)
+				destPath = filepath.Join(basePath, module.ID)
 			}
 			_, err := os.Stat(destPath)
 			if err == nil {
 				continue
 			}
 
-			reader := sourcereader.Factory(resource.Source)
-			if err := reader.GetResource(resource.Source, destPath); err != nil {
-				log.Fatalf("failed to get resource from %s to %s: %v", resource.Source, destPath, err)
+			reader := sourcereader.Factory(module.Source)
+			if err := reader.GetModule(module.Source, destPath); err != nil {
+				log.Fatalf("failed to get module from %s to %s: %v", module.Source, destPath, err)
 			}
 
-			/* Create resource level files */
-			writer := factory(resource.Kind)
-			writer.addNumResources(1)
+			/* Create module level files */
+			writer := factory(module.Kind)
+			writer.addNumModules(1)
 		}
 	}
 }
@@ -126,7 +129,7 @@ func printInstructionsPreamble(kind string, path string) {
 }
 
 // Determines if overwrite is allowed
-func isOverwriteAllowed(bpDir string, overwritingConfig *config.YamlConfig, overwriteFlag bool) bool {
+func isOverwriteAllowed(bpDir string, overwritingConfig *config.Blueprint, overwriteFlag bool) bool {
 	if !overwriteFlag {
 		return false
 	}
@@ -145,7 +148,7 @@ func isOverwriteAllowed(bpDir string, overwritingConfig *config.YamlConfig, over
 	}
 
 	var curGroups []string
-	for _, group := range overwritingConfig.ResourceGroups {
+	for _, group := range overwritingConfig.DeploymentGroups {
 		curGroups = append(curGroups, group.Name)
 	}
 
@@ -176,7 +179,7 @@ func (err *OverwriteDeniedError) Error() string {
 	return fmt.Sprintf("Failed to overwrite existing blueprint.\n\n"+
 		"Use the -w command line argument to enable overwrite.\n"+
 		"If overwrite is already enabled then this may be because "+
-		"you are attempting to remove a resource group, which is not supported.\n"+
+		"you are attempting to remove a deployment group, which is not supported.\n"+
 		"original error: %v",
 		err.cause)
 }
@@ -209,10 +212,10 @@ func prepBpDir(bpDir string, overwrite bool) error {
 	}
 
 	// clean up old dirs
-	prevGroupDir := filepath.Join(ghpcDir, prevResourceGroupDirName)
+	prevGroupDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
-		return fmt.Errorf("Failed to create directory to save previous resource groups at %s: %w", prevGroupDir, err)
+		return fmt.Errorf("Failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
 	}
 
 	// move resource groups
@@ -227,7 +230,7 @@ func prepBpDir(bpDir string, overwrite bool) error {
 		src := filepath.Join(bpDir, f.Name())
 		dest := filepath.Join(prevGroupDir, f.Name())
 		if err := os.Rename(src, dest); err != nil {
-			return fmt.Errorf("Error while moving previous resource groups: failed on %s: %w", f.Name(), err)
+			return fmt.Errorf("Error while moving previous deployment groups: failed on %s: %w", f.Name(), err)
 		}
 	}
 	return nil

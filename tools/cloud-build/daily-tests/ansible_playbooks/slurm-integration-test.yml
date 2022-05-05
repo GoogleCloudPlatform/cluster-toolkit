@@ -30,8 +30,8 @@
       path: "/builder/home/.ssh/id_rsa"
 
   ## Create cluster
-  - name: Create blueprint
-    command: "{{ scripts_dir }}/create_blueprint.sh"
+  - name: Create Deployment Directory
+    command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
       MAX_NODES: "{{ max_nodes }}"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
@@ -41,15 +41,15 @@
       DEPLOYMENT_NAME: "{{ deployment_name }}"
       NETWORK: "{{ network }}"
     args:
-      creates: "{{ workspace }}/{{ blueprint_dir }}.tgz"
+      creates: "{{ workspace }}/{{ deployment_name }}.tgz"
   - name: Create Infrastructure and test
     block:
     - name: Create Cluster with Terraform
       command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
+        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
       args:
-        creates: "{{ workspace }}/{{ blueprint_dir }}/.terraform"
+        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
       environment:
         TF_IN_AUTOMATION: "TRUE"
       with_items:
@@ -123,7 +123,7 @@
         TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
+        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
     - name: Fail Out
       fail:
         msg: "Failed while setting up test infrastructure"
@@ -187,4 +187,4 @@
         TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
+        chdir: "{{ workspace }}/{{ deployment_name }}/primary"

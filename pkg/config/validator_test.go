@@ -33,68 +33,68 @@ const (
 	undefinedGlobalVariableRegex = ".* was not defined$"
 )
 
-func (s *MySuite) TestValidateResources(c *C) {
-	bc := getBlueprintConfigForTest()
-	bc.validateResources()
+func (s *MySuite) TestValidateModules(c *C) {
+	dc := getDeploymentConfigForTest()
+	dc.validateModules()
 }
 
 func (s *MySuite) TestValidateVars(c *C) {
 	// Success
-	bc := getBlueprintConfigForTest()
-	err := bc.validateVars()
+	dc := getDeploymentConfigForTest()
+	err := dc.validateVars()
 	c.Assert(err, IsNil)
 
 	// Fail: Nil project_id
-	bc.Config.Vars["project_id"] = nil
-	err = bc.validateVars()
+	dc.Config.Vars["project_id"] = nil
+	err = dc.validateVars()
 	c.Assert(err, ErrorMatches, "global variable project_id was not set")
 
 	// Success: project_id not set
-	delete(bc.Config.Vars, "project_id")
+	delete(dc.Config.Vars, "project_id")
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
-	err = bc.validateVars()
+	err = dc.validateVars()
 	log.SetOutput(os.Stderr)
 	c.Assert(err, IsNil)
 	hasWarning := strings.Contains(buf.String(), "WARNING: No project_id")
 	c.Assert(hasWarning, Equals, true)
 
 	// Fail: labels not a map
-	bc.Config.Vars["labels"] = "a_string"
-	err = bc.validateVars()
+	dc.Config.Vars["labels"] = "a_string"
+	err = dc.validateVars()
 	c.Assert(err, ErrorMatches, "vars.labels must be a map")
 }
 
-func (s *MySuite) TestValidateResouceSettings(c *C) {
-	testSource := filepath.Join(tmpTestDir, "resource")
+func (s *MySuite) TestValidateModuleSettings(c *C) {
+	testSource := filepath.Join(tmpTestDir, "module")
 	testSettings := map[string]interface{}{
 		"test_variable": "test_value",
 	}
-	testResourceGroup := ResourceGroup{
+	testDeploymentGroup := DeploymentGroup{
 		Name:             "",
 		TerraformBackend: TerraformBackend{},
-		Resources:        []Resource{{Kind: "terraform", Source: testSource, Settings: testSettings}},
+		Modules:          []Module{{Kind: "terraform", Source: testSource, Settings: testSettings}},
 	}
-	bc := BlueprintConfig{
-		Config:          YamlConfig{ResourceGroups: []ResourceGroup{testResourceGroup}},
-		ResourcesInfo:   map[string]map[string]resreader.ResourceInfo{},
-		ResourceToGroup: map[string]int{},
-		expanded:        false,
+	dc := DeploymentConfig{
+		Config:        Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
+		ModulesInfo:   map[string]map[string]resreader.ModuleInfo{},
+		ModuleToGroup: map[string]int{},
+		expanded:      false,
 	}
-	bc.validateResourceSettings()
+	dc.validateModuleSettings()
 }
 
 func (s *MySuite) TestValidateSettings(c *C) {
 	// Succeeds: No settings, no variables
-	res := Resource{}
-	info := resreader.ResourceInfo{}
-	err := validateSettings(res, info)
+	mod := Module{}
+	info := resreader.ModuleInfo{}
+	err := validateSettings(mod, info)
 	c.Assert(err, IsNil)
 
 	// Failes One required variable, no settings
-	res.Settings = make(map[string]interface{})
-	res.Settings["TestSetting"] = "TestValue"
-	err = validateSettings(res, info)
+	mod.Settings = make(map[string]interface{})
+	mod.Settings["TestSetting"] = "TestValue"
+	err = validateSettings(mod, info)
 	expErr := fmt.Sprintf("%s: .*", errorMessages["extraSetting"])
 	c.Assert(err, ErrorMatches, expErr)
 
@@ -102,90 +102,90 @@ func (s *MySuite) TestValidateSettings(c *C) {
 	info.Inputs = []resreader.VarInfo{
 		{Name: "TestSetting", Required: true},
 	}
-	err = validateSettings(res, info)
+	err = validateSettings(mod, info)
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestValidateResource(c *C) {
+func (s *MySuite) TestValidateModule(c *C) {
 	// Catch no ID
-	testResource := Resource{
+	testModule := Module{
 		ID:     "",
 		Source: "testSource",
 	}
-	err := validateResource(testResource)
+	err := validateModule(testModule)
 	expectedErrorStr := fmt.Sprintf(
-		"%s\n%s", errorMessages["emptyID"], resource2String(testResource))
+		"%s\n%s", errorMessages["emptyID"], module2String(testModule))
 	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Catch no Source
-	testResource.ID = "testResource"
-	testResource.Source = ""
-	err = validateResource(testResource)
+	testModule.ID = "testModule"
+	testModule.Source = ""
+	err = validateModule(testModule)
 	expectedErrorStr = fmt.Sprintf(
-		"%s\n%s", errorMessages["emptySource"], resource2String(testResource))
+		"%s\n%s", errorMessages["emptySource"], module2String(testModule))
 	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Catch invalid kind
-	testResource.Source = "testSource"
-	testResource.Kind = ""
-	err = validateResource(testResource)
+	testModule.Source = "testSource"
+	testModule.Kind = ""
+	err = validateModule(testModule)
 	expectedErrorStr = fmt.Sprintf(
-		"%s\n%s", errorMessages["wrongKind"], resource2String(testResource))
+		"%s\n%s", errorMessages["wrongKind"], module2String(testModule))
 	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Successful validation
-	testResource.Kind = "terraform"
-	err = validateResource(testResource)
+	testModule.Kind = "terraform"
+	err = validateModule(testModule)
 	c.Assert(err, IsNil)
 }
 
 func (s *MySuite) TestValidateOutputs(c *C) {
 	// Simple case, no outputs in either
-	testRes := Resource{ID: "testRes"}
-	testInfo := resreader.ResourceInfo{Outputs: []resreader.VarInfo{}}
-	err := validateOutputs(testRes, testInfo)
+	testMod := Module{ID: "testMod"}
+	testInfo := resreader.ModuleInfo{Outputs: []resreader.VarInfo{}}
+	err := validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
-	// Output in varInfo, nothing in resource
+	// Output in varInfo, nothing in module
 	matchingName := "match"
 	testVarInfo := resreader.VarInfo{Name: matchingName}
 	testInfo.Outputs = append(testInfo.Outputs, testVarInfo)
-	err = validateOutputs(testRes, testInfo)
+	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
-	// Output matches between varInfo and resource
-	testRes.Outputs = []string{matchingName}
-	err = validateOutputs(testRes, testInfo)
+	// Output matches between varInfo and module
+	testMod.Outputs = []string{matchingName}
+	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
-	// Addition output found in resources, not in varinfo
+	// Addition output found in modules, not in varinfo
 	missingName := "missing"
-	testRes.Outputs = append(testRes.Outputs, missingName)
-	err = validateOutputs(testRes, testInfo)
+	testMod.Outputs = append(testMod.Outputs, missingName)
+	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, Not(IsNil))
 	expErr := fmt.Sprintf("%s.*", errorMessages["invalidOutput"])
 	c.Assert(err, ErrorMatches, expErr)
 }
 
 func (s *MySuite) TestAddDefaultValidators(c *C) {
-	bc := getBlueprintConfigForTest()
-	bc.addDefaultValidators()
-	c.Assert(bc.Config.Validators, HasLen, 0)
+	dc := getDeploymentConfigForTest()
+	dc.addDefaultValidators()
+	c.Assert(dc.Config.Validators, HasLen, 0)
 
-	bc.Config.Validators = nil
-	bc.Config.Vars["project_id"] = "not-a-project"
-	bc.addDefaultValidators()
-	c.Assert(bc.Config.Validators, HasLen, 1)
+	dc.Config.Validators = nil
+	dc.Config.Vars["project_id"] = "not-a-project"
+	dc.addDefaultValidators()
+	c.Assert(dc.Config.Validators, HasLen, 1)
 
-	bc.Config.Validators = nil
-	bc.Config.Vars["region"] = "us-central1"
-	bc.addDefaultValidators()
-	c.Assert(bc.Config.Validators, HasLen, 2)
+	dc.Config.Validators = nil
+	dc.Config.Vars["region"] = "us-central1"
+	dc.addDefaultValidators()
+	c.Assert(dc.Config.Validators, HasLen, 2)
 
-	bc.Config.Validators = nil
-	bc.Config.Vars["zone"] = "us-central1-c"
-	bc.addDefaultValidators()
-	c.Assert(bc.Config.Validators, HasLen, 4)
+	dc.Config.Validators = nil
+	dc.Config.Vars["zone"] = "us-central1-c"
+	dc.addDefaultValidators()
+	c.Assert(dc.Config.Validators, HasLen, 4)
 }
 
 func (s *MySuite) TestTestInputList(c *C) {
@@ -234,49 +234,49 @@ func (s *MySuite) TestTestInputList(c *C) {
 // if it is a literal global variable defined as a string, return value as string
 // in all other cases, return empty string and error
 func (s *MySuite) TestGetStringValue(c *C) {
-	bc := getBlueprintConfigForTest()
-	bc.Config.Vars["goodvar"] = "testval"
-	bc.Config.Vars["badvar"] = 2
+	dc := getDeploymentConfigForTest()
+	dc.Config.Vars["goodvar"] = "testval"
+	dc.Config.Vars["badvar"] = 2
 
 	// test non-string values return error
-	_, err := bc.getStringValue(2)
+	_, err := dc.getStringValue(2)
 	c.Assert(err, Not(IsNil))
 
 	// test strings that are not literal variables return error and empty string
-	strVal, err := bc.getStringValue("hello")
+	strVal, err := dc.getStringValue("hello")
 	c.Assert(err, Not(IsNil))
 	c.Assert(strVal, Equals, "")
 
 	// test literal variables that refer to strings return their value
-	strVal, err = bc.getStringValue("(( var.goodvar ))")
+	strVal, err = dc.getStringValue("(( var.goodvar ))")
 	c.Assert(err, IsNil)
-	c.Assert(strVal, Equals, bc.Config.Vars["goodvar"])
+	c.Assert(strVal, Equals, dc.Config.Vars["goodvar"])
 
 	// test literal variables that refer to non-strings return error
-	_, err = bc.getStringValue("(( var.badvar ))")
+	_, err = dc.getStringValue("(( var.badvar ))")
 	c.Assert(err, Not(IsNil))
 }
 
 func (s *MySuite) TestExecuteValidators(c *C) {
-	bc := getBlueprintConfigForTest()
-	bc.Config.Validators = []validatorConfig{
+	dc := getDeploymentConfigForTest()
+	dc.Config.Validators = []validatorConfig{
 		{
 			Validator: "unimplemented-validator",
 			Inputs:    map[string]interface{}{},
 		},
 	}
 
-	err := bc.executeValidators()
+	err := dc.executeValidators()
 	c.Assert(err, ErrorMatches, validationErrorMsg)
 
-	bc.Config.Validators = []validatorConfig{
+	dc.Config.Validators = []validatorConfig{
 		{
 			Validator: testProjectExistsName.String(),
 			Inputs:    map[string]interface{}{},
 		},
 	}
 
-	err = bc.executeValidators()
+	err = dc.executeValidators()
 	c.Assert(err, ErrorMatches, validationErrorMsg)
 }
 
@@ -286,11 +286,11 @@ func (s *MySuite) TestExecuteValidators(c *C) {
 // development of mock functions for Cloud API calls
 func (s *MySuite) TestProjectExistsValidator(c *C) {
 	var err error
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 	emptyValidator := validatorConfig{}
 
 	// test validator fails for config without validator id
-	err = bc.testProjectExists(emptyValidator)
+	err = dc.testProjectExists(emptyValidator)
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	// test validator fails for config without any inputs
@@ -298,12 +298,12 @@ func (s *MySuite) TestProjectExistsValidator(c *C) {
 		Validator: testProjectExistsName.String(),
 		Inputs:    map[string]interface{}{},
 	}
-	err = bc.testProjectExists(projectValidator)
+	err = dc.testProjectExists(projectValidator)
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
 	projectValidator.Inputs["project_id"] = "((var.project_id))"
-	err = bc.testProjectExists(projectValidator)
+	err = dc.testProjectExists(projectValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
 	// TODO: implement a mock client to test success of test_project_exists
@@ -311,11 +311,11 @@ func (s *MySuite) TestProjectExistsValidator(c *C) {
 
 func (s *MySuite) TestRegionExistsValidator(c *C) {
 	var err error
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 	emptyValidator := validatorConfig{}
 
 	// test validator fails for config without validator id
-	err = bc.testRegionExists(emptyValidator)
+	err = dc.testRegionExists(emptyValidator)
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	// test validator fails for config without any inputs
@@ -323,16 +323,16 @@ func (s *MySuite) TestRegionExistsValidator(c *C) {
 		Validator: testRegionExistsName.String(),
 		Inputs:    map[string]interface{}{},
 	}
-	err = bc.testRegionExists(regionValidator)
+	err = dc.testRegionExists(regionValidator)
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
 	regionValidator.Inputs["project_id"] = "((var.project_id))"
 	regionValidator.Inputs["region"] = "((var.region))"
-	err = bc.testRegionExists(regionValidator)
+	err = dc.testRegionExists(regionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
-	bc.Config.Vars["project_id"] = "invalid-project"
-	err = bc.testRegionExists(regionValidator)
+	dc.Config.Vars["project_id"] = "invalid-project"
+	err = dc.testRegionExists(regionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
 	// TODO: implement a mock client to test success of test_region_exists
@@ -340,11 +340,11 @@ func (s *MySuite) TestRegionExistsValidator(c *C) {
 
 func (s *MySuite) TestZoneExistsValidator(c *C) {
 	var err error
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 	emptyValidator := validatorConfig{}
 
 	// test validator fails for config without validator id
-	err = bc.testZoneExists(emptyValidator)
+	err = dc.testZoneExists(emptyValidator)
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	// test validator fails for config without any inputs
@@ -352,16 +352,16 @@ func (s *MySuite) TestZoneExistsValidator(c *C) {
 		Validator: testZoneExistsName.String(),
 		Inputs:    map[string]interface{}{},
 	}
-	err = bc.testZoneExists(zoneValidator)
+	err = dc.testZoneExists(zoneValidator)
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
 	zoneValidator.Inputs["project_id"] = "((var.project_id))"
 	zoneValidator.Inputs["zone"] = "((var.zone))"
-	err = bc.testZoneExists(zoneValidator)
+	err = dc.testZoneExists(zoneValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
-	bc.Config.Vars["project_id"] = "invalid-project"
-	err = bc.testZoneExists(zoneValidator)
+	dc.Config.Vars["project_id"] = "invalid-project"
+	err = dc.testZoneExists(zoneValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
 	// TODO: implement a mock client to test success of test_zone_exists
@@ -369,11 +369,11 @@ func (s *MySuite) TestZoneExistsValidator(c *C) {
 
 func (s *MySuite) TestZoneInRegionValidator(c *C) {
 	var err error
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 	emptyValidator := validatorConfig{}
 
 	// test validator fails for config without validator id
-	err = bc.testZoneInRegion(emptyValidator)
+	err = dc.testZoneInRegion(emptyValidator)
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	// test validator fails for config without any inputs
@@ -381,20 +381,20 @@ func (s *MySuite) TestZoneInRegionValidator(c *C) {
 		Validator: testZoneInRegionName.String(),
 		Inputs:    map[string]interface{}{},
 	}
-	err = bc.testZoneInRegion(zoneInRegionValidator)
+	err = dc.testZoneInRegion(zoneInRegionValidator)
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
 	zoneInRegionValidator.Inputs["project_id"] = "((var.project_id))"
 	zoneInRegionValidator.Inputs["region"] = "((var.region))"
 	zoneInRegionValidator.Inputs["zone"] = "((var.zone))"
-	err = bc.testZoneInRegion(zoneInRegionValidator)
+	err = dc.testZoneInRegion(zoneInRegionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
-	bc.Config.Vars["project_id"] = "invalid-project"
-	err = bc.testZoneInRegion(zoneInRegionValidator)
+	dc.Config.Vars["project_id"] = "invalid-project"
+	err = dc.testZoneInRegion(zoneInRegionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
-	bc.Config.Vars["zone"] = "invalid-zone"
-	err = bc.testZoneInRegion(zoneInRegionValidator)
+	dc.Config.Vars["zone"] = "invalid-zone"
+	err = dc.testZoneInRegion(zoneInRegionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
 	// TODO: implement a mock client to test success of test_zone_in_region

@@ -21,20 +21,21 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
 
-// getHCLInfo is wrapped by SourceReader interface which supports multiple sources and stores remote resources locally,
-// so the given source parameter to getHCLInfo is only a local path.
-func getHCLInfo(source string) (ResourceInfo, error) {
-	ret := ResourceInfo{}
+// getHCLInfo is wrapped by SourceReader interface which supports multiple
+// sources and stores remote modules locally, so the given source parameter to
+// getHCLInfo is only a local path.
+func getHCLInfo(source string) (ModuleInfo, error) {
+	ret := ModuleInfo{}
 
 	fileInfo, err := os.Stat(source)
 	if os.IsNotExist(err) {
-		return ret, fmt.Errorf("Source to resource does not exist: %s", source)
+		return ret, fmt.Errorf("Source to module does not exist: %s", source)
 	}
 	if err != nil {
-		return ret, fmt.Errorf("Failed to read source of resource: %s", source)
+		return ret, fmt.Errorf("Failed to read source of module: %s", source)
 	}
 	if !fileInfo.IsDir() {
-		return ret, fmt.Errorf("Source of resource must be a directory: %s", source)
+		return ret, fmt.Errorf("Source of module must be a directory: %s", source)
 	}
 	if !tfconfig.IsModuleDir(source) {
 		return ret, fmt.Errorf("Source is not a terraform or packer module: %s", source)

@@ -22,21 +22,21 @@ vars:
   region: europe-west4
   zone: europe-west4-a
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: resources/network/pre-existing-vpc
+  modules:
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
     settings:
       local_mount: /home
 
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:
@@ -51,7 +51,7 @@ resource_groups:
         source: "modules/startup-script/examples/mount.yaml"
         destination: "tmp.sh"
 
-  - source: resources/compute/simple-instance
+  - source: modules/compute/vm-instance
     kind: terraform
     id: workstation
     use:
@@ -62,7 +62,7 @@ resource_groups:
       metadata:
         startup-script: $(startup.startup_script)
 
-  - source: ./resources/scripts/wait-for-startup
+  - source: ./community/modules/scripts/wait-for-startup
     kind: terraform
     id: wait
     settings:
