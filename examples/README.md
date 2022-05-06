@@ -60,6 +60,17 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
 
+[hpc-cluster-intel-select.yaml]: ../community/examples/intel/hpc-cluster-intel-select.yaml
+[intel-examples-readme]: ../community/examples/intel/README.md
+[intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
+
+### [hpc-cluster-intel-select.yaml] ![community-badge]
+
+This example provisions a Slurm cluster [automating the steps to comply to the
+Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
+more extensively discussed in a dedicated [README for Intel
+examples][intel-examples-readme].
+
 ### [hpc-cluster-small.yaml] ![core-badge]
 
 Creates a basic auto-scaling SLURM cluster with mostly default settings. The
