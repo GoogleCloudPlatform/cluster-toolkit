@@ -11,6 +11,7 @@ The Google Cloud [HPC VM Image][hpcvmimage] has a built-in feature enabling it
 to install a Google Cloud-tested release of Intel compilers and libraries that
 are known to achieve optimal performance on Google Cloud.
 
+[tutorial]: ../../../docs/tutorials/intel-select/intel-select.md
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
 ## Provisioning the Intel-optimized Slurm cluster
@@ -26,6 +27,9 @@ Toolkit guidance to enable [APIs][apis] and establish minimum resource
 
 * file.googleapis.com (Cloud Filestore)
 * compute.googleapis.com (Google Compute Engine)
+
+[apis]: ../../../README.md#enable-gcp-apis
+[quotas]: ../../../README.md#gcp-quotas
 
 And the following available quota is required in the region used by the cluster:
 
