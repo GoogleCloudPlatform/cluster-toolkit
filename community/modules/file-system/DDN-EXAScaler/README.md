@@ -13,8 +13,6 @@ subnetwork where
 [Private Google Access](https://cloud.google.com/vpc/docs/configure-private-google-access)
 is enabled.
 
-**WARNING**: This is an experimental module and is not fully supported.
-
 **WARNING**: This file system has a license cost as described in the pricing
 section of the [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
 
