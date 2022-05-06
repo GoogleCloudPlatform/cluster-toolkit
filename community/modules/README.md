@@ -23,7 +23,7 @@ module documentation](../../modules/README.md).
   configures an NFS server that can be mounted by other VM instances.
 
 * [**DDN-EXAScaler**](third-party/file-system/DDN-EXAScaler/README.md): Creates
-  a [DDN Exascaler lustre](<https://www.ddn.com/partners/google-cloud-platform/>)
+  a [DDN EXAscaler lustre](<https://www.ddn.com/partners/google-cloud-platform/>)
   file system. This module has
   [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
 

@@ -34,7 +34,7 @@ File System
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system to be mounted..
 * **[DDN-EXAScaler]** ![community-badge] : Creates
-  a [DDN Exascaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
+  a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
   file system. This module has
   [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
