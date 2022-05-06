@@ -43,7 +43,24 @@ You can set the configuration at CLI as well like below:
 
 ## Blueprint Descriptions
 
-### hpc-cluster-small.yaml
+[core-badge]: https://img.shields.io/badge/-core-blue?style=plastic
+[community-badge]: https://img.shields.io/badge/-community-%23b8def4?style=plastic
+[stable-badge]: https://img.shields.io/badge/-stable-lightgrey?style=plastic
+[experimental-badge]: https://img.shields.io/badge/-experimental-%23febfa2?style=plastic
+
+The example blueprints listed below labeled with the core badge
+(![core-badge]) are located in this folder and are developed and tested by the
+HPC Toolkit team directly.
+
+The community blueprints are contributed by the community (including the HPC
+Toolkit team, partners, etc.) and are labeled with the community badge
+(![community-badge]). The community blueprints are located in the
+[community folder](../community/examples/README.md).
+
+Blueprints that are still in development and less stable are also labeled with
+the experimental badge (![experimental-badge]).
+
+### [hpc-cluster-small.yaml] ![core-badge]
 
 Creates a basic auto-scaling SLURM cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
@@ -54,6 +71,8 @@ partition uses `n2-standard-2` VMs, which should work out of the box without
 needing to request additional quota. The purpose of the `debug` partition is to
 make sure that first time users are not immediately blocked by quota
 limitations.
+
+[hpc-cluster-small.yaml]: ./hpc-cluster-small.yaml
 
 #### Compute Partition
 
@@ -75,7 +94,7 @@ Quota required for this example:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### hpc-cluster-high-io.yaml
+### [hpc-cluster-high-io.yaml] ![core-badge]
 
 Creates a slurm cluster with tiered file systems for higher performance. It
 connects to the default VPC of the project and creates two partitions and a
@@ -113,7 +132,9 @@ Quota required for this example:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### image-builder.yaml
+[hpc-cluster-high-io.yaml]: ./hpc-cluster-high-io.yaml
+
+### [image-builder.yaml] ![core-badge]
 
 This Blueprint uses the [Packer template module][pkr] to create custom VM images
 by applying software and configurations to existing images.
@@ -177,6 +198,7 @@ boot-time startup scripts because:
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [pkr]: ../modules/packer/custom-image/README.md
+[image-builder.yaml]: ./image-builder.yaml
 
 #### Custom Network (deployment group 1)
 
@@ -246,7 +268,7 @@ file that was added during image build:
   Hello World
   ```
 
-### (Community) spack-gromacs.yaml
+### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Spack is a HPC software package manager. This example creates a small slurm
 cluster with software installed with
@@ -291,12 +313,16 @@ spack load gromacs
 hours to run on startup. To decrease this time in future deployments, consider
 including a spack build cache as described in the comments of the example.
 
-### (Community) omnia-cluster.yaml
+[spack-gromacs.yaml]: ../community/examples/spack-gromacs.yaml
+
+### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
 Creates a simple omnia cluster, with an
 omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
+
+[omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
 ## Blueprint Schema
 
