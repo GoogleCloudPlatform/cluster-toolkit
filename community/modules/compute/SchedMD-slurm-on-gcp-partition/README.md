@@ -24,6 +24,14 @@ connected to a module subnetwork and with homefs mounted.
     - $(homefs.network_storage)
 ```
 
+## Support
+The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
+modules. For support with the underlying modules, see the instructions in the
+[slurm-gcp README][slurm-gcp-readme].
+
+[slurm-on-gcp]: https://github.com/SchedMD/slurm-gcp
+[slurm-gcp-readme]: https://github.com/SchedMD/slurm-gcp#slurm-on-google-cloud-platform
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 

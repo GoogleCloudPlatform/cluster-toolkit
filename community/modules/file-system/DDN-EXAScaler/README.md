@@ -18,6 +18,15 @@ section of the [DDN EXAScaler Cloud Marketplace Solution](https://console.develo
 
 More information about the architecture can be found at [Architecture: Lustre file system in Google Cloud using DDN EXAScaler](https://cloud.google.com/architecture/lustre-architecture).
 
+## Support
+EXAScaler Cloud includes self-help support with access to publicly available
+documents and videos. Premium support includes 24x7x365 access to DDN's experts,
+along with support community access, automated notifications of updates and
+other premium support features. For more information, visit
+[EXAscaler Cloud on GCP][exa-gcp].
+
+[exa-gcp]: https://console.cloud.google.com/marketplace/product/ddnstorage/exascaler-cloud
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
