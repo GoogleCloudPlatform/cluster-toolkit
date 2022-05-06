@@ -39,7 +39,11 @@ const (
 type ModWriter interface {
 	getNumModules() int
 	addNumModules(int)
-	writeDeploymentGroups(*config.Blueprint, string) error
+	writeDeploymentGroup(
+		depGroup config.DeploymentGroup,
+		globalVars map[string]interface{},
+		deployDir string,
+	) error
 	restoreState(deploymentDir string) error
 }
 
@@ -75,13 +79,32 @@ func WriteBlueprint(blueprint *config.Blueprint, outputDir string, overwriteFlag
 	}
 
 	copySource(deploymentDir, &blueprint.DeploymentGroups)
+
+	for _, grp := range blueprint.DeploymentGroups {
+
+		deploymentName, err := blueprint.DeploymentName()
+		if err != nil {
+			return err
+		}
+
+		deploymentPath := filepath.Join(outputDir, deploymentName)
+		writer, ok := kinds[grp.Kind]
+		if !ok {
+			return fmt.Errorf(
+				"Invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
+		}
+
+		if err := writer.writeDeploymentGroup(
+			grp, blueprint.Vars, deploymentPath,
+		); err != nil {
+			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
+		}
+	}
+
 	for _, writer := range kinds {
 		if writer.getNumModules() > 0 {
-			if err := writer.writeDeploymentGroups(blueprint, outputDir); err != nil {
-				return fmt.Errorf("error writing modules to deployment: %w", err)
-			}
 			if err := writer.restoreState(deploymentDir); err != nil {
-				return fmt.Errorf("Error trying to restore terraform state: %w", err)
+				return fmt.Errorf("error trying to restore terraform state: %w", err)
 			}
 		}
 	}

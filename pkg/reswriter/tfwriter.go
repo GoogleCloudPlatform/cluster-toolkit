@@ -367,71 +367,71 @@ func printTerraformInstructions(grpPath string) {
 	fmt.Printf("  terraform -chdir=%s apply\n", grpPath)
 }
 
-// writeTopLevel writes any needed files to the top layer of the blueprint
-func (w TFWriter) writeDeploymentGroups(
-	blueprint *config.Blueprint,
-	outputDir string,
+// writeDeploymentGroup creates and sets up the provided terraform deployment
+// group in the provided deployment directory
+// depGroup: The deployment group that is being written
+// globalVars: The top-level variables, needed for writing terraform.tfvars and
+//             variables.tf
+// groupDir: The path to the directory the resource group will be created in
+func (w TFWriter) writeDeploymentGroup(
+	depGroup config.DeploymentGroup,
+	globalVars map[string]interface{},
+	deploymentDir string,
 ) error {
-	deploymentName, err := blueprint.DeploymentName()
-	if err != nil {
-		return err
-	}
-	ctyVars, err := config.ConvertMapToCty(blueprint.Vars)
+
+	ctyVars, err := config.ConvertMapToCty(globalVars)
 	if err != nil {
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %v", err)
 	}
-	for _, depGroup := range blueprint.DeploymentGroups {
-		if !depGroup.HasKind("terraform") {
-			continue
-		}
-		writePath := filepath.Join(outputDir, deploymentName, depGroup.Name)
 
-		// Write main.tf file
-		if err := writeMain(
-			depGroup.Modules, depGroup.TerraformBackend, writePath,
-		); err != nil {
-			return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
-				depGroup.Name, err)
-		}
+	writePath := filepath.Join(deploymentDir, depGroup.Name)
 
-		// Write variables.tf file
-		if err := writeVariables(ctyVars, writePath); err != nil {
-			return fmt.Errorf(
-				"error writing variables.tf file for deployment group %s: %v",
-				depGroup.Name, err)
-		}
-
-		// Write outputs.tf file
-		if err := writeOutputs(depGroup.Modules, writePath); err != nil {
-			return fmt.Errorf(
-				"error writing outputs.tf file for deployment group %s: %v",
-				depGroup.Name, err)
-		}
-
-		// Write terraform.tfvars file
-		if err := writeTfvars(ctyVars, writePath); err != nil {
-			return fmt.Errorf(
-				"error writing terraform.tfvars file for deployment group %s: %v",
-				depGroup.Name, err)
-		}
-
-		// Write providers.tf file
-		if err := writeProviders(ctyVars, writePath); err != nil {
-			return fmt.Errorf(
-				"error writing providers.tf file for deployment group %s: %v",
-				depGroup.Name, err)
-		}
-
-		// Write versions.tf file
-		if err := writeVersions(writePath); err != nil {
-			return fmt.Errorf(
-				"error writing versions.tf file for deployment group %s: %v",
-				depGroup.Name, err)
-		}
-
-		printTerraformInstructions(writePath)
+	// Write main.tf file
+	if err := writeMain(
+		depGroup.Modules, depGroup.TerraformBackend, writePath,
+	); err != nil {
+		return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
+			depGroup.Name, err)
 	}
+
+	// Write variables.tf file
+	if err := writeVariables(ctyVars, writePath); err != nil {
+		return fmt.Errorf(
+			"error writing variables.tf file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	// Write outputs.tf file
+	if err := writeOutputs(depGroup.Modules, writePath); err != nil {
+		return fmt.Errorf(
+			"error writing outputs.tf file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	// Write terraform.tfvars file
+	if err := writeTfvars(ctyVars, writePath); err != nil {
+		return fmt.Errorf(
+			"error writing terraform.tfvars file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	// Write providers.tf file
+	if err := writeProviders(ctyVars, writePath); err != nil {
+		return fmt.Errorf(
+			"error writing providers.tf file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	// Write versions.tf file
+	if err := writeVersions(writePath); err != nil {
+		return fmt.Errorf(
+			"error writing versions.tf file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	printTerraformInstructions(writePath)
+
 	return nil
 }
 
