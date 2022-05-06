@@ -16,7 +16,7 @@ package sourcereader
 
 import (
 	"fmt"
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"io/fs"
 	"io/ioutil"
 	"os"
@@ -88,10 +88,10 @@ func copyFSToTempDir(fs BaseFS, modulePath string) (string, error) {
 	return tmpDir, err
 }
 
-// GetModuleInfo gets resreader.ModuleInfo for the given kind from the embedded source
-func (r EmbeddedSourceReader) GetModuleInfo(modPath string, kind string) (resreader.ModuleInfo, error) {
+// GetModuleInfo gets modulereader.ModuleInfo for the given kind from the embedded source
+func (r EmbeddedSourceReader) GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error) {
 	if !IsEmbeddedPath(modPath) {
-		return resreader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
+		return modulereader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
 	modDir, err := copyFSToTempDir(ModuleFS, modPath)
@@ -99,10 +99,10 @@ func (r EmbeddedSourceReader) GetModuleInfo(modPath string, kind string) (resrea
 	if err != nil {
 		err = fmt.Errorf("failed to copy embedded module at %s to tmp dir %s: %v",
 			modPath, modDir, err)
-		return resreader.ModuleInfo{}, err
+		return modulereader.ModuleInfo{}, err
 	}
 
-	reader := resreader.Factory(kind)
+	reader := modulereader.Factory(kind)
 	return reader.GetInfo(modDir)
 }
 

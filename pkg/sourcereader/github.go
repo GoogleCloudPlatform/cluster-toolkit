@@ -17,7 +17,7 @@ package sourcereader
 import (
 	"context"
 	"fmt"
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -56,25 +56,25 @@ func copyGitHubModules(srcPath string, destPath string) error {
 	return err
 }
 
-// GetModuleInfo gets resreader.ModuleInfo for the given kind from the GitHub source
-func (r GitHubSourceReader) GetModuleInfo(modPath string, kind string) (resreader.ModuleInfo, error) {
+// GetModuleInfo gets modulereader.ModuleInfo for the given kind from the GitHub source
+func (r GitHubSourceReader) GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error) {
 	if !IsGitHubPath(modPath) {
-		return resreader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
+		return modulereader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
 	modDir, err := ioutil.TempDir("", "git-module-*")
 	defer os.RemoveAll(modDir)
 	writeDir := filepath.Join(modDir, "mod")
 	if err != nil {
-		return resreader.ModuleInfo{}, err
+		return modulereader.ModuleInfo{}, err
 	}
 
 	if err := copyGitHubModules(modPath, writeDir); err != nil {
-		return resreader.ModuleInfo{}, fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
+		return modulereader.ModuleInfo{}, fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
 			modPath, writeDir, err)
 	}
 
-	reader := resreader.Factory(kind)
+	reader := modulereader.Factory(kind)
 	return reader.GetInfo(writeDir)
 }
 

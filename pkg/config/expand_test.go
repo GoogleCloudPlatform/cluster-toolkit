@@ -16,7 +16,7 @@ package config
 
 import (
 	"fmt"
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 
 	. "gopkg.in/check.v1"
 )
@@ -83,8 +83,8 @@ func (s *MySuite) TestUseModule(c *C) {
 		ID:     "UsedModule",
 		Source: useModSource,
 	}
-	modInfo := resreader.ModuleInfo{}
-	useInfo := resreader.ModuleInfo{}
+	modInfo := modulereader.ModuleInfo{}
+	useInfo := modulereader.ModuleInfo{}
 	hasChanged := make(map[string]bool)
 
 	// Pass: No Inputs, No Outputs
@@ -94,17 +94,17 @@ func (s *MySuite) TestUseModule(c *C) {
 	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Has Output, no maching input
-	varInfoNumber := resreader.VarInfo{
+	varInfoNumber := modulereader.VarInfo{
 		Name: "val1",
 		Type: "number",
 	}
-	useInfo.Outputs = []resreader.VarInfo{varInfoNumber}
+	useInfo.Outputs = []modulereader.VarInfo{varInfoNumber}
 	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
 	c.Assert(len(mod.Settings), Equals, 0)
 	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Single Input/Output match - no lists
-	modInfo.Inputs = []resreader.VarInfo{varInfoNumber}
+	modInfo.Inputs = []modulereader.VarInfo{varInfoNumber}
 	modInputs = getModuleInputMap(modInfo.Inputs)
 	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
 	expectedSetting := getModuleVarName("UsedModule", "val1")
@@ -123,11 +123,11 @@ func (s *MySuite) TestUseModule(c *C) {
 	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Single Input/Output match, input is list, not already set
-	varInfoList := resreader.VarInfo{
+	varInfoList := modulereader.VarInfo{
 		Name: "val1",
 		Type: "list",
 	}
-	modInfo.Inputs = []resreader.VarInfo{varInfoList}
+	modInfo.Inputs = []modulereader.VarInfo{varInfoList}
 	modInputs = getModuleInputMap(modInfo.Inputs)
 	mod.Settings = make(map[string]interface{})
 	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
@@ -160,7 +160,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		ID:     usedModuleID,
 		Source: usedModuleSource,
 	}
-	sharedVar := resreader.VarInfo{
+	sharedVar := modulereader.VarInfo{
 		Name: sharedVarName,
 		Type: "number",
 	}
@@ -179,8 +179,8 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	grpName := dc.Config.DeploymentGroups[0].Name
 	usingInfo := dc.ModulesInfo[grpName][usingModuleSource]
 	usedInfo := dc.ModulesInfo[grpName][usedModuleSource]
-	usingInfo.Inputs = []resreader.VarInfo{sharedVar}
-	usedInfo.Outputs = []resreader.VarInfo{sharedVar}
+	usingInfo.Inputs = []modulereader.VarInfo{sharedVar}
+	usedInfo.Outputs = []modulereader.VarInfo{sharedVar}
 	err = dc.applyUseModules()
 	c.Assert(err, IsNil)
 
@@ -296,8 +296,8 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	c.Assert(err, IsNil)
 
 	// Test no inputs, one required, doesn't exist in globals
-	dc.ModulesInfo["group1"][testModule.Source] = resreader.ModuleInfo{
-		Inputs: []resreader.VarInfo{requiredVar},
+	dc.ModulesInfo["group1"][testModule.Source] = modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{requiredVar},
 	}
 	err = dc.applyGlobalVariables()
 	expectedErrorStr := fmt.Sprintf("%s: Module ID: %s Setting: %s",
@@ -429,8 +429,8 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Module variable: Invalid -> Output not found
-	reader := resreader.Factory("terraform")
-	reader.SetInfo(testModule.Source, resreader.ModuleInfo{})
+	reader := modulereader.Factory("terraform")
+	reader.SetInfo(testModule.Source, modulereader.ModuleInfo{})
 	testModToGrp[testModID] = 0
 	fakeOutput := "doesntExist"
 	testVarContext.varString = fmt.Sprintf("$(%s.%s)", testModule.ID, fakeOutput)
@@ -441,9 +441,9 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 
 	// Module variable: Success
 	existingOutput := "outputExists"
-	testVarInfoOutput := resreader.VarInfo{Name: existingOutput}
-	testModInfo := resreader.ModuleInfo{
-		Outputs: []resreader.VarInfo{testVarInfoOutput},
+	testVarInfoOutput := modulereader.VarInfo{Name: existingOutput}
+	testModInfo := modulereader.ModuleInfo{
+		Outputs: []modulereader.VarInfo{testVarInfoOutput},
 	}
 	reader.SetInfo(testModule.Source, testModInfo)
 	testVarContext.varString = fmt.Sprintf(

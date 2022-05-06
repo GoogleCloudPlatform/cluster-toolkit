@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package blueprintio
+package deploymentio
 
 import (
 	"fmt"
@@ -54,10 +54,10 @@ func Test(t *testing.T) {
 
 func setup() {
 	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_blueprintio_test_%s", t.Format(time.RFC3339))
+	dirName := fmt.Sprintf("ghpc_deploymentio_test_%s", t.Format(time.RFC3339))
 	dir, err := ioutil.TempDir("", dirName)
 	if err != nil {
-		log.Fatalf("reswriter_test: %v", err)
+		log.Fatalf("modulewriter_test: %v", err)
 	}
 	testDir = dir
 }
@@ -75,15 +75,15 @@ func TestMain(m *testing.M) {
 
 func getTestFS() afero.IOFS {
 	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("pkg/reswriter", 0755)
+	aferoFS.MkdirAll("pkg/modulewriter", 0755)
 	afero.WriteFile(
-		aferoFS, "pkg/reswriter/blueprint.gitignore.tmpl", []byte(testGitignoreTmpl), 0644)
+		aferoFS, "pkg/modulewriter/deployment.gitignore.tmpl", []byte(testGitignoreTmpl), 0644)
 	afero.WriteFile(
-		aferoFS, "pkg/reswriter/blueprint_new.gitignore.tmpl", []byte(testGitignoreNewTmpl), 0644)
+		aferoFS, "pkg/modulewriter/deployment_new.gitignore.tmpl", []byte(testGitignoreNewTmpl), 0644)
 	return afero.NewIOFS(aferoFS)
 }
 
-func (s *MySuite) TestGetBlueprintIOLocal(c *C) {
-	blueprintio := GetBlueprintIOLocal()
-	c.Assert(blueprintio, Equals, blueprintios["local"])
+func (s *MySuite) TestGetDeploymentioLocal(c *C) {
+	deploymentio := GetDeploymentioLocal()
+	c.Assert(deploymentio, Equals, deploymentios["local"])
 }

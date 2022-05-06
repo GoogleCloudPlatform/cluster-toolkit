@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package blueprintio
+package deploymentio
 
 import (
 	"io/fs"
@@ -25,18 +25,18 @@ type BaseFS interface {
 	ReadFile(string) ([]byte, error)
 }
 
-// BlueprintIO interface for writing blueprints to a storage
-type BlueprintIO interface {
-	CreateDirectory(bpDirectoryPath string) error
+// Deploymentio interface for writing blueprints to a storage
+type Deploymentio interface {
+	CreateDirectory(DepDirectoryPath string) error
 	CopyFromPath(src string, dst string) error
 	CopyFromFS(fs BaseFS, src string, dst string) error
 }
 
-var blueprintios = map[string]BlueprintIO{
+var deploymentios = map[string]Deploymentio{
 	"local": new(Local),
 }
 
-// GetBlueprintIOLocal gets the instance writing blueprints to a local
-func GetBlueprintIOLocal() BlueprintIO {
-	return blueprintios["local"]
+// GetDeploymentioLocal gets the instance writing blueprints to a local
+func GetDeploymentioLocal() Deploymentio {
+	return deploymentios["local"]
 }

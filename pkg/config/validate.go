@@ -22,7 +22,7 @@ import (
 	"regexp"
 	"strings"
 
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 	"hpc-toolkit/pkg/validators"
 
@@ -146,7 +146,7 @@ func validateModule(c Module) error {
 	if c.Source == "" {
 		return fmt.Errorf("%s\n%s", errorMessages["emptySource"], module2String(c))
 	}
-	if !resreader.IsValidKind(c.Kind) {
+	if !modulereader.IsValidKind(c.Kind) {
 		return fmt.Errorf("%s\n%s", errorMessages["wrongKind"], module2String(c))
 	}
 	return nil
@@ -156,10 +156,10 @@ func hasIllegalChars(name string) bool {
 	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
 }
 
-func validateOutputs(mod Module, modInfo resreader.ModuleInfo) error {
+func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
 
 	// Only get the map if needed
-	var outputsMap map[string]resreader.VarInfo
+	var outputsMap map[string]modulereader.VarInfo
 	if len(mod.Outputs) > 0 {
 		outputsMap = modInfo.GetOutputsAsMap()
 	}
@@ -197,7 +197,7 @@ type moduleVariables struct {
 
 func validateSettings(
 	mod Module,
-	info resreader.ModuleInfo) error {
+	info modulereader.ModuleInfo) error {
 
 	var cVars = moduleVariables{
 		Inputs:  map[string]bool{},

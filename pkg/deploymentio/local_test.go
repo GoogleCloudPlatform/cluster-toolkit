@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package blueprintio
+package deploymentio
 
 import (
 	"io/ioutil"
@@ -24,16 +24,16 @@ import (
 )
 
 func (s *MySuite) TestCreateDirectoryLocal(c *C) {
-	blueprintio := GetBlueprintIOLocal()
+	deploymentio := GetDeploymentioLocal()
 
 	// Try to create the exist directory
-	err := blueprintio.CreateDirectory(testDir)
+	err := deploymentio.CreateDirectory(testDir)
 	expErr := "The directory already exists: .*"
 	c.Assert(err, ErrorMatches, expErr)
 
 	directoryName := "dir_TestCreateDirectoryLocal"
 	createdDir := filepath.Join(testDir, directoryName)
-	err = blueprintio.CreateDirectory(createdDir)
+	err = deploymentio.CreateDirectory(createdDir)
 	c.Assert(err, IsNil)
 
 	_, err = os.Stat(createdDir)
@@ -54,24 +54,24 @@ func (s *MySuite) TestGetAbsSourcePath(c *C) {
 }
 
 func (s *MySuite) TestCopyFromPathLocal(c *C) {
-	blueprintio := GetBlueprintIOLocal()
+	deploymentio := GetDeploymentioLocal()
 	testSrcFilename := filepath.Join(testDir, "testSrc")
 	str := []byte("TestCopyFromPathLocal")
 	if err := os.WriteFile(testSrcFilename, str, 0755); err != nil {
-		log.Fatalf("blueprintio_test: failed to create %s: %v", testSrcFilename, err)
+		log.Fatalf("deploymentio_test: failed to create %s: %v", testSrcFilename, err)
 	}
 
 	testDstFilename := filepath.Join(testDir, "testDst")
-	blueprintio.CopyFromPath(testSrcFilename, testDstFilename)
+	deploymentio.CopyFromPath(testSrcFilename, testDstFilename)
 
 	src, err := ioutil.ReadFile(testSrcFilename)
 	if err != nil {
-		log.Fatalf("blueprintio_test: failed to read %s: %v", testSrcFilename, err)
+		log.Fatalf("deploymentio_test: failed to read %s: %v", testSrcFilename, err)
 	}
 
 	dst, err := ioutil.ReadFile(testDstFilename)
 	if err != nil {
-		log.Fatalf("blueprintio_test: failed to read %s: %v", testDstFilename, err)
+		log.Fatalf("deploymentio_test: failed to read %s: %v", testDstFilename, err)
 	}
 
 	c.Assert(string(src), Equals, string(dst))
@@ -94,25 +94,25 @@ func (s *MySuite) TestMkdirWrapper(c *C) {
 
 func (s *MySuite) TestCopyFromFS(c *C) {
 	// Success
-	blueprintio := GetBlueprintIOLocal()
+	deploymentio := GetDeploymentioLocal()
 	testFS := getTestFS()
-	testSrcGitignore := "pkg/reswriter/blueprint.gitignore.tmpl"
+	testSrcGitignore := "pkg/modulewriter/deployment.gitignore.tmpl"
 	testDstGitignore := filepath.Join(testDir, ".gitignore")
-	err := blueprintio.CopyFromFS(testFS, testSrcGitignore, testDstGitignore)
+	err := deploymentio.CopyFromFS(testFS, testSrcGitignore, testDstGitignore)
 	c.Assert(err, IsNil)
 	data, err := os.ReadFile(testDstGitignore)
 	c.Assert(err, IsNil)
 	c.Assert(string(data), Equals, testGitignoreTmpl)
 
 	// Success: This truncates the file if it already exists in the destination
-	testSrcNewGitignore := "pkg/reswriter/blueprint_new.gitignore.tmpl"
-	err = blueprintio.CopyFromFS(testFS, testSrcNewGitignore, testDstGitignore)
+	testSrcNewGitignore := "pkg/modulewriter/deployment_new.gitignore.tmpl"
+	err = deploymentio.CopyFromFS(testFS, testSrcNewGitignore, testDstGitignore)
 	c.Assert(err, IsNil)
 	newData, err := os.ReadFile(testDstGitignore)
 	c.Assert(err, IsNil)
 	c.Assert(string(newData), Equals, testGitignoreNewTmpl)
 
 	// Failure: Invalid path
-	err = blueprintio.CopyFromFS(testFS, "not/valid", testDstGitignore)
+	err = deploymentio.CopyFromFS(testFS, "not/valid", testDstGitignore)
 	c.Assert(err, ErrorMatches, "*file does not exist")
 }

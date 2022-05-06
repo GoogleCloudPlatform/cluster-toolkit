@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/reswriter"
+	"hpc-toolkit/pkg/modulewriter"
 	"log"
 
 	"github.com/spf13/cobra"
@@ -88,8 +88,8 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 	deploymentConfig.ExpandConfig()
-	if err := reswriter.WriteBlueprint(&deploymentConfig.Config, outputDir, overwriteDeployment); err != nil {
-		var target *reswriter.OverwriteDeniedError
+	if err := modulewriter.WriteDeployment(&deploymentConfig.Config, outputDir, overwriteDeployment); err != nil {
+		var target *modulewriter.OverwriteDeniedError
 		if errors.As(err, &target) {
 			fmt.Printf("\n%s\n", err.Error())
 		} else {
