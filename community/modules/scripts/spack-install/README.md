@@ -176,7 +176,7 @@ No resources.
 | Name | Description |
 |------|-------------|
 | <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Path to the Spack installation script, duplicate for SLURM controller. |
-| <a name="output_install_spack_deps_runner"></a> [install\_spack\_deps\_runner](#output\_install\_spack\_deps\_runner) | Runner to install dependencies for spack using startup-scripts, requires ansible. |
-| <a name="output_install_spack_runner"></a> [install\_spack\_runner](#output\_install\_spack\_runner) | Runner to install Spack using startup-scripts |
+| <a name="output_install_spack_deps_runner"></a> [install\_spack\_deps\_runner](#output\_install\_spack\_deps\_runner) | Runner to install dependencies for spack using the startup-script module<br>This runner requires ansible to be installed. This can be achieved using the<br>install\_ansible.sh script as a prior runner in the startup-script module:<br>runners:<br>- type: shell<br>  source: modules/startup-script/examples/install\_ansible.sh<br>  destination: install\_ansible.sh<br>- $(spack.install\_spack\_deps\_runner)<br>... |
+| <a name="output_install_spack_runner"></a> [install\_spack\_runner](#output\_install\_spack\_runner) | Runner to install Spack using the startup-script module |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Path to the Spack installation script. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -25,11 +25,21 @@ output "controller_startup_script" {
 }
 
 output "install_spack_deps_runner" {
-  description = "Runner to install dependencies for spack using startup-scripts, requires ansible."
+  description = <<-EOT
+  Runner to install dependencies for spack using the startup-script module
+  This runner requires ansible to be installed. This can be achieved using the
+  install_ansible.sh script as a prior runner in the startup-script module:
+  runners:
+  - type: shell
+    source: modules/startup-script/examples/install_ansible.sh
+    destination: install_ansible.sh
+  - $(spack.install_spack_deps_runner)
+  ...
+  EOT
   value       = local.install_spack_deps_runner
 }
 
 output "install_spack_runner" {
-  description = "Runner to install Spack using startup-scripts"
+  description = "Runner to install Spack using the startup-script module"
   value       = local.install_spack_runner
 }
