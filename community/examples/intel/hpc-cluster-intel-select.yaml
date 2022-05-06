@@ -22,8 +22,10 @@ vars:
   zone: us-central1-c
   controller_image_family: slurm-intel-hpc-controller
   compute_image_family: slurm-intel-hpc-compute
-  # this example works due to hard-coding the name of the VPC subnetwork
-  # created by the VPC module; we will resolve this in future ghpc releases
+  # this example works due to hard-coding the name of the VPC network and
+  # subnetwork created by the VPC module; we will resolve this in future
+  # ghpc releases
+  network_name: hpc-intel-select-net
   subnetwork_name: hpc-intel-select-primary-subnet
 
 deployment_groups:
