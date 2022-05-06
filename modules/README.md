@@ -1,10 +1,20 @@
 # Modules
 
-This directory contains a set of modules built for the HPC Toolkit. Modules
+This directory contains a set of core modules built for the HPC Toolkit. Modules
 describe the building blocks of an HPC deployment. The expected fields in a
 module are listed in more detail below.
 
 ## Available Modules
+
+Modules listed below with the core badge (![core-badge]) are located in this
+folder and are tested and maintained by the HPC Toolkit team.
+
+Modules labeled with the community badge (![community-badge]) are contributed by
+the community (including the HPC Toolkit team, partners, etc.). Community modules
+are located in the [community folder](../community/modules/README.md).
+
+Modules that are still in development and less stable are also labeled with the
+experimental badge (![experimental-badge]).
 
 [core-badge]: https://img.shields.io/badge/-core-blue?style=plastic
 [community-badge]: https://img.shields.io/badge/-community-%23b8def4?style=plastic
