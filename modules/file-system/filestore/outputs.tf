@@ -31,11 +31,21 @@ output "install_nfs_client" {
 }
 
 output "install_nfs_client_runner" {
-  description = "Runner to install NFS client using startup-scripts"
+  description = "Runner to install NFS client using the startup-script module"
   value       = local.install_nfs_client_runner
 }
 
 output "mount_runner" {
-  description = "Runner to mount the file-system using startup-scripts"
+  description = <<-EOT
+  Runner to mount the file-system using the startup-script module.
+  This runner requires ansible to be installed. This can be achieved using the
+  install_ansible.sh script as a prior runner in the startup-script module:
+  runners:
+  - type: shell
+    source: modules/startup-script/examples/install_ansible.sh
+    destination: install_ansible.sh
+  - $(your-fs-id.mount_runner)
+  ...
+  EOT
   value       = local.mount_runner
 }

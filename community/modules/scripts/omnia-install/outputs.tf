@@ -25,17 +25,37 @@ output "setup_omnia_node_script" {
 }
 
 output "copy_inventory_runner" {
-  description = "Runner to copy the inventory to the omnia manager using startup-scripts"
+  description = "Runner to copy the inventory to the omnia manager using the startup-script module"
   value       = local.copy_inventory_runner
 }
 
 output "setup_omnia_node_runner" {
-  description = "Runner to create the omnia user using startup-scripts"
+  description = <<-EOT
+  Runner to create the omnia user using the startup-script module.
+  This runner requires ansible to be installed. This can be achieved using the
+  install_ansible.sh script as a prior runner in the startup-script module:
+  runners:
+  - type: shell
+    source: modules/startup-script/examples/install_ansible.sh
+    destination: install_ansible.sh
+  - $(omnia.setup_omnia_node_runner)
+  ...
+  EOT
   value       = local.setup_omnia_node_runner
 }
 
 output "install_omnia_runner" {
-  description = "Runner to install Omnia using startup-scripts"
+  description = <<-EOT
+  Runner to install Omnia using the startup-script module
+  This runner requires ansible to be installed. This can be achieved using the
+  install_ansible.sh script as a prior runner in the startup-script module:
+  runners:
+  - type: shell
+    source: modules/startup-script/examples/install_ansible.sh
+    destination: install_ansible.sh
+  ...
+  - $(omnia.install_omnia_runner)
+  EOT
   value       = local.install_omnia_runner
 }
 
