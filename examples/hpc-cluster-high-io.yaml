@@ -93,6 +93,8 @@ deployment_groups:
     - projectsfs
     - low_cost_partition  # low cost partition will be default as it is listed first
     - compute_partition
+    settings:
+      controller_machine_type: c2-standard-8
 
   - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
