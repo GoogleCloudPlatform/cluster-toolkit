@@ -20,9 +20,22 @@ variable "project_id" {
 }
 
 variable "network_name" {
-  description = "The name of the network to be created (defaults to \"{deployment_name}-net\")"
+  description = "The name of the network to be created (if unsupplied, will default to \"{deployment_name}-net\")"
   type        = string
   default     = null
+}
+
+variable "subnetwork_name" {
+  description = "The name of the network to be created (if unsupplied, will default to \"{deployment_name}-primary-subnet\")"
+  type        = string
+  default     = null
+}
+
+variable "subnetwork_size" {
+  description = "The size, in CIDR bits, of the primary subnetwork unless explicitly supplied in var.primary_subnetwork"
+  type        = number
+  default     = 15
+
 }
 
 variable "region" {
@@ -46,45 +59,36 @@ variable "network_address_range" {
   }
 }
 
-
 # the default will create a subnetwork in var.region with the settings noted
 variable "primary_subnetwork" {
   description = <<EOT
-  Primary (default) subnetwork in which to create resources.
+  Primary (default) subnetwork in which to create resources. If null, a default value will be constructed.
 
-  name           (string, required, Name of subnet; if set to null, is replaced by "{deployment_name}-primary-subnet")
-  region         (string, ignored, will be replaced by var.region)
-  new_bits       (number, required, Additional CIDR bits beyond var.network_address_range)
-  private_access (bool, optional, Enable Private Access on subnetwork)
-  flow_logs      (map(string), optional, Configure Flow Logs see
-                  terraform-google-network module for complete settings)
-  description    (string, optional, Description of Network)
-  purpose        (string, optional, related to Load Balancing)
-  role           (string, optional, related to Load Balancing)
+  subnet_name           (string, required, Name of subnet; will be replaced by var.subnetwork_name or its default value)
+  subnet_region         (string, required, will be replaced by var.region)
+  new_bits              (number, optional, Additional CIDR bits to determine subnetwork size; will default to var.subnetwork_size)
+  subnet_private_access (bool, optional, Enable Private Access on subnetwork)
+  subnet_flow_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)
+  description           (string, optional, Description of Network)
+  purpose               (string, optional, related to Load Balancing)
+  role                  (string, optional, related to Load Balancing)
   EOT
   type        = map(string)
-  default = {
-    name           = null
-    description    = "Primary Subnetwork"
-    new_bits       = 15
-    private_access = true
-    flow_logs      = false
-  }
+  default     = null
 }
 
 variable "additional_subnetworks" {
   description = <<EOT
   List of additional subnetworks in which to create resources.
 
-  name           (string, required, Name of subnet; must be unique in region)
-  region         (string, required, Google Cloud Region)
-  new_bits       (number, required, Additional CIDR bits beyond var.network_address_range)
-  private_access (bool, optional, Enable Private Access on subnetwork)
-  flow_logs      (map(string), optional, Configure Flow Logs see
-                  terraform-google-network module for complete settings)
-  description    (string, optional, Description of Network)
-  purpose        (string, optional, related to Load Balancing)
-  role           (string, optional, related to Load Balancing)
+  subnet_name           (string, required, Name of subnet; will be replaced by var.subnetwork_name or its default value)
+  subnet_region         (string, required, will be replaced by var.region)
+  new_bits              (number, required, Additional CIDR bits to determine subnetwork size)
+  subnet_private_access (bool, optional, Enable Private Access on subnetwork)
+  subnet_flow_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)
+  description           (string, optional, Description of Network)
+  purpose               (string, optional, related to Load Balancing)
+  role                  (string, optional, related to Load Balancing)
   EOT
   type        = list(map(string))
   default     = []

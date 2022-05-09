@@ -15,29 +15,33 @@
 */
 
 locals {
-  network_name = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
-  cidr_blocks  = cidrsubnets(var.network_address_range, var.primary_subnetwork.new_bits, var.additional_subnetworks[*].new_bits...)
+  network_name                = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
+  subnetwork_name             = var.subnetwork_name == null ? "${var.deployment_name}-primary-subnet" : var.subnetwork_name
+  primary_subnetwork_new_bits = try(var.primary_subnetwork.new_bits, var.subnetwork_size)
+  cidr_blocks                 = cidrsubnets(var.network_address_range, local.primary_subnetwork_new_bits, var.additional_subnetworks[*].new_bits...)
 
   regions = distinct([for subnet in local.all_subnets : subnet.subnet_region])
 
-  primary_subnet = {
-    subnet_name           = var.primary_subnetwork.name == null ? "${var.deployment_name}-primary-subnet" : var.primary_subnetwork.name
+  default_primary_subnet = {
+    subnet_name           = local.subnetwork_name
     subnet_ip             = local.cidr_blocks[0]
     subnet_region         = var.region
-    subnet_private_access = lookup(var.primary_subnetwork, "private_access", false)
-    subnet_flow_logs      = lookup(var.primary_subnetwork, "flow_logs", false)
-    description           = lookup(var.primary_subnetwork, "description", null)
-    purpose               = lookup(var.primary_subnetwork, "purpose", null)
-    role                  = lookup(var.primary_subnetwork, "role", null)
+    subnet_private_access = false
+    subnet_flow_logs      = false
+    description           = "primary subnetwork in ${local.network_name}"
+    purpose               = null
+    role                  = null
   }
+
+  primary_subnet = var.primary_subnetwork == null ? local.default_primary_subnet : var.primary_subnetwork
 
   additional_subnets = [for index, subnet in var.additional_subnetworks :
     {
-      subnet_name           = subnet.name
+      subnet_name           = subnet.subnet_name
       subnet_ip             = local.cidr_blocks[index + 1]
-      subnet_region         = subnet.region
-      subnet_private_access = lookup(subnet, "private_access", false)
-      subnet_flow_logs      = lookup(subnet, "flow_logs", false)
+      subnet_region         = subnet.subnet_region
+      subnet_private_access = lookup(subnet, "subnet_private_access", false)
+      subnet_flow_logs      = lookup(subnet, "subnet_flow_logs", false)
       description           = lookup(subnet, "description", null)
       purpose               = lookup(subnet, "purpose", null)
       role                  = lookup(subnet, "role", null)
