@@ -144,9 +144,9 @@ echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
 tmpdir=$(mktemp -d)
 currdir=$PWD
 cd $tmpdir
-wget https://download.schedmd.com/slurm/slurm-21.08.7.tar.bz2
-tar xf slurm-21.08.7.tar.bz2
-cd slurm-21.08.7
+wget https://download.schedmd.com/slurm/slurm-21.08-latest.tar.bz2
+tar xf slurm-21.08-latest.tar.bz2
+cd slurm-21.08*
 ./configure --prefix=/usr/local --sysconfdir=/etc/slurm
 make -j $(nproc)
 make install
