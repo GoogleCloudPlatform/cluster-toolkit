@@ -1,0 +1,10 @@
+{% extends "base_generic.html" %}
+
+{% block padded_content %}
+
+<div class="col-sm-10 p-0" style="flex:1;">
+  <iframe src="{% url 'grafana-proxy' '' %}" title="Grafana" style="border: none;" height="100%" width="100%"></iframe>
+</div>
+
+{% endblock %}
+

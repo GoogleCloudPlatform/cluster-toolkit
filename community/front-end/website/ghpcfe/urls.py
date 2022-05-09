@@ -30,6 +30,7 @@ from .views.users import *
 from .views.vpc import *
 from .views.filesystems import *
 from .views.gcpfilestore import *
+from .views.grafana import GrafanaProxyView, GrafanaView
 from .views.asyncview import RunningTasksViewSet
 
 handler403 = "ghpcfe.views.error_pages.custom_error_403"
@@ -74,6 +75,12 @@ urlpatterns = [
         WorkbenchDetailView.as_view(),
         name="workbench-detail",
     ),
+    re_path(
+        "^grafana/(?P<path>.*)$",
+        GrafanaProxyView.as_view(),
+        name="grafana-proxy"
+    ),
+    path("graphs", GrafanaView.as_view(), name="grafana"),
 ]
 
 urlpatterns += [

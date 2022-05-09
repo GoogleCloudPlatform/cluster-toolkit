@@ -46,7 +46,8 @@ dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
 	rsync nginx bind-utils policycoreutils-python-utils \
-	terraform packer supervisor python3-certbot-nginx
+	terraform packer supervisor python3-certbot-nginx \
+	grafana
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
 chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
@@ -182,6 +183,16 @@ sudo su - gcluster -c /bin/bash <<EOF
 
 EOF
 
+# Tweak Grafana settings
+
+sed -i \
+	-e '/^\[server]/,/^\[/{s/serve_from_sub_path = false/serve_from_sub_path = true/}' \
+	-e '/^\[server]/,/^\[/{s/root_url = \(.*\)\/$/root_url = \1\/grafana\//}' \
+	-e '/^\[auth.proxy]/,/^\[/{s/enabled = false/enabled = true/}' \
+	-e '/^\[auth.proxy]/,/^\[/{s/whitelist =.*/whitelist = 127.0.0.1/}' \
+	-e '/^\[auth.proxy]/,/^\[/{s/header_property =.*/header_property = email/}' \
+	/etc/grafana/grafana.ini
+
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]
 process_name=%(program_name)s_%(process_num)02d
@@ -196,7 +207,8 @@ stdout_logfile=/opt/gcluster/run/supvisor.log" >/etc/supervisord.d/gcluster.ini
 printf "Creating systemd service..."
 echo "[Unit]
 Description=GCluster: The GCP HPC Cluster deployment tool
-Requires=supervisord.service
+Requires=supervisord.service grafana-server.service
+After=supervisord.service grafana-server.service
 
 
 [Service]
@@ -215,6 +227,13 @@ systemctl daemon-reload
 systemctl enable gcluster.service
 systemctl start gcluster.service
 systemctl status gcluster.service
+
+# Now that Grafana and Django are running, initialize integration
+sudo su - gcluster -c /bin/bash <<EOF
+  source /opt/gcluster/django-env/bin/activate
+  cd /opt/gcluster/hpc-toolkit/community/front-end/website
+  python manage.py setup_grafana "${DJANGO_EMAIL}"
+EOF
 
 # IF we have a hostname, configure for TLS
 if [ -n "${SERVER_HOSTNAME}" ]; then

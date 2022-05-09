@@ -28,6 +28,7 @@ from ..forms import CredentialForm
 from ..serializers import CredentialSerializer
 from ..permissions import CredentialPermission, SuperUserRequiredMixin
 from ..cluster_manager import validate_credential
+from .. import grafana
 
 
 class CredentialListView(SuperUserRequiredMixin, generic.ListView):
@@ -70,6 +71,7 @@ class CredentialCreateView(SuperUserRequiredMixin, CreateView):
         self.object = form.save(commit=False)
         self.object.owner = self.request.user
         self.object.save()
+        grafana.add_gcp_datasource(self.object.name, self.object.detail)
         messages.success(
             self.request, f"Credential {self.object.name} validated and saved."
         )
