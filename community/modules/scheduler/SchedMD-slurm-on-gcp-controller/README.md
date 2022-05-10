@@ -4,7 +4,15 @@ This module creates a slurm controller node via the SchedMD/slurm-gcp
 [controller](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
 module.
 
-More information about Slurm On GCP can be found at the [project's GitHub page](https://github.com/SchedMD/slurm-gcp) and in the [Slurm on Google Cloud User Guide](https://goo.gle/slurm-gcp-user-guide).
+More information about Slurm On GCP can be found at the
+[project's GitHub page](https://github.com/SchedMD/slurm-gcp) and in the
+[Slurm on Google Cloud User Guide][slurm-ug].
+
+The [user guide][slurm-ug] provides detailed instructions on customizing and
+enhancing the Slurm on GCP cluster as well as recommendations on configuring the
+controller for optimal performance at different scales.
+
+[slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
 
 ### Example
 
@@ -27,6 +35,14 @@ This creates a controller node connected to the primary subnetwork with 1 login
 node (defined elsewhere). The controller will also have the homefs file system
 mounted and manage one partition. For more context see the
 [hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml).
+
+## Support
+The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
+modules. For support with the underlying modules, see the instructions in the
+[slurm-gcp README][slurm-gcp-readme].
+
+[slurm-on-gcp]: https://github.com/SchedMD/slurm-gcp
+[slurm-gcp-readme]: https://github.com/SchedMD/slurm-gcp#slurm-on-google-cloud-platform
 
 ## License
 
@@ -75,14 +91,14 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_boot_disk_size"></a> [boot\_disk\_size](#input\_boot\_disk\_size) | Size of boot disk to create for the cluster controller node | `number` | `50` | no |
-| <a name="input_boot_disk_type"></a> [boot\_disk\_type](#input\_boot\_disk\_type) | Type of boot disk to create for the cluster controller node | `string` | `"pd-standard"` | no |
+| <a name="input_boot_disk_type"></a> [boot\_disk\_type](#input\_boot\_disk\_type) | Type of boot disk to create for the cluster controller node.<br>Choose from: pd-ssd, pd-standard, pd-balanced, pd-extreme.<br>pd-ssd is recommended if the controller is hosting the SlurmDB and NFS share.<br>If SlurmDB and NFS share are not running on the controller, pd-standard is<br>recommended. See "Controller configuration recommendations" in the Slurm on<br>Google Cloud User Guide for more information:<br>https://goo.gle/slurm-gcp-user-guide | `string` | `"pd-ssd"` | no |
 | <a name="input_cloudsql"></a> [cloudsql](#input\_cloudsql) | Define an existing CloudSQL instance to use instead of instance-local MySQL | <pre>object({<br>    server_ip = string,<br>    user      = string,<br>    password  = string,<br>    db_name   = string<br>  })</pre> | `null` | no |
 | <a name="input_cluster_name"></a> [cluster\_name](#input\_cluster\_name) | Name of the cluster | `string` | `null` | no |
 | <a name="input_compute_node_scopes"></a> [compute\_node\_scopes](#input\_compute\_node\_scopes) | Scopes to apply to compute nodes. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/monitoring.write",<br>  "https://www.googleapis.com/auth/logging.write",<br>  "https://www.googleapis.com/auth/devstorage.read_only"<br>]</pre> | no |
 | <a name="input_compute_node_service_account"></a> [compute\_node\_service\_account](#input\_compute\_node\_service\_account) | Service Account for compute nodes. | `string` | `null` | no |
 | <a name="input_compute_startup_script"></a> [compute\_startup\_script](#input\_compute\_startup\_script) | Custom startup script to run on the compute nodes | `string` | `null` | no |
 | <a name="input_controller_instance_template"></a> [controller\_instance\_template](#input\_controller\_instance\_template) | Instance template to use to create controller instance | `string` | `null` | no |
-| <a name="input_controller_machine_type"></a> [controller\_machine\_type](#input\_controller\_machine\_type) | Compute Platform machine type to use in controller node creation | `string` | `"n2-standard-2"` | no |
+| <a name="input_controller_machine_type"></a> [controller\_machine\_type](#input\_controller\_machine\_type) | Compute Platform machine type to use in controller node creation. `c2-standard-4`<br>is recommended for clusters up to 50 nodes, for larger clusters see<br>"Controller configuration recommendations" in the Slurm on Google Cloud User<br>Guide: https://goo.gle/slurm-gcp-user-guide | `string` | `"c2-standard-4"` | no |
 | <a name="input_controller_scopes"></a> [controller\_scopes](#input\_controller\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform",<br>  "https://www.googleapis.com/auth/devstorage.read_only"<br>]</pre> | no |
 | <a name="input_controller_secondary_disk"></a> [controller\_secondary\_disk](#input\_controller\_secondary\_disk) | Create secondary disk mounted to controller node | `bool` | `false` | no |
 | <a name="input_controller_secondary_disk_size"></a> [controller\_secondary\_disk\_size](#input\_controller\_secondary\_disk\_size) | Size of disk for the secondary disk | `number` | `100` | no |

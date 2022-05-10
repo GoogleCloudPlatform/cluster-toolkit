@@ -30,11 +30,11 @@ import (
 	ctyJson "github.com/zclconf/go-cty/cty/json"
 	"gopkg.in/yaml.v2"
 
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 )
 
-const expectedVarFormat = "$(vars.var_name) or $(resource_id.var_name)"
+const expectedVarFormat = "$(vars.var_name) or $(module_id.var_name)"
 
 var errorMessages = map[string]string{
 	// general
@@ -65,21 +65,22 @@ var errorMessages = map[string]string{
 	"invalidOutput":  "requested output was not found in the module",
 }
 
-// ResourceGroup defines a group of Resource that are all executed together
-type ResourceGroup struct {
+// DeploymentGroup defines a group of Modules that are all executed together
+type DeploymentGroup struct {
 	Name             string           `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
-	Resources        []Resource       `yaml:"modules"`
+	Modules          []Module         `yaml:"modules"`
+	Kind             string
 }
 
-func (g ResourceGroup) getResourceByID(resID string) Resource {
-	for i := range g.Resources {
-		res := g.Resources[i]
-		if g.Resources[i].ID == resID {
-			return res
+func (g DeploymentGroup) getModuleByID(modID string) Module {
+	for i := range g.Modules {
+		mod := g.Modules[i]
+		if g.Modules[i].ID == modID {
+			return mod
 		}
 	}
-	return Resource{}
+	return Module{}
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
@@ -112,14 +113,14 @@ func isValidValidationLevel(level int) bool {
 }
 
 // SetValidationLevel allows command-line tools to set the validation level
-func (bc *BlueprintConfig) SetValidationLevel(level string) error {
+func (dc *DeploymentConfig) SetValidationLevel(level string) error {
 	switch level {
 	case "ERROR":
-		bc.Config.ValidationLevel = validationError
+		dc.Config.ValidationLevel = validationError
 	case "WARNING":
-		bc.Config.ValidationLevel = validationWarning
+		dc.Config.ValidationLevel = validationWarning
 	case "IGNORE":
-		bc.Config.ValidationLevel = validationIgnore
+		dc.Config.ValidationLevel = validationIgnore
 	default:
 		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
 	}
@@ -147,24 +148,24 @@ type validatorConfig struct {
 	Inputs    map[string]interface{}
 }
 
-// HasKind checks to see if a resource group contains any resources of the given
-// kind. Note that a resourceGroup should never have more than one kind, this
+// HasKind checks to see if a resource group contains any modules of the given
+// kind. Note that a DeploymentGroup should never have more than one kind, this
 // function is used in the validation step to ensure that is true.
-func (g ResourceGroup) HasKind(kind string) bool {
-	for _, res := range g.Resources {
-		if res.Kind == kind {
+func (g DeploymentGroup) HasKind(kind string) bool {
+	for _, mod := range g.Modules {
+		if mod.Kind == kind {
 			return true
 		}
 	}
 	return false
 }
 
-// Resource stores YAML definition of a resource
-type Resource struct {
+// Module stores YAML definition of an HPC cluster component defined in a blueprint
+type Module struct {
 	Source           string
 	Kind             string
 	ID               string
-	ResourceName     string
+	ModuleName       string
 	Use              []string
 	WrapSettingsWith map[string][]string
 	Outputs          []string `yaml:"outputs,omitempty"`
@@ -173,51 +174,51 @@ type Resource struct {
 
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
 // a new map is created.
-func (r *Resource) createWrapSettingsWith() {
-	if r.WrapSettingsWith == nil {
-		r.WrapSettingsWith = make(map[string][]string)
+func (m *Module) createWrapSettingsWith() {
+	if m.WrapSettingsWith == nil {
+		m.WrapSettingsWith = make(map[string][]string)
 	}
 }
 
-// YamlConfig stores the contents on the User YAML
+// Blueprint stores the contents on the User YAML
 // omitempty on validation_level ensures that expand will not expose the setting
 // unless it has been set to a non-default value; the implementation as an
 // integer is primarily for internal purposes even if it can be set in blueprint
-type YamlConfig struct {
+type Blueprint struct {
 	BlueprintName            string `yaml:"blueprint_name"`
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     map[string]interface{}
-	ResourceGroups           []ResourceGroup  `yaml:"deployment_groups"`
-	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults"`
+	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
+	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
-// BlueprintConfig is a container for the imported YAML data and supporting data for
+// DeploymentConfig is a container for the imported YAML data and supporting data for
 // creating the blueprint from it
-type BlueprintConfig struct {
-	Config YamlConfig
-	// Indexed by Resource Group name and Resource Source
-	ResourcesInfo map[string]map[string]resreader.ResourceInfo
-	// Maps resource ID to group index
-	ResourceToGroup map[string]int
-	expanded        bool
+type DeploymentConfig struct {
+	Config Blueprint
+	// Indexed by Resource Group name and Module Source
+	ModulesInfo map[string]map[string]modulereader.ModuleInfo
+	// Maps module ID to group index
+	ModuleToGroup map[string]int
+	expanded      bool
 }
 
 // ExpandConfig expands the yaml config in place
-func (bc *BlueprintConfig) ExpandConfig() {
-	bc.setResourcesInfo()
-	bc.validateConfig()
-	bc.expand()
-	bc.validate()
-	bc.expanded = true
+func (dc *DeploymentConfig) ExpandConfig() {
+	dc.setModulesInfo()
+	dc.validateConfig()
+	dc.expand()
+	dc.validate()
+	dc.expanded = true
 }
 
-// NewBlueprintConfig is a constructor for BlueprintConfig
-func NewBlueprintConfig(configFilename string) BlueprintConfig {
-	newBlueprintConfig := BlueprintConfig{
-		Config: importYamlConfig(configFilename),
+// NewDeploymentConfig is a constructor for DeploymentConfig
+func NewDeploymentConfig(configFilename string) DeploymentConfig {
+	newDeploymentConfig := DeploymentConfig{
+		Config: importBlueprint(configFilename),
 	}
-	return newBlueprintConfig
+	return newDeploymentConfig
 }
 
 func deprecatedSchema070a() {
@@ -230,44 +231,44 @@ func deprecatedSchema070a() {
 	os.Stderr.WriteString("*****************************************************************************************\n\n")
 }
 
-// ImportYamlConfig imports the blueprint configuration provided.
-func importYamlConfig(yamlConfigFilename string) YamlConfig {
-	yamlConfigText, err := ioutil.ReadFile(yamlConfigFilename)
+// ImportBlueprint imports the blueprint configuration provided.
+func importBlueprint(blueprintFilename string) Blueprint {
+	blueprintText, err := ioutil.ReadFile(blueprintFilename)
 	if err != nil {
 		log.Fatalf("%s, filename=%s: %v",
-			errorMessages["fileLoadError"], yamlConfigFilename, err)
+			errorMessages["fileLoadError"], blueprintFilename, err)
 	}
 
-	var yamlConfig YamlConfig
-	err = yaml.UnmarshalStrict(yamlConfigText, &yamlConfig)
+	var blueprint Blueprint
+	err = yaml.UnmarshalStrict(blueprintText, &blueprint)
 
 	if err != nil {
 		deprecatedSchema070a()
 		log.Fatalf("%s filename=%s: %v",
-			errorMessages["yamlUnmarshalError"], yamlConfigFilename, err)
+			errorMessages["yamlUnmarshalError"], blueprintFilename, err)
 	}
 
 	// Ensure Vars is not a nil map if not set by the user
-	if len(yamlConfig.Vars) == 0 {
-		yamlConfig.Vars = make(map[string]interface{})
+	if len(blueprint.Vars) == 0 {
+		blueprint.Vars = make(map[string]interface{})
 	}
 
-	if len(yamlConfig.Vars) == 0 {
-		yamlConfig.Vars = make(map[string]interface{})
+	if len(blueprint.Vars) == 0 {
+		blueprint.Vars = make(map[string]interface{})
 	}
 
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
-	if !isValidValidationLevel(yamlConfig.ValidationLevel) {
-		yamlConfig.ValidationLevel = validationError
+	if !isValidValidationLevel(blueprint.ValidationLevel) {
+		blueprint.ValidationLevel = validationError
 	}
 
-	return yamlConfig
+	return blueprint
 }
 
-// ExportYamlConfig exports the internal representation of a blueprint config
-func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) ([]byte, error) {
-	d, err := yaml.Marshal(&bc.Config)
+// ExportBlueprint exports the internal representation of a blueprint config
+func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error) {
+	d, err := yaml.Marshal(&dc.Config)
 	if err != nil {
 		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
@@ -283,29 +284,29 @@ func (bc BlueprintConfig) ExportYamlConfig(outputFilename string) ([]byte, error
 	return nil, nil
 }
 
-func createResourceInfo(
-	resourceGroup ResourceGroup) map[string]resreader.ResourceInfo {
-	resInfo := make(map[string]resreader.ResourceInfo)
-	for _, res := range resourceGroup.Resources {
-		if _, exists := resInfo[res.Source]; !exists {
-			reader := sourcereader.Factory(res.Source)
-			ri, err := reader.GetResourceInfo(res.Source, res.Kind)
+func createModuleInfo(
+	deploymentGroup DeploymentGroup) map[string]modulereader.ModuleInfo {
+	modInfo := make(map[string]modulereader.ModuleInfo)
+	for _, mod := range deploymentGroup.Modules {
+		if _, exists := modInfo[mod.Source]; !exists {
+			reader := sourcereader.Factory(mod.Source)
+			ri, err := reader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
 				log.Fatalf(
-					"failed to get info for module at %s while setting bc.ResourcesInfo: %e",
-					res.Source, err)
+					"failed to get info for module at %s while setting dc.ModulesInfo: %e",
+					mod.Source, err)
 			}
-			resInfo[res.Source] = ri
+			modInfo[mod.Source] = ri
 		}
 	}
-	return resInfo
+	return modInfo
 }
 
-// setResourcesInfo populates needed information from resources.
-func (bc *BlueprintConfig) setResourcesInfo() {
-	bc.ResourcesInfo = make(map[string]map[string]resreader.ResourceInfo)
-	for _, grp := range bc.Config.ResourceGroups {
-		bc.ResourcesInfo[grp.Name] = createResourceInfo(grp)
+// setModulesInfo populates needed information from modules
+func (dc *DeploymentConfig) setModulesInfo() {
+	dc.ModulesInfo = make(map[string]map[string]modulereader.ModuleInfo)
+	for _, grp := range dc.Config.DeploymentGroups {
+		dc.ModulesInfo[grp.Name] = createModuleInfo(grp)
 	}
 }
 
@@ -323,52 +324,51 @@ func validateGroupName(name string, usedNames map[string]bool) {
 	usedNames[name] = true
 }
 
-// checkResourceAndGroupNames checks and imports resource and resource group IDs
+// checkModuleAndGroupNames checks and imports module and resource group IDs
 // and names respectively.
-func checkResourceAndGroupNames(
-	resGroups []ResourceGroup) (map[string]int, error) {
-	resourceToGroup := make(map[string]int)
+func checkModuleAndGroupNames(
+	depGroups []DeploymentGroup) (map[string]int, error) {
+	moduleToGroup := make(map[string]int)
 	groupNames := make(map[string]bool)
-	for iGrp, grp := range resGroups {
+	for iGrp, grp := range depGroups {
 		validateGroupName(grp.Name, groupNames)
-		var groupKind string
-		for _, res := range grp.Resources {
-			// Verify no duplicate resource names
-			if _, ok := resourceToGroup[res.ID]; ok {
-				return resourceToGroup, fmt.Errorf(
-					"%s: %s used more than once", errorMessages["duplicateID"], res.ID)
+		for _, mod := range grp.Modules {
+			// Verify no duplicate module names
+			if _, ok := moduleToGroup[mod.ID]; ok {
+				return moduleToGroup, fmt.Errorf(
+					"%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
 			}
-			resourceToGroup[res.ID] = iGrp
+			moduleToGroup[mod.ID] = iGrp
 
-			// Verify Resource Kind matches group Kind
-			if groupKind == "" {
-				groupKind = res.Kind
-			} else if groupKind != res.Kind {
-				return resourceToGroup, fmt.Errorf(
+			// Verify Module Kind matches group Kind
+			if grp.Kind == "" {
+				depGroups[iGrp].Kind = mod.Kind
+			} else if grp.Kind != mod.Kind {
+				return moduleToGroup, fmt.Errorf(
 					"%s: deployment group %s, got: %s, wanted: %s",
 					errorMessages["mixedModule"],
-					grp.Name, groupKind, res.Kind)
+					grp.Name, grp.Kind, mod.Kind)
 			}
 		}
 	}
-	return resourceToGroup, nil
+	return moduleToGroup, nil
 }
 
-// checkUsedResourceNames verifies that any used resources have valid names and
+// checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
-func checkUsedResourceNames(
-	resGroups []ResourceGroup, idToGroup map[string]int) error {
-	for iGrp, grp := range resGroups {
-		for _, res := range grp.Resources {
-			for _, usedRes := range res.Use {
-				// Check if resource even exists
-				if _, ok := idToGroup[usedRes]; !ok {
-					return fmt.Errorf("used module ID %s does not exist", usedRes)
+func checkUsedModuleNames(
+	depGroups []DeploymentGroup, idToGroup map[string]int) error {
+	for iGrp, grp := range depGroups {
+		for _, mod := range grp.Modules {
+			for _, usedMod := range mod.Use {
+				// Check if module even exists
+				if _, ok := idToGroup[usedMod]; !ok {
+					return fmt.Errorf("used module ID %s does not exist", usedMod)
 				}
-				// Ensure resource is from the correct group
-				if idToGroup[usedRes] != iGrp {
+				// Ensure module is from the correct group
+				if idToGroup[usedMod] != iGrp {
 					return fmt.Errorf(
-						"used module ID %s not found in this Deployment Group", usedRes)
+						"used module ID %s not found in this Deployment Group", usedMod)
 				}
 			}
 		}
@@ -377,20 +377,20 @@ func checkUsedResourceNames(
 }
 
 // validateConfig runs a set of simple early checks on the imported input YAML
-func (bc *BlueprintConfig) validateConfig() {
-	resourceToGroup, err := checkResourceAndGroupNames(bc.Config.ResourceGroups)
+func (dc *DeploymentConfig) validateConfig() {
+	moduleToGroup, err := checkModuleAndGroupNames(dc.Config.DeploymentGroups)
 	if err != nil {
 		log.Fatal(err)
 	}
-	bc.ResourceToGroup = resourceToGroup
-	if err = checkUsedResourceNames(
-		bc.Config.ResourceGroups, bc.ResourceToGroup); err != nil {
+	dc.ModuleToGroup = moduleToGroup
+	if err = checkUsedModuleNames(
+		dc.Config.DeploymentGroups, dc.ModuleToGroup); err != nil {
 		log.Fatal(err)
 	}
 }
 
 // SetCLIVariables sets the variables at CLI
-func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
+func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 	for _, cliVar := range cliVariables {
 		arr := strings.SplitN(cliVar, "=", 2)
 
@@ -399,18 +399,18 @@ func (bc *BlueprintConfig) SetCLIVariables(cliVariables []string) error {
 		}
 
 		key, value := arr[0], arr[1]
-		bc.Config.Vars[key] = value
+		dc.Config.Vars[key] = value
 	}
 
 	return nil
 }
 
 // SetBackendConfig sets the backend config variables at CLI
-func (bc *BlueprintConfig) SetBackendConfig(cliBEConfigVars []string) error {
+func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
 	// Set "gcs" as default value when --backend-config is specified at CLI
 	if len(cliBEConfigVars) > 0 {
-		bc.Config.TerraformBackendDefaults.Type = "gcs"
-		bc.Config.TerraformBackendDefaults.Configuration = make(map[string]interface{})
+		dc.Config.TerraformBackendDefaults.Type = "gcs"
+		dc.Config.TerraformBackendDefaults.Configuration = make(map[string]interface{})
 	}
 
 	for _, config := range cliBEConfigVars {
@@ -423,9 +423,9 @@ func (bc *BlueprintConfig) SetBackendConfig(cliBEConfigVars []string) error {
 		key, value := arr[0], arr[1]
 		switch key {
 		case "type":
-			bc.Config.TerraformBackendDefaults.Type = value
+			dc.Config.TerraformBackendDefaults.Type = value
 		default:
-			bc.Config.TerraformBackendDefaults.Configuration[key] = value
+			dc.Config.TerraformBackendDefaults.Configuration[key] = value
 		}
 
 	}
@@ -456,7 +456,7 @@ func IdentifyLiteralVariable(str string) (string, string, bool) {
 	return contents[1], contents[2], true
 }
 
-// HandleLiteralVariable is exported for use in reswriter as well
+// HandleLiteralVariable is exported for use in modulewriter as well
 func HandleLiteralVariable(str string) string {
 	re := regexp.MustCompile(literalExp)
 	contents := re.FindStringSubmatch(str)
@@ -494,21 +494,21 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 	return cMap, nil
 }
 
-// ResolveGlobalVariables given a map of strings to cty.Value types, will examine
-// all cty.Values that are of type cty.String. If they are literal global variables,
-// then they are replaced by the cty.Value of the corresponding entry in
-// yc.Vars. All other cty.Values are unmodified.
-// ERROR: if conversion from yc.Vars to map[string]cty.Value fails
+// ResolveVariables is given two maps of strings to cty.Value types, one
+// representing a list of settings or variables to resolve (ctyMap) and other
+// representing variables used to resolve (origin). This function will
+// examine all cty.Values that are of type cty.String. If they are literal
+// global variables, then they are replaced by the cty.Value of the
+// corresponding entry in the origin. All other cty.Values are unmodified.
 // ERROR: if (somehow) the cty.String cannot be converted to a Go string
 // ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global variable
-//        being resolved does not exist in yc.Vars
-func (yc *YamlConfig) ResolveGlobalVariables(ctyMap map[string]cty.Value) error {
-	ctyVars, err := ConvertMapToCty(yc.Vars)
-	if err != nil {
-		return fmt.Errorf("could not convert global variables to cty map")
-	}
+//        being resolved does not exist in b.Vars
+func ResolveVariables(
+	ctyMap map[string]cty.Value,
+	origin map[string]cty.Value,
+) error {
 	evalCtx := &hcl.EvalContext{
-		Variables: map[string]cty.Value{"var": cty.ObjectVal(ctyVars)},
+		Variables: map[string]cty.Value{"var": cty.ObjectVal(origin)},
 	}
 	for key, val := range ctyMap {
 		if val.Type() == cty.String {
@@ -544,9 +544,20 @@ func (err *DeploymentNameError) Error() string {
 	return fmt.Sprintf("deployment_name must be a string and cannot be empty, cause: %v", err.cause)
 }
 
+// ResolveGlobalVariables will resolve literal variables "((var.*))" in the
+// provided map to their corresponding value in the global variables of the
+// Blueprint.
+func (b Blueprint) ResolveGlobalVariables(ctyVars map[string]cty.Value) error {
+	origin, err := ConvertMapToCty(b.Vars)
+	if err != nil {
+		return fmt.Errorf("error converting global variables to cty: %w", err)
+	}
+	return ResolveVariables(ctyVars, origin)
+}
+
 // DeploymentName returns the deployment_name from the config and does approperate checks.
-func (yc *YamlConfig) DeploymentName() (string, error) {
-	nameInterface, found := yc.Vars["deployment_name"]
+func (b *Blueprint) DeploymentName() (string, error) {
+	nameInterface, found := b.Vars["deployment_name"]
 	if !found {
 		return "", &DeploymentNameError{"deployment_name variable not defined."}
 	}

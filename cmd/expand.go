@@ -58,18 +58,18 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 		bpFilename = args[0]
 	}
 
-	blueprintConfig := config.NewBlueprintConfig(bpFilename)
-	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
+	deploymentConfig := config.NewDeploymentConfig(bpFilename)
+	if err := deploymentConfig.SetCLIVariables(cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
 	}
-	if err := blueprintConfig.SetBackendConfig(cliBEConfigVars); err != nil {
+	if err := deploymentConfig.SetBackendConfig(cliBEConfigVars); err != nil {
 		log.Fatalf("Failed to set the backend config at CLI: %v", err)
 	}
-	if err := blueprintConfig.SetValidationLevel(validationLevel); err != nil {
+	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
 		log.Fatal(err)
 	}
-	blueprintConfig.ExpandConfig()
-	blueprintConfig.ExportYamlConfig(outputFilename)
+	deploymentConfig.ExpandConfig()
+	deploymentConfig.ExportBlueprint(outputFilename)
 	fmt.Printf(
 		"Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)
 }

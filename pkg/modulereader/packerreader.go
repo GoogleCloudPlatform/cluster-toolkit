@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package resreader
+package modulereader
 
 import (
 	"fmt"
@@ -25,14 +25,14 @@ import (
 	"path/filepath"
 )
 
-// PackerReader implements ResReader for packer resources
+// PackerReader implements Modulereader for packer modules
 type PackerReader struct {
-	allResInfo map[string]ResourceInfo
+	allModInfo map[string]ModuleInfo
 }
 
-// SetInfo sets the resource info for a resource key'd on the source
-func (r PackerReader) SetInfo(source string, resInfo ResourceInfo) {
-	r.allResInfo[source] = resInfo
+// SetInfo sets the module info for a module key'd on the source
+func (r PackerReader) SetInfo(source string, modInfo ModuleInfo) {
+	r.allModInfo[source] = modInfo
 }
 
 func addTfExtension(filename string) {
@@ -92,7 +92,7 @@ func copyHCLFilesToTmp(dir string) (string, []string, error) {
 		// Copy
 		if _, err := io.Copy(destination, hclFile); err != nil {
 			return "", hclFiles, fmt.Errorf(
-				"failed to copy packer resource at %s to temporary directory to inspect: %v",
+				"failed to copy packer module at %s to temporary directory to inspect: %v",
 				dir, err)
 		}
 		hclFilePaths = append(hclFilePaths, destPath)
@@ -100,24 +100,24 @@ func copyHCLFilesToTmp(dir string) (string, []string, error) {
 	return tmpDir, hclFilePaths, nil
 }
 
-// GetInfo reads the ResourceInfo for a packer module
-func (r PackerReader) GetInfo(source string) (ResourceInfo, error) {
-	if resInfo, ok := r.allResInfo[source]; ok {
-		return resInfo, nil
+// GetInfo reads the ModuleInfo for a packer module
+func (r PackerReader) GetInfo(source string) (ModuleInfo, error) {
+	if modInfo, ok := r.allModInfo[source]; ok {
+		return modInfo, nil
 	}
 	tmpDir, packerFiles, err := copyHCLFilesToTmp(source)
 	if err != nil {
-		return ResourceInfo{}, err
+		return ModuleInfo{}, err
 	}
 	defer os.RemoveAll(tmpDir)
 
 	for _, packerFile := range packerFiles {
 		addTfExtension(packerFile)
 	}
-	resInfo, err := getHCLInfo(tmpDir)
+	modInfo, err := getHCLInfo(tmpDir)
 	if err != nil {
-		return resInfo, fmt.Errorf("PackerReader: %v", err)
+		return modInfo, fmt.Errorf("PackerReader: %v", err)
 	}
-	r.allResInfo[source] = resInfo
-	return resInfo, nil
+	r.allModInfo[source] = modInfo
+	return modInfo, nil
 }

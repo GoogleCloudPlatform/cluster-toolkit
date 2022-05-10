@@ -8,7 +8,7 @@ Cloud using the HPC Toolkit.
 
 ## Select a Project
 
-Select a project in which to deploy an HPC cluster on Google .
+Select a project in which to deploy an HPC cluster on Google.
 
 <walkthrough-project-setup billing="true"></walkthrough-project-setup>
 
@@ -64,7 +64,8 @@ This should show you the version of the HPC Toolkit you are using.
 ## Generate a Deployment
 
 To create a deployment, an input blueprint file needs to be written or adapted
-from one of the examples found in the `examples/` directory.
+from one of the examples found in the `examples/` or `community/examples`
+directories.
 
 This tutorial will use examples/hpc-cluster-small.yaml, which is a good starting
 point and creates a deployment containing:
@@ -86,7 +87,9 @@ file, use the ghpc binary to create a deployment directory by running:
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
-> blueprint variables.
+> blueprint variables. The `--vars` argument supports comma-separated list of
+> name=value variables to override blueprint variables. This feature only
+> supports variables of string type.
 
 This will create a deployment directory named `hpc-small/`, which
 contains the terraform needed to deploy your cluster.
@@ -118,6 +121,17 @@ displayed:
 ```shell
 Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 ```
+
+> **_NOTE:_** This example does not contain any Packer-based modules but for
+> completeness, you can use the following command to deploy a Packer-based
+> deployment group:
+>
+> ```shell
+> cd <deployment-directory>/<packer-group>/<custom-vm-image>
+> packer init .
+> packer validate .
+> packer build .
+> ```
 
 ## Run a Job on the Cluster
 
@@ -165,6 +179,10 @@ $ srun -N 3 hostname
     slurm-hpc-small-compute-0-1
     slurm-hpc-small-compute-0-2
 ```
+
+By default, this runs the job on the `debug` partition. See details in
+[examples/](examples/README.md#compute-partition) for how to run on the more
+performant `compute` partition.
 
 Running the same job again will run much faster as Slurm will reuse the nodes.
 

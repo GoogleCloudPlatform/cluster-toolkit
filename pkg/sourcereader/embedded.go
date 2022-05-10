@@ -16,7 +16,7 @@ package sourcereader
 
 import (
 	"fmt"
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"io/fs"
 	"io/ioutil"
 	"os"
@@ -24,23 +24,23 @@ import (
 	"path/filepath"
 )
 
-// ResourceFS contains embedded resources (./resources) for use in building
-// blueprints. The main package creates and injects the resources directory as
-// hpc-toolkit/resources are not accessible at the package level.
-var ResourceFS BaseFS
+// ModuleFS contains embedded modules (./modules) for use in building
+// blueprints. The main package creates and injects the modules directory as
+// hpc-toolkit/modules are not accessible at the package level.
+var ModuleFS BaseFS
 
 // BaseFS is an extension of the io.fs interface with the functionality needed
-// in CopyDirFromResources. Works with embed.FS and afero.FS
+// in CopyDirFromModules. Works with embed.FS and afero.FS
 type BaseFS interface {
 	ReadDir(string) ([]fs.DirEntry, error)
 	ReadFile(string) ([]byte, error)
 }
 
-// EmbeddedSourceReader reads resources from a local directory
+// EmbeddedSourceReader reads modules from a local directory
 type EmbeddedSourceReader struct{}
 
-// copyDirFromResources copies an FS directory to a local path
-func copyDirFromResources(fs BaseFS, source string, dest string) error {
+// copyDirFromModules copies an FS directory to a local path
+func copyDirFromModules(fs BaseFS, source string, dest string) error {
 	dirEntries, err := fs.ReadDir(source)
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func copyDirFromResources(fs BaseFS, source string, dest string) error {
 			if err := os.Mkdir(entryDest, 0755); err != nil {
 				return err
 			}
-			if err = copyDirFromResources(fs, entrySource, entryDest); err != nil {
+			if err = copyDirFromModules(fs, entrySource, entryDest); err != nil {
 				return err
 			}
 		} else {
@@ -84,41 +84,41 @@ func copyFSToTempDir(fs BaseFS, modulePath string) (string, error) {
 	if err != nil {
 		return tmpDir, err
 	}
-	err = copyDirFromResources(fs, modulePath, tmpDir)
+	err = copyDirFromModules(fs, modulePath, tmpDir)
 	return tmpDir, err
 }
 
-// GetResourceInfo gets resreader.ResourceInfo for the given kind from the embedded source
-func (r EmbeddedSourceReader) GetResourceInfo(resPath string, kind string) (resreader.ResourceInfo, error) {
-	if !IsEmbeddedPath(resPath) {
-		return resreader.ResourceInfo{}, fmt.Errorf("Source is not valid: %s", resPath)
+// GetModuleInfo gets modulereader.ModuleInfo for the given kind from the embedded source
+func (r EmbeddedSourceReader) GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error) {
+	if !IsEmbeddedPath(modPath) {
+		return modulereader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
-	resDir, err := copyFSToTempDir(ResourceFS, resPath)
-	defer os.RemoveAll(resDir)
+	modDir, err := copyFSToTempDir(ModuleFS, modPath)
+	defer os.RemoveAll(modDir)
 	if err != nil {
 		err = fmt.Errorf("failed to copy embedded module at %s to tmp dir %s: %v",
-			resPath, resDir, err)
-		return resreader.ResourceInfo{}, err
+			modPath, modDir, err)
+		return modulereader.ModuleInfo{}, err
 	}
 
-	reader := resreader.Factory(kind)
-	return reader.GetInfo(resDir)
+	reader := modulereader.Factory(kind)
+	return reader.GetInfo(modDir)
 }
 
-// GetResource copies the embedded source to a provided destination (the blueprint directory)
-func (r EmbeddedSourceReader) GetResource(resPath string, copyPath string) error {
-	if !IsEmbeddedPath(resPath) {
-		return fmt.Errorf("Source is not valid: %s", resPath)
+// GetModule copies the embedded source to a provided destination (the deployment directory)
+func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
+	if !IsEmbeddedPath(modPath) {
+		return fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
-	resDir, err := copyFSToTempDir(ResourceFS, resPath)
-	defer os.RemoveAll(resDir)
+	modDir, err := copyFSToTempDir(ModuleFS, modPath)
+	defer os.RemoveAll(modDir)
 	if err != nil {
 		err = fmt.Errorf("failed to copy embedded module at %s to tmp dir %s: %v",
-			resPath, resDir, err)
+			modPath, modDir, err)
 		return err
 	}
 
-	return copyFromPath(resDir, copyPath)
+	return copyFromPath(modDir, copyPath)
 }

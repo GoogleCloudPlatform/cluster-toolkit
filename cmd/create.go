@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/reswriter"
+	"hpc-toolkit/pkg/modulewriter"
 	"log"
 
 	"github.com/spf13/cobra"
@@ -77,19 +77,19 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 		bpFilename = args[0]
 	}
 
-	blueprintConfig := config.NewBlueprintConfig(bpFilename)
-	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
+	deploymentConfig := config.NewDeploymentConfig(bpFilename)
+	if err := deploymentConfig.SetCLIVariables(cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
 	}
-	if err := blueprintConfig.SetBackendConfig(cliBEConfigVars); err != nil {
+	if err := deploymentConfig.SetBackendConfig(cliBEConfigVars); err != nil {
 		log.Fatalf("Failed to set the backend config at CLI: %v", err)
 	}
-	if err := blueprintConfig.SetValidationLevel(validationLevel); err != nil {
+	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
 		log.Fatal(err)
 	}
-	blueprintConfig.ExpandConfig()
-	if err := reswriter.WriteBlueprint(&blueprintConfig.Config, outputDir, overwriteDeployment); err != nil {
-		var target *reswriter.OverwriteDeniedError
+	deploymentConfig.ExpandConfig()
+	if err := modulewriter.WriteDeployment(&deploymentConfig.Config, outputDir, overwriteDeployment); err != nil {
+		var target *modulewriter.OverwriteDeniedError
 		if errors.As(err, &target) {
 			fmt.Printf("\n%s\n", err.Error())
 		} else {

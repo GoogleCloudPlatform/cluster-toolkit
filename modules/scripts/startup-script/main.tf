@@ -59,6 +59,7 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_storage_bucket" "configs_bucket" {
+  project                     = var.project_id
   name                        = "${var.deployment_name}-startup-scripts-${random_id.resource_name_suffix.hex}"
   uniform_bucket_level_access = true
   location                    = var.region

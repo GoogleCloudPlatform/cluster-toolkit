@@ -14,7 +14,7 @@
 * limitations under the License.
  */
 
-package reswriter
+package modulewriter
 
 import (
 	"fmt"
@@ -39,17 +39,17 @@ const (
 
 // TFWriter writes terraform to the blueprint folder
 type TFWriter struct {
-	numResources int
+	numModules int
 }
 
-// GetNumResources getter for resource count
-func (w *TFWriter) getNumResources() int {
-	return w.numResources
+// GetNumModules getter for module count of kind terraform
+func (w *TFWriter) getNumModules() int {
+	return w.numModules
 }
 
-// AddNumResources add value to resource count
-func (w *TFWriter) addNumResources(value int) {
-	w.numResources += value
+// AddNumModules add value to module count
+func (w *TFWriter) addNumModules(value int) {
+	w.numModules += value
 }
 
 // createBaseFile creates a baseline file for all terraform/hcl including a
@@ -82,7 +82,7 @@ func appendHCLToFile(path string, hclBytes []byte) error {
 }
 
 func writeOutputs(
-	resources []config.Resource,
+	modules []config.Module,
 	dst string,
 ) error {
 	// Create file
@@ -96,17 +96,17 @@ func writeOutputs(
 	hclBody := hclFile.Body()
 
 	// Add all outputs from each module
-	for _, res := range resources {
-		for _, output := range res.Outputs {
+	for _, mod := range modules {
+		for _, output := range mod.Outputs {
 			// Create output block
-			outputName := fmt.Sprintf("%s_%s", output, res.ID)
+			outputName := fmt.Sprintf("%s_%s", output, mod.ID)
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
 			// Add attributes (description, value)
-			desc := fmt.Sprintf("Generated output from module '%s'", res.ID)
+			desc := fmt.Sprintf("Generated output from module '%s'", mod.ID)
 			blockBody.SetAttributeValue("description", cty.StringVal(desc))
-			value := fmt.Sprintf("((module.%s.%s))", res.ID, output)
+			value := fmt.Sprintf("((module.%s.%s))", mod.ID, output)
 			blockBody.SetAttributeValue("value", cty.StringVal(value))
 			hclBody.AppendNewline()
 		}
@@ -191,7 +191,7 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 }
 
 func writeMain(
-	resources []config.Resource,
+	modules []config.Module,
 	tfBackend config.TerraformBackend,
 	dst string,
 ) error {
@@ -221,26 +221,25 @@ func writeMain(
 		hclBody.AppendNewline()
 	}
 
-	// For each resource:
-	for _, res := range resources {
+	for _, mod := range modules {
 		// Convert settings to cty.Value
-		ctySettings, err := config.ConvertMapToCty(res.Settings)
+		ctySettings, err := config.ConvertMapToCty(mod.Settings)
 		if err != nil {
 			return fmt.Errorf(
 				"error converting setting in module %s to cty when writing main.tf: %v",
-				res.ID, err)
+				mod.ID, err)
 		}
 
 		// Add block
-		moduleBlock := hclBody.AppendNewBlock("module", []string{res.ID})
+		moduleBlock := hclBody.AppendNewBlock("module", []string{mod.ID})
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
 		var moduleSource cty.Value
-		if sourcereader.IsGitHubPath(res.Source) {
-			moduleSource = cty.StringVal(res.Source)
+		if sourcereader.IsGitHubPath(mod.Source) {
+			moduleSource = cty.StringVal(mod.Source)
 		} else {
-			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", res.ResourceName))
+			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", mod.ModuleName))
 		}
 
 		moduleBody.SetAttributeValue("source", moduleSource)
@@ -248,7 +247,7 @@ func writeMain(
 		// For each Setting
 		for setting, value := range ctySettings {
 			if setting == "labels" {
-				// Manually compose merge(var.labels, {res.labels}) using tokens
+				// Manually compose merge(var.labels, {mod.labels}) using tokens
 				mergeBytes := []byte("merge(var.labels, ")
 
 				labelsStr := flattenHCLLabelsMap(
@@ -264,11 +263,11 @@ func writeMain(
 				continue
 			}
 
-			if wrap, ok := res.WrapSettingsWith[setting]; ok {
+			if wrap, ok := mod.WrapSettingsWith[setting]; ok {
 				if len(wrap) != 2 {
 					return fmt.Errorf(
 						"invalid length of WrapSettingsWith for %s.%s, expected 2 got %d",
-						res.ID, setting, len(wrap))
+						mod.ID, setting, len(wrap))
 				}
 				wrapBytes := []byte(wrap[0])
 				endBytes := []byte(wrap[1])
@@ -368,86 +367,89 @@ func printTerraformInstructions(grpPath string) {
 	fmt.Printf("  terraform -chdir=%s apply\n", grpPath)
 }
 
-// writeTopLevel writes any needed files to the top layer of the blueprint
-func (w TFWriter) writeResourceGroups(
-	yamlConfig *config.YamlConfig,
-	outputDir string,
+// writeDeploymentGroup creates and sets up the provided terraform deployment
+// group in the provided deployment directory
+// depGroup: The deployment group that is being written
+// globalVars: The top-level variables, needed for writing terraform.tfvars and
+//             variables.tf
+// groupDir: The path to the directory the resource group will be created in
+func (w TFWriter) writeDeploymentGroup(
+	depGroup config.DeploymentGroup,
+	globalVars map[string]interface{},
+	deploymentDir string,
 ) error {
-	deploymentName, err := yamlConfig.DeploymentName()
-	if err != nil {
-		return err
-	}
-	ctyVars, err := config.ConvertMapToCty(yamlConfig.Vars)
+
+	ctyVars, err := config.ConvertMapToCty(globalVars)
 	if err != nil {
 		return fmt.Errorf(
 			"error converting global vars to cty for writing: %v", err)
 	}
-	for _, resGroup := range yamlConfig.ResourceGroups {
-		if !resGroup.HasKind("terraform") {
-			continue
-		}
-		writePath := filepath.Join(outputDir, deploymentName, resGroup.Name)
 
-		// Write main.tf file
-		if err := writeMain(
-			resGroup.Resources, resGroup.TerraformBackend, writePath,
-		); err != nil {
-			return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
-				resGroup.Name, err)
-		}
+	writePath := filepath.Join(deploymentDir, depGroup.Name)
 
-		// Write variables.tf file
-		if err := writeVariables(ctyVars, writePath); err != nil {
-			return fmt.Errorf(
-				"error writing variables.tf file for deployment group %s: %v",
-				resGroup.Name, err)
-		}
-
-		// Write outputs.tf file
-		if err := writeOutputs(resGroup.Resources, writePath); err != nil {
-			return fmt.Errorf(
-				"error writing outputs.tf file for deployment group %s: %v",
-				resGroup.Name, err)
-		}
-
-		// Write terraform.tfvars file
-		if err := writeTfvars(ctyVars, writePath); err != nil {
-			return fmt.Errorf(
-				"error writing terraform.tfvars file for deployment group %s: %v",
-				resGroup.Name, err)
-		}
-
-		// Write providers.tf file
-		if err := writeProviders(ctyVars, writePath); err != nil {
-			return fmt.Errorf(
-				"error writing providers.tf file for deployment group %s: %v",
-				resGroup.Name, err)
-		}
-
-		// Write versions.tf file
-		if err := writeVersions(writePath); err != nil {
-			return fmt.Errorf(
-				"error writing versions.tf file for deployment group %s: %v",
-				resGroup.Name, err)
-		}
-
-		printTerraformInstructions(writePath)
+	// Write main.tf file
+	if err := writeMain(
+		depGroup.Modules, depGroup.TerraformBackend, writePath,
+	); err != nil {
+		return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
+			depGroup.Name, err)
 	}
+
+	// Write variables.tf file
+	if err := writeVariables(ctyVars, writePath); err != nil {
+		return fmt.Errorf(
+			"error writing variables.tf file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	// Write outputs.tf file
+	if err := writeOutputs(depGroup.Modules, writePath); err != nil {
+		return fmt.Errorf(
+			"error writing outputs.tf file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	// Write terraform.tfvars file
+	if err := writeTfvars(ctyVars, writePath); err != nil {
+		return fmt.Errorf(
+			"error writing terraform.tfvars file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	// Write providers.tf file
+	if err := writeProviders(ctyVars, writePath); err != nil {
+		return fmt.Errorf(
+			"error writing providers.tf file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	// Write versions.tf file
+	if err := writeVersions(writePath); err != nil {
+		return fmt.Errorf(
+			"error writing versions.tf file for deployment group %s: %v",
+			depGroup.Name, err)
+	}
+
+	printTerraformInstructions(writePath)
+
 	return nil
 }
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
 func (w TFWriter) restoreState(deploymentDir string) error {
-	prevResourceGroupPath := filepath.Join(deploymentDir, hiddenGhpcDirName, prevResourceGroupDirName)
-	files, err := ioutil.ReadDir(prevResourceGroupPath)
+	prevDeploymentGroupPath := filepath.Join(
+		deploymentDir, hiddenGhpcDirName, prevDeploymentGroupDirName)
+	files, err := ioutil.ReadDir(prevDeploymentGroupPath)
 	if err != nil {
-		return fmt.Errorf("Error trying to read previous modules in %s, %w", prevResourceGroupPath, err)
+		return fmt.Errorf(
+			"Error trying to read previous modules in %s, %w",
+			prevDeploymentGroupPath, err)
 	}
 
 	for _, f := range files {
 		var tfStateFiles = []string{tfStateFileName, tfStateBackupFileName}
 		for _, stateFile := range tfStateFiles {
-			src := filepath.Join(prevResourceGroupPath, f.Name(), stateFile)
+			src := filepath.Join(prevDeploymentGroupPath, f.Name(), stateFile)
 			dest := filepath.Join(deploymentDir, f.Name(), tfStateFileName)
 
 			if bytesRead, err := ioutil.ReadFile(src); err == nil {

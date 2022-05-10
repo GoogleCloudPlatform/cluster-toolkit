@@ -24,6 +24,14 @@ connected to a module subnetwork and with homefs mounted.
     - $(homefs.network_storage)
 ```
 
+## Support
+The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
+modules. For support with the underlying modules, see the instructions in the
+[slurm-gcp README][slurm-gcp-readme].
+
+[slurm-on-gcp]: https://github.com/SchedMD/slurm-gcp
+[slurm-gcp-readme]: https://github.com/SchedMD/slurm-gcp#slurm-on-google-cloud-platform
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
@@ -64,7 +72,7 @@ No modules.
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Instance template to use to create partition instances | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to partition compute instances. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Compute Platform machine type to use for this partition compute nodes | `string` | `"c2-standard-60"` | no |
-| <a name="input_max_node_count"></a> [max\_node\_count](#input\_max\_node\_count) | Maximum number of nodes allowed in this partition | `number` | `10` | no |
+| <a name="input_max_node_count"></a> [max\_node\_count](#input\_max\_node\_count) | Maximum number of nodes allowed in this partition | `number` | `50` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on the partition compute nodes. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |
 | <a name="input_partition_name"></a> [partition\_name](#input\_partition\_name) | The name of the slurm partition | `string` | n/a | yes |
 | <a name="input_preemptible_bursting"></a> [preemptible\_bursting](#input\_preemptible\_bursting) | Should use preemptibles to burst | `string` | `false` | no |

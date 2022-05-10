@@ -60,13 +60,34 @@ variable "local_mount" {
 variable "size_gb" {
   description = "Storage size of the filestore instance in GB."
   type        = number
-  default     = 2660
+  default     = 1024
+  validation {
+    condition     = var.size_gb >= 1024
+    error_message = "No Filestore tier supports less than 1024GiB.\nSee https://cloud.google.com/filestore/docs/service-tiers."
+  }
 }
 
 variable "filestore_tier" {
   description = "The service tier of the instance."
   type        = string
-  default     = "PREMIUM"
+  default     = "BASIC_HDD"
+  validation {
+    condition     = var.filestore_tier != "STANDARD"
+    error_message = "The preferred name for STANDARD tier is now BASIC_HDD\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
+  }
+  validation {
+    condition     = var.filestore_tier != "PREMIUM"
+    error_message = "The preferred name for PREMIUM tier is now BASIC_SSD\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
+  }
+  validation {
+    condition = contains([
+      "BASIC_HDD",
+      "BASIC_SSD",
+      "HIGH_SCALE_SSD",
+      "ENTERPRISE"
+    ], var.filestore_tier)
+    error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','HIGH_SCALE_SSD','ENTERPRISE'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
+  }
 }
 
 variable "labels" {

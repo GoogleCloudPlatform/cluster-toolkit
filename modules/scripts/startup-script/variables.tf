@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+variable "project_id" {
+  description = "Project in which the HPC deployment will be created"
+  type        = string
+}
+
 variable "deployment_name" {
   description = "Name of the HPC deployment, used to name GCS bucket for startup scripts."
   type        = string

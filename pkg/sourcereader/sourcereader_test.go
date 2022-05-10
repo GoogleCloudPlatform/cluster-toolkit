@@ -63,7 +63,7 @@ func teardown() {
 
 func TestMain(m *testing.M) {
 	setup()
-	createTmpResource()
+	createTmpModule()
 	code := m.Run()
 	teardown()
 	os.Exit(code)

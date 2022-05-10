@@ -24,16 +24,15 @@ resource "random_password" "password" {
 }
 
 locals {
-  project_id        = var.project_id
-  region            = var.region
   sql_instance_name = var.sql_instance_name == null ? "${var.deployment_name}-sql-${random_id.resource_name_suffix.hex}" : var.sql_instance_name
   sql_password      = var.sql_password == null ? random_password.password.result : var.sql_password
 }
 
 resource "google_sql_database_instance" "instance" {
+  project             = var.project_id
   depends_on          = [var.nat_ips]
   name                = local.sql_instance_name
-  region              = local.region
+  region              = var.region
   deletion_protection = var.deletion_protection
   database_version    = "MYSQL_5_7"
 
@@ -58,11 +57,13 @@ resource "google_sql_database_instance" "instance" {
 }
 
 resource "google_sql_database" "database" {
+  project  = var.project_id
   name     = "slurm_accounting"
   instance = google_sql_database_instance.instance.name
 }
 
 resource "google_sql_user" "users" {
+  project  = var.project_id
   name     = var.sql_username
   instance = google_sql_database_instance.instance.name
   password = local.sql_password
@@ -70,7 +71,7 @@ resource "google_sql_user" "users" {
 
 resource "google_bigquery_connection" "connection" {
   provider = google-beta
-  project  = local.project_id
+  project  = var.project_id
   cloud_sql {
     instance_id = google_sql_database_instance.instance.connection_name
     database    = google_sql_database.database.name

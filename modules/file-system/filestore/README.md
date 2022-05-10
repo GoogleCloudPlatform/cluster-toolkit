@@ -4,7 +4,43 @@ This module creates a [filestore](https://cloud.google.com/filestore)
 instance. Filestore is a high performance network file system that can be
 mounted to one or more compute VMs.
 
-### Example - PREMIUM tier
+### Filestore tiers
+
+At the time of writing, Filestore supports 4 [tiers of service][tiers] that are
+specified in the Toolkit using the following names:
+
+- Basic HDD: "BASIC\_HDD" ([preferred][tierapi]) or "STANDARD" (deprecated)
+- Basic SSD: "BASIC\_SSD" ([preferred][tierapi]) or "PREMIUM" (deprecated)
+- High Scale SSD: "HIGH\_SCALE\_SSD"
+- Enterprise: "ENTERPRISE"
+
+[tierapi]: https://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier
+
+**Please review the minimum storage requirements for each tier**. The Terraform
+module can only enforce the minimum value of the `size_gb` parameter for the
+lowest tier of service. If you supply a value that is too low, Filestore
+creation will fail when you run `terraform apply`.
+
+[tiers]: https://cloud.google.com/filestore/docs/service-tiers
+
+### Filestore quota
+
+Your project must have unused quota for Cloud Filestore in the region you will
+provision the storage. This can be found by browsing to the [Quota tab within IAM
+& Admin](https://console.cloud.google.com/iam-admin/quotas) in the Cloud Console.
+Please note that there are separate quota limits for HDD and SSD storage.
+
+All projects begin with 0 available quota for High Scale SSD tier. To use this
+tier, [make a request and wait for it to be approved][hs-ssd-quota].
+
+[hs-ssd-quota]: https://cloud.google.com/filestore/docs/high-scale
+
+### Example - Basic HDD tier
+
+Leave the tier unspecified to default to the smallest-sized, lowest performance
+Filestore instance (Basic HDD, 1024GiB). This instance has a module ID of
+`homefs`, will be mounted at `/home`, and is connected to the network defined in
+the `network1` module.
 
 ```yaml
 - source: ./modules/file-system/filestore
@@ -13,13 +49,7 @@ mounted to one or more compute VMs.
   settings:
     local_mount: /home
     network_name: $(network1.network_name)
-    size_gb: 2660
 ```
-
-This creates a filestore instance with the module ID of `homefs` that will be
-mounted at `/home` and is connected to the network defined in the `network1`
-module. `size_gb` is set to the minimum for the default "PREMIUM" tier,
-2.5TiB.
 
 ### Example - High Scale
 
@@ -86,14 +116,14 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instace if no name is specified. | `string` | n/a | yes |
 | <a name="input_filestore_share_name"></a> [filestore\_share\_name](#input\_filestore\_share\_name) | Name of the file system share on the instance. | `string` | `"nfsshare"` | no |
-| <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"PREMIUM"` | no |
+| <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_HDD"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the filestore instance. List key, value pairs. | `any` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this filestore instance. | `string` | `"/shared"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the GCE VPC network to which the instance is connected. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Filestore instance will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Location for Filestore instances at Enterprise tier. | `string` | n/a | yes |
-| <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the filestore instance in GB. | `number` | `2660` | no |
+| <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the filestore instance in GB. | `number` | `1024` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Location for Filestore instances below Enterprise tier. | `string` | n/a | yes |
 
 ## Outputs
@@ -101,7 +131,7 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_install_nfs_client"></a> [install\_nfs\_client](#output\_install\_nfs\_client) | Script for installing NFS client |
-| <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using startup-scripts |
-| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using startup-scripts |
+| <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using the startup-script module |
+| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using the startup-script module.<br>This runner requires ansible to be installed. This can be achieved using the<br>install\_ansible.sh script as a prior runner in the startup-script module:<br>runners:<br>- type: shell<br>  source: modules/startup-script/examples/install\_ansible.sh<br>  destination: install\_ansible.sh<br>- $(your-fs-id.mount\_runner)<br>... |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a filestore instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
