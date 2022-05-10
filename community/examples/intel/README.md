@@ -14,12 +14,12 @@ are known to achieve optimal performance on Google Cloud.
 [tutorial]: ../../../docs/tutorials/intel-select/intel-select.md
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
-## Provisioning the Intel-optimized Slurm cluster
+### Provisioning the Intel-optimized Slurm cluster
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
 
-## Initial Setup
+### Initial Setup for the Intel-Optimized Slurm Cluster
 
 Before provisioning any infrastructure in this project you should follow the
 Toolkit guidance to enable [APIs][apis] and establish minimum resource
@@ -39,7 +39,7 @@ And the following available quota is required in the region used by the cluster:
     successfully scale the partition to its maximum size
 * C2 CPUs: 4 (login node)
 
-## Deploying the Blueprint
+### Deploying the Slurm Cluster
 
 Use `ghpc` to provision the blueprint, supplying your project ID:
 
@@ -99,7 +99,7 @@ templates. **Please ignore the printed instructions** in favor of the following:
   terraform -chdir=hpc-intel-select/cluster apply
   ```
 
-## Connecting to the login node
+### Connecting to the login node
 
 Once the startup script has completed and Slurm reports readiness, connect to the login node.
 
@@ -118,7 +118,7 @@ Once the startup script has completed and Slurm reports readiness, connect to th
    This will open a separate pop up window with a terminal into our newly created
    Slurm login VM.
 
-## Access the cluster and provision an example job
+### Access the cluster and provision an example job
 
    **The commands below should be run on the login node.**
 
@@ -137,7 +137,7 @@ Once the startup script has completed and Slurm reports readiness, connect to th
   sbatch dgemm_job.sh
   ```
 
-## Delete the infrastructure when not in use
+### Delete the infrastructure when not in use
 
 > **_NOTE:_** If the Slurm controller is shut down before the auto-scale nodes
 > are destroyed then they will be left running.
@@ -150,3 +150,87 @@ infrastructure in reverse order of creation:
 terraform -chdir=hpc-intel-select/cluster destroy
 terraform -chdir=hpc-intel-select/primary destroy
 ```
+
+## DAOS Cluster
+
+The file [daos-cluster.yaml](daos-cluster.yaml) describes an environment with a 4-node DAOS server and a [managed instance group][mig] with two DAOS Clients.
+
+For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
+
+[mig]: https://cloud.google.com/compute/docs/instance-groups
+[google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
+
+### Provisioning the DAOS cluster
+
+Identify a project to work in and substitute its unique id wherever you see
+`<<PROJECT_ID>>` in the instructions below.
+
+### Initial Setup for DAOS Cluster
+
+Before provisioning any infrastructure in this project you should follow the
+Toolkit guidance to enable [APIs][apis] and establish minimum resource
+[quotas][quotas]. In particular, the following APIs should be enabled
+
+* compute.googleapis.com (Google Compute Engine)
+
+[apis]: ../../../README.md#enable-gcp-apis
+[quotas]: ../../../README.md#gcp-quotas
+
+And the following available quota is required in the region used by the cluster:
+
+* C2 CPUs: 32 (16 per client node)
+* N2 CPUs: 144 (36 per server node)
+* PD-SSD: 160GB (20GB per client and server)
+* Local SSD: 4 \* 16 \* 375 = 24000GB (6TB per server)
+
+### Deploying the DAOS Cluster
+
+Use `ghpc` to provision the blueprint, supplying your project ID:
+
+```shell
+ghpc create --vars project_id=<<PROJECT_ID>> daos-cluster.yaml  [--backend-config bucket=<GCS tf backend bucket>]
+```
+
+It will create a set of directories containing Terraform modules and Packer
+templates. Please follow `ghpc` instructions to deploy the environment:
+
+  ```shell
+  terraform -chdir=daos-cluster/primary init
+  terraform -chdir=daos-cluster/primary validate
+  terraform -chdir=daos-cluster/primary apply
+  ```
+
+### Connecting to a client node
+
+1. Open the following URL in a new tab. This will take you to `Compute Engine` >
+   `VM instances` in the Google Cloud Console:
+
+  ```text
+  https://console.cloud.google.com/compute
+  ```
+
+  Ensure that you select the project in which you are provisioning the cluster.
+
+1. Click on the `SSH` button associated with the `daos-client-0001`
+   instance.
+
+   This will open a separate pop up window with a terminal into our newly created
+   DAOS client VM.
+
+### Create pools and partitions
+
+After connecting to the client VM follow the necessary [DAOS administration tasks](daos-admin) to create a pool, and a container with the appropriate permissions and mount it.
+
+[daos-admin]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#perform-daos-administration-tasks
+
+### Delete the DAOS infrastructure when not in use
+
+To delete the remaining infrastructure:
+
+```shell
+terraform -chdir=daos-cluster/primary destroy
+```
+
+## DAOS Server with Slurm cluster
+
+The file [daos-slurm.yaml](daos-slurm.yaml) describes an environment with a 4-nodes DAOS server and a slurm cluster configured to be able to access this file system.
