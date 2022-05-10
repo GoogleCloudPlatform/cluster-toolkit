@@ -25,10 +25,14 @@ locals {
   enable_gvnic  = var.bandwidth_tier != "not_enabled"
   enable_tier_1 = var.bandwidth_tier == "tier_1_enabled"
 
+  # use Spot provisioning model (now GA) over older preemptible model
+  provisioning_model = var.spot ? "SPOT" : null
+
   # compact_placement : true when placement policy is provided and collocation set; false if unset
-  compact_placement                  = try(var.placement_policy.collocation, null) != null
-  automatic_restart                  = local.compact_placement ? false : null
-  on_host_maintenance_from_placement = local.compact_placement ? "TERMINATE" : "MIGRATE"
+  compact_placement = try(var.placement_policy.collocation, null) != null
+  # both of these must be false if either compact placement or preemptible/spot instances are used
+  automatic_restart                  = local.compact_placement || var.spot ? false : null
+  on_host_maintenance_from_placement = local.compact_placement || var.spot ? "TERMINATE" : "MIGRATE"
 
   on_host_maintenance = (
     var.on_host_maintenance != null
@@ -115,6 +119,8 @@ resource "google_compute_instance" "compute_vm" {
   scheduling {
     on_host_maintenance = local.on_host_maintenance
     automatic_restart   = local.automatic_restart
+    preemptible         = var.spot
+    provisioning_model  = local.provisioning_model
   }
 
   metadata = merge(local.network_storage, local.startup_script, var.metadata)
