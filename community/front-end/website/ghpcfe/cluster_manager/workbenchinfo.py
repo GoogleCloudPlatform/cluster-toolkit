@@ -67,10 +67,10 @@ class WorkbenchInfo:
             self.workbench.save()
 
             self._terraform_init()
-            self._terraform_create()
             self.workbench.cloud_state = "m"
             self.workbench.status = "i"
             self.workbench.save()
+            self._terraform_create()
 
             # Wait for uri to appear
             self._get_proxy_uri()
@@ -109,7 +109,7 @@ class WorkbenchInfo:
         return terraform_dir
 
     def copy_startup_script(self):
-        user = self.workbench.trusted_users
+        user = self.workbench.trusted_user
 
         # pylint: disable=line-too-long
         startup_script_vars = f"""
@@ -146,10 +146,15 @@ currdir=$PWD
 cd $tmpdir
 wget https://download.schedmd.com/slurm/slurm-21.08-latest.tar.bz2
 tar xf slurm-21.08-latest.tar.bz2
-cd slurm-21.08*
+cd slurm-21.08*/
 ./configure --prefix=/usr/local --sysconfdir=/etc/slurm
 make -j $(nproc)
 make install
+# Throw an error if the slurm install fails
+if [ "$?" -ne "0" ]; then
+    echo "BRINGUP FAILED"
+    exit 1
+fi
 
 cd $currdir
 rm -r $tmpdir
@@ -263,9 +268,6 @@ EOF
         project = json.loads(self.workbench.cloud_credential.detail)[
             "project_id"
         ]
-        user = self.workbench.trusted_users
-        trusted_user_tfvalue = '"user:' + user.email + '"'
-
         csp_info = f"""
 region = "{region}"
 zone = "{zone}"
@@ -274,10 +276,10 @@ subnet_name = "{subnet}"
 machine_type = "{self.workbench.machine_type}"
 boot_disk_type = "{self.workbench.boot_disk_type}"
 boot_disk_size_gb = "{self.workbench.boot_disk_capacity}"
-trusted_users = [{trusted_user_tfvalue}]
+trusted_user = "{self.workbench.trusted_user.email}"
 image_family = "{self.workbench.image_family}"
 
-owner_id = ["{user.email}"]
+owner_id = ["{self.workbench.trusted_user.email}"]
 wb_startup_script_name   = "workbench/workbench_{self.workbench.id}_startup_script"
 wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 """
@@ -337,7 +339,7 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
                 outputs = json.load(statefp)["outputs"]
                 wb_name = "UNKNOWN"
                 try:
-                    wb_name = outputs["notebook_instance_names"]["value"][0]
+                    wb_name = outputs["notebook_instance_name"]["value"]
                 except KeyError:
                     logger.error(
                         "Failed to parse workbench instance name from TF state"
@@ -371,6 +373,7 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
             logger.error("Attempting to clean up with Terraform destroy")
             self._terraform_destroy()
+            raise
 
 
     def _terraform_destroy(self):
@@ -429,7 +432,7 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
         with tf_state_file.open("r") as statefp:
             outputs = json.load(statefp)["outputs"]
             try:
-                wb_uri = outputs["notebook_proxy_uris"]["value"][0]
+                wb_uri = outputs["notebook_proxy_uri"]["value"]
             except KeyError:
                 logger.error(
                     "Failed to get workbench uri from TF output"

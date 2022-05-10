@@ -31,14 +31,19 @@ GOOGLE_APPLICATION_CREDENTIALS="../../cloud_credentials"
 gcloud auth activate-service-account --key-file=${GOOGLE_APPLICATION_CREDENTIALS}
 GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
 FINISH_LINE="BRINGUP COMPLETE"
+ERROR_LINE="BRINGUP FAILED"
 
 TIMEOUT=1
 tries=0
 until [ $tries -ge "${RETRIES}" ]; do
-	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep -o "${FINISH_LINE}")
+	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep -oE "${FINISH_LINE}|${ERROR_LINE}")
 	echo "STATUS_LINE: '${STATUS_LINE}'"
 	if [ "${STATUS_LINE}" == "${FINISH_LINE}" ]; then
 		TIMEOUT=0
+		break
+	fi
+	if [ "${STATUS_LINE}" == "${ERROR_LINE}" ]; then
+		TIMEOUT=2
 		break
 	fi
 	echo "could not detect end of startup script. Sleeping."
@@ -50,8 +55,10 @@ rm -r "${CLOUDSDK_CONFIG}"
 
 if [ "${TIMEOUT}" -eq "0" ]; then
 	echo "Startup script completed"
+elif [ "${TIMEOUT}" -eq "1" ]; then
+	echo "Startup script timed out" >&2
 else
-	echo "Startup script timed out"
+	echo "Node bringup failed - check virtual serial console logs" >&2
 fi
 
 exit "${TIMEOUT}"

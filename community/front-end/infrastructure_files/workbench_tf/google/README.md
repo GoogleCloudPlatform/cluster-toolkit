@@ -42,6 +42,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [google_compute_instance_iam_member.oslogin_permissions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_iam_member) | resource |
 | [google_notebooks_instance.ai_notebook](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/notebooks_instance) | resource |
 | [google_project_iam_member.sa_p_notebook_permissions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_project_organization_policy.external_ip_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_organization_policy) | resource |
@@ -73,7 +74,6 @@ limitations under the License.
 | <a name="input_ip_cidr_range"></a> [ip\_cidr\_range](#input\_ip\_cidr\_range) | Unique IP CIDR Range for AI Notebooks subnet | `string` | `"10.142.190.0/24"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Type of VM you would like to spin up | `string` | `"n1-standard-1"` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Name of the network to be created. | `string` | `"ai-notebook"` | no |
-| <a name="input_notebook_count"></a> [notebook\_count](#input\_notebook\_count) | Number of AI Notebooks requested | `string` | `"1"` | no |
 | <a name="input_organization_id"></a> [organization\_id](#input\_organization\_id) | Organization ID where GCP Resources need to get spin up. It can be skipped if already setting folder\_id | `string` | `""` | no |
 | <a name="input_owner_id"></a> [owner\_id](#input\_owner\_id) | Billing Account associated to the GCP Resources | `list(any)` | <pre>[<br>  ""<br>]</pre> | no |
 | <a name="input_project"></a> [project](#input\_project) | Project in which to launch the AI Notebooks. | `string` | `""` | no |
@@ -84,7 +84,7 @@ limitations under the License.
 | <a name="input_set_shielded_vm_policy"></a> [set\_shielded\_vm\_policy](#input\_set\_shielded\_vm\_policy) | Apply org policy to disable shielded VMs. | `bool` | `false` | no |
 | <a name="input_set_trustedimage_project_policy"></a> [set\_trustedimage\_project\_policy](#input\_set\_trustedimage\_project\_policy) | Apply org policy to set the trusted image projects. | `bool` | `false` | no |
 | <a name="input_subnet_name"></a> [subnet\_name](#input\_subnet\_name) | Name of the subnet where to deploy the Notebooks. | `string` | `"subnet-ai-notebook"` | no |
-| <a name="input_trusted_users"></a> [trusted\_users](#input\_trusted\_users) | The list of trusted users. | `set(string)` | `[]` | no |
+| <a name="input_trusted_user"></a> [trusted\_user](#input\_trusted\_user) | User who is allowed to access the notebook | `string` | n/a | yes |
 | <a name="input_wb_startup_script_bucket"></a> [wb\_startup\_script\_bucket](#input\_wb\_startup\_script\_bucket) | Name for the bucket where the workbench startup script is stored. | `string` | `""` | no |
 | <a name="input_wb_startup_script_name"></a> [wb\_startup\_script\_name](#input\_wb\_startup\_script\_name) | Name & Path for the wb startup script file when uploaded to GCP cloud storage | `string` | `""` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Cloud Zone associated to the AI Notebooks | `string` | `"us-east4-c"` | no |
@@ -94,7 +94,7 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_deployment_id"></a> [deployment\_id](#output\_deployment\_id) | RADLab Module Deployment ID |
-| <a name="output_notebook_instance_names"></a> [notebook\_instance\_names](#output\_notebook\_instance\_names) | Notebook Instance Names |
-| <a name="output_notebook_proxy_uris"></a> [notebook\_proxy\_uris](#output\_notebook\_proxy\_uris) | Notebook Proxy URIs |
+| <a name="output_notebook_instance_name"></a> [notebook\_instance\_name](#output\_notebook\_instance\_name) | Notebook Instance Names |
+| <a name="output_notebook_proxy_uri"></a> [notebook\_proxy\_uri](#output\_notebook\_proxy\_uri) | Notebook Proxy URIs |
 | <a name="output_project_radlab_ds_analytics_id"></a> [project\_radlab\_ds\_analytics\_id](#output\_project\_radlab\_ds\_analytics\_id) | Analytics Project ID |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
