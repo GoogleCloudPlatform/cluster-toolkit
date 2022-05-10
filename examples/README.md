@@ -333,6 +333,13 @@ omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
 
+**_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to create
+the cluster. For these instances, Simultaneous Multithreading (SMT) is turned
+off by default, meaning that only the physical cores are visible. For the
+compute nodes, this means that 30 physical cores are visible on the
+c2-standard-60 VMs. To activate all 60 virtual cores, include
+`threads_per_core=2` under settings for the compute vm-instance module.
+
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
 ## Blueprint Schema
