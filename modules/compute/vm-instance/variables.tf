@@ -180,7 +180,7 @@ variable "placement_policy" {
   default = null
 }
 
-variable "preemptible" {
+variable "spot" {
   description = "Provision VMs using discounted Spot pricing, allowing for preemption"
   type        = bool
   default     = false
