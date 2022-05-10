@@ -72,7 +72,7 @@ No modules.
 | <a name="input_gpu_count"></a> [gpu\_count](#input\_gpu\_count) | Number of GPUs attached to the partition compute instances | `number` | `0` | no |
 | <a name="input_gpu_type"></a> [gpu\_type](#input\_gpu\_type) | Type of GPUs attached to the partition compute instances | `string` | `null` | no |
 | <a name="input_image_hyperthreads"></a> [image\_hyperthreads](#input\_image\_hyperthreads) | Enable hyperthreading | `bool` | `false` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image to be used for the compute VMs in this partition | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "schedmd-slurm-21-08-4-hpc-centos-7",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image to be used for the compute VMs in this partition | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "schedmd-slurm-21-08-8-hpc-centos-7",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Instance template to use to create partition instances | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to partition compute instances. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Compute Platform machine type to use for this partition compute nodes | `string` | `"c2-standard-60"` | no |
