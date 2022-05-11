@@ -185,3 +185,19 @@ variable "spot" {
   type        = bool
   default     = false
 }
+
+variable "threads_per_core" {
+  description = <<-EOT
+  Sets the number of threads per physical core. By setting threads_per_core
+  greater than 1, Simultaneous Multithreading (SMT) is enabled extending the
+  total number of virtual cores. For example, a machine of type c2-standard-60
+  will have 60 virtual cores with threads_per_core equal to 2. With
+  threads_per_core equal to 1 (SMT turned off), only the 30 physical cores will
+  be available on the VM.
+
+  Disabling SMT can be more performant in many HPC workloads, therefore it is
+  disabled by default.
+  EOT
+  type        = number
+  default     = 1
+}

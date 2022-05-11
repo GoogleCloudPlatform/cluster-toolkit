@@ -123,5 +123,9 @@ resource "google_compute_instance" "compute_vm" {
     provisioning_model  = local.provisioning_model
   }
 
+  advanced_machine_features {
+    threads_per_core = var.threads_per_core
+  }
+
   metadata = merge(local.network_storage, local.startup_script, var.metadata)
 }
