@@ -30,23 +30,23 @@
     {% endif %}
     {% with admin=request.user.has_admin_role %}
       {% if object.status == "n" %}
-        {% if workbench.trusted_users == request.user or admin %} 
+        {% if workbench.trusted_user == request.user or admin %} 
           <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Create</a>
         {% endif %}
       {% endif %}
       {% if object.status == "r" %}
         <a href="https://{{ object.proxy_uri }}" class="btn btn-primary" target="_blank">Open JupyterLab</a>
-        {% if workbench.trusted_users == request.user or admin %} 
+        {% if workbench.trusted_user == request.user or admin %} 
           <a href="{% url 'workbench-destroy' object.id %}" class="btn btn-primary">Destroy</a>
         {% endif %}
       {% endif %}
       {% if object.cloud_state == "nm" or  object.cloud_state == "xm" %}
-        {% if workbench.trusted_users == request.user or admin %} 
+        {% if workbench.trusted_user == request.user or admin %} 
           <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
         {% endif %}
       {% endif %}
       {% if object.status == "d" %}
-        {% if workbench.trusted_users == request.user or admin %} 
+        {% if workbench.trusted_user == request.user or admin %} 
           <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Recreate</a>
         {% endif %}
       {% endif %}

@@ -30,10 +30,10 @@
           <small class="form-text text-muted">{{ form.subnet.help_text }} - Please note user-managed workbenches are not available in all regions, see <a href="https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations" target="_blank"> Workbench Documentation</a> for more detail on currently available regions</small>
       </div>
       <div class="form-group">
-        {{ form.trusted_users.errors }}
-        {{ form.trusted_users.label_tag }}
-        {{ form.trusted_users }}
-          <small class="form-text text-muted">{{ form.trusted_users.help_text }}</small>
+        {{ form.trusted_user.errors }}
+        {{ form.trusted_user.label_tag }}
+        {{ form.trusted_user }}
+          <small class="form-text text-muted">{{ form.trusted_user.help_text }}</small>
       </div>
       <div class="form-group">
         {{ form.machine_type.errors }}
@@ -103,9 +103,10 @@
       {% endif %}
       {% if object.status == "n" %}
       <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
-      {% endif %}
       <input type="submit" value="Save" class="btn btn-primary"/>
-      <button class="btn btn-primary" onclick="javascript:history.back();"/>Cancel</button>
+      {% else %}
+      <button class="btn btn-primary" onclick="javascript:history.back();"/>Back</button>
+      {% endif %}
     </form>
 
 {% endblock %}

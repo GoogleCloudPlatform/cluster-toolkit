@@ -29,7 +29,7 @@
     </thead>
     <tbody> 
     {% for workbench in workbench_list %}
-      {% if workbench.trusted_users == request.user or admin %}
+      {% if workbench.trusted_user == request.user or admin %}
         <tr>
           <th>{{ workbench.id }}</th>
           <td><a href="{% url 'workbench-detail' workbench.id %}">{{ workbench.name }}</a></td>

@@ -161,16 +161,14 @@ resource "google_project_iam_member" "sa_p_notebook_permissions" {
 }
 
 resource "google_service_account_iam_member" "sa_ai_notebook_user_iam" {
-  for_each           = var.trusted_users
-  member             = each.value
   role               = "roles/iam.serviceAccountUser"
   service_account_id = google_service_account.sa_p_notebook.id
+  member             = "user:${var.trusted_user}"
 }
 
 resource "google_notebooks_instance" "ai_notebook" {
-  count        = var.notebook_count
   project      = local.project.project_id
-  name         = "notebooks-instance-${local.random_id}-${count.index}"
+  name         = "notebooks-instance-${local.random_id}"
   location     = var.zone
   machine_type = var.machine_type
 
@@ -204,14 +202,20 @@ resource "google_notebooks_instance" "ai_notebook" {
 
 }
 
+resource "google_compute_instance_iam_member" "oslogin_permissions" {
+  project       = google_notebooks_instance.ai_notebook.project
+  zone          = google_notebooks_instance.ai_notebook.location
+  instance_name = google_notebooks_instance.ai_notebook.name
+  role          = "roles/compute.osLogin"
+  member        = "user:${var.trusted_user}"
+}
+
 module "waitforstartup" {
 
   source = "./wait-for-startup"
 
-  count = length(google_notebooks_instance.ai_notebook)
-
-  instance_name = google_notebooks_instance.ai_notebook[count.index].name
-  zone          = google_notebooks_instance.ai_notebook[count.index].location
-  project_id    = google_notebooks_instance.ai_notebook[count.index].project
+  instance_name = google_notebooks_instance.ai_notebook.name
+  zone          = google_notebooks_instance.ai_notebook.location
+  project_id    = google_notebooks_instance.ai_notebook.project
   timeout       = 1200
 }

@@ -1372,7 +1372,7 @@ class Workbench(CloudResource):
         default=100,
     )
     proxy_uri = models.CharField(max_length=150, blank=True, null=True)
-    trusted_users = models.ForeignKey(
+    trusted_user = models.ForeignKey(
         User,
         help_text="Select primary user authorised to use this workbench",
         on_delete=models.RESTRICT,
@@ -1399,10 +1399,6 @@ class Workbench(CloudResource):
     def __str__(self):
         """String for representing the Model object."""
         return f"Workbench '{self.name}'"
-
-    def list_trusted_users(self):
-        return list(self.trusted_users.all())
-
 
 class WorkbenchMountPoint(models.Model):
     """Model representing a mount point"""

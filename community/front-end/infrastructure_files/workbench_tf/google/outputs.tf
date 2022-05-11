@@ -24,12 +24,12 @@ output "project_radlab_ds_analytics_id" {
   value       = local.project.project_id
 }
 
-output "notebook_instance_names" {
+output "notebook_instance_name" {
   description = "Notebook Instance Names"
-  value       = [for nb in google_notebooks_instance.ai_notebook : nb.name]
+  value       = google_notebooks_instance.ai_notebook.name
 }
 
-output "notebook_proxy_uris" {
+output "notebook_proxy_uri" {
   description = "Notebook Proxy URIs"
-  value       = [for nb in google_notebooks_instance.ai_notebook : nb.proxy_uri]
+  value       = google_notebooks_instance.ai_notebook.proxy_uri
 }

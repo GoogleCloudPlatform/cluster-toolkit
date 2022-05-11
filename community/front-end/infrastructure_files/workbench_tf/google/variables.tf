@@ -86,12 +86,6 @@ variable "network_name" {
   default     = "ai-notebook"
 }
 
-variable "notebook_count" {
-  description = "Number of AI Notebooks requested"
-  type        = string
-  default     = "1"
-}
-
 variable "organization_id" {
   description = "Organization ID where GCP Resources need to get spin up. It can be skipped if already setting folder_id"
   type        = string
@@ -133,12 +127,10 @@ variable "subnet_name" {
   default     = "subnet-ai-notebook"
 }
 
-variable "trusted_users" {
-  description = "The list of trusted users."
-  type        = set(string)
-  default     = []
+variable "trusted_user" {
+  description = "User who is allowed to access the notebook"
+  type        = string
 }
-
 
 variable "zone" {
   description = "Cloud Zone associated to the AI Notebooks"

@@ -299,7 +299,7 @@ class WorkbenchForm(forms.ModelForm):
             )
             raise forms.ValidationError(mark_safe(validation_error_message))
 
-        user = cleaned_data.get("trusted_users")
+        user = cleaned_data.get("trusted_user")
         # check user is associated with a social login account
         try:
             if user.socialaccount_set.first().uid:
@@ -342,6 +342,10 @@ class WorkbenchForm(forms.ModelForm):
 
         self.workbench_zones = cloud_info.get_gcp_workbench_region_zone_info(
             credential.detail
+        )
+
+        self.fields["trusted_user"].queryset = (
+            User.objects.exclude(socialaccount__isnull=True)
         )
 
         # Pull instance types from cloud_info
@@ -409,7 +413,7 @@ class WorkbenchForm(forms.ModelForm):
             "subnet",
             "cloud_zone",
             "cloud_credential",
-            "trusted_users",
+            "trusted_user",
             "machine_type",
             "boot_disk_type",
             "boot_disk_capacity",
@@ -425,7 +429,7 @@ class WorkbenchForm(forms.ModelForm):
             "subnet": forms.Select(attrs={"class": "form-control"}),
             "machine_type": forms.Select(attrs={"class": "form-control"}),
             "cloud_zone": forms.Select(attrs={"class": "form-control"}),
-            "trusted_users": forms.Select(attrs={"class": "form-control"}),
+            "trusted_user": forms.Select(attrs={"class": "form-control"}),
             "attached_cluster": forms.Select(attrs={"class": "form-control"}),
         }
 
