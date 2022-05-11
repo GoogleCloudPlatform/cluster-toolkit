@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 
 import utils
+from utils import notimplementedyet
 
 
 def unified_error_handling(func):
@@ -141,6 +142,7 @@ def credential_add(name, credential_file):
 
 @credential.command(name="delete",
                     short_help="Delete a credential from the system.")
+@notimplementedyet
 def credential_delete():
     """Delete a credential from the system."""
     pass
@@ -185,12 +187,14 @@ def cluster_show(cluster_id):
 @cluster.command(name="create", short_help="Create a new cluster.")
 @click.option("-n", "--name", required=True, type=click.STRING)
 @click.option("-s", "--subnet", required=True, type=click.STRING)
+@notimplementedyet
 #pylint: disable=unused-argument
 def cluster_create(name, subnet):
     """Create a new cluster."""
     print(f"cluster {name} created.")
 
 @cluster.command(name="destroy", short_help="Destroy a cluster.")
+@notimplementedyet
 def cluster_destroy():
     """Destroy a cluster."""
     pass
@@ -221,11 +225,13 @@ def application_list():
     utils.print_json(json.dumps(parsed))
 
 @application.command(name="show", short_help="Show details of an application.")
+@notimplementedyet
 def application_show():
     click.echo("Show details of an application.")
 
 @application.command(name="spack-install",
                      short_help="Install a Spack application.")
+@notimplementedyet
 def application_spack_install():
     """Install a Spack application."""
     pass
@@ -255,12 +261,14 @@ def job_list():
     utils.print_json(json.dumps(parsed))
 
 @job.command(name="show", short_help="Show details of an existing job.")
+@notimplementedyet
 def job_show():
     """Show details of an existing job."""
     pass
 
 @job.command(name="submit",
              short_help="Submit a job to run an application on a cluster.")
+@notimplementedyet
 def job_submit():
     """Submit a job to run a specified application on a cluster."""
     pass
