@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: daos
+blueprint_name: daos-slurm
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: daos
+  deployment_name: daos-slurm
   region: us-central1
   zone: us-central1-c
 
@@ -39,7 +39,7 @@ deployment_groups:
   # This module creates a DAOS server. Server images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=d1d0f60
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
     kind: terraform
     id: daos
     use: [network1]
