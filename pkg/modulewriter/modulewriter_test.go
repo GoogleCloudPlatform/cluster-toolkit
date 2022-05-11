@@ -263,9 +263,12 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 		depDir, hiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
 	curDeploymentGroup := filepath.Join(depDir, deploymentGroupName)
 	prevStateFile := filepath.Join(prevDeploymentGroup, tfStateFileName)
+	prevBuStateFile := filepath.Join(prevDeploymentGroup, tfStateBackupFileName)
 	os.MkdirAll(prevDeploymentGroup, 0755)
 	os.MkdirAll(curDeploymentGroup, 0755)
 	emptyFile, _ := os.Create(prevStateFile)
+	emptyFile.Close()
+	emptyFile, _ = os.Create(prevBuStateFile)
 	emptyFile.Close()
 
 	testWriter := TFWriter{}
@@ -273,7 +276,10 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 
 	// check state file was moved to current resource group dir
 	curStateFile := filepath.Join(curDeploymentGroup, tfStateFileName)
+	curBuStateFile := filepath.Join(curDeploymentGroup, tfStateBackupFileName)
 	_, err := os.Stat(curStateFile)
+	c.Check(err, IsNil)
+	_, err = os.Stat(curBuStateFile)
 	c.Check(err, IsNil)
 }
 
