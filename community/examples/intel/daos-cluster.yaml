@@ -37,10 +37,8 @@ deployment_groups:
     id: daos-server
     use: [network1]
     settings:
-      labels: {
-        ghpc_role: file-system
-      }
       allow_insecure: true
+      labels: {ghpc_role: file-system}
 
   # This module creates a MIG with DAOS clients. Client images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
@@ -51,8 +49,5 @@ deployment_groups:
     use: [network1, daos-server]
     settings:
       allow_insecure: true
-      os_family: daos-client-hpc-centos-7
       number_of_instances: 2
-      labels: {
-        ghpc_role: compute
-      }
+      labels: {ghpc_role: compute}

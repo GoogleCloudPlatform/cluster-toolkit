@@ -1,4 +1,21 @@
 # Intel Solutions for the HPC Toolkit
+<!-- TOC generated with: md_toc github community/examples/intel/README.md | sed -e "s/\s-\s/ * /" -->
+
+* [Intel-Optimized Slurm Cluster](#intel-optimized-slurm-cluster)
+  * [Provisioning the Intel-optimized Slurm cluster](#provisioning-the-intel-optimized-slurm-cluster)
+  * [Initial Setup for the Intel-Optimized Slurm Cluster](#initial-setup-for-the-intel-optimized-slurm-cluster)
+  * [Deploying the Slurm Cluster](#deploying-the-slurm-cluster)
+  * [Connecting to the login node](#connecting-to-the-login-node)
+  * [Access the cluster and provision an example job](#access-the-cluster-and-provision-an-example-job)
+  * [Delete the infrastructure when not in use](#delete-the-infrastructure-when-not-in-use)
+* [DAOS Cluster](#daos-cluster)
+  * [Provisioning the DAOS cluster](#provisioning-the-daos-cluster)
+  * [Initial Setup for DAOS Cluster](#initial-setup-for-daos-cluster)
+  * [Deploying the DAOS Cluster](#deploying-the-daos-cluster)
+  * [Connecting to a client node](#connecting-to-a-client-node)
+  * [Create pools and partitions](#create-pools-and-partitions)
+  * [Delete the DAOS infrastructure when not in use](#delete-the-daos-infrastructure-when-not-in-use)
+* [DAOS Server with Slurm cluster](#daos-server-with-slurm-cluster)
 
 ## Intel-Optimized Slurm Cluster
 
@@ -157,8 +174,11 @@ The file [daos-cluster.yaml](daos-cluster.yaml) describes an environment with a 
 
 For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
 
+Please notice you MUST first create [client and server DAOS images][daos-images] for this example to work.
+
 [mig]: https://cloud.google.com/compute/docs/instance-groups
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
+[daos-images]: https://github.com/daos-stack/google-cloud-daos/tree/main/images
 
 ### Provisioning the DAOS cluster
 
@@ -172,6 +192,7 @@ Toolkit guidance to enable [APIs][apis] and establish minimum resource
 [quotas][quotas]. In particular, the following APIs should be enabled
 
 * compute.googleapis.com (Google Compute Engine)
+* secretmanager.googleapis.com (Secret manager, for secure mode)
 
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
@@ -192,7 +213,9 @@ ghpc create --vars project_id=<<PROJECT_ID>> daos-cluster.yaml  [--backend-confi
 ```
 
 It will create a set of directories containing Terraform modules and Packer
-templates. Please follow `ghpc` instructions to deploy the environment:
+templates. Please notice how you may provide an optional, but recommended, [back-end configuration][backend]. This will safe the terraform state in a pre-existing [Google Cloud Storage bucket][bucket].
+
+Please follow `ghpc` instructions to deploy the environment:
 
   ```shell
   terraform -chdir=daos-cluster/primary init
@@ -200,6 +223,8 @@ templates. Please follow `ghpc` instructions to deploy the environment:
   terraform -chdir=daos-cluster/primary apply
   ```
 
+[backend]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/examples#optional-setting-up-a-remote-terraform-state
+[bucket]: https://cloud.google.com/storage/docs/creating-buckets
 ### Connecting to a client node
 
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >

@@ -22,11 +22,6 @@ vars:
   region: us-central1
   zone: us-central1-c
 
-# terraform_backend_defaults:
-#   type: gcs
-#   configuration:
-#     bucket: #please specify a GCS bucket for terraform state
-
 deployment_groups:
 - group: primary
   modules:
@@ -50,6 +45,7 @@ deployment_groups:
     use: [network1]
     settings:
       allow_insecure: true #  This allows us to run clients without certificates, which is needed for now.
+      labels: {ghpc_role: file-system}
       pools:
       - pool_name: "test_pool"
         pool_size: "1TB"
@@ -87,7 +83,7 @@ deployment_groups:
       runners:
       - type: shell
         content: $(daos.daos_client_install_script)
-        destination: /etc/daos/install_daos.yml
+        destination: /etc/daos/install_daos.sh
       - type: data
         content: $(daos.daos_agent_yml)
         destination: /etc/daos/daos_agent.yml

@@ -13,7 +13,7 @@ Using the DAOS server implies that one has DAOS server images created as [instru
 A full list of module parameters can be found at [the DAOS Server module README](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server).
 
 ```yaml
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=d1d0f60
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
     kind: terraform
     id: daos
     use: [network1]
