@@ -74,6 +74,7 @@ deployment_groups:
     - compute_partition
     settings:
       login_node_count: 1
+      suspend_time: 60
 
   - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
