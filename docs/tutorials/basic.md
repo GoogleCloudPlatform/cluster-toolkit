@@ -61,6 +61,14 @@ build run:
 
 This should show you the version of the HPC Toolkit you are using.
 
+(Optional) To install the `ghpc` binary in your home directory under bin,
+run the following command:
+
+```bash
+make install
+exec $SHELL -l
+```
+
 ## Generate a Deployment
 
 To create a deployment, an input blueprint file needs to be written or adapted
