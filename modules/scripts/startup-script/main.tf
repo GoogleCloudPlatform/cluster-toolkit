@@ -21,7 +21,7 @@ locals {
       bucket = google_storage_bucket.configs_bucket.name,
       runners = [
         for runner in var.runners : {
-          object      = basename(runner["destination"]),
+          object      = google_storage_bucket_object.scripts[basename(runner["destination"])].output_name
           type        = runner["type"]
           destination = runner["destination"]
           args        = contains(keys(runner), "args") ? runner["args"] : ""
@@ -45,11 +45,11 @@ locals {
   # Final content output to the user
   stdlib = join("", local.stdlib_list)
 
-  runners_dic = { for runner in var.runners :
+  runners_map = { for runner in var.runners :
     basename(runner["destination"])
     => {
-      content = contains(keys(runner), "content") ? runner["content"] : null
-      source  = contains(keys(runner), "source") ? runner["source"] : null
+      content = lookup(runner, "content", null)
+      source  = lookup(runner, "source", null)
     }
   }
 }
@@ -69,7 +69,7 @@ resource "google_storage_bucket" "configs_bucket" {
 
 resource "google_storage_bucket_object" "scripts" {
   # this writes all scripts exactly once into GCS
-  for_each = local.runners_dic
+  for_each = local.runners_map
   name     = each.key
   content  = each.value["content"]
   source   = each.value["source"]
