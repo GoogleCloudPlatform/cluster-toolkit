@@ -4,7 +4,8 @@ This directory contains a set of example blueprint files that can be fed into
 gHPC to create a deployment.
 
 <!-- TOC generated with some manual tweaking of the following command output:
-     md_toc github examples/README.md | sed -e "s/\s-\s/ * /"              -->
+md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
+-->
 <!-- TOC -->
 
 * [Instructions](#instructions)
@@ -14,6 +15,8 @@ gHPC to create a deployment.
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
   * [image-builder.yaml](#image-builderyaml-)
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
+  * [daos-cluster.yaml](#daos-clusteryaml-)
+  * [daos-slurm.yaml](#daos-slurmyaml-)
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
 * [Blueprint Schema](#blueprint-schema)
@@ -81,10 +84,6 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
-
-[hpc-cluster-intel-select.yaml]: ../community/examples/intel/hpc-cluster-intel-select.yaml
-[intel-examples-readme]: ../community/examples/intel/README.md
-[intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
 
 ### [hpc-cluster-small.yaml] ![core-badge]
 
@@ -300,6 +299,26 @@ This example provisions a Slurm cluster [automating the steps to comply to the
 Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
 more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
+
+[hpc-cluster-intel-select.yaml]: ../community/examples/intel/hpc-cluster-intel-select.yaml
+[intel-examples-readme]: ../community/examples/intel/README.md
+[intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
+
+### [daos-cluster.yaml] ![community-badge]
+
+This example provisions a DAOS cluster with [managed instance groups][migs] for the servers and for clients. It is more extensively discussed in a dedicated [README for Intel
+examples][intel-examples-readme].
+
+[daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
+[migs]: https://cloud.google.com/compute/docs/instance-groups
+
+### [daos-slurm.yaml] ![community-badge]
+
+This example provisions DAOS servers and a Slurm cluster. It is
+more extensively discussed in a dedicated [README for Intel
+examples][intel-examples-readme].
+
+[daos-slurm.yaml]: ../community/examples/intel/daos-slurm.yaml
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 

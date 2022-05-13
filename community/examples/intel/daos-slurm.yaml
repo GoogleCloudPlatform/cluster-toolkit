@@ -39,18 +39,33 @@ deployment_groups:
   # This module creates a DAOS server. Server images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
-  - source: github.com/markaolson/google-cloud-daos.git//terraform/modules/daos_server?ref=DAOSGCP-109
+  - source: github.com/markaolson/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
     kind: terraform
     id: daos
     use: [network1]
     settings:
-      allow_insecure: true #  This allows us to run clients without certificates, which is needed for now.
       labels: {ghpc_role: file-system}
       pools:
-      - pool_name: "test_pool"
-        pool_size: "1TB"
+      - name: "pool1"
+        size: "1TB"
+        tier_ratio: 3
+        acls:
+        - "A::OWNER@:rwdtTaAo"
+        - "A:G:GROUP@:rwtT"
+        - "A::EVERYONE@:r"
+        properties:
+          reclaim: "lazy"
         containers:
-        - "test_container"
+        - name: "container1"
+          type: "POSIX"
+          acls:
+          - "A::OWNER@:rwdtTaAo"
+          - "A:G:GROUP@:rwtT"
+          - "A::EVERYONE@:r"
+          properties:
+            rf: 0
+          user_attributes:
+            automount: true
 
   - source: modules/scripts/startup-script
     kind: terraform
