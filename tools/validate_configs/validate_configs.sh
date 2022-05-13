@@ -108,13 +108,11 @@ pids=()
 for example in $CONFIGS; do
 	JNUM=$(jobs | wc -l)
 	# echo "$JNUM jobs running"
-	if [ "$JNUM" -lt "$NPROCS" ]; then
-		run_test "$example" &
-		pids+=("$!")
-	else
-		# echo "Reached max number of parallel tests (${JNUM}). Waiting for one to finish."
+	if [ "$JNUM" -ge "$NPROCS" ]; then
 		check_background
 	fi
+	run_test "$example" &
+	pids+=("$!")
 done
 JNUM=$(jobs | wc -l)
 while [ "$JNUM" -gt 0 ]; do
