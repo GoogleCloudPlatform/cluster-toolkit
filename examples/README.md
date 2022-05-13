@@ -3,6 +3,28 @@
 This directory contains a set of example blueprint files that can be fed into
 gHPC to create a deployment.
 
+<!-- TOC generated with some manual tweaking of the following command output:
+     md_toc github examples/README.md | sed -e "s/\s-\s/ * /"              -->
+<!-- TOC -->
+
+* [Instructions](#instructions)
+  * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
+* [Blueprint Descriptions](#blueprint-descriptions)
+  * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-)
+  * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
+  * [image-builder.yaml](#image-builderyaml-)
+  * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
+  * [spack-gromacs.yaml](#spack-gromacsyaml--)
+  * [omnia-cluster.yaml](#omnia-clusteryaml--)
+* [Blueprint Schema](#blueprint-schema)
+* [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
+  * [Top Level Parameters](#top-level-parameters)
+  * [Global Variables](#global-variables)
+  * [Deployment Groups](#deployment-groups)
+* [Variables](#variables)
+  * [Blueprint Variables](#blueprint-variables)
+  * [Literal Variables](#literal-variables)
+
 ## Instructions
 
 Ensure your project\_id is set and other deployment variables such as zone and
@@ -63,13 +85,6 @@ the experimental badge (![experimental-badge]).
 [hpc-cluster-intel-select.yaml]: ../community/examples/intel/hpc-cluster-intel-select.yaml
 [intel-examples-readme]: ../community/examples/intel/README.md
 [intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
-
-### [hpc-cluster-intel-select.yaml] ![community-badge]
-
-This example provisions a Slurm cluster [automating the steps to comply to the
-Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
-more extensively discussed in a dedicated [README for Intel
-examples][intel-examples-readme].
 
 ### [hpc-cluster-small.yaml] ![core-badge]
 
@@ -279,6 +294,13 @@ file that was added during image build:
   Hello World
   ```
 
+### [hpc-cluster-intel-select.yaml] ![community-badge]
+
+This example provisions a Slurm cluster [automating the steps to comply to the
+Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
+more extensively discussed in a dedicated [README for Intel
+examples][intel-examples-readme].
+
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Spack is a HPC software package manager. This example creates a small slurm
@@ -398,7 +420,7 @@ deployment_groups:
   - source: github.com/org/repo//modules/role/module-name
 ```
 
-## Writing An HPC Blueprint
+## Writing an HPC Blueprint
 
 The blueprint file is composed of 3 primary parts, top-level parameters, global
 variables and deployment groups. These are described in more detail below.
