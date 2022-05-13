@@ -96,7 +96,9 @@ select the compute partition using the `srun -p compute` argument.
 Quota required for this example:
 
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1024 GB**
-* Compute Engine API: Persistent Disk SSD (GB): **~10 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
+  GB/node** up to 500 GB
 * Compute Engine API: N2 CPUs: **12**
 * Compute Engine API: C2 CPUs: **60/node** up to 1200 - _only needed for
   `compute` partition_
@@ -134,7 +136,9 @@ Quota required for this example:
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1024 GB**
 * Cloud Filestore API: High Scale SSD capacity (GB) per region: **10240 GiB** - _min
   quota request is 61440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14000 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~14050 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
+  GB/node** up to 4596 GB
 * Compute Engine API: N2 CPUs: **158**
 * Compute Engine API: C2 CPUs: **60/node** up to 12,000 - _only needed for
   `compute` partition_
