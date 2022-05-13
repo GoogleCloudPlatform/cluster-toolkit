@@ -39,7 +39,7 @@ deployment_groups:
   # This module creates a DAOS server. Server images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
+  - source: github.com/markaolson/google-cloud-daos.git//terraform/modules/daos_server?ref=DAOSGCP-109
     kind: terraform
     id: daos
     use: [network1]
@@ -54,12 +54,12 @@ deployment_groups:
 
   - source: modules/scripts/startup-script
     kind: terraform
-    id: daos-clients
+    id: daos-client-script
     settings:
       runners:
       - type: shell
         content: $(daos.daos_client_install_script)
-        destination: /tmp/install_daos.sh
+        destination: /tmp/daos_client_install.sh
       - type: data
         content: $(daos.daos_agent_yml)
         destination: /etc/daos/daos_agent.yml
@@ -67,32 +67,8 @@ deployment_groups:
         content: $(daos.daos_control_yml)
         destination: /etc/daos/daos_control.yml
       - type: shell
-        content: |
-          #!/bin/bash
-          set -x
-          sleep 300
-          ## Setup DAOS agent
-          systemctl start daos_agent
-          systemctl enable daos_agent
-        destination: /tmp/configure-daos.sh
-
-  - source: modules/scripts/startup-script
-    kind: terraform
-    id: daos-manager
-    settings:
-      runners:
-      - type: shell
-        content: $(daos.daos_client_install_script)
-        destination: /etc/daos/install_daos.sh
-      - type: data
-        content: $(daos.daos_agent_yml)
-        destination: /etc/daos/daos_agent.yml
-      - type: data
-        content: $(daos.daos_control_yml)
-        destination: /etc/daos/daos_control.yml
-      - type: shell
-        content: $(daos.daos_config_script)
-        destination: /tmp/configure-daos.sh
+        content: $(daos.daos_client_config_script)
+        destination: /var/daos/daos_client_config.sh
 
   ## This debug_partition will work out of the box without requesting additional GCP quota.
   - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
@@ -128,8 +104,8 @@ deployment_groups:
     - compute_partition
     settings:
       login_node_count: 1
-      compute_startup_script: $(daos-clients.startup_script)
-      controller_startup_script: $(daos-manager.startup_script)
+      compute_startup_script: $(daos-client-script.startup_script)
+      controller_startup_script: $(daos-client-script.startup_script)
 
   - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
@@ -139,4 +115,4 @@ deployment_groups:
     - homefs
     - slurm_controller
     settings:
-      login_startup_script: $(daos-clients.startup_script)
+      login_startup_script: $(daos-client-script.startup_script)
