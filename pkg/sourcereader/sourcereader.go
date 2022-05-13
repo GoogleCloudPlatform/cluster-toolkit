@@ -15,8 +15,8 @@
 package sourcereader
 
 import (
-	"hpc-toolkit/pkg/blueprintio"
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/deploymentio"
+	"hpc-toolkit/pkg/modulereader"
 	"log"
 	"strings"
 )
@@ -29,10 +29,10 @@ const (
 
 // SourceReader interface for reading modules from a source
 type SourceReader interface {
-	// GetModuleInfo would leverage resreader.GetInfo for the given kind.
+	// GetModuleInfo would leverage modulereader.GetInfo for the given kind.
 	// GetModuleInfo would operate over the source without creating a local copy.
 	// This would be very dependent on the kind of module.
-	GetModuleInfo(modPath string, kind string) (resreader.ModuleInfo, error)
+	GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error)
 
 	// GetModule copies the source to a provided local destination (the deployment directory).
 	GetModule(modPath string, copyPath string) error
@@ -53,7 +53,7 @@ func IsLocalPath(source string) bool {
 
 // IsEmbeddedPath checks if a source path points to an embedded modules
 func IsEmbeddedPath(source string) bool {
-	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/")
+	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
 }
 
 // IsGitHubPath checks if a source path points to GitHub
@@ -63,6 +63,11 @@ func IsGitHubPath(source string) bool {
 
 // Factory returns a SourceReader of module path
 func Factory(modPath string) SourceReader {
+	validPrefixes := []string{
+		"/", "./", "../",
+		"modules/", "community/modules/",
+		"git@", "github.com",
+	}
 	switch {
 	case IsLocalPath(modPath):
 		return readers[local]
@@ -71,8 +76,9 @@ func Factory(modPath string) SourceReader {
 	case IsGitHubPath(modPath):
 		return readers[github]
 	default:
-		log.Fatalf("Source (%s) not valid, should begin with /, ./, ../, modules/, git@ or github.com",
-			modPath)
+		log.Fatalf(
+			"Source (%s) not valid, must begin with one of: %s",
+			modPath, strings.Join(validPrefixes, ", "))
 	}
 
 	return nil
@@ -80,11 +86,11 @@ func Factory(modPath string) SourceReader {
 
 func copyFromPath(modPath string, copyPath string) error {
 	// currently supporting only local blueprint directory
-	blueprintio := blueprintio.GetBlueprintIOLocal()
+	deploymentio := deploymentio.GetDeploymentioLocal()
 
-	if err := blueprintio.CreateDirectory(copyPath); err != nil {
+	if err := deploymentio.CreateDirectory(copyPath); err != nil {
 		return err
 	}
 
-	return blueprintio.CopyFromPath(modPath, copyPath)
+	return deploymentio.CopyFromPath(modPath, copyPath)
 }

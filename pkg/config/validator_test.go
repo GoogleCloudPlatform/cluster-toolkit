@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 
 	. "gopkg.in/check.v1"
 )
@@ -77,7 +77,7 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 	}
 	dc := DeploymentConfig{
 		Config:        Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
-		ModulesInfo:   map[string]map[string]resreader.ModuleInfo{},
+		ModulesInfo:   map[string]map[string]modulereader.ModuleInfo{},
 		ModuleToGroup: map[string]int{},
 		expanded:      false,
 	}
@@ -87,7 +87,7 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 func (s *MySuite) TestValidateSettings(c *C) {
 	// Succeeds: No settings, no variables
 	mod := Module{}
-	info := resreader.ModuleInfo{}
+	info := modulereader.ModuleInfo{}
 	err := validateSettings(mod, info)
 	c.Assert(err, IsNil)
 
@@ -99,7 +99,7 @@ func (s *MySuite) TestValidateSettings(c *C) {
 	c.Assert(err, ErrorMatches, expErr)
 
 	// Succeeds: One required, setting exists
-	info.Inputs = []resreader.VarInfo{
+	info.Inputs = []modulereader.VarInfo{
 		{Name: "TestSetting", Required: true},
 	}
 	err = validateSettings(mod, info)
@@ -142,13 +142,13 @@ func (s *MySuite) TestValidateModule(c *C) {
 func (s *MySuite) TestValidateOutputs(c *C) {
 	// Simple case, no outputs in either
 	testMod := Module{ID: "testMod"}
-	testInfo := resreader.ModuleInfo{Outputs: []resreader.VarInfo{}}
+	testInfo := modulereader.ModuleInfo{Outputs: []modulereader.VarInfo{}}
 	err := validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
 	// Output in varInfo, nothing in module
 	matchingName := "match"
-	testVarInfo := resreader.VarInfo{Name: matchingName}
+	testVarInfo := modulereader.VarInfo{Name: matchingName}
 	testInfo.Outputs = append(testInfo.Outputs, testVarInfo)
 	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)

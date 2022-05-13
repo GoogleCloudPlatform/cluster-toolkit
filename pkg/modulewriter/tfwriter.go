@@ -14,7 +14,7 @@
 * limitations under the License.
  */
 
-package reswriter
+package modulewriter
 
 import (
 	"fmt"
@@ -450,7 +450,7 @@ func (w TFWriter) restoreState(deploymentDir string) error {
 		var tfStateFiles = []string{tfStateFileName, tfStateBackupFileName}
 		for _, stateFile := range tfStateFiles {
 			src := filepath.Join(prevDeploymentGroupPath, f.Name(), stateFile)
-			dest := filepath.Join(deploymentDir, f.Name(), tfStateFileName)
+			dest := filepath.Join(deploymentDir, f.Name(), stateFile)
 
 			if bytesRead, err := ioutil.ReadFile(src); err == nil {
 				err = ioutil.WriteFile(dest, bytesRead, 0644)

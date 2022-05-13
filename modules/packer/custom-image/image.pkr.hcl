@@ -13,7 +13,6 @@
 # limitations under the License.
 
 locals {
-  subnetwork_name      = var.subnetwork_name != null ? var.subnetwork_name : "${var.deployment_name}-primary-subnet"
   metadata             = var.startup_script == null ? null : { startup-script = var.startup_script }
   no_shell_scripts     = length(var.shell_scripts) == 0
   no_ansible_playbooks = length(var.ansible_playbooks) == 0
@@ -32,7 +31,7 @@ source "googlecompute" "toolkit_image" {
   disk_size               = var.disk_size
   omit_external_ip        = var.omit_external_ip
   use_internal_ip         = var.omit_external_ip
-  subnetwork              = local.subnetwork_name
+  subnetwork              = var.subnetwork_name
   network_project_id      = var.network_project_id
   source_image            = var.source_image
   source_image_family     = var.source_image_family

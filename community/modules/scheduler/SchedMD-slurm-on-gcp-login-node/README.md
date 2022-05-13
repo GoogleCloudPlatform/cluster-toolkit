@@ -28,6 +28,14 @@ the homefs filesystem mounted and connecting to `slurm_controller` as the
 slurm controller node. For more context see the
 [hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml)
 
+## Support
+The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
+modules. For support with the underlying modules, see the instructions in the
+[slurm-gcp README][slurm-gcp-readme].
+
+[slurm-on-gcp]: https://github.com/SchedMD/slurm-gcp
+[slurm-gcp-readme]: https://github.com/SchedMD/slurm-gcp#slurm-on-google-cloud-platform
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

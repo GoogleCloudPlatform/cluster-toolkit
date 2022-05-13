@@ -16,6 +16,35 @@ The following firewall rules are created with the VPC network:
 * Allow SSH access from the Cloud Console ("35.235.240.0/20").
 * Allow traffic between nodes within the VPC
 
+### Primary and additional subnetworks
+
+This module will, at minimum, provision "primary" subnetwork in which most
+resources are expected to be provisioned. These are controlled by the following
+input variables:
+
+* `var.subnetwork_name` and `var.subnetwork_size`
+* `var.primary_subnetwork`
+* `var.additional_subnetworks`
+
+Both `var.primary_subnetwork` and `var.additional_subnetworks` behave
+identically to the [Cloud Foundation Toolkit subnets module][cftsubnets] with
+the lone exception that the IP range for each subnet is constructed
+automatically by calculating the most compact set of subnetworks. The size of
+each individual subnetwork is specified with the `new_bits` key and the base of
+the global VPC network is specified using `var.network_address_range`.
+
+[cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/master/modules/subnets
+
+If `var.primary_subnetwork` is supplied explicitly, then it will define all
+properties of the primary subnetwork. If it is left at its default value of
+`null`, then a default primary subnetwork will be constructed from
+`var.subnetwork_name` and `var.subnetwork_size`. If no value is supplied for
+`var.subnetwork_name`, a default value is constructed from
+`var.deployment_name`.
+
+Additional subnetworks are optionally supplied explicitly with
+`var.additional_subnetworks`.
+
 ### Example
 
 ```yaml
@@ -37,7 +66,7 @@ included for clarity.
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -78,18 +107,20 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_additional_subnetworks"></a> [additional\_subnetworks](#input\_additional\_subnetworks) | List of additional subnetworks in which to create resources.<br><br>  name           (string, required, Name of subnet; must be unique in region)<br>  region         (string, required, Google Cloud Region)<br>  new\_bits       (number, required, Additional CIDR bits beyond var.network\_address\_range)<br>  private\_access (bool, optional, Enable Private Access on subnetwork)<br>  flow\_logs      (map(string), optional, Configure Flow Logs see<br>                  terraform-google-network module for complete settings)<br>  description    (string, optional, Description of Network)<br>  purpose        (string, optional, related to Load Balancing)<br>  role           (string, optional, related to Load Balancing) | `list(map(string))` | `[]` | no |
+| <a name="input_additional_subnetworks"></a> [additional\_subnetworks](#input\_additional\_subnetworks) | List of additional subnetworks in which to create resources.<br><br>  subnet\_name           (string, required, Name of subnet; will be replaced by var.subnetwork\_name or its default value)<br>  subnet\_region         (string, required, will be replaced by var.region)<br>  new\_bits              (number, required, Additional CIDR bits to determine subnetwork size)<br>  subnet\_private\_access (bool, optional, Enable Private Access on subnetwork)<br>  subnet\_flow\_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)<br>  description           (string, optional, Description of Network)<br>  purpose               (string, optional, related to Load Balancing)<br>  role                  (string, optional, related to Load Balancing) | `list(map(string))` | `[]` | no |
 | <a name="input_delete_default_internet_gateway_routes"></a> [delete\_default\_internet\_gateway\_routes](#input\_delete\_default\_internet\_gateway\_routes) | If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_ips_per_nat"></a> [ips\_per\_nat](#input\_ips\_per\_nat) | The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT) | `number` | `2` | no |
 | <a name="input_network_address_range"></a> [network\_address\_range](#input\_network\_address\_range) | IP address range (CIDR) for global network | `string` | `"10.0.0.0/9"` | no |
 | <a name="input_network_description"></a> [network\_description](#input\_network\_description) | An optional description of this resource (changes will trigger resource destroy/create) | `string` | `""` | no |
-| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created (defaults to "{deployment\_name}-net") | `string` | `null` | no |
+| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-net") | `string` | `null` | no |
 | <a name="input_network_routing_mode"></a> [network\_routing\_mode](#input\_network\_routing\_mode) | The network routing mode (default "GLOBAL") | `string` | `"GLOBAL"` | no |
-| <a name="input_primary_subnetwork"></a> [primary\_subnetwork](#input\_primary\_subnetwork) | Primary (default) subnetwork in which to create resources.<br><br>  name           (string, required, Name of subnet; if set to null, is replaced by "{deployment\_name}-primary-subnet")<br>  region         (string, ignored, will be replaced by var.region)<br>  new\_bits       (number, required, Additional CIDR bits beyond var.network\_address\_range)<br>  private\_access (bool, optional, Enable Private Access on subnetwork)<br>  flow\_logs      (map(string), optional, Configure Flow Logs see<br>                  terraform-google-network module for complete settings)<br>  description    (string, optional, Description of Network)<br>  purpose        (string, optional, related to Load Balancing)<br>  role           (string, optional, related to Load Balancing) | `map(string)` | <pre>{<br>  "description": "Primary Subnetwork",<br>  "flow_logs": false,<br>  "name": null,<br>  "new_bits": 15,<br>  "private_access": true<br>}</pre> | no |
+| <a name="input_primary_subnetwork"></a> [primary\_subnetwork](#input\_primary\_subnetwork) | Primary (default) subnetwork in which to create resources. If null, a default value will be constructed.<br><br>  subnet\_name           (string, required, Name of subnet; will be replaced by var.subnetwork\_name or its default value)<br>  subnet\_region         (string, required, will be replaced by var.region)<br>  new\_bits              (number, optional, Additional CIDR bits to determine subnetwork size; will default to var.subnetwork\_size)<br>  subnet\_private\_access (bool, optional, Enable Private Access on subnetwork)<br>  subnet\_flow\_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)<br>  description           (string, optional, Description of Network)<br>  purpose               (string, optional, related to Load Balancing)<br>  role                  (string, optional, related to Load Balancing) | `map(string)` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources | `string` | n/a | yes |
 | <a name="input_shared_vpc_host"></a> [shared\_vpc\_host](#input\_shared\_vpc\_host) | Makes this project a Shared VPC host if 'true' (default 'false') | `bool` | `false` | no |
+| <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-primary-subnet") | `string` | `null` | no |
+| <a name="input_subnetwork_size"></a> [subnetwork\_size](#input\_subnetwork\_size) | The size, in CIDR bits, of the primary subnetwork unless explicitly supplied in var.primary\_subnetwork | `number` | `15` | no |
 
 ## Outputs
 

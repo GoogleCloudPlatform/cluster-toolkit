@@ -48,7 +48,6 @@ variable "network_project_id" {
 variable "subnetwork_name" {
   description = "Name of subnetwork in which to provision image building VM"
   type        = string
-  default     = null
 }
 
 variable "omit_external_ip" {

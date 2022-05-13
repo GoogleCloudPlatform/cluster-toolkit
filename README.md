@@ -47,18 +47,96 @@ cd hpc-toolkit && make
 You should now have a binary named `ghpc` in the project root directory.
 Optionally, you can run `./ghpc --version` to verify the build.
 
-## Quick Start Tutorials
+## Quick Start
 
-* [Simple Cluster](docs/tutorials/basic.md): Deploy a simple HPC cluster
-  using the HPC Toolkit in [cloud shell](https://cloud.google.com/shell) and the
-  [hpc-cluster-small.yaml example](examples/hpc-cluster-small.yaml).
-* [Intel Select Solution Cluster](docs/tutorials/intel-select/intel-select.md):
-  Walks through deploying an HPC cluster that is based on the
-  [HPC virtual machine (VM) image][hpc-vm-image] and complies to the
-  [Intel Select Solution for Simulation and Modeling criteria][intel-select].
+To create an HPC deployment, an HPC blueprint file needs to be written or
+adapted from one of the [core examples](examples/) or
+[community examples](community/examples/).
 
-[hpc-vm-image]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[intel-select]: https://www.intel.com/content/www/us/en/products/solutions/select-solutions/hpc/simulation-modeling.html
+These instructions will use
+[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml), which is a
+good starting point and creates a deployment containing:
+
+* a new network
+* a filestore instance
+* a slurm login node
+* a slurm controller
+
+> **_NOTE:_** More information on the example blueprints can be found in
+> [examples/README.md](examples/README.md).
+
+These instructions assume you are using
+[Cloud Shell](https://cloud.google.com/shell) in the context of the GCP project
+you wish to deploy in, and that you are in the root directory of the hpc-toolkit
+repo cloned during [installation](#installation).
+
+Run the ghpc binary with the following command:
+
+```shell
+./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
+
+> **_NOTE:_** The `--vars` argument supports comma-separated list of name=value
+> variables to override blueprint variables. This feature only supports
+> variables of string type.
+
+This will create a deployment directory named `hpc-small/`.
+
+After successfully running `ghpc create`, a short message displaying how to
+proceed is displayed. For the `hpc-cluster-small` example, the message will
+appear similar to:
+
+```shell
+terraform -chdir=hpc-cluster-small/primary init
+terraform -chdir=hpc-cluster-small/primary validate
+terraform -chdir=hpc-cluster-small/primary apply
+```
+
+Use these commands to run terraform and deploy your cluster. If the `apply` is
+successful, a message similar to the following will be displayed:
+
+```shell
+Apply complete! Resources: 13 added, 0 changed, 0 destroyed.
+```
+
+> **_NOTE:_** Before you run this for the first time you may need to enable some
+> APIs and possibly request additional quotas. See
+> [Enable GCP APIs](#enable-gcp-apis) and
+> [Small Example Quotas](examples/README.md#hpc-cluster-smallyaml).\
+> **_NOTE:_** If not using cloud shell you may need to set up
+> [GCP Credentials](#gcp-credentials).\
+> **_NOTE:_** Cloud Shell times out after 20 minutes of inactivity. This example
+> deploys in about 5 minutes but for more complex deployments it may be
+> necessary to deploy (`terraform apply`) from a cloud VM. The same process
+> above can be used, although [dependencies](#dependencies) will need to be
+> installed first.
+
+Once successfully deployed, take the following steps to run a job:
+
+* First navigate to `Compute Engine` > `VM instances` in the Google Cloud Console.
+* Next click on the `SSH` button associated with the `slurm-hpc-small-login0` instance.
+* Finally run the `hostname` command on 3 nodes by running the following command in the shell popup:
+
+```shell
+$ srun -N 3 hostname
+slurm-hpc-slurm-small-debug-0-0
+slurm-hpc-slurm-small-debug-0-1
+slurm-hpc-slurm-small-debug-0-2
+```
+
+By default, this runs the job on the `debug` partition. See details in
+[examples/](examples/README.md#compute-partition) for how to run on the more
+performant `compute` partition.
+
+This example does not contain any Packer-based modules but for completeness,
+you can use the following command to deploy a Packer-based deployment group:
+
+```shell
+cd <deployment-directory>/<packer-group>/<custom-vm-image>
+packer init .
+packer validate .
+packer build .
+```
 
 ## HPC Toolkit Components
 

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Package resreader extracts necessary information from modules
-package resreader
+// Package modulereader extracts necessary information from modules
+package modulereader
 
 import (
 	"log"

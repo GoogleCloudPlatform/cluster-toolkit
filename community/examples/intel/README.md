@@ -137,7 +137,7 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 
   Ensure that you select the project in which you are provisioning the cluster.
 
-1. Click on the `SSH` button associated with the `slurm-hpc-small-login0`
+1. Click on the `SSH` button associated with the `slurm-hpc-intel-select-login0`
    instance.
 
    This will open a separate pop up window with a terminal into our newly created

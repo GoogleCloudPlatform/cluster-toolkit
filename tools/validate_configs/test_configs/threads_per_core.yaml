@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: hpc-cluster-small
+blueprint_name: threads-per-core
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: hpc-small
+  deployment_name: threads-per-core
   region: us-central1
   zone: us-central1-c
 
@@ -28,58 +28,66 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - source: modules/network/vpc
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: modules/file-system/filestore
+  - source: ./modules/compute/vm-instance
     kind: terraform
-    id: homefs
-    use: [network1]
-    settings:
-      local_mount: /home
-
-  # This debug_partition will work out of the box without requesting additional GCP quota.
-  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
-    id: debug_partition
+    id: n1-2-threads
     use:
     - network1
-    - homefs
     settings:
-      partition_name: debug
-      max_node_count: 4
-      enable_placement: false
-      exclusive: false
-      machine_type: n2-standard-2
+      name_prefix: n1-2-threads
+      machine_type: n1-standard-32
+      threads_per_core: 2
 
-  # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
-  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - source: ./modules/compute/vm-instance
     kind: terraform
-    id: compute_partition
+    id: n1-1-thread
     use:
     - network1
-    - homefs
     settings:
-      partition_name: compute
-      max_node_count: 20
+      name_prefix: n1-1-thread
+      machine_type: n1-standard-32
+      threads_per_core: 1
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: ./modules/compute/vm-instance
     kind: terraform
-    id: slurm_controller
+    id: n2-2-threads
     use:
     - network1
-    - homefs
-    - debug_partition  # debug partition will be default as it is listed first
-    - compute_partition
     settings:
-      login_node_count: 1
-      suspend_time: 60
+      name_prefix: n2-2-threads
+      machine_type: n2-standard-32
+      threads_per_core: 2
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: ./modules/compute/vm-instance
     kind: terraform
-    id: slurm_login
+    id: n2-1-thread
     use:
     - network1
-    - homefs
-    - slurm_controller
+    settings:
+      name_prefix: n2-1-thread
+      machine_type: n2-standard-32
+      threads_per_core: 1
+
+  - source: ./modules/compute/vm-instance
+    kind: terraform
+    id: c2-2-threads
+    use:
+    - network1
+    settings:
+      name_prefix: c2-2-threads
+      machine_type: c2-standard-30
+      threads_per_core: 2
+
+  - source: ./modules/compute/vm-instance
+    kind: terraform
+    id: c2-1-thread
+    use:
+    - network1
+    settings:
+      name_prefix: c2-1-thread
+      machine_type: c2-standard-30
+      threads_per_core: 1

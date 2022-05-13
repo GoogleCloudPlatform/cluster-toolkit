@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package resreader
+package modulereader
 
 import (
 	"io/ioutil"
@@ -66,7 +66,7 @@ func Test(t *testing.T) {
 	TestingT(t)
 }
 
-// resreader.go
+// modulereader.go
 func (s *MySuite) TestIsValidKind(c *C) {
 	c.Assert(IsValidKind(pkrKindString), Equals, true)
 	c.Assert(IsValidKind(tfKindString), Equals, true)
@@ -166,10 +166,10 @@ func (s *MySuite) TestGetInfo_MetaReader(c *C) {
 // Util Functions
 func createTmpModule() {
 	var err error
-	tmpModuleDir, err = ioutil.TempDir("", "resreader_tests_*")
+	tmpModuleDir, err = ioutil.TempDir("", "modulereader_tests_*")
 	if err != nil {
 		log.Fatalf(
-			"Failed to create temp dir for module in resreader_test, %v", err)
+			"Failed to create temp dir for module in modulereader_test, %v", err)
 	}
 
 	// Create terraform module dir
@@ -186,7 +186,7 @@ func createTmpModule() {
 	}
 	_, err = mainFile.WriteString(testMainTf)
 	if err != nil {
-		log.Fatalf("resreader_test: Failed to write main.tf test file. %v", err)
+		log.Fatalf("modulereader_test: Failed to write main.tf test file. %v", err)
 	}
 
 	// variables.tf file
@@ -197,7 +197,7 @@ func createTmpModule() {
 	_, err = varFile.WriteString(testVariablesTf)
 	if err != nil {
 		log.Fatalf(
-			"resreader_test: Failed to write variables.tf test file. %v", err)
+			"modulereader_test: Failed to write variables.tf test file. %v", err)
 	}
 
 	// outputs.tf file
@@ -207,7 +207,7 @@ func createTmpModule() {
 	}
 	_, err = outFile.WriteString(testOutputsTf)
 	if err != nil {
-		log.Fatalf("resreader_test: Failed to write outputs.tf test file. %v", err)
+		log.Fatalf("modulereader_test: Failed to write outputs.tf test file. %v", err)
 	}
 
 	// Create packer module dir
@@ -224,7 +224,7 @@ func createTmpModule() {
 	}
 	_, err = mainFile.WriteString(testMainTf)
 	if err != nil {
-		log.Fatalf("resreader_test: Failed to write main.pkr.hcl test file. %v", err)
+		log.Fatalf("modulereader_test: Failed to write main.pkr.hcl test file. %v", err)
 	}
 
 	// variables.pkr.hcl file
@@ -235,7 +235,7 @@ func createTmpModule() {
 	_, err = varFile.WriteString(testVariablesTf)
 	if err != nil {
 		log.Fatalf(
-			"resreader_test: Failed to write variables.pkr.hcl test file. %v", err)
+			"modulereader_test: Failed to write variables.pkr.hcl test file. %v", err)
 	}
 }
 
@@ -243,7 +243,7 @@ func teardownTmpModule() {
 	err := os.RemoveAll(tmpModuleDir)
 	if err != nil {
 		log.Fatalf(
-			"resreader_test: Failed to delete contents of test directory %s, %v",
+			"modulereader_test: Failed to delete contents of test directory %s, %v",
 			tmpModuleDir, err)
 	}
 }

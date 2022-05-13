@@ -3,6 +3,28 @@
 This directory contains a set of example blueprint files that can be fed into
 gHPC to create a deployment.
 
+<!-- TOC generated with some manual tweaking of the following command output:
+     md_toc github examples/README.md | sed -e "s/\s-\s/ * /"              -->
+<!-- TOC -->
+
+* [Instructions](#instructions)
+  * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
+* [Blueprint Descriptions](#blueprint-descriptions)
+  * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-)
+  * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
+  * [image-builder.yaml](#image-builderyaml-)
+  * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
+  * [spack-gromacs.yaml](#spack-gromacsyaml--)
+  * [omnia-cluster.yaml](#omnia-clusteryaml--)
+* [Blueprint Schema](#blueprint-schema)
+* [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
+  * [Top Level Parameters](#top-level-parameters)
+  * [Global Variables](#global-variables)
+  * [Deployment Groups](#deployment-groups)
+* [Variables](#variables)
+  * [Blueprint Variables](#blueprint-variables)
+  * [Literal Variables](#literal-variables)
+
 ## Instructions
 
 Ensure your project\_id is set and other deployment variables such as zone and
@@ -64,13 +86,6 @@ the experimental badge (![experimental-badge]).
 [intel-examples-readme]: ../community/examples/intel/README.md
 [intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
 
-### [hpc-cluster-intel-select.yaml] ![community-badge]
-
-This example provisions a Slurm cluster [automating the steps to comply to the
-Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
-more extensively discussed in a dedicated [README for Intel
-examples][intel-examples-readme].
-
 ### [hpc-cluster-small.yaml] ![core-badge]
 
 Creates a basic auto-scaling SLURM cluster with mostly default settings. The
@@ -95,7 +110,7 @@ select the compute partition using the `srun -p compute` argument.
 
 Quota required for this example:
 
-* Cloud Filestore API: Basic SSD (Premium) capacity (GB) per region: **2660 GB**
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1024 GB**
 * Compute Engine API: Persistent Disk SSD (GB): **~10 GB**
 * Compute Engine API: N2 CPUs: **12**
 * Compute Engine API: C2 CPUs: **60/node** up to 1200 - _only needed for
@@ -131,7 +146,7 @@ analysis.
 
 Quota required for this example:
 
-* Cloud Filestore API: Basic SSD (Premium) capacity (GB) per region: **2660 GB**
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1024 GB**
 * Cloud Filestore API: High Scale SSD capacity (GB) per region: **10240 GiB** - _min
   quota request is 61440 GiB_
 * Compute Engine API: Persistent Disk SSD (GB): **~14000 GB**
@@ -279,6 +294,13 @@ file that was added during image build:
   Hello World
   ```
 
+### [hpc-cluster-intel-select.yaml] ![community-badge]
+
+This example provisions a Slurm cluster [automating the steps to comply to the
+Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
+more extensively discussed in a dedicated [README for Intel
+examples][intel-examples-readme].
+
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Spack is a HPC software package manager. This example creates a small slurm
@@ -332,6 +354,13 @@ Creates a simple omnia cluster, with an
 omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
+
+**_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to create
+the cluster. For these instances, Simultaneous Multithreading (SMT) is turned
+off by default, meaning that only the physical cores are visible. For the
+compute nodes, this means that 30 physical cores are visible on the
+c2-standard-60 VMs. To activate all 60 virtual cores, include
+`threads_per_core=2` under settings for the compute vm-instance module.
 
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
@@ -391,7 +420,7 @@ deployment_groups:
   - source: github.com/org/repo//modules/role/module-name
 ```
 
-## Writing An HPC Blueprint
+## Writing an HPC Blueprint
 
 The blueprint file is composed of 3 primary parts, top-level parameters, global
 variables and deployment groups. These are described in more detail below.
