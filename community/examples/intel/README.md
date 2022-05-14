@@ -25,6 +25,8 @@
   * [Create DAOS/Slurm Cluster pools and partitions](#create-daosslurm-cluster-pools-and-partitions)
   * [Delete the DAOS/Slurm Cluster infrastructure when not in use](#delete-the-daosslurm-cluster-infrastructure-when-not-in-use)
 
+[daos-admin]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#perform-daos-administration-tasks
+
 ## Intel-Optimized Slurm Cluster
 
 This document is adapted from a [Cloud Shell tutorial][tutorial] developed to
@@ -50,8 +52,8 @@ Before provisioning any infrastructure in this project you should follow the
 Toolkit guidance to enable [APIs][apis] and establish minimum resource
 [quotas][quotas]. In particular, the following APIs should be enabled
 
-* file.googleapis.com (Cloud Filestore)
-* compute.googleapis.com (Google Compute Engine)
+* [file.googleapis.com](https://cloud.google.com/filestore/docs/reference/rest) (Cloud Filestore)
+* [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
 
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
@@ -68,11 +70,11 @@ And the following available quota is required in the region used by the cluster:
 
 Use `ghpc` to provision the blueprint, supplying your project ID:
 
-```shell
+```text
 ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/hpc-cluster-intel-select.yaml
 ```
 
-It will create a set of directories containing Terraform modules and Packer
+This will create a set of directories containing Terraform modules and Packer
 templates. **Please ignore the printed instructions** in favor of the following:
 
 1. Provision the network and startup scripts that install Intel software.
@@ -182,7 +184,7 @@ The file [daos-cluster.yaml](daos-cluster.yaml) describes an environment with a 
 
 For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
 
-Please notice you MUST first create [client and server DAOS images][daos-images] for this example to work.
+> **_NOTE:_** You MUST first create [client and server DAOS images][daos-images] for this example to work.
 
 [mig]: https://cloud.google.com/compute/docs/instance-groups
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
@@ -199,8 +201,8 @@ Before provisioning any infrastructure in this project you should follow the
 Toolkit guidance to enable [APIs][apis] and establish minimum resource
 [quotas][quotas]. In particular, the following APIs should be enabled
 
-* compute.googleapis.com (Google Compute Engine)
-* secretmanager.googleapis.com (Secret manager, for secure mode)
+* [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
+* [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
 
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
@@ -210,18 +212,20 @@ And the following available quota is required in the region used by the cluster:
 * C2 CPUs: 32 (16 per client node)
 * N2 CPUs: 144 (36 per server node)
 * PD-SSD: 120GB (20GB per client and server)
-* Local SSD: 4 \* 16 \* 375 = 24000GB (6TB per server)
+* Local SSD: 4 \* 16 \* 375 = 24,000GB (6TB per server)
 
 ### Deploying the DAOS Cluster
 
 Use `ghpc` to provision the blueprint, supplying your project ID:
 
-```shell
-ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/daos-cluster.yaml  [--backend-config bucket=<GCS tf backend bucket>]
+```text
+ghpc create community/examples/intel/daos-cluster.yaml  \
+  --vars project_id=<<PROJECT_ID>> \
+  [--backend-config bucket=<GCS tf backend bucket>]
 ```
 
 It will create a set of directories containing Terraform modules and Packer
-templates. Please notice how you may provide an optional, but recommended, [back-end configuration][backend]. This will safe the terraform state in a pre-existing [Google Cloud Storage bucket][bucket].
+templates. Please notice how you may provide an optional, but recommended, [back-end configuration][backend]. This will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket].
 
 Please follow `ghpc` instructions to deploy the environment:
 
@@ -231,7 +235,7 @@ Please follow `ghpc` instructions to deploy the environment:
   terraform -chdir=daos-cluster/primary apply
   ```
 
-[backend]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/examples#optional-setting-up-a-remote-terraform-state
+[backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
 [bucket]: https://cloud.google.com/storage/docs/creating-buckets
 ### Connecting to a client node
 
@@ -252,11 +256,11 @@ Please follow `ghpc` instructions to deploy the environment:
 
 ### Create pools and partitions
 
-After connecting to the client VM follow the necessary [DAOS administration tasks](daos-admin) to create a pool, and a container with the appropriate permissions and mount it.
-
-[daos-admin]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#perform-daos-administration-tasks
+After connecting to the client VM follow the necessary [DAOS administration tasks][daos-admin] to create a pool, and a container with the appropriate permissions and mount it.
 
 ### Delete the DAOS infrastructure when not in use
+
+> **_NOTE:_** All the DAOS data will be permanently lost after cluster deletion.
 
 To delete the remaining infrastructure:
 
@@ -270,7 +274,7 @@ The file [daos-slurm.yaml](daos-slurm.yaml) describes an environment with a 4-no
 
 For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
 
-Please notice you MUST first create [client and server DAOS images][daos-images] for this example to work.
+> **_NOTE:_** You MUST  first create [client and server DAOS images][daos-images] for this example to work.
 
 [mig]: https://cloud.google.com/compute/docs/instance-groups
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
@@ -287,8 +291,8 @@ Before provisioning any infrastructure in this project you should follow the
 Toolkit guidance to enable [APIs][apis] and establish minimum resource
 [quotas][quotas]. In particular, the following APIs should be enabled
 
-* compute.googleapis.com (Google Compute Engine)
-* secretmanager.googleapis.com (Secret manager, for secure mode)
+* [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
+* [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
 
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
@@ -298,7 +302,7 @@ And the following available quota is required in the region used by the cluster:
 For DAOS:
 * N2 CPUs: 144 (36 per server node)
 * PD-SSD: 80GB (20GB per server)
-* Local SSD: 4 \* 16 \* 375 = 24000GB (6TB per server)
+* Local SSD: 4 \* 16 \* 375 = 24,000GB (6TB per server)
 
 For Slurm:
 * Filestore: 2560GB
@@ -311,12 +315,14 @@ For Slurm:
 
 Use `ghpc` to provision the blueprint, supplying your project ID:
 
-```shell
-ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/daos-slurm.yaml  [--backend-config bucket=<GCS tf backend bucket>]
+```text
+ghpc create community/examples/intel/daos-slurm.yaml \
+  --vars project_id=<<PROJECT_ID>> \
+  [--backend-config bucket=<GCS tf backend bucket>]
 ```
 
 It will create a set of directories containing Terraform modules and Packer
-templates. Please notice how you may provide an optional, but recommended, [back-end configuration][backend]. This will safe the terraform state in a pre-existing [Google Cloud Storage bucket][bucket].
+templates. Please notice how you may provide an optional, but recommended, [back-end configuration][backend]. This will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket].
 
 Please follow `ghpc` instructions to deploy the environment:
 
@@ -326,7 +332,7 @@ Please follow `ghpc` instructions to deploy the environment:
   terraform -chdir=daos-slurm/primary apply
   ```
 
-[backend]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/examples#optional-setting-up-a-remote-terraform-state
+[backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
 [bucket]: https://cloud.google.com/storage/docs/creating-buckets
 
 ### Connecting to the DAOS/Slurm Cluster login node
@@ -350,13 +356,20 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 
 ### Create DAOS/Slurm Cluster pools and partitions
 
-After connecting to the client VM follow the necessary [DAOS administration tasks](daos-admin) to create a pool, and a container with the appropriate permissions and mount it.
-
-[daos-admin]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#perform-daos-administration-tasks
+After connecting to the client VM follow the necessary [DAOS administration tasks][daos-admin] to create a pool, and a container with the appropriate permissions and mount it.
 
 ### Delete the DAOS/Slurm Cluster infrastructure when not in use
 
-To delete the remaining infrastructure:
+> **_NOTE:_** All the DAOS data will be permanently lost after cluster deletion.
+
+<!-- -->
+
+> **_NOTE:_** If the Slurm controller is shut down before the auto-scale nodes
+> are destroyed then they will be left running.
+
+Open your browser to the VM instances page and ensure that nodes named "compute"
+have been shutdown and deleted by the Slurm autoscaler. Delete the remaining
+infrastructure with `terraform`:
 
 ```shell
 terraform -chdir=daos-cluster/primary destroy

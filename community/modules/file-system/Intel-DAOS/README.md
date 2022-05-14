@@ -4,6 +4,8 @@ This modules allows creating an instance of Distributed Asynchronous Object Stor
 
 For more information, please refer to the [Google Cloud DAOS repo on GitHub](https://github.com/daos-stack/google-cloud-daos).
 
+> **_NOTE:_** DAOS on GCP does not require an HPC Toolkit wrapper and, therefore, sources directly from GitHub. It will not work as a [local or embedded module](../../../../modules/README.md#embedded-modules).
+
 ### Example
 
 Multiple fully working examples of a DAOS deployment and how it can be used in conjunction with Slurm [can be found in the community examples folder](../../../examples/intel/).
