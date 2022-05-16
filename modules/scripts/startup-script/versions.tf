@@ -29,6 +29,9 @@ terraform {
       version = ">= 2.0.0, < 2.2.0"
     }
   }
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:startup-script/v0.7.1"
+  }
 
   required_version = ">= 0.14.0"
 }

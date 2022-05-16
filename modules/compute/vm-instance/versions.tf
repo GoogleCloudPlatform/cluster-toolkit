@@ -26,6 +26,12 @@ terraform {
       version = ">= 4.12"
     }
   }
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v0.7.1"
+  }
+  provider_meta "google-beta" {
+    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v0.7.1"
+  }
 
   required_version = ">= 0.14.0"
 }
