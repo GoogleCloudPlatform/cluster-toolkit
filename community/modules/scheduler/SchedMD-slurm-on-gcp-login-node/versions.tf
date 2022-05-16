@@ -21,6 +21,9 @@ terraform {
       version = ">= 3.83"
     }
   }
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:SchedMD-slurm-on-gcp-login-node/v0.7.1"
+  }
 
   required_version = ">= 0.14.0"
 }
