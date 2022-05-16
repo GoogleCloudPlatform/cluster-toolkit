@@ -73,3 +73,9 @@ variable "labels" {
   description = "Labels to add to the filestore instance. List key, value pairs."
   type        = any
 }
+
+variable "connect_mode" {
+  description = "Used to select mode - supported values DIRECT_PEERING and PRIVATE_SERVICE_ACCESS."
+  type        = string
+  default     = "DIRECT_PEERING"
+}
