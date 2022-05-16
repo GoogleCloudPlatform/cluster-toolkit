@@ -1,12 +1,15 @@
 ## Description
 
 This module creates a login node for a Slurm cluster based on the
-SchedMD/slurm-gcp [login module](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login).
-The login node is used in conjunction with the [controller](../SchedMD-slurm-on-gcp-controller).
+[Slurm on GCP][slurm-on-gcp] terraform [login module][login-module]. The login
+node is used in conjunction with the
+[Slurm controller](../SchedMD-slurm-on-gcp-controller).
 
-**Warning**: Slurm handles startup scripts differently from virtual machines.
-This will not work in conjuntion with the [startup_script](../../../scripts/startup-script/README.md)
-module.
+> **_Warning:_**: Slurm handles startup scripts differently from virtual
+> machines. This will not work in conjuntion with the
+> [startup_script](../../../scripts/startup-script/README.md) module.
+
+[login-module]: https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login
 
 ### Example
 
@@ -14,18 +17,23 @@ module.
 - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
   kind: terraform
   id: slurm_login
+  use:
+  - network1
+  - homefs
+  - slurm_controller
   settings:
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
-    network_storage:
-    - $(homefs.network_storage)
-    login_network_storage:
-    - $(homefs.network_storage)
-    controller_name: $(slurm_controller.controller_node_name)
+    login_machine_type: n2-standard-4
 ```
 
-This creates a Slurm login node connected to the primary subnet of network1 with
-the homefs filesystem mounted and connecting to `slurm_controller` as the
-slurm controller node. For more context see the
+This creates a Slurm login node which is:
+
+* connected to the primary subnet of network1 via `use`
+* mounted to the homefs filesystem via `use`
+* associated with the `slurm_controller` module as the slurm controller via
+  `use`
+* of VM machine type `n2-standard-4`
+
+For more context see the
 [hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml)
 
 ## Support

@@ -5,12 +5,12 @@ for a compute VM and report back if it fails. This can be useful when running
 post-boot installation scripts that require the startup script to finish setting
 up a node.
 
-**Warning**: this module is experimental and not fully supported.
+> **_WARNING:_**: this module is experimental and not fully supported.
 
 ### Additional Dependencies
 
 * [**gcloud**](https://cloud.google.com/sdk/gcloud) must be present in the path
-  of the machine where `terraform apply` is run
+  of the machine where `terraform apply` is run.
 
 ### Example
 

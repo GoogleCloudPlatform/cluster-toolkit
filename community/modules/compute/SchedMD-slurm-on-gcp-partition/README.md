@@ -3,25 +3,29 @@
 This module creates a compute partition that be used as input to
 [SchedMD-slurm-on-gcp-controller](../../scheduler/SchedMD-slurm-on-gcp-controller/README.md).
 
-**Warning**: updating a partition will not cause the slurm controller to update
-its configurations. In other words, it will not update an already deployed Slurm
-cluster.
+> **Warning**: updating a partition will not cause the slurm controller to
+> update its configurations. In other words, it will not update an already
+> deployed Slurm cluster.
 
 ### Example
 
-Create a partition module with a max node count of 200, named "compute",
-connected to a module subnetwork and with homefs mounted.
+The following code snippet creates a partition module with:
+
+* a max node count of 200
+* VM machine type of `c2-standard-30`
+* partition name of "compute"
+* connected to the `network1` module via `use`
+* Mounted to homefs via `use`
 
 ```yaml
 - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
   kind: terraform
   id: compute_partition
+  use: [network1, homefs]
   settings:
     max_node_count: 200
     partition_name: compute
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
-    network_storage:
-    - $(homefs.network_storage)
+    machine_type: c2-standard-30
 ```
 
 ## Support

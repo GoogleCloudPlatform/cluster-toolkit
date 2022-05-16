@@ -5,7 +5,7 @@ This module creates a slurm controller node via the SchedMD/slurm-gcp
 module.
 
 More information about Slurm On GCP can be found at the
-[project's GitHub page](https://github.com/SchedMD/slurm-gcp) and in the
+[project's GitHub page][slurm-on-gcp] and in the
 [Slurm on Google Cloud User Guide][slurm-ug].
 
 The [user guide][slurm-ug] provides detailed instructions on customizing and
@@ -20,20 +20,18 @@ controller for optimal performance at different scales.
 - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
   kind: terraform
   id: slurm_controller
+  use:
+  - network1
+  - homefs
+  - compute_partition
   settings:
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
     login_node_count: 1
-    network_storage:
-    - $(homefs.network_storage)
-    login_network_storage:
-    - $(homefs.network_storage)
-    partitions:
-    - $(compute_partition.partition)
 ```
 
 This creates a controller node connected to the primary subnetwork with 1 login
-node (defined elsewhere). The controller will also have the homefs file system
-mounted and manage one partition. For more context see the
+node (defined elsewhere). The controller will also have the `homefs` file system
+mounted via the `use` field and manage one partition, also declared in the `use`
+field. For more context see the
 [hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml).
 
 ## Support
