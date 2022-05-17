@@ -148,6 +148,7 @@ No modules.
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script used on the instance | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the VM. | `string` | `null` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Network tags, provided as a list | `list(string)` | `[]` | no |
 | <a name="input_threads_per_core"></a> [threads\_per\_core](#input\_threads\_per\_core) | Sets the number of threads per physical core. By setting threads\_per\_core<br>greater than 1, Simultaneous Multithreading (SMT) is enabled extending the<br>total number of virtual cores. For example, a machine of type c2-standard-60<br>will have 60 virtual cores with threads\_per\_core equal to 2. With<br>threads\_per\_core equal to 1 (SMT turned off), only the 30 physical cores will<br>be available on the VM.<br><br>Disabling SMT can be more performant in many HPC workloads, therefore it is<br>disabled by default. | `number` | `1` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Compute Platform zone | `string` | n/a | yes |
 

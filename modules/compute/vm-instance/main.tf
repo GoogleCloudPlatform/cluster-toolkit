@@ -84,6 +84,7 @@ resource "google_compute_instance" "compute_vm" {
 
   resource_policies = google_compute_resource_policy.placement_policy[*].self_link
 
+  tags   = var.tags
   labels = var.labels
 
   boot_disk {
