@@ -7,6 +7,12 @@ and configure a custom blueprint, see
 
 ## Community Examples
 
+### Intel
+
+Examples using Intel HPC technologies can be found in the
+[Intel folder](intel). More information can be found in the
+[readme](intel/README.md).
+
 ### spack-gromacs.yaml
 
 [See description in core](../../examples/README.md#community-spack-gromacsyaml)

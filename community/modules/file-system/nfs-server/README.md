@@ -1,11 +1,12 @@
 ## Description
 
-This module creates a Network File Sharing (NFS) disk to share directories and
-files with other clients over a network via the
-[Compute Disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk
-) to be mounted upon a google compute engine instance created through the
-[Compute Instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance
-).
+This module creates a Network File Sharing (NFS) file system based on a VM
+instance and [compute disk][disk]. This file system can share directories and
+files with other clients over a network. `nfs-server` can be used by
+[vm-instance](../../../../modules/compute/vm-instance/README.md) and SchedMD
+community modules that create compute VMs.
+
+[disk]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk
 
 ### Example
 
@@ -13,14 +14,22 @@ files with other clients over a network via the
 - source: community/modules/file-system/nfs-server
   kind: terraform
   id: homefs
+  use: [network1]
   settings:
-    network_name: $(network1.network_name)
+    auto_delete_disk: true
     labels:
       ghpc_role: storage-home
 ```
 
 This creates a NFS on a virtual machine which allow other VMs to mount the
 volume as an external file system.
+
+> **_NOTE:_** `auto_delete_disk` is set to true in this example, which means
+> that running `terraform destroy` also deletes the disk. To retain the disk
+> after `terraform destroy` either set this to false or don't include the
+> settings so it defaults to false. Note that with `auto_delete_disk: false`,
+> you will need to manually delete the disk after destroying a deployment group
+> with `nfs-server`.
 
 ## License
 
