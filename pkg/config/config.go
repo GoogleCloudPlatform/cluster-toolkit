@@ -46,7 +46,7 @@ var errorMessages = map[string]string{
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
 	"missingSetting":    "a required setting is missing from a module",
-	"globalLabelType":   "global labels are not a map",
+	"globalLabelType":   "deployment variable 'labels' are not a map",
 	"settingsLabelType": "labels in module settings are not a map",
 	"invalidVar":        "invalid variable definition in",
 	"varNotFound":       "Could not find source of variable",
@@ -550,7 +550,7 @@ func (err *DeploymentNameError) Error() string {
 func (b Blueprint) ResolveGlobalVariables(ctyVars map[string]cty.Value) error {
 	origin, err := ConvertMapToCty(b.Vars)
 	if err != nil {
-		return fmt.Errorf("error converting global variables to cty: %w", err)
+		return fmt.Errorf("error converting deployment variables to cty: %w", err)
 	}
 	return ResolveVariables(ctyVars, origin)
 }

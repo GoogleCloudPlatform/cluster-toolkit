@@ -60,8 +60,8 @@ with `_net` appended. `network_name` can be set manually as well as part of the
 settings.
 
 Note that `deployment_name` does not need to be set explicitly here,
-it would typically be inferred from the global variable of the same name. It was
-included for clarity.
+it would typically be inferred from the deployment variable of the same name. It
+was included for clarity.
 
 ## License
 

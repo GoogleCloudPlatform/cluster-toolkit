@@ -245,9 +245,9 @@ deployed.
 ## Blueprint Warnings and Errors
 
 By default, each blueprint is configured with a number of "validator" functions
-which perform basic tests of your global variables. If `project_id`, `region`,
-and `zone` are defined as global variables, then the following validators are
-enabled:
+which perform basic tests of your deployment variables. If `project_id`,
+`region`, and `zone` are defined as deployment variables, then the following
+validators are enabled:
 
 ```yaml
 validators:

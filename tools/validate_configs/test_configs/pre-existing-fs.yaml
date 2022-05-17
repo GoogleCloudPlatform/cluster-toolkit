@@ -28,7 +28,7 @@ deployment_groups:
 - group: storage
   modules:
   # the pre-existing-vpc is not needed here, since filestore will use the
-  # network-name from global vars
+  # network-name from deployment vars
   - source: modules/file-system/filestore
     kind: terraform
     id: homefs-filestore
