@@ -28,6 +28,16 @@ the `homefs` file system module.
 > physical cores visible. To change this, set `threads_per_core=2` under
 > settings.
 
+### SSH key metadata
+
+This module will ignore all changes to the `ssh-keys` metadata field that are
+typically set by [external Google Cloud tools that automate SSH access][gcpssh]
+when not using OS Login. For example, clicking on the Google Cloud Console SSH
+button next to VMs in the VM Instances list will temporarily modify VM metadata
+to include a dynamically-generated SSH public key.
+
+[gcpssh]: https://cloud.google.com/compute/docs/connect/add-ssh-keys#metadata
+
 ### Placement
 
 The `placement_policy` variable can be used to control where your VM instances

@@ -128,4 +128,10 @@ resource "google_compute_instance" "compute_vm" {
   }
 
   metadata = merge(local.network_storage, local.startup_script, var.metadata)
+
+  lifecycle {
+    ignore_changes = [
+      metadata["ssh-keys"],
+    ]
+  }
 }
