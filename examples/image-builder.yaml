@@ -21,6 +21,8 @@ vars:
   region: us-central1
   zone: us-central1-c
   new_image_family: my-slurm-image
+  network_name: image-builder
+  subnetwork_name: image-builder-us-central1
 
 deployment_groups:
 - group: builder-env

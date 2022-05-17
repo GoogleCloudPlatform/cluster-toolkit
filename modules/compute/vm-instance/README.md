@@ -22,6 +22,12 @@ This creates a cluster of 8 compute VMs named `compute-[0-7]` on the network
 defined by the `network1` module. The VMs are of type c2-standard-60 and mount
 the `homefs` file system module.
 
+> **_NOTE:_**: Simultaneous Multithreading (SMT) is deactivated by default
+> (threads_per_core=1), which means only the physical cores are visible on the
+> VM. With SMT disabled, a machine of type c2-standard-60 will only have the 30
+> physical cores visible. To change this, set `threads_per_core=2` under
+> settings.
+
 ### Placement
 
 The `placement_policy` variable can be used to control where your VM instances
@@ -85,14 +91,14 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 3.73 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.12 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 3.73 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.12 |
 
 ## Modules
 
@@ -129,8 +135,10 @@ No modules.
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Control where your VM instances are physically located relative to each other within a zone. | <pre>object({<br>    vm_count                  = number,<br>    availability_domain_count = number,<br>    collocation               = string,<br>  })</pre> | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the instance. See https://www.terraform.io/docs/providers/google/r/compute_instance_template.html#service_account. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/devstorage.read_only",<br>    "https://www.googleapis.com/auth/logging.write",<br>    "https://www.googleapis.com/auth/monitoring.write",<br>    "https://www.googleapis.com/auth/servicecontrol",<br>    "https://www.googleapis.com/auth/service.management.readonly",<br>    "https://www.googleapis.com/auth/trace.append"<br>  ]<br>}</pre> | no |
+| <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script used on the instance | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the VM. | `string` | `null` | no |
+| <a name="input_threads_per_core"></a> [threads\_per\_core](#input\_threads\_per\_core) | Sets the number of threads per physical core. By setting threads\_per\_core<br>greater than 1, Simultaneous Multithreading (SMT) is enabled extending the<br>total number of virtual cores. For example, a machine of type c2-standard-60<br>will have 60 virtual cores with threads\_per\_core equal to 2. With<br>threads\_per\_core equal to 1 (SMT turned off), only the 30 physical cores will<br>be available on the VM.<br><br>Disabling SMT can be more performant in many HPC workloads, therefore it is<br>disabled by default. | `number` | `1` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Compute Platform zone | `string` | n/a | yes |
 
 ## Outputs

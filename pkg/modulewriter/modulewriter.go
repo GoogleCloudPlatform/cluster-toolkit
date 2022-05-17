@@ -31,7 +31,7 @@ import (
 
 const (
 	hiddenGhpcDirName          = ".ghpc"
-	prevDeploymentGroupDirName = "previous_resource_groups"
+	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
 )
 
@@ -163,7 +163,7 @@ func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, over
 		return false
 	}
 
-	// build list of previous and current resource groups
+	// build list of previous and current deployment groups
 	var prevGroups []string
 	for _, f := range files {
 		if f.IsDir() && f.Name() != hiddenGhpcDirName {
@@ -242,7 +242,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 		return fmt.Errorf("Failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
 	}
 
-	// move resource groups
+	// move deployment groups
 	files, err := ioutil.ReadDir(depDir)
 	if err != nil {
 		return fmt.Errorf("Error trying to read directories in %s, %w", depDir, err)
