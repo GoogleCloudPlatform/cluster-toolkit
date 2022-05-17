@@ -61,10 +61,10 @@ Toolkit guidance to enable [APIs][apis] and establish minimum resource
 And the following available quota is required in the region used by the cluster:
 
 * Filestore: 2560GB
-* C2 CPUs: 6000 (fully-scaled "compute" partition)
+* C2 CPUs: 4 (login node)
+* C2 CPUs: up to 6000 (fully-scaled "compute" partition)
   * This quota is not necessary at initial deployment, but will be required to
     successfully scale the partition to its maximum size
-* C2 CPUs: 4 (login node)
 
 ### Deploying the Slurm Cluster
 
@@ -274,7 +274,7 @@ The file [daos-slurm.yaml](daos-slurm.yaml) describes an environment with a 4-no
 
 For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
 
-> **_NOTE:_** You MUST  first create [client and server DAOS images][daos-images] for this example to work.
+> **_NOTE:_** You MUST first create [client and server DAOS images][daos-images] for this example to work.
 
 [mig]: https://cloud.google.com/compute/docs/instance-groups
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
