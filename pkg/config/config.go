@@ -502,7 +502,7 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 // corresponding entry in the origin. All other cty.Values are unmodified.
 // ERROR: if (somehow) the cty.String cannot be converted to a Go string
 // ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global variable
-//        being resolved does not exist in b.Vars
+// being resolved does not exist in b.Vars
 func ResolveVariables(
 	ctyMap map[string]cty.Value,
 	origin map[string]cty.Value,
