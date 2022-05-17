@@ -186,6 +186,12 @@ variable "spot" {
   default     = false
 }
 
+variable "tags" {
+  description = "Network tags, provided as a list"
+  type        = list(string)
+  default     = []
+}
+
 variable "threads_per_core" {
   description = <<-EOT
   Sets the number of threads per physical core. By setting threads_per_core
