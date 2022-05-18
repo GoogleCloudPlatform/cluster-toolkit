@@ -207,3 +207,13 @@ variable "threads_per_core" {
   type        = number
   default     = 1
 }
+
+variable "enable_oslogin" {
+  description = "Enable OS Login on VMs"
+  type        = string
+  default     = "TRUE"
+  validation {
+    condition     = var.enable_oslogin == null ? true : contains(["TRUE", "FALSE", ""], var.enable_oslogin)
+    error_message = "When set, the enable_oslogin must be set to TRUE, FALSE or \"\"."
+  }
+}
