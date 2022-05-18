@@ -21,7 +21,7 @@ sharing a single network module between deployment groups.
 
 This creates a pre-existing-vpc module based on the "default" VPC network in
 the GCP project. "default" is the default for network_name unless otherwise
-provided. Note that the project_id setting would be inferred from the global
+provided. Note that the project_id setting would be inferred from the deployment
 variable of the same name, but it was included here for clarity.
 
 ## License

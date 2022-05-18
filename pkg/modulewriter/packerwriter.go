@@ -64,7 +64,7 @@ func (w PackerWriter) writeDeploymentGroup(
 	ctyGlobals, err := config.ConvertMapToCty(globalVars)
 	if err != nil {
 		return fmt.Errorf(
-			"error converting global vars to cty for writing: %w", err)
+			"error converting deployment vars to cty for writing: %w", err)
 	}
 	groupPath := filepath.Join(deployDir, depGroup.Name)
 	for _, mod := range depGroup.Modules {

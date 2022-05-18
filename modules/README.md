@@ -211,7 +211,7 @@ settings will become the values for the variables defined in either the
 
 For some modules, there are mandatory variables that must be set,
 therefore `settings` is a required field in that case. In many situations, a
-combination of sensible defaults, global variables and used modules can
+combination of sensible defaults, deployment variables and used modules can
 populated all required settings and therefore the settings field can be left out
 entirely.
 
@@ -251,7 +251,7 @@ value is the following:
 
 1. Explicitly set in the blueprint by the user
 1. Output from a used module, taken in the order provided in the `use` list
-1. Global variable (`vars`) of the same name
+1. Deployment variable (`vars`) of the same name
 1. Default value for the setting
 
 ### Outputs (Optional)
@@ -267,9 +267,9 @@ have in the
 
 The following common naming conventions should be used to decrease the verbosity
 needed to define a blueprint. This is intentional to allow multiple
-modules to share inferred settings from global variables. For example, if all
-modules are to be created in a single region, that region can be defined as a
-global variable, which is shared between all moduels without an explicit
+modules to share inferred settings from deployment variables. For example, if
+all modules are to be created in a single region, that region can be defined as
+a deployment variable, which is shared between all moduels without an explicit
 setting.
 
 * **project_id**: The GCP project ID in which to create the GCP resources.

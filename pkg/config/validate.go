@@ -110,11 +110,11 @@ func (dc DeploymentConfig) executeValidators() error {
 // validateVars checks the global variables for viable types
 func (dc DeploymentConfig) validateVars() error {
 	vars := dc.Config.Vars
-	nilErr := "global variable %s was not set"
+	nilErr := "deployment variable %s was not set"
 
 	// Check for project_id
 	if _, ok := vars["project_id"]; !ok {
-		log.Println("WARNING: No project_id in global variables")
+		log.Println("WARNING: No project_id in deployment variables")
 	}
 
 	// Check type of labels (if they are defined)
@@ -427,9 +427,9 @@ func (dc *DeploymentConfig) getStringValue(inputReference interface{}) (string, 
 				if ok {
 					return valString, nil
 				}
-				return "", fmt.Errorf("the global variable %s is not a string", inputReference)
+				return "", fmt.Errorf("the deployment variable %s is not a string", inputReference)
 			}
 		}
 	}
-	return "", fmt.Errorf("the value %s is not a global variable or was not defined", inputReference)
+	return "", fmt.Errorf("the value %s is not a deployment variable or was not defined", inputReference)
 }

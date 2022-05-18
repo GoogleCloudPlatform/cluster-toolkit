@@ -382,7 +382,7 @@ func (w TFWriter) writeDeploymentGroup(
 	ctyVars, err := config.ConvertMapToCty(globalVars)
 	if err != nil {
 		return fmt.Errorf(
-			"error converting global vars to cty for writing: %v", err)
+			"error converting deployment vars to cty for writing: %v", err)
 	}
 
 	writePath := filepath.Join(deploymentDir, depGroup.Name)

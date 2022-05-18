@@ -11,18 +11,18 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-)
-  * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
-  * [image-builder.yaml](#image-builderyaml-)
-  * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
-  * [daos-cluster.yaml](#daos-clusteryaml-)
-  * [daos-slurm.yaml](#daos-slurmyaml-)
-  * [spack-gromacs.yaml](#spack-gromacsyaml--)
-  * [omnia-cluster.yaml](#omnia-clusteryaml--)
+  * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-core-badge)
+  * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-core-badge)
+  * [image-builder.yaml](#image-builderyaml-core-badge)
+  * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-community-badge)
+  * [daos-cluster.yaml](#daos-clusteryaml-community-badge)
+  * [daos-slurm.yaml](#daos-slurmyaml-community-badge)
+  * [spack-gromacs.yaml](#spack-gromacsyaml-community-badge-experimental-badge)
+  * [omnia-cluster.yaml](#omnia-clusteryaml-community-badge-experimental-badge)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Top Level Parameters](#top-level-parameters)
-  * [Global Variables](#global-variables)
+  * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
 * [Variables](#variables)
   * [Blueprint Variables](#blueprint-variables)
@@ -34,7 +34,7 @@ Ensure your project\_id is set and other deployment variables such as zone and
 region are set correctly under `vars` before creating and deploying an example
 blueprint.
 
-Please note that global variables defined under `vars` are automatically
+Please note that deployment variables defined under `vars` are automatically
 passed to modules if the modules have an input that matches the variable name.
 
 ### (Optional) Setting up a remote terraform state
@@ -445,44 +445,45 @@ deployment_groups:
 
 ## Writing an HPC Blueprint
 
-The blueprint file is composed of 3 primary parts, top-level parameters, global
-variables and deployment groups. These are described in more detail below.
+The blueprint file is composed of 3 primary parts, top-level parameters,
+deployment variables and deployment groups. These are described in more detail
+below.
 
 ### Top Level Parameters
 
 * **blueprint_name** (required): This name can be used to track resources and
   usage across multiple deployments that come from the same blueprint.
 
-### Global Variables
+### Deployment Variables
 
 ```yaml
 vars:
   region: "us-west-1"
   labels:
-    "user-defined-global-label": "slurm-cluster"
+    "user-defined-deployment-label": "slurm-cluster"
   ...
 ```
 
-Global variables are set under the vars field at the top level of the blueprint
-file. These variables can be explicitly referenced in modules as
+Deployment variables are set under the vars field at the top level of the
+blueprint file. These variables can be explicitly referenced in modules as
 [Blueprint Variables](#blueprint-variables). Any module setting (inputs) not
-explicitly provided and matching exactly a global variable name will
+explicitly provided and matching exactly a deployment variable name will
 automatically be set to these values.
 
-Global variables should be used with care. Module default settings with the
-same name as a global variable and not explicitly set will be overwritten by the
-global variable.
+Deployment variables should be used with care. Module default settings with the
+same name as a deployment variable and not explicitly set will be overwritten by
+the deployment variable.
 
-The global “labels” variable is a special case as it will be appended to labels
-found in module settings, whereas normally an explicit module setting would
-be left unchanged. This ensures that global labels can be set alongside module
-specific labels. Precedence is given to the module specific labels if a
-collision occurs. Default module labels will still be overwritten by global
-labels.
+The “labels” deployment variable is a special case as it will be appended to
+labels found in module settings, whereas normally an explicit module setting
+would be left unchanged. This ensures that the deployment-wide labels can be
+set alongside module specific labels. Precedence is given to the module specific
+labels if a collision occurs. Default module labels will still be overwritten by
+deployment labels.
 
 The HPC Toolkit uses special reserved labels for monitoring each deployment.
-These are set automatically, but can be overridden through global vars or
-module settings. They include:
+These are set automatically, but can be overridden in vars or module settings.
+They include:
 
 * ghpc_blueprint: The name of the blueprint the deployment was created from
 * ghpc_deployment: The name of the specific deployment
@@ -525,8 +526,8 @@ and to the output and structure of other modules.
 
 ### Blueprint Variables
 
-Variables in a blueprint file can refer to global variables or the outputs of
-other modules. For global and module variables, the syntax is as follows:
+Variables in a blueprint file can refer to deployment variables or the outputs
+of other modules. For deployment and module variables, the syntax is as follows:
 
 ```yaml
 vars:
@@ -545,8 +546,8 @@ deployment_groups:
             key2: $(resource1.name)
 ```
 
-The variable is referred to by the source, either vars for global or the
-module ID for module variables, followed by the name of the value being
+The variable is referred to by the source, either vars for deploment variables
+or the module ID for module variables, followed by the name of the value being
 referenced. The entire variable is then wrapped in “$()”.
 
 Currently, references to variable attributes and string operations with
