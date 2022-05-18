@@ -40,7 +40,7 @@ variable "instance_image" {
     project = string
   })
   default = {
-    family  = "schedmd-slurm-21-08-4-hpc-centos-7"
+    family  = "schedmd-slurm-21-08-8-hpc-centos-7"
     project = "schedmd-slurm-public"
   }
 }
