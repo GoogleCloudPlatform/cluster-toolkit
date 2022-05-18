@@ -32,17 +32,18 @@ deployment_groups:
   # This module creates a DAOS server. Server images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
-  - source: github.com/markaolson/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
     kind: terraform
     id: daos-server
     use: [network1]
     settings:
+      number_of_instances: 2
       labels: {ghpc_role: file-system}
 
   # This module creates a MIG with DAOS clients. Client images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_client
-  - source: github.com/markaolson/google-cloud-daos.git//terraform/modules/daos_client?ref=develop
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_client?ref=develop
     kind: terraform
     id: daos-client
     use: [network1, daos-server]

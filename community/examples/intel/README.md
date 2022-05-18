@@ -25,8 +25,6 @@
   * [Create DAOS/Slurm Cluster pools and partitions](#create-daosslurm-cluster-pools-and-partitions)
   * [Delete the DAOS/Slurm Cluster infrastructure when not in use](#delete-the-daosslurm-cluster-infrastructure-when-not-in-use)
 
-[daos-admin]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#perform-daos-administration-tasks
-
 ## Intel-Optimized Slurm Cluster
 
 This document is adapted from a [Cloud Shell tutorial][tutorial] developed to
@@ -256,7 +254,12 @@ Please follow `ghpc` instructions to deploy the environment:
 
 ### Create pools and partitions
 
-After connecting to the client VM follow the necessary [DAOS administration tasks][daos-admin] to create a pool, and a container with the appropriate permissions and mount it.
+In this example, no pool creation is specified, and therefore, DAOS server only automatically issues a [`dmg format`](https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#format-storage).
+
+After connecting to the client VM follow the necessary DAOS administration tasks to [create a pool][create-pool], and [a container][create-container] with the appropriate permissions and mount it.
+
+[create-pool]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#create-a-pool
+[create-container]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#create-a-container
 
 ### Delete the DAOS infrastructure when not in use
 
@@ -300,9 +303,9 @@ Toolkit guidance to enable [APIs][apis] and establish minimum resource
 And the following available quota is required in the region used by the cluster:
 
 For DAOS:
-* N2 CPUs: 144 (36 per server node)
+* N2 CPUs: 64 (16 per server node)
 * PD-SSD: 80GB (20GB per server)
-* Local SSD: 4 \* 16 \* 375 = 24,000GB (6TB per server)
+* Local SSD: 4 \* 4 \* 375 = 6,000GB (1.5TB per server)
 
 For Slurm:
 * Filestore: 2560GB
@@ -356,7 +359,15 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 
 ### Create DAOS/Slurm Cluster pools and partitions
 
-After connecting to the client VM follow the necessary [DAOS administration tasks][daos-admin] to create a pool, and a container with the appropriate permissions and mount it.
+In this example, no pool creation is specified, and therefore, DAOS server only automatically issues a [`dmg format`](https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#format-storage).
+
+After connecting to the client VM follow the necessary DAOS administration tasks to [create a pool][create-pool], and [a container][create-container] with the appropriate permissions and mount it.
+
+<!--
+These are defined above:
+[create-pool]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#create-a-pool
+[create-container]: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#create-a-container
+-->
 
 ### Delete the DAOS/Slurm Cluster infrastructure when not in use
 

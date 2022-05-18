@@ -39,33 +39,18 @@ deployment_groups:
   # This module creates a DAOS server. Server images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
-  - source: github.com/markaolson/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
     kind: terraform
     id: daos
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}
-      pools:
-      - name: "pool1"
-        size: "1TB"
-        tier_ratio: 3
-        acls:
-        - "A::OWNER@:rwdtTaAo"
-        - "A:G:GROUP@:rwtT"
-        - "A::EVERYONE@:r"
-        properties:
-          reclaim: "lazy"
-        containers:
-        - name: "container1"
-          type: "POSIX"
-          acls:
-          - "A::OWNER@:rwdtTaAo"
-          - "A:G:GROUP@:rwtT"
-          - "A::EVERYONE@:r"
-          properties:
-            rf: 0
-          user_attributes:
-            automount: true
+      # The default DAOS settings are optimized for TCO
+      # The following will tune this system for best perf
+      machine_type: "n2-standard-16"
+      os_disk_size_gb: 20
+      daos_disk_count: 4
+      daos_scm_size: 45
 
   - source: modules/scripts/startup-script
     kind: terraform
