@@ -8,8 +8,8 @@ This module is based on submodules defined by the
 [Cloud Foundation Toolkit](https://cloud.google.com/foundation-toolkit).
 
 The created cloud NAT (Network Address Translation) allows virtual machines
-without external IP addresses create outbound connections to the internet. For
-more information see the [docs](https://cloud.google.com/nat/docs/overview).
+without external IP addresses to create outbound connections to the internet.
+For more information see the [docs](https://cloud.google.com/nat/docs/overview).
 
 The following firewall rules are created with the VPC network:
 

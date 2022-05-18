@@ -38,9 +38,9 @@ tier, [make a request and wait for it to be approved][hs-ssd-quota].
 ### Example - Basic HDD tier
 
 Leave the tier unspecified to default to the smallest-sized, lowest performance
-Filestore instance (Basic HDD, 1024GiB). This instance has a module ID of
-`homefs`, will be mounted at `/home`, and is connected to the network defined in
-the `network1` module.
+Filestore instance (Basic HDD, 1024GiB). The following instance has a module ID
+of `homefs`, will be mounted at `/home`, and is connected to the network defined
+in the `network1` module.
 
 ```yaml
 - source: ./modules/file-system/filestore
@@ -53,6 +53,10 @@ the `network1` module.
 
 ### Example - High Scale
 
+The following module creates a high scale filestore instance that will be
+mounted at `/projects` and has the minimum capacity for a high scale SDD
+instance of 10TiB.
+
 ```yaml
 - source: ./modules/file-system/filestore
   kind: terraform
@@ -63,9 +67,6 @@ the `network1` module.
     local_mount: /projects
     network_name: $(network1.network_name)
 ```
-
-This creates a high scale filestore instance that will be mounted at
-`/projects` and has the minimum capacity for a high scale SDD instance of 10TiB.
 
 ## License
 

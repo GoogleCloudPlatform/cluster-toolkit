@@ -4,7 +4,7 @@ This module defines a VPC network that already exists in GCP so that it can be
 used by other modules. For example, rather than creating a VPC network from
 scratch for a simple deployment, the "default" network can be used from a
 project. The pre-existing-vpc can be referenced in the same ways as the
-[vpc module](../vpc/README.md)
+[vpc module](../vpc/README.md).
 
 Using a pre-existing VPC created in another deployment group can be a good way of
 sharing a single network module between deployment groups.

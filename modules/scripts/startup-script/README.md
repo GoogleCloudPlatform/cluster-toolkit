@@ -1,32 +1,53 @@
 ## Description
 
-This module creates startup scripts by chaining together a list runners. Each
+This module creates startup scripts by chaining together a list of runners. Each
 runner receives the following attributes:
 
-- `destination`: (Required) The name of the file at the destination VM. If a
-  path if provided, the file will be copied at that path, otherwise, the file
-  will be created in a temporary folder and deleted once the startup script
-  runs.
+- `destination`: (Required) The name of the file at the destination VM. If an
+  absolute path is provided, the file will be copied to that path, otherwise
+  the file will be created in a temporary folder and deleted once the startup
+  script runs.
 - `type`: (Required) The type of the runner, one of the following:
   - `shell`: The runner is a shell script and will be executed once copied to
     the destination VM.
-  - `ansible-local`: The runner is an ansible playbook, and will run with
-    `ansible-playbook --connection=local --inventory=localhost, --limit localhost <destination>`.
-    Ansible must be previously installed in this VM (for instance
-    [with a previous runner](examples/install_ansible.sh)).
-  - `data`: The data specified will be copied to `<destination>`. No action will
-    be performed after the data is staged.
-- `content`: (Optional) Data as `string` to be uploaded. Must be defined if
-  `source` is not. This data can be used by subsequent runners or simply made
-  available on the VM for later use.
+  - `ansible-local`: The runner is an ansible playbook and will run on the VM
+    with the following command line flags:
+
+    ```shell
+    ansible-playbook --connection=local --inventory=localhost, \
+      --limit localhost <<DESTINATION>>
+    ```
+
+    > **_NOTE:_** Ansible must already be installed in this VM. This can be
+    > done using another runner executed prior to this one. A pre-built ansible
+    > installation shell runner is available as part of the
+    > [startup-script module](./examples/install_ansible.sh).
+
+  - `data`: The data or file specified will be copied to `<<DESTINATION>>`. No
+    action will be performed after the data is staged. This data can be used by
+    subsequent runners or simply made available on the VM for later use.
+- `content`: (Optional) Content as `string` to be uploaded and, if `type` is
+   either `shell` or `ansible-local`, executed. Must be defined if `source` is
+   not.
 - `source`: (Optional) A path to the file or data you want to upload. Must be
   defined if `content` is not. The source path is relative to the deployment
   group directory. Scripts distributed as part of modules should start with
-  modules/ followed by the name of the module used (not to be confused with the
-  module ID) and the path to the script. Examples shown below. To reference any
-  other source file, an absolute path must be used.
-- `args`: (Optional) Arguments to be passed to shell scripts. This will not be
-  used for other runner types.
+  `modules/` followed by the name of the module used (not to be confused with
+  the module ID) and the path to the script. The format is shown below:
+
+    ```text
+    source: /modules/<<MODULE_NAME>>/<<SCRIPT_NAME>>
+    ```
+
+  For more examples with context, see the
+  [example blueprint snippet](#example). To reference any other source file, an
+  absolute path must be used.
+
+- `args`: (Optional) Arguments to be passed to shell scripts.
+
+  > **_NOTE:_** `args` will not be applied to runners not of `type` `shell`.
+
+### Staging the runners
 
 Runners will be uploaded to a
 [GCS bucket](https://cloud.google.com/storage/docs/creating-buckets). This
@@ -35,8 +56,19 @@ bucket will be created by this module and named as
 script created by this module will pull the runners content from a GCS bucket
 and therefore must have access to GCS.
 
-To ensure access to GCS, set the following OAuth scope on the instance using
-the startup scripts: "https://www.googleapis.com/auth/devstorage.read_only".
+> **_NOTE:_** To ensure access to GCS, set the following OAuth scope on the
+> instance using the startup scripts:
+> `https://www.googleapis.com/auth/devstorage.read_only`.
+>
+> This is already set as a default scope in the [vm-instance],
+> [SchedMD-slurm-on-gcp-login-node] and [SchedMD-slurm-on-gcp-controller]
+> modules
+
+[vm-instance]: ../../compute/vm-instance/README.md
+[SchedMD-slurm-on-gcp-login-node]: ../../../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
+[SchedMD-slurm-on-gcp-controller]: ../../../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
+
+### Tracking startup script execution
 
 For more information on how to use startup scripts on Google Cloud Platform,
 please refer to
@@ -66,12 +98,15 @@ sudo journalctl -u google-startup-scripts.service
       - type: shell
         source: "modules/startup-script/examples/install_ansible.sh"
         destination: "install_ansible.sh"
-      - type: shell
-        content: $(homefs.install_nfs_client)
-        destination: "install-nfs.sh"
+      # Some modules such as filestore have runners as outputs for convenience:
+      - $(homefs.install_nfs_client_runner)
+      # These runners can still be created manually:
+      # - type: shell
+      #   destination: "modules/filestore/scripts/install_nfs_client.sh"
+      #   source: "modules/filestore/scripts/install_nfs_client.sh"
       - type: ansible-local
-        destination: "modules/startup-script/examples/mount.yaml"
-        source: "modules/startup-script/examples/mount.yaml"
+        destination: "modules/filestore/scripts/mount.yaml"
+        source: "modules/filestore/scripts/mount.yaml"
       - type: data
         source: /tmp/foo.tgz
         destination: /tmp/bar.tgz
@@ -86,11 +121,7 @@ sudo journalctl -u google-startup-scripts.service
 - source: ./modules/compute/vm-instance
   kind: terraform
   id: compute-cluster
-  settings:
-    network_storage:
-    - $(homefs.network_storage)
-    metadata:
-      startup-script: $(startup.startup_script_content)
+  use: [homefs, startup]
 ```
 
 ## License
