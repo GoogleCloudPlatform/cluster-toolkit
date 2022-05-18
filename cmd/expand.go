@@ -41,7 +41,7 @@ func init() {
 var (
 	outputFilename string
 	expandCmd      = &cobra.Command{
-		Use:   "expand",
+		Use:   "expand BLUEPRINT_NAME",
 		Short: "Expand the Environment Blueprint.",
 		Long:  "Updates the Environment Blueprint in the same way as create, but without writing the deployment.",
 		Run:   runExpandCmd,
