@@ -6,7 +6,7 @@ HPC Toolkit is an open-source software offered by Google Cloud which makes it
 easy for customers to deploy HPC environments on Google Cloud.
 
 HPC Toolkit allows customers to deploy turnkey HPC environments (compute,
-networking, storage, etc) following Google Cloud best-practices, in a repeatable
+networking, storage, etc.) following Google Cloud best-practices, in a repeatable
 manner. The HPC Toolkit is designed to be highly customizable and extensible,
 and intends to address the HPC deployment needs of a broad range of customers.
 
@@ -140,14 +140,14 @@ packer build .
 
 ## HPC Toolkit Components
 
-The HPC Toolkit has been designed to simplify the process of deploying a
-familiar HPC cluster on Google Cloud. The block diagram below describes the
-individual components of the HPC toolkit.
+The HPC Toolkit has been designed to simplify the process of deploying an HPC
+cluster on Google Cloud. The block diagram below describes the individual
+components of the HPC toolkit.
 
 ```mermaid
 graph LR
     subgraph HPC Environment Configuration
-    A(1. GCP-provided Blueprint Examples) --> B(2. HPC Blueprint)
+    A(1. Provided Blueprint Examples) --> B(2. HPC Blueprint)
     end
     B --> D
     subgraph Creating an HPC Deployment
@@ -159,19 +159,19 @@ graph LR
     end
 ```
 
-1. **GCP-provided Blueprint Examples** – A set of vetted reference blueprints
-   can be found in the examples directory. These can be used to create a
-   predefined deployment for a cluster or as a starting point for creating a
-   custom deployment.
+1. **Provided Blueprint Examples** – A set of vetted reference blueprints can be
+   found in the ./examples and ./community/examples directories. These can be
+   used to create a predefined deployment for a cluster or as a starting point
+   for creating a custom deployment.
 2. **HPC Blueprint** – The primary interface to the HPC Toolkit is an HPC
    Blueprint file. This is a YAML file that defines which modules to use and how
    to customize them.
-3. **gHPC Engine** – The gHPC engine converts the blueprint file into a
-   self-contained deployment directory.
-4. **HPC Modules** – The building blocks of a deployment directory are the
+3. **HPC Modules** – The building blocks of a deployment directory are the
    modules. Modules can be found in the ./modules and community/modules
    directories. They are composed of terraform, packer and/or script files that
    meet the expectations of the gHPC engine.
+4. **gHPC Engine** – The gHPC engine converts the blueprint file into a
+   self-contained deployment directory.
 5. **Deployment Directory** – A self-contained directory that can be used to
    deploy a cluster onto Google Cloud. This is the output of the gHPC engine.
 6. **HPC environment on GCP** – After deployment, an HPC environment will be
@@ -239,8 +239,7 @@ to the Google Cloud Console.
 Many of the above examples are easily executed within a Cloud Shell environment.
 Be aware that Cloud Shell has [several limitations][cloud-shell-limitations],
 in particular an inactivity timeout that will close running shells after 20
-minutes. Please consider it only for small blueprints that are quickly
-deployed.
+minutes. Please consider it only for blueprints that are quickly deployed.
 
 ## Blueprint Warnings and Errors
 
@@ -344,7 +343,7 @@ To view the Cloud Billing reports for your Cloud Billing account:
    [`Billing`](https://console.cloud.google.com/billing/overview).
 2. At the prompt, choose the Cloud Billing account for which you'd like to view
    reports. The Billing Overview page opens for the selected billing account.
-3. In the Billing navigation menu, select Reports.
+3. In the Billing navigation menu, select `Reports`.
 
 In the right side, expand the Filters view and then filter by label, specifying the key `ghpc_deployment` (or `ghpc_blueprint`) and the desired value.
 
@@ -468,7 +467,7 @@ can be found in the [Slurm on Google Cloud User Guide][slurm-on-gcp-ug],
 specifically the section titled "Create Service Accounts".
 
 After creating the service account, it can be set via the
-"compute_node_service_account" and "controller_service_account" settings on the
+`compute_node_service_account` and `controller_service_account` settings on the
 [slurm-on-gcp controller module][slurm-on-gcp-con] and the
 "login_service_account" setting on the
 [slurm-on-gcp login module][slurm-on-gcp-login].
@@ -493,7 +492,7 @@ message. Here are some common reasons for the deployment to fail:
 * **Filestore resource limit:** When regularly deploying filestore instances
   with a new vpc you may see an error during deployment such as:
   `System limit for internal resources has been reached`. See
-  [this doc](https://cloud.google.com/filestore/docs/troubleshooting#api_cannot_be_disabled)
+  [this doc](https://cloud.google.com/filestore/docs/troubleshooting#system_limit_for_internal_resources_has_been_reached_error_when_creating_an_instance)
   for the solution.
 * **Required permission not found:**
   * Example: `Required 'compute.projects.get' permission for 'projects/... forbidden`
@@ -596,15 +595,19 @@ List of dependencies:
 * make
 * git
 
-## MacOS Details
+### MacOS Additional Dependencies
 
-* Install GNU `findutils` with Homebrew or Conda
-  * `brew install findutils` (and follow instructions for modifying `PATH`)
-  * `conda install findutils`
-* If using `conda`, it's easier to use conda-forge Golang without CGO
-  * `conda install go go-nocgo go-nocgo_osx-64`
+When building the ghpc binary on a Mac there may be some special considerations.
 
-### Packer
+When you call `make` for the first time you may be asked to install xcode
+developer tools. Alternatively you can build `ghpc` directly using
+`go build ghpc.go`.
+
+If you choose to use `make`, you should install `coreutils` and `findutils`
+which are available from common package managers on macOS such as Homebrew,
+Macports, and conda.
+
+### Notes on Packer
 
 The Toolkit supports Packer templates in the contemporary [HCL2 file
 format][pkrhcl2] and not in the legacy JSON file format. We require the use of

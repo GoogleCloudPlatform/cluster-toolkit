@@ -3,7 +3,7 @@
 ## ghpc
 
 `ghpc` is the tool used by Cloud HPC Toolkit to create deployments of HPC
-clusters.
+clusters, also referred to as the gHPC Engine.
 
 ### Usage - ghpc
 
