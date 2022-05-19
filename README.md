@@ -536,13 +536,34 @@ drop-down menu at the top-left.
 
 ## Inspecting the Deployment
 
-The deployment is created in the directory matching the provided
-`deployment_name` variable in the blueprint. Within this directory are all the
-modules needed to deploy your cluster. The deployment directory will contain
-subdirectories representing the deployment groups defined in the blueprint file.
-Most example configurations contain a single deployment group.
+The deployment will be created with the following directory structure:
 
-From the [example above](#quick-start) we get the following deployment directory:
+```text
+<<OUTPUT_PATH>>/<<DEPLOYMENT_NAME>>/{<<DEPLOYMENT_GROUPS>>}/
+```
+
+If an output directory is provided with the `--output/-o` flag, the deployment
+directory will be created in the output directory, represented as
+`<<OUTPUT_PATH>>` here. If not provided, `<<OUTPUT_PATH>>` will default to the
+current working directory.
+
+The deployment directory is created in `<<OUTPUT_PATH>>` as a directory matching
+the provided `deployment_name` deployment variable (`vars`) in the blueprint.
+
+Within the deployment directory are directories representing each deployment
+group in the blueprint named the same as the `group` field for each element
+in `deployment_groups`.
+
+In each deployment group directory, are all of the configuration scripts and
+modules needed to deploy. The modules are in a directory named `modules` named
+the same as the source module, for example the
+[vpc module](./modules/network/vpc/README.md) is in a directory named `vpc`.
+
+A hidden directory containing meta information and backups is also created and
+named `.ghpc`.
+
+From the [hpc-cluster-small.yaml example](./examples/hpc-cluster-small.yaml), we
+get the following deployment directory:
 
 ```text
 hpc-small/
@@ -556,53 +577,8 @@ hpc-small/
       SchedMD-slurm-on-gcp-login-node/
       SchedMD-slurm-on-gcp-partition/
       vpc/
+    .ghpc/
 ```
-
-## `ghpc` Commands
-
-### Create
-
-``` shell
-./ghpc create <blueprint.yaml>
-```
-
-The create command is the primary interface for the HPC Toolkit. This command
-takes the path to a blueprint file as an input and creates a deployment based on
-it. Further information on creating this blueprint file, see
-[Writing an HPC Blueprint](examples/README.md#writing-an-hpc-blueprint).
-
-By default, the deployment directory will be created in the same directory as
-the `ghpc` binary and will have the name specified by the `deployment_name`
-field from the blueprint. Optionally, the output directory can be specified with
-the `-o` flag as shown in the following example.
-
-```shell
-./ghpc create examples/hpc-cluster-small.yaml -o deployments/
-```
-
-### Expand
-
-```shell
-./ghpc expand <blueprint.yaml> –out <expanded-blueprint.yaml>
-```
-
-The expand command creates an expanded blueprint file with all settings
-explicitly listed and variables expanded. This can be a useful tool for creating
-explicit, detailed examples and for debugging purposes. The expanded blueprint
-is still valid as input to [`ghpc create`](#create) to create the deployment.
-
-### Completion
-
-```shell
-./ghpc completion [bash|zsh|fish|powershell]
-```
-
-The completion command creates a shell completion config file for the specified
-shell. To apply the configuration file created by the command, it is required to
-set up for each shell. For example, loading the completion config by .bashrc is
-required for Bash.
-
-Call `ghpc completion --help` for shell specific setup instructions.
 
 ## Dependencies
 
@@ -628,25 +604,48 @@ List of dependencies:
 * If using `conda`, it's easier to use conda-forge Golang without CGO
   * `conda install go go-nocgo go-nocgo_osx-64`
 
+### Packer
+
+The Toolkit supports Packer templates in the contemporary [HCL2 file
+format][pkrhcl2] and not in the legacy JSON file format. We require the use of
+Packer 1.7 or above, and recommend using the latest release.
+
+The Toolkit's [Packer template module documentation][pkrmodreadme] describes
+input variables and their behavior. An [image-building example][pkrexample]
+and [usage instructions][pkrexamplereadme] are provided. The example integrates
+Packer, Terraform and
+[startup-script](./modules/scripts/startup-script/README.md) runners to
+demonstrate the power of customizing images using the same scripts that can be
+applied at boot-time.
+
+[pkrhcl2]: https://www.packer.io/guides/hcl
+[pkrmodreadme]: modules/packer/custom-image/README.md
+[pkrexamplereadme]: examples/README.md#image-builderyaml
+[pkrexample]: examples/image-builder.yaml
+
 ## Development
 
 The following setup is in addition to the [dependencies](#dependencies) needed
 to build and run HPC-Toolkit.
 
 Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
-this repository to ensure that all Terraform and golang modules are validated
-and properly documented before pushing code changes. The pre-commits configured
+this repository to ensure that all changes are validated, tested and properly
+documented before pushing code changes. The pre-commits configured
 in the HPC Toolkit have a set of dependencies that need to be installed before
 successfully passing.
+
+Follow these steps to install and setup pre-commit in your cloned repository:
 
 1. Install pre-commit using the instructions from [the pre-commit website](https://pre-commit.com/).
 1. Install TFLint using the instructions from
    [the TFLint documentation](https://github.com/terraform-linters/tflint#installation).
-   * Note: The version of TFLint must be compatible with the Google plugin
-     version identified in [tflint.hcl](.tflint.hcl). Versions of the plugin
-     `>=0.16.0` should use `tflint>=0.35.0` and versions of the plugin
-     `<=0.15.0` should preferably use `tflint==0.34.1`. These versions are
-     readily available via GitHub or package managers.
+
+   > **_NOTE:_** The version of TFLint must be compatible with the Google plugin
+   > version identified in [tflint.hcl](.tflint.hcl). Versions of the plugin
+   > `>=0.16.0` should use `tflint>=0.35.0` and versions of the plugin
+   > `<=0.15.0` should preferably use `tflint==0.34.1`. These versions are
+   > readily available via GitHub or package managers.
+
 1. Install ShellCheck using the instructions from
    [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)
 1. The other dev dependencies can be installed by running the following command
@@ -665,26 +664,8 @@ successfully passing.
 
 Now pre-commit is configured to automatically run before you commit.
 
-### Packer
-
-The Toolkit supports Packer templates in the contemporary [HCL2 file
-format][pkrhcl2] and not in the legacy JSON file format. We require the use of
-Packer 1.7 or above, and recommend using the latest release.
-
-The Toolkit's [Packer template module documentation][pkrmodreadme] describes
-input variables and their behavior. An [image-building example][pkrexample]
-and [usage instructions][pkrexamplereadme] are provided. The example integrates
-Packer, Terraform and Toolkit Runners to demonstrate the power of customizing
-images using the same scripts that can be applied at boot-time.
-
-[pkrhcl2]: https://www.packer.io/guides/hcl
-[pkrmodreadme]: modules/packer/custom-image/README.md
-[pkrexamplereadme]: examples/README.md#image-builderyaml
-[pkrexample]: examples/image-builder.yaml
-
 ### Contributing
 
 Please refer to the [contributing file](CONTRIBUTING.md) in our github repo, or
 to
 [Google’s Open Source documentation](https://opensource.google/docs/releasing/template/CONTRIBUTING/#).
-Before submitting, we recommend contributors run pre-commit tests (more below).
