@@ -126,6 +126,8 @@ Scripts
 
 ## Module Fields
 
+Find an overview of module fields on the [Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint).
+
 ### Source (Required)
 
 The source is a path or URL that points to the source files for a module. The

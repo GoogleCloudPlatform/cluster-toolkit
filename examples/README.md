@@ -389,6 +389,10 @@ c2-standard-60 VMs. To activate all 60 virtual cores, include
 
 ## Blueprint Schema
 
+See the
+[Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint)
+for information on Blueprint Schema.
+
 A user defined blueprint should follow the following schema:
 
 ```yaml

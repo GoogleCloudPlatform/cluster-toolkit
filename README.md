@@ -10,135 +10,17 @@ networking, storage, etc) following Google Cloud best-practices, in a repeatable
 manner. The HPC Toolkit is designed to be highly customizable and extensible,
 and intends to address the HPC deployment needs of a broad range of customers.
 
-## Installation
+More information can be found on the
+[Offical Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/overview).
 
-These instructions assume you are using
-[Cloud Shell](https://cloud.google.com/shell) which comes with the
-[dependencies](#dependencies) pre-installed.
+## Quickstart
 
-To use the HPC-Toolkit, you must clone the project from GitHub and build the
-`ghpc` binary.
-
-1. Execute `gh auth login`
-   * Select GitHub.com
-   * Select HTTPS
-   * Select Yes for "Authenticate Git with your GitHub credentials?"
-   * Select "Login with a web browser"
-   * Copy the one time code presented in the terminal
-   * Press [enter]
-   * Click the link https://github.com/login/device presented in the terminal
-
-A web browser will open, paste the one time code into the web browser prompt.
-Continue to log into GitHub, then return to the terminal. You should see a
-message that includes "Authentication complete."
-
-You can now clone the Toolkit:
-
-```shell
-gh repo clone GoogleCloudPlatform/hpc-toolkit
-```
-
-Finally, build the toolkit.
-
-```shell
-cd hpc-toolkit && make
-```
-
-You should now have a binary named `ghpc` in the project root directory.
-Optionally, you can run `./ghpc --version` to verify the build.
-
-## Quick Start
-
-To create an HPC deployment, an HPC blueprint file needs to be written or
-adapted from one of the [core examples](examples/) or
-[community examples](community/examples/).
-
-These instructions will use
-[examples/hpc-cluster-small.yaml](examples/hpc-cluster-small.yaml), which is a
-good starting point and creates a deployment containing:
-
-* a new network
-* a filestore instance
-* a slurm login node
-* a slurm controller
-
-> **_NOTE:_** More information on the example blueprints can be found in
-> [examples/README.md](examples/README.md).
-
-These instructions assume you are using
-[Cloud Shell](https://cloud.google.com/shell) in the context of the GCP project
-you wish to deploy in, and that you are in the root directory of the hpc-toolkit
-repo cloned during [installation](#installation).
-
-Run the ghpc binary with the following command:
-
-```shell
-./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-```
-
-> **_NOTE:_** The `--vars` argument supports comma-separated list of name=value
-> variables to override blueprint variables. This feature only supports
-> variables of string type.
-
-This will create a deployment directory named `hpc-small/`.
-
-After successfully running `ghpc create`, a short message displaying how to
-proceed is displayed. For the `hpc-cluster-small` example, the message will
-appear similar to:
-
-```shell
-terraform -chdir=hpc-cluster-small/primary init
-terraform -chdir=hpc-cluster-small/primary validate
-terraform -chdir=hpc-cluster-small/primary apply
-```
-
-Use these commands to run terraform and deploy your cluster. If the `apply` is
-successful, a message similar to the following will be displayed:
-
-```shell
-Apply complete! Resources: 13 added, 0 changed, 0 destroyed.
-```
-
-> **_NOTE:_** Before you run this for the first time you may need to enable some
-> APIs and possibly request additional quotas. See
-> [Enable GCP APIs](#enable-gcp-apis) and
-> [Small Example Quotas](examples/README.md#hpc-cluster-smallyaml).\
-> **_NOTE:_** If not using cloud shell you may need to set up
-> [GCP Credentials](#gcp-credentials).\
-> **_NOTE:_** Cloud Shell times out after 20 minutes of inactivity. This example
-> deploys in about 5 minutes but for more complex deployments it may be
-> necessary to deploy (`terraform apply`) from a cloud VM. The same process
-> above can be used, although [dependencies](#dependencies) will need to be
-> installed first.
-
-Once successfully deployed, take the following steps to run a job:
-
-* First navigate to `Compute Engine` > `VM instances` in the Google Cloud Console.
-* Next click on the `SSH` button associated with the `slurm-hpc-small-login0` instance.
-* Finally run the `hostname` command on 3 nodes by running the following command in the shell popup:
-
-```shell
-$ srun -N 3 hostname
-slurm-hpc-slurm-small-debug-0-0
-slurm-hpc-slurm-small-debug-0-1
-slurm-hpc-slurm-small-debug-0-2
-```
-
-By default, this runs the job on the `debug` partition. See details in
-[examples/](examples/README.md#compute-partition) for how to run on the more
-performant `compute` partition.
-
-This example does not contain any Packer-based modules but for completeness,
-you can use the following command to deploy a Packer-based deployment group:
-
-```shell
-cd <deployment-directory>/<packer-group>/<custom-vm-image>
-packer init .
-packer validate .
-packer build .
-```
+Get started with the HPC Toolkit by running through the
+[quickstart tutorial](https://cloud.google.com/hpc-toolkit/docs/quickstarts/slurm-cluster).
 
 ## HPC Toolkit Components
+
+<!-- TODO: Resolve overlap with https://cloud.google.com/hpc-toolkit/docs/overview. -->
 
 The HPC Toolkit has been designed to simplify the process of deploying a
 familiar HPC cluster on Google Cloud. The block diagram below describes the
@@ -189,6 +71,8 @@ editable before deploying. Any HPC customer seeking a quick on-ramp to building
 out their infrastructure on GCP can benefit from this.
 
 ## GCP Credentials
+
+<!-- TODO: Resolve overlap with https://cloud.google.com/hpc-toolkit/docs/setup/configure-environment. -->
 
 ### Supplying cloud credentials to Terraform
 
@@ -310,13 +194,13 @@ In a new GCP project there are several apis that must be enabled to deploy your
 HPC cluster. These will be caught when you perform `terraform apply` but you can
 save time by enabling them upfront.
 
-List of APIs to enable ([instructions](https://cloud.google.com/apis/docs/getting-started#enabling_apis)):
-
-* Compute Engine API
-* Cloud Filestore API
-* Cloud Runtime Configuration API - _needed for `high-io` example_
+See
+[official Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/setup/configure-environment#enable-apis)
+for instructions.
 
 ## GCP Quotas
+
+<!-- TODO: Resolve overlap with https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint#request-quota. -->
 
 You may need to request additional quota to be able to deploy and use your HPC
 cluster. For example, by default the `SchedMD-slurm-on-gcp-partition` module
@@ -606,19 +490,7 @@ Call `ghpc completion --help` for shell specific setup instructions.
 
 ## Dependencies
 
-Much of the HPC Toolkit deployment is built using Terraform and Packer, and
-therefore they must be available in the same machine calling the toolkit. In
-addition, building the HPC Toolkit from source requires git, make, and Go to be
-installed.
-
-List of dependencies:
-
-* Terraform: version>=1.0.0 - [install instructions](https://www.terraform.io/downloads.html)
-* Packer: version>=1.6.0 - [install instructions](https://www.packer.io/downloads)
-* golang: version>=1.16 - [install instructions](https://golang.org/doc/install)
-  * To setup GOPATH and development environment: `export PATH=$PATH:$(go env GOPATH)/bin`
-* make
-* git
+See [Cloud Docs on Installing Dependencies](https://cloud.google.com/hpc-toolkit/docs/setup/install-dependencies).
 
 ## MacOS Details
 
