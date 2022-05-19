@@ -40,7 +40,11 @@ locals {
     : local.on_host_maintenance_from_placement
   )
 
-  enable_oslogin = var.enable_oslogin == "" ? {} : { enable-oslogin : var.enable_oslogin }
+  oslogin_api_values = {
+    "DISABLE" = "FALSE"
+    "ENABLE"  = "TRUE"
+  }
+  enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 }
 
 data "google_compute_image" "compute_image" {
