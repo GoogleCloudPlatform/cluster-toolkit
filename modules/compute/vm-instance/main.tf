@@ -39,6 +39,8 @@ locals {
     ? var.on_host_maintenance
     : local.on_host_maintenance_from_placement
   )
+
+  enable_oslogin = var.enable_oslogin == "" ? {} : { enable-oslogin : var.enable_oslogin }
 }
 
 data "google_compute_image" "compute_image" {
@@ -128,7 +130,7 @@ resource "google_compute_instance" "compute_vm" {
     threads_per_core = var.threads_per_core
   }
 
-  metadata = merge(local.network_storage, local.startup_script, var.metadata)
+  metadata = merge(local.network_storage, local.startup_script, local.enable_oslogin, var.metadata)
 
   lifecycle {
     ignore_changes = [

@@ -207,3 +207,13 @@ variable "threads_per_core" {
   type        = number
   default     = 1
 }
+
+variable "enable_oslogin" {
+  description = "Enable or Disable OS Login with \"TRUE\" or \"FALSE\". Set to empty string to inherit project OS Login setting."
+  type        = string
+  default     = "TRUE"
+  validation {
+    condition     = var.enable_oslogin == null ? false : contains(["TRUE", "FALSE", ""], var.enable_oslogin)
+    error_message = "When set, the enable_oslogin must be set to TRUE, FALSE or \"\"."
+  }
+}
