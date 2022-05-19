@@ -481,10 +481,12 @@ Deployment variables should be used with care. Module default settings with the
 same name as a deployment variable and not explicitly set will be overwritten by
 the deployment variable.
 
+#### Deployment Variable "labels"
+
 The “labels” deployment variable is a special case as it will be appended to
 labels found in module settings, whereas normally an explicit module setting
-would be left unchanged. This ensures that the deployment-wide labels can be
-set alongside module specific labels. Precedence is given to the module specific
+would be left unchanged. This ensures that deployment-wide labels can be set
+alongside module specific labels. Precedence is given to the module specific
 labels if a collision occurs. Default module labels will still be overwritten by
 deployment labels.
 
@@ -494,11 +496,51 @@ They include:
 
 * ghpc_blueprint: The name of the blueprint the deployment was created from
 * ghpc_deployment: The name of the specific deployment
-* ghpc_role: The role of a given module, e.g. compute, network, or
-  file-system. By default, it will be taken from the folder immediately
-  containing the module. Example: A module with the source path of
-  `./modules/network/vpc` will have `network` as its `ghpc_role` label by
-  default.
+* ghpc_role: See below
+
+A module role is a default label applied to modules (`ghpc_role`), which
+conveys what role that module plays within a larger HPC environment.
+
+The modules provided with the HPC toolkit have been divided into roles
+matching the names of folders in the [modules/](../modules/) and
+[community/modules](../community/modules/) directories (compute,
+file-system etc.).
+
+When possible, custom modules should use these roles so that they match other
+modules defined by the toolkit. If a custom module does not fit into these
+roles, a new role can be defined.
+
+A module's parent folder will define the module’s role if possible. Therefore,
+regardless of where the module is located, the module directory should be
+explicitly referenced at least 2 layers deep, where the top layer refers to the
+“role” of that module.
+
+If a module is not defined at least 2 layers deep and the `ghpc_role` label has
+not been explicitly set in settings, ghpc_role will default to `undefined`.
+
+Below we show some of the core modules and their roles (as parent folders).
+
+```text
+modules/
+└── <<ROLE>
+    └── <<MODULE_NAME>>
+
+modules/
+├── compute
+│   └── vm-instance
+├── file-system
+│   ├── pre-existing-network-storage
+│   └── filestore
+├── monitoring
+│   └── dashboard
+├── network
+│   ├── pre-existing-vpc
+│   └── vpc
+├── packer
+│   └── custom-image
+└── scripts
+    └── startup-script
+```
 
 ### Deployment Groups
 
