@@ -34,15 +34,16 @@ Ensure your project\_id is set and other deployment variables such as zone and
 region are set correctly under `vars` before creating and deploying an example
 blueprint.
 
-Please note that deployment variables defined under `vars` are automatically
-passed to modules if the modules have an input that matches the variable name.
+> **_NOTE:_** Deployment variables defined under `vars` are automatically passed
+> to modules if the modules have an input that matches the variable name.
 
 ### (Optional) Setting up a remote terraform state
 
 The following block will configure terraform to point to an existing GCS bucket
-to store and manage the terraform state. Add your own bucket name and
-(optionally) a service account in the configuration. If not set, the terraform
-state will be stored locally within the generated deployment directory.
+to store and manage the terraform state. Add your own bucket name in place of
+`<<BUCKET_NAME>>` and (optionally) a service account in place of
+`<<SERVICE_ACCOUNT>>` in the configuration. If not set, the terraform state will
+be stored locally within the generated deployment directory.
 
 Add this block to the top-level of your blueprint:
 
@@ -50,14 +51,17 @@ Add this block to the top-level of your blueprint:
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: a_bucket
-    impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
+    bucket: <<BUCKET_NAME>>
+    impersonate_service_account: <<SERVICE_ACCOUNT>>
 ```
 
-You can set the configuration at CLI as well like below:
+You can set the configuration using the CLI in the `create` and `expand`
+subcommands as well:
 
 ```shell
-./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --backend-config "bucket=${GCS_BUCKET}"
+./ghpc create examples/hpc-cluster-small.yaml \
+  --vars "project_id=${GOOGLE_CLOUD_PROJECT}" \
+  --backend-config "bucket=${GCS_BUCKET}"
 ```
 
 > **_NOTE:_** The `--backend-config` argument supports comma-separated list of
@@ -105,16 +109,16 @@ There is a `compute` partition that achieves higher performance. Any
 performance analysis should be done on the `compute` partition. By default it
 uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
-select the compute partition using the `srun -p compute` argument.
+select the compute partition using the `-p compute` argument when running `srun`.
 
 Quota required for this example:
 
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1024 GB**
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
   GB/node** up to 500 GB
 * Compute Engine API: N2 CPUs: **12**
-* Compute Engine API: C2 CPUs: **60/node** up to 1200 - _only needed for
+* Compute Engine API: C2 CPUs: **60/node** up to 1,200 - _only needed for
   `compute` partition_
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
   needed for `compute` partition_
@@ -129,8 +133,8 @@ login node.
 
 File systems:
 
-* The homefs mounted at `/home` is a default "PREMIUM" tier filestore with
-  2.5TiB of capacity
+* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
+  1 TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
 * The scratchfs is mounted at `/scratch` and is a
@@ -147,10 +151,10 @@ analysis.
 
 Quota required for this example:
 
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10240 GiB** - _min
-  quota request is 61440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14050 GB**
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
+  quota request is 61,440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
   GB/node** up to 4596 GB
 * Compute Engine API: N2 CPUs: **158**
@@ -195,8 +199,8 @@ terraform -chdir=image-builder-001/builder-env apply
 
 # Provide startup script to Packer
 terraform -chdir=image-builder-001/builder-env output \
--raw startup_script_scripts_for_image > \
-image-builder-001/packer/custom-image/startup_script.sh
+  -raw startup_script_scripts_for_image > \
+  image-builder-001/packer/custom-image/startup_script.sh
 
 # Build image (3)
 cd image-builder-001/packer/custom-image
@@ -250,9 +254,9 @@ connections without exposing the machine to the internet on a public IP address.
 #### Toolkit Runners (deployment group 1)
 
 The Toolkit [startup-script](../modules/scripts/startup-script/README.md)
-module supports boot-time configuration of VMs using "runners." Runners are
+module supports boot-time configuration of VMs using "runners". Runners are
 configured as a series of scripts uploaded to Cloud Storage. A simple, standard
-[VM startup script][cloudstartup] runs at boot-time, downloads the scripts from
+[VM startup script][vmstartup] runs at boot-time, downloads the scripts from
 Cloud Storage and executes them in sequence.
 
 The standard bash startup script is exported as a string by the startup-script
@@ -326,13 +330,14 @@ examples][intel-examples-readme].
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
-Spack is a HPC software package manager. This example creates a small slurm
-cluster with software installed with
-[Spack](../community/modules/scripts/spack-install/README.md) The controller
-will install and configure spack, and install
+Spack is an HPC software package manager. This example creates a small slurm
+cluster with software installed using the
+[spack-install module](../community/modules/scripts/spack-install/README.md) The
+controller will install and configure spack, and install
 [gromacs](https://www.gromacs.org/) using spack. Spack is installed in a shared
-location (/sw) via filestore. This build leverages the startup-script module
-and can be applied in any cluster by using the output of spack-install or
+location (/sw) via filestore. This build leverages the
+[startup-script module](../modules/scripts/startup-script/README.md) and can be
+applied in any cluster by using the output of spack-install or
 startup-script modules.
 
 The installation will occur as part of the slurm startup-script, a warning
@@ -351,9 +356,9 @@ your blueprint, by default /var/log/spack.log in the login node.
 sudo tail -f /var/log/spack.log
 ```
 
-Once Slurm and spack installation is complete, spack will available on the login
-node. To use spack in the controller or compute nodes, the following command
-must be run first:
+Once the Slurm and Spack configuration is complete, spack will available on the
+login node. To use spack in the controller or compute nodes, the following
+command must be run first:
 
 ```shell
 source /sw/spack/share/spack/setup-env.sh
@@ -365,26 +370,28 @@ To load the gromacs module, use spack:
 spack load gromacs
 ```
 
- **_NOTE:_** Installing spack compilers and libraries in this example can take 1-2
-hours to run on startup. To decrease this time in future deployments, consider
-including a spack build cache as described in the comments of the example.
+> **_NOTE:_** Installing spack compilers and libraries in this example can take
+> 1-2 hours to run on startup. To decrease this time in future deployments,
+> consider including a spack build cache as described in the comments of the
+> example.
 
 [spack-gromacs.yaml]: ../community/examples/spack-gromacs.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
-Creates a simple omnia cluster, with an
-omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
+Creates a simple [Dell Omnia][omnia-github] provisioned cluster with an
+omnia-manager node and 2 omnia-compute nodes on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
 
-**_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to create
-the cluster. For these instances, Simultaneous Multithreading (SMT) is turned
-off by default, meaning that only the physical cores are visible. For the
-compute nodes, this means that 30 physical cores are visible on the
-c2-standard-60 VMs. To activate all 60 virtual cores, include
-`threads_per_core=2` under settings for the compute vm-instance module.
+> **_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to
+> create the cluster. For these instances, Simultaneous Multithreading (SMT) is
+> turned off by default, meaning that only the physical cores are visible. For
+> the compute nodes, this means that 30 physical cores are visible on the
+> `c2-standard-60` VMs. To activate all 60 virtual cores, include
+> `threads_per_core=2` under settings for the compute vm-instance module.
 
+[omnia-github]: https://github.com/dellhpc/omnia
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
 ## Blueprint Schema
