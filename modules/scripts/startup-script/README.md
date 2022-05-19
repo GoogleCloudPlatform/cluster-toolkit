@@ -1,7 +1,10 @@
 ## Description
 
-This module creates startup scripts by chaining together a list of runners. Each
-runner receives the following attributes:
+This module creates a startup script that will execute a list of runners in the
+order they are specified. The runners are copied to a GCS bucket at deployment
+time and then copied into the VM as they are executed after startup.
+
+Each runner receives the following attributes:
 
 - `destination`: (Required) The name of the file at the destination VM. If an
   absolute path is provided, the file will be copied to that path, otherwise
@@ -26,7 +29,7 @@ runner receives the following attributes:
   - `data`: The data or file specified will be copied to `<<DESTINATION>>`. No
     action will be performed after the data is staged. This data can be used by
     subsequent runners or simply made available on the VM for later use.
-- `content`: (Optional) Content as `string` to be uploaded and, if `type` is
+- `content`: (Optional) Content to be uploaded and, if `type` is
    either `shell` or `ansible-local`, executed. Must be defined if `source` is
    not.
 - `source`: (Optional) A path to the file or data you want to upload. Must be
@@ -36,7 +39,7 @@ runner receives the following attributes:
   the module ID) and the path to the script. The format is shown below:
 
     ```text
-    source: /modules/<<MODULE_NAME>>/<<SCRIPT_NAME>>
+    source: ./modules/<<MODULE_NAME>>/<<SCRIPT_NAME>>
     ```
 
   For more examples with context, see the
@@ -45,7 +48,7 @@ runner receives the following attributes:
 
 - `args`: (Optional) Arguments to be passed to shell scripts.
 
-  > **_NOTE:_** `args` will not be applied to runners not of `type` `shell`.
+  > **_NOTE:_** `args` will only be applied to runners of `type` `shell`.
 
 ### Staging the runners
 
@@ -60,7 +63,7 @@ and therefore must have access to GCS.
 > instance using the startup scripts:
 > `https://www.googleapis.com/auth/devstorage.read_only`.
 >
-> This is already set as a default scope in the [vm-instance],
+> This is set as a default scope in the [vm-instance],
 > [SchedMD-slurm-on-gcp-login-node] and [SchedMD-slurm-on-gcp-controller]
 > modules
 

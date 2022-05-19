@@ -61,7 +61,7 @@ If any of the [shell\_scripts][shell] or [ansible\_playbooks][ansible] fail by
 returning a code other than 0, Packer will determine that the build has failed
 and refuse to save the resulting disk.
 
-> **_NOTE:_** there an [existing issue][startup-script-issue] that can cause
+> **_NOTE:_** there an an [existing issue][startup-script-issue] that can cause
 > failures of the [startup\_script][sss] or [startup\_script\_file][ssf] not to
 > be detected as failures by Packer.
 

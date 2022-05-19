@@ -2,7 +2,7 @@
 
 This module defines a file-system that already exists (i.e. it does not create
 a new file system) in a way that can be shared with other modules. This allows
-a compute VM to mount a filesystem that is not a part of the current deployment
+a compute VM to mount a filesystem that is not part of the current deployment
 group.
 
 The pre-existing network storage can be referenced in the same way as any HPC
