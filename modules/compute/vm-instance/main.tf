@@ -130,7 +130,7 @@ resource "google_compute_instance" "compute_vm" {
     threads_per_core = var.threads_per_core
   }
 
-  metadata = merge(local.network_storage, local.startup_script, var.metadata, local.enable_oslogin)
+  metadata = merge(local.network_storage, local.startup_script, local.enable_oslogin, var.metadata)
 
   lifecycle {
     ignore_changes = [
