@@ -280,10 +280,15 @@ have in the
 
 The following common naming conventions should be used to decrease the verbosity
 needed to define a blueprint. This is intentional to allow multiple
-modules to share inferred settings from deployment and used variables. For
-example, if all modules are to be created in a single region, that region can be
-defined as a deployment variable, which is shared between all modules without an
-explicit setting.
+modules to share inferred settings from deployment variables or from other
+modules listed under the `use` field.
+
+For example, if all modules are to be created in a single region, that region
+can be defined as a deployment variable named `region`, which is shared between
+all modules without an explicit setting. Similarly, if many modules need to be
+connected to the same VPC network, they all can add the vpc module ID to their
+`use` list so that `network_name` would be inferred from that vpc module rather
+than having to set it manually.
 
 * **project_id**: The GCP project ID in which to create the GCP resources.
 * **deployment_name**: The name of the current deployment of a blueprint. This
