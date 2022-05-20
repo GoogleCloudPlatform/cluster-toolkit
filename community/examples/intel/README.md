@@ -77,52 +77,53 @@ templates. **Please ignore the printed instructions** in favor of the following:
 
 1. Provision the network and startup scripts that install Intel software.
 
-        ```shell
-        terraform -chdir=hpc-intel-select/primary init
-        terraform -chdir=hpc-intel-select/primary validate
-        terraform -chdir=hpc-intel-select/primary apply
-        ```
+    ```shell
+    terraform -chdir=hpc-intel-select/primary init
+    terraform -chdir=hpc-intel-select/primary validate
+    terraform -chdir=hpc-intel-select/primary apply
+    ```
 
 1. Capture the startup scripts to files that will be used by Packer to build the
    images.
 
-        ```shell
-        terraform -chdir=hpc-intel-select/primary output \
-            -raw startup_script_startup_controller > \
-            hpc-intel-select/packer/controller-image/startup_script.sh
-        terraform -chdir=hpc-intel-select/primary output \
-            -raw startup_script_startup_compute > \
-            hpc-intel-select/packer/compute-image/startup_script.sh
-        ```
+    ```shell
+    terraform -chdir=hpc-intel-select/primary output \
+      -raw startup_script_startup_controller > \
+      hpc-intel-select/packer/controller-image/startup_script.sh
+
+    terraform -chdir=hpc-intel-select/primary output \
+      -raw startup_script_startup_compute > \
+      hpc-intel-select/packer/compute-image/startup_script.sh
+    ```
 
 1. Build the custom Slurm controller image. While this step is executing, you
    may begin the next step in parallel.
 
-        ```shell
-        cd hpc-intel-select/packer/controller-image
-        packer init .
-        packer validate .
-        packer build -var startup_script_file=startup_script.sh .
-        ```
+    ```shell
+    cd hpc-intel-select/packer/controller-image
+    packer init .
+    packer validate .
+    packer build -var startup_script_file=startup_script.sh .
+    ```
 
 1. Build the custom Slurm image for login and compute nodes
 
-        ```shell
-        cd -
-        cd hpc-intel-select/packer/compute-image
-        packer init .
-        packer validate .
-        packer build -var startup_script_file=startup_script.sh .
-        ```
+    ```shell
+    cd -
+    cd hpc-intel-select/packer/compute-image
+    packer init .
+    packer validate .
+    packer build -var startup_script_file=startup_script.sh .
+    ```
 
 1. Provision the Slurm cluster
 
-        ```shell
-        cd -
-        terraform -chdir=hpc-intel-select/cluster init
-        terraform -chdir=hpc-intel-select/cluster validate
-        terraform -chdir=hpc-intel-select/cluster apply
-        ```
+    ```shell
+    cd -
+    terraform -chdir=hpc-intel-select/cluster init
+    terraform -chdir=hpc-intel-select/cluster validate
+    terraform -chdir=hpc-intel-select/cluster apply
+    ```
 
 ### Connecting to the login node
 
@@ -131,9 +132,9 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >
    `VM instances` in the Google Cloud Console:
 
-        ```text
-        https://console.cloud.google.com/compute
-        ```
+    ```text
+    https://console.cloud.google.com/compute
+    ```
 
     Ensure that you select the project in which you are provisioning the cluster.
 
@@ -149,18 +150,18 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 
 1. Create a default ssh key to be able to ssh between nodes:
 
-        ```shell
-        ssh-keygen -q -N '' -f ~/.ssh/id_rsa
-        cp ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys
-        chmod 0600 ~/.ssh/authorized_keys
-        ```
+    ```shell
+    ssh-keygen -q -N '' -f ~/.ssh/id_rsa
+    cp ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys
+    chmod 0600 ~/.ssh/authorized_keys
+    ```
 
 1. Submit an example job:
 
-        ```shell
-        cp /var/tmp/dgemm_job.sh .
-        sbatch dgemm_job.sh
-        ```
+    ```shell
+    cp /var/tmp/dgemm_job.sh .
+    sbatch dgemm_job.sh
+    ```
 
 ### Delete the infrastructure when not in use
 
@@ -240,11 +241,11 @@ Please follow `ghpc` instructions to deploy the environment:
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >
    `VM instances` in the Google Cloud Console:
 
-  ```text
-  https://console.cloud.google.com/compute
-  ```
+    ```text
+    https://console.cloud.google.com/compute
+    ```
 
-  Ensure that you select the project in which you are provisioning the cluster.
+    Ensure that you select the project in which you are provisioning the cluster.
 
 1. Click on the `SSH` button associated with the `daos-client-0001`
    instance.
@@ -345,11 +346,11 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >
    `VM instances` in the Google Cloud Console:
 
-  ```text
-  https://console.cloud.google.com/compute
-  ```
+      ```text
+      https://console.cloud.google.com/compute
+      ```
 
-  Ensure that you select the project in which you are provisioning the cluster.
+    Ensure that you select the project in which you are provisioning the cluster.
 
 1. Click on the `SSH` button associated with the `slurm-daos-slurm-login0`
    instance.
