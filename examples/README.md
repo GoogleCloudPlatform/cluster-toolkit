@@ -30,9 +30,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 
 ## Instructions
 
-Ensure your project\_id is set and other deployment variables such as zone and
-region are set correctly under `vars` before creating and deploying an example
-blueprint.
+Ensure `project_id`, `zone`, and `region` deployment variables are set correctly
+under `vars` before using an example blueprint.
 
 > **_NOTE:_** Deployment variables defined under `vars` are automatically passed
 > to modules if the modules have an input that matches the variable name.
@@ -84,14 +83,14 @@ HPC Toolkit team directly.
 The community blueprints are contributed by the community (including the HPC
 Toolkit team, partners, etc.) and are labeled with the community badge
 (![community-badge]). The community blueprints are located in the
-[community folder](../community/examples/README.md).
+[community folder](../community/examples/).
 
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
 
 ### [hpc-cluster-small.yaml] ![core-badge]
 
-Creates a basic auto-scaling SLURM cluster with mostly default settings. The
+Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
 `/home`.
 
@@ -127,7 +126,7 @@ Quota required for this example:
 
 ### [hpc-cluster-high-io.yaml] ![core-badge]
 
-Creates a slurm cluster with tiered file systems for higher performance. It
+Creates a Slurm cluster with tiered file systems for higher performance. It
 connects to the default VPC of the project and creates two partitions and a
 login node.
 
@@ -303,7 +302,7 @@ file that was added during image build:
 
 ### [hpc-cluster-intel-select.yaml] ![community-badge]
 
-This example provisions a Slurm cluster [automating the steps to comply to the
+This example provisions a Slurm cluster automating the [steps to comply to the
 Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
 more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
@@ -330,7 +329,7 @@ examples][intel-examples-readme].
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
-Spack is an HPC software package manager. This example creates a small slurm
+Spack is an HPC software package manager. This example creates a small Slurm
 cluster with software installed using the
 [spack-install module](../community/modules/scripts/spack-install/README.md) The
 controller will install and configure spack, and install
@@ -340,7 +339,7 @@ location (/sw) via filestore. This build leverages the
 applied in any cluster by using the output of spack-install or
 startup-script modules.
 
-The installation will occur as part of the slurm startup-script, a warning
+The installation will occur as part of the Slurm startup-script, a warning
 message will be displayed upon SSHing to the login node indicating
 that configuration is still active. To track the status of the overall
 startup script, run the following command on the login node:
@@ -356,8 +355,8 @@ your blueprint, by default /var/log/spack.log in the login node.
 sudo tail -f /var/log/spack.log
 ```
 
-Once the Slurm and Spack configuration is complete, spack will available on the
-login node. To use spack in the controller or compute nodes, the following
+Once the Slurm and Spack configuration is complete, spack will be available on
+the login node. To use spack in the controller or compute nodes, the following
 command must be run first:
 
 ```shell
@@ -371,9 +370,8 @@ spack load gromacs
 ```
 
 > **_NOTE:_** Installing spack compilers and libraries in this example can take
-> 1-2 hours to run on startup. To decrease this time in future deployments,
-> consider including a spack build cache as described in the comments of the
-> example.
+> hours to run on startup. To decrease this time in future deployments, consider
+> including a spack build cache as described in the comments of the example.
 
 [spack-gromacs.yaml]: ../community/examples/spack-gromacs.yaml
 
@@ -604,20 +602,15 @@ variables are not supported.
 
 ### Literal Variables
 
-Formally passthrough variables.
-
-Literal variables are not interpreted by `ghpc` directly, but rather for the
+Literal variables are not interpreted by `ghpc` directly, but rather embedded in the
 underlying module. Literal variables should only be used by those familiar
 with the underlying module technology (Terraform or Packer); no validation
 will be done before deployment to ensure that they are referencing
 something that exists.
 
 Literal variables are occasionally needed when referring to the data structure
-of the underlying module. For example, take the
-[hpc-cluster-high-io.yaml](./hpc-cluster-high-io.yaml) example blueprint. The
-DDN-EXAScaler module requires a subnetwork self link, which is not currently an
-output of either network module, therefore it is necessary to refer to the
-primary network self link through terraform itself:
+of the underlying module. For example, to refer to the subnetwork self link from
+a vpc module through terraform itself:
 
 ```yaml
 subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
