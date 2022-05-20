@@ -15,8 +15,12 @@ Examples using Intel HPC technologies can be found in the
 
 ### spack-gromacs.yaml
 
-[See description in core](../../examples/README.md#community-spack-gromacsyaml)
+[See description in core](../../examples/README.md#spack-gromacsyaml--)
 
 ### omnia-cluster.yaml
 
-[See description in core](../../examples/README.md#community-omnia-clusteryaml)
+[See description in core](../../examples/README.md#omnia-clusteryaml--)
+
+### hpc-cluster-small-sharedvpc.yaml
+
+[See description in core](../../examples/README.md#hpc-cluster-small-sharedvpcyaml--)
