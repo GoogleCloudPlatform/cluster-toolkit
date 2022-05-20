@@ -22,21 +22,21 @@ vars:
   region: us-central1
   zone: us-central1-c
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: resources/network/vpc
+  modules:
+  - source: modules/network/vpc
     kind: terraform
     id: network1
 
-  - source: resources/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
     settings:
       local_mount: /home
 
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup-controller
     settings:
@@ -48,7 +48,7 @@ resource_groups:
           google_install_mpi --prefix /apps --intel_compliance
         destination: /var/tmp/install_intel_controller.sh
 
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup-compute
     settings:
@@ -61,7 +61,7 @@ resource_groups:
         destination: /var/tmp/install_intel_compute.sh
 
   # This debug_partition will work out of the box without requesting additional GCP quota.
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: debug_partition
     use:
@@ -75,7 +75,7 @@ resource_groups:
       machine_type: n2-standard-2
 
   # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: compute_partition
     use:
@@ -85,7 +85,7 @@ resource_groups:
       partition_name: compute
       max_node_count: 20
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     use:
@@ -99,7 +99,7 @@ resource_groups:
       compute_startup_script: $(startup-compute.startup_script)
 
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     use:
