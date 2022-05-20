@@ -2,12 +2,12 @@
 
 ## Introduction
 
-This module is an example of creating an image with Packer using the HPC
-Toolkit. Packer operates by provisioning a short-lived VM in Google Cloud on
-which it executes scripts to customize the boot disk for repeated use. The VM's
-boot disk is specified from a source image that defaults to the [HPC VM
-Image][hpcimage]. This Packer "template" supports customization by the
-following approaches following a [recommended use](#recommended-use):
+This module uses [Packer](https://www.packer.io/) to create an image within an
+HPC Toolkit deployment. Packer operates by provisioning a short-lived VM in
+Google Cloud on which it executes scripts to customize the boot disk for
+repeated use. The VM's boot disk is specified from a source image that defaults
+to the [HPC VM Image][hpcimage]. This Packer "template" supports customization
+by the following approaches following a [recommended use](#recommended-use):
 
 * [startup-script metadata][startup-metadata] from [raw string][sss] or
   [file][ssf]
@@ -32,7 +32,7 @@ images to internal projects.
 
 ## Order of execution
 
-The startup script specified in metadata execute in parallel with the other
+The startup script specified in metadata executes in parallel with the other
 supported methods. However, the remaining methods execute in a well-defined
 order relative to one another.
 
@@ -40,8 +40,8 @@ order relative to one another.
 1. After shell scripts complete, all Ansible playbooks will execute in the
    configured order
 
-_NOTE_: if both [startup\_script][sss] and [startup\_script\_file][ssf] are
-specified, then [startup\_script\_file][ssf] takes precedence.
+> **_NOTE:_** if both [startup\_script][sss] and [startup\_script\_file][ssf]
+> are specified, then [startup\_script\_file][ssf] takes precedence.
 
 ## Recommended use
 
@@ -53,7 +53,7 @@ it is recommended to choose one of the following approaches:
 1. Specify _either_ [startup\_script][sss] _or_ [startup\_script\_file][ssf]
    and do not specify [shell\_scripts][shell] or [ansible\_playbooks][ansible].
    * This can be especially useful in [environments that restrict SSH access](#environments-without-ssh-access)
-2. Specify any combination of [shell\_scripts][shell] and
+1. Specify any combination of [shell\_scripts][shell] and
    [ansible\_playbooks][ansible] and do not specify [startup\_script][sss] or
    [startup\_script\_file][ssf].
 
@@ -61,9 +61,9 @@ If any of the [shell\_scripts][shell] or [ansible\_playbooks][ansible] fail by
 returning a code other than 0, Packer will determine that the build has failed
 and refuse to save the resulting disk.
 
-_NOTE_: there an [existing issue][startup-script-issue] that can cause failures
-of the [startup\_script][sss] or [startup\_script\_file][ssf] not to be
-detected as failures by Packer.
+> **_NOTE:_** there an an [existing issue][startup-script-issue] that can cause
+> failures of the [startup\_script][sss] or [startup\_script\_file][ssf] not to
+> be detected as failures by Packer.
 
 [startup-script-issue]: https://github.com/hashicorp/packer-plugin-googlecompute/issues/45
 [metaorder]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux#order_of_execution_of_linux_startup_scripts
@@ -107,9 +107,9 @@ Toolkit runners. Runners operate by using a single startup script whose
 behavior is extended by downloading and executing a customizable set of runners
 from Cloud Storage at startup.
 
-_NOTE_: Packer will attempt to use SSH if either [shell\_scripts][shell] or
-[ansible\_playbooks][ansible] are set to non-empty values. Leave them at their
-default, empty values to ensure access by SSH is disabled.
+> **_NOTE:_** Packer will attempt to use SSH if either [shell\_scripts][shell]
+> or [ansible\_playbooks][ansible] are set to non-empty values. Leave them at
+> their default, empty values to ensure access by SSH is disabled.
 
 ## Supplying startup script as a string
 

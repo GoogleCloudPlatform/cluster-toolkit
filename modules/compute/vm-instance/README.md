@@ -9,18 +9,18 @@ This module creates one or more simple
 - source: ./modules/compute/vm-instance
   kind: terraform
   id: compute
+  use: [network1]
   settings:
     instance_count: 8
     name_prefix: compute
-    network_self_link: $(network1.network_self_link)
     machine_type: c2-standard-60
-    network_storage:
-    - $(homefs.network_storage)
 ```
 
-This creates a cluster of 8 compute VMs named `compute-[0-7]` on the network
-defined by the `network1` module. The VMs are of type c2-standard-60 and mount
-the `homefs` file system module.
+This creates a cluster of 8 compute VMs that are:
+
+* named `compute-[0-7]`
+* on the network defined by the `network1` module
+* of type c2-standard-60
 
 > **_NOTE:_**: Simultaneous Multithreading (SMT) is deactivated by default
 > (threads_per_core=1), which means only the physical cores are visible on the

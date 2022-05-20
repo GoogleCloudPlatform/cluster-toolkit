@@ -35,12 +35,15 @@ tier, [make a request and wait for it to be approved][hs-ssd-quota].
 
 [hs-ssd-quota]: https://cloud.google.com/filestore/docs/high-scale
 
-### Example - Basic HDD tier
+### Example - Basic HDD
 
-Leave the tier unspecified to default to the smallest-sized, lowest performance
-Filestore instance (Basic HDD, 1024GiB). This instance has a module ID of
-`homefs`, will be mounted at `/home`, and is connected to the network defined in
-the `network1` module.
+The Filestore instance defined below will have the following attributes:
+
+- (default) `BASIC_HDD` tier
+- (default) 1TiB capacity
+- `homefs` module ID
+- mount point at `/home`
+- connected to the network defined in the `network1` module
 
 ```yaml
 - source: ./modules/file-system/filestore
@@ -51,7 +54,15 @@ the `network1` module.
     network_name: $(network1.network_name)
 ```
 
-### Example - High Scale
+### Example - High Scale SSD
+
+The Filestore instance defined below will have the following attributes:
+
+- `HIGH_SCALE_SSD` tier
+- 10TiB capacity
+- `highscale` module ID
+- mount point at `/projects`
+- connected to the VPC network defined in the `network1` module
 
 ```yaml
 - source: ./modules/file-system/filestore
@@ -63,9 +74,6 @@ the `network1` module.
     local_mount: /projects
     network_name: $(network1.network_name)
 ```
-
-This creates a high scale filestore instance that will be mounted at
-`/projects` and has the minimum capacity for a high scale SDD instance of 10TiB.
 
 ## License
 

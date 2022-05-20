@@ -2,7 +2,8 @@
 
 This module defines a file-system that already exists (i.e. it does not create
 a new file system) in a way that can be shared with other modules. This allows
-a compute VM to mount a filesystem that is not a part of the current deployment.
+a compute VM to mount a filesystem that is not part of the current deployment
+group.
 
 The pre-existing network storage can be referenced in the same way as any HPC
 Toolkit supported file-system such as [filestore](../filestore/README.md).
@@ -21,8 +22,8 @@ Toolkit supported file-system such as [filestore](../filestore/README.md).
 ```
 
 This creates a pre-existing-network-storage module in terraform at the
-provided IP in `server_ip` of type nfs that will be mounted at /home. Note that
-the `server_ip` must be known before deployment.
+provided IP in `server_ip` of type nfs that will be mounted at `/home`. Note
+that the `server_ip` must be known before deployment.
 
 ## License
 
