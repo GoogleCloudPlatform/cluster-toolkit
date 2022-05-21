@@ -90,7 +90,7 @@ After you have inspected the file, use the ghpc binary to create a deployment fo
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
-> blueprint variables.
+> deployment variables.
 
 This will create a deployment directory named `hpc-intel-select/`, which
 contains the terraform needed to deploy your cluster.
