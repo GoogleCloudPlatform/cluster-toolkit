@@ -61,6 +61,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_disable_on_destroy"></a> [disable\_on\_destroy](#input\_disable\_on\_destroy) | Disable services on destroy if they were enabled (or already enabled) during apply (default: false) | `bool` | `false` | no |
 | <a name="input_gcp_service_list"></a> [gcp\_service\_list](#input\_gcp\_service\_list) | list of APIs to be enabled for the project | `list(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of the project | `string` | n/a | yes |
 
