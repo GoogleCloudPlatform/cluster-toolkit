@@ -60,18 +60,18 @@ Before provisioning any infrastructure in this project you should follow the
 Toolkit guidance to enable [APIs][apis] and establish minimum resource
 [quotas][quotas]. In particular, the following APIs should be enabled
 
-* [file.googleapis.com](https://cloud.google.com/filestore/docs/reference/rest) (Cloud Filestore)
-* [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
+- [file.googleapis.com](https://cloud.google.com/filestore/docs/reference/rest) (Cloud Filestore)
+- [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
 
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
 
 And the following available quota is required in the region used by the cluster:
 
-* Filestore: 2560GB
-* C2 CPUs: 4 (login node)
-* C2 CPUs: up to 6000 (fully-scaled "compute" partition)
-  * This quota is not necessary at initial deployment, but will be required to
+- Filestore: 2560GB
+- C2 CPUs: 4 (login node)
+- C2 CPUs: up to 6000 (fully-scaled "compute" partition)
+  - This quota is not necessary at initial deployment, but will be required to
     successfully scale the partition to its maximum size
 
 ### Deploying the Slurm Cluster
@@ -210,18 +210,18 @@ Before provisioning any infrastructure in this project you should follow the
 Toolkit guidance to enable [APIs][apis] and establish minimum resource
 [quotas][quotas]. In particular, the following APIs should be enabled
 
-* [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
-* [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
+- [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
+- [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
 
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
 
 And the following available quota is required in the region used by the cluster:
 
-* C2 CPUs: 32 (16 per client node)
-* N2 CPUs: 144 (36 per server node)
-* PD-SSD: 120GB (20GB per client and server)
-* Local SSD: 4 \* 16 \* 375 = 24,000GB (6TB per server)
+- C2 CPUs: 32 (16 per client node)
+- N2 CPUs: 144 (36 per server node)
+- PD-SSD: 120GB (20GB per client and server)
+- Local SSD: 4 \* 16 \* 375 = 24,000GB (6TB per server)
 
 ### Deploying the DAOS Cluster
 
@@ -425,8 +425,8 @@ Before provisioning any infrastructure in this project you should follow the
 Toolkit guidance to enable [APIs][apis] and establish minimum resource
 [quotas][quotas]. In particular, the following APIs should be enabled
 
-* [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
-* [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
+- [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
+- [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
 
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
@@ -434,16 +434,16 @@ Toolkit guidance to enable [APIs][apis] and establish minimum resource
 And the following available quota is required in the region used by the cluster:
 
 For DAOS:
-* N2 CPUs: 64 (16 per server node)
-* PD-SSD: 80GB (20GB per server)
-* Local SSD: 4 \* 4 \* 375 = 6,000GB (1.5TB per server)
+- N2 CPUs: 64 (16 per server node)
+- PD-SSD: 80GB (20GB per server)
+- Local SSD: 4 \* 4 \* 375 = 6,000GB (1.5TB per server)
 
 For Slurm:
-* Filestore: 2560GB
-* C2 CPUs: 6000 (fully-scaled "compute" partition)
-  * This quota is not necessary at initial deployment, but will be required to
+- Filestore: 2560GB
+- C2 CPUs: 6000 (fully-scaled "compute" partition)
+  - This quota is not necessary at initial deployment, but will be required to
     successfully scale the partition to its maximum size
-* C2 CPUs: 4 (login node)
+- C2 CPUs: 4 (login node)
 
 ### Deploying the DAOS/Slurm Cluster
 
