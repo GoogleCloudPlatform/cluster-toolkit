@@ -199,6 +199,25 @@ Get module from GitHub over HTTPS:
     id: network1
 ```
 
+Both examples above use the [double-slash notation][tfsubdir] (`//`) to indicate
+the root directory of the git repository and the remainder of the path indicates
+the location of the Terraform module.
+
+Additionally, [specific revisions of a remote module][tfrev] can be selected by
+any valid [git reference][gitref]. Typically, these are a git branch, commit
+hash or tag. For example, to temporarily point to a development copy of the
+Toolkit vpc module use:
+
+```yaml
+  - source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
+    kind: terraform
+    id: network1
+```
+
+[tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
+[gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
+[tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
+
 ### Kind (Required)
 
 `kind` refers to the way in which a module is deployed. Currently, `kind` can be
