@@ -19,6 +19,7 @@ import (
 	"embed"
 	"hpc-toolkit/cmd"
 	"hpc-toolkit/pkg/sourcereader"
+	"log"
 	"os"
 )
 
@@ -26,6 +27,8 @@ import (
 var moduleFS embed.FS
 
 func main() {
+	log.SetFlags(0)
+
 	sourcereader.ModuleFS = moduleFS
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
