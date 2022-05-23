@@ -110,15 +110,15 @@ uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `-p compute` argument when running `srun`.
 
-Quota required for this example:
+Quota required for this example in selected region:
 
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
   GB/node** up to 500 GB
 * Compute Engine API: N2 CPUs: **12**
-* Compute Engine API: C2 CPUs: **60/node** up to 1,200 - _only needed for
-  `compute` partition_
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
@@ -148,7 +148,7 @@ Similar to the small example, there is a
 [compute partition](#compute-partition) that should be used for any performance
 analysis.
 
-Quota required for this example:
+Quota required for this example in selected region:
 
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
 * Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
@@ -157,8 +157,8 @@ Quota required for this example:
 * Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
   GB/node** up to 4596 GB
 * Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **60/node** up to 12,000 - _only needed for
-  `compute` partition_
+* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
+  in `compute` partition up to 12,008
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
@@ -284,6 +284,20 @@ packer init .
 packer validate -var startup_script_file=startup_script.sh .
 packer build -var startup_script_file=startup_script.sh .
 ```
+
+Quota required for this example in selected region:
+
+* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
+  GB/node** up to 500 GB
+* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
 
 #### Slurm Cluster Based on Custom Image (deployment group 3)
 
