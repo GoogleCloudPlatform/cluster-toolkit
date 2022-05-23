@@ -5,32 +5,30 @@
 
 - [Intel Solutions for the HPC Toolkit](#intel-solutions-for-the-hpc-toolkit)
   - [Intel-Optimized Slurm Cluster](#intel-optimized-slurm-cluster)
-    - [Provisioning the Intel-optimized Slurm cluster](#provisioning-the-intel-optimized-slurm-cluster)
     - [Initial Setup for the Intel-Optimized Slurm Cluster](#initial-setup-for-the-intel-optimized-slurm-cluster)
-    - [Deploying the Slurm Cluster](#deploying-the-slurm-cluster)
-    - [Connecting to the login node](#connecting-to-the-login-node)
+    - [Deploy the Slurm Cluster](#deploy-the-slurm-cluster)
+    - [Connect to the login node](#connect-to-the-login-node)
     - [Access the cluster and provision an example job](#access-the-cluster-and-provision-an-example-job)
     - [Delete the infrastructure when not in use](#delete-the-infrastructure-when-not-in-use)
   - [DAOS Cluster](#daos-cluster)
-    - [Provisioning the DAOS cluster](#provisioning-the-daos-cluster)
     - [Initial Setup for DAOS Cluster](#initial-setup-for-daos-cluster)
-    - [Deploying the DAOS Cluster](#deploying-the-daos-cluster)
-    - [Connecting to a client node](#connecting-to-a-client-node)
+    - [Deploy the DAOS Cluster](#deploy-the-daos-cluster)
+    - [Connect to a client node](#connect-to-a-client-node)
     - [Verifying the DAOS storage system](#verifying-the-daos-storage-system)
-    - [Creating a DAOS Pool and Container](#creating-a-daos-pool-and-container)
+    - [Create a DAOS Pool and Container](#create-a-daos-pool-and-container)
       - [About the DAOS Command Line Tools](#about-the-daos-command-line-tools)
-      - [Determining Free Space](#determining-free-space)
-      - [Creating a Pool](#creating-a-pool)
-      - [Creating a Container](#creating-a-container)
-    - [Mounting the DAOS Container](#mounting-the-daos-container)
+      - [Determine Free Space](#determine-free-space)
+      - [Create a Pool](#create-a-pool)
+      - [Create a Container](#create-a-container)
+      - [Mount the DAOS Container](#mount-the-daos-container)
+    - [Use DAOS Storage](#use-daos-storage)
     - [Unmounting the DAOS Container](#unmounting-the-daos-container)
     - [Delete the DAOS infrastructure when not in use](#delete-the-daos-infrastructure-when-not-in-use)
   - [DAOS Server with Slurm cluster](#daos-server-with-slurm-cluster)
-    - [Provisioning the DAOS/Slurm cluster](#provisioning-the-daosslurm-cluster)
     - [Initial Setup for the DAOS/Slurm cluster](#initial-setup-for-the-daosslurm-cluster)
     - [Deploying the DAOS/Slurm Cluster](#deploying-the-daosslurm-cluster)
-    - [Connecting to the DAOS/Slurm Cluster login node](#connecting-to-the-daosslurm-cluster-login-node)
-    - [Creating and Mounting a DAOS Container](#creating-and-mounting-a-daos-container)
+    - [Connect to the DAOS/Slurm Cluster login node](#connect-to-the-daosslurm-cluster-login-node)
+    - [Create and Mount a DAOS Container](#create-and-mount-a-daos-container)
     - [Running a Job that uses the DAOS Container](#running-a-job-that-uses-the-daos-container)
     - [Unmounting the Container](#unmounting-the-container)
     - [Delete the DAOS/Slurm Cluster infrastructure when not in use](#delete-the-daosslurm-cluster-infrastructure-when-not-in-use)
@@ -48,8 +46,6 @@ are known to achieve optimal performance on Google Cloud.
 
 [tutorial]: ../../../docs/tutorials/intel-select/intel-select.md
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-
-### Provisioning the Intel-optimized Slurm cluster
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
@@ -74,9 +70,9 @@ And the following available quota is required in the region used by the cluster:
   - This quota is not necessary at initial deployment, but will be required to
     successfully scale the partition to its maximum size
 
-### Deploying the Slurm Cluster
+### Deploy the Slurm Cluster
 
-Use `ghpc` to provision the blueprint, supplying your project ID:
+Use `ghpc` to provision the blueprint, supplying your project ID
 
 ```text
 ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/hpc-cluster-intel-select.yaml
@@ -85,7 +81,7 @@ ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/hpc-cluste
 This will create a set of directories containing Terraform modules and Packer
 templates. **Please ignore the printed instructions** in favor of the following:
 
-1. Provision the network and startup scripts that install Intel software.
+1. Provision the network and startup scripts that install Intel software
 
     ```shell
     terraform -chdir=hpc-intel-select/primary init
@@ -93,8 +89,8 @@ templates. **Please ignore the printed instructions** in favor of the following:
     terraform -chdir=hpc-intel-select/primary apply
     ```
 
-1. Capture the startup scripts to files that will be used by Packer to build the
-   images.
+2. Capture the startup scripts to files that will be used by Packer to build the
+   images
 
     ```shell
     terraform -chdir=hpc-intel-select/primary output \
@@ -106,7 +102,7 @@ templates. **Please ignore the printed instructions** in favor of the following:
       hpc-intel-select/packer/compute-image/startup_script.sh
     ```
 
-1. Build the custom Slurm controller image. While this step is executing, you
+3. Build the custom Slurm controller image. While this step is executing, you
    may begin the next step in parallel.
 
     ```shell
@@ -135,20 +131,19 @@ templates. **Please ignore the printed instructions** in favor of the following:
     terraform -chdir=hpc-intel-select/cluster apply
     ```
 
-### Connecting to the login node
+### Connect to the login node
 
 Once the startup script has completed and Slurm reports readiness, connect to the login node.
 
-1. Open the following URL in a new tab. This will take you to `Compute Engine` >
-   `VM instances` in the Google Cloud Console
+1. Open the following URL in a new tab.
 
-    ```text
     https://console.cloud.google.com/compute
-    ```
+
+    This will take you to **Compute Engine > VM instances** in the Google Cloud Console
 
     Ensure that you select the project in which you are provisioning the cluster.
 
-1. Click on the `SSH` button associated with the `slurm-hpc-intel-select-login0`
+2. Click on the **SSH** button associated with the `slurm-hpc-intel-select-login0`
    instance.
 
     This will open a separate pop up window with a terminal into our newly created
@@ -193,13 +188,11 @@ The file [daos-cluster.yaml](daos-cluster.yaml) describes an environment with a 
 
 For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
 
-> **_NOTE:_** You MUST first create [client and server DAOS images][daos-images] for this example to work.
+> **_NOTE:_** You MUST first follow the [pre-deployment steps in the README.md](https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps) in order for this example to work.
 
 [mig]: https://cloud.google.com/compute/docs/instance-groups
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
 [daos-images]: https://github.com/daos-stack/google-cloud-daos/tree/main/images
-
-### Provisioning the DAOS cluster
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
@@ -223,9 +216,9 @@ And the following available quota is required in the region used by the cluster:
 - PD-SSD: 120GB (20GB per client and server)
 - Local SSD: 4 \* 16 \* 375 = 24,000GB (6TB per server)
 
-### Deploying the DAOS Cluster
+### Deploy the DAOS Cluster
 
-Use `ghpc` to provision the blueprint, supplying your project ID
+Use `ghpc` to provision the blueprint
 
 ```text
 ghpc create community/examples/intel/daos-cluster.yaml  \
@@ -246,20 +239,19 @@ Follow `ghpc` instructions to deploy the environment
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
 [bucket]: https://cloud.google.com/storage/docs/creating-buckets
-### Connecting to a client node
 
-1. Open the following URL in a new tab. This will take you to **Compute Engine > VM instances** in the Google Cloud Console
+### Connect to a client node
 
-    ```text
-    https://console.cloud.google.com/compute
-    ```
+1. Open the following URL in a new tab.
 
-    Ensure that you select the project in which you are provisioning the cluster.
+   https://console.cloud.google.com/compute
+
+   This will take you to **Compute Engine > VM instances** in the Google Cloud Console.
+
+   Select the project in which the DAOS cluster will be provisioned.
 
 2. Click on the **SSH** button associated with the **daos-client-0001**
-   instance.
-
-   This will open a window with a terminal into our newly created DAOS client VM.
+   instance to open a window with a terminal into the first DAOS client instance.
 
 ### Verifying the DAOS storage system
 
@@ -286,7 +278,7 @@ Rank UUID                                 Control Address   Fault Domain      St
 
 Both daos-server instances should show a state of *Joined*.
 
-### Creating a DAOS Pool and Container
+### Create a DAOS Pool and Container
 
 #### About the DAOS Command Line Tools
 
@@ -294,7 +286,7 @@ The DAOS Management tool `dmg` is used by System Administrators to manange the D
 
 The DAOS CLI `daos` is used by both users and System Administrators to create and manage [containers](https://docs.daos.io/v2.0/overview/storage/#daos-container). It is not necessary to use `sudo` with the `daos` command.
 
-#### Determining Free Space
+#### Determine Free Space
 
 Determine how much free space is available.
 
@@ -313,7 +305,7 @@ daos-server-0002 215 GB    215 GB   0 %      6.4 TB     6.4 TB    0 %
 
 In the example output above we see that there is a total of 12.8TB NVME-Free.
 
-#### Creating a Pool
+#### Create a Pool
 
 Create a single pool owned by root which uses all available free space.
 
@@ -329,7 +321,7 @@ sudo dmg pool update-acl -e A::EVERYONE@:rcta pool1
 
 See the [Pool Operations](https://docs.daos.io/v2.0/admin/pool_operations) section of the of the DAOS Administration Guide for more information about creating pools.
 
-#### Creating a Container
+#### Create a Container
 
 At this point it is necessary to determine who will need to access the container
 and how it will be used. The ACLs will need to be set properly to allow users and/or groups to access the container.
@@ -345,21 +337,16 @@ daos cont create pool1 \
 
 See the [Container Management](https://docs.daos.io/v2.0/admin/pool_operations) section of the of the DAOS User Guide for more information about creating containers.
 
-### Mounting the DAOS Container
-
-Create a mount point for the container
-
-```bash
-mkdir -p /home/$USER/daos/cont1
-```
+#### Mount the DAOS Container
 
 Mount the container with dfuse (DAOS Fuse)
 
 ```bash
+mkdir -p ${HOME}/daos/cont1
 dfuse --singlethread \
   --pool=pool1 \
   --container=cont1 \
-  --mountpoint=/home/$USER/daos/cont1
+  --mountpoint=${HOME}/daos/cont1
 ```
 
 Verify that the container is mounted
@@ -368,11 +355,18 @@ Verify that the container is mounted
 df -h -t fuse.daos
 ```
 
-Create a file in the container
+### Use DAOS Storage
+
+The `cont1` container is now mounted on `${HOME}/daos/cont1`
+
+Create a 20GiB file which will be stored in the DAOS filesystem.
 
 ```bash
-echo "Hello World" > /home/$USER/daos/cont1/hello.txt
+pushd ${HOME}/daos/cont1
+time LD_PRELOAD=/usr/lib64/libioil.so \
+dd if=/dev/zero of=./test20GiB.img iflag=fullblock bs=1G count=20
 ```
+
 
 See the [File System](https://docs.daos.io/v2.0/user/filesystem/) section of the DAOS User Guide for more information about DFuse.
 
@@ -381,7 +375,7 @@ See the [File System](https://docs.daos.io/v2.0/user/filesystem/) section of the
 The container will need to by unmounted before you log out.  If this is not done it can leave open file handles and prevent the container from being mounted when you log in again.
 
 ```bash
-fusermount3 -u /home/$USER/daos/cont1
+fusermount3 -u ${HOME}/daos/cont1
 ```
 
 Verify that the container is unmounted
@@ -404,17 +398,16 @@ terraform -chdir=daos-cluster/primary destroy
 
 ## DAOS Server with Slurm cluster
 
-The file [daos-slurm.yaml](daos-slurm.yaml) describes an environment with a 4-nodes DAOS server and a slurm cluster configured to be able to access this file system.
+The [daos-slurm.yaml](daos-slurm.yaml) blueprint describes an environment DAOS server instances and a slurm cluster configured to be able to access this file system.
 
-For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
+The blueprint uses from the [Google Cloud DAOS repo][google-cloud-daos] and the SchedMD modules defined in [community/modules/compute](community/modules/compute)
+For more information, please refer to the .
 
-> **_NOTE:_** You MUST first create [client and server DAOS images][daos-images] for this example to work.
+> **_NOTE:_** You MUST first follow the [pre-deployment steps in the README.md](https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps) in order for this example to work.
 
 [mig]: https://cloud.google.com/compute/docs/instance-groups
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
 [daos-images]: https://github.com/daos-stack/google-cloud-daos/tree/main/images
-
-### Provisioning the DAOS/Slurm cluster
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
@@ -469,28 +462,27 @@ Follow `ghpc` instructions to deploy the environment
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
 [bucket]: https://cloud.google.com/storage/docs/creating-buckets
 
-### Connecting to the DAOS/Slurm Cluster login node
+### Connect to the DAOS/Slurm Cluster login node
 
 Once the startup script has completed and Slurm reports readiness, connect to the login node.
 
-1. Open the following URL in a new tab. This will take you to `Compute Engine` >
-   `VM instances` in the Google Cloud Console
+1. Open the following URL in a new tab.
 
-      ```text
-      https://console.cloud.google.com/compute
-      ```
+   https://console.cloud.google.com/compute
 
-    Ensure that you select the project in which you are provisioning the cluster.
+   This will take you to **Compute Engine > VM instances** in the Google Cloud Console
 
-1. Click on the `SSH` button associated with the `slurm-daos-slurm-login0`
+   Select the project in which the cluster will be provisionsd.
+
+2. Click on the `SSH` button associated with the `slurm-daos-slurm-login0`
    instance.
 
    This will open a separate pop up window with a terminal into our newly created
    Slurm login VM.
 
-### Creating and Mounting a DAOS Container
+### Create and Mount a DAOS Container
 
-The `community/examples/intel/daos-slurm.yaml` blueprint contains configuration that will create one DAOS pool named `pool1`.
+The `community/examples/intel/daos-slurm.yaml` blueprint contains configuration that will create one DAOS pool named `pool1` when the *daos-server* instances are provisioned.
 
 You will need to create your own DAOS container that can be used by your Slurm jobs.
 
@@ -508,12 +500,12 @@ The `cont1` container is owned by your account and therefore your SLURM jobs wil
 Create a mount point for the container and mount it with dfuse (DAOS Fuse)
 
 ```bash
-mkdir -p /home/$USER/daos/cont1
+mkdir -p ${HOME}/daos/cont1
 
 dfuse --singlethread \
 --pool=pool1 \
 --container=cont1 \
---mountpoint=/home/$USER/daos/cont1
+--mountpoint=${HOME}/daos/cont1
 ```
 
 Verify that the container is mounted
@@ -540,7 +532,7 @@ echo ""
 echo "Number of Nodes Allocated = $SLURM_JOB_NUM_NODES"
 echo "Number of Tasks Allocated = $SLURM_NTASKS"
 
-MOUNT_DIR="/home/${USER}/daos/cont1"
+MOUNT_DIR="${HOME}/daos/cont1"
 LOG_FILE="${MOUNT_DIR}/${JOB_HOSTNAME}.log"
 
 echo "${JOB_HOSTNAME} : Creating directory: ${MOUNT_DIR}"
@@ -571,11 +563,11 @@ srun --nodes=4 \
 
 Run `squeue` to see the status of the job. The `daos_job.sh` script will run once on each of the 4 nodes. Each time it runs it creates a log file which is stored in the `cont1` DAOS container.
 
-Wait for the job to complete and then view the files that were created in the `cont1` DAOS container mounted on `/home/${USER}/daos/cont1`.
+Wait for the job to complete and then view the files that were created in the `cont1` DAOS container mounted on `${HOME}/daos/cont1`.
 
 ```bash
-ls -l /home/${USER}/daos/cont1/*.log
-cat /home/${USER}/daos/cont1/*.log
+ls -l ${HOME}/daos/cont1/*.log
+cat ${HOME}/daos/cont1/*.log
 ```
 
 ### Unmounting the Container
@@ -583,7 +575,7 @@ cat /home/${USER}/daos/cont1/*.log
 The container will need to by unmounted before you log out.  If this is not done it can leave open file handles and prevent the container from being mounted when you log in again.
 
 ```bash
-fusermount3 -u /home/${USER}/daos/cont1
+fusermount3 -u ${HOME}/daos/cont1
 ```
 
 Verify that the container is unmounted
