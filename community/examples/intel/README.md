@@ -112,7 +112,7 @@ templates. **Please ignore the printed instructions** in favor of the following:
     packer build -var startup_script_file=startup_script.sh .
     ```
 
-1. Build the custom Slurm image for login and compute nodes
+4. Build the custom Slurm image for login and compute nodes
 
     ```shell
     cd -
@@ -122,7 +122,7 @@ templates. **Please ignore the printed instructions** in favor of the following:
     packer build -var startup_script_file=startup_script.sh .
     ```
 
-1. Provision the Slurm cluster
+5. Provision the Slurm cluster
 
     ```shell
     cd -
@@ -366,7 +366,6 @@ pushd ${HOME}/daos/cont1
 time LD_PRELOAD=/usr/lib64/libioil.so \
 dd if=/dev/zero of=./test20GiB.img iflag=fullblock bs=1G count=20
 ```
-
 
 See the [File System](https://docs.daos.io/v2.0/user/filesystem/) section of the DAOS User Guide for more information about DFuse.
 
