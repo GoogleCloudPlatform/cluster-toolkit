@@ -18,7 +18,6 @@ A full list of module parameters can be found at [the DAOS Server module README]
 
 By default, the DAOS system is created with 4 servers will be configured for best cost per GB (TCO, see below), the system will be formated at the server side using [`dmg format`](https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#format-storage) but no pool or containers will be created.
 
-See the [Creating DAOS Pools and Containers](../../../examples/intel/README.md#creating-daos-pools-and-containers) section of the [community/examples/intel/README.md](../../../examples/intel/README.md) file for instructions on how to create a pool and container.
 
 The following settings will configure this [system for TCO](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/examples/daos_cluster#the-terraformtfvarstcoexample-file) (default):
 
