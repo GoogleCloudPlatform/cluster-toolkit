@@ -64,6 +64,7 @@ deployment_groups:
     use: [cluster-network]
     settings:
       partition_name: compute
+      max_node_count: 20
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
