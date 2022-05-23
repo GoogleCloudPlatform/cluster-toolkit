@@ -494,7 +494,7 @@ daos cont create pool1 \
   --properties rf:0
 ```
 
-The `cont1` container is owned by your account and therefore your SLURM jobs will need to run with your user account in order to access the container.
+The `cont1` container is owned by your account and therefore your Slurm jobs will need to run with your user account in order to access the container.
 
 Create a mount point for the container and mount it with dfuse (DAOS Fuse)
 
@@ -548,7 +548,7 @@ echo "${JOB_HOSTNAME} : Unmounting dfuse"
 fusermount3 -u "${MOUNT_DIR}"
 ```
 
-Run the `daos_job.sh` script in an interactive SLURM job on 4 nodes
+Run the `daos_job.sh` script in an interactive Slurm job on 4 nodes
 
 ```bash
 srun --nodes=4 \
