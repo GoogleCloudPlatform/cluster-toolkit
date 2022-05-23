@@ -4,6 +4,15 @@ This directory contains a set of core modules built for the HPC Toolkit. Modules
 describe the building blocks of an HPC deployment. The expected fields in a
 module are listed in more detail [below](#module-fields).
 
+Toolkit users are expected to use external modules such as the [Cloud Foundation
+Toolkit][cft] (CFT) available [on Github][cftgh] and other custom modules. These
+external modules can be added to blueprints using Terraform's standard [syntax
+for remote git repositories][ghmods].
+
+[cft]: https://cloud.google.com/foundation-toolkit
+[cftgh]: https://github.com/terraform-google-modules/
+[ghmods]: #github-modules
+
 ## All Modules
 
 Modules from various sources are all listed here for visibility. Badges are used
@@ -205,8 +214,9 @@ the location of the Terraform module.
 
 Additionally, [specific revisions of a remote module][tfrev] can be selected by
 any valid [git reference][gitref]. Typically, these are a git branch, commit
-hash or tag. For example, to temporarily point to a development copy of the
-Toolkit vpc module use:
+hash or tag. The [Intel DAOS blueprint][daos-cluster.yaml] makes extensive use
+of this feature. For example, to temporarily point to a development copy of the
+Toolkit vpc module, use:
 
 ```yaml
   - source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
@@ -217,6 +227,7 @@ Toolkit vpc module use:
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
 [gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
+[daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
 
 ### Kind (Required)
 
