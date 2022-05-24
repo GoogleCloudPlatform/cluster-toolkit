@@ -11,8 +11,8 @@ MIN_GOLANG_VERSION=1.16 # for building ghpc
         check-tflint check-pre-commit
 
 ENG = ./cmd/... ./pkg/...
-TERRAFORM_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.tf" -not -path '*/\.*' -printf '%h\n' | sort -u)
-PACKER_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
+TERRAFORM_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.tf" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
+PACKER_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
 
 # RULES MEANT TO BE USED DIRECTLY
 
@@ -23,12 +23,12 @@ ghpc: warn-go-version warn-terraform-version warn-packer-version $(shell find ./
 install-user:
 	$(info ******** installing ghpc in ~/bin *********************)
 	mkdir -p ~/bin
-	install -t ~/bin ./ghpc
+	install ./ghpc ~/bin
 
 ifeq ($(shell id -u), 0)
 install:
 	$(info ***** installing ghpc in /usr/local/bin ***************)
-	install -t /usr/local/bin ./ghpc
+	install ./ghpc /usr/local/bin
 
 else
 install: install-user

@@ -597,15 +597,14 @@ List of dependencies:
 
 ### MacOS Additional Dependencies
 
-When building the ghpc binary on a Mac there may be some special considerations.
+On macOS, `make` is packaged with the Xcode command line developer tools. To
+install, run the following command:
 
-When you call `make` for the first time you may be asked to install xcode
-developer tools. Alternatively you can build `ghpc` directly using
-`go build ghpc.go`.
+```shell
+xcode-select --install
+```
 
-If you choose to use `make`, you should install `coreutils` and `findutils`
-which are available from common package managers on macOS such as Homebrew,
-Macports, and conda.
+Alternatively you can build `ghpc` directly using `go build ghpc.go`.
 
 ### Notes on Packer
 
@@ -666,6 +665,14 @@ Follow these steps to install and setup pre-commit in your cloned repository:
     ```
 
 Now pre-commit is configured to automatically run before you commit.
+
+### Development on macOS
+
+While macOS is a supported environment for building and executing the Toolkit,
+it is not supported for Toolkit development due to GNU specific shell scripts.
+
+If developing on a mac, a workaround is to install GNU tooling by installing
+`coreutils` and `findutils` from a package manager such as homebrew or conda.
 
 ### Contributing
 
