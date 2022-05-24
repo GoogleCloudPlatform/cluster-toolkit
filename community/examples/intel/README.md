@@ -194,7 +194,6 @@ For more information, please refer to the [Google Cloud DAOS repo on GitHub][goo
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
 [pre-deployment]: https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps
 
-
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
 
