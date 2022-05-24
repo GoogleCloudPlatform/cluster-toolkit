@@ -2,15 +2,10 @@
 
 This directory contains a set of core modules built for the HPC Toolkit. Modules
 describe the building blocks of an HPC deployment. The expected fields in a
-module are listed in more detail [below](#module-fields).
+module are listed in more detail [below](#module-fields). Blueprints can be
+extended in functionality by incorporating [modules from GitHub
+repositories][ghmods].
 
-Toolkit users are expected to use external modules such as the [Cloud Foundation
-Toolkit][cft] (CFT) available [on Github][cftgh] and other custom modules. These
-external modules can be added to blueprints using Terraform's standard [syntax
-for remote git repositories][ghmods].
-
-[cft]: https://cloud.google.com/foundation-toolkit
-[cftgh]: https://github.com/terraform-google-modules/
 [ghmods]: #github-modules
 
 ## All Modules
@@ -148,7 +143,7 @@ actual content of those files is determined by the [kind](#kind-required) of the
 module.
 
 A source can be a path which may refer to a module embedded in the `ghpc`
-binary or a local file. It can also be a URL pointing to a github path
+binary or a local file. It can also be a URL pointing to a GitHub path
 containing a conforming module.
 
 #### Embedded Modules
@@ -185,12 +180,12 @@ following module definition refers the local pre-existing-vpc modules.
 > directory, otherwise the path would need to be updated to point at the correct
 > directory.
 
-#### Github Modules
+#### GitHub Modules
 
-GitHub modules point to a module in GitHub. To use a GitHub module, set
-the source to a path starting with `github.com` (over HTTPS) or `git@github.com`
-(over SSH). For instance, the following module definitions are sourcing the
-vpc module by pointing at the HPC Toolkit github repository:
+To use a Terraform module available on GitHub, set the source to a path starting
+with `github.com` (over HTTPS) or `git@github.com` (over SSH). For instance, the
+following module definitions are sourcing the vpc module by pointing at the HPC
+Toolkit GitHub repository:
 
 Get module from GitHub over SSH:
 
