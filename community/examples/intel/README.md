@@ -14,7 +14,7 @@
     - [Initial Setup for DAOS Cluster](#initial-setup-for-daos-cluster)
     - [Deploy the DAOS Cluster](#deploy-the-daos-cluster)
     - [Connect to a client node](#connect-to-a-client-node)
-    - [Verifying the DAOS storage system](#verifying-the-daos-storage-system)
+    - [Verify the DAOS storage system](#verify-the-daos-storage-system)
     - [Create a DAOS Pool and Container](#create-a-daos-pool-and-container)
       - [About the DAOS Command Line Tools](#about-the-daos-command-line-tools)
       - [Determine Free Space](#determine-free-space)
@@ -22,15 +22,15 @@
       - [Create a Container](#create-a-container)
       - [Mount the DAOS Container](#mount-the-daos-container)
     - [Use DAOS Storage](#use-daos-storage)
-    - [Unmounting the DAOS Container](#unmounting-the-daos-container)
+    - [Unmount the DAOS Container](#unmount-the-daos-container)
     - [Delete the DAOS infrastructure when not in use](#delete-the-daos-infrastructure-when-not-in-use)
   - [DAOS Server with Slurm cluster](#daos-server-with-slurm-cluster)
     - [Initial Setup for the DAOS/Slurm cluster](#initial-setup-for-the-daosslurm-cluster)
-    - [Deploying the DAOS/Slurm Cluster](#deploying-the-daosslurm-cluster)
+    - [Deploy the DAOS/Slurm Cluster](#deploy-the-daosslurm-cluster)
     - [Connect to the DAOS/Slurm Cluster login node](#connect-to-the-daosslurm-cluster-login-node)
     - [Create and Mount a DAOS Container](#create-and-mount-a-daos-container)
-    - [Running a Job that uses the DAOS Container](#running-a-job-that-uses-the-daos-container)
-    - [Unmounting the Container](#unmounting-the-container)
+    - [Run a Job that uses the DAOS Container](#run-a-job-that-uses-the-daos-container)
+    - [Unmount the Container](#unmount-the-container)
     - [Delete the DAOS/Slurm Cluster infrastructure when not in use](#delete-the-daosslurm-cluster-infrastructure-when-not-in-use)
 
 ## Intel-Optimized Slurm Cluster
@@ -253,7 +253,7 @@ Follow `ghpc` instructions to deploy the environment
 2. Click on the **SSH** button associated with the **daos-client-0001**
    instance to open a window with a terminal into the first DAOS client instance.
 
-### Verifying the DAOS storage system
+### Verify the DAOS storage system
 
 The `community/examples/intel/daos-cluster.yaml` blueprint does not contain configuration for DAOS pools and containers. Therefore, pools and containers will need to be created manually.
 
@@ -369,7 +369,7 @@ dd if=/dev/zero of=./test20GiB.img iflag=fullblock bs=1G count=20
 
 See the [File System](https://docs.daos.io/v2.0/user/filesystem/) section of the DAOS User Guide for more information about DFuse.
 
-### Unmounting the DAOS Container
+### Unmount the DAOS Container
 
 The container will need to by unmounted before you log out.  If this is not done it can leave open file handles and prevent the container from being mounted when you log in again.
 
@@ -444,7 +444,7 @@ For Slurm:
     successfully scale the partition to its maximum size
 - C2 CPUs: 4 (login node)
 
-### Deploying the DAOS/Slurm Cluster
+### Deploy the DAOS/Slurm Cluster
 
 Use `ghpc` to provision the blueprint, supplying your project ID
 
@@ -520,7 +520,7 @@ Verify that the container is mounted
 df -h -t fuse.daos
 ```
 
-### Running a Job that uses the DAOS Container
+### Run a Job that uses the DAOS Container
 
 On the login node create a `daos_job.sh` file with the following content
 
@@ -576,7 +576,7 @@ ls -l ${HOME}/daos/cont1/*.log
 cat ${HOME}/daos/cont1/*.log
 ```
 
-### Unmounting the Container
+### Unmount the Container
 
 The container will need to by unmounted before you log out.  If this is not done it can leave open file handles and prevent the container from being mounted when you log in again.
 
