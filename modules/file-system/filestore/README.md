@@ -46,12 +46,12 @@ The Filestore instance defined below will have the following attributes:
 - connected to the network defined in the `network1` module
 
 ```yaml
-- source: ./modules/file-system/filestore
+- source: modules/file-system/filestore
   kind: terraform
   id: homefs
+  use: [network1]
   settings:
     local_mount: /home
-    network_name: $(network1.network_name)
 ```
 
 ### Example - High Scale SSD
@@ -65,14 +65,14 @@ The Filestore instance defined below will have the following attributes:
 - connected to the VPC network defined in the `network1` module
 
 ```yaml
-- source: ./modules/file-system/filestore
+- source: modules/file-system/filestore
   kind: terraform
   id: highscale
+  use: [network1]
   settings:
     filestore_tier: HIGH_SCALE_SSD
     size_gb: 10240
     local_mount: /projects
-    network_name: $(network1.network_name)
 ```
 
 ## License

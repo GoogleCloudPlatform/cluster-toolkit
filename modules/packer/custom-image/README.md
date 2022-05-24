@@ -61,7 +61,7 @@ If any of the [shell\_scripts][shell] or [ansible\_playbooks][ansible] fail by
 returning a code other than 0, Packer will determine that the build has failed
 and refuse to save the resulting disk.
 
-> **_NOTE:_** there an an [existing issue][startup-script-issue] that can cause
+> **_NOTE:_** there is an [existing issue][startup-script-issue] that can cause
 > failures of the [startup\_script][sss] or [startup\_script\_file][ssf] not to
 > be detected as failures by Packer.
 
@@ -98,7 +98,7 @@ the [shell\_scripts][shell] and [ansible\_playbooks][ansible] settings.
 ## Environments without SSH access
 
 Many network environments disallow SSH access to VMs. In these environments, the
-[metadata-based startup script][startup-metadata] are appropriate because they
+[metadata-based startup scripts][startup-metadata] are appropriate because they
 execute entirely independently of the Packer execution environment.
 
 In this scenario, a single scripts should be supplied in the form of a string to
@@ -152,10 +152,26 @@ solution that builds an image using:
 
 * The [HPC VM Image][hpcimage] as a base upon which to customize
 * A VPC network with firewall rules that allow IAP-based SSH tunnels
-* Toolkit runners that install Ansible
+* A Toolkit runner that installs a custom script
 
 Please review the [examples README](../../../examples/README.md#image-builderyaml)
 for usage instructions.
+
+## License
+
+Copyright 2021 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
