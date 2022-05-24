@@ -39,7 +39,7 @@ deployment_groups:
   # This module creates a DAOS server. Server images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=develop
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.0
     kind: terraform
     id: daos
     use: [network1]
@@ -51,6 +51,19 @@ deployment_groups:
       os_disk_size_gb: 20
       daos_disk_count: 4
       daos_scm_size: 45
+      pools:
+      - name: "pool1"
+        size: "6.4TB"
+        tier_ratio: 3
+        user: "root@"
+        group: "root@"
+        acls:
+        - "A::OWNER@:rwdtTaAo"
+        - "A:G:GROUP@:rwtT"
+        - "A::EVERYONE@:rcta"
+        properties:
+          reclaim: "lazy"
+        containers: []
 
   - source: modules/scripts/startup-script
     kind: terraform
@@ -105,6 +118,11 @@ deployment_groups:
     settings:
       login_node_count: 1
       compute_startup_script: $(daos-client-script.startup_script)
+      compute_node_scopes:
+      - "https://www.googleapis.com/auth/monitoring.write"
+      - "https://www.googleapis.com/auth/logging.write"
+      - "https://www.googleapis.com/auth/devstorage.read_only"
+      - "https://www.googleapis.com/auth/cloud-platform"
       controller_startup_script: $(daos-client-script.startup_script)
 
   - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
@@ -116,3 +134,8 @@ deployment_groups:
     - slurm_controller
     settings:
       login_startup_script: $(daos-client-script.startup_script)
+      login_scopes:
+      - "https://www.googleapis.com/auth/monitoring.write"
+      - "https://www.googleapis.com/auth/logging.write"
+      - "https://www.googleapis.com/auth/devstorage.read_only"
+      - "https://www.googleapis.com/auth/cloud-platform"
