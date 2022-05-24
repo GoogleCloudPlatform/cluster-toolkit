@@ -188,11 +188,12 @@ The file [daos-cluster.yaml](daos-cluster.yaml) describes an environment with a 
 
 For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
 
-> **_NOTE:_** You MUST first follow the [pre-deployment steps in the README.md](https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps) in order for this example to work.
+> **_NOTE:_** The [pre-deployment steps in the google-cloud-daos/README.md][pre-deployment] must be completed prior to running this HPC Toolkit example.
 
 [mig]: https://cloud.google.com/compute/docs/instance-groups
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
-[daos-images]: https://github.com/daos-stack/google-cloud-daos/tree/main/images
+[pre-deployment]: https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps
+
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
@@ -397,16 +398,23 @@ terraform -chdir=daos-cluster/primary destroy
 
 ## DAOS Server with Slurm cluster
 
-The [daos-slurm.yaml](daos-slurm.yaml) blueprint describes an environment DAOS server instances and a slurm cluster configured to be able to access this file system.
+The [daos-slurm.yaml](daos-slurm.yaml) blueprint describes an environment with a Slurm cluster and four DAOS server instances. The compute nodes are configured as DAOS clients and have the ability to use the DAOS filesystem on the DAOS server instances.
 
-The blueprint uses from the [Google Cloud DAOS repo][google-cloud-daos] and the SchedMD modules defined in [community/modules/compute](community/modules/compute)
-For more information, please refer to the .
+The blueprint uses modules from
+- [google-cloud-daos][google-cloud-daos]
+- [community/modules/scheduler/SchedMD-slurm-on-gcp-controller][SchedMD-slurm-on-gcp-controller]
+- [community/modules/scheduler/SchedMD-slurm-on-gcp-login-node][SchedMD-slurm-on-gcp-login-node]
+- [community/modules/compute/SchedMD-slurm-on-gcp-partition][SchedMD-slurm-on-gcp-partition]
 
-> **_NOTE:_** You MUST first follow the [pre-deployment steps in the README.md](https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps) in order for this example to work.
+> **_NOTE:_** The [pre-deployment steps in the google-cloud-daos/README.md][pre-deployment] must be completed prior to running this HPC Toolkit example.
 
 [mig]: https://cloud.google.com/compute/docs/instance-groups
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
-[daos-images]: https://github.com/daos-stack/google-cloud-daos/tree/main/images
+[pre-deployment]: https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps
+[apis]: ../../../README.md#enable-gcp-apis
+[SchedMD-slurm-on-gcp-controller]: ../../modules/compute/scheduler/SchedMD-slurm-on-gcp-controller
+[SchedMD-slurm-on-gcp-login-node]: ../../modules/compute/scheduler/SchedMD-slurm-on-gcp-login-node
+[SchedMD-slurm-on-gcp-partition]: ../../modules/compute/SchedMD-slurm-on-gcp-partition
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
@@ -481,9 +489,9 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 
 ### Create and Mount a DAOS Container
 
-The `community/examples/intel/daos-slurm.yaml` blueprint contains configuration that will create one DAOS pool named `pool1` when the *daos-server* instances are provisioned.
+The [community/examples/intel/daos-slurm.yaml](daos-slurm.yaml) blueprint defines a single DAOS pool named `pool1`. The pool will be created when the *daos-server* instances are provisioned.
 
-You will need to create your own DAOS container that can be used by your Slurm jobs.
+You will need to create your own DAOS container in the pool that can be used by your Slurm jobs.
 
 While logged into the login node create a container named `cont1` in the `pool1` pool:
 

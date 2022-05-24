@@ -53,7 +53,7 @@ The following settings will configure this system for [best performance](https:/
 
 ## Support
 
-Content in the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repository is licensed under the [Apache License Version 2.0](LICENSE) open-source license.
+Content in the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repository is licensed under the [Apache License Version 2.0](https://github.com/daos-stack/google-cloud-daos/blob/main/LICENSE) open-source license.
 
 [DAOS](https://github.com/daos-stack/daos) is being distributed under the BSD-2-Clause-Patent open-source license.
 
