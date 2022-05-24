@@ -122,6 +122,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_connect_mode"></a> [connect\_mode](#input\_connect\_mode) | Used to select mode - supported values DIRECT\_PEERING and PRIVATE\_SERVICE\_ACCESS. | `string` | `"DIRECT_PEERING"` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instace if no name is specified. | `string` | n/a | yes |
 | <a name="input_filestore_share_name"></a> [filestore\_share\_name](#input\_filestore\_share\_name) | Name of the file system share on the instance. | `string` | `"nfsshare"` | no |
 | <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_HDD"` | no |

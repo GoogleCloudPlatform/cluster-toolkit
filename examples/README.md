@@ -19,6 +19,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [daos-slurm.yaml](#daos-slurmyaml-)
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
+  * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Top Level Parameters](#top-level-parameters)
@@ -405,6 +406,16 @@ All nodes mount a filestore instance on `/home`.
 
 [omnia-github]: https://github.com/dellhpc/omnia
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
+
+### [hpc-cluster-small-sharedvpc.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates the use of the Slurm and Filestore modules in
+the service project of an existing Shared VPC.  Before attempting to deploy the
+blueprint, one must first complete [initial setup for provisioning Filestore in
+a Shared VPC service project][fs-shared-vpc].
+
+[hpc-cluster-small-sharedvpc.yaml]: ../community/examples/hpc-cluster-small-sharedvpc.yaml
+[fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
 ## Blueprint Schema
 
