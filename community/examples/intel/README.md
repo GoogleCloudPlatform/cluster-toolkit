@@ -184,7 +184,9 @@ terraform -chdir=hpc-intel-select/primary destroy
 
 ## DAOS Cluster
 
-The file [daos-cluster.yaml](daos-cluster.yaml) describes an environment with a 4-node DAOS server and a [managed instance group][mig] with two DAOS Clients.
+The [daos-cluster.yaml](daos-cluster.yaml) blueprint describes an environment with
+- A [managed instance group][mig] with four DAOS server instances
+- A [managed instance group][mig] with two DAOS client instances
 
 For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
 
@@ -209,7 +211,7 @@ Toolkit guidance to enable [APIs][apis] and establish minimum resource
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
 
-And the following available quota is required in the region used by the cluster:
+The following available quota is required in the region used by the cluster:
 
 - C2 CPUs: 32 (16 per client node)
 - N2 CPUs: 144 (36 per server node)
@@ -226,8 +228,10 @@ ghpc create community/examples/intel/daos-cluster.yaml  \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
 
-It will create a set of directories containing Terraform modules and Packer
-templates. Notice how you may provide an optional, but recommended, [back-end configuration][backend]. This will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket].
+This will create a set of directories containing Terraform modules and Packer
+templates.
+
+The `--backend-config` option is not required but recommended. It will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket]. For more information see [Setting up a remote terraform state][backend].
 
 Follow `ghpc` instructions to deploy the environment
 
@@ -335,7 +339,7 @@ daos cont create pool1 \
   --properties rf:1
 ```
 
-See the [Container Management](https://docs.daos.io/v2.0/admin/pool_operations) section of the of the DAOS User Guide for more information about creating containers.
+See the [Container Management](https://docs.daos.io/v2.0/user/container) section of the of the DAOS User Guide for more information about creating containers.
 
 #### Mount the DAOS Container
 
@@ -411,8 +415,8 @@ The blueprint uses modules from
 [google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
 [pre-deployment]: https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps
 [apis]: ../../../README.md#enable-gcp-apis
-[SchedMD-slurm-on-gcp-controller]: ../../modules/compute/scheduler/SchedMD-slurm-on-gcp-controller
-[SchedMD-slurm-on-gcp-login-node]: ../../modules/compute/scheduler/SchedMD-slurm-on-gcp-login-node
+[SchedMD-slurm-on-gcp-controller]: ../../modules/scheduler/SchedMD-slurm-on-gcp-controller
+[SchedMD-slurm-on-gcp-login-node]: ../../modules/scheduler/SchedMD-slurm-on-gcp-login-node
 [SchedMD-slurm-on-gcp-partition]: ../../modules/compute/SchedMD-slurm-on-gcp-partition
 
 Identify a project to work in and substitute its unique id wherever you see
@@ -454,8 +458,10 @@ ghpc create community/examples/intel/daos-slurm.yaml \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
 
-It will create a set of directories containing Terraform modules and Packer
-templates. Please notice how you may provide an optional, but recommended, [back-end configuration][backend]. This will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket].
+This will create a set of directories containing Terraform modules and Packer
+templates.
+
+The `--backend-config` option is not required but recommended. It will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket]. For more information see [Setting up a remote terraform state][backend].
 
 Follow `ghpc` instructions to deploy the environment
 
