@@ -107,9 +107,9 @@ Modules that are still in development and less stable are labeled with the
 
 ### Scheduler
 
-* **[SchedMD-slurm-on-gcp-controller]** ![community-badge] : Creates a SLURM
+* **[SchedMD-slurm-on-gcp-controller]** ![community-badge] : Creates a Slurm
   controller node using [slurm-gcp].
-* **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a SLURM
+* **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
   login node using [slurm-gcp].
 
 [schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
@@ -120,7 +120,7 @@ Modules that are still in development and less stable are labeled with the
 
 * **[startup-script]** ![core-badge] : Creates a customizable startup script
   that can be fed into compute VMs.
-* **[omnia-install]** ![community-badge] ![experimental-badge] : Installs SLURM
+* **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
   via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of compute
   VMs.
 * **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
@@ -235,7 +235,7 @@ The `id` field is used to uniquely identify and reference a defined module.
 ID's are used in [variables](../examples/README.md#variables) and become the
 name of each module when writing the terraform `main.tf` file. They are also
 used in the [use](#use-optional) and [outputs](#outputs-optional) lists
-described just below.
+described below.
 
 For terraform modules, the ID will be rendered into the terraform module label
 at the top level main.tf file.
@@ -287,7 +287,7 @@ of the same names.
 The order of precedence that `ghpc` uses in determining when to infer a setting
 value is in the following priority order:
 
-1. Explicitly set in the blueprint by the user
+1. Explicitly set in the blueprint using the `settings` field
 1. Output from a used module, taken in the order provided in the `use` list
 1. Deployment variable (`vars`) of the same name
 1. Default value for the setting

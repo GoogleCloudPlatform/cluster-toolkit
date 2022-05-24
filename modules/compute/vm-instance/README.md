@@ -1,12 +1,12 @@
 ## Description
 
-This module creates one or more simple
+This module creates one or more
 [compute VM instances](https://cloud.google.com/compute/docs/instances).
 
 ### Example
 
 ```yaml
-- source: ./modules/compute/vm-instance
+- source: modules/compute/vm-instance
   kind: terraform
   id: compute
   use: [network1]
@@ -22,7 +22,7 @@ This creates a cluster of 8 compute VMs that are:
 * on the network defined by the `network1` module
 * of type c2-standard-60
 
-> **_NOTE:_**: Simultaneous Multithreading (SMT) is deactivated by default
+> **_NOTE:_** Simultaneous Multithreading (SMT) is deactivated by default
 > (threads_per_core=1), which means only the physical cores are visible on the
 > VM. With SMT disabled, a machine of type c2-standard-60 will only have the 30
 > physical cores visible. To change this, set `threads_per_core=2` under

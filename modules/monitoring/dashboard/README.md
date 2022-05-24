@@ -1,6 +1,6 @@
 ## Description
 
-Creates a [monitoring dashboard][gcp-dash] for the HPC cluster distribution. The
+Creates a [monitoring dashboard][gcp-dash] for the HPC cluster deployment. The
 module includes a default HPC-focused dashboard with the ability to add custom
 widgets as well as the option to add an empty dashboard and add widgets as
 needed.

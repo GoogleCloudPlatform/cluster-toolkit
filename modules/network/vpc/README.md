@@ -18,7 +18,7 @@ The following firewall rules are created with the VPC network:
 
 ### Primary and additional subnetworks
 
-This module will, at minimum, provision "primary" subnetwork in which most
+This module will, at minimum, provision a "primary" subnetwork in which most
 resources are expected to be provisioned. These are controlled by the following
 input variables:
 
@@ -35,8 +35,8 @@ the global VPC network is specified using `var.network_address_range`.
 
 [cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/master/modules/subnets
 
-If `var.primary_subnetwork` is supplied explicitly, then it will define all
-properties of the primary subnetwork. If it is left at its default value of
+If explicitly supplied, `var.primary_subnetwork` defines all properties of the
+primary subnetwork. If `var.primary_subnetwork` is left at its default value of
 `null`, then a default primary subnetwork will be constructed from
 `var.subnetwork_name` and `var.subnetwork_size`. If no value is supplied for
 `var.subnetwork_name`, a default value is constructed from
@@ -48,7 +48,7 @@ Additional subnetworks are optionally supplied explicitly with
 ### Example
 
 ```yaml
-- source: ./modules/network/vpc
+- source: modules/network/vpc
   kind: terraform
   id: network1
   settings:
@@ -59,9 +59,9 @@ This creates a new VPC network named based on the `deployment_name` variable
 with `_net` appended. `network_name` can be set manually as well as part of the
 settings.
 
-Note that `deployment_name` does not need to be set explicitly here,
-it would typically be inferred from the deployment variable of the same name. It
-was included for clarity.
+> **_NOTE:_** `deployment_name` does not need to be set explicitly here. It
+> would typically be inferred from the deployment variable of the same name. It
+> is included here for clarity.
 
 ## License
 
