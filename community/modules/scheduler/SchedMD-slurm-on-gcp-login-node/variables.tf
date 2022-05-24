@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2022 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ variable "instance_image" {
     project = string
   })
   default = {
-    family  = "schedmd-slurm-21-08-4-hpc-centos-7"
+    family  = "schedmd-slurm-21-08-8-hpc-centos-7"
     project = "schedmd-slurm-public"
   }
 }

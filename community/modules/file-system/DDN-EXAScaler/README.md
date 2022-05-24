@@ -3,20 +3,23 @@
 This module creates a DDN EXAScaler Cloud Lustre file system using
 [exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp).
 
-By default security.public_key is set to `null`, therefore the admin user is not
-created. To ensure the admin user is created, provide a public key via the
-security setting.
+More information about the architecture can be found at
+[Architecture: Lustre file system in Google Cloud using DDN EXAScaler][architecture].
 
-**Please note**: This module's instances require access to Google APIs and
-therefore, instances must have public IP address or it must be used in a
-subnetwork where
-[Private Google Access](https://cloud.google.com/vpc/docs/configure-private-google-access)
-is enabled.
+> **_NOTE:_** By default security.public_key is set to `null`, therefore the
+> admin user is not created. To ensure the admin user is created, provide a
+> public key via the security setting.
+>
+> **_NOTE:_** This module's instances require access to Google APIs and
+> therefore, instances must have public IP address or it must be used in a
+> subnetwork where [Private Google Access][private-google-access] is enabled.
+>
+> **_WARNING:_** This file system has a license cost as described in the pricing
+> section of the [DDN EXAScaler Cloud Marketplace Solution][marketplace].
 
-**WARNING**: This file system has a license cost as described in the pricing
-section of the [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
-
-More information about the architecture can be found at [Architecture: Lustre file system in Google Cloud using DDN EXAScaler](https://cloud.google.com/architecture/lustre-architecture).
+[private-google-access]: https://cloud.google.com/vpc/docs/configure-private-google-access
+[marketplace]: https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
+[architecture]: https://cloud.google.com/architecture/lustre-architecture
 
 ## Support
 EXAScaler Cloud includes self-help support with access to publicly available
@@ -30,7 +33,7 @@ other premium support features. For more information, visit
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

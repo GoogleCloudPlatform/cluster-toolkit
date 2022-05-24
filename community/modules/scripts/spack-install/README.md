@@ -3,36 +3,31 @@
 This module can be used to install spack on a VM. This includes:
 
 1. Cloning spack into a predefined directory
-2. Checking out a specific version of spack
-3. Configuring compilers within spack
-4. Installing application licenses that spack packages might depend on
-5. Installing various spack specs.
+1. Checking out a specific version of spack
+1. Configuring compilers within spack
+1. Installing application licenses that spack packages might depend on
+1. Installing various spack specs.
 
 The output of this module is a startup script that is intended to be attached
-to either the controller node of a scheduler, or a single VM. The resulting
-installation of spack can then be mounted across many other VMs to share a
-software stack.
+to either the login or controller node of a scheduler, or a
+[vm-instance](../../../../modules/compute/vm-instance/README.md). The
+resulting installation of spack can then be mounted across many other VMs to
+share a software stack.
 
-Two output variables are defined by this module:
-
-- `startup_script` - Can be used to chain this with
-  `modules/scripts/startup_script` as a runner
-- `controller_startup_script` - Can be added to a scheduler by simply adding a
-  `use: [spack]` option to the contoller node
-
-**Please note**: This module currently is capable of re-running to install
-additional packages, but cannot be used to uninstall packages from the VM.
-
-**Please note**: Currently, license installation is performed by copying a
-license file from a GCS bucket to a specific directory on the target VM.
-
-**Please note**: When populating a buildcache with packages, the VM this
-spack module is running on requires the following scope:
-https://www.googleapis.com/auth/devstorage.read_write
+> **_NOTE:_** This module currently is capable of re-running to install
+> additional packages, but cannot be used to uninstall packages from the VM.
+>
+> **_NOTE:_** Currently, license installation is performed by copying a
+> license file from a GCS bucket to a specific directory on the target VM.
+>
+> **_NOTE:_** When populating a buildcache with packages, the VM this
+> spack module is running on requires the following scope:
+> https://www.googleapis.com/auth/devstorage.read_write
 
 ## Example
 
-As an example, the below is a possible definition of a spack installation.
+As an example, the below is a possible definition of a spack installation. To
+see this module used in a full blueprint, see the [spack-gromacs.yaml] example.
 
 ```yaml
   - source: community/modules/scripts/spack-install
@@ -46,33 +41,18 @@ As an example, the below is a possible definition of a spack installation.
       - mirror_name: 'gcs_cache'
         mirror_url: gs://example-buildcache/linux-centos7
       configs:
-      - type: 'single-config'
-        value: 'config:install_tree:/sw/spack/opt'
-        scope: 'site'
-      - type: 'file'
-        scope: 'site'
-        value: |
-          config:
-            build_stage:
-              - /sw/spack/stage
-      - type: 'file'
-        scope: 'site'
+      - type: single-config
+        scope: defaults
+        value: "config:build_stage:/sw/spack/spack-stage"
+      - type: file
+        scope: defaults
         value: |
           modules:
             tcl:
               hash_length: 0
-              whitelist:
-                - gcc
-              blacklist:
-                - '%gcc@4.8.5'
               all:
                 conflict:
                   - '{name}'
-                filter:
-                  environment_blacklist:
-                    - "C_INCLUDE_PATH"
-                    - "CPLUS_INCLUDE_PATH"
-                    - "LIBRARY_PATH"
               projections:
                 all: '{name}/{version}-{compiler.name}-{compiler.version}'
       compilers:
@@ -100,7 +80,6 @@ deployment via the following:
       login_node_count: 1
       partitions:
       - $(compute_partition.partition)
-
 ```
 
 Alternatively, it can be added as a startup script via:
@@ -111,16 +90,18 @@ Alternatively, it can be added as a startup script via:
     id: startup
     settings:
       runners:
-      - type: ansible-local
-        source: modules/spack-install/scripts/install_spack_deps.yml
-        destination: install_spack_deps.yml
+      - $(spack.install_spack_deps_runner)
       - type: shell
         content: $(spack.startup_script)
         destination: "/sw/spack-install.sh"
 ```
 
+[spack-gromacs.yaml]: ../../../examples/spack-gromacs.yaml
+
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

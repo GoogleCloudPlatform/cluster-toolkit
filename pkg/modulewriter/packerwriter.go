@@ -1,5 +1,5 @@
 /**
-* Copyright 2021 Google LLC
+* Copyright 2022 Google LLC
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ func (w PackerWriter) writeDeploymentGroup(
 	ctyGlobals, err := config.ConvertMapToCty(globalVars)
 	if err != nil {
 		return fmt.Errorf(
-			"error converting global vars to cty for writing: %w", err)
+			"error converting deployment vars to cty for writing: %w", err)
 	}
 	groupPath := filepath.Join(deployDir, depGroup.Name)
 	for _, mod := range depGroup.Modules {

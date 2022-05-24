@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2022 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,10 +30,10 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v0.7.2"
+    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v0.7.3"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v0.7.2"
+    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v0.7.3"
   }
 
   required_version = ">= 0.13.0"

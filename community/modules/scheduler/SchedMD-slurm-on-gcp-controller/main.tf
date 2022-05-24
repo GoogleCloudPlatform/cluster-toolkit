@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2022 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ data "google_compute_image" "compute_image" {
 }
 
 module "slurm_cluster_controller" {
-  source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.1.5"
+  source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.1.8"
   boot_disk_size                = var.boot_disk_size
   boot_disk_type                = var.boot_disk_type
   image                         = data.google_compute_image.compute_image.self_link

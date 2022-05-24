@@ -1,5 +1,5 @@
 /**
-* Copyright 2021 Google LLC
+* Copyright 2022 Google LLC
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -382,7 +382,7 @@ func (w TFWriter) writeDeploymentGroup(
 	ctyVars, err := config.ConvertMapToCty(globalVars)
 	if err != nil {
 		return fmt.Errorf(
-			"error converting global vars to cty for writing: %v", err)
+			"error converting deployment vars to cty for writing: %v", err)
 	}
 
 	writePath := filepath.Join(deploymentDir, depGroup.Name)

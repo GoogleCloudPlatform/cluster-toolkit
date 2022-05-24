@@ -50,7 +50,7 @@ deployment_groups:
     settings:
       disk_size: 20
       source_image_project_id: [schedmd-slurm-public]
-      source_image_family: schedmd-slurm-21-08-4-hpc-centos-7
+      source_image_family: schedmd-slurm-21-08-8-hpc-centos-7
       image_family: $(vars.new_image_family)
 
 - group: cluster
@@ -64,6 +64,7 @@ deployment_groups:
     use: [cluster-network]
     settings:
       partition_name: compute
+      max_node_count: 20
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)

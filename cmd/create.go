@@ -1,5 +1,5 @@
 /*
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const msgCLIVars = "Comma-separated list of name=value variables to override YAML configuration. Can be invoked multiple times."
-const msgCLIBackendConfig = "Comma-separated list of name=value variables to set Terraform backend configuration. Can be invoked multiple times."
+const msgCLIVars = "Comma-separated list of name=value variables to override YAML configuration. Can be used multiple times."
+const msgCLIBackendConfig = "Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times."
 
 func init() {
 	createCmd.Flags().StringVarP(&bpFilename, "config", "c", "",
@@ -37,13 +37,13 @@ func init() {
 		"please see the command usage for more details."))
 
 	createCmd.Flags().StringVarP(&outputDir, "out", "o", "",
-		"Output dir under which the HPC deployment dir will be created")
+		"Sets the output directory where the HPC deployment directory will be created.")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
 	createCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
 	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
 	createCmd.Flags().BoolVarP(&overwriteDeployment, "overwrite-deployment", "w", false,
-		"if set, an existing deployment dir can be overwritten by the newly created deployment. \n"+
+		"If specified, an existing deployment directory is overwritten by the new deployment. \n"+
 			"Note: Terraform state IS preserved. \n"+
 			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
 			"Note: Packer is NOT supported.")
@@ -60,7 +60,7 @@ var (
 	validationLevel     string
 	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
 	createCmd           = &cobra.Command{
-		Use:   "create FILENAME",
+		Use:   "create BLUEPRINT_NAME",
 		Short: "Create a new deployment.",
 		Long:  "Create a new deployment based on a provided blueprint.",
 		Run:   runCreateCmd,

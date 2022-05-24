@@ -5,7 +5,7 @@ This module creates a slurm controller node via the SchedMD/slurm-gcp
 module.
 
 More information about Slurm On GCP can be found at the
-[project's GitHub page](https://github.com/SchedMD/slurm-gcp) and in the
+[project's GitHub page][slurm-on-gcp] and in the
 [Slurm on Google Cloud User Guide][slurm-ug].
 
 The [user guide][slurm-ug] provides detailed instructions on customizing and
@@ -20,20 +20,18 @@ controller for optimal performance at different scales.
 - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
   kind: terraform
   id: slurm_controller
+  use:
+  - network1
+  - homefs
+  - compute_partition
   settings:
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
     login_node_count: 1
-    network_storage:
-    - $(homefs.network_storage)
-    login_network_storage:
-    - $(homefs.network_storage)
-    partitions:
-    - $(compute_partition.partition)
 ```
 
 This creates a controller node connected to the primary subnetwork with 1 login
-node (defined elsewhere). The controller will also have the homefs file system
-mounted and manage one partition. For more context see the
+node (defined elsewhere). The controller will also have the `homefs` file system
+mounted via the `use` field and manage one partition, also declared in the `use`
+field. For more context see the
 [hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml).
 
 ## Support
@@ -47,7 +45,7 @@ modules. For support with the underlying modules, see the instructions in the
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -78,7 +76,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.1.5 |
+| <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.1.8 |
 
 ## Resources
 
@@ -108,7 +106,7 @@ limitations under the License.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment | `string` | n/a | yes |
 | <a name="input_disable_compute_public_ips"></a> [disable\_compute\_public\_ips](#input\_disable\_compute\_public\_ips) | If set to true, create Cloud NAT gateway and enable IAP FW rules | `bool` | `true` | no |
 | <a name="input_disable_controller_public_ips"></a> [disable\_controller\_public\_ips](#input\_disable\_controller\_public\_ips) | If set to true, create Cloud NAT gateway and enable IAP FW rules | `bool` | `false` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Slurm image to use for the controller instance | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "schedmd-slurm-21-08-4-hpc-centos-7",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Slurm image to use for the controller instance | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "schedmd-slurm-21-08-8-hpc-centos-7",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
 | <a name="input_intel_select_solution"></a> [intel\_select\_solution](#input\_intel\_select\_solution) | Configure the cluster to meet the performance requirement of the Intel Select Solution | `string` | `null` | no |
 | <a name="input_jwt_key"></a> [jwt\_key](#input\_jwt\_key) | Specific libjwt key to use | `any` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to controller instance. List of key key, value pairs. | `any` | `{}` | no |

@@ -4,7 +4,8 @@ This directory contains a set of example blueprint files that can be fed into
 gHPC to create a deployment.
 
 <!-- TOC generated with some manual tweaking of the following command output:
-     md_toc github examples/README.md | sed -e "s/\s-\s/ * /"              -->
+md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
+-->
 <!-- TOC -->
 
 * [Instructions](#instructions)
@@ -14,12 +15,14 @@ gHPC to create a deployment.
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
   * [image-builder.yaml](#image-builderyaml-)
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
+  * [daos-cluster.yaml](#daos-clusteryaml-)
+  * [daos-slurm.yaml](#daos-slurmyaml-)
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Top Level Parameters](#top-level-parameters)
-  * [Global Variables](#global-variables)
+  * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
 * [Variables](#variables)
   * [Blueprint Variables](#blueprint-variables)
@@ -27,19 +30,19 @@ gHPC to create a deployment.
 
 ## Instructions
 
-Ensure your project\_id is set and other deployment variables such as zone and
-region are set correctly under `vars` before creating and deploying an example
-blueprint.
+Ensure `project_id`, `zone`, and `region` deployment variables are set correctly
+under `vars` before using an example blueprint.
 
-Please note that global variables defined under `vars` are automatically
-passed to modules if the modules have an input that matches the variable name.
+> **_NOTE:_** Deployment variables defined under `vars` are automatically passed
+> to modules if the modules have an input that matches the variable name.
 
 ### (Optional) Setting up a remote terraform state
 
 The following block will configure terraform to point to an existing GCS bucket
-to store and manage the terraform state. Add your own bucket name and
-(optionally) a service account in the configuration. If not set, the terraform
-state will be stored locally within the generated deployment directory.
+to store and manage the terraform state. Add your own bucket name in place of
+`<<BUCKET_NAME>>` and (optionally) a service account in place of
+`<<SERVICE_ACCOUNT>>` in the configuration. If not set, the terraform state will
+be stored locally within the generated deployment directory.
 
 Add this block to the top-level of your blueprint:
 
@@ -47,14 +50,17 @@ Add this block to the top-level of your blueprint:
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: a_bucket
-    impersonate_service_account: a_bucket_reader@project.iam.gserviceaccount.com
+    bucket: <<BUCKET_NAME>>
+    impersonate_service_account: <<SERVICE_ACCOUNT>>
 ```
 
-You can set the configuration at CLI as well like below:
+You can set the configuration using the CLI in the `create` and `expand`
+subcommands as well:
 
 ```shell
-./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --backend-config "bucket=${GCS_BUCKET}"
+./ghpc create examples/hpc-cluster-small.yaml \
+  --vars "project_id=${GOOGLE_CLOUD_PROJECT}" \
+  --backend-config "bucket=${GCS_BUCKET}"
 ```
 
 > **_NOTE:_** The `--backend-config` argument supports comma-separated list of
@@ -77,18 +83,14 @@ HPC Toolkit team directly.
 The community blueprints are contributed by the community (including the HPC
 Toolkit team, partners, etc.) and are labeled with the community badge
 (![community-badge]). The community blueprints are located in the
-[community folder](../community/examples/README.md).
+[community folder](../community/examples/).
 
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
 
-[hpc-cluster-intel-select.yaml]: ../community/examples/intel/hpc-cluster-intel-select.yaml
-[intel-examples-readme]: ../community/examples/intel/README.md
-[intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
-
 ### [hpc-cluster-small.yaml] ![core-badge]
 
-Creates a basic auto-scaling SLURM cluster with mostly default settings. The
+Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
 `/home`.
 
@@ -106,17 +108,17 @@ There is a `compute` partition that achieves higher performance. Any
 performance analysis should be done on the `compute` partition. By default it
 uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
-select the compute partition using the `srun -p compute` argument.
+select the compute partition using the `-p compute` argument when running `srun`.
 
-Quota required for this example:
+Quota required for this example in selected region:
 
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1024 GB**
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
   GB/node** up to 500 GB
 * Compute Engine API: N2 CPUs: **12**
-* Compute Engine API: C2 CPUs: **60/node** up to 1200 - _only needed for
-  `compute` partition_
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
@@ -124,14 +126,14 @@ Quota required for this example:
 
 ### [hpc-cluster-high-io.yaml] ![core-badge]
 
-Creates a slurm cluster with tiered file systems for higher performance. It
+Creates a Slurm cluster with tiered file systems for higher performance. It
 connects to the default VPC of the project and creates two partitions and a
 login node.
 
 File systems:
 
-* The homefs mounted at `/home` is a default "PREMIUM" tier filestore with
-  2.5TiB of capacity
+* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
+  1 TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
 * The scratchfs is mounted at `/scratch` and is a
@@ -146,17 +148,17 @@ Similar to the small example, there is a
 [compute partition](#compute-partition) that should be used for any performance
 analysis.
 
-Quota required for this example:
+Quota required for this example in selected region:
 
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10240 GiB** - _min
-  quota request is 61440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14050 GB**
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
+  quota request is 61,440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
   GB/node** up to 4596 GB
 * Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **60/node** up to 12,000 - _only needed for
-  `compute` partition_
+* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
+  in `compute` partition up to 12,008
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
@@ -196,8 +198,8 @@ terraform -chdir=image-builder-001/builder-env apply
 
 # Provide startup script to Packer
 terraform -chdir=image-builder-001/builder-env output \
--raw startup_script_scripts_for_image > \
-image-builder-001/packer/custom-image/startup_script.sh
+  -raw startup_script_scripts_for_image > \
+  image-builder-001/packer/custom-image/startup_script.sh
 
 # Build image (3)
 cd image-builder-001/packer/custom-image
@@ -251,9 +253,9 @@ connections without exposing the machine to the internet on a public IP address.
 #### Toolkit Runners (deployment group 1)
 
 The Toolkit [startup-script](../modules/scripts/startup-script/README.md)
-module supports boot-time configuration of VMs using "runners." Runners are
+module supports boot-time configuration of VMs using "runners". Runners are
 configured as a series of scripts uploaded to Cloud Storage. A simple, standard
-[VM startup script][cloudstartup] runs at boot-time, downloads the scripts from
+[VM startup script][vmstartup] runs at boot-time, downloads the scripts from
 Cloud Storage and executes them in sequence.
 
 The standard bash startup script is exported as a string by the startup-script
@@ -283,6 +285,20 @@ packer validate -var startup_script_file=startup_script.sh .
 packer build -var startup_script_file=startup_script.sh .
 ```
 
+Quota required for this example in selected region:
+
+* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
+  GB/node** up to 500 GB
+* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
 #### Slurm Cluster Based on Custom Image (deployment group 3)
 
 Once the Slurm cluster has been deployed we can test that our Slurm compute
@@ -300,23 +316,44 @@ file that was added during image build:
 
 ### [hpc-cluster-intel-select.yaml] ![community-badge]
 
-This example provisions a Slurm cluster [automating the steps to comply to the
+This example provisions a Slurm cluster automating the [steps to comply to the
 Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
 more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
+[hpc-cluster-intel-select.yaml]: ../community/examples/intel/hpc-cluster-intel-select.yaml
+[intel-examples-readme]: ../community/examples/intel/README.md
+[intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
+
+### [daos-cluster.yaml] ![community-badge]
+
+This example provisions a DAOS cluster with [managed instance groups][migs] for the servers and for clients. It is more extensively discussed in a dedicated [README for Intel
+examples][intel-examples-readme].
+
+[daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
+[migs]: https://cloud.google.com/compute/docs/instance-groups
+
+### [daos-slurm.yaml] ![community-badge]
+
+This example provisions DAOS servers and a Slurm cluster. It is
+more extensively discussed in a dedicated [README for Intel
+examples][intel-examples-readme].
+
+[daos-slurm.yaml]: ../community/examples/intel/daos-slurm.yaml
+
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
-Spack is a HPC software package manager. This example creates a small slurm
-cluster with software installed with
-[Spack](../community/modules/scripts/spack-install/README.md) The controller
-will install and configure spack, and install
+Spack is an HPC software package manager. This example creates a small Slurm
+cluster with software installed using the
+[spack-install module](../community/modules/scripts/spack-install/README.md) The
+controller will install and configure spack, and install
 [gromacs](https://www.gromacs.org/) using spack. Spack is installed in a shared
-location (/sw) via filestore. This build leverages the startup-script module
-and can be applied in any cluster by using the output of spack-install or
+location (/sw) via filestore. This build leverages the
+[startup-script module](../modules/scripts/startup-script/README.md) and can be
+applied in any cluster by using the output of spack-install or
 startup-script modules.
 
-The installation will occur as part of the slurm startup-script, a warning
+The installation will occur as part of the Slurm startup-script, a warning
 message will be displayed upon SSHing to the login node indicating
 that configuration is still active. To track the status of the overall
 startup script, run the following command on the login node:
@@ -332,9 +369,9 @@ your blueprint, by default /var/log/spack.log in the login node.
 sudo tail -f /var/log/spack.log
 ```
 
-Once Slurm and spack installation is complete, spack will available on the login
-node. To use spack in the controller or compute nodes, the following command
-must be run first:
+Once the Slurm and Spack configuration is complete, spack will be available on
+the login node. To use spack in the controller or compute nodes, the following
+command must be run first:
 
 ```shell
 source /sw/spack/share/spack/setup-env.sh
@@ -346,26 +383,27 @@ To load the gromacs module, use spack:
 spack load gromacs
 ```
 
- **_NOTE:_** Installing spack compilers and libraries in this example can take 1-2
-hours to run on startup. To decrease this time in future deployments, consider
-including a spack build cache as described in the comments of the example.
+> **_NOTE:_** Installing spack compilers and libraries in this example can take
+> hours to run on startup. To decrease this time in future deployments, consider
+> including a spack build cache as described in the comments of the example.
 
 [spack-gromacs.yaml]: ../community/examples/spack-gromacs.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
-Creates a simple omnia cluster, with an
-omnia-manager node and 2 omnia-compute nodes, on the pre-existing default
+Creates a simple [Dell Omnia][omnia-github] provisioned cluster with an
+omnia-manager node and 2 omnia-compute nodes on the pre-existing default
 network. Omnia will be automatically installed after the nodes are provisioned.
 All nodes mount a filestore instance on `/home`.
 
-**_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to create
-the cluster. For these instances, Simultaneous Multithreading (SMT) is turned
-off by default, meaning that only the physical cores are visible. For the
-compute nodes, this means that 30 physical cores are visible on the
-c2-standard-60 VMs. To activate all 60 virtual cores, include
-`threads_per_core=2` under settings for the compute vm-instance module.
+> **_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to
+> create the cluster. For these instances, Simultaneous Multithreading (SMT) is
+> turned off by default, meaning that only the physical cores are visible. For
+> the compute nodes, this means that 30 physical cores are visible on the
+> `c2-standard-60` VMs. To activate all 60 virtual cores, include
+> `threads_per_core=2` under settings for the compute vm-instance module.
 
+[omnia-github]: https://github.com/dellhpc/omnia
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
 ## Blueprint Schema
@@ -426,52 +464,95 @@ deployment_groups:
 
 ## Writing an HPC Blueprint
 
-The blueprint file is composed of 3 primary parts, top-level parameters, global
-variables and deployment groups. These are described in more detail below.
+The blueprint file is composed of 3 primary parts, top-level parameters,
+deployment variables and deployment groups. These are described in more detail
+below.
 
 ### Top Level Parameters
 
 * **blueprint_name** (required): This name can be used to track resources and
   usage across multiple deployments that come from the same blueprint.
 
-### Global Variables
+### Deployment Variables
 
 ```yaml
 vars:
   region: "us-west-1"
   labels:
-    "user-defined-global-label": "slurm-cluster"
+    "user-defined-deployment-label": "slurm-cluster"
   ...
 ```
 
-Global variables are set under the vars field at the top level of the blueprint
-file. These variables can be explicitly referenced in modules as
+Deployment variables are set under the vars field at the top level of the
+blueprint file. These variables can be explicitly referenced in modules as
 [Blueprint Variables](#blueprint-variables). Any module setting (inputs) not
-explicitly provided and matching exactly a global variable name will
+explicitly provided and matching exactly a deployment variable name will
 automatically be set to these values.
 
-Global variables should be used with care. Module default settings with the
-same name as a global variable and not explicitly set will be overwritten by the
-global variable.
+Deployment variables should be used with care. Module default settings with the
+same name as a deployment variable and not explicitly set will be overwritten by
+the deployment variable.
 
-The global “labels” variable is a special case as it will be appended to labels
-found in module settings, whereas normally an explicit module setting would
-be left unchanged. This ensures that global labels can be set alongside module
-specific labels. Precedence is given to the module specific labels if a
-collision occurs. Default module labels will still be overwritten by global
-labels.
+#### Deployment Variable "labels"
+
+The “labels” deployment variable is a special case as it will be appended to
+labels found in module settings, whereas normally an explicit module setting
+would be left unchanged. This ensures that deployment-wide labels can be set
+alongside module specific labels. Precedence is given to the module specific
+labels if a collision occurs. Default module labels will still be overwritten by
+deployment labels.
 
 The HPC Toolkit uses special reserved labels for monitoring each deployment.
-These are set automatically, but can be overridden through global vars or
-module settings. They include:
+These are set automatically, but can be overridden in vars or module settings.
+They include:
 
 * ghpc_blueprint: The name of the blueprint the deployment was created from
 * ghpc_deployment: The name of the specific deployment
-* ghpc_role: The role of a given module, e.g. compute, network, or
-  file-system. By default, it will be taken from the folder immediately
-  containing the module. Example: A module with the source path of
-  `./modules/network/vpc` will have `network` as its `ghpc_role` label by
-  default.
+* ghpc_role: See below
+
+A module role is a default label applied to modules (`ghpc_role`), which
+conveys what role that module plays within a larger HPC environment.
+
+The modules provided with the HPC toolkit have been divided into roles
+matching the names of folders in the [modules/](../modules/) and
+[community/modules](../community/modules/) directories (compute,
+file-system etc.).
+
+When possible, custom modules should use these roles so that they match other
+modules defined by the toolkit. If a custom module does not fit into these
+roles, a new role can be defined.
+
+A module's parent folder will define the module’s role if possible. Therefore,
+regardless of where the module is located, the module directory should be
+explicitly referenced at least 2 layers deep, where the top layer refers to the
+“role” of that module.
+
+If a module is not defined at least 2 layers deep and the `ghpc_role` label has
+not been explicitly set in settings, ghpc_role will default to `undefined`.
+
+Below we show some of the core modules and their roles (as parent folders).
+
+```text
+modules/
+└── <<ROLE>
+    └── <<MODULE_NAME>>
+
+modules/
+├── compute
+│   └── vm-instance
+├── file-system
+│   ├── pre-existing-network-storage
+│   └── filestore
+├── monitoring
+│   └── dashboard
+├── network
+│   ├── pre-existing-vpc
+│   └── vpc
+├── packer
+│   └── custom-image
+└── scripts
+    └── startup-script
+```
 
 ### Deployment Groups
 
@@ -506,8 +587,8 @@ and to the output and structure of other modules.
 
 ### Blueprint Variables
 
-Variables in a blueprint file can refer to global variables or the outputs of
-other modules. For global and module variables, the syntax is as follows:
+Variables in a blueprint file can refer to deployment variables or the outputs
+of other modules. For deployment and module variables, the syntax is as follows:
 
 ```yaml
 vars:
@@ -526,8 +607,8 @@ deployment_groups:
             key2: $(resource1.name)
 ```
 
-The variable is referred to by the source, either vars for global or the
-module ID for module variables, followed by the name of the value being
+The variable is referred to by the source, either vars for deploment variables
+or the module ID for module variables, followed by the name of the value being
 referenced. The entire variable is then wrapped in “$()”.
 
 Currently, references to variable attributes and string operations with
@@ -535,20 +616,15 @@ variables are not supported.
 
 ### Literal Variables
 
-Formally passthrough variables.
-
-Literal variables are not interpreted by `ghpc` directly, but rather for the
+Literal variables are not interpreted by `ghpc` directly, but rather embedded in the
 underlying module. Literal variables should only be used by those familiar
 with the underlying module technology (Terraform or Packer); no validation
 will be done before deployment to ensure that they are referencing
 something that exists.
 
 Literal variables are occasionally needed when referring to the data structure
-of the underlying module. For example, take the
-[hpc-cluster-high-io.yaml](./hpc-cluster-high-io.yaml) example blueprint. The
-DDN-EXAScaler module requires a subnetwork self link, which is not currently an
-output of either network module, therefore it is necessary to refer to the
-primary network self link through terraform itself:
+of the underlying module. For example, to refer to the subnetwork self link from
+a vpc module through terraform itself:
 
 ```yaml
 subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))

@@ -1,32 +1,42 @@
 ## Description
 
-This module creates one or more simple
+This module creates one or more
 [compute VM instances](https://cloud.google.com/compute/docs/instances).
 
 ### Example
 
 ```yaml
-- source: ./modules/compute/vm-instance
+- source: modules/compute/vm-instance
   kind: terraform
   id: compute
+  use: [network1]
   settings:
     instance_count: 8
     name_prefix: compute
-    network_self_link: $(network1.network_self_link)
     machine_type: c2-standard-60
-    network_storage:
-    - $(homefs.network_storage)
 ```
 
-This creates a cluster of 8 compute VMs named `compute-[0-7]` on the network
-defined by the `network1` module. The VMs are of type c2-standard-60 and mount
-the `homefs` file system module.
+This creates a cluster of 8 compute VMs that are:
 
-> **_NOTE:_**: Simultaneous Multithreading (SMT) is deactivated by default
+* named `compute-[0-7]`
+* on the network defined by the `network1` module
+* of type c2-standard-60
+
+> **_NOTE:_** Simultaneous Multithreading (SMT) is deactivated by default
 > (threads_per_core=1), which means only the physical cores are visible on the
 > VM. With SMT disabled, a machine of type c2-standard-60 will only have the 30
 > physical cores visible. To change this, set `threads_per_core=2` under
 > settings.
+
+### SSH key metadata
+
+This module will ignore all changes to the `ssh-keys` metadata field that are
+typically set by [external Google Cloud tools that automate SSH access][gcpssh]
+when not using OS Login. For example, clicking on the Google Cloud Console SSH
+button next to VMs in the VM Instances list will temporarily modify VM metadata
+to include a dynamically-generated SSH public key.
+
+[gcpssh]: https://cloud.google.com/compute/docs/connect/add-ssh-keys#metadata
 
 ### Placement
 
@@ -71,7 +81,7 @@ Use the following settings for spread placement:
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -122,6 +132,7 @@ No modules.
 | <a name="input_disable_public_ips"></a> [disable\_public\_ips](#input\_disable\_public\_ips) | If set to true, instances will not have public IPs | `bool` | `false` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for instances. | `number` | `200` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for instances. | `string` | `"pd-standard"` | no |
+| <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `[]` | no |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of instances | `number` | `1` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Instance Image | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
@@ -138,6 +149,7 @@ No modules.
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script used on the instance | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the VM. | `string` | `null` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Network tags, provided as a list | `list(string)` | `[]` | no |
 | <a name="input_threads_per_core"></a> [threads\_per\_core](#input\_threads\_per\_core) | Sets the number of threads per physical core. By setting threads\_per\_core<br>greater than 1, Simultaneous Multithreading (SMT) is enabled extending the<br>total number of virtual cores. For example, a machine of type c2-standard-60<br>will have 60 virtual cores with threads\_per\_core equal to 2. With<br>threads\_per\_core equal to 1 (SMT turned off), only the 30 physical cores will<br>be available on the VM.<br><br>Disabling SMT can be more performant in many HPC workloads, therefore it is<br>disabled by default. | `number` | `1` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Compute Platform zone | `string` | n/a | yes |
 

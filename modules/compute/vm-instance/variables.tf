@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2022 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -186,6 +186,12 @@ variable "spot" {
   default     = false
 }
 
+variable "tags" {
+  description = "Network tags, provided as a list"
+  type        = list(string)
+  default     = []
+}
+
 variable "threads_per_core" {
   description = <<-EOT
   Sets the number of threads per physical core. By setting threads_per_core
@@ -200,4 +206,14 @@ variable "threads_per_core" {
   EOT
   type        = number
   default     = 1
+}
+
+variable "enable_oslogin" {
+  description = "Enable or Disable OS Login with \"ENABLE\" or \"DISABLE\". Set to \"INHERIT\" to inherit project OS Login setting."
+  type        = string
+  default     = "ENABLE"
+  validation {
+    condition     = var.enable_oslogin == null ? false : contains(["ENABLE", "DISABLE", "INHERIT"], var.enable_oslogin)
+    error_message = "Allowed string values for var.enable_oslogin are \"ENABLE\", \"DISABLE\", or \"INHERIT\"."
+  }
 }

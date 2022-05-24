@@ -1,4 +1,4 @@
-// Copyright 2021 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ func (dc *DeploymentConfig) expand() {
 
 	if err := dc.applyGlobalVariables(); err != nil {
 		log.Fatalf(
-			"failed to apply global variables in modules when expanding the config: %v",
+			"failed to apply deployment variables in modules when expanding the config: %v",
 			err)
 	}
 	dc.expandVariables()
@@ -342,7 +342,7 @@ func updateGlobalVarTypes(vars map[string]interface{}) error {
 	for k, v := range vars {
 		val, err := updateVariableType(v, varContext{}, make(map[string]int))
 		if err != nil {
-			return fmt.Errorf("error setting type for global variable %s: %v", k, err)
+			return fmt.Errorf("error setting type for deployment variable %s: %v", k, err)
 		}
 		vars[k] = val
 	}
@@ -400,7 +400,7 @@ func expandSimpleVariable(
 	if varSource == "vars" { // Global variable
 		// Verify global variable exists
 		if _, ok := context.blueprint.Vars[varValue]; !ok {
-			return "", fmt.Errorf("%s: %s is not a global variable",
+			return "", fmt.Errorf("%s: %s is not a deployment variable",
 				errorMessages["varNotFound"], context.varString)
 		}
 		return fmt.Sprintf("((var.%s))", varValue), nil

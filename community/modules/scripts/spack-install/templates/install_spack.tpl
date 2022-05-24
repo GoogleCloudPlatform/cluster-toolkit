@@ -124,7 +124,7 @@ echo "$PREFIX Populating defined buildcaches"
     # shellcheck disable=SC2046
     spack buildcache create --mirror-url ${c.path} -af $(spack find --format /{hash})
     spack gpg publish --mirror-url ${c.path}
-    spack buildcache update-index -mirror-url ${c.path} --keys
+    spack buildcache update-index --mirror-url ${c.path} --keys
   %{endif ~}
 %{endfor ~}
 

@@ -1,12 +1,15 @@
 ## Description
 
 This module creates a login node for a Slurm cluster based on the
-SchedMD/slurm-gcp [login module](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login).
-The login node is used in conjunction with the [controller](../SchedMD-slurm-on-gcp-controller).
+[Slurm on GCP][slurm-on-gcp] terraform [login module][login-module]. The login
+node is used in conjunction with the
+[Slurm controller](../SchedMD-slurm-on-gcp-controller).
 
-**Warning**: Slurm handles startup scripts differently from virtual machines.
-This will not work in conjuntion with the [startup_script](../../../scripts/startup-script/README.md)
-module.
+> **_Warning:_**: Slurm handles startup scripts differently from virtual
+> machines. This will not work in conjuntion with the
+> [startup_script](../../../scripts/startup-script/README.md) module.
+
+[login-module]: https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login
 
 ### Example
 
@@ -14,18 +17,23 @@ module.
 - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
   kind: terraform
   id: slurm_login
+  use:
+  - network1
+  - homefs
+  - slurm_controller
   settings:
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
-    network_storage:
-    - $(homefs.network_storage)
-    login_network_storage:
-    - $(homefs.network_storage)
-    controller_name: $(slurm_controller.controller_node_name)
+    login_machine_type: n2-standard-4
 ```
 
-This creates a Slurm login node connected to the primary subnet of network1 with
-the homefs filesystem mounted and connecting to `slurm_controller` as the
-slurm controller node. For more context see the
+This creates a Slurm login node which is:
+
+* connected to the primary subnet of network1 via `use`
+* mounted to the homefs filesystem via `use`
+* associated with the `slurm_controller` module as the slurm controller via
+  `use`
+* of VM machine type `n2-standard-4`
+
+For more context see the
 [hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml)
 
 ## Support
@@ -39,7 +47,7 @@ modules. For support with the underlying modules, see the instructions in the
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -70,7 +78,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_cluster_login_node"></a> [slurm\_cluster\_login\_node](#module\_slurm\_cluster\_login\_node) | github.com/SchedMD/slurm-gcp//tf/modules/login/ | v4.1.5 |
+| <a name="module_slurm_cluster_login_node"></a> [slurm\_cluster\_login\_node](#module\_slurm\_cluster\_login\_node) | github.com/SchedMD/slurm-gcp//tf/modules/login/ | v4.1.8 |
 
 ## Resources
 
@@ -89,7 +97,7 @@ limitations under the License.
 | <a name="input_controller_secondary_disk"></a> [controller\_secondary\_disk](#input\_controller\_secondary\_disk) | Create secondary disk mounted to controller node | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment | `string` | n/a | yes |
 | <a name="input_disable_login_public_ips"></a> [disable\_login\_public\_ips](#input\_disable\_login\_public\_ips) | If set to true, create Cloud NAT gateway and enable IAP FW rules | `bool` | `false` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Disk OS image with Slurm preinstalled to use for login node | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "schedmd-slurm-21-08-4-hpc-centos-7",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Disk OS image with Slurm preinstalled to use for login node | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "schedmd-slurm-21-08-8-hpc-centos-7",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to login instances. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_login_instance_template"></a> [login\_instance\_template](#input\_login\_instance\_template) | Instance template to use to create controller instance | `string` | `null` | no |
 | <a name="input_login_machine_type"></a> [login\_machine\_type](#input\_login\_machine\_type) | Machine type to use for login node instances. | `string` | `"n2-standard-2"` | no |

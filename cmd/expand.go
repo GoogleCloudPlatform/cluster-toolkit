@@ -1,4 +1,4 @@
-// Copyright 2021 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ func init() {
 var (
 	outputFilename string
 	expandCmd      = &cobra.Command{
-		Use:   "expand",
+		Use:   "expand BLUEPRINT_NAME",
 		Short: "Expand the Environment Blueprint.",
 		Long:  "Updates the Environment Blueprint in the same way as create, but without writing the deployment.",
 		Run:   runExpandCmd,

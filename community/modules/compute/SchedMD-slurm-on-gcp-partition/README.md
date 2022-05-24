@@ -3,25 +3,29 @@
 This module creates a compute partition that be used as input to
 [SchedMD-slurm-on-gcp-controller](../../scheduler/SchedMD-slurm-on-gcp-controller/README.md).
 
-**Warning**: updating a partition will not cause the slurm controller to update
-its configurations. In other words, it will not update an already deployed Slurm
-cluster.
+> **Warning**: updating a partition will not cause the slurm controller to
+> update its configurations. In other words, it will not update an already
+> deployed Slurm cluster.
 
 ### Example
 
-Create a partition module with a max node count of 200, named "compute",
-connected to a module subnetwork and with homefs mounted.
+The following code snippet creates a partition module with:
+
+* a max node count of 200
+* VM machine type of `c2-standard-30`
+* partition name of "compute"
+* connected to the `network1` module via `use`
+* Mounted to homefs via `use`
 
 ```yaml
 - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
   kind: terraform
   id: compute_partition
+  use: [network1, homefs]
   settings:
     max_node_count: 200
     partition_name: compute
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
-    network_storage:
-    - $(homefs.network_storage)
+    machine_type: c2-standard-30
 ```
 
 ## Support
@@ -68,7 +72,7 @@ No modules.
 | <a name="input_gpu_count"></a> [gpu\_count](#input\_gpu\_count) | Number of GPUs attached to the partition compute instances | `number` | `0` | no |
 | <a name="input_gpu_type"></a> [gpu\_type](#input\_gpu\_type) | Type of GPUs attached to the partition compute instances | `string` | `null` | no |
 | <a name="input_image_hyperthreads"></a> [image\_hyperthreads](#input\_image\_hyperthreads) | Enable hyperthreading | `bool` | `false` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image to be used for the compute VMs in this partition | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "schedmd-slurm-21-08-4-hpc-centos-7",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image to be used for the compute VMs in this partition | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "schedmd-slurm-21-08-8-hpc-centos-7",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Instance template to use to create partition instances | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to partition compute instances. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Compute Platform machine type to use for this partition compute nodes | `string` | `"c2-standard-60"` | no |

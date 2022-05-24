@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2022 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,12 @@ locals {
     ? var.on_host_maintenance
     : local.on_host_maintenance_from_placement
   )
+
+  oslogin_api_values = {
+    "DISABLE" = "FALSE"
+    "ENABLE"  = "TRUE"
+  }
+  enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 }
 
 data "google_compute_image" "compute_image" {
@@ -84,6 +90,7 @@ resource "google_compute_instance" "compute_vm" {
 
   resource_policies = google_compute_resource_policy.placement_policy[*].self_link
 
+  tags   = var.tags
   labels = var.labels
 
   boot_disk {
@@ -127,5 +134,11 @@ resource "google_compute_instance" "compute_vm" {
     threads_per_core = var.threads_per_core
   }
 
-  metadata = merge(local.network_storage, local.startup_script, var.metadata)
+  metadata = merge(local.network_storage, local.startup_script, local.enable_oslogin, var.metadata)
+
+  lifecycle {
+    ignore_changes = [
+      metadata["ssh-keys"],
+    ]
+  }
 }

@@ -5,12 +5,12 @@ for a compute VM and report back if it fails. This can be useful when running
 post-boot installation scripts that require the startup script to finish setting
 up a node.
 
-**Warning**: this module is experimental and not fully supported.
+> **_WARNING:_**: this module is experimental and not fully supported.
 
 ### Additional Dependencies
 
 * [**gcloud**](https://cloud.google.com/sdk/gcloud) must be present in the path
-  of the machine where `terraform apply` is run
+  of the machine where `terraform apply` is run.
 
 ### Example
 
@@ -25,7 +25,7 @@ up a node.
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

@@ -47,7 +47,7 @@ func (s *MySuite) TestValidateVars(c *C) {
 	// Fail: Nil project_id
 	dc.Config.Vars["project_id"] = nil
 	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, "global variable project_id was not set")
+	c.Assert(err, ErrorMatches, "deployment variable project_id was not set")
 
 	// Success: project_id not set
 	delete(dc.Config.Vars, "project_id")

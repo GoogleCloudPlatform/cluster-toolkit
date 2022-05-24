@@ -1,8 +1,11 @@
 ## Description
 
-Creates a monitoring dashboard for the HPC cluster distribution. The module
-includes a default HPC focused dashboard with the ability to add custom widgets
-as well as the option to add an empty dashboard and add widgets as needed.
+Creates a [monitoring dashboard][gcp-dash] for the HPC cluster deployment. The
+module includes a default HPC-focused dashboard with the ability to add custom
+widgets as well as the option to add an empty dashboard and add widgets as
+needed.
+
+[gcp-dash]: https://cloud.google.com/monitoring/charts/predefined-dashboards
 
 ## Example
 
@@ -28,7 +31,7 @@ extra text widget added as a multi-line string representing a JSON block.
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
