@@ -36,6 +36,9 @@ const (
 
 // validate is the top-level function for running the validation suite.
 func (dc DeploymentConfig) validate() {
+	// Drop the flags for log to improve readability only for running the validation suite
+	log.SetFlags(0)
+
 	if err := dc.validateVars(); err != nil {
 		log.Fatal(err)
 	}
@@ -51,6 +54,9 @@ func (dc DeploymentConfig) validate() {
 	if err := dc.validateModuleSettings(); err != nil {
 		log.Fatal(err)
 	}
+
+	// Set it back to the initial value
+	log.SetFlags(log.LstdFlags)
 }
 
 // performs validation of global variables
@@ -77,7 +83,10 @@ func (dc DeploymentConfig) executeValidators() error {
 				}
 				log.Print(prefix, err)
 				log.Println()
-				break
+
+				if validator.Validator == testProjectExistsName.String() {
+					break
+				}
 			}
 		} else {
 			errored = true
