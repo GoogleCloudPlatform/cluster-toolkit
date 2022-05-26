@@ -22,7 +22,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:SchedMD-slurm-on-gcp-controller/v0.7.3"
+    module_name = "blueprints/terraform/hpc-toolkit:SchedMD-slurm-on-gcp-controller/v1.0.0"
   }
 
   required_version = ">= 0.14.0"
