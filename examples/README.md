@@ -419,6 +419,9 @@ a Shared VPC service project][fs-shared-vpc].
 
 ## Blueprint Schema
 
+Similar documentation can be found on
+[Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint).
+
 A user defined blueprint should follow the following schema:
 
 ```yaml
