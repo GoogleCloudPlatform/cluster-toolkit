@@ -7,9 +7,9 @@ Find the quickstart tutorial on
 
 ## Simple Cluster Tutorial
 
-Deploy a simple HPC cluster using the HPC Toolkit in
-[cloud shell](https://cloud.google.com/shell) and the
-[hpc-cluster-small.yaml example](../../examples/hpc-cluster-small.yaml).
+Deploy a simple HPC cluster with the HPC Toolkit in
+[cloud shell](https://cloud.google.com/shell) using the
+[hpc-cluster-small.yaml](../../examples/hpc-cluster-small.yaml) example.
 
 It is recommended to use the [Quickstart Tutorial](#quickstart-tutorial), which
 covers similar material as the Simple Cluster Tutorial and will be replacing

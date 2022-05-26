@@ -15,63 +15,32 @@ More information can be found on the
 
 ## Quickstart
 
-Get started with the HPC Toolkit by running through the
-[quickstart tutorial](https://cloud.google.com/hpc-toolkit/docs/quickstarts/slurm-cluster).
+Running through the
+[quickstart tutorial](https://cloud.google.com/hpc-toolkit/docs/quickstarts/slurm-cluster)
+is the recommended path to get started with the HPC Toolkit.
 
 Find a full list of tutorials [here](docs/tutorials/README.md).
 
-## HPC Toolkit Components
+---
 
-The HPC Toolkit has been designed to simplify the process of deploying an HPC
-cluster on Google Cloud. The block diagram below describes the individual
-components of the HPC toolkit.
+If a self directed path is preferred, you can use the following commands to
+build the `ghpc` binary:
 
-```mermaid
-graph LR
-    subgraph HPC Environment Configuration
-    A(1. Provided Blueprint Examples) --> B(2. HPC Blueprint)
-    end
-    B --> D
-    subgraph Creating an HPC Deployment
-    C(3. Modules, eg. Terraform, Scripts) --> D(4. ghpc Engine)
-    D --> E(5. Deployment Directory)
-    end
-    subgraph Google Cloud
-    E --> F(6. HPC environment on GCP)
-    end
+```shell
+git clone git@github.com:GoogleCloudPlatform/hpc-toolkit.git
+cd hpc-toolkit
+make
+./ghpc --version
+./ghpc --help
 ```
 
-1. **Provided Blueprint Examples** – A set of vetted reference blueprints can be
-   found in the ./examples and ./community/examples directories. These can be
-   used to create a predefined deployment for a cluster or as a starting point
-   for creating a custom deployment.
-2. **HPC Blueprint** – The primary interface to the HPC Toolkit is an HPC
-   Blueprint file. This is a YAML file that defines which modules to use and how
-   to customize them.
-3. **HPC Modules** – The building blocks of a deployment directory are the
-   modules. Modules can be found in the ./modules and community/modules
-   directories. They are composed of terraform, packer and/or script files that
-   meet the expectations of the gHPC engine.
-4. **gHPC Engine** – The gHPC engine converts the blueprint file into a
-   self-contained deployment directory.
-5. **Deployment Directory** – A self-contained directory that can be used to
-   deploy a cluster onto Google Cloud. This is the output of the gHPC engine.
-6. **HPC environment on GCP** – After deployment, an HPC environment will be
-   available in Google Cloud.
+> **_NOTE:_** You may need to [install dependencies](#dependencies) first.
 
-Users can configure a set of modules, and using the gHPC Engine of the HPC
-Toolkit, they can produce a deployment directory with instructions for
-deploying. Terraform is the primary method for defining the modules behind the
-HPC cluster, but other modules based on tools like ansible and Packer are
-available.
+## HPC Toolkit Components
 
-The HPC Toolkit can provide extra flexibility to configure a cluster to the
-specifications of a customer by making the deployment directory available and
-editable before deploying. Any HPC customer seeking a quick on-ramp to building
-out their infrastructure on GCP can benefit from this.
-
-You can find more documentation on
-[Google Cloud Docs Product Overview](https://cloud.google.com/hpc-toolkit/docs/overview).
+Learn about the components that make up the HPC Toolkit and more on how it works
+on the
+[Google Cloud Docs Product Overview](https://cloud.google.com/hpc-toolkit/docs/overview#components).
 
 ## GCP Credentials
 
