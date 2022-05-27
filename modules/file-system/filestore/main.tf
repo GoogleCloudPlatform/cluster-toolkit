@@ -49,8 +49,9 @@ resource "google_filestore_instance" "filestore_instance" {
   labels = var.labels
 
   networks {
-    network = var.network_name
-    modes   = ["MODE_IPV4"]
+    network      = var.network_name
+    connect_mode = var.connect_mode
+    modes        = ["MODE_IPV4"]
   }
 
   dynamic "timeouts" {

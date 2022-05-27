@@ -27,10 +27,10 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v0.7.3"
+    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.0.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v0.7.3"
+    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.0.0"
   }
 
   required_version = ">= 0.14.0"
