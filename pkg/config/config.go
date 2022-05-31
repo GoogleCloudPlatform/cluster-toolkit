@@ -28,7 +28,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
@@ -233,14 +233,17 @@ func deprecatedSchema070a() {
 
 // ImportBlueprint imports the blueprint configuration provided.
 func importBlueprint(blueprintFilename string) Blueprint {
-	blueprintText, err := ioutil.ReadFile(blueprintFilename)
+	reader, err := os.Open(blueprintFilename)
 	if err != nil {
 		log.Fatalf("%s, filename=%s: %v",
 			errorMessages["fileLoadError"], blueprintFilename, err)
 	}
 
+	decoder := yaml.NewDecoder(reader)
+	decoder.KnownFields(true)
+
 	var blueprint Blueprint
-	err = yaml.UnmarshalStrict(blueprintText, &blueprint)
+	err = decoder.Decode(&blueprint)
 
 	if err != nil {
 		deprecatedSchema070a()

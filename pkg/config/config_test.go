@@ -328,7 +328,7 @@ func (s *MySuite) TestImportBlueprint(c *C) {
 	c.Assert(obtainedBlueprint.BlueprintName,
 		Equals, expectedSimpleBlueprint.BlueprintName)
 	c.Assert(
-		len(obtainedBlueprint.Vars["labels"].(map[interface{}]interface{})),
+		len(obtainedBlueprint.Vars["labels"].(map[string]interface{})),
 		Equals,
 		len(expectedSimpleBlueprint.Vars["labels"].(map[string]interface{})),
 	)
