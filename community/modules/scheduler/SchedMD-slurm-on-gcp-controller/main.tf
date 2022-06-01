@@ -13,6 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
+locals {
+  controller_startup_script = var.controller_startup_script != null ? var.controller_startup_script : var.startup_script
+  compute_startup_script    = var.compute_startup_script != null ? var.compute_startup_script : var.startup_script
+}
 
 data "google_compute_image" "compute_image" {
   family  = var.instance_image.family
@@ -38,8 +42,8 @@ module "slurm_cluster_controller" {
   jwt_key                       = var.jwt_key
   network_storage               = var.network_storage
   partitions                    = var.partition
-  controller_startup_script     = var.controller_startup_script
-  compute_startup_script        = var.compute_startup_script
+  controller_startup_script     = local.controller_startup_script
+  compute_startup_script        = local.compute_startup_script
   project                       = var.project_id
   region                        = var.region
   secondary_disk                = var.controller_secondary_disk

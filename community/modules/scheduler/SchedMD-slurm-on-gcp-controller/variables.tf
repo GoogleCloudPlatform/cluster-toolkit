@@ -182,6 +182,16 @@ variable "compute_startup_script" {
   default     = null
 }
 
+variable "startup_script" {
+  description = <<EOT
+  Custom startup script to run on compute nodes and controller. 
+  `controller_startup_script` for the controller and `compute_startup_script` for compute nodes take presidence if specified.
+  This variable allows Slurm to [use](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules#use-optional) the [startup_script](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script) module.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "project_id" {
   description = "Compute Platform project that will host the Slurm cluster"
   type        = string
