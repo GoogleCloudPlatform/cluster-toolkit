@@ -16,6 +16,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -271,10 +272,17 @@ func importBlueprint(blueprintFilename string) Blueprint {
 
 // ExportBlueprint exports the internal representation of a blueprint config
 func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error) {
-	d, err := yaml.Marshal(&dc.Config)
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+
+	err := encoder.Encode(&dc.Config)
+	encoder.Close()
+	d := buf.Bytes()
 	if err != nil {
 		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
+
 	if outputFilename == "" {
 		return d, nil
 	}
