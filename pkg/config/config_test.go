@@ -319,12 +319,12 @@ func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
 	dc.ExportBlueprint(outFile)
-	newDC := NewDeploymentConfig(outFile)
+	newDC, _ := NewDeploymentConfig(outFile)
 	c.Assert(dc.Config, DeepEquals, newDC.Config)
 }
 
 func (s *MySuite) TestImportBlueprint(c *C) {
-	obtainedBlueprint := importBlueprint(simpleYamlFilename)
+	obtainedBlueprint, _ := importBlueprint(simpleYamlFilename)
 	c.Assert(obtainedBlueprint.BlueprintName,
 		Equals, expectedSimpleBlueprint.BlueprintName)
 	c.Assert(

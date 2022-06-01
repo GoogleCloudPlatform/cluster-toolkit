@@ -215,11 +215,17 @@ func (dc *DeploymentConfig) ExpandConfig() {
 }
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
-func NewDeploymentConfig(configFilename string) DeploymentConfig {
-	newDeploymentConfig := DeploymentConfig{
-		Config: importBlueprint(configFilename),
+func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
+	var newDeploymentConfig DeploymentConfig
+	blueprint, err := importBlueprint(configFilename)
+	if err != nil {
+		return newDeploymentConfig, err
 	}
-	return newDeploymentConfig
+
+	newDeploymentConfig = DeploymentConfig{
+		Config: blueprint,
+	}
+	return newDeploymentConfig, nil
 }
 
 func deprecatedSchema070a() {
@@ -233,22 +239,23 @@ func deprecatedSchema070a() {
 }
 
 // ImportBlueprint imports the blueprint configuration provided.
-func importBlueprint(blueprintFilename string) Blueprint {
+func importBlueprint(blueprintFilename string) (Blueprint, error) {
+	var blueprint Blueprint
+
 	reader, err := os.Open(blueprintFilename)
 	if err != nil {
-		log.Fatalf("%s, filename=%s: %v",
+		return blueprint, fmt.Errorf("%s, filename=%s: %v",
 			errorMessages["fileLoadError"], blueprintFilename, err)
 	}
 
 	decoder := yaml.NewDecoder(reader)
 	decoder.KnownFields(true)
 
-	var blueprint Blueprint
 	err = decoder.Decode(&blueprint)
 
 	if err != nil {
 		deprecatedSchema070a()
-		log.Fatalf("%s filename=%s: %v",
+		return blueprint, fmt.Errorf("%s filename=%s: %v",
 			errorMessages["yamlUnmarshalError"], blueprintFilename, err)
 	}
 
@@ -267,7 +274,7 @@ func importBlueprint(blueprintFilename string) Blueprint {
 		blueprint.ValidationLevel = validationError
 	}
 
-	return blueprint
+	return blueprint, nil
 }
 
 // ExportBlueprint exports the internal representation of a blueprint config
