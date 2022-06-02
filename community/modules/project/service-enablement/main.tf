@@ -24,5 +24,5 @@ resource "google_project_service" "gcp_services" {
   }
 
   disable_dependent_services = true
-  disable_on_destroy         = true
+  disable_on_destroy         = var.disable_on_destroy
 }

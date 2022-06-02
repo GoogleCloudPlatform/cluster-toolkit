@@ -23,3 +23,9 @@ variable "gcp_service_list" {
   description = "list of APIs to be enabled for the project"
   type        = list(string)
 }
+
+variable "disable_on_destroy" {
+  description = "Disable services on destroy if they were enabled (or already enabled) during apply (default: false)"
+  type        = bool
+  default     = false
+}
