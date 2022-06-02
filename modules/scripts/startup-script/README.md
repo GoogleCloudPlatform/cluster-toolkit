@@ -53,8 +53,6 @@ Each runner receives the following attributes:
   Therefore`args` should not include any arguments that alter this behavior,
   such as `--connection`, `--inventory`, or `--limit`.
 
-  > **_NOTE:_** `args` will only be applied to runners of `type` `shell`.
-
 ### Staging the runners
 
 Runners will be uploaded to a
