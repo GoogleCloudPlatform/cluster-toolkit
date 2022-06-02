@@ -13,6 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+locals {
+  login_startup_script = var.login_startup_script != null ? var.login_startup_script : var.startup_script
+}
 
 data "google_compute_image" "compute_image" {
   family  = var.instance_image.family
@@ -46,5 +49,5 @@ module "slurm_cluster_login_node" {
   subnet_depend             = var.subnet_depend
   subnetwork_name           = var.subnetwork_name
   zone                      = var.zone
-  login_startup_script      = var.login_startup_script
+  login_startup_script      = local.login_startup_script
 }

@@ -117,6 +117,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Compute Platform project that will host the Slurm cluster | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Compute Platform region where the Slurm cluster will be located | `string` | n/a | yes |
 | <a name="input_shared_vpc_host_project"></a> [shared\_vpc\_host\_project](#input\_shared\_vpc\_host\_project) | Host project of shared VPC | `string` | `null` | no |
+| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Custom startup script to run on compute nodes and controller. <br>  `controller_startup_script` for the controller and `compute_startup_script` for compute nodes take presidence if specified.<br>  This variable allows Slurm to [use](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules#use-optional) the [startup\_script](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script) module. | `string` | `null` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the pre-defined VPC subnet you want the nodes to attach to based on Region. | `string` | `null` | no |
 | <a name="input_suspend_time"></a> [suspend\_time](#input\_suspend\_time) | Idle time (in sec) to wait before nodes go away | `number` | `300` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Compute Platform zone where the servers will be located | `string` | n/a | yes |

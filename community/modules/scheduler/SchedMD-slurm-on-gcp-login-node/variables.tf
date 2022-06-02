@@ -156,3 +156,13 @@ variable "login_startup_script" {
   type        = string
   default     = null
 }
+
+variable "startup_script" {
+  description = <<EOT
+  Custom startup script to run on the login node. 
+  Will be ignored if `login_startup_script` is specified.
+  This variable allows Slurm to [use](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules#use-optional) the [startup_script](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script) module.
+  EOT
+  type        = string
+  default     = null
+}
