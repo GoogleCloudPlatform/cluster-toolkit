@@ -46,9 +46,12 @@ Each runner receives the following attributes:
   [example blueprint snippet](#example). To reference any other source file, an
   absolute path must be used.
 
-- `args`: (Optional) Arguments to be passed to shell scripts.
-
-  > **_NOTE:_** `args` will only be applied to runners of `type` `shell`.
+- `args`: (Optional) Arguments to be passed to `shell` or `ansible-local`
+  runners. For `shell` runners, these will be passed as arguments to the script
+  when it is executed. For `ansible-local` runners, they will be appended to
+  a list of default arguments that invoke `ansible-playbook` on the localhost.
+  Therefore`args` should not include any arguments that alter this behavior,
+  such as `--connection`, `--inventory`, or `--limit`.
 
 ### Staging the runners
 
