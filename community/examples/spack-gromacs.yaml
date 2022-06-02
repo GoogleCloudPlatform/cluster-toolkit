@@ -120,5 +120,4 @@ deployment_groups:
     - homefs
     - appsfs
     - slurm_controller
-    settings:
-      login_startup_script: $(spack-startup.startup_script)
+    - spack-startup
