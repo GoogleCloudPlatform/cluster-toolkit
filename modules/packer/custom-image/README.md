@@ -145,6 +145,40 @@ In a blueprint, the equivalent syntax is:
 
 [pkrvars]: https://www.packer.io/guides/hcl/variables#from-a-file
 
+## Monitoring startup script execution
+
+When using startup script customization, Packer will print very limited output
+to the console. For example:
+
+```text
+==> example.googlecompute.toolkit_image: Waiting for any running startup script to finish...
+==> example.googlecompute.toolkit_image: Startup script not finished yet. Waiting...
+==> example.googlecompute.toolkit_image: Startup script not finished yet. Waiting...
+==> example.googlecompute.toolkit_image: Startup script, if any, has finished running.
+```
+
+Using the default value for [var.scopes][#input_scopes], the output of startup
+script execution will be stored in Cloud Logging. It can be examined using the
+[Cloud Logging Console][logging-console] or with a [gcloud logging
+read][logging-read-docs] command (substituting `<<PROJECT_ID>>` with your
+project ID):
+
+```shell
+$ gcloud logging --project <<PROJECT_ID>> read \
+    'logName="projects/<<PROJECT_ID>>/logs/GCEMetadataScripts" AND jsonPayload.message=~"^startup-script: "' \
+    --format="table[box](timestamp, resource.labels.instance_id, jsonPayload.message)" --freshness 2h
+```
+
+Note that this command will print **all** startup script entries within the
+project within the "freshness" window **in reverse order**. You may need to
+identify the instance ID of the Packer VM and filter further by that value using
+`gcloud` or `grep`. To print the entries in the order they would have appeared on
+your console, we recommend piping the output of this command to the standard
+Linux utility `tac`.
+
+[logging-console]: https://console.cloud.google.com/logs/
+[logging-read-docs]: https://cloud.google.com/sdk/gcloud/reference/logging/read
+
 ## Example
 
 The [included blueprint](../../../examples/image-builder.yaml) demonstrates a
@@ -198,12 +232,13 @@ No resources.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | The family name of the image to be built. Image name will also be derived from this value. Defaults to `deployment_name` | `string` | `null` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the short-lived VM | `map(string)` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2-standard-4"` | no |
 | <a name="input_network_project_id"></a> [network\_project\_id](#input\_network\_project\_id) | Project ID of Shared VPC network | `string` | `null` | no |
 | <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `true` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which to create VM and image | `string` | n/a | yes |
+| <a name="input_scopes"></a> [scopes](#input\_scopes) | Service account scopes to attach to the instance. See<br>https://cloud.google.com/compute/docs/access/service-accounts. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/userinfo.email",<br>  "https://www.googleapis.com/auth/compute",<br>  "https://www.googleapis.com/auth/devstorage.full_control",<br>  "https://www.googleapis.com/auth/logging.write"<br>]</pre> | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The service account email to use. If null or 'default', then the default Compute Engine service account will be used. | `string` | `null` | no |
-| <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Service account scopes to attach to the instance. See<br>https://cloud.google.com/compute/docs/access/service-accounts. | `list(string)` | `null` | no |
 | <a name="input_shell_scripts"></a> [shell\_scripts](#input\_shell\_scripts) | A list of paths to local shell scripts which will be uploaded to customize the VM image | `list(string)` | `[]` | no |
 | <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Source OS image to build from | `string` | `null` | no |
 | <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternative to source\_image. Specify image family to build from latest image in family | `string` | `"hpc-centos-7"` | no |
