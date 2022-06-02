@@ -55,7 +55,7 @@ variable "configs" {
   description = <<EOT
     List of configuration options to set within spack.
     Configs can be of type 'single-config' or 'file'.
-    All configs must specify a value, and a
+    All configs must specify content, and a
     a scope.
 EOT
   default     = []
@@ -74,9 +74,9 @@ EOT
   }
   validation {
     condition = alltrue([
-      for c in var.configs : contains(keys(c), "value")
+      for c in var.configs : contains(keys(c), "content")
     ])
-    error_message = "All configs must declare a value."
+    error_message = "All configs must declare a content."
   }
   validation {
     condition = alltrue([
@@ -189,7 +189,15 @@ EOT
 }
 
 variable "environments" {
-  description = "Defines a spack environment to configure."
+  description = <<EOT
+  Defines spack environments to configure, given as a list.
+  Each environment must define a name, and type.
+  Valid types for environments are 'file', and 'packages'.
+  Environments of type 'packages' must define a list named packages, containing
+  all of the packages to install in that environment.
+  Environments of type 'file' must define a string named 'content' containing the
+  contents of a spack.yaml file to create the environment from.
+EOT
   default     = []
   type        = list(map(any))
   validation {
@@ -212,9 +220,9 @@ variable "environments" {
   }
   validation {
     condition = alltrue([
-      for e in var.environments : (e["type"] == "packages" || (e["type"] == "file" && contains(keys(e), "value")))
+      for e in var.environments : (e["type"] == "packages" || (e["type"] == "file" && contains(keys(e), "content")))
     ])
-    error_message = "Environments of type 'file' require a 'value' string."
+    error_message = "Environments of type 'file' require a 'content' string."
   }
 }
 

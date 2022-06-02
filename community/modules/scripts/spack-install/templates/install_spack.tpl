@@ -32,13 +32,13 @@ if [ ! -d ${INSTALL_DIR} ]; then
   echo "$PREFIX Configuring spack..."
   %{for c in CONFIGS ~}
     %{if c.type == "single-config" ~}
-      spack config --scope=${c.scope} add "${c.value}" >> ${LOG_FILE} 2>&1
+      spack config --scope=${c.scope} add "${c.content}" >> ${LOG_FILE} 2>&1
     %{endif ~}
 
     %{if c.type == "file" ~}
       {
       cat << 'EOF' > ${INSTALL_DIR}/spack_conf.yaml
-${c.value}
+${c.content}
 EOF
 
       spack config --scope=${c.scope} add -f ${INSTALL_DIR}/spack_conf.yaml
@@ -96,7 +96,7 @@ echo "$PREFIX Configuring spack environments"
   %{if e.type == "file" ~}
     {
       cat << 'EOF' > ${INSTALL_DIR}/spack_env.yaml
-${e.value}
+${e.content}
 EOF
       spack env create ${e.name} ${INSTALL_DIR}/spack_env.yaml
       rm -f ${INSTALL_DIR}/spack_env.yaml
