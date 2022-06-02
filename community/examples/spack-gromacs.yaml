@@ -56,10 +56,10 @@ deployment_groups:
       configs:
       - type: single-config
         scope: defaults
-        value: "config:build_stage:/sw/spack/spack-stage"
+        content: "config:build_stage:/sw/spack/spack-stage"
       - type: file
         scope: defaults
-        value: |
+        content: |
           modules:
             default:
               tcl:
