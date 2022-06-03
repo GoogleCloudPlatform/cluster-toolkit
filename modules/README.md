@@ -120,6 +120,9 @@ Modules that are still in development and less stable are labeled with the
 
 * **[startup-script]** ![core-badge] : Creates a customizable startup script
   that can be fed into compute VMs.
+* **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
+  a Toolkit runner to install HTCondor and a list of required APIs for use with
+  [service-enablement].
 * **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
   via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of compute
   VMs.
@@ -130,6 +133,7 @@ Modules that are still in development and less stable are labeled with the
   successful completion of a startup script on a compute VM.
 
 [startup-script]: scripts/startup-script/README.md
+[htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
 [spack-install]: ../community/modules/scripts/spack-install/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
