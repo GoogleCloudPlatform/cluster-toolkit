@@ -21,6 +21,7 @@ vars:
   deployment_name: spack-gromacs
   region: us-central1
   zone: us-central1-c
+  spack_cache_mirror_url: ## Set Spack Buildcache URL here ##
 
 deployment_groups:
 - group: primary
@@ -90,7 +91,7 @@ deployment_groups:
               - - $^mpis
       spack_cache_url:
       - mirror_name: gcs_cache
-        mirror_url: ##  Add GCS bucket to use here ##
+        mirror_url: $(vars.spack_cache_mirror_url)
 
   - source: modules/scripts/startup-script
     kind: terraform
