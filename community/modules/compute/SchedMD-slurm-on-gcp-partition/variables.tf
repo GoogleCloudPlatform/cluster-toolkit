@@ -142,6 +142,25 @@ variable "regional_policy" {
   default     = {}
 }
 
+variable "bandwidth_tier" {
+  description = <<EOT
+  Tier 1 bandwidth increases the maximum egress bandwidth for VMs.
+  Setting `platform_default` respects the Google Cloud Platform API default values for networking.
+  Setting `virtio_enabled` explicitly selects the VirtioNet network adapter.
+  Setting `gvnic_enabled` selects the gVNIC network adapter (without Tier 1 high bandwidth).
+  Setting `tier_1_enabled` selects both the gVNIC adapter and Tier 1 high bandwidth networking.
+  Note that Tier 1 only works with specific machine families & shapes and must be using an image that supports gVNIC. See [official docs](
+https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details.
+  EOT
+  type        = string
+  default     = "platform_default"
+
+  validation {
+    condition     = contains(["platform_default", "virtio_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
+    error_message = "Allowed values for bandwidth_tier are 'platform_default', 'virtio_enabled', 'gvnic_enabled', or 'tier_1_enabled'."
+  }
+}
+
 variable "instance_template" {
   description = "Instance template to use to create partition instances"
   type        = string
