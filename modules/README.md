@@ -111,7 +111,11 @@ Modules that are still in development and less stable are labeled with the
   controller node using [slurm-gcp].
 * **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
   login node using [slurm-gcp].
+* **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
+  Toolkit runners and service accounts to configure an HTCondor Central Manager
+  and Access Point.
 
+[htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
 [schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5
