@@ -27,7 +27,7 @@ If a self directed path is preferred, you can use the following commands to
 build the `ghpc` binary:
 
 ```shell
-git clone git@github.com:GoogleCloudPlatform/hpc-toolkit.git
+git clone git@github.com/GoogleCloudPlatform/hpc-toolkit.git
 cd hpc-toolkit
 make
 ./ghpc --version
