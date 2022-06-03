@@ -16,6 +16,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -28,7 +29,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
@@ -214,11 +215,17 @@ func (dc *DeploymentConfig) ExpandConfig() {
 }
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
-func NewDeploymentConfig(configFilename string) DeploymentConfig {
-	newDeploymentConfig := DeploymentConfig{
-		Config: importBlueprint(configFilename),
+func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
+	var newDeploymentConfig DeploymentConfig
+	blueprint, err := importBlueprint(configFilename)
+	if err != nil {
+		return newDeploymentConfig, err
 	}
-	return newDeploymentConfig
+
+	newDeploymentConfig = DeploymentConfig{
+		Config: blueprint,
+	}
+	return newDeploymentConfig, nil
 }
 
 func deprecatedSchema070a() {
@@ -232,19 +239,23 @@ func deprecatedSchema070a() {
 }
 
 // ImportBlueprint imports the blueprint configuration provided.
-func importBlueprint(blueprintFilename string) Blueprint {
-	blueprintText, err := ioutil.ReadFile(blueprintFilename)
+func importBlueprint(blueprintFilename string) (Blueprint, error) {
+	var blueprint Blueprint
+
+	reader, err := os.Open(blueprintFilename)
 	if err != nil {
-		log.Fatalf("%s, filename=%s: %v",
+		return blueprint, fmt.Errorf("%s, filename=%s: %v",
 			errorMessages["fileLoadError"], blueprintFilename, err)
 	}
 
-	var blueprint Blueprint
-	err = yaml.UnmarshalStrict(blueprintText, &blueprint)
+	decoder := yaml.NewDecoder(reader)
+	decoder.KnownFields(true)
+
+	err = decoder.Decode(&blueprint)
 
 	if err != nil {
 		deprecatedSchema070a()
-		log.Fatalf("%s filename=%s: %v",
+		return blueprint, fmt.Errorf("%s filename=%s: %v",
 			errorMessages["yamlUnmarshalError"], blueprintFilename, err)
 	}
 
@@ -263,15 +274,22 @@ func importBlueprint(blueprintFilename string) Blueprint {
 		blueprint.ValidationLevel = validationError
 	}
 
-	return blueprint
+	return blueprint, nil
 }
 
 // ExportBlueprint exports the internal representation of a blueprint config
 func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error) {
-	d, err := yaml.Marshal(&dc.Config)
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+
+	err := encoder.Encode(&dc.Config)
+	encoder.Close()
+	d := buf.Bytes()
 	if err != nil {
 		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
+
 	if outputFilename == "" {
 		return d, nil
 	}
