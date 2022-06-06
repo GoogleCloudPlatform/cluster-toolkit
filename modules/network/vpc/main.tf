@@ -66,6 +66,7 @@ module "vpc" {
   auto_create_subnetworks                = false
   subnets                                = local.all_subnets
   routing_mode                           = var.network_routing_mode
+  mtu                                    = var.mtu
   description                            = var.network_description
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
