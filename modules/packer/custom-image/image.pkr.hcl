@@ -33,6 +33,7 @@ source "googlecompute" "toolkit_image" {
   use_internal_ip         = var.omit_external_ip
   subnetwork              = var.subnetwork_name
   network_project_id      = var.network_project_id
+  scopes                  = var.scopes
   source_image            = var.source_image
   source_image_family     = var.source_image_family
   source_image_project_id = var.source_image_project_id
@@ -41,6 +42,7 @@ source "googlecompute" "toolkit_image" {
   use_iap                 = local.use_iap
   use_os_login            = var.use_os_login
   zone                    = var.zone
+  labels                  = var.labels
   metadata                = local.metadata
   startup_script_file     = var.startup_script_file
   wrap_startup_script     = var.wrap_startup_script

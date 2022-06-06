@@ -98,13 +98,18 @@ variable "service_account_email" {
   default     = null
 }
 
-variable "service_account_scopes" {
+variable "scopes" {
   description = <<EOD
 Service account scopes to attach to the instance. See
 https://cloud.google.com/compute/docs/access/service-accounts.
 EOD
   type        = list(string)
-  default     = null
+  default = [
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/compute",
+    "https://www.googleapis.com/auth/devstorage.full_control",
+    "https://www.googleapis.com/auth/logging.write",
+  ]
 }
 
 variable "use_iap" {
@@ -157,4 +162,10 @@ variable "wrap_startup_script" {
   description = "Wrap startup script with Packer-generated wrapper"
   type        = bool
   default     = true
+}
+
+variable "labels" {
+  description = "Labels to apply to the short-lived VM"
+  type        = map(string)
+  default     = null
 }
