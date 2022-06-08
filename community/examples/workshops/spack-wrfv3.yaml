@@ -114,7 +114,7 @@ deployment_groups:
           mkdir -p /apps/wrfv3
           chmod a+rwx /apps/wrfv3
           cd /apps/wrfv3
-          wget http://www2.mmm.ucar.edu/wrf/bench/conus12km_v3911/bench_12km.tar.bz2
+          wget --no-verbose http://www2.mmm.ucar.edu/wrf/bench/conus12km_v3911/bench_12km.tar.bz2
           tar xjf bench_12km.tar.bz2
       - type: data
         destination: /apps/wrfv3/submit_wrfv3.sh
