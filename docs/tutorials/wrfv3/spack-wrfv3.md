@@ -74,6 +74,7 @@ which should be open in the Cloud Shell Editor (on the left).
 This file describes the cluster you will deploy. It defines:
 
 * the existing default network from your project
+* a monitoring dashboard with metrics on your cluster
 * a definition of a custom Spack installation
 * a startup script that
   * installs ansible
@@ -245,6 +246,16 @@ running the following command on the login node:
 
 ```bash
 cat rsl.out.0000
+```
+
+## View the cluster monitoring dashboard
+
+To view the monitoring dashboard containing metrics on your cluster, open the
+following URL in a new tab and click on the dashboard named
+`HPC Toolkit Dashboard: spack-wrfv3`.
+
+```text
+https://console.cloud.google.com/monitoring/dashboards?project=<walkthrough-project-id/>
 ```
 
 ## Destroy the Cluster
