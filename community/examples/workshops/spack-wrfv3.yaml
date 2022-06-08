@@ -30,6 +30,10 @@ deployment_groups:
     kind: terraform
     id: network1
 
+  - source: modules/monitoring/dashboard
+    kind: terraform
+    id: hpc_dash
+
   ## Install Scripts
   - source: community/modules/scripts/spack-install
     kind: terraform
