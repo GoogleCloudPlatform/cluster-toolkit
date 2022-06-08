@@ -241,7 +241,7 @@ about 5 minutes to run.
 Several files will have been generated in the `test_run/` folder you created.
 
 The `md.log` and `slurm-1.out` files have information on the run such as
-performance. You can view these files by running the following command on the
+performance. You can view these files by running the following commandsq on the
 login node:
 
 ```bash

@@ -240,18 +240,11 @@ about 5 minutes to run.
 
 Several files will have been generated in the `test_run/` folder you created.
 
-TODO: Needs openfoam specific update
-
-The `md.log` and `slurm-1.out` files have information on the run such as
-performance. You can view these files by running the following command on the
-login node:
+The `slurm-1.out` file has information on the run such as performance. You can
+view this file by running the following command on the login node:
 
 ```bash
 cat slurm-*.out
-```
-
-```bash
-cat md.log
 ```
 
 ## Destroy the Cluster
