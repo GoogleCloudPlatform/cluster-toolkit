@@ -114,7 +114,7 @@ deployment_groups:
           mkdir -p /apps/gromacs
           chmod a+rwx /apps/gromacs
           cd /apps/gromacs
-          wget https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz
+          wget --no-verbose https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz
           tar xzf water_GMX50_bare.tar.gz
 
       - type: data
