@@ -240,18 +240,11 @@ about 5 minutes to run.
 
 Several files will have been generated in the `test_run/` folder you created.
 
-TODO: Needs wrfv3 specific update
-
-The `md.log` and `slurm-1.out` files have information on the run such as
-performance. You can view these files by running the following command on the
-login node:
+The `rsl.out.0000` file has information on the run. You can view this file by
+running the following command on the login node:
 
 ```bash
-cat slurm-*.out
-```
-
-```bash
-cat md.log
+cat rsl.out.0000
 ```
 
 ## Destroy the Cluster
