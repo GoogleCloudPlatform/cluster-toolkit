@@ -19,21 +19,17 @@
     block_metadata_server: true
   become: true
   tasks:
-  - name: Upgrade all packages
-    yum:
-      name: '*'
-      state: latest
   - name: setup HTCondor yum repository
-    yum:
+    ansible.builtin.yum:
       name:
       - epel-release
       - https://research.cs.wisc.edu/htcondor/repo/9.x/htcondor-release-current.el7.noarch.rpm
   - name: install HTCondor
-    yum:
+    ansible.builtin.yum:
       name: condor
       state: latest
   - name: ensure token directory
-    file:
+    ansible.builtin.file:
       path: /etc/condor/tokens.d
       mode: 0700
       owner: root
@@ -45,10 +41,11 @@
       enabled: false
       state: stopped
   - name: Ensure that firewall is started and enabled
-    ansible.builtin.service:
+    ansible.builtin.systemd:
       name: firewalld
       enabled: true
       state: started
+      masked: no
   - name: Ensure that only root and condor users can access service account
     when: block_metadata_server | bool # allows string to be passed at CLI
     ansible.builtin.shell: |
