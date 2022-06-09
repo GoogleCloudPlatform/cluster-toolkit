@@ -17,6 +17,10 @@
   become: true
   hosts: localhost
   tasks:
+  - name: User must supply HTCondor role
+    ansible.builtin.assert:
+      that:
+      - htcondor_role is defined
   - name: Remove default HTCondor configuration
     ansible.builtin.file:
       name: /etc/condor/config.d/00-htcondor-9.0.config
@@ -24,6 +28,7 @@
   - name: set HTCondor role
     ansible.builtin.copy:
       dest: /etc/condor/config.d/01-role
+      mode: 0644
       content: |
         use role:{{ htcondor_role }}
   - name: Configure VM to be HTCondor Central Manager
@@ -32,13 +37,14 @@
     - name: set HTCondor Central Manager
       ansible.builtin.copy:
         dest: /etc/condor/config.d/00-central-manager
+        mode: 0644
         content: |
           CONDOR_HOST={{ ansible_default_ipv4.address }}
   - name: Read HTCondor Central Manager from metadata
     when: htcondor_role != 'get_htcondor_central_manager'
     block:
     - name: Read metadata central-manager
-      uri:
+      ansible.builtin.uri:
         url: http://metadata.google.internal/computeMetadata/v1/instance/attributes/central-manager
         return_content: true
         headers:
@@ -47,5 +53,22 @@
     - name: set HTCondor Central Manager
       ansible.builtin.copy:
         dest: /etc/condor/config.d/00-central-manager
+        mode: 0644
         content: |
           CONDOR_HOST={{ cm.content }}
+  - name: Set HTCondor credentials
+    ansible.builtin.shell: |
+      set -e -o pipefail
+      export CLOUDSDK_PYTHON=/usr/bin/python
+      POOL_PASSWORD=$(gcloud secrets versions access latest --secret={{ password_id }})
+      echo -n "$POOL_PASSWORD" | sh -c "condor_store_cred add -c -i -"
+      umask 0077
+      TRUST_DOMAIN=$(condor_config_val TRUST_DOMAIN)
+      condor_token_create -identity condor@$TRUST_DOMAIN > /etc/condor/tokens.d/condor@$TRUST_DOMAIN
+    args:
+      creates: /etc/condor/passwords.d/POOL
+  - name: start HTCondor
+    ansible.builtin.service:
+      name: condor
+      state: started
+      enabled: true

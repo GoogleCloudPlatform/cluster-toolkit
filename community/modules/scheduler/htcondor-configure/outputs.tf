@@ -36,12 +36,12 @@ output "pool_password_secret_id" {
   sensitive   = true
 }
 
-output "central_manager_runners" {
+output "central_manager_runner" {
   description = "Toolkit Runner to configure an HTCondor Central Manager"
-  value       = local.central_manager_runners
+  value       = local.role_runner_cm
 }
 
-output "access_point_runners" {
+output "access_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Access Point"
-  value       = local.access_point_runners
+  value       = local.role_runner_access
 }

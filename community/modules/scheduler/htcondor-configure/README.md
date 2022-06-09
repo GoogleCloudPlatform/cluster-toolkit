@@ -76,9 +76,9 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_access_point_runners"></a> [access\_point\_runners](#output\_access\_point\_runners) | Toolkit Runner to configure an HTCondor Access Point |
+| <a name="output_access_point_runner"></a> [access\_point\_runner](#output\_access\_point\_runner) | Toolkit Runner to configure an HTCondor Access Point |
 | <a name="output_access_point_service_account"></a> [access\_point\_service\_account](#output\_access\_point\_service\_account) | HTCondor Access Point Service Account (e-mail format) |
-| <a name="output_central_manager_runners"></a> [central\_manager\_runners](#output\_central\_manager\_runners) | Toolkit Runner to configure an HTCondor Central Manager |
+| <a name="output_central_manager_runner"></a> [central\_manager\_runner](#output\_central\_manager\_runner) | Toolkit Runner to configure an HTCondor Central Manager |
 | <a name="output_central_manager_service_account"></a> [central\_manager\_service\_account](#output\_central\_manager\_service\_account) | HTCondor Central Manager Service Account (e-mail format) |
 | <a name="output_pool_password_secret_id"></a> [pool\_password\_secret\_id](#output\_pool\_password\_secret\_id) | Google Cloud Secret Manager ID containing HTCondor Pool Password |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

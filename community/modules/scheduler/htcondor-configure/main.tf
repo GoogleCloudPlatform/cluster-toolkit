@@ -22,44 +22,19 @@ locals {
 
   pool_password = var.pool_password == null ? random_password.pool.result : var.pool_password
 
-  start_enable_runner = {
-    "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/htcondor_start_enable.yml")
-    "destination" = "htcondor_start_enable.yml"
-  }
-
-  secure_runner = {
-    "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/htcondor_secure.yml")
-    "destination" = "htcondor_secure.yml"
-    "args"        = "-e \"password_id=${google_secret_manager_secret.pool_password.secret_id}\""
-  }
-
   role_runner_cm = {
     "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/htcondor_role.yml")
+    "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_role.yml"
-    "args"        = "-e \"htcondor_role=get_htcondor_central_manager\""
+    "args"        = "-e htcondor_role=get_htcondor_central_manager"
   }
 
   role_runner_access = {
     "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/htcondor_role.yml")
+    "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_role.yml"
-    "args"        = "-e \"htcondor_role=get_htcondor_submit\""
+    "args"        = "-e htcondor_role=get_htcondor_submit"
   }
-
-  central_manager_runners = [
-    local.role_runner_cm,
-    local.secure_runner,
-    local.start_enable_runner,
-  ]
-
-  access_point_runners = [
-    local.role_runner_access,
-    local.secure_runner,
-    local.start_enable_runner,
-  ]
 }
 
 module "access_point_service_account" {
