@@ -14,16 +14,8 @@
  * limitations under the License.
  */
 
-locals {
-  install_htcondor_runner = {
-    "type"        = "ansible-local"
-    "source"      = "${path.module}/files/install-htcondor.yaml"
-    "destination" = "install-htcondor.yaml"
-    "args"        = "-e block_metadata_server=${var.block_metadata_server}"
-  }
-
-  required_apis = [
-    "compute.googleapis.com",
-    "secretmanager.googleapis.com",
-  ]
+variable "block_metadata_server" {
+  description = "Use Linux firewall to block the instance metadata server for users other than root and HTCondor daemons"
+  type        = bool
+  default     = true
 }

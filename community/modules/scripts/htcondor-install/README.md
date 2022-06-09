@@ -35,7 +35,9 @@ No resources.
 
 ## Inputs
 
-No inputs.
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_block_metadata_server"></a> [block\_metadata\_server](#input\_block\_metadata\_server) | Use Linux firewall to block the instance metadata server for users other than root and HTCondor daemons | `bool` | `true` | no |
 
 ## Outputs
 

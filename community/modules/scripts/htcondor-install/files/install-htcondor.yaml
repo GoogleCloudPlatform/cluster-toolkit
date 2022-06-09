@@ -15,6 +15,8 @@
 ---
 - name: ensure HTCondor is installed
   hosts: all
+  vars:
+    block_metadata_server: true
   become: true
   tasks:
   - name: Upgrade all packages
@@ -48,7 +50,8 @@
       enabled: true
       state: started
   - name: Ensure that only root and condor users can access service account
-    shell: |
+    when: block_metadata_server | bool # allows string to be passed at CLI
+    ansible.builtin.shell: |
       firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 1 \
           -m owner --uid-owner root -p tcp -d metadata.google.internal --dport 80 -j ACCEPT
       firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 2 \
