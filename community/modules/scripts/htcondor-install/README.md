@@ -1,3 +1,25 @@
+## Description
+
+**THIS MODULE IS PRE-RELEASE AND DOES NOT YET SUPPORT A FULLY FUNCTIONAL
+HTCONDOR POOL**
+
+This module creates a Toolkit runner that will install HTCondor on RedHat 7 or
+derivative operating systems such as the CentOS 7 release in the [HPC VM
+Image][hpcvmimage].
+
+It also exports a list of Google Cloud APIs which must be enabled prior to
+provisioning an HTCondor Pool.
+
+[hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+
+## Important note
+
+This module enables Linux firewall rules that block access to the instance
+metadata server for any POSIX user that is not `root` or `condor`. This prevents
+user jobs from being able to escalate privileges to act as the VM. System
+services and HTCondor itself can continue to do so, such as writing to Cloud
+Logging. This [feature can be disabled](#input_block_metadata_server).
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
