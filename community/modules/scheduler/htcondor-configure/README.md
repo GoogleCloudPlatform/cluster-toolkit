@@ -1,3 +1,20 @@
+## Description
+
+**THIS MODULE IS PRE-RELEASE AND DOES NOT YET SUPPORT A FULLY FUNCTIONAL
+HTCONDOR POOL**
+
+This module performs the following tasks:
+
+- store an HTCondor Pool password in Google Cloud Secret Manager
+  - will generate a new password if one is not supplied
+- create service accounts for an HTCondor Access Point and Central Manager
+- create a Toolkit runner for an Access Point
+- create a Toolkit runner for a Central Manager
+
+[htcrole]: https://htcondor.readthedocs.io/en/latest/getting-htcondor/admin-quick-start.html#what-get-htcondor-does-to-configure-a-role
+
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2022 Google LLC
 
