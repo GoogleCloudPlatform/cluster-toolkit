@@ -188,3 +188,8 @@
       command:
         cmd: terraform destroy -auto-approve
         chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+    - name: Check if there were failures
+      ansible.builtin.assert:
+        that:
+        - '" ERROR: " not in resume_output.stdout'
+        - '" ERROR: " not in suspend_output.stdout'
