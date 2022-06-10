@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/hashicorp/go-getter"
 )
@@ -31,7 +32,7 @@ var goGetterDetectors = []getter.Detector{
 }
 
 var goGetterGetters = map[string]getter.Getter{
-	"git": new(getter.GitGetter),
+	"git": &getter.GitGetter{Timeout: 5 * time.Minute},
 }
 
 var goGetterDecompressors = map[string]getter.Decompressor{}
