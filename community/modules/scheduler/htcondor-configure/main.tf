@@ -25,15 +25,15 @@ locals {
   role_runner_cm = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
-    "destination" = "htcondor_role.yml"
-    "args"        = "-e htcondor_role=get_htcondor_central_manager"
+    "destination" = "htcondor_configure.yml"
+    "args"        = "-e htcondor_role=get_htcondor_central_manager -e password_id=${google_secret_manager_secret.pool_password.secret_id}"
   }
 
   role_runner_access = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
-    "destination" = "htcondor_role.yml"
-    "args"        = "-e htcondor_role=get_htcondor_submit"
+    "destination" = "htcondor_configure.yml"
+    "args"        = "-e htcondor_role=get_htcondor_submit -e password_id=${google_secret_manager_secret.pool_password.secret_id}"
   }
 }
 
