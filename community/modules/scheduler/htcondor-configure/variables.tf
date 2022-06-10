@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "deployment_name" {
-  description = "Name for HTCondor pool"
+  description = "HPC Toolkit deployment name. HTCondor cloud resource names will include this value."
   type        = string
 }
 
