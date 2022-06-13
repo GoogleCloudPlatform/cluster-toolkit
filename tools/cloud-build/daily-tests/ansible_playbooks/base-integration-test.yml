@@ -33,6 +33,7 @@
   - name: Create Deployment Directory
     command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
+      ALWAYS_RECOMPILE: "no"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"

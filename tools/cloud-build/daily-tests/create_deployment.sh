@@ -20,6 +20,8 @@ BLUEPRINT_DIR=${BLUEPRINT_DIR:-blueprint}
 DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-missing-deployment-name}
 NETWORK=${NETWORK:-missing-network-name}
 MAX_NODES=${MAX_NODES:-2}
+ALWAYS_RECOMPILE=${ALWAYS_RECOMPILE:-yes}
+
 echo "Creating blueprint from ${EXAMPLE_YAML} in project ${PROJECT}"
 
 ## Add GCS Backend to example
@@ -39,7 +41,12 @@ cd "$ROOT_DIR" ||
 		echo "*** ERROR: failed to access root directory ${ROOT_DIR} when creating blueprint"
 		exit 1
 	}
-make
+
+if [[ $ALWAYS_RECOMPILE != "no" || ! -f ghpc ]]; then
+	make
+else
+	echo "Skipping recompilation due to pre-existing ghpc binary and ALWAYS_RECOMPILE == 'no'"
+fi
 
 ## Customize config yaml
 sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT_DIR}/" "${EXAMPLE_YAML}" ||
