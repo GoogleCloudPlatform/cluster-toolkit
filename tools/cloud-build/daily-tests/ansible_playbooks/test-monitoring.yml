@@ -16,9 +16,10 @@
 
 - name: Wait for startup script to complete
   become: true
-  wait_for:
+  ansible.builtin.wait_for:
     path: /var/log/messages
     search_regex: '.*{{ remote_node }}.*startup-script exit status ([0-9]+)'
+    timeout: 600
   register: startup_status
 - name: Fail if ops agent is not running
   become: true
