@@ -103,8 +103,6 @@
       add_host:
         hostname: "{{ login_ip.stdout }}"
         groups: [remote_host]
-    - name: Wait for cluster
-      wait_for_connection:
 
     ## Cleanup and fail gracefully
     rescue:
@@ -132,15 +130,23 @@
 
 - name: Run Integration Tests
   hosts: remote_host
-  gather_facts: false
+  gather_facts: no # must wait until host is reachable
+  ignore_unreachable: true # ensure always block will run even if SSH fails
   tasks:
   - name: Slurm Test Block
     vars:
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     block:
-    - name: Pause for 2 minutes to allow cluster setup
-      pause:
-        minutes: 2
+    - name: Wait until host is reachable
+      ansible.builtin.wait_for_connection:
+        delay: 60
+        timeout: 300
+    - name: Gather facts
+      ansible.builtin.setup:
+    - name: Wait until Munge is active
+      ansible.builtin.wait_for:
+        path: /var/run/munge/munge.socket.2
+        timeout: 600
     - name: Run Integration tests for HPC toolkit
       include_tasks: "{{ test }}"
       run_once: true
