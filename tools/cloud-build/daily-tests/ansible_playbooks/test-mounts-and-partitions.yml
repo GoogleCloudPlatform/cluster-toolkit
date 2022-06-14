@@ -18,6 +18,9 @@
   ansible.builtin.command: sinfo --format='%P' --noheader
   changed_when: False
   register: partition_output
+  retries: 10
+  delay: 12
+  until: partition_output.rc == 0
 - name: Clount Slurm nodes
   ansible.builtin.shell:
     sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
