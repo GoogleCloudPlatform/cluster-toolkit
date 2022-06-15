@@ -111,7 +111,9 @@ uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `-p compute` argument when running `srun`.
 
-Quota required for this example in selected region:
+#### Quota Requirements for hpc-cluster-small.yaml
+
+For this example the following is needed in the selected region:
 
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
@@ -149,7 +151,9 @@ Similar to the small example, there is a
 [compute partition](#compute-partition) that should be used for any performance
 analysis.
 
-Quota required for this example in selected region:
+#### Quota Requirements for hpc-cluster-high-io.yaml
+
+For this example the following is needed in the selected region:
 
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
 * Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
@@ -286,7 +290,9 @@ packer validate -var startup_script_file=startup_script.sh .
 packer build -var startup_script_file=startup_script.sh .
 ```
 
-Quota required for this example in selected region:
+#### Quota Requirements for image-builder.yaml
+
+For this example the following is needed in the selected region:
 
 * Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
