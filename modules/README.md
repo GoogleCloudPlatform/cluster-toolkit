@@ -33,9 +33,12 @@ Modules that are still in development and less stable are labeled with the
 * **[vm-instance]** ![core-badge] : Creates one or more VM instances.
 * **[SchedMD-slurm-on-gcp-partition]** ![community-badge] : Creates a partition
   to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
+* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] ![experimental-badge] :
+  Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
 
 [vm-instance]: compute/vm-instance/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
+[schedmd-slurm-on-gcp-partition-v5]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 
 ### Database
 
@@ -111,14 +114,21 @@ Modules that are still in development and less stable are labeled with the
   controller node using [slurm-gcp].
 * **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
   login node using [slurm-gcp].
+* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
+  Creates a Slurm controller node using [slurm-gcp-version-5].
+* **[schedmd-slurm-gcp-v5-login-node]** ![community-badge] ![experimental-badge] :
+  Creates a Slurm login node using [slurm-gcp-version-5].
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor Central Manager
   and Access Point.
 
 [htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
 [schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
+[schedmd-slurm-gcp-v5-login-node]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login-node/README.md
+[schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.1
 
 ### Scripts
 

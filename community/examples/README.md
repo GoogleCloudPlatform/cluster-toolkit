@@ -24,3 +24,7 @@ Examples using Intel HPC technologies can be found in the
 ### hpc-cluster-small-sharedvpc.yaml
 
 [See description in core](../../examples/README.md#hpc-cluster-small-sharedvpcyaml--)
+
+### hpc-cluster-small-slurm-v5.yaml
+
+[See description in core](../../examples/README.md#hpc-cluster-small-slurm-v5yaml--)
