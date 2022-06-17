@@ -21,6 +21,7 @@
     ansible.builtin.assert:
       that:
       - htcondor_role is defined
+      - password_id is defined
   - name: Remove default HTCondor configuration
     ansible.builtin.file:
       name: /etc/condor/config.d/00-htcondor-9.0.config
