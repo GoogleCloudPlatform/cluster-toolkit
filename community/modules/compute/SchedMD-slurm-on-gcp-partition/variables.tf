@@ -125,7 +125,7 @@ variable "exclusive" {
 }
 
 variable "enable_placement" {
-  description = "Enable placement groups"
+  description = "Enable compact placement policies for jobs requiring low latency networking."
   type        = bool
   default     = true
 }
