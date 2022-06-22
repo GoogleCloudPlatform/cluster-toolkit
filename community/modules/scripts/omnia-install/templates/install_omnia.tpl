@@ -74,6 +74,16 @@
       path: "{{ omnia_dir }}/omnia.yml"
       regexp: '- name(.*)'
       replace: '- name\1\n  become: yes'
+  - name: Patch Slurm source URL
+    replace:
+      path: "{{ omnia_dir }}/roles/slurm_manager/vars/main.yml"
+      regexp: '(.*)slurm-20.11.7.tar.bz2(.*)'
+      replace: '\1slurm-20.11.9.tar.bz2\2'
+  - name: Patch Slurm source checksum
+    replace:
+      path: "{{ omnia_dir }}/roles/slurm_manager/vars/main.yml"
+      regexp: '^slurm_md5: .*'
+      replace: 'slurm_md5: "md5:79b39943768ef21b83585e2f5087d9af"'
 
 - name: Run the Omnia installation once all nodes are ready
   hosts: localhost
