@@ -13,17 +13,14 @@
 # limitations under the License.
 
 ---
-# Current parallel execution tree, built to minimize total execution time and faster tests first.
+# Build a custom HTCondor image, provision an HTCondor pool using the image,
+# and test health of the pool
 # ├── build_ghpc
 # └── fetch_builder
-#    ├── spack-gromacks (group 2)
+#    ├── htcondor (group 4)
 
 
 timeout: 14400s  # 4hr
-availableSecrets:
-  secretManager:
-  - versionName: projects/$PROJECT_ID/secrets/spack_cache_url/versions/2
-    env: SPACK_CACHE
 steps:
 ## Test simple golang build
 - id: build_ghpc
@@ -44,8 +41,8 @@ steps:
   - -c
   - echo "done fetching builder"
 
-## Test Spack Gromacs Example
-- id: spack-gromacs
+## Test Slurm High IO Example
+- id: htcondor
   waitFor:
   - fetch_builder
   - build_ghpc
@@ -55,19 +52,12 @@ steps:
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  secretEnv: ['SPACK_CACHE']
   args:
   - -c
   - |
     set -x -e
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=community/examples/spack-gromacs.yaml
 
-    sed -i "s/# spack_cache_url:/spack_cache_url:/" $${SG_EXAMPLE}
-    sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" $${SG_EXAMPLE}
-    sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE//\//\\\/}/" $${SG_EXAMPLE}
-
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/spack-gromacs.yml"
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/htcondor-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/htcondor.yml"
