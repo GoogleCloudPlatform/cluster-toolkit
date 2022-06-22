@@ -26,7 +26,7 @@ locals {
     subnet_name           = local.subnetwork_name
     subnet_ip             = local.cidr_blocks[0]
     subnet_region         = var.region
-    subnet_private_access = false
+    subnet_private_access = true
     subnet_flow_logs      = false
     description           = "primary subnetwork in ${local.network_name}"
     purpose               = null
@@ -40,7 +40,7 @@ locals {
       subnet_name           = subnet.subnet_name
       subnet_ip             = local.cidr_blocks[index + 1]
       subnet_region         = subnet.subnet_region
-      subnet_private_access = lookup(subnet, "subnet_private_access", false)
+      subnet_private_access = lookup(subnet, "subnet_private_access", true)
       subnet_flow_logs      = lookup(subnet, "subnet_flow_logs", false)
       description           = lookup(subnet, "description", null)
       purpose               = lookup(subnet, "purpose", null)

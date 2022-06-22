@@ -16,6 +16,14 @@ The following firewall rules are created with the VPC network:
 * Allow SSH access from the Cloud Console ("35.235.240.0/20").
 * Allow traffic between nodes within the VPC
 
+Additionally, [Google Private Access][gpa] is enabled by default on all
+subnetworks unless it is explicitly disabled. This setting ensures that all VMs
+can use Google services such as [Cloud Storage][gcs] even if they do not have
+public IP addresses or Cloud NAT is disabled.
+
+[gpa]: https://cloud.google.com/vpc/docs/private-google-access
+[gcs]: https://cloud.google.com/storage
+
 ### Primary and additional subnetworks
 
 This module will, at minimum, provision a "primary" subnetwork in which most
