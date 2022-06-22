@@ -40,7 +40,8 @@ deployment_groups:
     kind: terraform
     use: [network]
     settings:
-      local_mount: "/home"
+      local_mounts: ["/home"]
+      auto_delete_disk: true
 
   ## Installation Scripts
   - id: omnia
@@ -64,6 +65,15 @@ deployment_groups:
       - $(omnia.setup_omnia_node_runner)
       - $(omnia.copy_inventory_runner)
       - $(omnia.install_omnia_runner)
+      - type: shell
+        destination: install_hybrid_deps.sh
+        content: |
+          #!/bin/bash
+          yum install -y yum-utils
+          yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+          yum -y install terraform
+          sudo pip3 install --upgrade pip
+          pip3 install addict~=2.0 google-cloud-pubsub~=2.0 httplib2 google-api-python-client google-cloud-secret-manager pyyaml
 
   - id: startup-compute
     source: modules/scripts/startup-script
@@ -88,6 +98,9 @@ deployment_groups:
     settings:
       name_prefix: omnia-manager
       machine_type: n2-standard-4
+      service_account:
+        email: null
+        scopes: [https://www.googleapis.com/auth/cloud-platform]
 
   - id: compute
     source: modules/compute/vm-instance
@@ -97,7 +110,7 @@ deployment_groups:
     - homefs
     - startup-compute
     settings:
-      name_prefix: omnia-compute
+      name_prefix: omnia-local-compute
       instance_count: 2
 
   # This module simply makes terraform wait until the startup script is complete

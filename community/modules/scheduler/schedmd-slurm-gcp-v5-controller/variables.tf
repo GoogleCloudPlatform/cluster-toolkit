@@ -335,6 +335,13 @@ variable "partition" {
     })
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for x in var.partition[*].partition : can(regex("(^[a-z][a-z0-9]*$)", x.partition_name))
+    ])
+    error_message = "Item 'partition_name' must be alphanumeric and begin with a letter. regex: '(^[a-z][a-z0-9]*$)'."
+  }
 }
 
 variable "preemptible" {

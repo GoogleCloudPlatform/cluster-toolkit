@@ -1,0 +1,67 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-cluster-hybrid-v5
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hybrid-controller
+  region: us-central1
+  zone: us-central1-c
+  slurm_cluster_name: hybrid
+
+deployment_groups:
+- group: primary
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+    settings:
+      network_name: cloud-vpc-network
+      subnetwork_name: primary-subnet
+
+  - source: modules/file-system/pre-existing-network-storage
+    kind: terraform
+    id: pre-existing-storage
+    outputs:
+    - network_storage
+    settings:
+      server_ip: 10.0.0.17
+      remote_mount: /exports/home
+      local_mount: /home
+      fs_type: nfs
+
+  - source: ./community/modules/compute/schedmd-slurm-gcp-v5-partition
+    kind: terraform
+    id: compute-partition
+    use: [network1]
+    settings:
+      partition_name: cloud
+      node_count_dynamic_max: 10
+      exclusive: false
+      machine_type: n2-standard-2
+      partition_conf:
+        Default: NO
+      source_image_project: $(vars.project_id)
+
+  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-v5-controller-hybrid
+    kind: terraform
+    id: slurm-controller
+    use: [compute-partition, pre-existing-storage]
+    settings:
+      output_dir: /etc/slurm/hybrid
+      slurm_bin_dir: /usr/local/bin
+      slurm_control_host: hybrid-controller
