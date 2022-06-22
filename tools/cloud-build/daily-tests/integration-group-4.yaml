@@ -13,10 +13,11 @@
 # limitations under the License.
 
 ---
-# Current parallel execution tree, built to minimize total execution time and faster tests first.
-# ├── build_hpc
+# Build a custom HTCondor image, provision an HTCondor pool using the image,
+# and test health of the pool
+# ├── build_ghpc
 # └── fetch_builder
-#    ├── hpc-high-io (group 1)
+#    ├── htcondor (group 4)
 
 
 timeout: 14400s  # 4hr

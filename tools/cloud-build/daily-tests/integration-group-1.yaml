@@ -14,7 +14,7 @@
 
 ---
 # Current parallel execution tree, built to minimize total execution time and faster tests first.
-# ├── build_hpc
+# ├── build_ghpc
 # └── fetch_builder
 #    ├── hpc-high-io (group 1)
 

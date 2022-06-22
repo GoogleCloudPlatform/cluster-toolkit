@@ -13,8 +13,8 @@
 # limitations under the License.
 
 ---
-# Current parallel execution tree, built to minimize total execution time and faster tests first.
-# ├── build_hpc
+# Test Packer image building and monitoring dashboard in parallel
+# ├── build_ghpc
 # └── fetch_builder
 #    └── packer      (group 3)
 #    └── monitoring  (group 3)
@@ -106,7 +106,8 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/lustre-new-vpc.yml"
 
-# test building an image using Packer
+# test image creation by provisioning a new VPC and using Packer to build an
+# image in it
 - id: packer
   waitFor:
   - fetch_builder
