@@ -52,6 +52,7 @@ No resources.
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Path where omnia will be installed, defaults to omnia user home directory (/home/omnia).<br>If specifying this path, please make sure it is on a shared file system, accessible by all omnia nodes. | `string` | `""` | no |
 | <a name="input_manager_ips"></a> [manager\_ips](#input\_manager\_ips) | IPs of the Omnia manager nodes | `list(string)` | n/a | yes |
 | <a name="input_omnia_username"></a> [omnia\_username](#input\_omnia\_username) | Name of the user that installs omnia | `string` | `"omnia"` | no |
+| <a name="input_slurm_uid"></a> [slurm\_uid](#input\_slurm\_uid) | User ID of the slurm user | `number` | `981` | no |
 
 ## Outputs
 

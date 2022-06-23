@@ -54,6 +54,7 @@
   vars:
     install_dir: ${install_dir}
     omnia_dir: "{{ install_dir }}/omnia"
+    slurm_uid: ${slurm_uid}
   tasks:
   - name: Unmask and restart firewalld
     become: true
@@ -84,6 +85,11 @@
       path: "{{ omnia_dir }}/roles/slurm_manager/vars/main.yml"
       regexp: '^slurm_md5: .*'
       replace: 'slurm_md5: "md5:79b39943768ef21b83585e2f5087d9af"'
+  - name: Add slurm user ID to the omnia vars
+    replace:
+      path: "{{ omnia_dir }}/roles/slurm_common/vars/main.yml"
+      regexp: '^slurm_uid: ".*"'
+      replace: 'slurm_uid: "{{ slurm_uid }}"'
 
 - name: Run the Omnia installation once all nodes are ready
   hosts: localhost
