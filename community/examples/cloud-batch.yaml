@@ -25,9 +25,37 @@ vars:
 deployment_groups:
 - group: primary
   modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: hello-startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: generate_hello.sh
+        content: |
+          #!/bin/sh
+          echo "Hello World" > /home/hello.txt
+
+  - source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
+    kind: terraform
+    id: batch-compute-template
+    use: [hello-startup-script]
+    settings:
+      # Boiler plate to work with Cloud Foundation Toolkit
+      network: $(network1.network_self_link)
+      service_account: {email: null, scopes: ["https://www.googleapis.com/auth/cloud-platform"]}
+      access_config: [{nat_ip: null, network_tier: null}]
+      # Batch customization
+      machine_type: n2-standard-4
+
   - source: ./community/modules/scheduler/cloud-batch-job
     kind: terraform
     id: batch-job
     settings:
-      runnable: "echo 'hello world'"
+      runnable: "cat /home/hello.txt"
+      instance_template: $(batch-compute-template.self_link)
     outputs: [instructions]
