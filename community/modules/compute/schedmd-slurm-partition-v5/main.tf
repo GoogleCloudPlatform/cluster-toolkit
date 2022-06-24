@@ -22,37 +22,32 @@ locals {
       group_name             = "ghpc"
       node_count_dynamic_max = var.node_count_dynamic_max
       node_count_static      = var.node_count_static
-      node_conf              = {}
+      node_conf              = var.node_conf
 
       # Template By Definition
-      additional_disks       = []
-      can_ip_forward         = false
-      disable_smt            = false
-      disk_auto_delete       = true
-      disk_labels            = var.labels
-      disk_size_gb           = var.disk_size_gb
-      disk_type              = var.disk_type
-      enable_confidential_vm = false
-      enable_oslogin         = true
-      enable_shielded_vm     = false
-      gpu                    = var.gpu
-      labels                 = {}
-      machine_type           = var.machine_type
-      metadata               = {}
-      min_cpu_platform       = var.min_cpu_platform
-      on_host_maintenance    = null
-      preemptible            = var.preemptible
-      service_account = {
-        email = "default"
-        scopes = [
-          "https://www.googleapis.com/auth/cloud-platform",
-        ]
-      }
-      shielded_instance_config = null
-      source_image_family      = null
+      additional_disks         = var.additional_disks
+      can_ip_forward           = var.can_ip_forward
+      disable_smt              = var.disable_smt
+      disk_auto_delete         = var.disk_auto_delete
+      disk_labels              = var.labels
+      disk_size_gb             = var.disk_size_gb
+      disk_type                = var.disk_type
+      enable_confidential_vm   = var.enable_confidential_vm
+      enable_oslogin           = var.enable_oslogin
+      enable_shielded_vm       = var.enable_shielded_vm
+      gpu                      = var.gpu
+      labels                   = var.labels
+      machine_type             = var.machine_type
+      metadata                 = var.metadata
+      min_cpu_platform         = var.min_cpu_platform
+      on_host_maintenance      = var.on_host_maintenance
+      preemptible              = var.preemptible
+      service_account          = var.service_account
+      shielded_instance_config = var.shielded_instance_config
+      source_image_family      = var.source_image_family
       source_image_project     = var.source_image_project
       source_image             = var.source_image
-      tags                     = []
+      tags                     = var.tags
 
       # Spot VM settings
       enable_spot_vm       = var.enable_spot_vm
@@ -66,7 +61,7 @@ locals {
 
 
 module "slurm_partition" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.1"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.2"
 
   slurm_cluster_name      = var.slurm_cluster_name
   partition_nodes         = local.partition_nodes
@@ -77,8 +72,6 @@ module "slurm_partition" {
   project_id              = var.project_id
   region                  = var.region
   subnetwork              = var.subnetwork_self_link
-  partition_conf = {
-    Default = "YES"
-  }
+  partition_conf          = var.partition_conf
 }
 

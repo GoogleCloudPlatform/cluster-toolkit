@@ -1,6 +1,6 @@
 ## Description
 
-This module creates a compute partition that be used as input to
+This module creates a compute partition that be can used as input to
 [SchedMD-slurm-on-gcp-controller](../../scheduler/SchedMD-slurm-on-gcp-controller/README.md).
 
 > **Warning**: updating a partition will not cause the slurm controller to
