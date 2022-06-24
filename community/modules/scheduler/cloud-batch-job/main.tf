@@ -20,8 +20,9 @@ locals {
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.json.tftpl",
     {
-      runnable   = var.runnable
-      log_policy = var.log_policy
+      runnable          = var.runnable
+      log_policy        = var.log_policy
+      instance_template = var.instance_template
     }
   )
 

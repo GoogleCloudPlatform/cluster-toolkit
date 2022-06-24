@@ -47,6 +47,12 @@ variable "log_policy" {
   }
 }
 
+variable "instance_template" {
+  description = "Compute VM instance template self-link to be used for Batch compute node."
+  type        = string
+  default     = null
+}
+
 variable "runnable" {
   description = "A string to be executed as the main workload of the Batch job. This will be used to populate the generated template."
   type        = string
