@@ -39,7 +39,7 @@ variable "spack_url" {
 variable "spack_ref" {
   description = "Git ref to checkout for spack."
   type        = string
-  default     = "develop"
+  default     = "v0.18.0"
 }
 
 variable "spack_cache_url" {
@@ -55,7 +55,7 @@ variable "configs" {
   description = <<EOT
     List of configuration options to set within spack.
     Configs can be of type 'single-config' or 'file'.
-    All configs must specify a value, and a
+    All configs must specify content, and a
     a scope.
 EOT
   default     = []
@@ -74,9 +74,9 @@ EOT
   }
   validation {
     condition = alltrue([
-      for c in var.configs : contains(keys(c), "value")
+      for c in var.configs : contains(keys(c), "content")
     ])
-    error_message = "All configs must declare a value."
+    error_message = "All configs must declare a content."
   }
   validation {
     condition = alltrue([
@@ -105,6 +105,18 @@ variable "packages" {
   description = "Defines root packages for spack to install (in order)."
   default     = []
   type        = list(string)
+}
+
+variable "install_flags" {
+  description = "Defines the flags to pass into `spack install`"
+  default     = ""
+  type        = string
+}
+
+variable "concretize_flags" {
+  description = "Defines the flags to pass into `spack concretize`"
+  default     = ""
+  type        = string
 }
 
 variable "gpg_keys" {
@@ -177,12 +189,37 @@ EOT
 }
 
 variable "environments" {
-  description = "Defines a spack environment to configure."
-  default     = null
-  type = list(object({
-    name     = string
-    packages = list(string)
-  }))
+  description = <<EOT
+  Defines spack environments to configure, given as a list.
+  Each environment must define a name.
+  Additional optional attributes are 'content' and 'packages'.
+  'content' must be a string, defining the content of the Spack Environment YAML file.
+  'packages' must be a list of strings, defining the spack specs to install.
+  If both 'content' and 'packages' are defined, 'content' is processed first.
+
+EOT
+  default     = []
+  type        = any
+  validation {
+    condition = alltrue([
+      for e in var.environments : (contains(keys(e), "name"))
+    ])
+    error_message = "All environments must have a name."
+  }
+
+  validation {
+    condition = alltrue([
+      for e in var.environments : (contains(keys(e), "packages") ? alltrue(([for p in e["packages"] : alltrue([tostring(p) == p])])) : true)
+    ])
+    error_message = "The packages attribute within environments is required to be a list of strings."
+  }
+
+  validation {
+    condition = alltrue([
+      for e in var.environments : (contains(keys(e), "content") ? tostring(e["content"]) == e["content"] : true)
+    ])
+    error_message = "The content attribute within environments is required to be a string."
+  }
 }
 
 variable "log_file" {

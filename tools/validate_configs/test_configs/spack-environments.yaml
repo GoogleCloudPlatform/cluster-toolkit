@@ -35,7 +35,7 @@ deployment_groups:
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
-      spack_ref: v0.18.0
+      spack_ref: v0.17.1
       log_file: /var/log/spack.log
       configs:
       - type: 'single-config'
@@ -43,9 +43,37 @@ deployment_groups:
         content: 'config:install_tree:padded_length:128'
       compilers:
       - gcc@10.3.0 target=x86_64
-      packages:
-      - intel-mpi@2018.4.274%gcc@10.3.0
-      - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+      environments:
+      - name: 'file-test'
+        content: |
+          spack:
+            definitions:
+            - compilers:
+              - gcc@10.3.0
+            - mpis:
+              - intel-mpi@2018.4.274
+            - mpi_packages:
+              - gromacs@2021.2
+            specs:
+            - matrix:
+              - - $mpis
+              - - $%compilers
+            - matrix:
+              - - $mpi_packages
+              - - $%compilers
+              - - $^mpis
+      - name: 'pkg-test'
+        packages:
+        - intel-mpi@2018.4.274 %gcc@10.3.0
+        - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+      - name: 'mixed-test'
+        content: |
+          spack:
+            specs:
+              intel-mpi@20184.274 %gcc@10.3.0
+        packages:
+        - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+      - name: 'empty-test'
       gpg_keys:
       - type: 'file'
         path: '/tmp/spack_key.gpg'

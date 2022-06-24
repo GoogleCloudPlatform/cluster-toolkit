@@ -15,6 +15,13 @@
  */
 
 locals {
+  env = [
+    for e in var.environments : {
+      name     = e.name
+      packages = contains(keys(e), "packages") ? e.packages : null
+      content  = contains(keys(e), "content") ? e.content : null
+    }
+  ]
   script_content = templatefile(
     "${path.module}/templates/install_spack.tpl",
     {
@@ -27,7 +34,9 @@ locals {
       CONFIGS            = var.configs == null ? [] : var.configs
       LICENSES           = var.licenses == null ? [] : var.licenses
       PACKAGES           = var.packages == null ? [] : var.packages
-      ENVIRONMENTS       = var.environments == null ? [] : var.environments
+      INSTALL_FLAGS      = var.install_flags == null ? "" : var.install_flags
+      CONCRETIZE_FLAGS   = var.concretize_flags == null ? "" : var.concretize_flags
+      ENVIRONMENTS       = local.env
       MIRRORS            = var.spack_cache_url == null ? [] : var.spack_cache_url
       GPG_KEYS           = var.gpg_keys == null ? [] : var.gpg_keys
       CACHES_TO_POPULATE = var.caches_to_populate == null ? [] : var.caches_to_populate
