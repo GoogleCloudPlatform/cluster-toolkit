@@ -38,6 +38,7 @@ locals {
       install_dir   = local.install_dir
       omnia_compute = var.compute_ips
       nodecount     = local.nodecount
+      slurm_uid     = var.slurm_uid
     }
   )
   inventory_path = "${local.install_dir}/inventory"

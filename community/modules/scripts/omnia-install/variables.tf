@@ -38,3 +38,9 @@ variable "omnia_username" {
   default     = "omnia"
   type        = string
 }
+
+variable "slurm_uid" {
+  description = "User ID of the slurm user"
+  default     = 981
+  type        = number
+}
