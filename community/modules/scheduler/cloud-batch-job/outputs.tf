@@ -20,15 +20,15 @@ output "instructions" {
   Use the following commands to:
   
   Submit your job:
-    gcloud ${local.gcloud_version}batch jobs submit ${var.job_id} --location=${var.region} --config=${abspath(local.job_template_output_path)}
+    gcloud ${var.gcloud_version} batch jobs submit ${local.job_id} --location=${var.region} --config=${abspath(local.job_template_output_path)}
   
   Check status:
-    gcloud ${local.gcloud_version}batch jobs describe ${var.job_id} --location=${var.region} | grep state:
+    gcloud ${var.gcloud_version} batch jobs describe ${local.job_id} --location=${var.region} | grep state:
   
   Delete job:
-    gcloud ${local.gcloud_version}batch jobs delete ${var.job_id} --location=${var.region}
+    gcloud ${var.gcloud_version} batch jobs delete ${local.job_id} --location=${var.region}
 
   List all jobs in region:
-    gcloud ${local.gcloud_version}batch jobs list ${var.region} | grep ^name:
+    gcloud ${var.gcloud_version} batch jobs list ${var.region} | grep ^name:
   EOT
 }

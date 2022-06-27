@@ -19,16 +19,32 @@ variable "region" {
   type        = string
 }
 
-variable "job_id" {
-  description = "An id for the batch job. Used for output instructions and file naming."
+variable "deployment_name" {
+  description = "Name of the deployment, used for the job_id"
   type        = string
-  default     = "my_job"
+}
+
+variable "job_id" {
+  description = "An id for the batch job. Used for output instructions and file naming. Defaults to deployment name."
+  type        = string
+  default     = null
+}
+
+variable "job_filename" {
+  description = "The filename of the generated job template file. Will default to `cloud-batch-<job_id>.json` if not specified"
+  type        = string
+  default     = null
 }
 
 variable "gcloud_version" {
-  description = "The version of the gcloud cli being used. Used for output instructions."
+  description = "The version of the gcloud cli being used. Used for output instructions. Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default version)"
   type        = string
   default     = "alpha"
+
+  validation {
+    condition     = contains(["alpha", "beta", ""], var.gcloud_version)
+    error_message = "Allowed values for gcloud_version are 'alpha', 'beta', or '' (empty string)."
+  }
 }
 
 variable "log_policy" {
