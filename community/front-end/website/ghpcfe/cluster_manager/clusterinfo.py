@@ -200,7 +200,7 @@ class ClusterInfo:
                 yaml[-1] += (
                     f"""\
       gpu_count: {part.GPU_per_node}
-      gpu_type: {part.GPU_type}\
+      gpu_type: {part.GPU_type}
 """
                 )
             yaml[-1] += (
