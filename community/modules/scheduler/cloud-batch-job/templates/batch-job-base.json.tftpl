@@ -1,0 +1,25 @@
+{
+  "taskGroups": [{
+    "taskSpec": {
+      "runnables": [
+        {
+          "script": {
+            "text": "${runnable}"
+          }
+        }
+      ]
+    }
+  }]%{ if instance_template != null },
+  "allocationPolicy": {
+    "instances": [{
+      "instanceTemplate": "${instance_template}"
+    }]
+  }%{ endif }%{ if log_policy == "CLOUD_LOGGING" },
+  "logsPolicy": {
+    "destination": "CLOUD_LOGGING"
+  }%{ endif }%{ if log_policy == "PATH" },
+  "logsPolicy": {
+    "destination": "PATH",
+    "logsPath": ## Add logging path here
+  }%{ endif }
+}
