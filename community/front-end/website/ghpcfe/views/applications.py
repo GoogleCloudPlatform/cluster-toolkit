@@ -44,7 +44,7 @@ from .view_utils import StreamingFileView
 logger = logging.getLogger(__name__)
 
 
-class ApplicationListView(generic.ListView):
+class ApplicationListView(LoginRequiredMixin, generic.ListView):
     """Custom ListView for Application model"""
 
     model = Application

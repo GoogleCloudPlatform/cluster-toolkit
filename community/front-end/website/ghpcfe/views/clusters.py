@@ -71,7 +71,7 @@ import secrets
 logger = logging.getLogger(__name__)
 
 
-class ClusterListView(generic.ListView):
+class ClusterListView(LoginRequiredMixin, generic.ListView):
     """Custom ListView for Cluster model"""
 
     model = Cluster
