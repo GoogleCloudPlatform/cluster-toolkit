@@ -15,11 +15,11 @@
  */
 
 output "controller_instance_id" {
-  description = "Self link of the controller node"
+  description = "Instance ID of the controller node"
   value       = module.slurm_controller_instance.slurm_controller_instance.instances_details[0].id
 }
 
 output "controller_instance" {
-  description = "Self link of the controller node"
+  description = "The controller instance module"
   value       = module.slurm_controller_instance.slurm_controller_instance
 }

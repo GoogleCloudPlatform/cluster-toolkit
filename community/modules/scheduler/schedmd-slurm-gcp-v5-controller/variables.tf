@@ -14,97 +14,6 @@
  * limitations under the License.
  */
 
-
-
-###########
-# GENERAL #
-###########
-
-variable "project_id" {
-  type        = string
-  description = "Project ID to create resources in."
-}
-
-variable "slurm_cluster_name" {
-  type        = string
-  description = "Cluster name, used for resource naming and slurm accounting."
-
-  validation {
-    condition     = can(regex("(^[a-z][a-z0-9]*$)", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be a match of regex '(^[a-z][a-z0-9]*$)'."
-  }
-}
-
-variable "on_host_maintenance" {
-  type        = string
-  description = "Instance availability Policy"
-  default     = "MIGRATE"
-}
-
-variable "labels" {
-  type        = map(string)
-  description = "Labels, provided as a map"
-  default     = {}
-}
-
-variable "enable_oslogin" {
-  type        = bool
-  description = <<EOD
-Enables Google Cloud os-login for user login and authentication for VMs.
-See https://cloud.google.com/compute/docs/oslogin
-EOD
-  default     = true
-}
-
-###########
-# NETWORK #
-###########
-variable "can_ip_forward" {
-  type        = bool
-  description = "Enable IP forwarding, for NAT instances for example."
-  default     = false
-}
-
-variable "network_self_link" {
-  type        = string
-  description = "Network to deploy to. Only one of network or subnetwork should be specified."
-  default     = ""
-}
-
-variable "subnetwork_self_link" {
-  type        = string
-  description = "Subnet to deploy to. Only one of network or subnetwork should be specified."
-  default     = ""
-}
-
-variable "subnetwork_project" {
-  type        = string
-  description = "The project that subnetwork belongs to."
-  default     = ""
-}
-
-variable "region" {
-  type        = string
-  description = "Region where the instances should be created."
-  default     = null
-}
-
-variable "network_ip" {
-  type        = string
-  description = "Private IP address to assign to the instance if desired."
-  default     = ""
-}
-
-############
-# INSTANCE #
-############
-
-variable "static_ips" {
-  type        = list(string)
-  description = "List of static IPs for VM instances."
-  default     = []
-}
-
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
   type = list(object({
@@ -114,36 +23,100 @@ variable "access_config" {
   default = []
 }
 
-variable "zone" {
-  type        = string
-  description = <<EOD
-Zone where the instances should be created. If not specified, instances will be
-spread across available zones in the region.
-EOD
-  default     = null
-}
-
-variable "metadata" {
-  type        = map(string)
-  description = "Metadata, provided as a map"
-  default     = {}
-}
-
-
-variable "tags" {
-  type        = list(string)
-  description = "Network tag list."
+variable "additional_disks" {
+  type = list(object({
+    disk_name    = string
+    device_name  = string
+    disk_type    = string
+    disk_size_gb = number
+    disk_labels  = map(string)
+    auto_delete  = bool
+    boot         = bool
+  }))
+  description = "List of maps of disks."
   default     = []
 }
 
-#########
-# SLURM #
-#########
+variable "can_ip_forward" {
+  type        = bool
+  description = "Enable IP forwarding, for NAT instances for example."
+  default     = false
+}
+
+variable "cloud_parameters" {
+  description = "cloud.conf options."
+  type = object({
+    resume_rate     = number
+    resume_timeout  = number
+    suspend_rate    = number
+    suspend_timeout = number
+  })
+  default = {
+    resume_rate     = 0
+    resume_timeout  = 300
+    suspend_rate    = 0
+    suspend_timeout = 300
+  }
+}
+
+variable "cloudsql" {
+  description = <<EOD
+Use this database instead of the one on the controller.
+  server_ip : Address of the database server.
+  user      : The user to access the database as.
+  password  : The password, given the user, to access the given database. (sensitive)
+  db_name   : The database to access.
+EOD
+  type = object({
+    server_ip = string
+    user      = string
+    password  = string # sensitive
+    db_name   = string
+  })
+  default   = null
+  sensitive = true
+}
+
+variable "compute_startup_script" {
+  description = "Startup script used by the compute VMs"
+  type        = string
+  default     = ""
+}
+
+variable "controller_startup_script" {
+  description = "Startup script used by the controller VM."
+  type        = string
+  default     = ""
+}
+
+variable "cgroup_conf_tpl" {
+  type        = string
+  description = "Slurm cgroup.conf template file path."
+  default     = null
+}
 
 variable "disable_smt" {
   type        = bool
   description = "Disables Simultaneous Multi-Threading (SMT) on instance."
   default     = false
+}
+
+variable "disk_type" {
+  type        = string
+  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
+  default     = "pd-standard"
+}
+
+variable "disk_size_gb" {
+  type        = number
+  description = "Boot disk size in GB."
+  default     = 100
+}
+
+variable "disk_auto_delete" {
+  type        = bool
+  description = "Whether or not the boot disk should be auto-deleted."
+  default     = true
 }
 
 variable "enable_devel" {
@@ -174,7 +147,7 @@ variable "enable_cleanup_subscriptions" {
 
     NOTE: Requires Python and pip packages listed at the following link:
     https://github.com/SchedMD/slurm-gcp/blob/3979e81fc5e4f021b5533a23baa474490f4f3614/scripts/requirements.txt
-    
+
     *WARNING*: Toggling this may temporarily impact var.enable_reconfigure behavior.
     EOD
   type        = bool
@@ -187,65 +160,25 @@ variable "enable_bigquery_load" {
   default     = false
 }
 
-variable "slurmdbd_conf_tpl" {
-  type        = string
-  description = "Slurm slurmdbd.conf template file path."
-  default     = null
+variable "enable_oslogin" {
+  type        = bool
+  description = <<-EOD
+    Enables Google Cloud os-login for user login and authentication for VMs.
+    See https://cloud.google.com/compute/docs/oslogin
+    EOD
+  default     = true
 }
 
-variable "slurm_conf_tpl" {
-  type        = string
-  description = "Slurm slurm.conf template file path."
-  default     = null
+variable "enable_confidential_vm" {
+  type        = bool
+  description = "Enable the Confidential VM configuration. Note: the instance image must support option."
+  default     = false
 }
 
-variable "cgroup_conf_tpl" {
-  type        = string
-  description = "Slurm cgroup.conf template file path."
-  default     = null
-}
-
-variable "cloudsql" {
-  description = <<EOD
-Use this database instead of the one on the controller.
-  server_ip : Address of the database server.
-  user      : The user to access the database as.
-  password  : The password, given the user, to access the given database. (sensitive)
-  db_name   : The database to access.
-EOD
-  type = object({
-    server_ip = string
-    user      = string
-    password  = string # sensitive
-    db_name   = string
-  })
-  default   = null
-  sensitive = true
-}
-
-variable "controller_startup_script" {
-  description = "Startup script used by the controller VM."
-  type        = string
-  default     = ""
-}
-
-variable "compute_startup_script" {
-  description = "Startup script used by the compute VMs"
-  type        = string
-  default     = ""
-}
-
-variable "prolog_scripts" {
-  description = <<EOD
-List of scripts to be used for Prolog. Programs for the slurmd to execute
-whenever it is asked to run a job step from a new job allocation.
-See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog.
-EOD
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
+variable "enable_shielded_vm" {
+  type        = bool
+  description = "Enable the Shielded VM configuration. Note: the instance image must support option."
+  default     = false
 }
 
 variable "epilog_scripts" {
@@ -259,6 +192,60 @@ EOD
     content  = string
   }))
   default = []
+}
+
+variable "gpu" {
+  type = object({
+    type  = string
+    count = number
+  })
+  description = <<EOD
+GPU information. Type and count of GPU to attach to the instance template. See
+https://cloud.google.com/compute/docs/gpus more details.
+  type : the GPU type
+  count : number of GPUs
+EOD
+  default     = null
+}
+
+variable "labels" {
+  type        = map(string)
+  description = "Labels, provided as a map"
+  default     = {}
+}
+
+variable "machine_type" {
+  type        = string
+  description = "Machine type to create."
+  default     = "c2-standard-4"
+}
+
+variable "metadata" {
+  type        = map(string)
+  description = "Metadata, provided as a map"
+  default     = {}
+}
+
+variable "min_cpu_platform" {
+  type        = string
+  description = <<EOD
+Specifies a minimum CPU platform. Applicable values are the friendly names of
+CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:
+https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+EOD
+  default     = null
+}
+
+variable "network_ip" {
+  type        = string
+  description = "Private IP address to assign to the instance if desired."
+  default     = ""
+}
+
+variable "network_self_link" {
+  type        = string
+  description = "Network to deploy to. Only one of network or subnetwork should be specified."
+  default     = ""
 }
 
 variable "network_storage" {
@@ -278,6 +265,12 @@ EOD
     mount_options = string
   }))
   default = []
+}
+
+variable "on_host_maintenance" {
+  type        = string
+  description = "Instance availability Policy"
+  default     = "MIGRATE"
 }
 
 variable "partition" {
@@ -313,84 +306,35 @@ variable "partition" {
     })
   }))
   default = []
-
-  validation {
-    condition = alltrue([
-      for x in var.partition[*].partition : can(regex("(^[a-z][a-z0-9]*$)", x.partition_name))
-    ])
-    error_message = "Items 'partition_name' must be a match of regex '(^[a-z][a-z0-9]*$)'."
-  }
 }
 
-variable "cloud_parameters" {
-  description = "cloud.conf options."
-  type = object({
-    resume_rate     = number
-    resume_timeout  = number
-    suspend_rate    = number
-    suspend_timeout = number
-  })
-  default = {
-    resume_rate     = 0
-    resume_timeout  = 300
-    suspend_rate    = 0
-    suspend_timeout = 300
-  }
+variable "preemptible" {
+  type        = bool
+  description = "Allow the instance to be preempted."
+  default     = false
 }
 
-################
-# SOURCE IMAGE #
-################
-
-variable "source_image_project" {
+variable "project_id" {
   type        = string
-  description = "Project where the source image comes from. If it is not provided, the provider project is used."
-  default     = null
+  description = "Project ID to create resources in."
 }
 
-variable "source_image_family" {
-  type        = string
-  description = "Source image family."
-  default     = null
-}
-
-variable "source_image" {
-  type        = string
-  description = "Source disk image."
-  default     = null
-}
-
-############
-# INSTANCE #
-############
-
-variable "machine_type" {
-  type        = string
-  description = "Machine type to create."
-  default     = "n1-standard-1"
-}
-
-variable "min_cpu_platform" {
-  type        = string
+variable "prolog_scripts" {
   description = <<EOD
-Specifies a minimum CPU platform. Applicable values are the friendly names of
-CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:
-https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+List of scripts to be used for Prolog. Programs for the slurmd to execute
+whenever it is asked to run a job step from a new job allocation.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog.
 EOD
-  default     = null
+  type = list(object({
+    filename = string
+    content  = string
+  }))
+  default = []
 }
 
-variable "gpu" {
-  type = object({
-    type  = string
-    count = number
-  })
-  description = <<EOD
-GPU information. Type and count of GPU to attach to the instance template. See
-https://cloud.google.com/compute/docs/gpus more details.
-  type : the GPU type
-  count : number of GPUs
-EOD
+variable "region" {
+  type        = string
+  description = "Region where the instances should be created."
   default     = null
 }
 
@@ -431,58 +375,70 @@ EOD
   }
 }
 
-variable "enable_confidential_vm" {
-  type        = bool
-  description = "Enable the Confidential VM configuration. Note: the instance image must support option."
-  default     = false
-}
-
-variable "enable_shielded_vm" {
-  type        = bool
-  description = "Enable the Shielded VM configuration. Note: the instance image must support option."
-  default     = false
-}
-
-variable "preemptible" {
-  type        = bool
-  description = "Allow the instance to be preempted."
-  default     = false
-}
-
-########
-# DISK #
-########
-
-variable "disk_type" {
+variable "slurm_cluster_name" {
   type        = string
-  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
-  default     = "pd-standard"
+  description = "Cluster name, used for resource naming and slurm accounting."
 }
 
-variable "disk_size_gb" {
-  type        = number
-  description = "Boot disk size in GB."
-  default     = 100
+variable "slurmdbd_conf_tpl" {
+  type        = string
+  description = "Slurm slurmdbd.conf template file path."
+  default     = null
 }
 
-variable "disk_auto_delete" {
-  type        = bool
-  description = "Whether or not the boot disk should be auto-deleted."
-  default     = true
+variable "slurm_conf_tpl" {
+  type        = string
+  description = "Slurm slurm.conf template file path."
+  default     = null
 }
 
-variable "additional_disks" {
-  type = list(object({
-    disk_name    = string
-    device_name  = string
-    disk_type    = string
-    disk_size_gb = number
-    disk_labels  = map(string)
-    auto_delete  = bool
-    boot         = bool
-  }))
-  description = "List of maps of disks."
+variable "source_image_project" {
+  type        = string
+  description = "Project where the source image comes from. If it is not provided, the provider project is used."
+  default     = null
+}
+
+variable "source_image_family" {
+  type        = string
+  description = "Source image family."
+  default     = null
+}
+
+variable "source_image" {
+  type        = string
+  description = "Source disk image."
+  default     = null
+}
+
+variable "static_ips" {
+  type        = list(string)
+  description = "List of static IPs for VM instances."
   default     = []
 }
 
+variable "subnetwork_self_link" {
+  type        = string
+  description = "Subnet to deploy to. Only one of network or subnetwork should be specified."
+  default     = ""
+}
 
+variable "subnetwork_project" {
+  type        = string
+  description = "The project that subnetwork belongs to."
+  default     = ""
+}
+
+variable "tags" {
+  type        = list(string)
+  description = "Network tag list."
+  default     = []
+}
+
+variable "zone" {
+  type        = string
+  description = <<EOD
+Zone where the instances should be created. If not specified, instances will be
+spread across available zones in the region.
+EOD
+  default     = null
+}

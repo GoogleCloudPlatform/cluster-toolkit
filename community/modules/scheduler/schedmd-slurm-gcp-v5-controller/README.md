@@ -11,10 +11,17 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
+> **_WARNING:_** The variables [enable\_cleanup\_compute] and
+> [enable\_cleanup\_subscriptions], if set to true, require addition
+> dependencies **to be installed on the system running `terraform apply`**.
+> Python3 must be installed along with the pip packages listed in the
+> [requirements.txt] file of [SchedMD/slurm-gcp].
+
 [SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
 [slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_controller_instance
 [slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/scripts/requirements.txt
 
 ### Example
 
@@ -26,13 +33,18 @@ controller for optimal performance at different scales.
   - network1
   - homefs
   - compute_partition
+  settings:
+    machine_type: c2-standard-8
 ```
 
-This creates a controller node connected to the primary subnetwork of
-`network1`. The controller will also have the `homefs` file system
-mounted and manage one partition, both declared in the `use`
-field. For more context see the
-[hpc-cluster-slurm-vt example](../../../examples/hpc-cluster-slurm-v5.yaml).
+This creates a controller node with the following attributes:
+
+* connected to the primary subnetwork of `network1`
+* the filesystem with the ID `homefs` (defined elsewhere in the blueprint)
+  mounted
+* One partition with the ID `compute_partition` (defined elsewhere in the
+  blueprint)
+* machine type upgraded from the default `c2-standard-4` to `c2-standard-8`
 
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
@@ -106,7 +118,7 @@ No resources.
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br>on every node when a user's job completes.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
 | <a name="input_gpu"></a> [gpu](#input\_gpu) | GPU information. Type and count of GPU to attach to the instance template. See<br>https://cloud.google.com/compute/docs/gpus more details.<br>  type : the GPU type<br>  count : number of GPUs | <pre>object({<br>    type  = string<br>    count = number<br>  })</pre> | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels, provided as a map | `map(string)` | `{}` | no |
-| <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to create. | `string` | `"n1-standard-1"` | no |
+| <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to create. | `string` | `"c2-standard-4"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | Specifies a minimum CPU platform. Applicable values are the friendly names of<br>CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:<br>https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform | `string` | `null` | no |
 | <a name="input_network_ip"></a> [network\_ip](#input\_network\_ip) | Private IP address to assign to the instance if desired. | `string` | `""` | no |
@@ -136,6 +148,6 @@ No resources.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_controller_instance"></a> [controller\_instance](#output\_controller\_instance) | Self link of the controller node |
-| <a name="output_controller_instance_id"></a> [controller\_instance\_id](#output\_controller\_instance\_id) | Self link of the controller node |
+| <a name="output_controller_instance"></a> [controller\_instance](#output\_controller\_instance) | The controller instance module |
+| <a name="output_controller_instance_id"></a> [controller\_instance\_id](#output\_controller\_instance\_id) | Instance ID of the controller node |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
