@@ -14,17 +14,12 @@
  * limitations under the License.
  */
 
-output "startup_script" {
-  description = "script to load and run all runners, as a string value."
-  value       = local.stdlib
+output "controller_instance_id" {
+  description = "Self link of the controller node"
+  value       = module.slurm_controller_instance.slurm_controller_instance.instances_details[0].id
 }
 
-output "compute_startup_script" {
-  description = "script to load and run all runners, as a string value. Targets the inputs for the slurm controller."
-  value       = local.stdlib
-}
-
-output "controller_startup_script" {
-  description = "script to load and run all runners, as a string value. Targets the inputs for the slurm controller."
-  value       = local.stdlib
+output "controller_instance" {
+  description = "Self link of the controller node"
+  value       = module.slurm_controller_instance.slurm_controller_instance
 }
