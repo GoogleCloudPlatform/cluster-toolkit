@@ -191,22 +191,16 @@ EOD
   sensitive = true
 }
 
-variable "controller_startup_scripts" {
-  description = "List of scripts to be ran on controller VM startup."
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
+variable "controller_startup_script" {
+  description = "Startup script used by the controller VM."
+  type        = string
+  default     = ""
 }
 
-variable "compute_startup_scripts" {
-  description = "List of scripts to be ran on compute VM startup."
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
+variable "compute_startup_script" {
+  description = "Startup script used by the compute VMs"
+  type        = string
+  default     = ""
 }
 
 variable "prolog_scripts" {

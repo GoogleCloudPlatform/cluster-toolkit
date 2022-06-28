@@ -16,6 +16,9 @@
 
 locals {
 
+  # Default to value in partition_conf if both set "Default"
+  partition_conf = merge(var.is_default == true ? { "Default" : "YES" } : {}, var.partition_conf)
+
   partition_nodes = [
     {
       # Group Definition
@@ -72,6 +75,6 @@ module "slurm_partition" {
   project_id              = var.project_id
   region                  = var.region
   subnetwork              = var.subnetwork_self_link
-  partition_conf          = var.partition_conf
+  partition_conf          = local.partition_conf
 }
 

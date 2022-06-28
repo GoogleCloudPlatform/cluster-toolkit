@@ -9,7 +9,7 @@ node is used in conjunction with the
 > machines. This will not work in conjuntion with the
 > [startup_script](../../../scripts/startup-script/README.md) module.
 
-[login-module]: https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login
+[login-module]: https://github.com/SchedMD/slurm-gcp/tree/v4.2.0/tf/modules/login
 
 ### Example
 

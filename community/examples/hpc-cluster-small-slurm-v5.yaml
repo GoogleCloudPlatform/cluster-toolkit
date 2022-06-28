@@ -14,14 +14,14 @@
 
 ---
 
-blueprint_name: hpc-cluster-small-v5
+blueprint_name: hpc-cluster-slurm-v5
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-small-v5
   region: us-central1
   zone: us-central1-c
-  slurm_cluster_name: hpc-small-v5
+  slurm_cluster_name: ghpc
 
 deployment_groups:
 - group: primary
@@ -33,7 +33,7 @@ deployment_groups:
     kind: terraform
     id: network1
 
-  - source: community/modules/file-system/filestore
+  - source: modules/file-system/filestore
     kind: terraform
     id: homefs
     use: [network1]
@@ -51,6 +51,7 @@ deployment_groups:
       node_count_dynamic_max: 4
       enable_placement: false
       machine_type: n2-standard-2
+      is_default: true
 
   - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     kind: terraform
@@ -71,7 +72,7 @@ deployment_groups:
     - compute_partition
     - homefs
 
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login-node
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     kind: terraform
     id: slurm_login
     use:

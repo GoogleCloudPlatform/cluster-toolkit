@@ -19,11 +19,6 @@ variable "project_id" {
   description = "Project ID to create resources in."
 }
 
-variable "deployment_name" {
-  description = "Name of the deployment"
-  type        = string
-}
-
 variable "labels" {
   type        = map(string)
   description = "Labels, provided as a map"
@@ -247,6 +242,12 @@ variable "num_instances" {
   type        = number
   description = "Number of instances to create. This value is ignored if static_ips is provided."
   default     = 1
+}
+
+variable "startup_script" {
+  description = "Startup script that will be used by the login node VM"
+  type        = string
+  default     = ""
 }
 
 ################

@@ -47,6 +47,15 @@ variable "partition_conf" {
   default     = {}
 }
 
+variable "is_default" {
+  description = <<-EOD
+    Sets this partition as the default partition by updating the partition_conf.
+    If "Default" is already set in partition_conf, this variable will have no effect.
+    EOD
+  type        = bool
+  default     = false
+}
+
 variable "machine_type" {
   description = "Compute Platform machine type to use for this partition compute nodes"
   type        = string

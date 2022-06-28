@@ -3,10 +3,9 @@
 This module creates a compute partition that can be used as input to the
 [schedmd-slurm-gcp-v5-controller](../../scheduler/schedmd-slurm-gcp-v5-controller/README.md).
 
-TODO - heyealex - Verify whether this is true still
-> **Warning**: updating a partition will not cause the slurm controller to
-> update its configurations. In other words, it will not update an already
-> deployed Slurm cluster.
+> **Warning**: updating a partition and running `terraform apply` will not cause
+> the slurm controller to update its own configurations (`slurm.conf`) and may
+> require some additional manual configuration to become active.
 
 ### Example
 
@@ -92,6 +91,7 @@ No resources.
 | <a name="input_enable_spot_vm"></a> [enable\_spot\_vm](#input\_enable\_spot\_vm) | Enable the partition to use spot VMs (https://cloud.google.com/spot-vms) | `bool` | `false` | no |
 | <a name="input_exclusive"></a> [exclusive](#input\_exclusive) | Exclusive job access to nodes | `bool` | `false` | no |
 | <a name="input_gpu"></a> [gpu](#input\_gpu) | Definition of requested GPU resources | <pre>object({<br>    count = number,<br>    type  = string<br>  })</pre> | `null` | no |
+| <a name="input_is_default"></a> [is\_default](#input\_is\_default) | Sets this partition as the default partition by updating the partition\_conf.<br>If "Default" is already set in partition\_conf, this variable will have no effect. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to partition compute instances. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Compute Platform machine type to use for this partition compute nodes | `string` | `"c2-standard-60"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
