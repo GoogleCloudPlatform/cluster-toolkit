@@ -24,3 +24,4 @@ steps:
   - |
     set -e
     /workspace/tools/clean-resource-policies.sh
+    /workspace/tools/clean-filestore-limit.sh
