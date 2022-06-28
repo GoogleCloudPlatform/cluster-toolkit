@@ -148,6 +148,5 @@ No resources.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_controller_instance"></a> [controller\_instance](#output\_controller\_instance) | The controller instance module |
 | <a name="output_controller_instance_id"></a> [controller\_instance\_id](#output\_controller\_instance\_id) | Instance ID of the controller node |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
