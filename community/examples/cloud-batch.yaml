@@ -18,7 +18,7 @@ blueprint_name: cloud-batch
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: batch
+  deployment_name: hello-workload
   region: us-central1
   zone: us-central1-c
 
@@ -29,16 +29,27 @@ deployment_groups:
     kind: terraform
     id: network1
 
+  - source: modules/file-system/filestore
+    kind: terraform
+    id: appfs
+    use: [network1]
+    settings: {local_mount: /sw}
+
   - source: modules/scripts/startup-script
     kind: terraform
     id: hello-startup-script
     settings:
       runners:
       - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(appfs.install_nfs_client_runner)
+      - $(appfs.mount_runner)
+      - type: shell
         destination: generate_hello.sh
         content: |
           #!/bin/sh
-          echo "Hello World" > /home/hello.txt
+          echo "Hello World" > /sw/hello.txt
 
   - source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
     kind: terraform
@@ -51,11 +62,15 @@ deployment_groups:
       access_config: [{nat_ip: null, network_tier: null}]
       # Batch customization
       machine_type: n2-standard-4
+      metadata:
+        network_storage: ((jsonencode([module.appfs.network_storage])))
+      source_image_family: hpc-centos-7
+      source_image_project: cloud-hpc-image-public
 
   - source: ./community/modules/scheduler/cloud-batch-job
     kind: terraform
     id: batch-job
     settings:
-      runnable: "cat /home/hello.txt"
+      runnable: "cat /sw/hello.txt"
       instance_template: $(batch-compute-template.self_link)
     outputs: [instructions]
