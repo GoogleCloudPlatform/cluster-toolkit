@@ -1,8 +1,7 @@
 ## Description
 
 This module creates a slurm controller node via the SchedMD/slurm-gcp
-[controller](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
-module.
+[controller] module.
 
 More information about Slurm On GCP can be found at the
 [project's GitHub page][slurm-on-gcp] and in the
@@ -12,6 +11,7 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
+[controller]: https://github.com/SchedMD/slurm-gcp/tree/v4.2.0/tf/modules/controller
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
 
 ### Example
