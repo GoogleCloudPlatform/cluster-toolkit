@@ -24,6 +24,11 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "labels" {
+  description = "Labels to add to the Batch compute nodes. List key, value pairs. Ignored if `instance_template` is provided."
+  type        = any
+}
+
 variable "job_id" {
   description = "An id for the batch job. Used for output instructions and file naming. Defaults to deployment name."
   type        = string
@@ -63,14 +68,74 @@ variable "log_policy" {
   }
 }
 
+variable "runnable" {
+  description = "A string to be executed as the main workload of the Batch job. This will be used to populate the generated template."
+  type        = string
+  default     = "## Add your workload here"
+}
+
 variable "instance_template" {
   description = "Compute VM instance template self-link to be used for Batch compute node."
   type        = string
   default     = null
 }
 
-variable "runnable" {
-  description = "A string to be executed as the main workload of the Batch job. This will be used to populate the generated template."
+variable "network_self_link" {
+  description = "The self link of the network to attach the Batch compute node. Ignored if `instance_template` is provided."
   type        = string
-  default     = "## Add your workload here"
+  default     = "default"
+}
+
+variable "subnetwork_self_link" {
+  description = "The self link of the subnetwork to attach the Batch compute node. Ignored if `instance_template` is provided."
+  type        = string
+  default     = null
+}
+
+variable "service_account" {
+  description = "Service account to attach to the Batch compute node. Ignored if `instance_template` is provided."
+  type = object({
+    email  = string,
+    scopes = set(string)
+  })
+  default = {
+    email  = null
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+  }
+}
+
+variable "machine_type" {
+  description = "Machine type to use for Batch compute nodes. Ignored if `instance_template` is provided."
+  type        = string
+  default     = "n2-standard-4"
+}
+
+variable "startup_script" {
+  description = "Startup script run before Batch job starts. Ignored if `instance_template` is provided."
+  type        = string
+  default     = null
+}
+
+variable "network_storage" {
+  description = "An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided."
+  type = list(object({
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string
+  }))
+  default = []
+}
+
+variable "image" {
+  description = "Batch compute node image. Ignored if `instance_template` is provided."
+  type = object({
+    family  = string,
+    project = string
+  })
+  default = {
+    family  = "hpc-centos-7"
+    project = "cloud-hpc-image-public"
+  }
 }

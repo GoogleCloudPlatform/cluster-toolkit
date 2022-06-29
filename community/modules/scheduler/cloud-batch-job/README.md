@@ -30,7 +30,9 @@ limitations under the License.
 
 ## Modules
 
-No modules.
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | > 7.6.0 |
 
 ## Resources
 
@@ -44,12 +46,20 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used for the job\_id | `string` | n/a | yes |
 | <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions. Valid inputs are `"alpha"`, `"beta"` and "" (empty string for default version) | `string` | `"alpha"` | no |
+| <a name="input_image"></a> [image](#input\_image) | Batch compute node image. Ignored if `instance_template` is provided. | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Compute VM instance template self-link to be used for Batch compute node. | `string` | `null` | no |
 | <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file. Will default to `cloud-batch-<job_id>.json` if not specified | `string` | `null` | no |
 | <a name="input_job_id"></a> [job\_id](#input\_job\_id) | An id for the batch job. Used for output instructions and file naming. Defaults to deployment name. | `string` | `null` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Batch compute nodes. List key, value pairs. Ignored if `instance_template` is provided. | `any` | n/a | yes |
 | <a name="input_log_policy"></a> [log\_policy](#input\_log\_policy) | Create a block to define log policy.<br>When set to `CLOUD_LOGGING`, logs will be sent to Cloud Logging.<br>When set to `PATH`, path must be added to generated template.<br>When set to `DESTINATION_UNSPECIFIED`, logs will not be preserved. | `string` | `"CLOUD_LOGGING"` | no |
+| <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for Batch compute nodes. Ignored if `instance_template` is provided. | `string` | `"n2-standard-4"` | no |
+| <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the Batch compute node. Ignored if `instance_template` is provided. | `string` | `"default"` | no |
+| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region in which to run the Cloud Batch job | `string` | n/a | yes |
 | <a name="input_runnable"></a> [runnable](#input\_runnable) | A string to be executed as the main workload of the Batch job. This will be used to populate the generated template. | `string` | `"## Add your workload here"` | no |
+| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Batch compute node. Ignored if `instance_template` is provided. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/cloud-platform"<br>  ]<br>}</pre> | no |
+| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script run before Batch job starts. Ignored if `instance_template` is provided. | `string` | `null` | no |
+| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the Batch compute node. Ignored if `instance_template` is provided. | `string` | `null` | no |
 
 ## Outputs
 
