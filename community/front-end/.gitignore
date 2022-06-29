@@ -22,3 +22,4 @@ key2
 .terraform.lock.hcl
 terraform.tfstate*
 terraform.tfvars
+tf/.tkfe.lock
