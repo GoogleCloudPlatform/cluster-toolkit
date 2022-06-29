@@ -12,7 +12,7 @@ enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
 > **_WARNING:_** The variables [enable\_cleanup\_compute] and
-> [enable\_cleanup\_subscriptions], if set to true, require addition
+> [enable\_cleanup\_subscriptions], if set to true, require additional
 > dependencies **to be installed on the system running `terraform apply`**.
 > Python3 must be installed along with the pip packages listed in the
 > [requirements.txt] file of [SchedMD/slurm-gcp].
@@ -22,6 +22,8 @@ controller for optimal performance at different scales.
 [slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
 [requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/scripts/requirements.txt
+[enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
+[enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
 
 ### Example
 
