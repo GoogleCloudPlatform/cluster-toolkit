@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /bin/bash
 # Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,111 +13,146 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Exit on any errors
-set -e
 
-cat <<+
-Welcome to the deployment of the Google HPC Frontend.
+################################################################################
+#                                                                              #
+#               Google HPC Toolkit FrontEnd deployment script                  #
+#                                                                              #
+################################################################################
 
-This script will ask a short series of questions to configure the frontend
-before deployment.
 
-As this deployment creates many GCP resources, plenty of permissions are
-required. Owner or Editor of the hosting GCP project can deploy without
-any problem. A workable set of GCP roles for successful deployment includes:
 
-* Compute Admin
-* Storage Admin
-* Pub/Sub Admin
-* Create Service Accounts, Delete Service Accounts, Service Account User
+# Default GCP zone to use
+default_zone='europe-west4-a'
 
-+
 
-# Check for terraform
-if ! command -v terraform &>/dev/null; then
-	echo "Please install or make sure is in your \$PATH, terraform, version 0.13 or higher"
-	exit 1
-fi
+#
+# Function for capturing user entry
+# -- Has an option to hide the response, which is useful for passwords
+# -- accepts a default that is used when no user entry
+#
+# Usage:
+#   ask [--hidden] PROMPT [DEFAULT]
+#
+ask() {
+        
+    # set if we are hiding the typing
+    unset hidden
+    if [[ "${1}" == '--hidden' ]]; then
+	hidden=1;
+	shift
+    fi
+    
+    # get the question string
+    question="${1}"
+    shift
+    
+    # get any default value
+    unset default
+    if [[ ${1} ]]; then
+	default=${1}
+	printf "${question} [default: ${default}]" >&2
+    else
+	printf "${question}" >&2
+    fi
+    
+    charcount='0'
+    prompt='> '
+    reply=''
+    if [[ ${hidden} ]]; then
+	while IFS='' read -n '1' -p "${prompt}" -r -s 'char'
+	do
+            case "${char}" in
+		# Handle NULL
+		( $'\000' )
+		break
+		;;
+		# Handle BACKSPACE and DELETE
+		( $'\010' | $'\177' )
+		if (( charcount > 0 )); then
+                    prompt=$'\b \b'
+                    reply="${reply%?}"
+                    (( charcount-- ))
+		else
+                    prompt=''
+		fi
+		;;
+		( * )
+		prompt='*'
+		reply+="${char}"
+		(( charcount++ ))
+		;;
+            esac
+	done
+	printf '\n' >&2
+    else
+	IFS='' read -p "${prompt}" -r 'reply'
+    fi
+    if [[ ! ${reply} && ${default} ]]; then
+	reply=${default}
+    fi
 
-if ! command -v gsutil &>/dev/null; then
-	echo "Please install or make sure is in your \$PATH, gsutil, part of the Google Cloud Tools"
-	exit 1
-fi
+    # return string
+    printf '%s\n' "${reply}"
+}
 
-# GCP project to deploy
-while [ -z "${project_id}" ]; do
-	read -r -p "GCP Project Name: " project_id
-	if [ -z "${project_id}" ]; then
-		echo "This cannot be left blank"
-		echo ""
-	fi
-done
 
-read -r -p "  Enter a cloud zone [europe-west4-a]: " zone
-zone=${zone:-europe-west4-a}
-region=${zone%-*}
-read -r -p "Deployment name [lower-case letters, numbers, no spaces]: " deployment_name
+#
+#
+#
+checklock() {
+    #
+    # -- Check for presence of a lock file.
+    #    If one exists, there is a FrontEnd already deployed, so abort as
+    #    deploying another will overwrite terraform, leaving the current
+    #    deployment dangling and in need of manual clean-up via Google console.
 
-echo ""
-echo "Please enter an existing GCP Subnet in which to place the webserver"
-echo "or leave blank (hit enter) to have one created for you"
-read -r -p "  GCP Subnet Name: " subnet_name
+    if [[ -f tf/.tkfe.lock ]]; then
+	echo ""
+	echo "Error:  A lock file has been found."
+	echo ""
+	echo "    A Front End has already been deployed from this location."
+	echo ""
+	echo "    Either destroy existing Front End by deleting all resources via web"
+	echo "    application, then use ./destroy.sh"
+	echo "    Or ensure all resources have been removed via Google Console and delete the"
+	echo "    lock file: tf/.tkfe.lock"
+	echo ""
+	exit 0
+    fi
+}
 
-echo ""
-echo "Please select deployment method of server software:"
-echo "  1) Use a copy of the code from this computer"
-echo "  2) Clone the git repo when server deploys"
-read -r -p "  Please choose one of the above options:  " deploy_choice
-if [ "${deploy_choice}" == "1" ]; then
-	deployment="tarball"
-elif [ "${deploy_choice}" == "2" ]; then
-	deployment="git"
-	read -r -p "For Git clones, please specify the path to the deployment key: " deploy_key
-	if [ ! -r "${deploy_key}" ]; then
-		echo "Deployment key file cannot be read."
-		exit 1
-	fi
-	deploy_key=$(realpath "${deploy_key}")
-else
-	echo "Invalid selection"
-	exit 1
-fi
+    
+#
+#
+#
+deploy() {
+    #
+    # -- Collect deployment files
+    #
+    #    For a tarball deployment, it is important that the 'root' directory is
+    #    named 'hpc-toolkit' as most of the install depends on it.
+    #
+    #    Simplest way to ensure this is to build from a temporary copy that
+    #    definitely is named correctly.
+    #
+    if [ "${deployment}" == "tarball" ]; then
+	sdir=${PWD}
+	tdir=/tmp/hpc-toolkit
+	cp -R ../.. ${tdir}/
+	cd ${tdir}
+	tar -cz -f ${sdir}/tf/deployment.tar.gz --exclude=tf ../hpc-toolkit 2>/dev/null
+	cd ${sdir}
+	rm -rf ${tdir}
+    fi
 
-echo ""
-echo "If you specify a DNS hostname, the server will attempt to acquire a TLS"
-echo "Certificate from LetsEncrypt.  If no hostname is specified, the server"
-echo "will use standard, unencrypted HTTP.  This is NOT RECOMMENDED."
-read -r -p "  Please enter the DNS hostname of the new webserver, or just hit enter for none: " hostname
 
-echo ""
-echo "Do you have a static IP address to assign to the webserver?"
-echo "If so, we will assign this IP address, otherwise, we will automatically"
-echo "create an ephemeral public IP address."
-echo "You can create a static IP address with the command:"
-echo "  $ gcloud compute addresses create <NAME> --project ${project_id} --region=${region}"
-echo "  $ gcloud compute addresses describe <NAME> --project ${project_id} --region=${region} | grep 'address:'"
-echo ""
-echo "If you have set a hostname above, it is recommended that you use a static"
-echo "IP addresses, and set the DNS record for the hostname to point at this"
-echo "static address."
-read -r -p "  Enter static IP address, or just press [Enter] for none:  " ip_address
+    cd tf
 
-# Collect Django admin user information
-echo ""
-echo "To create an admin user for this web application:"
-read -r -p "  choose a username: " django_superuser_username
-read -r -p "  set an initial password for this user: " django_superuser_password
-read -r -p "  supply this user's email address: " django_superuser_email
-
-# Collect deployment files
-if [ "${deployment}" == "tarball" ]; then
-	tar -cz -f tf/deployment.tar.gz --exclude=tf ../../../hpc-toolkit 2>/dev/null
-fi
-
-cd tf
-
-# Create Terraform setup
-cat >terraform.tfvars <<+
+    #
+    # -- Create Terraform setup
+    #
+    cat >terraform.tfvars <<+
 project_id = "${project_id}"
 region = "${region}"
 zone = "${zone}"
@@ -125,8 +160,8 @@ zone = "${zone}"
 deployment_name = "${deployment_name}"
 
 django_su_username = "${django_superuser_username}"
-django_su_email    = "${django_superuser_email}"
 django_su_password = "${django_superuser_password}"
+django_su_email    = "${django_superuser_email}"
 
 deployment_mode = "${deployment}"
 subnet = "${subnet_name}"
@@ -135,51 +170,362 @@ extra_labels = {
     creator = "${USER}"
 }
 +
-
-if [ -n "${hostname}" ]; then
-	echo "webserver_hostname = \"${hostname}\"" >>terraform.tfvars
-fi
-if [ -n "${ip_address}" ]; then
+    if [ -n "${dns_hostname}" ]; then
+	echo "webserver_hostname = \"${dns_hostname}\"" >>terraform.tfvars
+    fi
+    if [ -n "${ip_address}" ]; then
 	echo "static_ip = \"${ip_address}\"" >>terraform.tfvars
-fi
+    fi
 
-if [ "${deployment}" == "git" ]; then
-	echo "Will clone Hpc-Toolkit from github.com/${REPO_FORK:-GoogleCloudPlatform}.git branch ${REPO_BRANCH:-main}."
+    if [ "${deployment}" == "git" ]; then
+	echo "Will clone hpc-toolkit from github.com/${REPO_FORK:-GoogleCloudPlatform}.git branch ${REPO_BRANCH:-main}."
 	echo "Set REPO_BRANCH and REPO_FORK environment variables to override"
 
 	cat >>terraform.tfvars <<+
-repo_branch = "${REPO_BRANCH:-main}"
-repo_fork = "${REPO_FORK:-GoogleCloudPlatform}"
-deployment_key = "${deploy_key}"
+    repo_branch = "${REPO_BRANCH:-main}"
+    repo_fork = "${REPO_FORK:-GoogleCloudPlatform}"
+    deployment_key = "${deploy_key}"
++
+    fi
+
+
+    echo ""
+#    echo ""
+#    echo "terraform.tfvars file has been created in the 'tf' directory."
+#    echo "If you wish additional customization, please edit that file before continuing"
+#    echo ""
+    ready=$(ask '  Proceed to deploy? [y/N]: ')
+    case "$ready" in
+	[Yy]*) ;;
+	*)
+	    echo "Exiting."
+	    exit 0
+	    ;;
+    esac
+
+    #
+    # -- Start the deployment using Terraform
+    #    Note: catch the $? from terraform using PIPESTATUS, as $? is from tee
+    #
+    terraform init
+    terraform apply -auto-approve | tee tfapply.log
+    if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+	echo "Error:  Terraform failed."
+	echo "        Please check parameters and/or seek assistance."
+	echo ""
+	exit 2
+    fi
+    
+    echo ""
+    echo "Deployment in progress."
+    echo ""
+    echo "  Started at:" `date`
+    echo "  Initialization should take about 15 minutes."
+    echo "  After that time, please point your web browser to the above server_ip."
+    if [ -n "${dns_hostname}" ]; then
+	echo "  Also update your DNS record to point '${dns_hostname}' to that IP."
+    fi
+
+    # TODO - put in an optional wait, to confirm to user that the FE is ready
+    #        a ping every 30s may work?   Need to capture IP address and then:
+    #           until $?==0 do: ping -q -c 1 -w 5 IPADDRESS >/dev/null
+
+    # 
+    #
+    echo ""
+    echo "To terminate this deployment, please make sure any resources created"
+    echo "within the FrontEnd have been deleted, then run ./destroy.sh"
+    echo ""
+
+    # -- Touch FE lock file, to ensure only one deployment is made from this
+    #    location.   (Multiple deployments will over-write terraform files,
+    #    leaving a mess of previous deployments to clean-up manually from the
+    #    GCP Console).
+    #
+    touch .tkfe.lock
+}
+
+
+#
+#
+#
+standard_setup() {
+    
+    checklock
+
+    cat <<+
+This script will ask a short series of questions to configure the FrontEnd
+web application before deployment.
+
+The Google Cloud CLI and terraform must be installed before use.
+These can be downloaded from:
+    https://cloud.google.com/cli
+    https://www.terraform.io/downloads
+
+A valid GCP project must already be created and cloud credentials must be
+associated with your GCP account.  If credentials haven't been authorised
+already, this command can be used:
+    $ gcloud auth application-default login
+
+As this deployment creates many GCP resources, a number of permissions are
+required.  An Owner or Editor of the hosting GCP project can deploy without
+any problem. Otherwise, a workable set of GCP roles for successful deployment
+need to be added to the account, which includes:
+
+    * Compute Admin
+    * Storage Admin
+    * Pub/Sub Admin
+    * Create Service Accounts, Delete Service Accounts, Service Account User
+      (or Service Account Admin)
+
+--------------------------------------------------------------------------------
+
++
+# '
+
+    # -- Check for terraform and gsutil
+    #
+    if ! command -v terraform &>/dev/null; then
+	echo "Error:"
+	echo "   Please ensure terraform (version 0.13 or higher) is in your \$PATH"
+	exit 1
+    fi
+    if ! command -v gsutil &>/dev/null; then
+	echo "Error:"
+	echo "   Please ensure gsutil (part of Google Cloud Tools)  is in your \$PATH"
+	exit 1
+    fi
+
+    # TODO - Check default authorisation has been set up
+    #        'gcloud auth list' could be used
+
+
+    cat <<+
+
+* GCP deployment name, project and location
+
+    The webserver will need a name within GCP and will be run within a specified
+    project and zone.  The project must have authorization and quota to use
+    resources in the zone.
+    
+    The deployment name must contain only lower-case letters and numbers (no
+    spaces)
+
++
+    # -- Name to use for this Front End deployment
+    #    This will be the name of the server VM
+    #
+    deployment_name=$(ask '    Deployment name')
+    
+    # -- GCP project to deploy into
+    #
+    while [ -z "${project_id}" ]; do
+	project_id=$(ask '    GCP Project ID')
+	if [ -z "${project_id}" ]; then
+	    echo "This cannot be left blank"
+	    echo ""
+	fi
+    done
+    # TODO - Check project_id is valid?
+    #        -> 'gcloud config list' and extract
+    #        -> or 'gcloud projects list' and extract
+    
+    # -- GCP zone/region to use
+    #    + clip datacenter from zone to get the region
+    #
+    zone=$(ask '    GCP zone' ${default_zone})
+    region=${zone%-*}
+    
+    cat <<+
+
+* GCP subnet
+
+    Enter existing subnet in which to place the webserver,
+    or leave empty to have one created.
+
++
+    subnet_name=$(ask '    GCP subnet name (or just press Enter)')
+
+    cat <<+ 
+
+* DNS hostname
+    
+    If you specify a DNS hostname for the new webserver, we will attempt to
+    acquire a TLS Certificate from LetsEncrypt.
+    
+    If this is left blank with no hostname specified, the server will use
+    standard, unencrypted HTTP.  This is not recommended.
+    
++
+    dns_hostname=$(ask '    DNS hostname (or just press Enter)')
+
+    cat <<+
+
+* IP address
+    
+    If you specify a static IP address it will be assigned to the server.
+    If not specified, an ephemeral public IP address will be created.
+    You can create and get a static IP address with the commands:
+
+    $ gcloud compute addresses create <NAME> --project ${project_id} \\
+           --region=${region}
+    $ gcloud compute addresses describe <NAME> --project ${project_id} \\
+           --region=${region} | grep 'address:'
+
+    If you have set a hostname above, it is recommended that you use a static IP
+    address and set the DNS record for the hostname to point at this.
+   
++
+    ip_address=$(ask '    Static IP address (or just press Enter)')
+
+    #
+    # -- Collect Django admin user information
+    #
+    cat <<+
+
+* Admin user creation
+
+    Please give details of admin user for the web application.
+
++
+    django_superuser_username=$(ask '    Username')
+    django_superuser_password=$(ask --hidden '    Password')
+    password_check=$(ask --hidden '    Re-enter password')
+
+    if [[ ${django_superuser_password} != ${password_check} ]]; then
+	echo "Error:"
+	echo "   Passwords do not match - exiting"
+	exit 1
+    fi
+    
+    django_superuser_email=$(ask '    Admin user email address')
+
+
+    #
+    # Have restricted deployment to only be via tarball
+    #
+    # TODO - Reinstate option to deploy from git, once close to formal release
+    #        and location and access to open repository is available.
+    #
+    #        Will need to make sure that names, etc., are correct and don't break
+    #        deployment and startup scripts (e.g. 'root' directory name must be
+    #        "hpc-toolkit"
+    #
+    #echo ""
+    #echo "Please select deployment method of server software:"
+    #echo "  1) Use a copy of the code from this computer"
+    #echo "  2) Clone the git repo when server deploys"
+    #deploy_choice=$(ask '  Please choose one of the above options', '1')
+    #if [ "${deploy_choice}" == "1" ]; then
+    #	deployment="tarball"
+    #elif [ "${deploy_choice}" == "2" ]; then
+    #	deployment="git"
+    #	deploy_key=$(ask 'For Git clones, please specify the path to the deployment key')
+    #	if [ ! -r "${deploy_key}" ]; then
+    #		echo "Deployment key file cannot be read."
+    #		exit 1
+    #	fi
+    #	deploy_key=$(realpath "${deploy_key}")
+    #else
+    #	echo "Invalid selection"
+    #	exit 1
+    #fi
+    deployment="tarball"
+
+
+    # -- check user is ok to proceed with entered parameters:
+    #
+    echo ""
+    echo "***  Deployment summary:  ***"
+    echo ""
+    echo "    Deployment name:  ${deployment_name}"
+    echo "    GCP project ID:   ${project_id}"
+    echo "    GCP zone:         ${zone}"
+    if [[ ${subnet_name} ]]; then
+	echo "    GCP subnet:       ${subnet_name}"
+    else
+	echo "    GCP subnet:       Automatically created"
+    fi
+    if [[ ${dns_hostname} ]]; then
+	echo "    DNS hostname:     ${dns_hostname}"
+    else
+	echo "    DNS hostname:     None - will use standard HTTP"
+    fi
+    if [[ ${ip_address} ]]; then
+	echo "    IP address:       ${ip_address}"
+    else
+	echo "    IP address:       Automatically created"
+    fi
+    echo ""
+    echo "    Admin username:   ${django_superuser_username}"
+    echo "    Admin email:      ${django_superuser_email}"
+    echo ""
+#    ready=$(ask '  Are details correct? [y/N]: ')
+#    case "$ready" in
+#	[Yy]*) ;;
+#	*)
+#	    echo "Exiting."
+#	    exit 0
+#	    ;;
+#    esac
+}
+
+
+#
+#
+#
+quick_setup() {
+    #
+    # -- Shortened setup, for expert user
+    #
+        # -- Splash screen
+    #
+    checklock
+    deployment_name=$(ask '  Deployment name')
+    zone=$(ask '  GCP zone' ${default_zone})
+    region=${zone%-*}
+    subnet_name=$(ask '  GCP subnet')
+    dns_hostname=$(ask '  DNS hostname')
+    ip_address=$(ask '  IP address')
+    django_superuser_username=$(ask '  Username')
+    django_superuser_password=$(ask --hidden '  Password')
+    password_check=$(ask --hidden '  Re-enter password')
+    if [[ ${django_superuser_password} != ${password_check} ]]; then
+	echo "Error:"
+	echo "   Passwords do not match - Exiting"
+	exit 1
+    fi
+    django_superuser_email=$(ask '  Admin user email address')
+    deployment="tarball"
+}
+
+
+################################################################################
+#
+
+# -- Exit on any errors
+set -e
+
+cat <<+
+
+--------------------------------------------------------------------------------
+
+                        Google HPC Toolkit FrontEnd
+
+--------------------------------------------------------------------------------
+
 +
 
+if [[ $1 == '-q' ]]; then
+    quick_setup
+else
+    standard_setup
 fi
 
-echo ""
-echo ""
-echo "terraform.tfvars file has been created in the 'tf' directory."
-echo "If you wish additional customization, please edit that file before continuing"
-echo ""
-read -r -p "  Are you ready to deploy? [y/N]: " ready
-case "$ready" in
-[Yy]*) ;;
-*)
-	echo "exiting."
-	exit
-	;;
-esac
+deploy
 
-terraform init
-terraform apply -auto-approve
-echo ""
-echo "Deployment in process.  Initialization should take about 15 minutes."
-echo "After that time, please point your web browser to the above server_ip."
-if [ -n "${hostname}" ]; then
-	echo "and update your DNS record to point '${hostname}' to that IP."
-fi
+wait
+exit 0
 
-echo ""
-echo "To terminate this deployment, please make sure any resources created"
-echo "by the FrontEnd have been destroyed, then run 'terraform destroy' from the"
-echo "'tf' directory"
-echo ""
+#
+# eof
