@@ -91,13 +91,19 @@ variable "node_count_dynamic_max" {
 
 variable "source_image_project" {
   type        = string
-  description = "Project where the source image comes from. If it is not provided, the provider project is used."
+  description = <<-EOD
+    Project path where the source image comes from. If not provided, this value
+    will default to the project hosting the slurm-gcp public images.
+    EOD
   default     = ""
 }
 
 variable "source_image_family" {
   type        = string
-  description = "Source image family."
+  description = <<-EOD
+    Source image family. If not provided, the default image family name for the
+    hpc-centos-7 version of the slurm-gcp public images will be used.
+    EOD
   default     = ""
 }
 
@@ -192,8 +198,15 @@ variable "min_cpu_platform" {
 
 variable "on_host_maintenance" {
   type        = string
-  description = "Instance availability Policy"
-  default     = "MIGRATE"
+  description = <<-EOD
+    Instance availability Policy.
+
+    Note: Placement groups are not supported when on_host_maintenance is set to
+    "MIGRATE" and will be deactivated regardless of the value of
+    enable_placement. To support enable_placement, ensure on_host_maintenance is
+    set to "TERMINATE".
+    EOD
+  default     = "TERMINATE"
 }
 
 variable "gpu" {
@@ -274,7 +287,7 @@ variable "subnetwork_self_link" {
 variable "exclusive" {
   description = "Exclusive job access to nodes"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_placement" {

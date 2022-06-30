@@ -38,7 +38,7 @@ Modules that are still in development and less stable are labeled with the
 
 [vm-instance]: compute/vm-instance/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
-[schedmd-slurm-on-gcp-partition-v5]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
+[schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 
 ### Database
 
