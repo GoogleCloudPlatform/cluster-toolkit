@@ -15,13 +15,14 @@
 
 set -e -o pipefail
 
+BUILD_ID=${BUILD_ID:-non-existent-build}
 PROJECT_ID=${PROJECT_ID:-$(gcloud config get-value project)}
 if [ -z "$PROJECT_ID" ]; then
 	echo "PROJECT_ID must be defined"
 	exit 1
 fi
 
-ACTIVE_BUILDS=$(gcloud builds list --project "${PROJECT_ID}" --ongoing 2>/dev/null)
+ACTIVE_BUILDS=$(gcloud builds list --project "${PROJECT_ID}" --filter="id!=\"${BUILD_ID}\"" --ongoing 2>/dev/null)
 ACTIVE_FILESTORE=$(gcloud filestore instances list --project "${PROJECT_ID}" --format='value(name)')
 if [[ -z "$ACTIVE_BUILDS" && -z "$ACTIVE_FILESTORE" ]]; then
 	echo "Disabling Filestore API..."
