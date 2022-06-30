@@ -478,8 +478,6 @@ quick_setup() {
     #
     # -- Shortened setup, for expert user
     #
-        # -- Splash screen
-    #
     checklock
     deployment_name=$(ask '  Deployment name')
     zone=$(ask '  GCP zone' ${default_zone})
