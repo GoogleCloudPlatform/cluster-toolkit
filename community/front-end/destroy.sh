@@ -32,7 +32,7 @@ tfdestroy() {
     if [[ ! -f .tkfe.lock ]]; then
 	echo "Warning: No lock file found"
 	echo "         It is likely there is no Front End currently deployed"
-	read -r -p "          Proceed anyway? [y/N]: " ready
+	read -r -p "         Proceed anyway? [y/N]: " ready
 	case "$ready" in
 	    [Yy]*) ;;
 	    *)

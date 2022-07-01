@@ -21,15 +21,63 @@
 ################################################################################
 
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
 
 # Default GCP zone to use
 default_zone='europe-west4-a'
 
 
+# help function
+#   - write out purpose and preprequisites
 #
-# Function for capturing user entry
-# -- Has an option to hide the response, which is useful for passwords
-# -- accepts a default that is used when no user entry
+help() {
+    cat <<+
+  This script will ask a short series of questions to configure the FrontEnd
+  web application before deployment.
+
+  The Google Cloud CLI and terraform must be installed before use.
+  These can be downloaded from:
+      https://cloud.google.com/cli
+      https://www.terraform.io/downloads
+
+  A valid GCP project must already be created and cloud credentials must be
+  associated with your GCP account.  If credentials haven't been authorised
+  already, this command can be used:
+      $ gcloud auth application-default login
+
+  The GCP project must have the following APIs enabled:
+      - Compute Engine API
+      - Cloud Monitoring API
+      - Cloud Logging API
+      - Cloud Pub/Sub API
+      - Cloud Resource Manager
+      - Identity and Access Management (IAM) API
+      - Cloud OS Login API
+      - Cloud Filestore API
+      - Cloud Billing API
+      - Vertex AI API
+
+  As this deployment creates many GCP resources, a number of permissions are
+  required.  An Owner or Editor of the hosting GCP project can deploy without
+  any problem. Otherwise, a workable set of GCP roles for successful deployment
+  need to be added to the account, which includes:
+
+      - Compute Admin
+      - Storage Admin
+      - Pub/Sub Admin
+      - Create Service Accounts, Delete Service Accounts, Service Account User
+        (or Service Account Admin)
+      - Project IAM Admin
+
++
+#'
+}
+
+
+# Function for capturing user entry.
+#  - Has an option to hide the response, which is useful for passwords.
+#  - Accepts a default that is used when no user entry.
 #
 # Usage:
 #   ask [--hidden] PROMPT [DEFAULT]
@@ -65,23 +113,23 @@ ask() {
             case "${char}" in
 		# Handle NULL
 		( $'\000' )
-		break
-		;;
+		    break
+		    ;;
 		# Handle BACKSPACE and DELETE
 		( $'\010' | $'\177' )
-		if (( charcount > 0 )); then
-                    prompt=$'\b \b'
-                    reply="${reply%?}"
-                    (( charcount-- ))
-		else
-                    prompt=''
-		fi
-		;;
+		    if (( charcount > 0 )); then
+			prompt=$'\b \b'
+			reply="${reply%?}"
+			(( charcount-- ))
+		    else
+			prompt=''
+		    fi
+		    ;;
 		( * )
-		prompt='*'
-		reply+="${char}"
-		(( charcount++ ))
-		;;
+		    prompt='*'
+		    reply+="${char}"
+		    (( charcount++ ))
+		    ;;
             esac
 	done
 	printf '\n' >&2
@@ -97,17 +145,21 @@ ask() {
 }
 
 
+# Set and check a lock file.
+#   - Ensures only one instance of FE is deployed from this location.
 #
-#
-#
-checklock() {
-    #
-    # -- Check for presence of a lock file.
-    #    If one exists, there is a FrontEnd already deployed, so abort as
-    #    deploying another will overwrite terraform, leaving the current
-    #    deployment dangling and in need of manual clean-up via Google console.
+setlock() {
+    touch ${SCRIPT_DIR}/tf/.tkfe.lock
+}
 
-    if [[ -f tf/.tkfe.lock ]]; then
+checklock() {
+    
+    # -- If lock exists, there is a FrontEnd already deployed, so abort as
+    #    deploying another will overwrite the terraform files, leaving the
+    #    current deployment impossible to destroy, so then dangling and in
+    #    need of manual clean-up via Google console.
+    #
+    if [[ -f ${SCRIPT_DIR}/tf/.tkfe.lock ]]; then
 	echo ""
 	echo "Error:  A lock file has been found."
 	echo ""
@@ -123,11 +175,12 @@ checklock() {
 }
 
     
-#
-#
+# Deploy the FrontEnd
+#  - All deployments parameters have been obtained, so can now construct the
+#    terraform recipes and initiate the deployment.
 #
 deploy() {
-    #
+    
     # -- Collect deployment files
     #
     #    For a tarball deployment, it is important that the 'root' directory is
@@ -141,7 +194,7 @@ deploy() {
 	tdir=/tmp/hpc-toolkit
 	cp -R ../.. ${tdir}/
 	cd ${tdir}
-	tar -cz -f ${sdir}/tf/deployment.tar.gz --exclude=tf ../hpc-toolkit 2>/dev/null
+	tar -zcf ${sdir}/tf/deployment.tar.gz --exclude=tf ../hpc-toolkit 2>/dev/null
 	cd ${sdir}
 	rm -rf ${tdir}
     fi
@@ -149,7 +202,6 @@ deploy() {
 
     cd tf
 
-    #
     # -- Create Terraform setup
     #
     cat >terraform.tfvars <<+
@@ -188,12 +240,14 @@ extra_labels = {
 +
     fi
 
-
     echo ""
-#    echo ""
 #    echo "terraform.tfvars file has been created in the 'tf' directory."
-#    echo "If you wish additional customization, please edit that file before continuing"
+#    echo "If you wish additional customization, please edit that file before continuing."
 #    echo ""
+
+    # TODO - upload terraform files to the FE server, so that they can be recovered if ever
+    #        needed
+    
     ready=$(ask '  Proceed to deploy? [y/N]: ')
     case "$ready" in
 	[Yy]*) ;;
@@ -203,10 +257,11 @@ extra_labels = {
 	    ;;
     esac
 
+    # -- Start the deployment using Terraform.
+    #    Note: Extract $? for terraform using PIPESTATUS, as $? below is just from tee
+    #          Also toggle exit on error.
     #
-    # -- Start the deployment using Terraform
-    #    Note: catch the $? from terraform using PIPESTATUS, as $? is from tee
-    #
+    set +e
     terraform init
     terraform apply -auto-approve | tee tfapply.log
     if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
@@ -215,6 +270,7 @@ extra_labels = {
 	echo ""
 	exit 2
     fi
+    set -e
     
     echo ""
     echo "Deployment in progress."
@@ -226,8 +282,8 @@ extra_labels = {
 	echo "  Also update your DNS record to point '${dns_hostname}' to that IP."
     fi
 
-    # TODO - put in an optional wait, to confirm to user that the FE is ready
-    #        a ping every 30s may work?   Need to capture IP address and then:
+    # TODO - Put in an optional wait, to confirm back to the user when the FE is ready
+    #        A ping every 30s may work?   Need to capture IP address and then:
     #           until $?==0 do: ping -q -c 1 -w 5 IPADDRESS >/dev/null
 
     # 
@@ -237,12 +293,9 @@ extra_labels = {
     echo "within the FrontEnd have been deleted, then run ./destroy.sh"
     echo ""
 
-    # -- Touch FE lock file, to ensure only one deployment is made from this
-    #    location.   (Multiple deployments will over-write terraform files,
-    #    leaving a mess of previous deployments to clean-up manually from the
-    #    GCP Console).
+    # -- Set FE lock file, to ensure only one deployment is performed.
     #
-    touch .tkfe.lock
+    setlock
 }
 
 
@@ -250,39 +303,17 @@ extra_labels = {
 #
 #
 standard_setup() {
-    
+
+    # -- Ensure that there is no pre-deployed FE from this location.
+    #
     checklock
-
+        
+    help
     cat <<+
-This script will ask a short series of questions to configure the FrontEnd
-web application before deployment.
-
-The Google Cloud CLI and terraform must be installed before use.
-These can be downloaded from:
-    https://cloud.google.com/cli
-    https://www.terraform.io/downloads
-
-A valid GCP project must already be created and cloud credentials must be
-associated with your GCP account.  If credentials haven't been authorised
-already, this command can be used:
-    $ gcloud auth application-default login
-
-As this deployment creates many GCP resources, a number of permissions are
-required.  An Owner or Editor of the hosting GCP project can deploy without
-any problem. Otherwise, a workable set of GCP roles for successful deployment
-need to be added to the account, which includes:
-
-    * Compute Admin
-    * Storage Admin
-    * Pub/Sub Admin
-    * Create Service Accounts, Delete Service Accounts, Service Account User
-      (or Service Account Admin)
-
 --------------------------------------------------------------------------------
 
 +
-# '
-
+	
     # -- Check for terraform and gsutil
     #
     if ! command -v terraform &>/dev/null; then
@@ -322,13 +353,23 @@ need to be added to the account, which includes:
     while [ -z "${project_id}" ]; do
 	project_id=$(ask '    GCP Project ID')
 	if [ -z "${project_id}" ]; then
-	    echo "This cannot be left blank"
+	    echo "    Error: This cannot be left blank"
 	    echo ""
+	else
+	    # Check project_id is valid.
+	    # Toggle error exit so check works.
+	    set +e
+	    gcloud projects describe ${project_id} >/dev/null 2>&1
+	    if [[ $? -ne 0 ]]; then
+		echo "    Error: Invalid project ID"
+		echo "           Please check you are using the project ID and not the project name"
+		echo "           and that you have access to the project"
+		echo ""
+		project_id=""
+	    fi
+	    set -e
 	fi
     done
-    # TODO - Check project_id is valid?
-    #        -> 'gcloud config list' and extract
-    #        -> or 'gcloud projects list' and extract
     
     # -- GCP zone/region to use
     #    + clip datacenter from zone to get the region
@@ -480,11 +521,12 @@ quick_setup() {
     #
     checklock
     deployment_name=$(ask '  Deployment name')
+    project_id=$(ask '  GCP project ID')
     zone=$(ask '  GCP zone' ${default_zone})
     region=${zone%-*}
-    subnet_name=$(ask '  GCP subnet')
-    dns_hostname=$(ask '  DNS hostname')
-    ip_address=$(ask '  IP address')
+    subnet_name=$(ask '  GCP subnet   [blank to create]')
+    dns_hostname=$(ask '  DNS hostname [blank to create]')
+    ip_address=$(ask '  IP address   [blank to create]')
     django_superuser_username=$(ask '  Username')
     django_superuser_password=$(ask --hidden '  Password')
     password_check=$(ask --hidden '  Re-enter password')
@@ -501,7 +543,7 @@ quick_setup() {
 ################################################################################
 #
 
-# -- Exit on any errors
+# -- Exit on any errors by default (will toggle on/off throughout this script)
 set -e
 
 cat <<+
@@ -514,7 +556,20 @@ cat <<+
 
 +
 
-if [[ $1 == '-q' ]]; then
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+	-q)
+	    quick=1
+	    ;;
+	-h|--help)
+	    help
+	    exit 0
+	    ;;
+    esac
+    shift
+done
+
+if [[ $quick ]]; then
     quick_setup
 else
     standard_setup
