@@ -1,0 +1,75 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: cloud-batch
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hello-workload
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+
+  - source: modules/file-system/filestore
+    kind: terraform
+    id: appfs
+    use: [network1]
+    settings: {local_mount: /sw}
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: batch-startup-script
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(appfs.install_nfs_client_runner)
+      - $(appfs.mount_runner)
+      - type: shell
+        destination: generate_hello.sh
+        content: |
+          #!/bin/sh
+          echo "Hello World" > /sw/hello.txt
+
+  - source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
+    kind: terraform
+    id: batch-compute-template
+    use: [batch-startup-script]
+    settings:
+      # Boiler plate to work with Cloud Foundation Toolkit
+      network: $(network1.network_self_link)
+      service_account: {email: null, scopes: ["https://www.googleapis.com/auth/cloud-platform"]}
+      access_config: [{nat_ip: null, network_tier: null}]
+      # Batch customization
+      machine_type: n2-standard-4
+      metadata:
+        network_storage: ((jsonencode([module.appfs.network_storage])))
+      source_image_family: hpc-centos-7
+      source_image_project: cloud-hpc-image-public
+
+  - source: ./community/modules/scheduler/cloud-batch-job
+    kind: terraform
+    id: batch-job
+    use: [network1, appfs, batch-startup-script]
+    settings:
+      runnable: "cat /sw/hello.txt"
+      machine_type: n2-standard-4
+    outputs: [instructions]

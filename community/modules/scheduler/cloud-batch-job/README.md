@@ -2,10 +2,10 @@
 
 ## Instance Templates
 
-Many of the setting for a Cloud Batch job are set using an instance template,
+Many of the settings for a Cloud Batch job are set using an instance template,
 `machine_type` for example. The `cloud-batch-job` module accomplishes this by
 creating an instance template within the module, which is supplied to the Cloud
-Batch job. 
+Batch job.
 
 Alternatively, one can supply an instance template to the `cloud-batch-job`
 module using the `instance_template` setting. This supplied instance template
@@ -15,7 +15,7 @@ template within a blueprint, one can use the Cloud Foundation Toolkit instance
 template module as shown in the following example. This can be useful when
 trying to set a property not natively supported in the `cloud-batch-job` module.
 
-**Example generating instance template using Cloud Foundation Toolkit module.**
+### Example generating instance template using Cloud Foundation Toolkit module
 
 ```yaml
 deployment_groups:
