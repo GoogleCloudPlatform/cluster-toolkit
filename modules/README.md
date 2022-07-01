@@ -107,6 +107,8 @@ Modules that are still in development and less stable are labeled with the
 
 ### Scheduler
 
+* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
+  Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[SchedMD-slurm-on-gcp-controller]** ![community-badge] : Creates a Slurm
   controller node using [slurm-gcp].
 * **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
@@ -116,6 +118,7 @@ Modules that are still in development and less stable are labeled with the
   and Access Point.
 
 [htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
+[schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5

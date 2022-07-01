@@ -32,13 +32,13 @@ if [ ! -d ${INSTALL_DIR} ]; then
   echo "$PREFIX Configuring spack..."
   %{for c in CONFIGS ~}
     %{if c.type == "single-config" ~}
-      spack config --scope=${c.scope} add "${c.value}" >> ${LOG_FILE} 2>&1
+      spack config --scope=${c.scope} add "${c.content}" >> ${LOG_FILE} 2>&1
     %{endif ~}
 
     %{if c.type == "file" ~}
       {
-      cat <<EOF > ${INSTALL_DIR}/spack_conf.yaml
-${c.value}
+      cat << 'EOF' > ${INSTALL_DIR}/spack_conf.yaml
+${c.content}
 EOF
 
       spack config --scope=${c.scope} add -f ${INSTALL_DIR}/spack_conf.yaml
@@ -77,7 +77,7 @@ echo "$PREFIX Installing licenses..."
 echo "$PREFIX Installing compilers..."
 %{for c in COMPILERS ~}
   {
-    spack install ${c};
+    spack install ${INSTALL_FLAGS} ${c};
     spack load ${c};
     spack clean -s
   } &>> ${LOG_FILE}
@@ -87,44 +87,63 @@ spack compiler find --scope site >> ${LOG_FILE} 2>&1
 
 echo "$PREFIX Installing root spack specs..."
 %{for p in PACKAGES ~}
-  spack install ${p} >> ${LOG_FILE} 2>&1
+  spack install ${INSTALL_FLAGS} ${p} >> ${LOG_FILE} 2>&1
   spack clean -s
 %{endfor ~}
 
 echo "$PREFIX Configuring spack environments"
+%{if ENVIRONMENTS != null ~}
 %{for e in ENVIRONMENTS ~}
-  {
-    spack env create ${e.name};
-    spack env activate ${e.name};
-  } &>> ${LOG_FILE}
+  %{if e.content != null}
+    {
+      cat << 'EOF' > ${INSTALL_DIR}/spack_env.yaml
+${e.content}
+EOF
+      spack env create ${e.name} ${INSTALL_DIR}/spack_env.yaml
+      rm -f ${INSTALL_DIR}/spack_env.yaml
+    } &>> ${LOG_FILE}
+  %{else ~}
+      spack env create ${e.name} >> ${LOG_FILE} 2>&1
+  %{endif ~}
 
-  echo "$PREFIX    Configuring spack environment ${e.name}"
-  %{for p in e.packages ~}
-    spack add ${p} >> ${LOG_FILE} 2>&1
-  %{endfor ~}
+  spack env activate ${e.name} >> ${LOG_FILE} 2>&1
+
+  %{if e.packages != null}
+    echo "$PREFIX    Configuring spack environment ${e.name}"
+    %{for p in e.packages ~}
+      spack add ${p} >> ${LOG_FILE} 2>&1
+    %{endfor ~}
+  %{endif ~}
 
   echo "$PREFIX    Concretizing spack environment ${e.name}"
-  spack concretize >> ${LOG_FILE} 2>&1
+  spack concretize ${CONCRETIZE_FLAGS} >> ${LOG_FILE} 2>&1
+
   echo "$PREFIX    Installing packages for spack environment ${e.name}"
-  spack install >> ${LOG_FILE} 2>&1
+  # shellcheck disable=SC2129
+  spack install ${INSTALL_FLAGS} >> ${LOG_FILE} 2>&1
 
   spack env deactivate >> ${LOG_FILE} 2>&1
-  spack clean -s
+  spack clean -s >> ${LOG_FILE} 2>&1
 %{endfor ~}
+%{endif ~}
 
 echo "$PREFIX Populating defined buildcaches"
 %{for c in CACHES_TO_POPULATE ~}
   %{if c.type == "directory" ~}
     # shellcheck disable=SC2046
-    spack buildcache create -d ${c.path} -af $(spack find --format /{hash})
-    spack gpg publish -d ${c.path}
-    spack buildcache update-index -d ${c.path} --keys
+    {
+      spack buildcache create -d ${c.path} -af $(spack find --format /{hash});
+      spack gpg publish -d ${c.path};
+      spack buildcache update-index -d ${c.path} --keys;
+    } >> ${LOG_FILE}
   %{endif ~}
   %{if c.type == "mirror" ~}
     # shellcheck disable=SC2046
-    spack buildcache create --mirror-url ${c.path} -af $(spack find --format /{hash})
-    spack gpg publish --mirror-url ${c.path}
-    spack buildcache update-index --mirror-url ${c.path} --keys
+    {
+      spack buildcache create --mirror-url ${c.path} -af $(spack find --format /{hash});
+      spack gpg publish --mirror-url ${c.path};
+      spack buildcache update-index --mirror-url ${c.path} --keys;
+    } >> ${LOG_FILE}
   %{endif ~}
 %{endfor ~}
 

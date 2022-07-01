@@ -12,19 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+*/
 
-output "startup_script" {
-  description = "script to load and run all runners, as a string value."
-  value       = local.stdlib
-}
-
-output "compute_startup_script" {
-  description = "script to load and run all runners, as a string value. Targets the inputs for the slurm controller."
-  value       = local.stdlib
-}
-
-output "controller_startup_script" {
-  description = "script to load and run all runners, as a string value. Targets the inputs for the slurm controller."
-  value       = local.stdlib
+terraform {
+  required_version = ">= 0.14.0"
 }

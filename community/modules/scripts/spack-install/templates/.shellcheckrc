@@ -21,3 +21,8 @@ disable=SC2034
 # Disabled because string is not literal, variable is prefaced with $$ for template
 # https://github.com/koalaman/shellcheck/wiki/SC2157
 disable=SC2157
+
+
+# Disabled because parenthesis are used in terraform code
+# https://github.com/koalaman/shellcheck/wiki/SC1036
+disable=SC1036
