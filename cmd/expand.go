@@ -45,6 +45,7 @@ var (
 		Short: "Expand the Environment Blueprint.",
 		Long:  "Updates the Environment Blueprint in the same way as create, but without writing the deployment.",
 		Run:   runExpandCmd,
+		Args:  cobra.ExactArgs(1),
 	}
 )
 
