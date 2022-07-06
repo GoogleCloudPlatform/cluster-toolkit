@@ -65,6 +65,7 @@ module "vpc" {
   project_id                             = var.project_id
   auto_create_subnetworks                = false
   subnets                                = local.all_subnets
+  secondary_ranges                       = var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu
   description                            = var.network_description
