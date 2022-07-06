@@ -163,10 +163,10 @@ checklock() {
 	echo ""
 	echo "Error:  A lock file has been found."
 	echo ""
-	echo "    A Front End has already been deployed from this location."
+	echo "    A FrontEnd has already been deployed from this location."
 	echo ""
-	echo "    Either destroy existing Front End by deleting all resources via web"
-	echo "    application, then use ./destroy.sh"
+	echo "    Either destroy existing FrontEnd by deleting all resources via web"
+	echo "    application, then use ./teardown.sh"
 	echo "    Or ensure all resources have been removed via Google Console and delete the"
 	echo "    lock file: tf/.tkfe.lock"
 	echo ""
@@ -290,7 +290,7 @@ extra_labels = {
     #
     echo ""
     echo "To terminate this deployment, please make sure any resources created"
-    echo "within the FrontEnd have been deleted, then run ./destroy.sh"
+    echo "within the FrontEnd have been deleted, then run ./teardown.sh"
     echo ""
 
     # -- Set FE lock file, to ensure only one deployment is performed.
@@ -343,7 +343,7 @@ standard_setup() {
     spaces)
 
 +
-    # -- Name to use for this Front End deployment
+    # -- Name to use for this FrontEnd deployment
     #    This will be the name of the server VM
     #
     deployment_name=$(ask '    Deployment name')
