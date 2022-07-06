@@ -55,6 +55,58 @@ locals {
   primary_subnetwork_name          = local.primary_subnetwork.name
   primary_subnetwork_self_link     = local.primary_subnetwork.self_link
   primary_subnetwork_ip_cidr_range = local.primary_subnetwork.ip_cidr_range
+
+  allow_iap_ssh_ingress = {
+    name                    = "${local.network_name}-allow-iap-ssh-ingress"
+    description             = "allow console SSH access"
+    direction               = "INGRESS"
+    priority                = null
+    ranges                  = ["35.235.240.0/20"]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = ["22"]
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
+  allow_internal_traffic = {
+    name                    = "${local.network_name}-allow-internal-traffic"
+    priority                = null
+    description             = "allow traffic between nodes of this VPC"
+    direction               = "INGRESS"
+    ranges                  = [var.network_address_range]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = ["0-65535"]
+      }, {
+      protocol = "udp"
+      ports    = ["0-65535"]
+      }, {
+      protocol = "icmp"
+      ports    = null
+      },
+    ]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
+  firewall_rules = concat(var.firewall_rules,
+    var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
+    var.enable_iap_ssh_ingress ? [local.allow_iap_ssh_ingress] : []
+  )
 }
 
 module "vpc" {
@@ -78,52 +130,7 @@ module "firewall_rules" {
   version      = "~> 5.0"
   project_id   = var.project_id
   network_name = module.vpc.network_name
-
-  rules = [
-    {
-      name                    = "${local.network_name}-allow-iap-ssh-ingress"
-      description             = "allow console SSH access"
-      direction               = "INGRESS"
-      priority                = null
-      ranges                  = ["35.235.240.0/20"]
-      source_tags             = null
-      source_service_accounts = null
-      target_tags             = null
-      target_service_accounts = null
-      allow = [{
-        protocol = "tcp"
-        ports    = ["22"]
-      }]
-      deny = []
-      log_config = {
-        metadata = "INCLUDE_ALL_METADATA"
-      }
-      }, {
-      name                    = "${local.network_name}-allow-internal-traffic"
-      priority                = null
-      description             = "allow traffic between nodes of this VPC"
-      direction               = "INGRESS"
-      ranges                  = [var.network_address_range]
-      source_tags             = null
-      source_service_accounts = null
-      target_tags             = null
-      target_service_accounts = null
-      allow = [{
-        protocol = "tcp"
-        ports    = ["0-65535"]
-        }, {
-        protocol = "udp"
-        ports    = ["0-65535"]
-        }, {
-        protocol = "icmp"
-        ports    = null
-        },
-      ]
-      deny = []
-      log_config = {
-        metadata = "INCLUDE_ALL_METADATA"
-      }
-  }]
+  rules        = local.firewall_rules
 }
 
 # This use of the module may appear odd when var.ips_per_nat = 0. The module

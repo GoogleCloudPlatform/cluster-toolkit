@@ -140,3 +140,21 @@ variable "delete_default_internet_gateway_routes" {
   description = "If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted"
   default     = false
 }
+
+variable "enable_iap_ssh_ingress" {
+  type        = bool
+  description = "Enable a firewall rule to allow SSH access using IAP tunnels"
+  default     = true
+}
+
+variable "enable_internal_traffic" {
+  type        = bool
+  description = "Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network"
+  default     = true
+}
+
+variable "firewall_rules" {
+  type        = any
+  description = "List of firewall rules"
+  default     = []
+}
