@@ -1,0 +1,76 @@
+
+## GCP user/service account permissions
+
+The FrontEnd runs within a GCP project, which requires an authorized
+account to
+
+
+  - The complete list of required permissions for a least-privilege custom role is as follows:
+    - compute.acceleratorTypes.list
+    - compute.addresses.use
+    - compute.disks.create
+    - compute.disks.get
+    - compute.firewalls.create
+    - compute.firewalls.delete
+    - compute.firewalls.get
+    - compute.globalOperations.get
+    - compute.instances.create
+    - compute.instances.delete
+    - compute.instances.get
+    - compute.instances.getSerialPortOutput
+    - compute.instances.setLabels
+    - compute.instances.setMetadata
+    - compute.instances.setServiceAccount
+    - compute.instances.setTags
+    - compute.machineTypes.list
+    - compute.networks.create
+    - compute.networks.delete
+    - compute.networks.get
+    - compute.networks.updatePolicy
+    - compute.projects.get
+    - compute.regionOperations.get
+    - compute.routers.create
+    - compute.routers.delete
+    - compute.routers.get
+    - compute.routers.update
+    - compute.subnetworks.create
+    - compute.subnetworks.delete
+    - compute.subnetworks.get
+    - compute.subnetworks.use
+    - compute.subnetworks.useExternalIp
+    - compute.zoneOperations.get
+    - compute.zones.get
+    - compute.zones.list
+    - file.instances.create
+    - file.instances.delete
+    - file.instances.get
+    - file.operations.get
+    - iam.serviceAccounts.actAs
+    - iam.serviceAccounts.create
+    - iam.serviceAccounts.delete
+    - iam.serviceAccounts.get
+    - iam.serviceAccounts.getIamPolicy
+    - iam.serviceAccounts.setIamPolicy
+    - pubsub.subscriptions.create
+    - pubsub.subscriptions.delete
+    - pubsub.subscriptions.get
+    - pubsub.subscriptions.getIamPolicy
+    - pubsub.subscriptions.setIamPolicy
+    - pubsub.topics.attachSubscription
+    - pubsub.topics.create
+    - pubsub.topics.delete
+    - pubsub.topics.get
+    - pubsub.topics.getIamPolicy
+    - pubsub.topics.setIamPolicy
+    - resourcemanager.projects.get
+    - resourcemanager.projects.getIamPolicy
+    - resourcemanager.projects.setIamPolicy
+    - storage.buckets.create
+    - storage.buckets.delete
+    - storage.buckets.get
+    - storage.buckets.getIamPolicy
+    - storage.buckets.setIamPolicy
+    - storage.objects.create
+    - storage.objects.delete
+    - storage.objects.get
+    - storage.objects.list
