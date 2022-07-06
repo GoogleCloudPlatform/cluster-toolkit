@@ -148,7 +148,7 @@ module "nat_ip_addresses" {
 
 module "cloud_router" {
   source  = "terraform-google-modules/cloud-router/google"
-  version = "~> 1.3"
+  version = "~> 2.0"
 
   for_each = toset(local.regions)
 
@@ -157,7 +157,7 @@ module "cloud_router" {
   region  = each.value
   network = module.vpc.network_name
   # in scenario with no NAT IPs, no NAT is created even if router is created
-  # https://github.com/terraform-google-modules/terraform-google-cloud-router/blob/v1.3.0/nat.tf#L18-L20
+  # https://github.com/terraform-google-modules/terraform-google-cloud-router/blob/v2.0.0/nat.tf#L18-L20
   nats = length(module.nat_ip_addresses[each.value].self_links) == 0 ? [] : [
     {
       name : "cloud-nat-${each.value}",
