@@ -1,20 +1,32 @@
 ## Description
 
-This module creates a new VPC network along with a
-[cloud NAT](https://github.com/terraform-google-modules/terraform-google-cloud-nat),
-[Router](https://github.com/terraform-google-modules/terraform-google-cloud-router)
-and common [firewall rules](https://github.com/terraform-google-modules/terraform-google-network/tree/master/modules/firewall-rules).
-This module is based on submodules defined by the
-[Cloud Foundation Toolkit](https://cloud.google.com/foundation-toolkit).
+This module creates a new [VPC network][vpc] with 1 or more subnetworks and
+a [Cloud Router][router] for every region with a subnetwork. By default, it will
+create:
 
-The created cloud NAT (Network Address Translation) allows virtual machines
-without external IP addresses to create outbound connections to the internet.
-For more information see the [docs](https://cloud.google.com/nat/docs/overview).
+* A [Cloud NAT][nat] to enable outbound access to the public internet for VMs
+  without public IP addresses; VMs with public IP addresses bypass the NAT to
+  directly access the public internet
+* A firewall rule that enables inbound SSH access from [Identity-Aware
+  Proxy][iap]
+* A firewall rule that enables all traffic internal to the network
 
-The following firewall rules are created with the VPC network:
+This behavior is optional and can be configured as [described below](#inputs).
+This module is based on networking support in the [Cloud Foundation
+Toolkit][cft]. We recommend following the [documentation for the network
+module][cft-network] and [submodules][cft-network-submodules] for more details.
+In particular, the detailed structure of input variables can be found for:
 
-* Allow SSH access from the Cloud Console ("35.235.240.0/20").
-* Allow traffic between nodes within the VPC
+* [var.firewall\_rules](https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/firewall-rules#inputs)
+* [var.secondary\_ranges](https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/subnets#inputs)
+
+[vpc]: https://cloud.google.com/vpc
+[router]: https://github.com/terraform-google-modules/terraform-google-cloud-router
+[nat]: https://github.com/terraform-google-modules/terraform-google-cloud-nat
+[iap]: https://cloud.google.com/iap
+[cft]: https://cloud.google.com/foundation-toolkit
+[cft-network]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0
+[cft-network-submodules]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules
 
 Additionally, [Google Private Access][gpa] is enabled by default on all
 subnetworks unless it is explicitly disabled. This setting ensures that all VMs
@@ -41,7 +53,7 @@ automatically by calculating the most compact set of subnetworks. The size of
 each individual subnetwork is specified with the `new_bits` key and the base of
 the global VPC network is specified using `var.network_address_range`.
 
-[cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/master/modules/subnets
+[cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/subnets
 
 If explicitly supplied, `var.primary_subnetwork` defines all properties of the
 primary subnetwork. If `var.primary_subnetwork` is left at its default value of
