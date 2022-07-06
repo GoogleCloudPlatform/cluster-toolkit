@@ -75,7 +75,7 @@ variable "runnable" {
 }
 
 variable "instance_template" {
-  description = "Compute VM instance template self-link to be used for Batch compute node."
+  description = "Compute VM instance template self-link to be used for Batch compute node. If provided, a number of other variables will be ignored as noted by `Ignored if instance_template is provided` in descriptions."
   type        = string
   default     = null
 }
