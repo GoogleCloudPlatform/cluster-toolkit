@@ -14,8 +14,14 @@
  * limitations under the License.
  */
 
+data "google_compute_instance_template" "batch_instance_template" {
+  name = var.instance_template
+}
+
 locals {
-  login_metadata = { startup-script = module.login_startup_script.startup_script }
+  instance_template_metadata = data.google_compute_instance_template.batch_instance_template.metadata
+  batch_startup_script       = local.instance_template_metadata["startup-script"]
+  login_metadata             = merge(local.instance_template_metadata, { startup-script = module.login_startup_script.startup_script })
 }
 
 module "login_startup_script" {
@@ -25,6 +31,16 @@ module "login_startup_script" {
   deployment_name = var.deployment_name
   region          = var.region
   runners = [
+    {
+      content     = local.batch_startup_script
+      destination = "/tmp/startup-scripts/batch_startup_script.sh"
+      type        = "data"
+    },
+    {
+      content     = "bash /tmp/startup-scripts/batch_startup_script.sh"
+      destination = "/tmp/startup-scripts/invoke_batch_startup_script.sh"
+      type        = "shell"
+    },
     {
       content     = var.job_template_contents
       destination = "${var.batch_job_directory}/${var.job_filename}"
