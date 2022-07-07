@@ -31,8 +31,6 @@ blueprint_name: hpc-cluster-small-sharedvpc
 vars:
   project_id:  ## Set GCP Project ID Here ##
   host_project_id: your-host-project
-  network_name: your-shared-network
-  subnetwork_name: your-shared-subnetwork
   deployment_name: hpc-small-shared-vpc
   region: us-central1
   zone: us-central1-c
@@ -45,6 +43,8 @@ deployment_groups:
     id: network1
     settings:
       project_id: $(vars.host_project_id)
+      network_name: your-shared-network
+      subnetwork_name: your-shared-subnetwork
 
   - source: modules/file-system/filestore
     kind: terraform
@@ -52,9 +52,8 @@ deployment_groups:
     use: [network1]
     settings:
       local_mount: /home
-      project_id: $(vars.host_project_id)
       connect_mode: PRIVATE_SERVICE_ACCESS
-
+      network_name: $(network1.network_id)
 
   # This debug_partition will work out of the box without requesting additional GCP quota.
   - source: community/modules/compute/SchedMD-slurm-on-gcp-partition

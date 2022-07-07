@@ -15,12 +15,17 @@
 */
 
 output "network_name" {
-  description = "The name of the network created"
+  description = "The name of the existing network"
   value       = data.google_compute_network.vpc.name
 }
 
+output "network_id" {
+  description = "The ID of the existing network"
+  value       = data.google_compute_network.vpc.id
+}
+
 output "network_self_link" {
-  description = "The URI of the VPC being created"
+  description = "The URI of the existing network"
   value       = data.google_compute_network.vpc.self_link
 }
 

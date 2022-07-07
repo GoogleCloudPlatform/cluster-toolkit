@@ -152,6 +152,7 @@ No resources.
 | Name | Description |
 |------|-------------|
 | <a name="output_nat_ips"></a> [nat\_ips](#output\_nat\_ips) | the external IPs assigned to the NAT |
+| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The ID of the network created |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The name of the network created |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The URI of the VPC being created |
 | <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | The primary subnetwork object created by the input variable primary\_subnetwork |
