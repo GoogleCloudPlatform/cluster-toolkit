@@ -47,8 +47,10 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_batch_job_directory"></a> [batch\_job\_directory](#input\_batch\_job\_directory) | The path of the directory on the login node in which to place the Cloud Batch job template | `string` | `"/home/batch-jobs"` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used for the job\_id | `string` | n/a | yes |
+| <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions. Valid inputs are `"alpha"`, `"beta"` and "" (empty string for default version) | `string` | `"alpha"` | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Login VM instance template self-link | `string` | n/a | yes |
 | <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file | `string` | n/a | yes |
+| <a name="input_job_id"></a> [job\_id](#input\_job\_id) | An id for the Cloud Batch job. Used for output instructions | `string` | n/a | yes |
 | <a name="input_job_template_contents"></a> [job\_template\_contents](#input\_job\_template\_contents) | The contents of the Cloud Batch job template | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the login node. List key, value pairs | `any` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
@@ -56,4 +58,8 @@ limitations under the License.
 
 ## Outputs
 
+| Name | Description |
+|------|-------------|
+| <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for accessing the login node and submitting Cloud Batch jobs |
+| <a name="output_login_node_name"></a> [login\_node\_name](#output\_login\_node\_name) | Name of the created VM |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

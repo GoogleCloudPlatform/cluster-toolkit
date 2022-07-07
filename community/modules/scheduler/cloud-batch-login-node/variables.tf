@@ -49,6 +49,22 @@ variable "job_filename" {
   type        = string
 }
 
+variable "job_id" {
+  description = "An id for the Cloud Batch job. Used for output instructions"
+  type        = string
+}
+
+variable "gcloud_version" {
+  description = "The version of the gcloud cli being used. Used for output instructions. Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default version)"
+  type        = string
+  default     = "alpha"
+
+  validation {
+    condition     = contains(["alpha", "beta", ""], var.gcloud_version)
+    error_message = "Allowed values for gcloud_version are 'alpha', 'beta', or '' (empty string)."
+  }
+}
+
 variable "batch_job_directory" {
   description = "The path of the directory on the login node in which to place the Cloud Batch job template"
   type        = string

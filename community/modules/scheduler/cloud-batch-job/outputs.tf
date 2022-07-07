@@ -47,3 +47,13 @@ output "job_filename" {
   description = "The filename of the generated Cloud Batch job template."
   value       = local.job_filename
 }
+
+output "job_id" {
+  description = "The Cloud Batch job id."
+  value       = local.job_id
+}
+
+output "gcloud_version" {
+  description = "The version of gcloud to be used."
+  value       = var.gcloud_version
+}
