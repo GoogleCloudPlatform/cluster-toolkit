@@ -80,8 +80,9 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The name of the network created |
-| <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The URI of the VPC being created |
+| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The ID of the existing network |
+| <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The name of the existing network |
+| <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The URI of the existing network |
 | <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | The subnetwork in the specified primary region |
 | <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | The subnetwork address in the specified primary region |
 | <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | The name of the subnetwork in the specified primary region |
