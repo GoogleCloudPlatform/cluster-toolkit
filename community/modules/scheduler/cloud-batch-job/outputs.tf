@@ -32,3 +32,18 @@ output "instructions" {
     gcloud ${var.gcloud_version} batch jobs list ${var.region} | grep ^name:
   EOT
 }
+
+output "instance_template" {
+  description = "Instance template used by the Cloud Batch job."
+  value       = local.instance_template
+}
+
+output "job_template_contents" {
+  description = "The generated Cloud Batch job template."
+  value       = local.job_template_contents
+}
+
+output "job_filename" {
+  description = "The filename of the generated Cloud Batch job template."
+  value       = local.job_filename
+}
