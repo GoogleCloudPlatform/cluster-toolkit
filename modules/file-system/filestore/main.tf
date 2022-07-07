@@ -22,7 +22,7 @@ locals {
   timeouts = var.filestore_tier == "HIGH_SCALE_SSD" ? [1] : []
   install_nfs_client_runner = {
     "type"        = "shell"
-    "content"     = "${path.module}/scripts/install-nfs-client.sh"
+    "source"      = "${path.module}/scripts/install-nfs-client.sh"
     "destination" = "install-nfs.sh"
   }
   mount_runner = {
