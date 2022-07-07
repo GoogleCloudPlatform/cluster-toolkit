@@ -100,6 +100,12 @@ variable "additional_subnetworks" {
   default     = []
 }
 
+variable "secondary_ranges" {
+  type        = map(list(object({ range_name = string, ip_cidr_range = string })))
+  description = "Secondary ranges that will be used in some of the subnets"
+  default     = {}
+}
+
 variable "network_routing_mode" {
   type        = string
   default     = "GLOBAL"
@@ -133,4 +139,22 @@ variable "delete_default_internet_gateway_routes" {
   type        = bool
   description = "If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted"
   default     = false
+}
+
+variable "enable_iap_ssh_ingress" {
+  type        = bool
+  description = "Enable a firewall rule to allow SSH access using IAP tunnels"
+  default     = true
+}
+
+variable "enable_internal_traffic" {
+  type        = bool
+  description = "Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network"
+  default     = true
+}
+
+variable "firewall_rules" {
+  type        = any
+  description = "List of firewall rules"
+  default     = []
 }
