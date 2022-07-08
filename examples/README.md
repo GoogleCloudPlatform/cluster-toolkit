@@ -352,13 +352,15 @@ examples][intel-examples-readme].
 ### [cloud-batch.yaml] ![community-badge] ![experimental-badge]
 
 This example demonstrates how to use the HPC Toolkit to set up a Cloud Batch job
-that uses a Filestore and startup scripts.
+that mounts a Filestore instance and runs startup scripts.
 
 The blueprint creates a Filestore and uses the `startup-script` module to mount
 and load _"data"_ onto the shared storage. The `cloud-batch-job` module creates
 an instance template to be used for the Batch compute VMs and renders a Cloud
 Batch job template. A Batch login node VM is created with instructions on how to
 SSH to the login node and submit the Batch job.
+
+[cloud-batch.yaml]: ../community/examples/cloud-batch.yaml
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 

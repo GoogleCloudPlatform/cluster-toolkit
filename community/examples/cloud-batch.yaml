@@ -49,7 +49,7 @@ deployment_groups:
           #!/bin/sh
           echo "Hello World" > /sw/hello.txt
 
-  - source: ./community/modules/scheduler/cloud-batch-job
+  - source: community/modules/scheduler/cloud-batch-job
     kind: terraform
     id: batch-job
     use: [network1, appfs, hello-startup-script]
@@ -60,7 +60,7 @@ deployment_groups:
         family: centos-7
         project: centos-cloud
 
-  - source: ./community/modules/scheduler/cloud-batch-login-node
+  - source: community/modules/scheduler/cloud-batch-login-node
     kind: terraform
     id: batch-login
     use: [batch-job]
