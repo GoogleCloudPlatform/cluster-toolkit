@@ -15,7 +15,7 @@
  */
 
 variable "deployment_name" {
-  description = "Name of the deployment, used for the job_id"
+  description = "Name of the deployment, also used for the job_id"
   type        = string
 }
 
@@ -35,27 +35,27 @@ variable "labels" {
 }
 
 variable "instance_template" {
-  description = "Login VM instance template self-link"
+  description = "Login VM instance template self-link. Typically supplied by a cloud-batch-job module."
   type        = string
 }
 
 variable "job_template_contents" {
-  description = "The contents of the Cloud Batch job template"
+  description = "The contents of the Cloud Batch job template. Typically supplied by a cloud-batch-job module."
   type        = string
 }
 
 variable "job_filename" {
-  description = "The filename of the generated job template file"
+  description = "The filename of the generated job template file. Typically supplied by a cloud-batch-job module."
   type        = string
 }
 
 variable "job_id" {
-  description = "An id for the Cloud Batch job. Used for output instructions"
+  description = "The ID for the Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions."
   type        = string
 }
 
 variable "gcloud_version" {
-  description = "The version of the gcloud cli being used. Used for output instructions. Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default version)"
+  description = "The version of the gcloud cli being used. Used for output instructions. Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default version). Typically supplied by a cloud-batch-job module."
   type        = string
   default     = "alpha"
 

@@ -36,7 +36,7 @@ module "login_startup_script" {
       destination = "/tmp/startup-scripts/batch_startup_script.sh"
       type        = "data"
     },
-    {
+    { # TODO: This workaround should be removed once startup-script supports Bash syntax
       content     = "bash /tmp/startup-scripts/batch_startup_script.sh"
       destination = "/tmp/startup-scripts/invoke_batch_startup_script.sh"
       type        = "shell"
@@ -52,6 +52,7 @@ module "login_startup_script" {
 resource "google_compute_instance_from_template" "batch_login" {
   name                     = "${var.deployment_name}-batch-login"
   source_instance_template = var.instance_template
+  project                  = var.project_id
   metadata                 = local.login_metadata
 
   service_account {

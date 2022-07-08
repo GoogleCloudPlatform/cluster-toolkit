@@ -1,3 +1,7 @@
+## Description
+
+TODO: Add documentation prior to release.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -46,12 +50,12 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_batch_job_directory"></a> [batch\_job\_directory](#input\_batch\_job\_directory) | The path of the directory on the login node in which to place the Cloud Batch job template | `string` | `"/home/batch-jobs"` | no |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used for the job\_id | `string` | n/a | yes |
-| <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions. Valid inputs are `"alpha"`, `"beta"` and "" (empty string for default version) | `string` | `"alpha"` | no |
-| <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Login VM instance template self-link | `string` | n/a | yes |
-| <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file | `string` | n/a | yes |
-| <a name="input_job_id"></a> [job\_id](#input\_job\_id) | An id for the Cloud Batch job. Used for output instructions | `string` | n/a | yes |
-| <a name="input_job_template_contents"></a> [job\_template\_contents](#input\_job\_template\_contents) | The contents of the Cloud Batch job template | `string` | n/a | yes |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, also used for the job\_id | `string` | n/a | yes |
+| <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions. Valid inputs are `"alpha"`, `"beta"` and "" (empty string for default version). Typically supplied by a cloud-batch-job module. | `string` | `"alpha"` | no |
+| <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Login VM instance template self-link. Typically supplied by a cloud-batch-job module. | `string` | n/a | yes |
+| <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file. Typically supplied by a cloud-batch-job module. | `string` | n/a | yes |
+| <a name="input_job_id"></a> [job\_id](#input\_job\_id) | The ID for the Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions. | `string` | n/a | yes |
+| <a name="input_job_template_contents"></a> [job\_template\_contents](#input\_job\_template\_contents) | The contents of the Cloud Batch job template. Typically supplied by a cloud-batch-job module. | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the login node. List key, value pairs | `any` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region in which to create the login node | `string` | n/a | yes |

@@ -37,6 +37,7 @@ module "instance_template" {
   count   = var.instance_template == null ? 1 : 0
 
   name_prefix     = "${local.job_id}-instance-template"
+  project_id      = var.project_id
   network         = var.network_self_link
   subnetwork      = var.subnetwork_self_link
   service_account = var.service_account
