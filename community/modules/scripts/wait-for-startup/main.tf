@@ -16,6 +16,7 @@
 locals {
   retries = var.timeout / 5
 }
+
 resource "null_resource" "wait_for_startup" {
   provisioner "local-exec" {
     command = "/bin/bash ${path.module}/scripts/wait-for-startup-status.sh"
@@ -26,4 +27,6 @@ resource "null_resource" "wait_for_startup" {
       RETRIES       = local.retries
     }
   }
+
+  triggers = var.always_wait ? { run_every_time = "${timestamp()}" } : null
 }

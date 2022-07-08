@@ -66,6 +66,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_always_wait"></a> [always\_wait](#input\_always\_wait) | If true, `wait-for-startup` will be forced to run for consecutive invocations of `terraform apply`. If false, it may not run when tracked vm is replaced but name does not change. | `bool` | `true` | no |
 | <a name="input_instance_name"></a> [instance\_name](#input\_instance\_name) | Name of the instance we are waiting for | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_timeout"></a> [timeout](#input\_timeout) | Timeout in seconds | `number` | `1200` | no |
