@@ -30,11 +30,17 @@ apt_wait() {
 	fi
 }
 
-if ! command -v ansible-playbook >/dev/null 2>&1; then
+if [ ! -h /usr/bin/ansible-playbook ] || [ ! -f /usr/bin/ansible-playbook ]; then
 	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-		yum -y install epel-release
-		yum -y install ansible
-
+		if [ ! -f /bin/pip ]; then
+			curl -Os https://bootstrap.pypa.io/pip/2.7/get-pip.py
+			python get-pip.py
+		fi
+		python -m pip install virtualenv
+		virtualenv /usr/local/toolkit
+		/usr/local/toolkit/bin/python -m pip install wheel
+		/usr/local/toolkit/bin/python -m pip install ansible==2.9.27
+		ln -s /usr/local/toolkit/bin/ansible-playbook /usr/bin/ansible-playbook
 	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
 		echo 'WARNING: unsupported installation of ansible in debian / ubuntu'
 		apt_wait
