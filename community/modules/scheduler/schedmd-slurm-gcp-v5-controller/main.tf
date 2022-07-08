@@ -33,7 +33,9 @@ module "slurm_controller_instance" {
   instance_template            = module.slurm_controller_template.self_link
   project_id                   = var.project_id
   region                       = var.region
-  subnetwork                   = var.subnetwork_self_link
+  network                      = var.network_self_link == null ? "" : var.network_self_link
+  subnetwork                   = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
+  subnetwork_project           = var.subnetwork_project == null ? "" : var.subnetwork_project
   zone                         = var.zone
   static_ips                   = var.static_ips
   cgroup_conf_tpl              = var.cgroup_conf_tpl
@@ -84,9 +86,9 @@ module "slurm_controller_template" {
   source_image_family      = var.source_image_family
   source_image_project     = var.source_image_project
   source_image             = var.source_image
-  network                  = var.network_self_link
-  subnetwork_project       = var.subnetwork_project
-  subnetwork               = var.subnetwork_self_link
+  network                  = var.network_self_link == null ? "" : var.network_self_link
+  subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
+  subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   tags                     = concat([var.slurm_cluster_name], var.tags)
 }
 

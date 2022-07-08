@@ -51,9 +51,9 @@ module "slurm_login_template" {
   source_image_family      = var.source_image_family
   source_image_project     = var.source_image_project
   source_image             = var.source_image
-  network                  = var.network_self_link
-  subnetwork_project       = var.subnetwork_project
-  subnetwork               = var.subnetwork_self_link
+  network                  = var.network_self_link == null ? "" : var.network_self_link
+  subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
+  subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   tags                     = concat([var.slurm_cluster_name], var.tags)
 }
 

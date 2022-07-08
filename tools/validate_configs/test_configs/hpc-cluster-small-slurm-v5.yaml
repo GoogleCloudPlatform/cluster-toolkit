@@ -78,4 +78,3 @@ deployment_groups:
     use:
     - network1
     - slurm_controller
-    - homefs

@@ -47,9 +47,9 @@ locals {
       preemptible              = var.preemptible
       service_account          = var.service_account
       shielded_instance_config = var.shielded_instance_config
-      source_image_family      = var.source_image_family
-      source_image_project     = var.source_image_project
-      source_image             = var.source_image
+      source_image_family      = var.source_image_family == null ? "" : var.source_image_family
+      source_image_project     = var.source_image_project == null ? "" : var.source_image_project
+      source_image             = var.source_image == null ? "" : var.source_image
       tags                     = var.tags
 
       # Spot VM settings
@@ -74,7 +74,7 @@ module "slurm_partition" {
   partition_name          = var.partition_name
   project_id              = var.project_id
   region                  = var.region
-  subnetwork              = var.subnetwork_self_link
+  subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   partition_conf          = local.partition_conf
 }
 

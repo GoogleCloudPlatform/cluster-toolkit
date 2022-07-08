@@ -21,7 +21,7 @@ variable "project_id" {
 
 variable "labels" {
   type        = map(string)
-  description = "Labels, provided as a map"
+  description = "Labels, provided as a map."
   default     = {}
 }
 
@@ -57,20 +57,20 @@ variable "can_ip_forward" {
 
 variable "network_self_link" {
   type        = string
-  description = "Network to deploy to. Only one of network or subnetwork should be specified."
-  default     = ""
+  description = "Network to deploy to. Either network_self_link or subnetwork_self_link must be specified."
+  default     = null
 }
 
 variable "subnetwork_self_link" {
   type        = string
-  description = "Subnet to deploy to. Only one of network or subnetwork should be specified."
-  default     = ""
+  description = "Subnet to deploy to. Either network_self_link or subnetwork_self_link must be specified."
+  default     = null
 }
 
 variable "subnetwork_project" {
   type        = string
   description = "The project that subnetwork belongs to."
-  default     = ""
+  default     = null
 }
 
 variable "region" {
@@ -114,7 +114,7 @@ variable "zone" {
 
 variable "metadata" {
   type        = map(string)
-  description = "Metadata, provided as a map"
+  description = "Metadata, provided as a map."
   default     = {}
 }
 
@@ -211,7 +211,7 @@ variable "preemptible" {
 
 variable "on_host_maintenance" {
   type        = string
-  description = "Instance availability Policy"
+  description = "Instance availability Policy."
   default     = "MIGRATE"
 }
 
@@ -231,26 +231,41 @@ variable "num_instances" {
 }
 
 variable "startup_script" {
-  description = "Startup script that will be used by the login node VM"
+  description = "Startup script that will be used by the login node VM."
   type        = string
   default     = ""
 }
 
 variable "source_image_project" {
   type        = string
-  description = "Project where the source image comes from. If it is not provided, the provider project is used."
+  description = <<-EOD
+    Project path where the source image comes from. If not provided, this value
+    will default to the project hosting the slurm-gcp public images. More
+    information can be found in the slurm-gcp docs:
+    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image.
+    EOD
   default     = null
 }
 
 variable "source_image_family" {
   type        = string
-  description = "Source image family."
+  description = <<-EOD
+    Source image family. If not provided, the default image family name for the
+    hpc-centos-7 version of the slurm-gcp public images will be used. More
+    information can be found in the slurm-gcp docs:
+    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
+    EOD
   default     = null
 }
 
 variable "source_image" {
   type        = string
-  description = "Source disk image."
+  description = <<-EOD
+    Source disk image. By default, the image used will be the hpc-centos7
+    version of the slurm-gcp public images. More information can be found in the
+    slurm-gcp docs:
+    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
+    EOD
   default     = null
 }
 
@@ -258,12 +273,17 @@ variable "disk_type" {
   type        = string
   description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
   default     = "pd-standard"
+
+  validation {
+    condition     = contains(["pd-ssd", "local-ssd", "pd-standard"], var.disk_type)
+    error_message = "Variable disk_type must be one of pd-ssd, local-ssd, or pd-standard."
+  }
 }
 
 variable "disk_size_gb" {
   type        = number
   description = "Boot disk size in GB."
-  default     = 100
+  default     = 50
 }
 
 variable "disk_auto_delete" {
