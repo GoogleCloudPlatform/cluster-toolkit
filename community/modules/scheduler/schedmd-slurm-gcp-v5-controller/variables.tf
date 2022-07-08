@@ -104,7 +104,7 @@ variable "disable_smt" {
 variable "disk_type" {
   type        = string
   description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
-  default     = "pd-standard"
+  default     = "pd-ssd"
 
   validation {
     condition     = contains(["pd-ssd", "local-ssd", "pd-standard"], var.disk_type)
