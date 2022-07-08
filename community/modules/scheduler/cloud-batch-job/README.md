@@ -1,3 +1,65 @@
+# Description
+
+## Instance Templates
+
+Many of the settings for a Cloud Batch job are set using an instance template,
+`machine_type` for example. The `cloud-batch-job` module accomplishes this by
+creating an instance template within the module, which is supplied to the Cloud
+Batch job.
+
+Alternatively, one can supply an instance template to the `cloud-batch-job`
+module using the `instance_template` setting. This supplied instance template
+could be generated outside of the HPC Toolkit (via the Cloud Console UI for
+example) or using a separate module within the blueprint. To define an instance
+template within a blueprint, one can use the Cloud Foundation Toolkit instance
+template module as shown in the following example. This can be useful when
+trying to set a property not natively supported in the `cloud-batch-job` module.
+
+### Example generating instance template using Cloud Foundation Toolkit module
+
+```yaml
+deployment_groups:
+- group: primary
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+
+  - source: modules/file-system/filestore
+    kind: terraform
+    id: appfs
+    use: [network1]
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: batch-startup-script
+    settings:
+      runners: ...
+          
+  - source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
+    kind: terraform
+    id: batch-compute-template
+    use: [batch-startup-script]
+    settings:
+      # Boiler plate to work with Cloud Foundation Toolkit
+      network: $(network1.network_self_link)
+      service_account: {email: null, scopes: ["https://www.googleapis.com/auth/cloud-platform"]}
+      access_config: [{nat_ip: null, network_tier: null}]
+      # Batch customization
+      machine_type: n2-standard-4
+      metadata:
+        network_storage: ((jsonencode([module.appfs.network_storage])))
+      source_image_family: hpc-centos-7
+      source_image_project: cloud-hpc-image-public
+
+  - source: ./community/modules/scheduler/cloud-batch-job
+    kind: terraform
+    id: batch-job
+    settings:
+      instance_template: $(batch-compute-template.self_link)
+    outputs: [instructions]
+```
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
