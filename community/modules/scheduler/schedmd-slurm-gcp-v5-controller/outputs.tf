@@ -15,6 +15,6 @@
  */
 
 output "controller_instance_id" {
-  description = "Instance ID of the controller node"
+  description = "The server-assigned unique identifier of the controller compute instance."
   value       = module.slurm_controller_instance.slurm_controller_instance.instances_details[0].id
 }

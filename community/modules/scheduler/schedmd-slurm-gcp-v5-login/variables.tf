@@ -42,7 +42,10 @@ variable "slurm_cluster_name" {
 }
 
 variable "controller_instance_id" {
-  description = "The controller instance template"
+  description = <<-EOD
+    The server-assigned unique identifier of the controller instance, typically
+    supplied as an output of the controler module.
+    EOD
   type        = string
 }
 

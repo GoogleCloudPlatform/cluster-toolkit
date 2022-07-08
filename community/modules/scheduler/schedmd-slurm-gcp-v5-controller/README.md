@@ -150,5 +150,5 @@ No resources.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_controller_instance_id"></a> [controller\_instance\_id](#output\_controller\_instance\_id) | Instance ID of the controller node |
+| <a name="output_controller_instance_id"></a> [controller\_instance\_id](#output\_controller\_instance\_id) | The server-assigned unique identifier of the controller compute instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
