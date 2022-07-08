@@ -56,4 +56,12 @@ deployment_groups:
     settings:
       runnable: "cat /sw/hello.txt"
       machine_type: n2-standard-4
+      image:
+        family: centos-7
+        project: centos-cloud
+
+  - source: ./community/modules/scheduler/cloud-batch-login-node
+    kind: terraform
+    id: batch-login
+    use: [batch-job]
     outputs: [instructions]

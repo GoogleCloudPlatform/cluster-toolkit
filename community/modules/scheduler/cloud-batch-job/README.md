@@ -1,5 +1,7 @@
 # Description
 
+TODO: Add documentation prior to release.
+
 ## Instance Templates
 
 Many of the settings for a Cloud Batch job are set using an instance template,
@@ -117,6 +119,7 @@ limitations under the License.
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for Batch compute nodes. Ignored if `instance_template` is provided. | `string` | `"n2-standard-4"` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the Batch compute node. Ignored if `instance_template` is provided. | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region in which to run the Cloud Batch job | `string` | n/a | yes |
 | <a name="input_runnable"></a> [runnable](#input\_runnable) | A string to be executed as the main workload of the Batch job. This will be used to populate the generated template. | `string` | `"## Add your workload here"` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Batch compute node. Ignored if `instance_template` is provided. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/devstorage.read_only",<br>    "https://www.googleapis.com/auth/logging.write",<br>    "https://www.googleapis.com/auth/monitoring.write",<br>    "https://www.googleapis.com/auth/servicecontrol",<br>    "https://www.googleapis.com/auth/service.management.readonly",<br>    "https://www.googleapis.com/auth/trace.append"<br>  ]<br>}</pre> | no |
@@ -127,5 +130,10 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_gcloud_version"></a> [gcloud\_version](#output\_gcloud\_version) | The version of gcloud to be used. |
+| <a name="output_instance_template"></a> [instance\_template](#output\_instance\_template) | Instance template used by the Cloud Batch job. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting Cloud Batch job. |
+| <a name="output_job_filename"></a> [job\_filename](#output\_job\_filename) | The filename of the generated Cloud Batch job template. |
+| <a name="output_job_id"></a> [job\_id](#output\_job\_id) | The Cloud Batch job id. |
+| <a name="output_job_template_contents"></a> [job\_template\_contents](#output\_job\_template\_contents) | The generated Cloud Batch job template. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
