@@ -71,3 +71,10 @@ deployment_groups:
     - debug_partition
     - compute_partition
     - homefs
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    kind: terraform
+    id: slurm_login
+    use:
+    - network1
+    - slurm_controller

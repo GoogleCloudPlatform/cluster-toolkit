@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-output "controller_instance_id" {
-  description = "The server-assigned unique identifier of the controller compute instance."
-  value       = module.slurm_controller_instance.slurm_controller_instance.instances_details[0].id
+terraform {
+  required_version = ">= 0.14.0"
 }

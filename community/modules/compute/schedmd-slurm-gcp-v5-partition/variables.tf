@@ -22,22 +22,22 @@ variable "slurm_cluster_name" {
 
   validation {
     condition     = can(regex("(^[a-z][a-z0-9]*$)", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be a match of regex '(^[a-z][a-z0-9]*$)'."
+    error_message = "Variable 'slurm_cluster_name' must be composed of only alphanumeric values and begin with a leter. regex: '(^[a-z][a-z0-9]*$)'."
   }
 }
 
 variable "project_id" {
-  description = "Project in which the HPC deployment will be created"
+  description = "Project in which the HPC deployment will be created."
   type        = string
 }
 
 variable "region" {
-  description = "The default region for Cloud resources"
+  description = "The default region for Cloud resources."
   type        = string
 }
 
 variable "partition_name" {
-  description = "The name of the slurm partition"
+  description = "The name of the slurm partition."
   type        = string
 }
 
@@ -60,7 +60,7 @@ variable "is_default" {
 }
 
 variable "machine_type" {
-  description = "Compute Platform machine type to use for this partition compute nodes"
+  description = "Compute Platform machine type to use for this partition compute nodes."
   type        = string
   default     = "c2-standard-60"
 }
@@ -72,19 +72,19 @@ variable "metadata" {
 }
 
 variable "node_count_static" {
-  description = "Number of nodes to be statically created"
+  description = "Number of nodes to be statically created."
   type        = number
   default     = 0
 }
 
 variable "node_conf" {
-  description = "Map of Slurm node line configuration"
+  description = "Map of Slurm node line configuration."
   type        = map(any)
   default     = {}
 }
 
 variable "node_count_dynamic_max" {
-  description = "Maximum number of nodes allowed in this partition"
+  description = "Maximum number of nodes allowed in this partition."
   type        = number
   default     = 10
 }
@@ -93,24 +93,33 @@ variable "source_image_project" {
   type        = string
   description = <<-EOD
     Project path where the source image comes from. If not provided, this value
-    will default to the project hosting the slurm-gcp public images.
+    will default to the project hosting the slurm-gcp public images. More
+    information can be found in the slurm-gcp docs:
+    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image.
     EOD
-  default     = ""
+  default     = null
 }
 
 variable "source_image_family" {
   type        = string
   description = <<-EOD
     Source image family. If not provided, the default image family name for the
-    hpc-centos-7 version of the slurm-gcp public images will be used.
+    hpc-centos-7 version of the slurm-gcp public images will be used. More
+    information can be found in the slurm-gcp docs:
+    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
     EOD
-  default     = ""
+  default     = null
 }
 
 variable "source_image" {
   type        = string
-  description = "Source disk image."
-  default     = ""
+  description = <<-EOD
+    Source disk image. By default, the image used will be the hpc-centos7
+    version of the slurm-gcp public images. More information can be found in the
+    slurm-gcp docs:
+    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
+    EOD
+  default     = null
 }
 
 variable "tags" {
@@ -120,15 +129,20 @@ variable "tags" {
 }
 
 variable "disk_type" {
-  description = "Type of boot disk to create for the partition compute nodes"
+  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
   type        = string
   default     = "pd-standard"
+
+  validation {
+    condition     = contains(["pd-ssd", "local-ssd", "pd-standard"], var.disk_type)
+    error_message = "Variable disk_type must be one of pd-ssd, local-ssd, or pd-standard."
+  }
 }
 
 variable "disk_size_gb" {
-  description = "Size of boot disk to create for the partition compute nodes"
+  description = "Size of boot disk to create for the partition compute nodes."
   type        = number
-  default     = 30
+  default     = 50
 }
 
 variable "disk_auto_delete" {
@@ -138,7 +152,7 @@ variable "disk_auto_delete" {
 }
 
 variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes"
+  description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
     disk_name    = string
     device_name  = string
@@ -173,7 +187,7 @@ variable "enable_oslogin" {
 }
 
 variable "can_ip_forward" {
-  description = "Enable IP forwarding, for NAT instances for example"
+  description = "Enable IP forwarding, for NAT instances for example."
   type        = bool
   default     = false
 }
@@ -210,7 +224,7 @@ variable "on_host_maintenance" {
 }
 
 variable "gpu" {
-  description = "Definition of requested GPU resources"
+  description = "Definition of requested GPU resources."
   type = object({
     count = number,
     type  = string
@@ -231,7 +245,7 @@ variable "network_storage" {
 }
 
 variable "preemptible" {
-  description = "Should use preemptibles to burst"
+  description = "Should use preemptibles to burst."
   type        = string
   default     = false
 }
@@ -280,24 +294,24 @@ variable "shielded_instance_config" {
 
 variable "subnetwork_self_link" {
   type        = string
-  description = "Subnet to deploy to. Only one of network or subnetwork should be specified."
-  default     = ""
+  description = "Subnet to deploy to."
+  default     = null
 }
 
 variable "exclusive" {
-  description = "Exclusive job access to nodes"
+  description = "Exclusive job access to nodes."
   type        = bool
   default     = true
 }
 
 variable "enable_placement" {
-  description = "Enable placement groups"
+  description = "Enable placement groups."
   type        = bool
   default     = true
 }
 
 variable "enable_spot_vm" {
-  description = "Enable the partition to use spot VMs (https://cloud.google.com/spot-vms)"
+  description = "Enable the partition to use spot VMs (https://cloud.google.com/spot-vms)."
   type        = bool
   default     = false
 }
