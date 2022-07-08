@@ -1,8 +1,5 @@
 ## Description
 
-**THIS MODULE IS PRE-RELEASE AND DOES NOT YET SUPPORT A FULLY FUNCTIONAL
-HTCONDOR POOL**
-
 This module performs the following tasks:
 
 - store an HTCondor Pool password in Google Cloud Secret Manager
@@ -11,7 +8,66 @@ This module performs the following tasks:
 - create a Toolkit runner for an Access Point
 - create a Toolkit runner for a Central Manager
 
+It is expected to be used with the [htcondor-install] and
+[htcondor-execute-point] modules.
+
+[hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[htcondor-install]: ../../scripts/htcondor-configure/README.md
+[htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
+
 [htcrole]: https://htcondor.readthedocs.io/en/latest/getting-htcondor/admin-quick-start.html#what-get-htcondor-does-to-configure-a-role
+
+### Example
+
+The following code snippet uses this module to create startup scripts that
+install the HTCondor software and adds custom configurations using
+[htcondor-configure] and [htcondor-execute-point].
+
+```yaml
+- source: community/modules/scripts/htcondor-install
+  kind: terraform
+  id: htcondor_install
+
+- source: modules/scripts/startup-script
+  kind: terraform
+  id: htcondor_configure_central_manager
+  settings:
+    runners:
+    - type: shell
+      source: modules/startup-script/examples/install_ansible.sh
+      destination: install_ansible.sh
+    - $(htcondor_install.install_htcondor_runner)
+    - $(htcondor_configure.central_manager_runner)
+
+- source: modules/scripts/startup-script
+  kind: terraform
+  id: htcondor_configure_access_point
+  settings:
+    runners:
+    - type: shell
+      source: modules/startup-script/examples/install_ansible.sh
+      destination: install_ansible.sh
+    - $(htcondor_install.install_htcondor_runner)
+    - $(htcondor_install.install_autoscaler_deps_runner)
+    - $(htcondor_install.install_autoscaler_runner)
+    - $(htcondor_configure.access_point_runner)
+    - $(htcondor_execute_point.configure_autoscaler_runner)
+```
+
+A full example can be found in the [examples README][htc-example].
+
+[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
+
+## Support
+
+HTCondor is maintained by the [Center for High Throughput Computing][chtc] at
+the University of Wisconsin-Madison. Support for HTCondor is available via:
+
+- [Discussion lists](https://htcondor.org/mail-lists/)
+- [HTCondor on GitHub](https://github.com/htcondor/htcondor/)
+- [HTCondor manual](https://htcondor.readthedocs.io/en/latest/)
+
+[chtc]: https://chtc.cs.wisc.edu/
 
 ## License
 
