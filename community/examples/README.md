@@ -13,6 +13,10 @@ Examples using Intel HPC technologies can be found in the
 [Intel folder](intel). More information can be found in the
 [readme](intel/README.md).
 
+### cloud-batch.yaml
+
+[See description in core](../../examples/README.md/#cloud-batchyaml--)
+
 ### spack-gromacs.yaml
 
 [See description in core](../../examples/README.md#spack-gromacsyaml--)

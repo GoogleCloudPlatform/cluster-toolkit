@@ -17,6 +17,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
   * [daos-cluster.yaml](#daos-clusteryaml-)
   * [daos-slurm.yaml](#daos-slurmyaml-)
+  * [cloud-batch.yaml](#cloud-batchyaml--)
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
@@ -347,6 +348,17 @@ more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
 [daos-slurm.yaml]: ../community/examples/intel/daos-slurm.yaml
+
+### [cloud-batch.yaml] ![community-badge] ![experimental-badge]
+
+This example demonstrates how to use the HPC Toolkit to set up a Cloud Batch job
+that uses a Filestore and startup scripts.
+
+The blueprint creates a Filestore and uses the `startup-script` module to mount
+and load _"data"_ onto the shared storage. The `cloud-batch-job` module creates
+an instance template to be used for the Batch compute VMs and renders a Cloud
+Batch job template. A Batch login node VM is created with instructions on how to
+SSH to the login node and submit the Batch job.
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 

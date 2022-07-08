@@ -1,6 +1,33 @@
 # Description
 
-TODO: Add documentation prior to release.
+This module will render a Cloud Batch job template that is written to a local
+file. When this module is used with the `cloud-batch-login-node` module, the
+generated job template is placed on the login node.
+
+In some cases the job template can be submitted to the Google Cloud Batch API
+without modification, but for more complex workloads it is expected that the
+user will modify the template after running the HPC Toolkit.
+
+This module will also generate an instance template for the Cloud Batch job
+unless one is provided. See the
+[Instance Templates section](#instance-templates) for more information.
+
+## Example
+
+```yaml
+- source: community/modules/scheduler/cloud-batch-job
+  kind: terraform
+  id: batch-job
+  use: [network1]
+  settings:
+    runnable: "echo 'hello world'"
+    machine_type: n2-standard-4
+  outputs: [instructions]
+```
+
+See the [Cloud Batch Example](../../../../examples/README.md#cloud-batchyaml--)
+for how to use the `cloud-batch-job` module with other HPC Toolkit modules such
+as `filestore` and `startup-script`.
 
 ## Instance Templates
 
