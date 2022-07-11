@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "The region in which to run the Cloud Batch job"
+  description = "The region in which to run the Google Cloud Batch job"
   type        = string
 }
 
@@ -30,12 +30,12 @@ variable "deployment_name" {
 }
 
 variable "labels" {
-  description = "Labels to add to the Batch compute nodes. List key, value pairs. Ignored if `instance_template` is provided."
+  description = "Labels to add to the Google Cloud Batch compute nodes. List key, value pairs. Ignored if `instance_template` is provided."
   type        = any
 }
 
 variable "job_id" {
-  description = "An id for the batch job. Used for output instructions and file naming. Defaults to deployment name."
+  description = "An id for the Google Cloud Batch job. Used for output instructions and file naming. Defaults to deployment name."
   type        = string
   default     = null
 }
@@ -74,31 +74,31 @@ variable "log_policy" {
 }
 
 variable "runnable" {
-  description = "A string to be executed as the main workload of the Batch job. This will be used to populate the generated template."
+  description = "A string to be executed as the main workload of the Google Cloud Batch job. This will be used to populate the generated template."
   type        = string
   default     = "## Add your workload here"
 }
 
 variable "instance_template" {
-  description = "Compute VM instance template self-link to be used for Batch compute node. If provided, a number of other variables will be ignored as noted by `Ignored if instance_template is provided` in descriptions."
+  description = "Compute VM instance template self-link to be used for Google Cloud Batch compute node. If provided, a number of other variables will be ignored as noted by `Ignored if instance_template is provided` in descriptions."
   type        = string
   default     = null
 }
 
 variable "network_self_link" {
-  description = "The self link of the network to attach the Batch compute node. Ignored if `instance_template` is provided."
+  description = "The self link of the network to attach the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
   type        = string
   default     = "default"
 }
 
 variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork to attach the Batch compute node. Ignored if `instance_template` is provided."
+  description = "The self link of the subnetwork to attach the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
   type        = string
   default     = null
 }
 
 variable "service_account" {
-  description = "Service account to attach to the Batch compute node. Ignored if `instance_template` is provided."
+  description = "Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
   type = object({
     email  = string,
     scopes = set(string)
@@ -117,13 +117,13 @@ variable "service_account" {
 }
 
 variable "machine_type" {
-  description = "Machine type to use for Batch compute nodes. Ignored if `instance_template` is provided."
+  description = "Machine type to use for Google Cloud Batch compute nodes. Ignored if `instance_template` is provided."
   type        = string
   default     = "n2-standard-4"
 }
 
 variable "startup_script" {
-  description = "Startup script run before Batch job starts. Ignored if `instance_template` is provided."
+  description = "Startup script run before Google Cloud Batch job starts. Ignored if `instance_template` is provided."
   type        = string
   default     = null
 }
@@ -141,7 +141,7 @@ variable "network_storage" {
 }
 
 variable "image" {
-  description = "Batch compute node image. Ignored if `instance_template` is provided."
+  description = "Google Cloud Batch compute node image. Ignored if `instance_template` is provided."
   type = object({
     family  = string,
     project = string

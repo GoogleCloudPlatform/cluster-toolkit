@@ -15,7 +15,7 @@
  */
 
 output "instructions" {
-  description = "Instructions for submitting Cloud Batch job."
+  description = "Instructions for submitting Google Cloud Batch job."
   value       = <<-EOT
   Use the following commands to:
   
@@ -34,22 +34,22 @@ output "instructions" {
 }
 
 output "instance_template" {
-  description = "Instance template used by the Cloud Batch job."
+  description = "Instance template used by the Google Cloud Batch job."
   value       = local.instance_template
 }
 
 output "job_template_contents" {
-  description = "The generated Cloud Batch job template."
+  description = "The generated Google Cloud Batch job template."
   value       = local.job_template_contents
 }
 
 output "job_filename" {
-  description = "The filename of the generated Cloud Batch job template."
+  description = "The filename of the generated Google Cloud Batch job template."
   value       = local.job_filename
 }
 
 output "job_id" {
-  description = "The Cloud Batch job id."
+  description = "The Google Cloud Batch job id."
   value       = local.job_id
 }
 

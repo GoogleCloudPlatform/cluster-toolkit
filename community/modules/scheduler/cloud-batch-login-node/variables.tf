@@ -40,7 +40,7 @@ variable "instance_template" {
 }
 
 variable "job_template_contents" {
-  description = "The contents of the Cloud Batch job template. Typically supplied by a cloud-batch-job module."
+  description = "The contents of the Google Cloud Batch job template. Typically supplied by a cloud-batch-job module."
   type        = string
 }
 
@@ -50,7 +50,7 @@ variable "job_filename" {
 }
 
 variable "job_id" {
-  description = "The ID for the Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions."
+  description = "The ID for the Google Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions."
   type        = string
 }
 
@@ -66,7 +66,7 @@ variable "gcloud_version" {
 }
 
 variable "batch_job_directory" {
-  description = "The path of the directory on the login node in which to place the Cloud Batch job template"
+  description = "The path of the directory on the login node in which to place the Google Cloud Batch job template"
   type        = string
   default     = "/home/batch-jobs"
 }
