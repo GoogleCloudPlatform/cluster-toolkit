@@ -13,6 +13,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-)
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
+  * [slurm-gcp-v5-cluster.yaml](#slurm-gcp-v5-clusteryaml--)
   * [image-builder.yaml](#image-builderyaml-)
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
   * [daos-cluster.yaml](#daos-clusteryaml-)
@@ -120,7 +121,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
   GB/node** up to 500 GB
-* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: N2 CPUs: **10**
 * Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
   in `compute` partition up to 1,204
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
@@ -171,6 +172,38 @@ For this example the following is needed in the selected region:
   _only needed for `compute` partition_
 
 [hpc-cluster-high-io.yaml]: ./hpc-cluster-high-io.yaml
+
+### [slurm-gcp-v5-cluster.yaml] ![community-badge]
+
+This example creates an HPC cluster similar to the one created by
+[hpc-cluster-small.yaml], but uses modules built from version 5 of
+[slurm-gcp].
+
+The cluster will support 2 partitions named `debug` and `compute`.
+The `debug` partition is the default partition and runs on smaller
+`n2-standard-2` nodes. The `compute` partition is not default and requires
+specifying in the `srun` command via the `--partition` flag. The `compute`
+partition runs on compute optimized nodes of type `cs-standard-60`. The
+`compute` partition may require additional quota before using.
+
+#### Quota Requirements for slurm-gcp-v5-cluster.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+[slurm-gcp-v5-cluster.yaml]: ../community/examples/slurm-gcp-v5-cluster.yaml
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
 
 ### [image-builder.yaml] ![core-badge]
 

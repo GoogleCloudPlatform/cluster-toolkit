@@ -30,6 +30,9 @@ The following code snippet creates a partition module with:
     machine_type: c2-standard-30
 ```
 
+For a complete example using this module, see
+[slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
+
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
