@@ -64,6 +64,7 @@ var (
 		Short: "Create a new deployment.",
 		Long:  "Create a new deployment based on a provided blueprint.",
 		Run:   runCreateCmd,
+		Args:  cobra.ExactArgs(1),
 	}
 )
 
