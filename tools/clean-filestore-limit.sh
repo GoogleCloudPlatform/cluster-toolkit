@@ -24,7 +24,7 @@ fi
 
 ACTIVE_BUILDS=$(gcloud builds list --project "${PROJECT_ID}" --filter="id!=\"${BUILD_ID}\"" --ongoing 2>/dev/null)
 ACTIVE_FILESTORE=$(gcloud filestore instances list --project "${PROJECT_ID}" --format='value(name)')
-if [[ -z "$ACTIVE_BUILDS" && -z "$ACTIVE_FILESTORE" ]]; then
+if [[ ! (-n "$ACTIVE_BUILDS" || -n "$ACTIVE_FILESTORE") ]]; then
 	echo "Disabling Filestore API..."
 	gcloud services disable file.googleapis.com --force --project "${PROJECT_ID}"
 	echo "Re-enabling Filestore API..."
