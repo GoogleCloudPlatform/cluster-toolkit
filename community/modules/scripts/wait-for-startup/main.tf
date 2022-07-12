@@ -17,6 +17,12 @@ locals {
   retries = var.timeout / 5
 }
 
+data "google_compute_instance" "vm_instance" {
+  name    = var.instance_name
+  zone    = var.zone
+  project = var.project_id
+}
+
 resource "null_resource" "wait_for_startup" {
   provisioner "local-exec" {
     command = "/bin/bash ${path.module}/scripts/wait-for-startup-status.sh"
@@ -28,5 +34,5 @@ resource "null_resource" "wait_for_startup" {
     }
   }
 
-  triggers = var.always_wait ? { run_every_time = "${timestamp()}" } : null
+  triggers = { instance_id_changes = data.google_compute_instance.vm_instance.instance_id }
 }

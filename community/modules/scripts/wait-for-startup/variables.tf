@@ -34,9 +34,3 @@ variable "timeout" {
   type        = number
   default     = 1200
 }
-
-variable "always_wait" {
-  description = "If true, `wait-for-startup` will be forced to run for consecutive invocations of `terraform apply`. If false, it may not run when tracked vm is replaced but name does not change."
-  type        = bool
-  default     = true
-}
