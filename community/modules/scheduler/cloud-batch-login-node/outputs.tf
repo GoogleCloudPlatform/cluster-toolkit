@@ -20,7 +20,7 @@ output "login_node_name" {
 }
 
 output "instructions" {
-  description = "Instructions for accessing the login node and submitting Cloud Batch jobs"
+  description = "Instructions for accessing the login node and submitting Google Cloud Batch jobs"
   value       = <<-EOT
   Use the following commands to:
 

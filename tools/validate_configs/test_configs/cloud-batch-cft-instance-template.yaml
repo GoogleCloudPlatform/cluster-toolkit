@@ -58,7 +58,7 @@ deployment_groups:
       network: $(network1.network_self_link)
       service_account: {email: null, scopes: ["https://www.googleapis.com/auth/cloud-platform"]}
       access_config: [{nat_ip: null, network_tier: null}]
-      # Batch customization
+      # Google Cloud Batch customization
       machine_type: n2-standard-4
       metadata:
         network_storage: ((jsonencode([module.appfs.network_storage])))
