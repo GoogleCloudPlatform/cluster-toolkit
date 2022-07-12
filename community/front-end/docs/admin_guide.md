@@ -1,5 +1,8 @@
 # HPC Toolkit FrontEnd - Administrator’s Guide
-
+<!--
+0        1         2         3         4         5         6         7        8
+1234567890123456789012345678901234567890123456789012345678901234567890234567890
+-->
 This document is for administrators of the HPC Toolkit FrontEnd (TKFE). An
 administrator can manage the life cycle of HPC clusters, set up networking and
 storage resources that support clusters, install applications and manage user
@@ -14,7 +17,7 @@ within the FrontEnd, once it is deployed and running.
 
 This guide covers the deployment of the TKFE and the steps required to create
 and manage clusters.  Further guides cover installation of
-[applications](Applications.md) and the [Workbench](Workbench.md) Jupyter
+[applications](Applications.md) and the [Workbench](WorkbenchAdmin.md) Jupyter
 Notebook feature.
 
 
@@ -448,7 +451,7 @@ Please see the [application installation guide](Applications.md).
 
 ## Workbench Management
 
-Please see the [Workbench Admin Guide](Workbench.md).
+Please see the [Workbench Admin Guide](WorkbenchAdmin.md).
 
 
 ## Teardown Process
