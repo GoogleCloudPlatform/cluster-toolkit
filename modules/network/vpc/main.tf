@@ -15,16 +15,16 @@
 */
 
 locals {
-  network_name                = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
-  subnetwork_name             = var.subnetwork_name == null ? "${var.deployment_name}-primary-subnet" : var.subnetwork_name
-  primary_subnetwork_new_bits = try(var.primary_subnetwork.new_bits, var.subnetwork_size)
-  cidr_blocks                 = cidrsubnets(var.network_address_range, local.primary_subnetwork_new_bits, var.additional_subnetworks[*].new_bits...)
+  network_name    = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
+  subnetwork_name = var.subnetwork_name == null ? "${var.deployment_name}-primary-subnet" : var.subnetwork_name
 
-  regions = distinct([for subnet in local.all_subnets : subnet.subnet_region])
-
-  default_primary_subnet = {
+  # define a default subnetwork for cases in which no explicit subnetworks are
+  # defined in var.primary_subnetwork or var.subnetworks
+  default_primary_subnetwork_new_bits   = coalesce(try(var.primary_subnetwork.new_bits, var.subnetwork_size), var.default_primary_subnetwork_size)
+  default_primary_subnetwork_cidr_block = cidrsubnet(var.network_address_range, local.default_primary_subnetwork_new_bits, 0)
+  default_primary_subnetwork = {
     subnet_name           = local.subnetwork_name
-    subnet_ip             = local.cidr_blocks[0]
+    subnet_ip             = local.default_primary_subnetwork_cidr_block
     subnet_region         = var.region
     subnet_private_access = true
     subnet_flow_logs      = false
@@ -33,28 +33,47 @@ locals {
     role                  = null
   }
 
-  primary_subnet = var.primary_subnetwork == null ? local.default_primary_subnet : var.primary_subnetwork
+  # Identify user-supplied primary subnetwork
+  # (1) explicit var.primary_subnetwork
+  # (2) explicit var.subnetworks[0]
+  # (3) implicit local default subnetwork
+  input_primary_subnetwork = try(coalesce(
+    var.primary_subnetwork,
+    try(var.subnetworks[0], null)
+  ), local.default_primary_subnetwork)
 
-  additional_subnets = [for index, subnet in var.additional_subnetworks :
-    {
-      subnet_name           = subnet.subnet_name
-      subnet_ip             = local.cidr_blocks[index + 1]
-      subnet_region         = subnet.subnet_region
-      subnet_private_access = lookup(subnet, "subnet_private_access", true)
-      subnet_flow_logs      = lookup(subnet, "subnet_flow_logs", false)
-      description           = lookup(subnet, "description", null)
-      purpose               = lookup(subnet, "purpose", null)
-      role                  = lookup(subnet, "role", null)
-    }
+  # Identify user-supplied additional subnetworks
+  # (1) explicit var.additional_subnetworks
+  # (2) explicit var.subnetworks[1:end]
+  # (3) empty list
+  input_additional_subnetworks = try(coalescelist(
+    var.additional_subnetworks,
+    try(slice(var.subnetworks, 1, length(var.subnetworks)), []),
+  ), [])
+
+  # at this point we have constructed a list of subnetworks but need to extract
+  # user-provided CIDR blocks or calculate them from user-provided new_bits
+  # after we complete deprecation, local.all_subnetworks can be replaced with
+  # var.subnetworks (or local.default_primary_subnetwork if that is null)
+  input_subnetworks = concat([local.input_primary_subnetwork], local.input_additional_subnetworks)
+  subnetworks_cidr_blocks = try(
+    local.input_subnetworks[*]["subnet_ip"],
+    cidrsubnets(var.network_address_range, local.input_subnetworks[*]["new_bits"]...)
+  )
+
+  # merge in the CIDR blocks (even when already there) and remove new_bits
+  subnetworks = [for i, subnet in local.input_subnetworks :
+    merge({ for k, v in subnet : k => v if k != "new_bits" }, { "subnet_ip" = local.subnetworks_cidr_blocks[i] })
   ]
 
-  all_subnets = concat([local.primary_subnet], local.additional_subnets)
+  # gather the unique regions for purposes of creating Router/NAT
+  regions = distinct([for subnet in local.subnetworks : subnet.subnet_region])
 
-  # this comprehension is guaranteed to have 1 and only 1 match
-  primary_subnetwork               = one([for k, v in module.vpc.subnets : v if k == "${local.primary_subnet.subnet_region}/${local.primary_subnet.subnet_name}"])
-  primary_subnetwork_name          = local.primary_subnetwork.name
-  primary_subnetwork_self_link     = local.primary_subnetwork.self_link
-  primary_subnetwork_ip_cidr_range = local.primary_subnetwork.ip_cidr_range
+  # this comprehension should have 1 and only 1 match
+  output_primary_subnetwork               = one([for k, v in module.vpc.subnets : v if k == "${local.subnetworks[0].subnet_region}/${local.subnetworks[0].subnet_name}"])
+  output_primary_subnetwork_name          = local.output_primary_subnetwork.name
+  output_primary_subnetwork_self_link     = local.output_primary_subnetwork.self_link
+  output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
 
   allow_iap_ssh_ingress = {
     name                    = "${local.network_name}-allow-iap-ssh-ingress"
@@ -116,7 +135,7 @@ module "vpc" {
   network_name                           = local.network_name
   project_id                             = var.project_id
   auto_create_subnetworks                = false
-  subnets                                = local.all_subnets
+  subnets                                = local.subnetworks
   secondary_ranges                       = var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu

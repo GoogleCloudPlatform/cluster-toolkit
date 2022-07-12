@@ -40,25 +40,25 @@ output "subnetworks" {
 
 output "subnetwork" {
   description = "The primary subnetwork object created by the input variable primary_subnetwork"
-  value       = local.primary_subnetwork
+  value       = local.output_primary_subnetwork
   depends_on  = [module.firewall_rules, module.cloud_router]
 }
 
 output "subnetwork_name" {
   description = "The name of the primary subnetwork"
-  value       = local.primary_subnetwork_name
+  value       = local.output_primary_subnetwork_name
   depends_on  = [module.firewall_rules, module.cloud_router]
 }
 
 output "subnetwork_self_link" {
   description = "The self-link to the primary subnetwork"
-  value       = local.primary_subnetwork_self_link
+  value       = local.output_primary_subnetwork_self_link
   depends_on  = [module.firewall_rules, module.cloud_router]
 }
 
 output "subnetwork_address" {
   description = "The address range of the primary subnetwork"
-  value       = local.primary_subnetwork_ip_cidr_range
+  value       = local.output_primary_subnetwork_ip_cidr_range
   depends_on  = [module.firewall_rules, module.cloud_router]
 }
 
