@@ -38,10 +38,10 @@ output "pool_password_secret_id" {
 
 output "central_manager_runner" {
   description = "Toolkit Runner to configure an HTCondor Central Manager"
-  value       = local.role_runner_cm
+  value       = local.runner_cm_role
 }
 
 output "access_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Access Point"
-  value       = local.role_runner_access
+  value       = local.runner_access_role
 }
