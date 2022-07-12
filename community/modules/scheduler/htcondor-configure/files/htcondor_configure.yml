@@ -57,6 +57,15 @@
         mode: 0644
         content: |
           CONDOR_HOST={{ cm.content }}
+  - name: Configure HTCondor SchedD
+    when: htcondor_role == 'get_htcondor_submit'
+    block:
+    - name: Create SchedD configuration file
+      ansible.builtin.copy:
+        dest: /etc/condor/config.d/02-schedd
+        mode: 0644
+        content: |
+          SCHEDD_INTERVAL=15
   - name: Set HTCondor credentials
     ansible.builtin.shell: |
       set -e -o pipefail
