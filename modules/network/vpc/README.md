@@ -95,11 +95,11 @@ be the size of the CIDR subnetwork (in bits). IP ranges for each subnetwork are
 calculated using `var.network_address_range` as the base IP, producing the most
 compact set of subnetworks possible.
 
-**_NOTE:_** we do not presently support the modification of individual subnetworks
-when using this module to provision more than 1 subnetwork using
-automatically-calculated IP ranges based upon `new_bits`. Doing so will cause
-IP ranges to be recalculated for each subnetwork. We advise appending new
-subnetworks to the end of `var.subnetworks`.
+> **_NOTE:_** we do not presently support the modification of individual subnetworks
+> when using this module to provision more than 1 subnetwork using automatically
+> calculated IP ranges based upon `new_bits`. Doing so will cause IP ranges to be
+> recalculated for each subnetwork. We advise appending new subnetworks to the end
+> of `var.subnetworks`.
 
 [cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/subnets
 
