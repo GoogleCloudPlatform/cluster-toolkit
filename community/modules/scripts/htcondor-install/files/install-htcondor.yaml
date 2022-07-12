@@ -34,12 +34,6 @@
       mode: 0700
       owner: root
       group: root
-      recurse: true
-  - name: Ensure HTCondor is stopped and disabled. Must configure at boot!
-    ansible.builtin.service:
-      name: condor
-      enabled: false
-      state: stopped
   - name: Ensure that firewall is started and enabled
     ansible.builtin.systemd:
       name: firewalld
