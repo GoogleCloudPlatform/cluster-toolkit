@@ -26,7 +26,7 @@ locals {
     subnet_name           = local.subnetwork_name
     subnet_ip             = local.cidr_blocks[0]
     subnet_region         = var.region
-    subnet_private_access = false
+    subnet_private_access = true
     subnet_flow_logs      = false
     description           = "primary subnetwork in ${local.network_name}"
     purpose               = null
@@ -40,7 +40,7 @@ locals {
       subnet_name           = subnet.subnet_name
       subnet_ip             = local.cidr_blocks[index + 1]
       subnet_region         = subnet.subnet_region
-      subnet_private_access = lookup(subnet, "subnet_private_access", false)
+      subnet_private_access = lookup(subnet, "subnet_private_access", true)
       subnet_flow_logs      = lookup(subnet, "subnet_flow_logs", false)
       description           = lookup(subnet, "description", null)
       purpose               = lookup(subnet, "purpose", null)
@@ -55,6 +55,58 @@ locals {
   primary_subnetwork_name          = local.primary_subnetwork.name
   primary_subnetwork_self_link     = local.primary_subnetwork.self_link
   primary_subnetwork_ip_cidr_range = local.primary_subnetwork.ip_cidr_range
+
+  allow_iap_ssh_ingress = {
+    name                    = "${local.network_name}-allow-iap-ssh-ingress"
+    description             = "allow console SSH access"
+    direction               = "INGRESS"
+    priority                = null
+    ranges                  = ["35.235.240.0/20"]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = ["22"]
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
+  allow_internal_traffic = {
+    name                    = "${local.network_name}-allow-internal-traffic"
+    priority                = null
+    description             = "allow traffic between nodes of this VPC"
+    direction               = "INGRESS"
+    ranges                  = [var.network_address_range]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = ["0-65535"]
+      }, {
+      protocol = "udp"
+      ports    = ["0-65535"]
+      }, {
+      protocol = "icmp"
+      ports    = null
+      },
+    ]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
+  firewall_rules = concat(var.firewall_rules,
+    var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
+    var.enable_iap_ssh_ingress ? [local.allow_iap_ssh_ingress] : []
+  )
 }
 
 module "vpc" {
@@ -65,7 +117,9 @@ module "vpc" {
   project_id                             = var.project_id
   auto_create_subnetworks                = false
   subnets                                = local.all_subnets
+  secondary_ranges                       = var.secondary_ranges
   routing_mode                           = var.network_routing_mode
+  mtu                                    = var.mtu
   description                            = var.network_description
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
@@ -76,52 +130,7 @@ module "firewall_rules" {
   version      = "~> 5.0"
   project_id   = var.project_id
   network_name = module.vpc.network_name
-
-  rules = [
-    {
-      name                    = "${local.network_name}-allow-iap-ssh-ingress"
-      description             = "allow console SSH access"
-      direction               = "INGRESS"
-      priority                = null
-      ranges                  = ["35.235.240.0/20"]
-      source_tags             = null
-      source_service_accounts = null
-      target_tags             = null
-      target_service_accounts = null
-      allow = [{
-        protocol = "tcp"
-        ports    = ["22"]
-      }]
-      deny = []
-      log_config = {
-        metadata = "INCLUDE_ALL_METADATA"
-      }
-      }, {
-      name                    = "${local.network_name}-allow-internal-traffic"
-      priority                = null
-      description             = "allow traffic between nodes of this VPC"
-      direction               = "INGRESS"
-      ranges                  = [var.network_address_range]
-      source_tags             = null
-      source_service_accounts = null
-      target_tags             = null
-      target_service_accounts = null
-      allow = [{
-        protocol = "tcp"
-        ports    = ["0-65535"]
-        }, {
-        protocol = "udp"
-        ports    = ["0-65535"]
-        }, {
-        protocol = "icmp"
-        ports    = null
-        },
-      ]
-      deny = []
-      log_config = {
-        metadata = "INCLUDE_ALL_METADATA"
-      }
-  }]
+  rules        = local.firewall_rules
 }
 
 # This use of the module may appear odd when var.ips_per_nat = 0. The module
@@ -147,7 +156,7 @@ module "nat_ip_addresses" {
 
 module "cloud_router" {
   source  = "terraform-google-modules/cloud-router/google"
-  version = "~> 1.3"
+  version = "~> 2.0"
 
   for_each = toset(local.regions)
 
@@ -156,7 +165,7 @@ module "cloud_router" {
   region  = each.value
   network = module.vpc.network_name
   # in scenario with no NAT IPs, no NAT is created even if router is created
-  # https://github.com/terraform-google-modules/terraform-google-cloud-router/blob/v1.3.0/nat.tf#L18-L20
+  # https://github.com/terraform-google-modules/terraform-google-cloud-router/blob/v2.0.0/nat.tf#L18-L20
   nats = length(module.nat_ip_addresses[each.value].self_links) == 0 ? [] : [
     {
       name : "cloud-nat-${each.value}",

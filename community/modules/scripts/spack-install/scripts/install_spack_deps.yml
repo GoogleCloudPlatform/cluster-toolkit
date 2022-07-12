@@ -15,14 +15,24 @@
 ---
 
 - name: Install dependencies for spack installation
+  become: yes
   hosts: localhost
   tasks:
   - name: Install pip3 and git
-    package:
+    ansible.builtin.package:
       name:
       - python3-pip
       - git
+  - name: Gather the package facts
+    ansible.builtin.package_facts:
+      manager: auto
+  - name: Install protobuf for old releases of Python
+    when: ansible_facts.packages["python3"][0].version is version("3.7", "<") and ansible_facts.packages["python3"][0].version is version("3.5", ">=")
+    ansible.builtin.pip:
+      name: protobuf
+      version: 3.19.4
+      executable: pip3
   - name: Install google cloud storage
-    pip:
+    ansible.builtin.pip:
       name: google-cloud-storage
       executable: pip3

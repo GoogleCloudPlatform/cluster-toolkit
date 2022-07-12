@@ -20,6 +20,12 @@ output "network_name" {
   depends_on  = [module.firewall_rules, module.cloud_router]
 }
 
+output "network_id" {
+  description = "The ID of the network created"
+  value       = module.vpc.network_id
+  depends_on  = [module.firewall_rules, module.cloud_router]
+}
+
 output "network_self_link" {
   description = "The URI of the VPC being created"
   value       = module.vpc.network_self_link

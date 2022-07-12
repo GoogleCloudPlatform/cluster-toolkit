@@ -46,9 +46,12 @@ Each runner receives the following attributes:
   [example blueprint snippet](#example). To reference any other source file, an
   absolute path must be used.
 
-- `args`: (Optional) Arguments to be passed to shell scripts.
-
-  > **_NOTE:_** `args` will only be applied to runners of `type` `shell`.
+- `args`: (Optional) Arguments to be passed to `shell` or `ansible-local`
+  runners. For `shell` runners, these will be passed as arguments to the script
+  when it is executed. For `ansible-local` runners, they will be appended to
+  a list of default arguments that invoke `ansible-playbook` on the localhost.
+  Therefore`args` should not include any arguments that alter this behavior,
+  such as `--connection`, `--inventory`, or `--limit`.
 
 ### Staging the runners
 
@@ -189,5 +192,7 @@ No modules.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_compute_startup_script"></a> [compute\_startup\_script](#output\_compute\_startup\_script) | script to load and run all runners, as a string value. Targets the inputs for the slurm controller. |
+| <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | script to load and run all runners, as a string value. Targets the inputs for the slurm controller. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | script to load and run all runners, as a string value. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

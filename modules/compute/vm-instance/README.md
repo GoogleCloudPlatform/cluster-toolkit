@@ -157,6 +157,7 @@ No modules.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_external_ip"></a> [external\_ip](#output\_external\_ip) | External IP of the instances (if enabled) |
 | <a name="output_internal_ip"></a> [internal\_ip](#output\_internal\_ip) | Internal IP of the instances |
 | <a name="output_name"></a> [name](#output\_name) | Name of any instance created |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

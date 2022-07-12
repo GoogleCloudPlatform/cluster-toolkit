@@ -18,3 +18,13 @@ output "startup_script" {
   description = "script to load and run all runners, as a string value."
   value       = local.stdlib
 }
+
+output "compute_startup_script" {
+  description = "script to load and run all runners, as a string value. Targets the inputs for the slurm controller."
+  value       = local.stdlib
+}
+
+output "controller_startup_script" {
+  description = "script to load and run all runners, as a string value. Targets the inputs for the slurm controller."
+  value       = local.stdlib
+}

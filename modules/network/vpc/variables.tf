@@ -59,6 +59,12 @@ variable "network_address_range" {
   }
 }
 
+variable "mtu" {
+  type        = number
+  description = "The network MTU (If set to 0, meaning MTU is unset - defaults to '1460'). Recommended values: 1460 (default for historic reasons), 1500 (Internet default), or 8896 (for Jumbo packets). Allowed are all values in the range 1300 to 8896, inclusively."
+  default     = 0
+}
+
 # the default will create a subnetwork in var.region with the settings noted
 variable "primary_subnetwork" {
   description = <<EOT
@@ -94,6 +100,12 @@ variable "additional_subnetworks" {
   default     = []
 }
 
+variable "secondary_ranges" {
+  type        = map(list(object({ range_name = string, ip_cidr_range = string })))
+  description = "Secondary ranges that will be used in some of the subnets"
+  default     = {}
+}
+
 variable "network_routing_mode" {
   type        = string
   default     = "GLOBAL"
@@ -127,4 +139,22 @@ variable "delete_default_internet_gateway_routes" {
   type        = bool
   description = "If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted"
   default     = false
+}
+
+variable "enable_iap_ssh_ingress" {
+  type        = bool
+  description = "Enable a firewall rule to allow SSH access using IAP tunnels"
+  default     = true
+}
+
+variable "enable_internal_traffic" {
+  type        = bool
+  description = "Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network"
+  default     = true
+}
+
+variable "firewall_rules" {
+  type        = any
+  description = "List of firewall rules"
+  default     = []
 }

@@ -319,21 +319,38 @@ func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
 	dc.ExportBlueprint(outFile)
-	newDC := NewDeploymentConfig(outFile)
+	newDC, err := NewDeploymentConfig(outFile)
+	c.Assert(err, IsNil)
 	c.Assert(dc.Config, DeepEquals, newDC.Config)
 }
 
 func (s *MySuite) TestImportBlueprint(c *C) {
-	obtainedBlueprint := importBlueprint(simpleYamlFilename)
+	obtainedBlueprint, err := importBlueprint(simpleYamlFilename)
+	c.Assert(err, IsNil)
 	c.Assert(obtainedBlueprint.BlueprintName,
 		Equals, expectedSimpleBlueprint.BlueprintName)
 	c.Assert(
-		len(obtainedBlueprint.Vars["labels"].(map[interface{}]interface{})),
+		len(obtainedBlueprint.Vars["labels"].(map[string]interface{})),
 		Equals,
 		len(expectedSimpleBlueprint.Vars["labels"].(map[string]interface{})),
 	)
 	c.Assert(obtainedBlueprint.DeploymentGroups[0].Modules[0].ID,
 		Equals, expectedSimpleBlueprint.DeploymentGroups[0].Modules[0].ID)
+}
+
+func (s *MySuite) TestImportBlueprint_ExtraField_ThrowsError(c *C) {
+	yaml := []byte(`
+blueprint_name: hpc-cluster-high-io
+# line below is not in our schema
+dragon: "Lews Therin Telamon"`)
+	file, _ := ioutil.TempFile("", "*.yaml")
+	file.Write(yaml)
+	filename := file.Name()
+	file.Close()
+
+	// should fail on strict unmarshal as field does not match schema
+	_, err := importBlueprint(filename)
+	c.Check(err, NotNil)
 }
 
 func (s *MySuite) TestExportBlueprint(c *C) {

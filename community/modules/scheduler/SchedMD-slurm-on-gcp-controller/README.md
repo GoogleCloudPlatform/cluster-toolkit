@@ -1,8 +1,7 @@
 ## Description
 
 This module creates a slurm controller node via the SchedMD/slurm-gcp
-[controller](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
-module.
+[controller] module.
 
 More information about Slurm On GCP can be found at the
 [project's GitHub page][slurm-on-gcp] and in the
@@ -12,6 +11,7 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
+[controller]: https://github.com/SchedMD/slurm-gcp/tree/v4.2.0/tf/modules/controller
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
 
 ### Example
@@ -76,7 +76,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.1.8 |
+| <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.2.0 |
 
 ## Resources
 
@@ -113,10 +113,11 @@ limitations under the License.
 | <a name="input_login_node_count"></a> [login\_node\_count](#input\_login\_node\_count) | Number of login nodes in the cluster | `number` | `0` | no |
 | <a name="input_munge_key"></a> [munge\_key](#input\_munge\_key) | Specific munge key to use | `any` | `null` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on all instances. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |
-| <a name="input_partition"></a> [partition](#input\_partition) | An array of configurations for specifying multiple machine types residing in their own Slurm partitions. | <pre>list(object({<br>    name                 = string,<br>    machine_type         = string,<br>    max_node_count       = number,<br>    zone                 = string,<br>    image                = string,<br>    image_hyperthreads   = bool,<br>    compute_disk_type    = string,<br>    compute_disk_size_gb = number,<br>    compute_labels       = any,<br>    cpu_platform         = string,<br>    gpu_type             = string,<br>    gpu_count            = number,<br>    network_storage = list(object({<br>      server_ip     = string,<br>      remote_mount  = string,<br>      local_mount   = string,<br>      fs_type       = string,<br>      mount_options = string<br>    })),<br>    preemptible_bursting = string,<br>    vpc_subnet           = string,<br>    exclusive            = bool,<br>    enable_placement     = bool,<br>    regional_capacity    = bool,<br>    regional_policy      = any,<br>    instance_template    = string,<br>    static_node_count    = number<br>  }))</pre> | n/a | yes |
+| <a name="input_partition"></a> [partition](#input\_partition) | An array of configurations for specifying multiple machine types residing in their own Slurm partitions. | <pre>list(object({<br>    name                 = string,<br>    machine_type         = string,<br>    max_node_count       = number,<br>    zone                 = string,<br>    image                = string,<br>    image_hyperthreads   = bool,<br>    compute_disk_type    = string,<br>    compute_disk_size_gb = number,<br>    compute_labels       = any,<br>    cpu_platform         = string,<br>    gpu_type             = string,<br>    gpu_count            = number,<br>    network_storage = list(object({<br>      server_ip     = string,<br>      remote_mount  = string,<br>      local_mount   = string,<br>      fs_type       = string,<br>      mount_options = string<br>    })),<br>    preemptible_bursting = string,<br>    vpc_subnet           = string,<br>    exclusive            = bool,<br>    enable_placement     = bool,<br>    regional_capacity    = bool,<br>    regional_policy      = any,<br>    instance_template    = string,<br>    bandwidth_tier       = string,<br>    static_node_count    = number<br>  }))</pre> | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Compute Platform project that will host the Slurm cluster | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Compute Platform region where the Slurm cluster will be located | `string` | n/a | yes |
 | <a name="input_shared_vpc_host_project"></a> [shared\_vpc\_host\_project](#input\_shared\_vpc\_host\_project) | Host project of shared VPC | `string` | `null` | no |
+| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Custom startup script to run on compute nodes and controller. <br>  `controller_startup_script` for the controller and `compute_startup_script` for compute nodes take presidence if specified.<br>  This variable allows Slurm to [use](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules#use-optional) the [startup\_script](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script) module. | `string` | `null` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the pre-defined VPC subnet you want the nodes to attach to based on Region. | `string` | `null` | no |
 | <a name="input_suspend_time"></a> [suspend\_time](#input\_suspend\_time) | Idle time (in sec) to wait before nodes go away | `number` | `300` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Compute Platform zone where the servers will be located | `string` | n/a | yes |

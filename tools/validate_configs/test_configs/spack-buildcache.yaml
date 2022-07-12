@@ -35,12 +35,12 @@ deployment_groups:
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
-      spack_ref: v0.17.1
+      spack_ref: v0.18.0
       log_file: /var/log/spack.log
       configs:
       - type: 'single-config'
         scope: 'site'
-        value: 'config:install_tree:padded_length:128'
+        content: 'config:install_tree:padded_length:128'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:

@@ -271,7 +271,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	c.Assert(exists, Equals, true)
 
 	moduleLabels := dc.Config.DeploymentGroups[0].Modules[0].
-		Settings["labels"].(map[interface{}]interface{})
+		Settings["labels"].(map[string]interface{})
 
 	// Was the role created correctly?
 	ghpcRole, exists := moduleLabels[roleLabel]

@@ -281,14 +281,14 @@ func (dc *DeploymentConfig) combineLabels() error {
 				continue
 			}
 
-			var modLabels map[interface{}]interface{}
+			var modLabels map[string]interface{}
 			var ok bool
 			// If labels aren't already set, prefill them with globals
 			if _, exists := mod.Settings[labels]; !exists {
-				modLabels = make(map[interface{}]interface{})
+				modLabels = make(map[string]interface{})
 			} else {
 				// Cast into map so we can index into them
-				modLabels, ok = mod.Settings[labels].(map[interface{}]interface{})
+				modLabels, ok = mod.Settings[labels].(map[string]interface{})
 
 				if !ok {
 					return fmt.Errorf("%s, Module %s, labels type: %T",

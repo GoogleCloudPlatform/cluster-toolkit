@@ -1,0 +1,128 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: spack-buildcache
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: spack-buildcache
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+
+  - source: ./community/modules/scripts/spack-install
+    kind: terraform
+    id: spack
+    settings:
+      install_dir: /apps/spack
+      spack_url: https://github.com/spack/spack
+      spack_ref: v0.17.1
+      log_file: /var/log/spack.log
+      configs:
+      - type: 'single-config'
+        scope: 'site'
+        content: 'config:install_tree:padded_length:128'
+      compilers:
+      - gcc@10.3.0 target=x86_64
+      environments:
+      - name: 'file-test'
+        content: |
+          spack:
+            definitions:
+            - compilers:
+              - gcc@10.3.0
+            - mpis:
+              - intel-mpi@2018.4.274
+            - mpi_packages:
+              - gromacs@2021.2
+            specs:
+            - matrix:
+              - - $mpis
+              - - $%compilers
+            - matrix:
+              - - $mpi_packages
+              - - $%compilers
+              - - $^mpis
+      - name: 'pkg-test'
+        packages:
+        - intel-mpi@2018.4.274 %gcc@10.3.0
+        - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+      - name: 'mixed-test'
+        content: |
+          spack:
+            specs:
+              intel-mpi@20184.274 %gcc@10.3.0
+        packages:
+        - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+      - name: 'empty-test'
+      gpg_keys:
+      - type: 'file'
+        path: '/tmp/spack_key.gpg'
+      caches_to_populate:
+      - type: 'mirror'
+        path: ##  Add GCS bucket to populate here ##
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: spack-startup
+    settings:
+      runners:
+      - type: data
+        source: ##  Add path to GPG key here ##
+        destination: /tmp/spack_key.gpg
+      - type: shell
+        content: |
+          #!/bin/bash
+          mkdir /apps
+          chmod a+rwx /apps
+        destination: apps_create.sh
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - type: ansible-local
+        source: modules/spack-install/scripts/install_spack_deps.yml
+        destination: install_spack_deps.yml
+      - type: shell
+        content: $(spack.startup_script)
+        destination: install_spack.sh
+      - type: shell
+        destination: shutdown.sh
+        content: shutdown -h
+
+  - source: modules/compute/vm-instance
+    kind: terraform
+    id: spack-build
+    use:
+    - network1
+    - spack-startup
+    settings:
+      name_prefix: spack-builder
+      machine_type: n2-standard-8
+      service_account:
+        email: null
+        scopes:
+        - "https://www.googleapis.com/auth/devstorage.read_write"
+        - "https://www.googleapis.com/auth/logging.write"
+        - "https://www.googleapis.com/auth/monitoring.write"
+        - "https://www.googleapis.com/auth/servicecontrol"
+        - "https://www.googleapis.com/auth/service.management.readonly"
+        - "https://www.googleapis.com/auth/trace.append"

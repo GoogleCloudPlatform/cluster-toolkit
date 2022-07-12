@@ -13,10 +13,12 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-)
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
+  * [slurm-gcp-v5-cluster.yaml](#slurm-gcp-v5-clusteryaml--)
   * [image-builder.yaml](#image-builderyaml-)
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
   * [daos-cluster.yaml](#daos-clusteryaml-)
   * [daos-slurm.yaml](#daos-slurmyaml-)
+  * [cloud-batch.yaml](#cloud-batchyaml--)
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
@@ -111,13 +113,15 @@ uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `-p compute` argument when running `srun`.
 
-Quota required for this example in selected region:
+#### Quota Requirements for hpc-cluster-small.yaml
+
+For this example the following is needed in the selected region:
 
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
   GB/node** up to 500 GB
-* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: N2 CPUs: **10**
 * Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
   in `compute` partition up to 1,204
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
@@ -149,7 +153,9 @@ Similar to the small example, there is a
 [compute partition](#compute-partition) that should be used for any performance
 analysis.
 
-Quota required for this example in selected region:
+#### Quota Requirements for hpc-cluster-high-io.yaml
+
+For this example the following is needed in the selected region:
 
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
 * Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
@@ -166,6 +172,38 @@ Quota required for this example in selected region:
   _only needed for `compute` partition_
 
 [hpc-cluster-high-io.yaml]: ./hpc-cluster-high-io.yaml
+
+### [slurm-gcp-v5-cluster.yaml] ![community-badge]
+
+This example creates an HPC cluster similar to the one created by
+[hpc-cluster-small.yaml], but uses modules built from version 5 of
+[slurm-gcp].
+
+The cluster will support 2 partitions named `debug` and `compute`.
+The `debug` partition is the default partition and runs on smaller
+`n2-standard-2` nodes. The `compute` partition is not default and requires
+specifying in the `srun` command via the `--partition` flag. The `compute`
+partition runs on compute optimized nodes of type `cs-standard-60`. The
+`compute` partition may require additional quota before using.
+
+#### Quota Requirements for slurm-gcp-v5-cluster.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+[slurm-gcp-v5-cluster.yaml]: ../community/examples/slurm-gcp-v5-cluster.yaml
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
 
 ### [image-builder.yaml] ![core-badge]
 
@@ -286,7 +324,9 @@ packer validate -var startup_script_file=startup_script.sh .
 packer build -var startup_script_file=startup_script.sh .
 ```
 
-Quota required for this example in selected region:
+#### Quota Requirements for image-builder.yaml
+
+For this example the following is needed in the selected region:
 
 * Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
@@ -341,6 +381,20 @@ more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
 [daos-slurm.yaml]: ../community/examples/intel/daos-slurm.yaml
+
+### [cloud-batch.yaml] ![community-badge] ![experimental-badge]
+
+This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
+that mounts a Filestore instance and runs startup scripts.
+
+The blueprint creates a Filestore and uses the `startup-script` module to mount
+and load _"data"_ onto the shared storage. The `cloud-batch-job` module creates
+an instance template to be used for the Google Cloud Batch compute VMs and
+renders a Google Cloud Batch job template. A login node VM is created with
+instructions on how to SSH to the login node and submit the Google Cloud Batch
+job.
+
+[cloud-batch.yaml]: ../community/examples/cloud-batch.yaml
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 

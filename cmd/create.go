@@ -77,7 +77,10 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 		bpFilename = args[0]
 	}
 
-	deploymentConfig := config.NewDeploymentConfig(bpFilename)
+	deploymentConfig, err := config.NewDeploymentConfig(bpFilename)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if err := deploymentConfig.SetCLIVariables(cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
 	}

@@ -22,7 +22,7 @@ locals {
   name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
   install_nfs_client_runner = {
     "type"        = "shell"
-    "content"     = "${path.module}/scripts/install-nfs-client.sh"
+    "source"      = "${path.module}/scripts/install-nfs-client.sh"
     "destination" = "install-nfs.sh"
   }
   mount_runner = {

@@ -15,29 +15,45 @@
 ---
 
 - name: Get partition info
-  command: sinfo --format='%P' --noheader
+  ansible.builtin.command: sinfo --format='%P' --noheader
+  changed_when: False
   register: partition_output
+  retries: 10
+  delay: 12
+  until: partition_output.rc == 0
+- name: Clount Slurm nodes
+  ansible.builtin.shell:
+    sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
+  args:
+    executable: /bin/bash
+  changed_when: False
+  register: initial_node_count
 - name: Check partition compute exists
-  fail:
+  ansible.builtin.fail:
     msg: Test Check Partitions failed
   when: item not in partition_output.stdout
   loop: "{{ partitions }}"
-
 - name: Get mount info
-  stat:
+  ansible.builtin.stat:
     path: "{{ item }}"
   register: stat_mounts
   loop: "{{ mounts }}"
 - name: Check if mount exists
-  fail:
+  ansible.builtin.fail:
     msg: "{{ item.item }} not mounted"
   when: not item.stat.exists
   loop: "{{ stat_mounts.results }}"
-
 - name: Test Mounts on partitions
-  shell: srun -N 1 ls -laF {{ mounts | join(' ') }} && sleep 120
+  ansible.builtin.shell: srun -N 1 ls -laF {{ mounts | join(' ') }}
   loop: "{{ partitions }}"
-
 - name: Test partitions with hostname
-  shell: srun -N 2 --partition {{ item }} hostname && sleep 120
+  ansible.builtin.shell: srun -N 2 --partition {{ item }} hostname
   loop: "{{ partitions }}"
+- name: Ensure all nodes are powered down
+  ansible.builtin.shell:
+    sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
+  register: final_node_count
+  changed_when: False
+  until: final_node_count.stdout_lines | length == initial_node_count.stdout_lines | length
+  retries: 40
+  delay: 15

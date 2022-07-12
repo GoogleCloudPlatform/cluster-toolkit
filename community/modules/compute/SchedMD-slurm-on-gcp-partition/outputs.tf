@@ -41,6 +41,7 @@ output "partition" {
     enable_placement : var.enable_placement
     regional_capacity : var.regional_capacity
     regional_policy : var.regional_policy
+    bandwidth_tier : var.bandwidth_tier
     instance_template : var.instance_template
   }
 }

@@ -19,6 +19,11 @@ output "name" {
   value       = google_compute_instance.compute_vm.*.name
 }
 
+output "external_ip" {
+  description = "External IP of the instances (if enabled)"
+  value       = try(google_compute_instance.compute_vm.*.network_interface.0.access_config.0.nat_ip, [])
+}
+
 output "internal_ip" {
   description = "Internal IP of the instances"
   value       = google_compute_instance.compute_vm.*.network_interface.0.network_ip
