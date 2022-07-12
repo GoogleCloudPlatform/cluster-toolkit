@@ -112,7 +112,7 @@ Modules that are still in development and less stable are labeled with the
 
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-login-node]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![experimental-badge] :
   Creates a Slurm login node using [slurm-gcp-version-5].
 * **[SchedMD-slurm-on-gcp-controller]** ![community-badge] : Creates a Slurm
   controller node using [slurm-gcp].
@@ -129,7 +129,7 @@ Modules that are still in development and less stable are labeled with the
 [cloud-batch-login-node]: ../community/modules/scheduler/cloud-batch-login-node/README.md
 [htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
-[schedmd-slurm-gcp-v5-login-node]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login-node/README.md
+[schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5
