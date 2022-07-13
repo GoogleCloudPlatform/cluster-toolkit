@@ -76,7 +76,7 @@ locals {
   output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
 
   allow_iap_ssh_ingress = {
-    name                    = "${local.network_name}-allow-iap-ssh-ingress"
+    name                    = "${local.network_name}-fw-allow-iap-ssh-ingress"
     description             = "allow console SSH access"
     direction               = "INGRESS"
     priority                = null
@@ -96,7 +96,7 @@ locals {
   }
 
   allow_internal_traffic = {
-    name                    = "${local.network_name}-allow-internal-traffic"
+    name                    = "${local.network_name}-fw-allow-internal-traffic"
     priority                = null
     description             = "allow traffic between nodes of this VPC"
     direction               = "INGRESS"
@@ -142,14 +142,7 @@ module "vpc" {
   description                            = var.network_description
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
-}
-
-module "firewall_rules" {
-  source       = "terraform-google-modules/network/google//modules/firewall-rules"
-  version      = "~> 5.0"
-  project_id   = var.project_id
-  network_name = module.vpc.network_name
-  rules        = local.firewall_rules
+  firewall_rules                         = local.firewall_rules
 }
 
 # This use of the module may appear odd when var.ips_per_nat = 0. The module
