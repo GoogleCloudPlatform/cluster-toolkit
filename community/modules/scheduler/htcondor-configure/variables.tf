@@ -45,6 +45,16 @@ variable "central_manager_roles" {
   ]
 }
 
+variable "execute_point_roles" {
+  description = "Project-wide roles for HTCondor Execute Point service account"
+  type        = list(string)
+  default = [
+    "roles/monitoring.metricWriter",
+    "roles/logging.logWriter",
+    "roles/storage.objectViewer",
+  ]
+}
+
 variable "pool_password" {
   description = "HTCondor Pool Password"
   type        = string
