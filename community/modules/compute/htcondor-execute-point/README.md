@@ -38,6 +38,10 @@ a startup script and network created in previous steps.
       - cloud-platform
 ```
 
+A full example can be found in the [examples README][htc-example].
+
+[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
+
 ## Support
 
 HTCondor is maintained by the [Center for High Throughput Computing][chtc] at
