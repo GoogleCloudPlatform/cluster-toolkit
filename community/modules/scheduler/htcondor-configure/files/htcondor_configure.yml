@@ -66,6 +66,16 @@
         mode: 0644
         content: |
           SCHEDD_INTERVAL=15
+  - name: Configure HTCondor StartD
+    when: htcondor_role == 'get_htcondor_execute'
+    block:
+    - name: Create StartD configuration file
+      ansible.builtin.copy:
+        dest: /etc/condor/config.d/02-startd
+        mode: 0644
+        content: |
+          use feature:PartitionableSlot
+          use feature:CommonCloudAttributesGoogle("-c created-by")
   - name: Set HTCondor credentials
     ansible.builtin.shell: |
       set -e -o pipefail
