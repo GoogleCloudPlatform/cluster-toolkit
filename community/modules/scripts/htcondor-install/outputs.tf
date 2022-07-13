@@ -16,7 +16,17 @@
 
 output "install_htcondor_runner" {
   description = "Runner to install HTCondor using startup-scripts"
-  value       = local.install_htcondor_runner
+  value       = local.runner_install_htcondor
+}
+
+output "install_autoscaler_deps_runner" {
+  description = "Toolkit Runner to install HTCondor autoscaler dependencies"
+  value       = local.runner_install_autoscaler_deps
+}
+
+output "install_autoscaler_runner" {
+  description = "Toolkit Runner to install HTCondor autoscaler"
+  value       = local.runner_install_autoscaler
 }
 
 output "gcp_service_list" {

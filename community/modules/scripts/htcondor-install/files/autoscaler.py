@@ -87,12 +87,9 @@ class AutoScaler:
             self.instanceGroupManagers = self.service.instanceGroupManagers()
 
     # Remove specified instance from MIG and decrease MIG size
-    def deleteFromMig(self, instance):
+    def deleteFromMig(self, instance, zone):
         instanceUrl = "https://www.googleapis.com/compute/v1/projects/" + self.project
-        if self.multizone:
-            instanceUrl += "/regions/" + self.region
-        else:
-            instanceUrl += "/zones/" + self.zone
+        instanceUrl += "/zones/" + zone
         instanceUrl += "/instances/" + instance
 
         instances_to_delete = {"instances": [instanceUrl]}
@@ -211,7 +208,7 @@ class AutoScaler:
         print("Number of CPU per compute node: " + str(self.cores_per_node))
 
         # Get state for for all jobs in Condor
-        name_req = "condor_status  -af name state"
+        name_req = "condor_status  -af Name State CloudZone"
         slot_names = os.popen(name_req).read().splitlines()
         if self.debug > 1:
             print("Currently running jobs in Condor")
@@ -227,7 +224,7 @@ class AutoScaler:
             self.size = int(math.ceil(float(queue) / float(self.cores_per_node)))
             if self.debug > 0:
                 print(
-                    "Calucalting size of MIG: ⌈"
+                    "Calculating size of MIG: ⌈"
                     + str(queue)
                     + "/"
                     + str(self.cores_per_node)
@@ -276,12 +273,13 @@ class AutoScaler:
             print("Scaling down. Looking for nodes that can be shut down")
             # Find nodes that are not busy (all slots showing status as "Unclaimed")
 
-            node_busy = {}
+            idle_node_zones = {}
             for slot_name in slot_names:
                 name_status = slot_name.split()
                 if len(name_status) > 1:
                     name = name_status[0]
                     status = name_status[1]
+                    zone = name_status[2]
                     slot = "NO-SLOT"
                     slot_server = name.split("@")
                     if len(slot_server) > 1:
@@ -293,24 +291,24 @@ class AutoScaler:
                     if self.debug > 0:
                         print(slot + ", " + server + ", " + status + "\n")
 
-                    if server not in node_busy:
+                    if server not in idle_node_zones:
                         if status == "Unclaimed":
-                            node_busy[server] = False
+                            idle_node_zones[server] = zone
                         else:
-                            node_busy[server] = True
+                            idle_node_zones[server] = None
                     else:
                         if status != "Unclaimed":
-                            node_busy[server] = True
+                            idle_node_zones[server] = None
 
             if self.debug > 1:
-                print("Compuute node busy status:")
-                print(node_busy)
+                print("Compute node busy status:")
+                print(idle_node_zones)
 
             # Shut down nodes that are not busy
-            for node in node_busy:
-                if not node_busy[node]:
+            for node, zone in idle_node_zones.items():
+                if zone:
                     print("Will shut down: " + node + " ...")
-                    respDel = self.deleteFromMig(node)
+                    respDel = self.deleteFromMig(node, zone)
                     if self.debug > 1:
                         print("Shut down request for compute node " + node)
                         pprint(respDel)

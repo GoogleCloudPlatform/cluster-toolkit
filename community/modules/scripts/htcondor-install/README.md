@@ -66,5 +66,7 @@ No resources.
 | Name | Description |
 |------|-------------|
 | <a name="output_gcp_service_list"></a> [gcp\_service\_list](#output\_gcp\_service\_list) | Google Cloud APIs required by HTCondor |
+| <a name="output_install_autoscaler_deps_runner"></a> [install\_autoscaler\_deps\_runner](#output\_install\_autoscaler\_deps\_runner) | Toolkit Runner to install HTCondor autoscaler dependencies |
+| <a name="output_install_autoscaler_runner"></a> [install\_autoscaler\_runner](#output\_install\_autoscaler\_runner) | Toolkit Runner to install HTCondor autoscaler |
 | <a name="output_install_htcondor_runner"></a> [install\_htcondor\_runner](#output\_install\_htcondor\_runner) | Runner to install HTCondor using startup-scripts |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

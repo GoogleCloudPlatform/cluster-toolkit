@@ -22,14 +22,14 @@ locals {
 
   pool_password = var.pool_password == null ? random_password.pool.result : var.pool_password
 
-  role_runner_cm = {
+  runner_cm_role = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
     "args"        = "-e htcondor_role=get_htcondor_central_manager -e password_id=${google_secret_manager_secret.pool_password.secret_id}"
   }
 
-  role_runner_access = {
+  runner_access_role = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
