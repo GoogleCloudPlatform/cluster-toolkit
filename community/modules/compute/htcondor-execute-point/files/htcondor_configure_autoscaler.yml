@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This playbook makes the assumption that a virtual environment has been created
+# with the autoscaler and its dependencies previously installed. A runner that
+# does this is provided as an output of the htcondor-install module within the
+# HPC Toolkit at community/modules/scripts/htcondor-install.
+
 ---
 - name: Configure HTCondor Autoscaler
   hosts: all
