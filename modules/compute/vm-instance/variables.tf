@@ -195,17 +195,31 @@ variable "tags" {
 variable "threads_per_core" {
   description = <<-EOT
   Sets the number of threads per physical core. By setting threads_per_core
-  greater than 1, Simultaneous Multithreading (SMT) is enabled extending the
-  total number of virtual cores. For example, a machine of type c2-standard-60
-  will have 60 virtual cores with threads_per_core equal to 2. With
-  threads_per_core equal to 1 (SMT turned off), only the 30 physical cores will
-  be available on the VM.
+  to 2, Simultaneous Multithreading (SMT) is enabled extending the total number
+  of virtual cores. For example, a machine of type c2-standard-60 will have 60
+  virtual cores with threads_per_core equal to 2. With threads_per_core equal
+  to 1 (SMT turned off), only the 30 physical cores will be available on the VM.
+
+  The default value of \"0\" will turn off SMT for supported machine types, and
+  will fall back to GCE defaults for unsupported machine types (t2d, shared-core 
+  instances, or instances with less than 2 vCPU). 
 
   Disabling SMT can be more performant in many HPC workloads, therefore it is
-  disabled by default.
+  disabled by default where compatible.
+
+  null = SMT configuration will use the GCE defaults for the machine type
+  0 = SMT will be disabled where compatible (default)
+  1 = SMT will always be disabled (will fail on incompatible machine types)
+  2 = SMT will always be enabled (will fail on incompatible machine types)
   EOT
   type        = number
-  default     = 1
+  default     = 0
+
+  validation {
+    condition     = var.threads_per_core == null || try(var.threads_per_core >= 0, false) && try(var.threads_per_core <= 2, false)
+    error_message = "Allowed values for threads_per_core are \"null\", \"0\", \"1\", \"2\"."
+  }
+
 }
 
 variable "enable_oslogin" {

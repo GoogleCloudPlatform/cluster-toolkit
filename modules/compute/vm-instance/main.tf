@@ -45,6 +45,18 @@ locals {
     "ENABLE"  = "TRUE"
   }
   enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
+
+  machine_vals            = split("-", var.machine_type)
+  machine_family          = local.machine_vals[0]
+  machine_not_shared_core = length(local.machine_vals) > 2
+  machine_vcpus           = try(parseint(local.machine_vals[2], 10), 1)
+
+  smt_capable_family = !contains(["t2d"], local.machine_family)
+  smt_capable_vcpu   = local.machine_vcpus >= 2
+
+  smt_capable = local.smt_capable_family && local.smt_capable_vcpu && local.machine_not_shared_core
+  smt_enable  = var.threads_per_core != null && (var.threads_per_core == 0 && local.smt_capable || try(var.threads_per_core >= 1, false))
+  smt_value   = var.threads_per_core == 2 ? 2 : 1
 }
 
 data "google_compute_image" "compute_image" {
@@ -130,8 +142,11 @@ resource "google_compute_instance" "compute_vm" {
     provisioning_model  = local.provisioning_model
   }
 
-  advanced_machine_features {
-    threads_per_core = var.threads_per_core
+  dynamic "advanced_machine_features" {
+    for_each = local.smt_enable ? [1] : []
+    content {
+      threads_per_core = local.smt_value
+    }
   }
 
   metadata = merge(local.network_storage, local.startup_script, local.enable_oslogin, var.metadata)
