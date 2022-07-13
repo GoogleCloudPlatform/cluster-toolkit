@@ -34,10 +34,10 @@ if [ ! -h /usr/bin/ansible-playbook ] || [ ! -f /usr/bin/ansible-playbook ]; the
 	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
 		if [ ! -f /bin/pip ]; then
 			curl -Os https://bootstrap.pypa.io/pip/2.7/get-pip.py
-			python get-pip.py
+			/usr/bin/python get-pip.py
 		fi
-		python -m pip install virtualenv
-		virtualenv /usr/local/toolkit
+		/usr/bin/python -m pip install virtualenv
+		/usr/bin/python -m virtualenv /usr/local/toolkit
 		/usr/local/toolkit/bin/python -m pip install wheel
 		/usr/local/toolkit/bin/python -m pip install ansible==2.9.27
 		ln -s /usr/local/toolkit/bin/ansible-playbook /usr/bin/ansible-playbook
