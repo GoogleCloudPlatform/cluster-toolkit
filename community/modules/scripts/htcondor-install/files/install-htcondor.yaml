@@ -17,6 +17,7 @@
   hosts: all
   vars:
     block_metadata_server: true
+    enable_docker: true
   become: true
   tasks:
   - name: setup HTCondor yum repository
@@ -40,6 +41,34 @@
       enabled: true
       state: started
       masked: no
+  - name: Install Docker and configure HTCondor to use it
+    when: enable_docker | bool  # allows string to be passed at CLI
+    block:
+    - name: Setup Docker repo
+      ansible.builtin.yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable - $basearch
+        baseurl: https://download.docker.com/linux/centos/$releasever/$basearch/stable
+        enabled: yes
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+    - name: Install Docker
+      ansible.builtin.yum:
+        name:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-compose-plugin
+    - name: Enable Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+    - name: Add condor to docker group
+      ansible.builtin.user:
+        name: condor
+        groups: docker
+        append: yes
   - name: Ensure that only root and condor users can access service account
     when: block_metadata_server | bool # allows string to be passed at CLI
     ansible.builtin.shell: |
