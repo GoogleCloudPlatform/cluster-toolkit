@@ -22,6 +22,7 @@
       that:
       - htcondor_role is defined
       - password_id is defined
+      - project_id is defined
   - name: Remove default HTCondor configuration
     ansible.builtin.file:
       name: /etc/condor/config.d/00-htcondor-9.0.config
@@ -66,6 +67,10 @@
         mode: 0644
         content: |
           SCHEDD_INTERVAL=15
+          UID_DOMAIN = c.{{ project_id }}.internal
+          TRUST_UID_DOMAIN = True
+          SUBMIT_ATTRS = RunAsOwner
+          RunAsOwner = True
   - name: Configure HTCondor StartD
     when: htcondor_role == 'get_htcondor_execute'
     block:
@@ -76,6 +81,9 @@
         content: |
           use feature:PartitionableSlot
           use feature:CommonCloudAttributesGoogle("-c created-by")
+          UID_DOMAIN = c.{{ project_id }}.internal
+          TRUST_UID_DOMAIN = True
+          STARTER_ALLOW_RUNAS_OWNER = True
   - name: Set HTCondor credentials
     ansible.builtin.shell: |
       set -e -o pipefail
@@ -92,3 +100,8 @@
       name: condor
       state: started
       enabled: true
+  - name: inform users
+    changed_when: false
+    ansible.builtin.shell: |
+      set -e -o pipefail
+      wall "******* HTCondor system configuration complete ********"
