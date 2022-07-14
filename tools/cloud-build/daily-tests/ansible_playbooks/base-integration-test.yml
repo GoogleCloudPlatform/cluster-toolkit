@@ -55,6 +55,15 @@
       with_items:
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
+    - name: Gather instance information
+      delegate_to: localhost
+      register: instances_list
+      command: >-
+        gcloud compute instances list
+        --filter="labels.ghpc_deployment={{ deployment_name }}"
+        --format='table(name,zone,id,status)'
+    - debug:
+        var: instances_list.stdout_lines
     - name: Get remote IP
       register: remote_ip
       command: >-
