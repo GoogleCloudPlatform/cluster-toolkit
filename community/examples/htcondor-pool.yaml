@@ -58,31 +58,6 @@ deployment_groups:
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.central_manager_runner)
 
-  - source: modules/scripts/startup-script
-    kind: terraform
-    id: htcondor_configure_access_point
-    settings:
-      runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
-      - $(htcondor_install.install_htcondor_runner)
-      - $(htcondor_install.install_autoscaler_deps_runner)
-      - $(htcondor_install.install_autoscaler_runner)
-      - $(htcondor_configure.access_point_runner)
-      - $(htcondor_execute_point.configure_autoscaler_runner)
-
-  - source: modules/scripts/startup-script
-    kind: terraform
-    id: htcondor_configure_execute_point
-    settings:
-      runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
-      - $(htcondor_install.install_htcondor_runner)
-      - $(htcondor_configure.execute_point_runner)
-
   - source: modules/compute/vm-instance
     kind: terraform
     id: htcondor_cm
@@ -101,6 +76,17 @@ deployment_groups:
     outputs:
     - internal_ip
 
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: htcondor_configure_execute_point
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(htcondor_install.install_htcondor_runner)
+      - $(htcondor_configure.execute_point_runner)
+
   - source: community/modules/compute/htcondor-execute-point
     kind: terraform
     id: htcondor_execute_point
@@ -115,6 +101,20 @@ deployment_groups:
         email: $(htcondor_configure.execute_point_service_account)
         scopes:
         - cloud-platform
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: htcondor_configure_access_point
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(htcondor_install.install_htcondor_runner)
+      - $(htcondor_install.install_autoscaler_deps_runner)
+      - $(htcondor_install.install_autoscaler_runner)
+      - $(htcondor_configure.access_point_runner)
+      - $(htcondor_execute_point.configure_autoscaler_runner)
 
   - source: modules/compute/vm-instance
     kind: terraform
