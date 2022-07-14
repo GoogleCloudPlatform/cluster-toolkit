@@ -28,21 +28,33 @@ locals {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
-    "args"        = "-e htcondor_role=get_htcondor_central_manager -e password_id=${google_secret_manager_secret.pool_password.secret_id}"
+    "args" = join(" ", [
+      "-e htcondor_role=get_htcondor_central_manager",
+      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e project_id=${var.project_id}",
+    ])
   }
 
   runner_access_role = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
-    "args"        = "-e htcondor_role=get_htcondor_submit -e password_id=${google_secret_manager_secret.pool_password.secret_id}"
+    "args" = join(" ", [
+      "-e htcondor_role=get_htcondor_submit",
+      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e project_id=${var.project_id}",
+    ])
   }
 
   runner_execute_role = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
-    "args"        = "-e htcondor_role=get_htcondor_execute -e password_id=${google_secret_manager_secret.pool_password.secret_id}"
+    "args" = join(" ", [
+      "-e htcondor_role=get_htcondor_execute",
+      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e project_id=${var.project_id}",
+    ])
   }
 }
 
