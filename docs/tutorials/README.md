@@ -31,3 +31,12 @@ Click the button below to launch the Intel Select tutorial.
 
 [hpc-vm-image]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [intel-select]: https://www.intel.com/content/www/us/en/products/solutions/select-solutions/hpc/simulation-modeling.html
+
+## HTCondor Tutorial
+
+Walk through deploying an HTCondor pool that supports jobs running inside Docker
+containers or the base [HPC VM Image][hpc-vm-mage].
+
+Click the button below to launch the HTCondor tutorial.
+
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_open_in_editor=community%2Fexamples%2Fhtcondor-pool.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fhtcondor.md&cloudshell_git_branch=develop)
