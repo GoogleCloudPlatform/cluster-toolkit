@@ -54,9 +54,9 @@ locals {
   smt_capable_family = !contains(["t2d"], local.machine_family)
   smt_capable_vcpu   = local.machine_vcpus >= 2
 
-  smt_capable = local.smt_capable_family && local.smt_capable_vcpu && local.machine_not_shared_core
-  smt_enable  = var.threads_per_core != null && (var.threads_per_core == 0 && local.smt_capable || try(var.threads_per_core >= 1, false))
-  smt_value   = var.threads_per_core == 2 ? 2 : 1
+  smt_capable          = local.smt_capable_family && local.smt_capable_vcpu && local.machine_not_shared_core
+  set_threads_per_core = var.threads_per_core != null && (var.threads_per_core == 0 && local.smt_capable || try(var.threads_per_core >= 1, false))
+  threads_per_core     = var.threads_per_core == 2 ? 2 : 1
 }
 
 data "google_compute_image" "compute_image" {
@@ -143,9 +143,9 @@ resource "google_compute_instance" "compute_vm" {
   }
 
   dynamic "advanced_machine_features" {
-    for_each = local.smt_enable ? [1] : []
+    for_each = local.set_threads_per_core ? [1] : []
     content {
-      threads_per_core = local.smt_value
+      threads_per_core = local.threads_per_core
     }
   }
 
