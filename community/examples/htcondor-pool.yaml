@@ -119,9 +119,9 @@ deployment_groups:
         content: |
           universe       = docker
           docker_image   = hello-world
-          output         = out.$(Cluster)-$(Process)
-          error          = err.$(Cluster)-$(Process)
-          log            = log.$(Cluster)-$(Process)
+          output         = out
+          error          = err
+          log            = log
           request_cpus   = 1
           request_memory = 100MB
           queue
