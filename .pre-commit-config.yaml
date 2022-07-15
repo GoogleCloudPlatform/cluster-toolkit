@@ -15,7 +15,7 @@
 ---
 repos:
 - repo: https://github.com/antonbabenko/pre-commit-terraform
-  rev: v1.64.0
+  rev: v1.74.1
   hooks:
   - id: terraform_fmt
   - id: terraform_tflint
@@ -61,12 +61,12 @@ repos:
   hooks:
   - id: ansible-lint
 - repo: https://github.com/adrienverge/yamllint.git
-  rev: v1.26.3
+  rev: v1.27.1
   hooks:
   - id: yamllint
     args: [-c=.yamllint]
 - repo: https://github.com/jackdewinter/pymarkdown
-  rev: v0.9.5
+  rev: v0.9.7
   hooks:
   - id: pymarkdown
     # Rules at https://github.com/jackdewinter/pymarkdown/tree/main/docs/rules
