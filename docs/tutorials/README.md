@@ -35,7 +35,7 @@ Click the button below to launch the Intel Select tutorial.
 ## HTCondor Tutorial
 
 Walk through deploying an HTCondor pool that supports jobs running inside Docker
-containers or the base [HPC VM Image][hpc-vm-mage].
+containers or the base [HPC VM Image][hpc-vm-image].
 
 Click the button below to launch the HTCondor tutorial.
 
