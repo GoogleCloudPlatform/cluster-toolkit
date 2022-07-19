@@ -27,6 +27,7 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 
+	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 )
@@ -188,7 +189,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testBlueprint := Blueprint{
 		BlueprintName: "simple",
 		Validators:    []validatorConfig{},
-		Vars:          map[string]interface{}{},
+		Vars:          map[string]interface{}{"deployment_name": "deployment_name"},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
 			Configuration: map[string]interface{}{},
@@ -231,7 +232,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	}
 	return DeploymentConfig{
 		Config: Blueprint{
-			Vars:             make(map[string]interface{}),
+			Vars:             map[string]interface{}{"deployment_name": "deployment_name"},
 			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
 		},
 	}
@@ -315,6 +316,34 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 	c.Assert(dc.ModuleToGroup[testModID], Equals, 0)
 }
 
+func (s *MySuite) TestDeploymentName(c *C) {
+	dc := getDeploymentConfigForTest()
+	var e *DeploymentNameError
+
+	// Is deployment_name a valid string?
+	deploymentName, err := dc.Config.DeploymentName()
+	c.Assert(deploymentName, Equals, "deployment_name")
+	c.Assert(err, IsNil)
+
+	// Is deployment_name an empty string?
+	dc.Config.Vars["deployment_name"] = ""
+	deploymentName, err = dc.Config.DeploymentName()
+	c.Assert(deploymentName, Equals, "")
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Is deployment_name not a string?
+	dc.Config.Vars["deployment_name"] = 100
+	_, err = dc.Config.DeploymentName()
+	c.Assert(deploymentName, Equals, "")
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Is deployment_name not set?
+	delete(dc.Config.Vars, "deployment_name")
+	deploymentName, err = dc.Config.DeploymentName()
+	c.Assert(deploymentName, Equals, "")
+	c.Check(errors.As(err, &e), Equals, true)
+}
+
 func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
@@ -376,7 +405,7 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	// Success
 	dc := getBasicDeploymentConfigWithTestModule()
 	c.Assert(dc.Config.Vars["project_id"], IsNil)
-	c.Assert(dc.Config.Vars["deployment_name"], IsNil)
+	c.Assert(dc.Config.Vars["deployment_name"], Equals, "deployment_name")
 	c.Assert(dc.Config.Vars["region"], IsNil)
 	c.Assert(dc.Config.Vars["zone"], IsNil)
 

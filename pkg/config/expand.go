@@ -214,14 +214,6 @@ func getRole(source string) string {
 	return role
 }
 
-func getDeploymentName(vars map[string]interface{}) string {
-	deployName, exists := vars["deployment_name"]
-	if exists {
-		return deployName.(string)
-	}
-	return "undefined"
-}
-
 func toStringInterfaceMap(i interface{}) (map[string]interface{}, error) {
 	var ret map[string]interface{}
 	switch val := i.(type) {
@@ -247,7 +239,7 @@ func toStringInterfaceMap(i interface{}) (map[string]interface{}, error) {
 func (dc *DeploymentConfig) combineLabels() error {
 	defaultLabels := map[string]interface{}{
 		blueprintLabel:  dc.Config.BlueprintName,
-		deploymentLabel: getDeploymentName(dc.Config.Vars),
+		deploymentLabel: dc.Config.Vars["deployment_name"],
 	}
 	labels := "labels"
 	var globalLabels map[string]interface{}

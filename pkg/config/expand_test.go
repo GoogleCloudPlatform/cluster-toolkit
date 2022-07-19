@@ -43,7 +43,8 @@ func (s *MySuite) TestExpandBackends(c *C) {
 	grp := dc.Config.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix := grp.TerraformBackend.Configuration["prefix"]
-	expPrefix := fmt.Sprintf("%s/%s", dc.Config.BlueprintName, grp.Name)
+	expPrefix := fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName,
+		dc.Config.Vars["deployment_name"], grp.Name)
 	c.Assert(gotPrefix, Equals, expPrefix)
 
 	// Add a new resource group, ensure each group name is included
@@ -51,7 +52,6 @@ func (s *MySuite) TestExpandBackends(c *C) {
 		Name: "group2",
 	}
 	dc.Config.DeploymentGroups = append(dc.Config.DeploymentGroups, newGroup)
-	dc.Config.Vars["deployment_name"] = "testDeployment"
 	err = dc.expandBackends()
 	c.Assert(err, IsNil)
 	newGrp := dc.Config.DeploymentGroups[1]
@@ -264,7 +264,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	// Was the ghpc_deployment label set correctly?
 	ghpcDeployment, exists := globalLabels[deploymentLabel]
 	c.Assert(exists, Equals, true)
-	c.Assert(ghpcDeployment, Equals, "undefined")
+	c.Assert(ghpcDeployment, Equals, "deployment_name")
 
 	// Was "labels" created for the module with no settings?
 	_, exists = dc.Config.DeploymentGroups[0].Modules[0].Settings["labels"]
