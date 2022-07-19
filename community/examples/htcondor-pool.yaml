@@ -65,7 +65,6 @@ deployment_groups:
     - network1
     - htcondor_configure_central_manager
     settings:
-      enable_oslogin: DISABLE
       name_prefix: central-manager
       machine_type: c2-standard-4
       disable_public_ips: true
@@ -95,8 +94,8 @@ deployment_groups:
     - htcondor_configure_execute_point
     settings:
       metadata:
+        enable-oslogin: "TRUE"
         central-manager: ((module.htcondor_cm.internal_ip[0]))
-        enable-oslogin: "FALSE"
       service_account:
         email: $(htcondor_configure.execute_point_service_account)
         scopes:
@@ -115,7 +114,17 @@ deployment_groups:
       - $(htcondor_install.install_autoscaler_runner)
       - $(htcondor_configure.access_point_runner)
       - $(htcondor_execute_point.configure_autoscaler_runner)
-
+      - type: data
+        destination: /var/tmp/helloworld.sub
+        content: |
+          universe       = docker
+          docker_image   = hello-world
+          output         = out
+          error          = err
+          log            = log
+          request_cpus   = 1
+          request_memory = 100MB
+          queue
   - source: modules/compute/vm-instance
     kind: terraform
     id: htcondor_access
@@ -123,9 +132,9 @@ deployment_groups:
     - network1
     - htcondor_configure_access_point
     settings:
-      enable_oslogin: DISABLE
       name_prefix: access-point
       machine_type: c2-standard-4
+      disable_public_ips: true
       metadata:
         central-manager: ((module.htcondor_cm.internal_ip[0]))
       service_account:
@@ -133,4 +142,4 @@ deployment_groups:
         scopes:
         - cloud-platform
     outputs:
-    - external_ip
+    - internal_ip
