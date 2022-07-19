@@ -136,7 +136,10 @@ You should also verify that the pool is operational by executing
 condor_status -schedd -autoformat Name
 ```
 
-and observing output similar to
+Until HTCondor is installed and configured, you may find that this command is
+not yet available ("command not found") or fails to find the pool ("Failed to
+connect"). Installation may take 5 minutes or more. When it succeeds, you will
+observe output similar to
 
 ```text
 access-point-0.us-central1-c.c.<walkthrough-project-id/>.internal
@@ -144,8 +147,16 @@ access-point-0.us-central1-c.c.<walkthrough-project-id/>.internal
 
 ## Submit an example job
 
-The following commands will copy this job into your home directory and submit it
-to the HTCondor pool.
+An example job is automatically copied to your HTCondor access point. The
+following commands will copy the example into your home directory and submit it
+to the pool.
+
+```bash
+cp /var/tmp/helloworld.sub .
+condor_submit helloworld.sub
+```
+
+The job "submit file" will resemble:
 
 ```text
 universe       = docker
@@ -158,12 +169,7 @@ request_memory = 100MB
 queue
 ```
 
-```bash
-cp /var/tmp/helloworld.sub .
-condor_submit helloworld.sub
-```
-
-The output should resemble
+After you submit the job, `condor_submit` will print:
 
 ```text
 Submitting job(s).
@@ -171,8 +177,8 @@ Submitting job(s).
 ```
 
 Run `condor_watch_q` to watch your jobs as they transition from `IDLE` to `RUN`
-to `DONE`. This will take several minutes are the pool autoscales to serve your
-job.
+to `DONE`. This may take 5 or more minutes as the pool autoscales VMs to serve
+your job.
 
 ```bash
 condor_watch_q
@@ -185,7 +191,7 @@ BATCH   IDLE  RUN  DONE  TOTAL  JOB_IDS
 ID: 1     1    -     -      1   1.0
 ```
 
-When complete, observe the output of your job:
+Once the pool autoscales (approx. 5 minutes), observe the output of your job:
 
 ```bash
 cat out
