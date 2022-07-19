@@ -16,7 +16,7 @@
 
 ################################################################################
 #                                                                              #
-#                 Google HPC Toolkit FrontEnd destroy script                   #
+#                 Google HPC Toolkit FrontEnd teardown script                  #
 #                                                                              #
 ################################################################################
 
@@ -24,54 +24,60 @@
 #
 #
 tfdestroy() {
-    
-    cd tf
 
-    # -- If there's no lock file, there shouldn't be any Front End deployed.
-    #
-    if [[ ! -f .tkfe.lock ]]; then
-	echo "Warning: No lock file found"
-	echo "         It is likely there is no Front End currently deployed"
-	read -r -p "         Proceed anyway? [y/N]: " ready
+    # All action happens in tf subdirectory
+    (
+	cd tf
+
+	# -- If there's no lock file, there shouldn't be any FrontEnd deployed.
+	#
+	if [[ ! -f .tkfe.lock ]]; then
+	    echo "Warning: No lock file found"
+	    echo "         It is likely there is no FrontEnd currently deployed"
+	    read -r -p "         Proceed anyway? [y/N]: " ready
+	    case "$ready" in
+		[Yy]*) ;;
+		*)
+		    echo "exiting."
+		    exit 0
+		    ;;
+	    esac
+	    
+	fi
+
+	name=$(terraform show | awk '/ghpcfe_id/ {print $3; exit}')
+    
+	echo ""
+	echo "  This will destroy the running FrontEnd: ${name}"
+	echo "  Please ensure all resources deployed by the FrontEnd have been deleted."
+	echo ""
+	read -r -p "  Proceed? [y/N]: " ready
 	case "$ready" in
 	    [Yy]*) ;;
 	    *)
-		echo "exiting."
+		echo "Exiting."
 		exit 0
 		;;
 	esac
 	
-    fi
-
-    name=`terraform show | awk '/ghpcfe_id/ {print $3; exit}'`
+	# Remove service account?
     
-    echo ""
-    echo "  This will destroy the running Front End:" ${name}
-    echo "  Please ensure all resources deployed by the Front End have been deleted."
-    echo ""
-    read -r -p "  Proceed? [y/N]: " ready
-    case "$ready" in
-	[Yy]*) ;;
-	*)
-	    echo "Exiting."
-	    exit 0
-	    ;;
-    esac
-    #
-    # TODO - Spawn a shutdown script on FE server, via gcloud, which finds all
-    #        running clusters and 'terraform destroy's them.
-    #        This will give a totally clean shut down, leaving no GCP resources
-    #        attributable to this FE.
-    #
+	# Remove PubSub subscriptions?
+	
+	# TODO: Spawn a shutdown script on FE server, via gcloud, which finds
+	#       all running clusters and 'terraform destroy's them.
+	#       This will give a totally clean shut down, leaving no GCP
+	#       resources attributable to this FE.
     
-    #
-    # -- Start the deployment using Terraform
-    #
-    terraform destroy -auto-approve | tee tfdestroy.log
-    
-    # -- Remove the lock file
-    #
-    rm -f .tkfe.lock 2> /dev/null
+	#
+	# -- Start the deployment using Terraform
+	#
+	terraform destroy -auto-approve | tee tfdestroy.log
+	
+	# -- Remove the lock file
+	#
+	rm -f .tkfe.lock 2> /dev/null
+    )
 }
 
 
@@ -83,7 +89,7 @@ set -e
 
 # -- Splash screen
 #
-cat <<+
+cat <<'HEADER'
 
 --------------------------------------------------------------------------------
 
@@ -91,7 +97,7 @@ cat <<+
 
 --------------------------------------------------------------------------------
 
-+
+HEADER
 
 # -- Check for terraform and gsutil
 #

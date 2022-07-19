@@ -796,7 +796,7 @@ ADMIN
     Alternatively, service accounts and credentials can be created manually
     via the GCP Console or gcloud CLI.  Multiple credentials can then be
     registered to the FrontEnd for different projects, allowing the
-    FrontEnd to deploy resources against these and also manage access at a
+    FrontEnd to deploy resources against these, and/or manage access at a
     finer level.  Existing service accounts with the necessary roles/permissions
     can also be used.  Please see Administrator's Guide for more details.
 
