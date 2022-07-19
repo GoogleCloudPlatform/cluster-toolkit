@@ -396,6 +396,10 @@ func checkUsedModuleNames(
 
 // validateConfig runs a set of simple early checks on the imported input YAML
 func (dc *DeploymentConfig) validateConfig() {
+	_, err := dc.Config.DeploymentName()
+	if err != nil {
+		log.Fatal(err)
+	}
 	moduleToGroup, err := checkModuleAndGroupNames(dc.Config.DeploymentGroups)
 	if err != nil {
 		log.Fatal(err)
