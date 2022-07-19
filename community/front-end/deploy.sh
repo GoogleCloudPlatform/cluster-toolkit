@@ -23,16 +23,64 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
+#
+#   Deployment requires a GCP project and authenticated user to run the FrontEnd
+#   on GCP resources.
+#
+#   The FrontEnd also requires a service account with permissions and
+#   credential, which needs to be created and registered with the FrontEnd once
+#   it is running.
+#
+#   By default this script will create the account and supply the credential
+#   file, but this can be skipped if the admin user already has an account they
+#   prefer to use.
+#
 
-# Default GCP zone to use
-default_zone='europe-west4-a'
+
+# Default GCP zone to use for FrontEnd server
+#
+DEFAULT_ZONE='europe-west4-a'
+
+# GCP APIs needed by GCP project
+# - using a bash associative array to hold key-value of API and description,
+#   similar to Python
+#
+declare -A PRJ_API
+PRJ_API['monitoring.googleapis.com']='Cloud Monitoring API'
+PRJ_API['logging.googleapis.com']='Cloud Logging API'
+PRJ_API['compute.googleapis.com']='Compute Engine API'
+PRJ_API['pubsub.googleapis.com']='Cloud Pub/Sub API'
+PRJ_API['file.googleapis.com']='Cloud Filestore API'
+PRJ_API['cloudresourcemanager.googleapis.com']='Cloud Resource Manager API'
+PRJ_API['pubsub.googleapis.com']='Cloud Pub/Sub API'
+PRJ_API['iam.googleapis.com']='Identity and Access Management (IAM) API'
+PRJ_API['oslogin.googleapis.com']='Cloud OS Login API'
+PRJ_API['cloudbilling.googleapis.com']='Cloud Billing API'
+PRJ_API['aiplatform.googleapis.com']='Vertex AI API'
+
+
+# Roles needed by service account
+#
+declare -a SA_ROLES
+SA_ROLES=('aiplatform.admin'
+	  'compute.admin'
+	  'file.editor'
+	  'iam.serviceAccountAdmin'
+          'iam.serviceAccountUser'
+          'notebooks.admin'
+          'resourcemanager.projectIamAdmin')
+
+# Location for output credential file = pwd/credential.json
+#
+CREDENTIAL_FILE="${SCRIPT_DIR}/credential.json"
+
 
 
 # help function
 #   - write out purpose and preprequisites
 #
 help() {
-    cat <<+
+  cat <<HELP1
   This script will ask a short series of questions to configure the FrontEnd
   web application before deployment.
 
@@ -46,23 +94,25 @@ help() {
   already, this command can be used:
       $ gcloud auth application-default login
 
-  The GCP project must have the following APIs enabled:
-      - Compute Engine API
-      - Cloud Monitoring API
-      - Cloud Logging API
-      - Cloud Pub/Sub API
-      - Cloud Resource Manager
-      - Identity and Access Management (IAM) API
-      - Cloud OS Login API
-      - Cloud Filestore API
-      - Cloud Billing API
-      - Vertex AI API
+  The GCP project must have a number of APIs enabled in order to deploy the
+  FrontEnd.  These are:
+HELP1
+  local aa
+  for aa in "${!PRJ_API[@]}"; do
+    echo "      - ${PRJ_API[${aa}]}"
+  done
 
+  cat <<HELP2
+
+  If these are not enabled, you will be asked to confirm they can be
+  enabled by this script.  Not confirming will cause the script to exit, so you
+  can rectify the project manually, or start again with a different project.
+  Please see the Administrator's Guide for details on the APIs.
+  
   As this deployment creates many GCP resources, a number of permissions are
   required.  An Owner or Editor of the hosting GCP project can deploy without
   any problem. Otherwise, a workable set of GCP roles for successful deployment
   need to be added to the account, which includes:
-
       - Compute Admin
       - Storage Admin
       - Pub/Sub Admin
@@ -70,78 +120,100 @@ help() {
         (or Service Account Admin)
       - Project IAM Admin
 
-+
-#'
+HELP2
+}
+
+#
+# Simple functions to direct verbose output (if on) and stderr
+#
+verbose() {
+  if false; then
+    echo ">>> $*"
+  fi
+}
+
+error() {
+  echo "$*" >&2
 }
 
 
-# Function for capturing user entry.
+
+# ask
+#
+# Capture user entry.
 #  - Has an option to hide the response, which is useful for passwords.
 #  - Accepts a default that is used when no user entry.
+#  - Note: this function is used in command substition, i.e. foo=$(ask "bar")
+#          so no echo commands can be used
 #
 # Usage:
-#   ask [--hidden] PROMPT [DEFAULT]
+#    ask [--hidden] PROMPT [DEFAULT]
+#
+# Example:
+#    reply=$(ask "Enter string> " "foo")
 #
 ask() {
-        
-    # set if we are hiding the typing
-    unset hidden
-    if [[ "${1}" == '--hidden' ]]; then
-	hidden=1;
-	shift
-    fi
     
-    # get the question string
-    question="${1}"
+  # set if we are hiding the typing
+  local hidden  
+  unset hidden
+  if [[ "${1}" == '--hidden' ]]; then
+    hidden=1;
     shift
+  fi
     
-    # get any default value
-    unset default
-    if [[ ${1} ]]; then
-	default=${1}
-	printf "${question} [default: ${default}]" >&2
-    else
-	printf "${question}" >&2
-    fi
+  # get the question string
+  local question="${1}"
+  shift
     
-    charcount='0'
-    prompt='> '
-    reply=''
-    if [[ ${hidden} ]]; then
-	while IFS='' read -n '1' -p "${prompt}" -r -s 'char'
-	do
-            case "${char}" in
-		# Handle NULL
-		( $'\000' )
-		    break
-		    ;;
-		# Handle BACKSPACE and DELETE
-		( $'\010' | $'\177' )
-		    if (( charcount > 0 )); then
-			prompt=$'\b \b'
-			reply="${reply%?}"
-			(( charcount-- ))
-		    else
-			prompt=''
-		    fi
-		    ;;
-		( * )
-		    prompt='*'
-		    reply+="${char}"
-		    (( charcount++ ))
-		    ;;
-            esac
-	done
-	printf '\n' >&2
-    else
-	IFS='' read -p "${prompt}" -r 'reply'
-    fi
-    if [[ ! ${reply} && ${default} ]]; then
-	reply=${default}
-    fi
+  # get any default value
+  local default
+  unset default
+  if [[ ${1} ]]; then
+    default=${1}
+    printf "%s [default: %s]" "${question}" "${default}" >&2
+  else
+    printf "%s" "${question}" >&2
+  fi
+    
+  local charcount='0'
+  local prompt='> '
+  local reply=''
+  local IFS
+  if [[ ${hidden} ]]; then
+    while IFS='' read -n '1' -p "${prompt}" -r -s 'char'; do
+      case "${char}" in
+	# Handle NULL
+	( $'\000' )
+	  break
+	  ;;
+      # Handle BACKSPACE and DELETE
+        ( $'\010' | $'\177' )
+	  if (( charcount > 0 )); then
+	    prompt=$'\b \b'
+	    reply="${reply%?}"
+	    (( charcount-- ))
+	  else
+	    prompt=''
+	  fi
+	  ;;
+	( * )
+	  prompt='*'
+	  reply+="${char}"
+	  (( charcount++ ))
+	  ;;
+      esac
+    done
+    printf '\n' >&2
+  else
+    IFS='' read -p "${prompt}" -r 'reply'
+  fi
+  if [[ ! ${reply} && ${default} ]]; then
+    reply=${default}
+  fi
 
-    # return string
-    printf '%s\n' "${reply}"
+  # return string
+  printf '%s\n' "${reply}"
 }
 
 
@@ -149,62 +221,296 @@ ask() {
 #   - Ensures only one instance of FE is deployed from this location.
 #
 setlock() {
-    touch ${SCRIPT_DIR}/tf/.tkfe.lock
+  touch "${SCRIPT_DIR}"/tf/.tkfe.lock
 }
 
 checklock() {
     
-    # -- If lock exists, there is a FrontEnd already deployed, so abort as
-    #    deploying another will overwrite the terraform files, leaving the
-    #    current deployment impossible to destroy, so then dangling and in
-    #    need of manual clean-up via Google console.
-    #
-    if [[ -f ${SCRIPT_DIR}/tf/.tkfe.lock ]]; then
-	echo ""
-	echo "Error:  A lock file has been found."
-	echo ""
-	echo "    A FrontEnd has already been deployed from this location."
-	echo ""
-	echo "    Either destroy existing FrontEnd by deleting all resources via web"
-	echo "    application, then use ./teardown.sh"
-	echo "    Or ensure all resources have been removed via Google Console and delete the"
-	echo "    lock file: tf/.tkfe.lock"
-	echo ""
-	exit 0
-    fi
+  # -- If lock exists, there is a FrontEnd already deployed, so abort as
+  #    deploying another will overwrite the terraform files, leaving the
+  #    current deployment impossible to destroy, so then dangling and in
+  #    need of manual clean-up via Google console.
+  #
+  if [[ -f ${SCRIPT_DIR}/tf/.tkfe.lock ]]; then
+    error ""
+    error "Error:  A lock file has been found."
+    error ""
+    error "    A FrontEnd has already been deployed from this location."
+    error ""
+    error "    Either destroy existing FrontEnd by deleting all resources via web"
+    error "    application, then use ./teardown.sh"
+    error "    Or ensure all resources have been removed via Google Console and delete the"
+    error "    lock file: tf/.tkfe.lock"
+    error ""
+    exit 1
+  fi
 }
 
+
+#
+# Check that account if all good
+#
+check_account() {
     
+  local project=$1
+  local account
+  
+  account=$(gcloud auth list 2>&1 | awk '$1 ~ /^*/ {print $2}')
+  
+  if [[ ! ${account} ]]; then
+    error ""
+    error "Error: No authorized GCP account was found."
+    error ""
+    error "   Please ensure your account has been authorized with this command:"
+    error "   $ gcloud auth application-default login"
+    error ""
+    exit 1
+  fi
+
+  # Basic check that user is Owner or Editor of the project.
+  # - issue warning if not - user can set permissions to do everything that
+  #   is needed to deploy FrontEnd, but Owner/Editor is good by default.
+  #
+  local roles
+  roles=$(gcloud projects get-iam-policy "${project}" \
+		 --flatten="bindings[].members" \
+		 --format="table(bindings.role)" \
+		 --filter="bindings.members:${account}" | grep '^roles')
+  set +e
+  echo "${roles}" | grep -q 'roles/owner';  is_owner=$?
+  echo "${roles}" | grep -q 'roles/editor'; is_editor=$?
+  set -e
+  
+  if [[ ${is_owner} -ne 0 && ${is_editor} -ne 0 ]]; then
+    echo ""
+    echo "Warning: account is not Owner or Editor of project"
+    echo "         Please ensure account has correct permissions before proceeding."
+    echo "         See HPC Toolkit FrontEnd Administrator's Guide for details."
+    echo ""
+    case $(ask "         Proceed [y/N]: ") in
+      [Yy]*) ;;
+      *)
+	echo "Exiting."
+	exit 0
+	;;
+    esac
+  fi
+    
+  # TODO: perform more extensive check the account has all required roles.
+  #       - these could change over, depending back-end GCP / HPC Toolkit
+  #         requirements, so would require maintaining.
+}
+
+
+
+#
+# Check that all required APIs are enabled for the project
+# - If some are missing, ask if they would like them enabled and do so.
+# - Abort if declined, as cannot deploy without them.
+#
+check_apis() {
+
+  local project=$1
+  
+  # Get all currently enabled APIs for this project
+  #
+  local enabled_apis
+  enabled_apis=$(gcloud services list)
+  
+  # Check all required APIs are present, prompt and enable for any missing
+  #
+  local id
+  for id in "${!PRJ_API[@]}"; do
+    local desc=${PRJ_API[$id]}
+
+    verbose "checking API: ${desc}"
+    set +e
+    echo "${enabled_apis}" | grep -q "${id}"
+    local ok=$?
+    set -e
+    
+    if [[ ${ok} -ne 0 ]]; then
+	echo ""
+	echo "Warning: Required API is not enabled: ${desc}"
+	read -r -p "         Enable this API? [y/N]: " reply
+	case "${reply}" in
+	  [Yy]*)
+	    echo ""
+	    echo "  Enabling: ${desc}"
+	    echo "  This may take a few seconds..."
+	    # Enabling may fail if user doesn't have privileges to
+	    # modify the project.
+	    # Could use --async option on this command, to prevent wait,
+	    # but would need to check later if did this.
+	    set +e
+	    if ! gcloud services enable "${id}" \
+		      --project="${project}" >/dev/null 2>&1; then
+	      error "  Error: Unable to modify project APIs"
+	      error "         Please contact to administrator"
+	      error ""
+	      error "Exiting."
+	      exit 1
+	    fi
+	    set -e
+	    ;;
+	  *)
+	    echo "Exiting."
+	    exit 0
+	    ;;
+	esac
+
+    fi
+  done
+}
+
+
+#
+# Create a service account with required roles to run TKFE operations
+#
+create_service_account() {
+    
+  local project=$1
+  local server_name=$2
+  local credfile=$3
+  
+  local service_account="${server_name}-tkfe-sa"
+  local sa_fullname="${service_account}@${project}.iam.gserviceaccount.com"
+  
+  
+  # Check for existing service account with this name
+  # - if there is an account, it can be used and a new credential generated
+  #   if required.
+  #
+  verbose "checking no previous existing account"
+  
+  local ex_acc
+  ex_acc=$(gcloud iam service-accounts list \
+	| awk -v SA="${sa_fullname}" '$1 ~ SA')
+  
+  local create=0
+  local getcred=0
+  
+  if [[ -n ${ex_acc} ]]; then
+    echo "Warning: Service account already exists (it is likely the deployment name is"
+    echo "         being reused)."
+    echo "         If the credential still exists this can be reused (assuming it has the"
+    echo "         correct roles)."
+    echo "         Or the account and credential can be overwritten."
+    echo ""
+    case $(ask "         Overwrite? [y/N]: ") in
+      [Yy]*)
+	verbose "deleting service account: ${sa_fullname}"
+	# Deleting previous service account may fail if user doesn't
+	# have permissions
+	set +e
+	if ! gcloud iam service-accounts delete "${sa_fullname}" \
+	     --quiet --project="${project}" >/dev/null 2>&1; then
+	  error "Error: failed to overwrite existing service account."
+	  error "       Your account may not have permissions to do this."
+	  error "       Please contact your administrator."
+	  exit 1
+	fi	  
+	set -e
+	create=1
+	getcred=1
+	;;
+      *)
+	verbose "assuming re-use of account"
+	echo "         Using existing service account: ${service_account}"
+	case $(ask "         Do you want to regenerate the credential? [y/N]: ") in
+	  [Yy]*)
+	    getcred=1
+	    ;;
+	  *)
+	    echo "         Please register existing credential with FrontEnd once it is running."
+	    ;;
+	esac
+	;;
+    esac
+  else
+    create=1
+    getcred=1
+  fi
+  
+  if [[ ${create} -ne 0 ]]; then
+    verbose "creating service account: ${sa_fullname}"
+
+    echo "      This may take a few seconds..."
+    # Create the service account
+    # - may fail if user doesn'thave permissions
+    #
+    set +e
+    if ! gcloud iam service-accounts create "${service_account}" \
+	   --description="TKFE service account" --project="${project}"; then
+      error "Error: failed to create service account."
+      error "       Your account may not have permissions to do this."
+      error "       Please contact your administrator."
+      exit 1
+    fi
+    set -e
+    
+    # Add all required roles to new service account
+    # - can assume we can do this if account creation above worke
+    #
+    local role
+    for role in ${SA_ROLES[*]}; do
+      verbose "adding role: ${role}"
+      gcloud projects add-iam-policy-binding "${project}" \
+	     --member="serviceAccount:${sa_fullname}" \
+	     --role="roles/${role}" > /dev/null 2>&1
+    done
+  fi
+
+  if [[ ${getcred} -ne 0 ]]; then
+    verbose "creating credential file: ${credfile}"
+	
+    # Create credential for new service account and put into file
+    #
+    gcloud iam service-accounts keys create "${credfile}" \
+	   --iam-account="${sa_fullname}"
+    echo "  Credential written to:"
+    echo "      ${credfile}"
+    echo ""
+    echo "  You will need to register the contents of this file as a credential to the"
+    echo "  FrontEnd once it is running."
+  fi
+}
+
+
+#
 # Deploy the FrontEnd
 #  - All deployments parameters have been obtained, so can now construct the
 #    terraform recipes and initiate the deployment.
 #
 deploy() {
     
-    # -- Collect deployment files
-    #
-    #    For a tarball deployment, it is important that the 'root' directory is
-    #    named 'hpc-toolkit' as most of the install depends on it.
-    #
-    #    Simplest way to ensure this is to build from a temporary copy that
-    #    definitely is named correctly.
-    #
-    if [ "${deployment}" == "tarball" ]; then
-	sdir=${PWD}
-	tdir=/tmp/hpc-toolkit
-	cp -R ../.. ${tdir}/
-	cd ${tdir}
-	tar -zcf ${sdir}/tf/deployment.tar.gz --exclude=tf ../hpc-toolkit 2>/dev/null
-	cd ${sdir}
-	rm -rf ${tdir}
-    fi
-
-
+  # -- Collect deployment files
+  #
+  #    For a tarball deployment, it is important that the 'root' directory is
+  #    named 'hpc-toolkit' as most of the install depends on it.
+  #
+  #    Simplest way to ensure this is to build from a temporary copy that
+  #    definitely is named correctly.
+  #
+  if [ "${deployment_mode}" == "tarball" ]; then
+    tdir=/tmp/hpc-toolkit
+    cp --recursive ../.. ${tdir}/
+    (
+      cd ${tdir}
+      tar -zcf "${SCRIPT_DIR}"/tf/deployment.tar.gz --exclude=tf \
+	  ../hpc-toolkit 2>/dev/null
+    )
+    rm --force --recursive ${tdir}
+  fi
+  
+  # -- All Terraform operations to be done in tf subdir
+  #
+  (
     cd tf
 
     # -- Create Terraform setup
     #
-    cat >terraform.tfvars <<+
+    cat >terraform.tfvars <<TFVARS
 project_id = "${project_id}"
 region = "${region}"
 zone = "${zone}"
@@ -215,30 +521,34 @@ django_su_username = "${django_superuser_username}"
 django_su_password = "${django_superuser_password}"
 django_su_email    = "${django_superuser_email}"
 
-deployment_mode = "${deployment}"
+deployment_mode = "${deployment_mode}"
 subnet = "${subnet_name}"
 
 extra_labels = {
     creator = "${USER}"
 }
-+
+TFVARS
     if [ -n "${dns_hostname}" ]; then
-	echo "webserver_hostname = \"${dns_hostname}\"" >>terraform.tfvars
+      echo "webserver_hostname = \"${dns_hostname}\"" >>terraform.tfvars
     fi
     if [ -n "${ip_address}" ]; then
-	echo "static_ip = \"${ip_address}\"" >>terraform.tfvars
+      echo "static_ip = \"${ip_address}\"" >>terraform.tfvars
     fi
-
-    if [ "${deployment}" == "git" ]; then
-	echo "Will clone hpc-toolkit from github.com/${REPO_FORK:-GoogleCloudPlatform}.git branch ${REPO_BRANCH:-main}."
-	echo "Set REPO_BRANCH and REPO_FORK environment variables to override"
-
-	cat >>terraform.tfvars <<+
-    repo_branch = "${REPO_BRANCH:-main}"
-    repo_fork = "${REPO_FORK:-GoogleCloudPlatform}"
-    deployment_key = "${deploy_key}"
-+
-    fi
+    
+    
+#### git deployment not yet available - commented out, reinstate later
+#
+#    if [ "${deployment}" == "git" ]; then
+#	echo "Will clone hpc-toolkit from github.com/${REPO_FORK:-GoogleCloudPlatform}.git branch ${REPO_BRANCH:-main}."
+#	echo "Set REPO_BRANCH and REPO_FORK environment variables to override"
+#
+#	cat >>terraform.tfvars <<+
+#    repo_branch = "${REPO_BRANCH:-main}"
+#    repo_fork = "${REPO_FORK:-GoogleCloudPlatform}"
+#    deployment_key = "${deploy_key}"
+#+
+#    fi
+####
 
     echo ""
 #    echo "terraform.tfvars file has been created in the 'tf' directory."
@@ -248,26 +558,26 @@ extra_labels = {
     # TODO - upload terraform files to the FE server, so that they can be recovered if ever
     #        needed
     
-    ready=$(ask '  Proceed to deploy? [y/N]: ')
-    case "$ready" in
-	[Yy]*) ;;
-	*)
-	    echo "Exiting."
-	    exit 0
-	    ;;
+    case $(ask "  Proceed to deploy? [y/N]: ") in
+      [Yy]*) ;;
+      *)
+	echo "Exiting."
+	exit 0
+	;;
     esac
-
+    
     # -- Start the deployment using Terraform.
-    #    Note: Extract $? for terraform using PIPESTATUS, as $? below is just from tee
+    #    Note: Extract $? for terraform using PIPESTATUS, as $? below is
+    #          from tee
     #          Also toggle exit on error.
     #
     set +e
     terraform init
     terraform apply -auto-approve | tee tfapply.log
     if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
-	echo "Error:  Terraform failed."
-	echo "        Please check parameters and/or seek assistance."
-	echo ""
+	error "Error:  Terraform failed."
+	error "        Please check parameters and/or seek assistance."
+	error ""
 	exit 2
     fi
     set -e
@@ -275,63 +585,68 @@ extra_labels = {
     echo ""
     echo "Deployment in progress."
     echo ""
-    echo "  Started at:" `date`
+    echo "  Started at: $(date)"
     echo "  Initialization should take about 15 minutes."
     echo "  After that time, please point your web browser to the above server_ip."
     if [ -n "${dns_hostname}" ]; then
-	echo "  Also update your DNS record to point '${dns_hostname}' to that IP."
+      echo "  Also update your DNS record to point '${dns_hostname}' to that IP."
     fi
 
-    # TODO - Put in an optional wait, to confirm back to the user when the FE is ready
-    #        A ping every 30s may work?   Need to capture IP address and then:
+    # TODO - Put in an optional wait, to confirm back to the user when the
+    #        FE is ready
+    #        A ping every 30s may work?   Need to capture IP address and
+    #        then:
     #           until $?==0 do: ping -q -c 1 -w 5 IPADDRESS >/dev/null
-
+    
     # 
     #
     echo ""
-    echo "To terminate this deployment, please make sure any resources created"
+    echo "To terminate this deployment, please make sure all resources created"
     echo "within the FrontEnd have been deleted, then run ./teardown.sh"
     echo ""
 
     # -- Set FE lock file, to ensure only one deployment is performed.
     #
-    setlock
+  )
+  setlock
 }
 
 
 #
+# setup
 #
+# - uses question/answer to obtain all required parameters for deployment
+# - checks are performed on pre-requisites/account/project
 #
-standard_setup() {
+# - Note: take care not to declare variables local if they are used in the
+#   deploy() function
+#
+setup() {
 
-    # -- Ensure that there is no pre-deployed FE from this location.
-    #
-    checklock
-        
-    help
-    cat <<+
+  # -- Ensure that there is no pre-deployed FE from this location.
+  # -- Echo help to instruct user
+  #
+  checklock
+  help
+  cat <<LINE
 --------------------------------------------------------------------------------
 
-+
+LINE
 	
-    # -- Check for terraform and gsutil
-    #
-    if ! command -v terraform &>/dev/null; then
-	echo "Error:"
-	echo "   Please ensure terraform (version 0.13 or higher) is in your \$PATH"
-	exit 1
-    fi
-    if ! command -v gsutil &>/dev/null; then
-	echo "Error:"
-	echo "   Please ensure gsutil (part of Google Cloud Tools)  is in your \$PATH"
-	exit 1
-    fi
-
-    # TODO - Check default authorisation has been set up
-    #        'gcloud auth list' could be used
-
-
-    cat <<+
+  # -- Check for terraform and gsutil
+  #
+  if ! command -v terraform &>/dev/null; then
+    error "Error:"
+    error "   Please ensure terraform (version 0.13 or higher) is in your \$PATH"
+    exit 1
+  fi
+  if ! command -v gsutil &>/dev/null; then
+    error "Error:"
+    error "   Please ensure gsutil (part of Google Cloud Tools)  is in your \$PATH"
+    exit 1
+  fi
+    
+  cat <<FUNDAMENTALS
 
 * GCP deployment name, project and location
 
@@ -339,56 +654,77 @@ standard_setup() {
     project and zone.  The project must have authorization and quota to use
     resources in the zone.
     
-    The deployment name must contain only lower-case letters and numbers (no
+    The deployment name must contain only lowercase letters and numbers (no
     spaces)
 
-+
-    # -- Name to use for this FrontEnd deployment
-    #    This will be the name of the server VM
-    #
-    deployment_name=$(ask '    Deployment name')
+FUNDAMENTALS
     
-    # -- GCP project to deploy into
-    #
-    while [ -z "${project_id}" ]; do
-	project_id=$(ask '    GCP Project ID')
-	if [ -z "${project_id}" ]; then
-	    echo "    Error: This cannot be left blank"
-	    echo ""
-	else
-	    # Check project_id is valid.
-	    # Toggle error exit so check works.
-	    set +e
-	    gcloud projects describe ${project_id} >/dev/null 2>&1
-	    if [[ $? -ne 0 ]]; then
-		echo "    Error: Invalid project ID"
-		echo "           Please check you are using the project ID and not the project name"
-		echo "           and that you have access to the project"
-		echo ""
-		project_id=""
-	    fi
-	    set -e
-	fi
-    done
+  # -- Name to use for this FrontEnd deployment
+  #    This will be the name of the server VM
+  #    TODO: check name is valid - i.e. right length, lowercase,...
+  while [ -z "${deployment_name}" ]; do
+    deployment_name=$(ask "    Deployment name")
+    if [ -z "${deployment_name}" ]; then
+      echo "    Error: This cannot be left blank"
+    fi
+  done
+  
+  # -- GCP project to deploy into
+  #    Offer default project from config
+  #    If there is no default in config, this will check it is not blank
+  #
+  local default_project
+  default_project=$(gcloud config list 2>/dev/null \
+			| awk '$1 ~ /^project/ {print $3}')
+  
+  while [ -z "${project_id}" ]; do
+    project_id=$(ask "    GCP Project ID" "${default_project}")
+    if [ -z "${project_id}" ]; then
+      echo "    Error: This cannot be left blank"
+      echo ""
+    else
+      # Check project_id is valid.
+      # Toggle error exit so check works.
+      set +e
+      if ! gcloud projects describe "${project_id}" >/dev/null 2>&1; then
+	echo "    Error: Invalid project ID"
+	echo "           Please check you are using the project ID and not the project name"
+	echo "           and that you have access to the project"
+	echo ""
+	project_id=""
+      fi
+      set -e
+    fi
+  done
+  
+  # -- Check/set project APIs are all good
+  #
+  verbose "checking APIs..."
+  check_apis "${project_id}"
+
+  # -- Check account is good
+  #
+  verbose "checking account..."
+  check_account "${project_id}"
+  
+  # -- GCP zone/region to use
+  #    + clip datacenter from zone to get the region
+  #
+  zone=$(ask "    GCP zone" "${DEFAULT_ZONE}")
+  region=${zone%-*}
     
-    # -- GCP zone/region to use
-    #    + clip datacenter from zone to get the region
-    #
-    zone=$(ask '    GCP zone' ${default_zone})
-    region=${zone%-*}
-    
-    cat <<+
+  cat <<SUBNET
 
 * GCP subnet
 
     Enter existing subnet in which to place the webserver,
     or leave empty to have one created.
 
-+
-    subnet_name=$(ask '    GCP subnet name (or just press Enter)')
-
-    cat <<+ 
-
+SUBNET
+  subnet_name=$(ask "    GCP subnet name (or just press Enter)")
+  
+  cat <<DNSHOST
+    
 * DNS hostname
     
     If you specify a DNS hostname for the new webserver, we will attempt to
@@ -397,11 +733,11 @@ standard_setup() {
     If this is left blank with no hostname specified, the server will use
     standard, unencrypted HTTP.  This is not recommended.
     
-+
-    dns_hostname=$(ask '    DNS hostname (or just press Enter)')
+DNSHOST
+  dns_hostname=$(ask "    DNS hostname (or just press Enter)")
 
-    cat <<+
-
+  cat <<IPADDRESS
+    
 * IP address
     
     If you specify a static IP address it will be assigned to the server.
@@ -413,131 +749,132 @@ standard_setup() {
     $ gcloud compute addresses describe <NAME> --project ${project_id} \\
            --region=${region} | grep 'address:'
 
-    If you have set a hostname above, it is recommended that you use a static IP
-    address and set the DNS record for the hostname to point at this.
+    If you have set a DNS hostname above, it is recommended that you use a
+    static IP address and set the DNS record for the hostname to point at this.
    
-+
-    ip_address=$(ask '    Static IP address (or just press Enter)')
+IPADDRESS
+  ip_address=$(ask "    Static IP address (or just press Enter)")
 
-    #
-    # -- Collect Django admin user information
-    #
-    cat <<+
+  #
+  # -- Collect Django admin user information
+  #
+  cat <<ADMIN
 
 * Admin user creation
 
     Please give details of admin user for the web application.
 
-+
-    django_superuser_username=$(ask '    Username')
-    django_superuser_password=$(ask --hidden '    Password')
-    password_check=$(ask --hidden '    Re-enter password')
-
-    if [[ ${django_superuser_password} != ${password_check} ]]; then
-	echo "Error:"
-	echo "   Passwords do not match - exiting"
-	exit 1
-    fi
+ADMIN
+  django_superuser_username=$(ask "    Username")
+  django_superuser_password=$(ask --hidden "    Password")
+  local password_check
+  password_check=$(ask --hidden "    Re-enter password")
+  
+  if [[ ${django_superuser_password} != "${password_check}" ]]; then
+    error "Error:"
+    error "   Passwords do not match - exiting"
+    exit 1
+  fi
     
-    django_superuser_email=$(ask '    Admin user email address')
+  django_superuser_email=$(ask "    Admin user email address")
+  
+  #
+  # -- Create service account and credential if required
+  #
+  cat <<SERVICEACC
 
+* Service account & credential
 
-    #
-    # Have restricted deployment to only be via tarball
-    #
-    # TODO - Reinstate option to deploy from git, once close to formal release
-    #        and location and access to open repository is available.
-    #
-    #        Will need to make sure that names, etc., are correct and don't break
-    #        deployment and startup scripts (e.g. 'root' directory name must be
-    #        "hpc-toolkit"
-    #
-    #echo ""
-    #echo "Please select deployment method of server software:"
-    #echo "  1) Use a copy of the code from this computer"
-    #echo "  2) Clone the git repo when server deploys"
-    #deploy_choice=$(ask '  Please choose one of the above options', '1')
-    #if [ "${deploy_choice}" == "1" ]; then
-    #	deployment="tarball"
-    #elif [ "${deploy_choice}" == "2" ]; then
-    #	deployment="git"
-    #	deploy_key=$(ask 'For Git clones, please specify the path to the deployment key')
-    #	if [ ! -r "${deploy_key}" ]; then
-    #		echo "Deployment key file cannot be read."
-    #		exit 1
-    #	fi
-    #	deploy_key=$(realpath "${deploy_key}")
-    #else
-    #	echo "Invalid selection"
-    #	exit 1
-    #fi
-    deployment="tarball"
+    A service account with a credential to use this project can be created
+    by this script.  This credential allows clusters and other resources to be
+    deployed by the FrontEnd within this project.
 
+    If requested, a service account will be created and the new credential is
+    written to a file, which needs to be registered to the FrontEnd once
+    running.
 
-    # -- check user is ok to proceed with entered parameters:
-    #
-    echo ""
-    echo "***  Deployment summary:  ***"
-    echo ""
-    echo "    Deployment name:  ${deployment_name}"
-    echo "    GCP project ID:   ${project_id}"
-    echo "    GCP zone:         ${zone}"
-    if [[ ${subnet_name} ]]; then
-	echo "    GCP subnet:       ${subnet_name}"
-    else
-	echo "    GCP subnet:       Automatically created"
-    fi
-    if [[ ${dns_hostname} ]]; then
-	echo "    DNS hostname:     ${dns_hostname}"
-    else
-	echo "    DNS hostname:     None - will use standard HTTP"
-    fi
-    if [[ ${ip_address} ]]; then
-	echo "    IP address:       ${ip_address}"
-    else
-	echo "    IP address:       Automatically created"
-    fi
-    echo ""
-    echo "    Admin username:   ${django_superuser_username}"
-    echo "    Admin email:      ${django_superuser_email}"
-    echo ""
-#    ready=$(ask '  Are details correct? [y/N]: ')
-#    case "$ready" in
-#	[Yy]*) ;;
-#	*)
-#	    echo "Exiting."
-#	    exit 0
-#	    ;;
-#    esac
+    Alternatively, service accounts and credentials can be created manually
+    via the GCP Console or gcloud CLI.  Multiple credentials can then be
+    registered to the FrontEnd for different projects, allowing the
+    FrontEnd to deploy resources against these and also manage access at a
+    finer level.  Existing service accounts with the necessary roles/permissions
+    can also be used.  Please see Administrator's Guide for more details.
+
+    The single service account and credential is sufficient for most use cases.
+
+SERVICEACC
+  case $(ask "    Create a service account and credential? [y/N]: ") in
+    [Yy]*)
+      create_service_account "${project_id}" \
+			     "${deployment_name}" \
+			     "${CREDENTIAL_FILE}"
+      
+      ;;
+    *)
+      ;;
+  esac
+  
+  #
+  # For now, we have restricted deployment to only be via tarball
+  #
+  # TODO - Reinstate option to deploy from git, once close to formal release
+  #        and location and access to open repository is available.
+  #
+  #        Will need to make sure that names, etc., are correct and don't
+  #        break deployment and startup scripts (e.g. 'root' directory name
+  #        must be "hpc-toolkit")
+  #
+  #echo ""
+  #echo "Please select deployment method of server software:"
+  #echo "  1) Use a copy of the code from this computer"
+  #echo "  2) Clone the git repo when server deploys"
+  #deploy_choice=$(ask "  Please choose one of the above options", "1")
+  #if [ "${deploy_choice}" == "1" ]; then
+  #	deployment_mode="tarball"
+  #elif [ "${deploy_choice}" == "2" ]; then
+  #	deployment_mode="git"
+  #	deploy_key=$(ask "For Git clones, please specify the path to the deployment key")
+  #	if [ ! -r "${deploy_key}" ]; then
+  #		error "Deployment key file cannot be read."
+  #		exit 1
+  #	fi
+  #	deploy_key=$(realpath "${deploy_key}")
+  #else
+  #	error "Invalid selection"
+  #	exit 1
+  #fi
+  deployment_mode="tarball"
+  
+  
+  # -- Summarise entered parameters back to user
+  #
+  echo ""
+  echo "***  Deployment summary:  ***"
+  echo ""
+  echo "    Deployment name:  ${deployment_name}"
+  echo "    GCP project ID:   ${project_id}"
+  echo "    GCP zone:         ${zone}"
+  if [[ ${subnet_name} ]]; then
+    echo "    GCP subnet:       ${subnet_name}"
+  else
+    echo "    GCP subnet:       Automatically created"
+  fi
+  if [[ ${dns_hostname} ]]; then
+    echo "    DNS hostname:     ${dns_hostname}"
+  else
+    echo "    DNS hostname:     None - will use standard HTTP"
+  fi
+  if [[ ${ip_address} ]]; then
+    echo "    IP address:       ${ip_address}"
+  else
+    echo "    IP address:       Automatically created"
+  fi
+  echo ""
+  echo "    Admin username:   ${django_superuser_username}"
+  echo "    Admin email:      ${django_superuser_email}"
+  echo ""
 }
 
-
-#
-#
-#
-quick_setup() {
-    #
-    # -- Shortened setup, for expert user
-    #
-    checklock
-    deployment_name=$(ask '  Deployment name')
-    project_id=$(ask '  GCP project ID')
-    zone=$(ask '  GCP zone' ${default_zone})
-    region=${zone%-*}
-    subnet_name=$(ask '  GCP subnet   [blank to create]')
-    dns_hostname=$(ask '  DNS hostname [blank to create]')
-    ip_address=$(ask '  IP address   [blank to create]')
-    django_superuser_username=$(ask '  Username')
-    django_superuser_password=$(ask --hidden '  Password')
-    password_check=$(ask --hidden '  Re-enter password')
-    if [[ ${django_superuser_password} != ${password_check} ]]; then
-	echo "Error:"
-	echo "   Passwords do not match - Exiting"
-	exit 1
-    fi
-    django_superuser_email=$(ask '  Admin user email address')
-    deployment="tarball"
-}
 
 
 ################################################################################
@@ -546,7 +883,7 @@ quick_setup() {
 # -- Exit on any errors by default (will toggle on/off throughout this script)
 set -e
 
-cat <<+
+cat <<HEADER
 
 --------------------------------------------------------------------------------
 
@@ -554,31 +891,24 @@ cat <<+
 
 --------------------------------------------------------------------------------
 
-+
+HEADER
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-	-q)
-	    quick=1
-	    ;;
-	-h|--help)
-	    help
-	    exit 0
-	    ;;
-    esac
-    shift
+while [[ ${#} -gt 0 ]]; do
+  case "${1}" in
+    -h|--help)
+      help
+      exit 0
+      ;;
+  esac
+  shift
 done
 
-if [[ $quick ]]; then
-    quick_setup
-else
-    standard_setup
-fi
-
+setup
 deploy
 
 wait
 exit 0
+
 
 #
 # eof
