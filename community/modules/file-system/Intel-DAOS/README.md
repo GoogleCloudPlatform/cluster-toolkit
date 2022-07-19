@@ -21,7 +21,7 @@ By default, the DAOS system is created with 4 servers will be configured for bes
 The following settings will configure this [system for TCO](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/examples/daos_cluster#the-terraformtfvarstcoexample-file) (default):
 
 ```yaml
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.0
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
     kind: terraform
     id: daos-server
     use: [network1]
@@ -37,7 +37,7 @@ The following settings will configure this [system for TCO](https://github.com/d
 The following settings will configure this system for [best performance](https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#the-terraformtfvarsperfexample-file):
 
 ```yaml
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.0
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
     kind: terraform
     id: daos-server
     use: [network1]
