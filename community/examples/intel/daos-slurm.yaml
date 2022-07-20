@@ -39,7 +39,7 @@ deployment_groups:
   # This module creates a DAOS server. Server images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.0
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
     kind: terraform
     id: daos
     use: [network1]
