@@ -37,7 +37,8 @@
   run_once: true
   delegate_to: localhost
   register: dashboards
-- debug:
+- name: Print dashboard information
+  ansible.builtin.debug:
     var: dashboards
 - name: Fail if the HPC Dashboard hasn't been created
   ansible.builtin.fail:

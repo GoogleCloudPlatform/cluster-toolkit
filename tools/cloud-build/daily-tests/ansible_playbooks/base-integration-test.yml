@@ -62,7 +62,8 @@
         gcloud compute instances list
         --filter="labels.ghpc_deployment={{ deployment_name }}"
         --format='table(name,zone,id,status)'
-    - debug:
+    - name: Print instance information
+      ansible.builtin.debug:
         var: instances_list.stdout_lines
     - name: Get remote IP
       register: remote_ip

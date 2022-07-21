@@ -63,7 +63,8 @@
         gcloud compute instances list
         --filter="labels.ghpc_deployment={{ deployment_name }}"
         --format='table(name,zone,id,status)'
-    - debug:
+    - name: Print instance information
+      ansible.builtin.debug:
         var: instances_list.stdout_lines
     - name: Get login IP
       register: login_ip
@@ -174,17 +175,17 @@
       command: cat /var/log/slurm/resume.log
       register: resume_output
       ignore_errors: true
-    - debug:
+    - name: Print Slurm resume.log
+      ansible.builtin.debug:
         var: resume_output.stdout_lines
-
     - name: Recover Suspend Logs
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
       command: cat /var/log/slurm/suspend.log
       register: suspend_output
       ignore_errors: true
-    - debug:
+    - name: Print Slurm suspend.log
+      ansible.builtin.debug:
         var: suspend_output.stdout_lines
-
     - name: Delete Firewall Rule
       run_once: true
       delegate_to: localhost
