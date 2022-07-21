@@ -173,8 +173,7 @@
       run_once: true
       vars:
         login_node: "{{ login_node }}"
-        mounts: "{{ mounts }}"
-        partitions: "{{ partitions }}"
+        custom_vars: "{{ custom_vars }}"
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
