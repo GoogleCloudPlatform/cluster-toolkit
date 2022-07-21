@@ -21,6 +21,10 @@
     search_regex: '.*{{ remote_node }}.*startup-script exit status ([0-9]+)'
     timeout: 600
   register: startup_status
+- name: Fail if startup script exited with a non-zero return code
+  fail:
+    msg: There was a failure in the startup script
+  when: startup_status['match_groups'][0] != "0"
 - name: Fail if ops agent is not running
   become: true
   ansible.builtin.command: systemctl is-active {{ item }}
