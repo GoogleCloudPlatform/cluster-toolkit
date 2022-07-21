@@ -29,7 +29,7 @@ output "instructions" {
     gcloud ${var.gcloud_version} batch jobs delete ${local.job_id} --location=${var.region} --project=${var.project_id}
 
   List all jobs in region:
-    gcloud ${var.gcloud_version} batch jobs list ${var.region} --project=${var.project_id} | grep ^name:
+    gcloud ${var.gcloud_version} batch jobs list ${var.region} --project=${var.project_id}
   EOT
 }
 
