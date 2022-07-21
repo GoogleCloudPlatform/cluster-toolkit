@@ -25,8 +25,9 @@ login_node: "slurm-{{ deployment_name }}-login0"
 controller_node: "slurm-{{ deployment_name }}-controller"
 post_deploy_tests:
 - test-mounts-and-partitions.yml
-partitions:
-- compute
-mounts:
-- /home
-- /scratch
+custom_vars:
+  partitions:
+  - compute
+  mounts:
+  - /home
+  - /scratch

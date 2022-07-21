@@ -13,6 +13,11 @@
 # limitations under the License.
 
 ---
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - custom_vars.partitions is defined
+    - custom_vars.mounts is defined
 
 - name: Get partition info
   ansible.builtin.command: sinfo --format='%P' --noheader
@@ -32,12 +37,12 @@
   ansible.builtin.fail:
     msg: Test Check Partitions failed
   when: item not in partition_output.stdout
-  loop: "{{ partitions }}"
+  loop: "{{ custom_vars.partitions }}"
 - name: Get mount info
   ansible.builtin.stat:
     path: "{{ item }}"
   register: stat_mounts
-  loop: "{{ mounts }}"
+  loop: "{{ custom_vars.mounts }}"
 - name: Check if mount exists
   ansible.builtin.fail:
     msg: "{{ item.item }} not mounted"
@@ -46,13 +51,13 @@
 - name: Test Mounts on partitions
   register: srun_mounts
   changed_when: srun_mounts.rc == 0
-  ansible.builtin.command: "srun -N 1 ls -laF {{ mounts | join(' ') }}"
-  loop: "{{ partitions }}"
+  ansible.builtin.command: "srun -N 1 ls -laF {{ custom_vars.mounts | join(' ') }}"
+  loop: "{{ custom_vars.partitions }}"
 - name: Test partitions with hostname
   register: srun_hostname
   changed_when: srun_hostname.rc == 0
   ansible.builtin.command: srun -N 2 --partition {{ item }} hostname
-  loop: "{{ partitions }}"
+  loop: "{{ custom_vars.partitions }}"
 - name: Ensure all nodes are powered down
   ansible.builtin.command: sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
   register: final_node_count
