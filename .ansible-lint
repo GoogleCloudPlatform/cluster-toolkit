@@ -3,3 +3,10 @@ skip_list:
 
 mock_roles:
 - googlecloudplatform.google_cloud_ops_agents
+
+kinds:
+  - playbook: "**/ansible_playbooks/*test.{yml,yaml}"
+  - playbook: "**/files/*.{yml,yaml}"
+  - playbook: "**/scripts/*.{yml,yaml}"
+  - tasks: "**/ansible_playbooks/test*.{yml,yaml}"
+  - tasks: "**/tasks/*"
