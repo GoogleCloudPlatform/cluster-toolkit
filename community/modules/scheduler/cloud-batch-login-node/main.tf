@@ -21,7 +21,15 @@ data "google_compute_instance_template" "batch_instance_template" {
 locals {
   instance_template_metadata = data.google_compute_instance_template.batch_instance_template.metadata
   batch_startup_script       = local.instance_template_metadata["startup-script"]
-  login_metadata             = merge(local.instance_template_metadata, { startup-script = module.login_startup_script.startup_script })
+  startup_metadata           = { startup-script = module.login_startup_script.startup_script }
+
+  oslogin_api_values = {
+    "DISABLE" = "FALSE"
+    "ENABLE"  = "TRUE"
+  }
+  oslogin_metadata = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
+
+  login_metadata = merge(local.instance_template_metadata, local.startup_metadata, local.oslogin_metadata)
 }
 
 module "login_startup_script" {

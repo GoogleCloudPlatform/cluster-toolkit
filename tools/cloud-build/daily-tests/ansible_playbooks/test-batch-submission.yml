@@ -1,0 +1,39 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Wait for startup script to complete
+  become: true
+  ansible.builtin.wait_for:
+    path: /var/log/messages
+    search_regex: '.*{{ remote_node }}.*startup-script exit status ([0-9]+)'
+    timeout: 600
+  register: startup_status
+- name: Fail if startup script exited with a non-zero return code
+  fail:
+    msg: There was a failure in the startup script
+  when: startup_status['match_groups'][0] != "0"
+- name: Batch Job Block
+  block:
+  - name: Submit batch job
+    ansible.builtin.command: gcloud alpha batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/cloud-batch-{{ deployment_name }}.json --location=us-central1 --project={{ custom_vars.project }}
+  - name: Wait for job to run
+    ansible.builtin.command: gcloud alpha batch jobs describe {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}
+    register: result
+    until: result.stdout.find("SUCCEEDED") != -1
+    retries: 60
+    delay: 10
+
+  always:
+  - name: delete job
+    ansible.builtin.command: gcloud alpha batch jobs delete {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}

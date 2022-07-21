@@ -70,3 +70,13 @@ variable "batch_job_directory" {
   type        = string
   default     = "/home/batch-jobs"
 }
+
+variable "enable_oslogin" {
+  description = "Enable or Disable OS Login with \"ENABLE\" or \"DISABLE\". Set to \"INHERIT\" to inherit project OS Login setting."
+  type        = string
+  default     = "ENABLE"
+  validation {
+    condition     = var.enable_oslogin == null ? false : contains(["ENABLE", "DISABLE", "INHERIT"], var.enable_oslogin)
+    error_message = "Allowed string values for var.enable_oslogin are \"ENABLE\", \"DISABLE\", or \"INHERIT\"."
+  }
+}
