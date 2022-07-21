@@ -19,12 +19,16 @@
     search_regex: '.*{{ remote_node }}.*startup-script exit status ([0-9]+)'
     timeout: 600
   register: startup_status
+- name: Fail if startup script exited with a non-zero return code
+  fail:
+    msg: There was a failure in the startup script
+  when: startup_status['match_groups'][0] != "0"
 - name: Batch Job Block
   block:
   - name: Submit batch job
     ansible.builtin.command: gcloud alpha batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/cloud-batch-{{ deployment_name }}.json --location=us-central1 --project={{ custom_vars.project }}
   - name: Wait for job to run
-    ansible.builtin.command: "gcloud alpha batch jobs describe {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}"
+    ansible.builtin.command: gcloud alpha batch jobs describe {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}
     register: result
     until: result.stdout.find("SUCCEEDED") != -1
     retries: 60
@@ -32,4 +36,4 @@
 
   always:
   - name: delete job
-    ansible.builtin.command: "gcloud alpha batch jobs delete {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}"
+    ansible.builtin.command: gcloud alpha batch jobs delete {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}
