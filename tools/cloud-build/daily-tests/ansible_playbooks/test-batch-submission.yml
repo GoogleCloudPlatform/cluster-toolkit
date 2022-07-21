@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-- name: Wait for startup script
+- name: Include wait for startup script
   ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
   vars:
     vm_name: "{{ remote_node }}"
+    timeout_seconds: 600
 
 - name: Batch Job Block
   block:
