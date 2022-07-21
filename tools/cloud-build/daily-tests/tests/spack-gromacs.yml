@@ -24,7 +24,7 @@ max_nodes: 5
 login_node: slurm-{{ deployment_name }}-login0
 controller_node: slurm-{{ deployment_name }}-controller
 post_deploy_tests:
-- spack.yml
+- test-spack.yml
 partitions:
 - compute
 mounts:
