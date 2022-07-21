@@ -146,15 +146,19 @@
 
 - name: Run Integration Tests
   hosts: remote_host
-  gather_facts: false
+  gather_facts: false # must wait until host is reachable
+  ignore_unreachable: true # ensure always block will run even if SSH fails
   tasks:
   - name: Remote Test Block
     vars:
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     block:
-    - name: Pause for 2 minutes to allow cluster setup
-      pause:
-        minutes: 2
+    - name: Wait until host is reachable
+      ansible.builtin.wait_for_connection:
+        delay: 60
+        timeout: 300
+    - name: Gather facts
+      ansible.builtin.setup:
     - name: Run Integration tests for HPC toolkit
       include_tasks: "{{ test }}"
       run_once: true
