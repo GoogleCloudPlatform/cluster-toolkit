@@ -57,6 +57,7 @@
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
     - name: Gather instance information
+      changed_when: false
       delegate_to: localhost
       register: instances_list
       command: >-
@@ -67,11 +68,13 @@
       ansible.builtin.debug:
         var: instances_list.stdout_lines
     - name: Get login IP
+      changed_when: false
       register: login_ip
       command: >-
         gcloud compute instances describe --zone={{ zone }} {{ login_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
     - name: Get Controller IP
+      changed_when: false
       register: controller_ip
       command: >-
         gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
@@ -79,11 +82,14 @@
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
+      changed_when: false
       shell: >-
         dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
          awk -F'"' '{print $2}'
       register: build_ip
     - name: Create firewall rule
+      register: fw_created
+      changed_when: fw_created.rc == 0
       command:
         argv:
         - gcloud
@@ -99,6 +105,8 @@
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
     - name: 'Add SSH Keys to OS-Login'
+      register: key_created
+      changed_when: key_created.rc == 0
       command:
         argv:
         - gcloud
@@ -117,6 +125,9 @@
     ## Cleanup and fail gracefully
     rescue:
     - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false # keep cleaning up
       command:
         argv:
         - gcloud
@@ -124,8 +135,8 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-      ignore_errors: true
     - name: Tear Down Cluster
+      changed_when: true # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:
@@ -171,22 +182,27 @@
     ## Always cleanup, even on failure
     always:
     - name: Recover Resume Logs
+      changed_when: false
+      failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
       command: cat /var/log/slurm/resume.log
       register: resume_output
-      ignore_errors: true
     - name: Print Slurm resume.log
       ansible.builtin.debug:
         var: resume_output.stdout_lines
     - name: Recover Suspend Logs
+      changed_when: false
+      failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
       command: cat /var/log/slurm/suspend.log
       register: suspend_output
-      ignore_errors: true
     - name: Print Slurm suspend.log
       ansible.builtin.debug:
         var: suspend_output.stdout_lines
     - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false # keep cleaning up
       run_once: true
       delegate_to: localhost
       command:
@@ -196,8 +212,8 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-      ignore_errors: true
     - name: Tear Down Cluster
+      changed_when: true # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:

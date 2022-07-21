@@ -35,6 +35,7 @@
     - ansible_facts.services["google-cloud-ops-agent-fluent-bit.service"].state == "running"
     - ansible_facts.services["google-cloud-ops-agent-opentelemetry-collector.service"].state == "running"
 - name: Check that monitoring dashboard has been created
+  changed_when: false
   ansible.builtin.command: gcloud monitoring dashboards list --format="get(displayName)"
   run_once: true
   delegate_to: localhost

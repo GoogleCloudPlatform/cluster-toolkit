@@ -44,9 +44,13 @@
   when: not item.stat.exists
   loop: "{{ stat_mounts.results }}"
 - name: Test Mounts on partitions
+  register: srun_mounts
+  changed_when: srun_mounts.rc == 0
   ansible.builtin.command: "srun -N 1 ls -laF {{ mounts | join(' ') }}"
   loop: "{{ partitions }}"
 - name: Test partitions with hostname
+  register: srun_hostname
+  changed_when: srun_hostname.rc == 0
   ansible.builtin.command: srun -N 2 --partition {{ item }} hostname
   loop: "{{ partitions }}"
 - name: Ensure all nodes are powered down
