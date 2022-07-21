@@ -12,17 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-- name: Wait for startup script to complete
-  become: true
-  ansible.builtin.wait_for:
-    path: /var/log/messages
-    search_regex: '.*{{ remote_node }}.*startup-script exit status ([0-9]+)'
-    timeout: 600
-  register: startup_status
-- name: Fail if startup script exited with a non-zero return code
-  fail:
-    msg: There was a failure in the startup script
-  when: startup_status['match_groups'][0] != "0"
+- name: Wait for startup script
+  ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
+  vars:
+    vm_name: "{{ remote_node }}"
+
 - name: Batch Job Block
   block:
   - name: Submit batch job
