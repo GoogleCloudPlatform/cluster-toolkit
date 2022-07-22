@@ -57,6 +57,7 @@
       - terraform apply -auto-approve -no-color
     - name: Get startup_script
       register: network_name
+      changed_when: false
       args:
         chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
         executable: /bin/bash
@@ -65,6 +66,7 @@
           ../packer/custom-image/startup_script.sh
     - name: Create VM image with Packer
       register: image_created
+      changed_when: image_created.rc == 0
       args:
         chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
         executable: /bin/bash
@@ -86,6 +88,7 @@
       - terraform apply -auto-approve -no-color
     - name: Get Access Point public IP address
       register: access_ip
+      changed_when: false
       args:
         chdir: "{{ workspace }}/{{ deployment_name }}/pool"
         executable: /bin/bash
@@ -98,11 +101,14 @@
         groups: [remote_host]
     ## Setup firewall for cloud build
     - name: Get Builder IP
+      register: build_ip
+      changed_when: false
       ansible.builtin.shell: >-
         dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
          awk -F'"' '{print $2}'
-      register: build_ip
     - name: Create firewall rule
+      register: fw_result
+      changed_when: fw_result.rc == 0
       ansible.builtin.command:
         argv:
         - gcloud
@@ -118,6 +124,8 @@
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
     - name: Add SSH Keys to OS Login
+      register: key_result
+      changed_when: key_result.rc == 0
       ansible.builtin.command:
         argv:
         - gcloud
@@ -130,6 +138,9 @@
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
     rescue:
     - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false # keep cleaning up
       ansible.builtin.command:
         argv:
         - gcloud
@@ -137,8 +148,9 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-      ignore_errors: true
     - name: Tear Down Pool
+      changed_when: true # assume something destroyed
+      failed_when: false # keep cleaning up
       run_once: true
       delegate_to: localhost
       environment:
@@ -159,10 +171,13 @@
         set -o pipefail
         jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2
     - name: Delete custom image
+      register: image_deleted
       when: image_created is defined and image_created.rc == 0
+      changed_when: image_deleted.rc == 0
       ansible.builtin.command:
         cmd: gcloud compute images delete {{ image_name.stdout }}
     - name: Tear Down Network
+      changed_when: true # assume something destroyed
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
@@ -203,6 +218,7 @@
         loop_var: test
     always:
     - name: Tear Down Pool
+      changed_when: true # assume something destroyed
       delegate_to: localhost
       run_once: true
       environment:
@@ -214,6 +230,7 @@
       - terraform init
       - terraform destroy -auto-approve
     - name: Get image name
+      changed_when: false
       run_once: true
       delegate_to: localhost
       register: image_name
@@ -224,11 +241,17 @@
         set -o pipefail
         jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2
     - name: Delete custom image
+      register: image_deleted
+      changed_when: image_deleted.rc == 0
+      failed_when: false # keep cleaning up
       run_once: true
       delegate_to: localhost
       ansible.builtin.command:
         cmd: gcloud compute images delete {{ image_name.stdout }}
     - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false # keep cleaning up
       run_once: true
       delegate_to: localhost
       ansible.builtin.command:
@@ -238,8 +261,8 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-      ignore_errors: true
     - name: Tear Down Network
+      changed_when: true # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:

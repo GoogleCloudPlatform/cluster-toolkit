@@ -26,8 +26,11 @@
 - name: Batch Job Block
   block:
   - name: Submit batch job
+    register: batch_submission
+    changed_when: batch_submission.rc == 0
     ansible.builtin.command: gcloud alpha batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/cloud-batch-{{ deployment_name }}.json --location=us-central1 --project={{ custom_vars.project }}
   - name: Wait for job to run
+    changed_when: false
     ansible.builtin.command: gcloud alpha batch jobs describe {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}
     register: result
     until: result.stdout.find("SUCCEEDED") != -1
@@ -36,4 +39,6 @@
 
   always:
   - name: delete job
+    register: batch_deletion
+    changed_when: batch_deletion.rc == 0
     ansible.builtin.command: gcloud alpha batch jobs delete {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}
