@@ -19,6 +19,9 @@ blueprint_yaml: "{{ workspace }}/community/examples/cloud-batch.yaml"
 blueprint_dir: deployment-cloud-batch
 network: "default"
 remote_node: "{{ deployment_name }}-batch-login"
-post_deploy_tests: [test-batch-submission.yml]
+post_deploy_tests:
+- test-batch-submission.yml
+- test-mounts.yml
 custom_vars:
   project: "{{ project }}"
+  mounts: [/sw]
