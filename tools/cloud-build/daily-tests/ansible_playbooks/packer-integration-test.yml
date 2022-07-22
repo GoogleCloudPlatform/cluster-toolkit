@@ -29,6 +29,7 @@
       ROOT_DIR: "{{ workspace }}"
       BLUEPRINT_DIR: "{{ blueprint_dir }}"
       DEPLOYMENT_NAME: "{{ deployment_name }}"
+      NETWORK: "{{ network }}"
     args:
       creates: "{{ workspace }}/{{ deployment_name }}.tgz"
   - name: Create Infrastructure and test
