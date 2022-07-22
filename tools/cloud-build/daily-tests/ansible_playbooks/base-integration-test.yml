@@ -161,8 +161,6 @@
       vars:
         remote_node: "{{ remote_node }}"
         deployment_name: "{{ deployment_name }}"
-        mounts: "{{ mounts }}"
-        partitions: "{{ partitions }}"
         custom_vars: "{{ custom_vars }}"
       loop: "{{ post_deploy_tests }}"
       loop_control:

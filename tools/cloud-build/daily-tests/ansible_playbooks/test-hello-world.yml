@@ -14,6 +14,12 @@
 
 # The hello world integration test exists to demonstrate the test interaction between test files
 ---
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - top_level_var
+    - custom_vars.bar is defined
+
 - name: Print top_level_var
   debug:
     msg: "{{ top_level_var }}"
