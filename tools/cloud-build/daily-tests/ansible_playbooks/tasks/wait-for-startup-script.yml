@@ -11,21 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 ---
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - vm_name is defined
+    - timeout_seconds is defined
 
-- name: Include wait for startup script
-  ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
-  vars:
-    vm_name: "{{ login_node }}"
-    timeout_seconds: 7200
-- name: Ensure spack is installed
-  command: spack --version
-  changed_when: False
-- name: Test gromacs is available on compute nodes
-  shell: |
-    spack load gromacs
-    srun -N 1 gmx_mpi -version
-    sleep 120
-  register: srun_gromacs
-  changed_when: srun_gromacs.rc == 0
+- name: Wait for startup script to complete
+  become: true
+  ansible.builtin.wait_for:
+    path: /var/log/messages
+    search_regex: '.*{{ vm_name }}.*startup-script exit status ([0-9]+)'
+    timeout: "{{ timeout_seconds }}"
+  register: startup_status
+- name: Fail if startup script exited with a non-zero return code
+  fail:
+    msg: There was a failure in the startup script
+  when: startup_status['match_groups'][0] != "0"
