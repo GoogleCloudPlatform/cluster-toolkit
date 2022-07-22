@@ -74,6 +74,8 @@ module "slurm_partition" {
   partition_name          = var.partition_name
   project_id              = var.project_id
   region                  = var.region
+  zone_policy_allow       = var.zone_policy_allow
+  zone_policy_deny        = var.zone_policy_deny
   subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   partition_conf          = local.partition_conf
 }

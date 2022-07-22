@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-
+# Most variables have been sourced and modified from the SchedMD/slurm-gcp
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
 
 variable "slurm_cluster_name" {
   type        = string
@@ -34,6 +35,40 @@ variable "project_id" {
 variable "region" {
   description = "The default region for Cloud resources."
   type        = string
+}
+
+variable "zone_policy_allow" {
+  description = <<-EOD
+    Partition nodes will prefer to be created in the listed zones. If a zone appears
+    in both zone_policy_allow and zone_policy_deny, then zone_policy_deny will take
+    priority for that zone.
+    EOD
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for x in var.zone_policy_allow : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
+    ])
+    error_message = "A provided zone in zone_policy_allow is not a valid zone (Regexp: '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
+  }
+}
+
+variable "zone_policy_deny" {
+  description = <<-EOD
+    Partition nodes will not be created in the listed zones. If a zone appears in
+    both zone_policy_allow and zone_policy_deny, then zone_policy_deny will take
+    priority for that zone.
+    EOD
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for x in var.zone_policy_deny : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
+    ])
+    error_message = "A provided zone in zone_policy_deny is not a valid zone (Regexp '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
+  }
 }
 
 variable "partition_name" {
