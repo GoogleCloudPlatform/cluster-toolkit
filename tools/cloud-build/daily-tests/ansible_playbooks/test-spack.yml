@@ -28,10 +28,11 @@
   when: startup_status['match_groups'][0] != "0"
 - name: Ensure spack is installed
   command: spack --version
-- name: Ensure gromacs is installed
-  shell: spack load gromacs
+  changed_when: False
 - name: Test gromacs is available on compute nodes
   shell: |
     spack load gromacs
     srun -N 1 gmx_mpi -version
     sleep 120
+  register: srun_gromacs
+  changed_when: srun_gromacs.rc == 0
