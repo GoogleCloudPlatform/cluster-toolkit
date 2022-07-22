@@ -19,10 +19,6 @@
     - custom_vars.partitions is defined
     - custom_vars.mounts is defined
 
-- name: Include test mounts
-  ansible.builtin.include_tasks: "test-mounts.yml"
-  vars:
-    custom_vars: "{{ custom_vars }}"
 - name: Get partition info
   ansible.builtin.command: sinfo --format='%P' --noheader
   changed_when: False
@@ -37,7 +33,7 @@
     executable: /bin/bash
   changed_when: False
   register: initial_node_count
-- name: Check partition compute exists
+- name: Check partitions exist
   ansible.builtin.fail:
     msg: Test Check Partitions failed
   when: item not in partition_output.stdout
