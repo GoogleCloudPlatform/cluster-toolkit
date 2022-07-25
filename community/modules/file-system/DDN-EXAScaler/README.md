@@ -61,7 +61,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_ddn_exascaler"></a> [ddn\_exascaler](#module\_ddn\_exascaler) | github.com/DDNStorage/exascaler-cloud-terraform//gcp | 76ab7fc |
+| <a name="module_ddn_exascaler"></a> [ddn\_exascaler](#module\_ddn\_exascaler) | github.com/DDNStorage/exascaler-cloud-terraform//gcp | 3eec46e |
 
 ## Resources
 
