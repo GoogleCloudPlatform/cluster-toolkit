@@ -48,6 +48,7 @@ module "slurm_controller_instance" {
   enable_cleanup_subscriptions = var.enable_cleanup_subscriptions
   enable_bigquery_load         = var.enable_bigquery_load
   epilog_scripts               = var.epilog_scripts
+  disable_default_mounts       = var.disable_default_mounts
   login_network_storage        = var.network_storage
   network_storage              = var.network_storage
   partitions                   = var.partition
