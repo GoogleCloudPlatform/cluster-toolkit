@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+# Most variables have been sourced and modified from the SchedMD/slurm-gcp
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3
+
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
   type = list(object({
@@ -102,9 +105,9 @@ variable "disable_default_mounts" {
     * /etc/munge
     * /home
     * /apps
-    If these are disabled, the slurm etc and munge dirs must be added manually,
-    or some other mechanism must be used to synchronize the slurm conf files
-    and the munge key across the cluster.
+    Warning: If these are disabled, the slurm etc and munge dirs must be added
+    manually, or some other mechanism must be used to synchronize the slurm conf
+    files and the munge key across the cluster.
     EOD
   type        = bool
   default     = false

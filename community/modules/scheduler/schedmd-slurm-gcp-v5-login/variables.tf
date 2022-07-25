@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+# Most variables have been sourced and modified from the SchedMD/slurm-gcp
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3
+
 variable "project_id" {
   type        = string
   description = "Project ID to create resources in."
