@@ -54,6 +54,26 @@ deployment_groups:
 
   - source: ./modules/compute/vm-instance
     kind: terraform
+    id: n1-0-threads
+    use:
+    - network1
+    settings:
+      name_prefix: n1-0-threads
+      machine_type: n1-standard-32
+      threads_per_core: 0
+
+  - source: ./modules/compute/vm-instance
+    kind: terraform
+    id: n1-null-threads
+    use:
+    - network1
+    settings:
+      name_prefix: n1-null-threads
+      machine_type: n1-standard-32
+      threads_per_core: null
+
+  - source: ./modules/compute/vm-instance
+    kind: terraform
     id: n2-2-threads
     use:
     - network1
@@ -91,3 +111,23 @@ deployment_groups:
       name_prefix: c2-1-thread
       machine_type: c2-standard-30
       threads_per_core: 1
+
+  - source: ./modules/compute/vm-instance
+    kind: terraform
+    id: e2-medium-0-thread
+    use:
+    - network1
+    settings:
+      name_prefix: e2-medium-0-thread
+      machine_type: e2-medium
+      threads_per_core: 0
+
+  - source: ./modules/compute/vm-instance
+    kind: terraform
+    id: e2-medium-null-thread
+    use:
+    - network1
+    settings:
+      name_prefix: e2-medium-null-thread
+      machine_type: e2-medium
+      threads_per_core: null

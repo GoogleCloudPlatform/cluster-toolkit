@@ -15,11 +15,26 @@
  */
 
 locals {
-  install_htcondor_runner = {
+  runner_install_htcondor = {
     "type"        = "ansible-local"
     "source"      = "${path.module}/files/install-htcondor.yaml"
     "destination" = "install-htcondor.yaml"
-    "args"        = "-e block_metadata_server=${var.block_metadata_server}"
+    "args" = join(" ", [
+      "-e block_metadata_server=${var.block_metadata_server}",
+      "-e enable_docker=${var.enable_docker}"
+    ])
+  }
+
+  runner_install_autoscaler_deps = {
+    "type"        = "ansible-local"
+    "content"     = file("${path.module}/files/install-htcondor-autoscaler-deps.yml")
+    "destination" = "install-htcondor-autoscaler-deps.yml"
+  }
+
+  runner_install_autoscaler = {
+    "type"        = "data"
+    "content"     = file("${path.module}/files/autoscaler.py")
+    "destination" = "/usr/local/htcondor/bin/autoscaler.py"
   }
 
   required_apis = [

@@ -19,3 +19,9 @@ variable "block_metadata_server" {
   type        = bool
   default     = true
 }
+
+variable "enable_docker" {
+  description = "Install and enable docker daemon alongside HTCondor"
+  type        = bool
+  default     = true
+}

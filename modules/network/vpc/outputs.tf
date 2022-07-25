@@ -17,49 +17,49 @@
 output "network_name" {
   description = "The name of the network created"
   value       = module.vpc.network_name
-  depends_on  = [module.firewall_rules, module.cloud_router]
+  depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "network_id" {
   description = "The ID of the network created"
   value       = module.vpc.network_id
-  depends_on  = [module.firewall_rules, module.cloud_router]
+  depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "network_self_link" {
   description = "The URI of the VPC being created"
   value       = module.vpc.network_self_link
-  depends_on  = [module.firewall_rules, module.cloud_router]
+  depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetworks" {
   description = "All subnetwork resources created by this module"
   value       = module.vpc.subnets
-  depends_on  = [module.firewall_rules, module.cloud_router]
+  depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork" {
   description = "The primary subnetwork object created by the input variable primary_subnetwork"
-  value       = local.primary_subnetwork
-  depends_on  = [module.firewall_rules, module.cloud_router]
+  value       = local.output_primary_subnetwork
+  depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork_name" {
   description = "The name of the primary subnetwork"
-  value       = local.primary_subnetwork_name
-  depends_on  = [module.firewall_rules, module.cloud_router]
+  value       = local.output_primary_subnetwork_name
+  depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork_self_link" {
   description = "The self-link to the primary subnetwork"
-  value       = local.primary_subnetwork_self_link
-  depends_on  = [module.firewall_rules, module.cloud_router]
+  value       = local.output_primary_subnetwork_self_link
+  depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork_address" {
   description = "The address range of the primary subnetwork"
-  value       = local.primary_subnetwork_ip_cidr_range
-  depends_on  = [module.firewall_rules, module.cloud_router]
+  value       = local.output_primary_subnetwork_ip_cidr_range
+  depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "nat_ips" {

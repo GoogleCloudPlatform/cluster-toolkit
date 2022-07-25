@@ -1,8 +1,5 @@
 ## Description
 
-**THIS MODULE IS PRE-RELEASE AND DOES NOT YET SUPPORT A FULLY FUNCTIONAL
-HTCONDOR POOL**
-
 This module performs the following tasks:
 
 - store an HTCondor Pool password in Google Cloud Secret Manager
@@ -11,7 +8,66 @@ This module performs the following tasks:
 - create a Toolkit runner for an Access Point
 - create a Toolkit runner for a Central Manager
 
+It is expected to be used with the [htcondor-install] and
+[htcondor-execute-point] modules.
+
+[hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[htcondor-install]: ../../scripts/htcondor-configure/README.md
+[htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
+
 [htcrole]: https://htcondor.readthedocs.io/en/latest/getting-htcondor/admin-quick-start.html#what-get-htcondor-does-to-configure-a-role
+
+### Example
+
+The following code snippet uses this module to create startup scripts that
+install the HTCondor software and adds custom configurations using
+[htcondor-configure] and [htcondor-execute-point].
+
+```yaml
+- source: community/modules/scripts/htcondor-install
+  kind: terraform
+  id: htcondor_install
+
+- source: modules/scripts/startup-script
+  kind: terraform
+  id: htcondor_configure_central_manager
+  settings:
+    runners:
+    - type: shell
+      source: modules/startup-script/examples/install_ansible.sh
+      destination: install_ansible.sh
+    - $(htcondor_install.install_htcondor_runner)
+    - $(htcondor_configure.central_manager_runner)
+
+- source: modules/scripts/startup-script
+  kind: terraform
+  id: htcondor_configure_access_point
+  settings:
+    runners:
+    - type: shell
+      source: modules/startup-script/examples/install_ansible.sh
+      destination: install_ansible.sh
+    - $(htcondor_install.install_htcondor_runner)
+    - $(htcondor_install.install_autoscaler_deps_runner)
+    - $(htcondor_install.install_autoscaler_runner)
+    - $(htcondor_configure.access_point_runner)
+    - $(htcondor_execute_point.configure_autoscaler_runner)
+```
+
+A full example can be found in the [examples README][htc-example].
+
+[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
+
+## Support
+
+HTCondor is maintained by the [Center for High Throughput Computing][chtc] at
+the University of Wisconsin-Madison. Support for HTCondor is available via:
+
+- [Discussion lists](https://htcondor.org/mail-lists/)
+- [HTCondor on GitHub](https://github.com/htcondor/htcondor/)
+- [HTCondor manual](https://htcondor.readthedocs.io/en/latest/)
+
+[chtc]: https://chtc.cs.wisc.edu/
 
 ## License
 
@@ -51,6 +107,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.1 |
 | <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.1 |
+| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.1 |
 
 ## Resources
 
@@ -59,6 +116,7 @@ limitations under the License.
 | [google_secret_manager_secret.pool_password](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.access_point](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_iam_member.central_manager](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
+| [google_secret_manager_secret_iam_member.execute_point](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_version.pool_password](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
 | [random_password.pool](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 
@@ -66,9 +124,10 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_access_point_roles"></a> [access\_point\_roles](#input\_access\_point\_roles) | Project-wide roles for HTCondor Access Point service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
-| <a name="input_central_manager_roles"></a> [central\_manager\_roles](#input\_central\_manager\_roles) | Project-wide roles for HTCondor Central Manager service account | `list(string)` | <pre>[<br>  "roles/compute.instanceAdmin",<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
+| <a name="input_access_point_roles"></a> [access\_point\_roles](#input\_access\_point\_roles) | Project-wide roles for HTCondor Access Point service account | `list(string)` | <pre>[<br>  "roles/compute.instanceAdmin",<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
+| <a name="input_central_manager_roles"></a> [central\_manager\_roles](#input\_central\_manager\_roles) | Project-wide roles for HTCondor Central Manager service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
+| <a name="input_execute_point_roles"></a> [execute\_point\_roles](#input\_execute\_point\_roles) | Project-wide roles for HTCondor Execute Point service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
 | <a name="input_pool_password"></a> [pool\_password](#input\_pool\_password) | HTCondor Pool Password | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |
 
@@ -80,5 +139,7 @@ limitations under the License.
 | <a name="output_access_point_service_account"></a> [access\_point\_service\_account](#output\_access\_point\_service\_account) | HTCondor Access Point Service Account (e-mail format) |
 | <a name="output_central_manager_runner"></a> [central\_manager\_runner](#output\_central\_manager\_runner) | Toolkit Runner to configure an HTCondor Central Manager |
 | <a name="output_central_manager_service_account"></a> [central\_manager\_service\_account](#output\_central\_manager\_service\_account) | HTCondor Central Manager Service Account (e-mail format) |
+| <a name="output_execute_point_runner"></a> [execute\_point\_runner](#output\_execute\_point\_runner) | Toolkit Runner to configure an HTCondor Execute Point |
+| <a name="output_execute_point_service_account"></a> [execute\_point\_service\_account](#output\_execute\_point\_service\_account) | HTCondor Execute Point Service Account (e-mail format) |
 | <a name="output_pool_password_secret_id"></a> [pool\_password\_secret\_id](#output\_pool\_password\_secret\_id) | Google Cloud Secret Manager ID containing HTCondor Pool Password |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

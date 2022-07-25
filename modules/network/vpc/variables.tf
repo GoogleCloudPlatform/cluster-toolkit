@@ -32,10 +32,15 @@ variable "subnetwork_name" {
 }
 
 variable "subnetwork_size" {
-  description = "The size, in CIDR bits, of the primary subnetwork unless explicitly supplied in var.primary_subnetwork"
+  description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
+  type        = number
+  default     = null
+}
+
+variable "default_primary_subnetwork_size" {
+  description = "The size, in CIDR bits, of the default primary subnetwork unless explicitly defined in var.subnetworks"
   type        = number
   default     = 15
-
 }
 
 variable "region" {
@@ -65,31 +70,17 @@ variable "mtu" {
   default     = 0
 }
 
-# the default will create a subnetwork in var.region with the settings noted
-variable "primary_subnetwork" {
-  description = <<EOT
-  Primary (default) subnetwork in which to create resources. If null, a default value will be constructed.
+variable "subnetworks" {
+  description = <<-EOT
+  List of subnetworks to create within the VPC. If left empty, it will be
+  replaced by a single, default subnetwork constructed from other parameters
+  (e.g. var.region). In all cases, the first subnetwork in the list is identified
+  by outputs as a "primary" subnetwork.
 
-  subnet_name           (string, required, Name of subnet; will be replaced by var.subnetwork_name or its default value)
-  subnet_region         (string, required, will be replaced by var.region)
-  new_bits              (number, optional, Additional CIDR bits to determine subnetwork size; will default to var.subnetwork_size)
-  subnet_private_access (bool, optional, Enable Private Access on subnetwork)
-  subnet_flow_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)
-  description           (string, optional, Description of Network)
-  purpose               (string, optional, related to Load Balancing)
-  role                  (string, optional, related to Load Balancing)
-  EOT
-  type        = map(string)
-  default     = null
-}
-
-variable "additional_subnetworks" {
-  description = <<EOT
-  List of additional subnetworks in which to create resources.
-
-  subnet_name           (string, required, Name of subnet; will be replaced by var.subnetwork_name or its default value)
-  subnet_region         (string, required, will be replaced by var.region)
-  new_bits              (number, required, Additional CIDR bits to determine subnetwork size)
+  subnet_name           (string, required, name of subnet)
+  subnet_region         (string, required, region of subnet)
+  subnet_ip             (string, mutually exclusive with new_bits, CIDR-formatted IP range for subnetwork)
+  new_bits              (number, mutually exclusive with subnet_ip, CIDR bits used to calculate subnetwork range)
   subnet_private_access (bool, optional, Enable Private Access on subnetwork)
   subnet_flow_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)
   description           (string, optional, Description of Network)
@@ -98,6 +89,68 @@ variable "additional_subnetworks" {
   EOT
   type        = list(map(string))
   default     = []
+  validation {
+    condition = alltrue([
+      for s in var.subnetworks : can(s["subnet_name"])
+    ])
+    error_message = "All subnetworks must define \"subnet_name\"."
+  }
+  validation {
+    condition = alltrue([
+      for s in var.subnetworks : can(s["subnet_region"])
+    ])
+    error_message = "All subnetworks must define \"subnet_region\"."
+  }
+  validation {
+    condition = alltrue([
+      for s in var.subnetworks : can(s["subnet_ip"]) != can(s["new_bits"])
+    ])
+    error_message = "All subnetworks must define exactly one of \"subnet_ip\" or \"new_bits\"."
+  }
+  validation {
+    condition     = alltrue([for s in var.subnetworks : can(s["subnet_ip"])]) || alltrue([for s in var.subnetworks : can(s["new_bits"])])
+    error_message = "All subnetworks must make same choice of \"subnet_ip\" or \"new_bits\"."
+  }
+}
+
+variable "primary_subnetwork" {
+  description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
+  type        = map(string)
+  default     = null
+  validation {
+    condition     = var.primary_subnetwork == null || can(var.primary_subnetwork["subnet_name"])
+    error_message = "Primary subnetwork must define \"subnet_name\"."
+  }
+  validation {
+    condition     = var.primary_subnetwork == null || can(var.primary_subnetwork["subnet_region"])
+    error_message = "Primary subnetwork must define \"subnet_region\"."
+  }
+  validation {
+    condition     = var.primary_subnetwork == null || can(var.primary_subnetwork["new_bits"])
+    error_message = "Primary subnetwork must define \"new_bits\"."
+  }
+}
+
+variable "additional_subnetworks" {
+  description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
+  type        = list(map(string))
+  default     = []
+  validation {
+    condition = alltrue([
+      for s in var.additional_subnetworks : can(s["subnet_name"])
+    ])
+    error_message = "All additional subnetworks must define \"subnet_name\"."
+  }
+  validation {
+    condition = alltrue([
+      for s in var.additional_subnetworks : can(s["subnet_region"])
+    ])
+    error_message = "All additional subnetworks must define \"subnet_region\"."
+  }
+  validation {
+    condition     = alltrue([for s in var.additional_subnetworks : can(s["new_bits"])])
+    error_message = "All additional subnetworks must define \"new_bits\"."
+  }
 }
 
 variable "secondary_ranges" {

@@ -12,22 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
-terraform {
-  required_providers {
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
-    }
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 3.83"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:wait-for-startup/v1.2.0"
-  }
-
-  required_version = ">= 0.14.0"
+output "configure_autoscaler_runner" {
+  value       = local.configure_autoscaler_role
+  description = "Toolkit runner to configure the HTCondor autoscaler"
 }

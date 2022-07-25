@@ -15,6 +15,8 @@
  */
 
 locals {
+  execute_point_display_name   = "HTCondor Execute Point (${var.deployment_name})"
+  execute_point_roles          = [for role in var.execute_point_roles : "${var.project_id}=>${role}"]
   access_point_display_name    = "HTCondor Access Point (${var.deployment_name})"
   access_point_roles           = [for role in var.access_point_roles : "${var.project_id}=>${role}"]
   central_manager_display_name = "HTCondor Central Manager (${var.deployment_name})"
@@ -22,18 +24,37 @@ locals {
 
   pool_password = var.pool_password == null ? random_password.pool.result : var.pool_password
 
-  role_runner_cm = {
+  runner_cm_role = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
-    "args"        = "-e htcondor_role=get_htcondor_central_manager -e password_id=${google_secret_manager_secret.pool_password.secret_id}"
+    "args" = join(" ", [
+      "-e htcondor_role=get_htcondor_central_manager",
+      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e project_id=${var.project_id}",
+    ])
   }
 
-  role_runner_access = {
+  runner_access_role = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
-    "args"        = "-e htcondor_role=get_htcondor_submit -e password_id=${google_secret_manager_secret.pool_password.secret_id}"
+    "args" = join(" ", [
+      "-e htcondor_role=get_htcondor_submit",
+      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e project_id=${var.project_id}",
+    ])
+  }
+
+  runner_execute_role = {
+    "type"        = "ansible-local"
+    "content"     = file("${path.module}/files/htcondor_configure.yml")
+    "destination" = "htcondor_configure.yml"
+    "args" = join(" ", [
+      "-e htcondor_role=get_htcondor_execute",
+      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e project_id=${var.project_id}",
+    ])
   }
 }
 
@@ -46,6 +67,17 @@ module "access_point_service_account" {
   names         = ["access"]
   display_name  = local.access_point_display_name
   project_roles = local.access_point_roles
+}
+
+module "execute_point_service_account" {
+  source     = "terraform-google-modules/service-accounts/google"
+  version    = "~> 4.1"
+  project_id = var.project_id
+  prefix     = var.deployment_name
+
+  names         = ["execute"]
+  display_name  = local.execute_point_display_name
+  project_roles = local.execute_point_roles
 }
 
 module "central_manager_service_account" {
@@ -92,4 +124,10 @@ resource "google_secret_manager_secret_iam_member" "access_point" {
   secret_id = google_secret_manager_secret.pool_password.id
   role      = "roles/secretmanager.secretAccessor"
   member    = module.access_point_service_account.iam_email
+}
+
+resource "google_secret_manager_secret_iam_member" "execute_point" {
+  secret_id = google_secret_manager_secret.pool_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = module.execute_point_service_account.iam_email
 }

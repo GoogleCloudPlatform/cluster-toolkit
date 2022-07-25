@@ -22,6 +22,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
+  * [htcondor-pool.yaml](#htcondor-poolyaml--)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Top Level Parameters](#top-level-parameters)
@@ -470,6 +471,15 @@ a Shared VPC service project][fs-shared-vpc].
 
 [hpc-cluster-small-sharedvpc.yaml]: ../community/examples/hpc-cluster-small-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
+
+### [htcondor-pool.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
+the [HPC VM Image][hpcvmimage].
+
+[htcondor]: https://htcondor.org/
+[htcondor-pool.yaml]: ../community/examples/htcondor-pool.yaml
+[hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
 ## Blueprint Schema
 

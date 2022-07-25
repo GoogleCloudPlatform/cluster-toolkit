@@ -41,7 +41,7 @@ steps:
   - -c
   - echo "done fetching builder"
 
-## Test Slurm High IO Example
+# Test htcondor
 - id: htcondor
   waitFor:
   - fetch_builder
@@ -61,3 +61,25 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/htcondor-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/htcondor.yml"
+
+## Test Cloud Batch Example
+- id: cloud-batch
+  waitFor:
+  - fetch_builder
+  - build_ghpc
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/cloud-build.yml"

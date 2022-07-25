@@ -30,6 +30,14 @@ output "central_manager_service_account" {
   ]
 }
 
+output "execute_point_service_account" {
+  description = "HTCondor Execute Point Service Account (e-mail format)"
+  value       = module.execute_point_service_account.email
+  depends_on = [
+    google_secret_manager_secret_iam_member.execute_point
+  ]
+}
+
 output "pool_password_secret_id" {
   description = "Google Cloud Secret Manager ID containing HTCondor Pool Password"
   value       = google_secret_manager_secret.pool_password.secret_id
@@ -38,10 +46,15 @@ output "pool_password_secret_id" {
 
 output "central_manager_runner" {
   description = "Toolkit Runner to configure an HTCondor Central Manager"
-  value       = local.role_runner_cm
+  value       = local.runner_cm_role
 }
 
 output "access_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Access Point"
-  value       = local.role_runner_access
+  value       = local.runner_access_role
+}
+
+output "execute_point_runner" {
+  description = "Toolkit Runner to configure an HTCondor Execute Point"
+  value       = local.runner_execute_role
 }
