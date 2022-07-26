@@ -64,7 +64,7 @@ locals {
 
 
 module "slurm_partition" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.2"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.3"
 
   slurm_cluster_name      = var.slurm_cluster_name
   partition_nodes         = local.partition_nodes

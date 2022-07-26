@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3
 
 variable "slurm_cluster_name" {
   type        = string
