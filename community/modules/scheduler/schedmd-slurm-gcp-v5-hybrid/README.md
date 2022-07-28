@@ -1,19 +1,131 @@
 ## Description
-This module is a wrapper around the [hybrid-controller] module by SchedMD as
-part of the [slurm-gcp] github repository. The hybrid module serves to create
+This module is a wrapper around the [slurm-controller-hybrid] module by SchedMD
+as part of the [slurm-gcp] github repository. The hybrid module serves to create
 the configurations needed to extend an on-premise slurm cluster to one with one
 or more Google Cloud bursting partitions. These partitions will create the
 requested nodes in a GCP project on-demand and scale after a period of not being
 used, in the same way as the [schedmd-slurm-gcp-v5-controller] module
 auto-scales VMs.
 
-### Usages
+[schedmd-slurm-gcp-v5-controller]: ../schedmd-slurm-gcp-v5-controller/
 
-### Setup
+### Usage
+The [slurm-controller-hybrid] is intended to be run on the controller of the on
+premise slurm cluster, meaning executing `terraform init/apply` against the
+deployment directory. This allows the module to infer settings such as the
+slurm user and user ID when setting permissions for the created configurations.
+
+If unable to install terraform and other dependencies on the controller
+directly, it is possible to deploy the hybrid module in a separate build
+environment and copy the created configurations to the on premise controller
+manually. This will require addition configuration and verification of
+permissions. For more information see the [hybrid.md] documentation on
+[slurm-gcp].
+
+[slurm-controller-hybrid]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3/terraform/slurm_cluster/modules/slurm_controller_hybrid
+
+> **_NOTE:_** The hybrid module requires the following dependencies to be
+> installed on the system deploying the module:
+>
+> * [terraform]
+> * [addict]
+> * [google-cloud-pubsub]
+> * A full list of recommended python packages is available in a
+>   [requirements.txt] file in the [slurm-gcp] repo.
+
+[terraform]: https://learn.hashicorp.com/tutorials/terraform/install-cli
+[addict]: https://pypi.org/project/addict/
+[google-cloud-pubsub]: https://pypi.org/project/google-cloud-pubsub/
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/v5.0.3/scripts/requirements.txt
 
 ### Manual Configuration
+This module *does not* complete the installation of hybrid partitions on your
+slurm cluster. After deploying, you must follow the steps listed out in the
+[hybrid.md] documentation under [manual steps].
 
-### Example Blueprint
+[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/v5.0.3/docs/hybrid.md
+[manual steps]: https://github.com/SchedMD/slurm-gcp/blob/v5.0.3/docs/hybrid.md#manual-configurations
+
+### Example Usage
+The hybrid module can be added to a blueprint as follows:
+
+```yaml
+- id: slurm-controller
+  source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
+  kind: terraform
+  use:
+  - debug-partition
+  - compute-partition
+  - pre-existing-storage
+  settings:
+    output_dir: /etc/slurm/hybrid
+    slurm_bin_dir: /usr/local/bin
+    slurm_control_host: static-controller
+```
+
+This defines a HPC module that create a hybrid configuration with the following
+attributes:
+
+* 2 partitions defined in previous modules with the IDs of `debug-partition` and
+  `compute-partition`.
+* Network storage to be mounted on the compute nodes when created, defined in
+  `pre-existing-storage`.
+* `output_directory` set to `/etc/slurm/hybrid`. This is where the hybrid
+  configurations will be created.
+* `slurm_bin_dir` located at `/usr/local/bin`. Set this to whereever the slurm
+  executables are installed on your system.
+* `slurm_control_host`: The name of the on premise host is provided to the
+  module for configuring NFS mounts and communicating with the controller after
+  VM creation.
+
+### Assumptions and Limitations
+**Shared directories from the controller:** By default, the following
+directories are NFS mounted from the on premise controller to the created cloud
+VMs:
+* /home
+* /opt/apps
+* /etc/munge
+* /usr/local/slurm/etc
+
+The expectation is that these directories exist on the controller and that all
+files required by slurmd to be in sync with the controller are in those
+directories.
+
+If this does not match your slurm cluster, these directories can be overwritten
+with a custom NFS mount using [pre-existing-network-storage] or by setting the
+`network_storage` variable directly in the hybrid module. Any value in
+`network_storage`, added directly or with `use`, will override the default
+directories above.
+
+The variable `disable_default_mounts` will disregard these defaults. Note that
+at a minimum, the cloud VMs require `/etc/munge` and `/usr/local/slurm/etc` to
+be mounted from the controller. Those will need to be managed manually if the
+`disable_default_mounts` variable is set to true.
+
+**Power Saving Logic:** The cloud partitions will make use of the power saving
+logic and the suspend and resume scripts will be set. If any local partitions
+also make use of these `slurm.conf` variables, a conflict will likely occur.
+There is no support currently for partition level suspend and resume scripts,
+therefore either the local partition will need to turn this off or the hybrid
+module will not work.
+
+**Slurm versions:** The version of slurm on the on premise cluster must match the
+slurm version on the cloud VMs created by the hybrid partitions. The version
+on the cloud VMs will be dictated by the version on the disk image that can be
+set when defining the partitions using [schedmd-slurm-gcp-v5-partition].
+
+If the publically available images do not suffice, [slurm-gcp] provides
+[packer templates] for creating custom disk images.
+
+SchedMD only supports the current and last major version of slurm, therefore we
+strongly advise only using versions 21 or 22 when using this module. Attempting
+to use this module with any version older than 21 may lead to unexpected
+results.
+
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3
+[pre-existing-network-storage]: ../../../../modules/file-system/pre-existing-network-storage/
+[schedmd-slurm-gcp-v5-partition]: ../../compute/schedmd-slurm-gcp-v5-partition/
+[packer templates]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3/packer
 
 ## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

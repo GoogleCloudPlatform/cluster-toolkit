@@ -10,6 +10,9 @@ output "instructions" {
       2. Add the following line to your `gres.conf` file:
       `include <<OUTPUT_DIR>>/cloud_gres.conf`
 
+      3. Ensure your output directory is owned by the slurm user:
+      `sudo chown slurm <<OUTPUT_DIR>>`
+
       3. With the slurm user on the controller, add a cronjob/crontab to run
       slurmsync.py regularly:
       `*/1 * * * * <<OUTPUT_DIR>>/slurmsync.py`

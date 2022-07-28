@@ -57,7 +57,7 @@ deployment_groups:
         Default: NO
       source_image_project: $(vars.project_id)
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-v5-controller-hybrid
+  - source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
     kind: terraform
     id: slurm-controller
     use: [compute-partition, pre-existing-storage]
