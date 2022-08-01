@@ -8,6 +8,11 @@ verify a local `ghpc` build.
 
 ## Blueprint Descriptions
 
+**2-nfs-servers.yaml**: Creates 2 NFS servers with different local mount points,
+but otherwise the same variables. This test exists to ensure there will be no
+naming collisions when more than one NFS server is created in a projects with
+the same deployment name.
+
 **hpc-cluster-simple.yaml**: Creates a simple cluster with a single compute VM,
 filestore as a /home directory and a network. This has been used as a demo
 blueprint when presenting the toolkit.
