@@ -33,12 +33,16 @@ deployment_groups:
     kind: terraform
     id: homefs
     use: [network1]
+    outputs: [network_storage]
     settings:
       local_mounts: ["/home"]
+      auto_delete_disk: true
 
   - source: ./community/modules/file-system/nfs-server
     kind: terraform
     id: appsfs
     use: [network1]
+    outputs: [network_storage]
     settings:
       local_mounts: ["/apps"]
+      auto_delete_disk: true
