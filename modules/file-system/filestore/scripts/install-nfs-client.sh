@@ -14,10 +14,9 @@
 # limitations under the License.
 
 if [ ! "$(which mount.nfs)" ]; then
-	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-
-		yum -y update
-		yum install -y nfs-utils
+	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] ||
+		[ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
+		yum install --disablerepo="*" --enablerepo="base,epel" -y nfs-utils
 	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
 		apt-get -y update
 		apt-get -y install nfs-common

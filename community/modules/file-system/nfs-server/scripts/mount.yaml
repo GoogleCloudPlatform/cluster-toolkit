@@ -34,6 +34,6 @@
       path: "{{ item.local_mount }}"
       opts: "{{ item.mount_options }}"
       boot: true
-      fstype: "{ {item.fs_type }}"
+      fstype: "{{ item.fs_type }}"
       state: "mounted"
     loop: "{{ storage.json }}"
