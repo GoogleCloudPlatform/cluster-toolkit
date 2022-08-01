@@ -54,16 +54,18 @@ var errorMessages = map[string]string{
 	"varInAnotherGroup": "References to other groups are not yet supported",
 	"noOutput":          "Output not found for a variable",
 	// validator
-	"emptyID":        "a module id cannot be empty",
-	"emptySource":    "a module source cannot be empty",
-	"wrongKind":      "a module kind is invalid",
-	"extraSetting":   "a setting was added that is not found in the module",
-	"mixedModules":   "mixing modules of differing kinds in a deployment group is not supported",
-	"duplicateGroup": "group names must be unique",
-	"duplicateID":    "module IDs must be unique",
-	"emptyGroupName": "group name must be set for each deployment group",
-	"illegalChars":   "invalid character(s) found in group name",
-	"invalidOutput":  "requested output was not found in the module",
+	"emptyID":            "a module id cannot be empty",
+	"emptySource":        "a module source cannot be empty",
+	"wrongKind":          "a module kind is invalid",
+	"extraSetting":       "a setting was added that is not found in the module",
+	"settingWithPeriod":  "a setting name contains a period, which is not supported; variable subfields cannot be set independently in a blueprint.",
+	"settingInvalidChar": "a setting name must begin with a non-numeric character and all characters must be either letters, numbers, dashes ('-') or underscores ('_').",
+	"mixedModules":       "mixing modules of differing kinds in a deployment group is not supported",
+	"duplicateGroup":     "group names must be unique",
+	"duplicateID":        "module IDs must be unique",
+	"emptyGroupName":     "group name must be set for each deployment group",
+	"illegalChars":       "invalid character(s) found in group name",
+	"invalidOutput":      "requested output was not found in the module",
 }
 
 // DeploymentGroup defines a group of Modules that are all executed together
