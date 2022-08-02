@@ -24,6 +24,7 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 
+	"github.com/pkg/errors"
 	. "gopkg.in/check.v1"
 )
 
@@ -85,25 +86,48 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 }
 
 func (s *MySuite) TestValidateSettings(c *C) {
+	testSettingName := "TestSetting"
+	testSettingValue := "TestValue"
+	validSettingNames := []string{
+		"a", "A", "_", "-", testSettingName, "abc_123-ABC",
+	}
+	invalidSettingNames := []string{
+		"", "1", "Test.Setting", "Test$Setting", "1_TestSetting",
+	}
+	var e *InvalidSettingError
+
 	// Succeeds: No settings, no variables
 	mod := Module{}
+	mod.Settings = make(map[string]interface{})
 	info := modulereader.ModuleInfo{}
 	err := validateSettings(mod, info)
 	c.Assert(err, IsNil)
 
-	// Failes One required variable, no settings
-	mod.Settings = make(map[string]interface{})
-	mod.Settings["TestSetting"] = "TestValue"
+	// Fails: One required variable, no settings
+	mod.Settings = map[string]interface{}{testSettingName: testSettingValue}
 	err = validateSettings(mod, info)
-	expErr := fmt.Sprintf("%s: .*", errorMessages["extraSetting"])
-	c.Assert(err, ErrorMatches, expErr)
+	c.Check(errors.As(err, &e), Equals, true)
 
-	// Succeeds: One required, setting exists
-	info.Inputs = []modulereader.VarInfo{
-		{Name: "TestSetting", Required: true},
+	// Fails: Invalid setting names
+	for _, name := range invalidSettingNames {
+		info.Inputs = []modulereader.VarInfo{
+			{Name: name, Required: true},
+		}
+		mod.Settings = map[string]interface{}{name: testSettingValue}
+		err = validateSettings(mod, info)
+		c.Check(errors.As(err, &e), Equals, true)
 	}
-	err = validateSettings(mod, info)
-	c.Assert(err, IsNil)
+
+	// Succeeds: Valid setting names
+	for _, name := range validSettingNames {
+		info.Inputs = []modulereader.VarInfo{
+			{Name: name, Required: true},
+		}
+		mod.Settings = map[string]interface{}{name: testSettingValue}
+		err = validateSettings(mod, info)
+		c.Assert(err, IsNil)
+	}
+
 }
 
 func (s *MySuite) TestValidateModule(c *C) {
