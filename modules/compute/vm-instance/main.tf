@@ -30,14 +30,18 @@ locals {
 
   # compact_placement : true when placement policy is provided and collocation set; false if unset
   compact_placement = try(var.placement_policy.collocation, null) != null
+
+  gpu_attached = contains(["a2"], local.machine_family) || length(var.guest_accelerator) > 0
+
   # both of these must be false if either compact placement or preemptible/spot instances are used
-  automatic_restart                  = local.compact_placement || var.spot ? false : null
-  on_host_maintenance_from_placement = local.compact_placement || var.spot ? "TERMINATE" : "MIGRATE"
+  # automatic restart is tolerant of GPUs while on host maintenance is not
+  automatic_restart           = local.compact_placement || var.spot ? false : null
+  on_host_maintenance_default = local.compact_placement || var.spot || local.gpu_attached ? "TERMINATE" : "MIGRATE"
 
   on_host_maintenance = (
     var.on_host_maintenance != null
     ? var.on_host_maintenance
-    : local.on_host_maintenance_from_placement
+    : local.on_host_maintenance_default
   )
 
   oslogin_api_values = {
