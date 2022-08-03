@@ -145,7 +145,7 @@ variable "guest_accelerator" {
 }
 
 variable "on_host_maintenance" {
-  description = "Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy` requires it to be `TERMINATE`"
+  description = "Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy`, spot provisioning, or GPUs require it to be `TERMINATE`"
   type        = string
   default     = null
   validation {
