@@ -1,0 +1,86 @@
+blueprint_name: hpc-cluster-small
+
+vars:
+  billing_account: ## Set GCP Billing Account Here ## 
+  org_id: ## Set GCP Organization ID Here ##
+  folder_id: ## Set GCP Folder ID Here ## 
+  deployment_name: ## Set Deployment Name Here ## 
+  project_id : ## Set Project ID Here ##
+  region: ## Set Region Here ##
+  zone: ## Set Zone Here ##
+  activate_apis:
+    - compute.googleapis.com
+    - file.googleapis.com
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - source: community/modules/project/new-project
+    kind: terraform
+    id: project1
+
+  - source: modules/network/vpc
+    kind: terraform
+    id: network1
+    use: [project1]
+
+  - source: modules/file-system/filestore
+    kind: terraform
+    id: homefs
+    use: 
+      - project1
+      - network1
+    settings:
+      local_mount: /home
+
+  # This debug_partition will work out of the box without requesting additional GCP quota.
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    id: debug_partition
+    use:
+    - project1
+    - network1
+    - homefs
+    settings:
+      partition_name: debug
+      max_node_count: 4
+      enable_placement: false
+      exclusive: false
+      machine_type: n2-standard-2
+
+  # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    id: compute_partition
+    use:
+    - project1
+    - network1
+    - homefs
+    settings:
+      partition_name: compute
+      max_node_count: 20
+
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    kind: terraform
+    id: slurm_controller
+    use:
+    - project1
+    - network1
+    - homefs
+    - debug_partition  # debug partition will be default as it is listed first
+    - compute_partition
+    settings:
+      login_node_count: 1
+      suspend_time: 60
+
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    kind: terraform
+    id: slurm_login
+    use:
+    - project1
+    - network1
+    - homefs
+    - slurm_controller
