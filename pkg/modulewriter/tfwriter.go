@@ -371,7 +371,9 @@ func printTerraformInstructions(grpPath string) {
 // group in the provided deployment directory
 // depGroup: The deployment group that is being written
 // globalVars: The top-level variables, needed for writing terraform.tfvars and
-//             variables.tf
+//
+//	variables.tf
+//
 // groupDir: The path to the directory the resource group will be created in
 func (w TFWriter) writeDeploymentGroup(
 	depGroup config.DeploymentGroup,
