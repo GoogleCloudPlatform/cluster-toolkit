@@ -83,6 +83,13 @@ Here are some notes from a developer's perspective:
 - When `deploy.sh` is invoked, it validates the client machine's development
   environment, collects configuration information from user, save input
   variables in `tf/terraform.tfvars`, and invoke Terraform.
+    - The deploy script will check the GCP project being used has the correct
+      APIs enabled.  The list of required APIs is embedded in `deploy.sh`
+      script - ** this will need to be maintained**.
+    - The deploy script will also, optionally, use an additional script,
+      `script/service_account.sh`, to create a GCP service account.  This sets
+      the correct roles/permissions on the account based on a list kept in the
+      script - **this will need to be maintained**.
 - Terraform creates a hosting VPC and a subnetwork for the deployment, together
   with the necessary firewall rules.
 - Terraform creates a supporting GCS bucket. This bucket is not only used

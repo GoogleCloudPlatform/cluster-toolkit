@@ -1,147 +1,185 @@
 # HPC Toolkit FrontEnd - Administrator’s Guide
+
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
 -->
+
 This document is for administrators of the HPC Toolkit FrontEnd (TKFE). An
-administrator can manage the life cycle of HPC clusters, set up networking and
-storage resources that support clusters, install applications and manage user
-access. Ordinary HPC users should refer to the [User Guide](user_guide.md) for
-guidance on how to prepare and run jobs on existing clusters.
+administrator can deploy the TKFE portal, manage the lifecycle of HPC clusters,
+set up networking and storage resources that support clusters, install
+applications. and manage user access. Normal HPC users should refer to the
+[User Guide](user_guide.md) for guidance on how to prepare and run jobs on
+clusters that have been set up by administrators.
 
-The HPC TKFE is a web application built upon the Django framework.
-By default, a single Django superuser is created at deployment time that has
-administrator privileges. For large organisations that need additional
+Basic administrator knowledge of the Google Cloud Plaform is needed in order to
+create projects and user accounts, but all other low-level administration tasks
+are handled by the portal.
+
+TKFE is a web application built upon the Django framework.  By default, a
+single Django superuser is created at deployment time - this superuser then has
+administrator privileges in TKFE.  For large organisations that need additional
 administrators, additional Django superusers can be created from the Admin site
-within the FrontEnd, once it is deployed and running.
+within TKFE, once it is deployed and running.
 
-This guide covers the deployment of the TKFE and the steps required to create
-and manage clusters.  Further guides cover installation of
-[applications](Applications.md) and the [Workbench](WorkbenchAdmin.md) Jupyter
-Notebook feature.
+The TFKE web application server uses the
+[Google HPC Toolkit](https://github.com/GoogleCloudPlatform/hpc-toolkit) to
+provision resources for networks, filesystems and clusters, using a service
+account that has its credentials registered to TKFE. The service account is 
+used for access management and billing. 
 
+This guide covers the deployment of TKFE, registering the service account, and
+the steps required to then create and manage clusters.  Further guides cover
+installation of [Applications](Applications.md) and the
+[Workbench](WorkbenchAdmin.md) Jupyter Notebook feature.
+An [Advanced Administrators Guide](AdvancedAdmin.md) also covers features for
+customising the TKFE deployment.
 
 
 ## TKFE Deployment
 
+TKFE is deployed from a client machine using a script. The script will guide
+the admin through the setup process, prompting for input of required 
+parameters, then deploy TKFE into the Google Cloud Platform.
+
 ### Prerequisites
 
+#### Client Machine
+
+The client machine must run Linux (or equivalent such as 
+[WSL](https://docs.microsoft.com/en-us/windows/wsl/install)) and there are a
+small number of prerequisites that must be installed ahead of time:
+
+- bash shell
+- [Git](https://github.com/git-guides/install-git)
+- [Terraform CLI](https://www.terraform.io/downloads) installation
+- [Google Cloud CLI](https://cloud.google.com/cli) installation (`gcloud`
+  and `gsutil` utilities)
+  
 #### Download TKFE
 
-If not already downloaded, the TKFE repository needs to be cloned to a client machine from where deployment will take place.
+If not already downloaded, the TKFE repository needs to be cloned to the client 
+machine.
+
+Clone the repository, checkout the corresponding branch, and switch to
+the `frontend` directory as follows:
 <!-- TODO: insert link to official repository name when released as public project]
 [TKFE repository](https://github.com/nagconsulting/hpc-toolkit.git)
 -->
-Clone the repository for TKFE, checkout the corresponding branch, and switch to the working directory as follows:
+<!-- TODO: switch to public repo
 ```bash
 $ git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
+$ cd hpc-toolkit
+$ cd community/frontend
+```
+-->
+```bash
+$ git clone https://github.com/ghpcfe/hpc-toolkit-private.git
 $ cd hpc-toolkit
 $ git checkout new_frontend
 $ cd community/frontend
 ```
- 
-Deployment must be started from this directory location.
+All further deployment actions must be performed from this directory.
 
-#### Client Machine
-
-The client deploying TKFE has a number of prerequisites - these must be
-installed ahead of time.
-
-- Linux environment (or an equivalent such as WSL) with bash shell
-- [Terraform CLI](https://www.terraform.io/downloads) installation
-- Google [Cloud CLI](https://cloud.google.com/cli) installation (`gcloud`
-  utility)
-- Google cloud user for deployment
-  [authenticated in gcloud](https://cloud.google.com/sdk/gcloud/reference/auth/login) (see below for required permissions)
 
 #### Google Cloud Platform
 
-A GCP Project and user account with enabled APIs and roles/permissions are
-also needed to deploy TKFE.
+Your organisation must already have access to the Google Cloud Plaform (GCP)
+and be able to create projects and users.  A project and a user account with
+enabled APIs and roles/permissions need to be created. The user account must
+also be authenticated on the client machine to allow it to provision GCP
+resources.
 
-Please refer to GCP documentation for
-[how to add APIs](https://cloud.google.com/endpoints/docs/openapi/enable-api) 
-and
-[granting and roles/permissions](https://cloud.google.com/iam/docs/creating-custom-roles) to Projects and Users respectively.
+**GCP project**
 
-The GCP Project requires the following APIs :
+A GCP project is required with the following APIs enabled:
+```Text
+ Compute Engine API
+ Cloud Monitoring API
+ Cloud Logging API
+ Cloud Pub/Sub API
+ Cloud Resource Manager
+ Identity and Access Management (IAM) API
+ Cloud OS Login API
+ Cloud Filestore API
+ Cloud Billing API
+ Vertex AI API
+```
+If these are not enabled, the deployment script will ask to enable them for
+you. It's not possible to complete a deployment without these APIs, so the
+script will abort if not selected.
 
-- Compute Engine API
-- Cloud Monitoring API
-- Cloud Logging API
-- Cloud Pub/Sub API
-- Cloud Resource Manager
-- Identity and Access Management (IAM) API
-- Cloud OS Login API
-- Cloud Filestore API
-- Cloud Billing API
-- Vertex AI API
+**GCP user**
 
-<!--
- TODO:  TKFE has the mechanics to allow the FE to be created from one GCP
-  project, but the clusters deployed against another.   This isn't expected to
-  be used in anger, at least in the short term, and does complicate things.
-  The interface and docs will need updating and simplifying.  For now, assume
-  a single project for both TKFE and all clusters from it.
+A GCP user that is a member of the project will be able to deploy TKFE, but
+must have appropriate privileges.  A user that is an *Owner* of the project
+will automatically have all required roles and permissions.  Alternatively,
+another account with access to the project, but a limited set of roles can be
+used, which can help satisfy security concerns. The `gcloud` command can be
+used to [switch to another account](https://cloud.google.com/sdk/gcloud/reference/auth/login)
+and apply IAM roles.  IAM roles can also be applied via the GCP Console. The
+required roles are:
+```Text
+ Compute Admin
+ Storage Admin
+ Pub/Sub Admin
+ Create Service Accounts
+ Delete Service Accounts
+ Service Account User
+ Project IAM Admin
+```
+If required, an even stricter, or least-privilege custom role can be created -
+please refer to the [Advanced Admin Guide](AdvancedAdmin.md#Custom-roles/permissions-and-APIs).
 
-- GCP project(s):
-- for the HPC Toolkit FrontEnd with at least the following APIs enabled:
-    - Compute Engine API
-    - Cloud Monitoring API
-    - Cloud Logging API
-    - Cloud Pub/Sub API
-    - Cloud Resource Manager
-    - Identity and Access Management (IAM) API
+The user account must also be [authenticated to deploy GCP resources](https://cloud.google.com/sdk/gcloud/reference/auth/application-default/login).
+This can be done with the following command:
+```bash
+$ gcloud auth application-default login --project=<PROJECT_ID>
+```
+You will be prompted to open your web browser to authenticate.
 
-  - A GCP project for deploying Clusters with at least the following APIs
-    enabled:
+If further help is needed, please refer to GCP documentation for:
 
-    - Compute Engine API
-    - Cloud Monitoring API
-    - Cloud Resource Manager
-    - Cloud Logging API
-    - Cloud OS Login API
-    - Cloud Filestore API
-    - Cloud Billing API
-    - Vertex AI API
-
-- These two projects may actually be the same project.  The HPC Toolkit
-    FrontEnd supports deploying clusters into the same project in which the
-    service machine runs, as well as deploying clusters into other projects.
--->
-
-The *Owner* of the project will automatically have all required roles and
-permissions, so this account can be used without any further modification.
-Alternatively, another account with a more limited collections of roles, which
-can help satisfy security concerns, can be used.  The `gcloud` command can be used [to switch to another account](https://cloud.google.com/sdk/gcloud/reference/auth/login). The required roles are:
-
-- Compute Admin
-- Storage Admin
-- Pub/Sub Admin
-- Create Service Accounts
-- Delete Service Accounts
-- Service Account User
-- Project IAM Admin
-
-If required, a strict, least-privilege custom role can be created - please refer
-to the [complete list](CompletePermissions.md) of required permissions.
-
+- [Creating and managing projects](https://cloud.google.com/resource-manager/docs/creating-managing-projects)
+- [Enabling APIs](https://cloud.google.com/endpoints/docs/openapi/enable-api)
+- [Granting and roles/permissions](https://cloud.google.com/iam/docs/creating-custom-roles)
 
 
 ### Deployment Process
-TKFE uses a deployment script run on the client machine, prompting for required parameters, to configure TKFE.
+TKFE uses a deployment script run on the client machine, prompting for required
+parameters, to configure TKFE.
 
 1. Run `./deploy.sh`
-1. Follow prompts to name the FrontEnd VM instance, specify the GCP project, zone and subnet (subnet is optional, and one will be created if required). The hosting VM will be referred to as the *service machine* from now on.
-    - For a production deployment, provide a domain name and static IP address.  If a static IP is needed, follow the on-screen instructions. An SSL certificate will automatically be obtained via [LetsEncrypt](https://letsencrypt.org/) to secure the web application.
-    - For testing purposes the domain name and static public IP address and domain name can be left blank. The system can still be successfully deployed and run with an ephemeral IP address, however OAuth2-based login (see later) will not be available as this requires a publicly resolvable domain name.
-1. Follow instructions to provide details for an Admin (the Django superuser) account.
-1. Confirm the parameters are correct when prompted and the deployment can proceed.
+1. Follow prompts to name the FrontEnd VM instance, specify the GCP project,
+   zone and subnet (subnet is optional, and one will be created if required).
+   The hosting VM will be referred to as the *service machine* from now on.
+1. Follow prompts to enter domain name (DNS hostname) and IP address for the
+   service machine.
+    - For a production deployment, provide a domain name and static IP
+      address.  If a static IP is needed, follow the on-screen instructions. An
+      SSL certificate will automatically be obtained via
+      [LetsEncrypt](https://letsencrypt.org/) to secure the web application.
+    - For dev and testing purposes, the domain name and static IP address and
+      domain name can be left blank. The system can still be successfully
+      deployed and run with an ephemeral IP address, however OAuth2-based login
+      (see later) will not be available as this requires a publicly resolvable
+      domain name.
+1. Follow instructions to provide details for an Admin (the Django superuser)
+   account - username, password, email address.
+1. Confirm whether to create a service account for managing clusters.  This
+   will create a service account, and generate a credential, associated with
+   the GCP project specified earlier being used to deploy TKFE.  This service
+   account may not be needed if using an existing one, or using multiple
+   projects (see [advanced admin guide](AdvancedAdmin.md) for details).
+    - If selected, a credential file, `credential.json`. will be created in the
+      directory that needs to be registered in the FrontEnd (see below).
+1. Confirm the parameters are correct when prompted and the deployment can
+   proceed.
     - If confirmed, the VM instance will be created.  This can take a few
-      minutes    .
+      minutes.
     - **Note: after the deploy script has completed, it will still take up to
-      another 15 minutes to fully install the TKFE server will the full software
-      stack.**
+      another 15 minutes to fully install the TKFE server with its full
+      software stack.**
 
 <!--
 TODO:  Give instruction for a custom deployment.
@@ -149,13 +187,16 @@ TODO:  Give instruction for a custom deployment.
 If a custom TKFE deployment is needed, the final step can be cancelled  Then hack any files in ./tf and manually run `terraform apply` in the `frontend/tf` directory after properly setting the `terraform.tfvars`.
 -->
 
-**Important: To ensure that the TKFE resources can be cleaned up fully at a later date, ensure that the directory containing the terraform configuration (`./tf`) is retained.**
+**Important: To ensure that the TKFE resources can be fully cleaned up at a
+later date, ensure that the directory containing the terraform configuration
+(`./tf`) is retained.**
 
-The deployment is now complete and after ~15 minutes, it will be possible to log
-into the TKFE using the Admin account details given, at the specified domain
-name or IP address via a web browser.   The IP address will be output as
+The deployment is now complete and after ~15 minutes, it will be possible to 
+log into the TKFE using the Admin account details given, at the specified
+domain name or IP address via a web browser.  The IP address will be output as
 `server_ip`.
 
+---
 
 ## Post-deployment Configuration
 
@@ -163,118 +204,59 @@ name or IP address via a web browser.   The IP address will be output as
 
 To allow TKFE to manage cloud resources on behalf of users, a
 [service account](https://cloud.google.com/iam/docs/service-accounts)
-with credentials must be registered to the system by the Admin user. These are
-first created within GCP console, then entered in the *Credentials* menu of the
-TKFE.
+must be registered by the Admin.  This is done by entering a credential 
+corresponding to the service account - the credential will be a json format
+key file that needs to be copied into the *Credentials* form in TKFE.
 
+The deploy script will usually create a service account and credential (unless
+told not to), but other service accounts can be used -see advanced admin guide(AdvancedAdmin.md#service-account-management) for details.
 
-<!-- The supplied credential will be validated and stored in the database for
- future use.
+<!--
+The supplied credential will be validated and stored in the database for
+future use.
 
-The preferred way to access GCP resources from this system is through a
-[service account](https://cloud.google.com/iam/docs/service-accounts).
-To create a service account, a GCP account with sufficient permissions is
-required.
 Typically, the Owner or Editor of a GCP project have enough permissions. For
 other users with custom roles, if certain permissions are missing, GCP will
 typically return clear error messages.
 
-For this project, the following roles should be sufficient for the admin users to manage the required service account: *Service Account User*, *Service Account Admin*, and *Service Account Key Admin*.-->
-
-#### Creating a service account via the GCP Console
-
-1. Log in to the [GCP console](https://console.cloud.google.com/) and select the 
-   GCP project that hosts the TKFE.
-   
-1. From the Navigation menu, select *IAM & Admin*, then *Service Accounts*.
-    - Click the *CREATE SERVICE ACCOUNT* button.
-    - Name the service account, optionally provide a description, and then click
-      the *CREATE* button.
-      
-1. Grant the service account the following roles:
-    - Cloud Filestore Editor
-    - Compute Admin
-    - Create Service Accounts
-    - Delete Service Accounts
-    - Project IAM Admin
-    - Notebooks Admin
-    - Vertex AI administrator
-
-- <!-- Human users may be given permissions to access this service account but that is not required in this work.--> Click *Done* button.
-
-1. Locate the new service account from the list, click *Manage Keys* from the *Actions* menu.
-    - Click *ADD KEY*, then *Create new key*.
-        - Select JSON as key type, and click the *CREATE* button.
-        - A JSON key file will then be downloaded.
-        - Copy the generated JSON content which should then be pasted into the
-          credential creation form within the TKFE.
-
-1.  Click *Validate and Save* to register the new credential to TKFE.
-
-<!--
-TODO: check this actually works before documenting as a method
-
-#### Creating a service account using the `gcloud` tool
-
-Alternatively the `gcloud` command line tool can be used to create a suitable service account:
-
-```bash
-$ gcloud iam service-accounts create <service_account_name>
-$ for roleid in file.editor \
-              compute.admin \
-              iam.serviceAccountCreator \
-              iam.serviceAccountDelete \
-              resourcemanager.projectIamAdmin \
-              notebooks.admin aiplatform.admin; \
-  do gcloud projects add-iam-policy-binding <project_name> \
-      --member="serviceAccount:<service_account_name>@<project_name>.iam.gserviceaccount.com" \
-      --role="roles/$roleid"; \
-  done
-
-$ gcloud iam service-accounts keys create <path_to_key_file> \
-    --iam-account=<service_account_name>@<project_name>.iam.gserviceaccount.com
-```
-
-Once complete, the service account key json can be copied from
-`path_to_key_file` into the credentials form on the frontend.
+For this project, the following roles should be sufficient for the admin users to manage the required service account: *Service Account User*, *Service Account Admin*, and *Service Account Key Admin*.
 -->
-
-The credential can now be used to create network, storage and compute resources
-from the TKFE.
 
 ## Network Management
 
-All cloud systems begin with defining the network within which the systems will
-be deployed. Before a cluster or stand-alone filesystem can be created, the
+All cloud systems begin with defining the network that components will
+exist in. Before a cluster or stand-alone filesystem can be created, the
 administrator must create the virtual private cloud (VPC) network. This is
 accomplished under the *Networks* main menu item. Note that network resources
 have their own life cycles and are managed independently.
 
 ### Create a new VPC
-To create a new network, the admin must first select which cloud credential
-should be used for this network, then give the VPC a name, and then select the
-cloud region for the network.
+To create a new network, the admin must first select which credential should be
+used for this network, then give the VPC a name, and then select the cloud
+region for the network.
 
 Upon clicking the *Save* button, the network is not immediately created. The
-admin has to click *Edit Subnet* to create at least one subnet. Once the network
-and subnets are appropriately defined, click the ‘Apply Cloud Changes’ button to
-trigger Terraform to provision the  cloud resources.
+admin has to click *Edit Subnet* to create at least one subnet in the VPC.
+Once the network and subnet(s) are defined, click the ‘Apply Cloud Changes’
+button to trigger creation of the VPC and subnet(s).
+
+<!-- Behind the scenes, ghpc is used to get Terraform to provision the cloud resources. -->
 
 ### Import an existing VPC
 
-If the organisation already has predefined VPCs on cloud within the hosting GCP
-project, they can be imported. Simply selecting an existing VPC and associated
-subnets from the web interface to register them with the system. Imported VPCs
+If your organisation already has predefined VPCs within the hosting GCP 
+project, they can be imported.  Simply select an existing VPC and associated
+subnets from the web interface to register them with TKFE.  Imported VPCs
 can be used in exactly the same way as newly created ones.
 
 ## Filesystem Management
 
-By default each cluster creates two shared filesystems: one at `/opt/cluster` to
+By default each cluster creates two shared filesystems: one at `/opt/cluster`	 to
 hold installed applications and one at `/home` to hold job files for individual
 users. Both can be customised if required. Optionally, additional filesystems
 may be created and mounted to the clusters. Note that filesystem resources have
 their own life cycles and are managed independently, so they persist until
-explicitly deleted and can be attached to several clusters.
+explicitly deleted and can be attached to several clusters in the same subnet.
 
 ### Create new filesystems
 
@@ -404,7 +386,7 @@ attached to the website as configured in the deployment script.  Next, register
 the site with the hosting GCP project on the GCP console in the *Credentials*
 section under *APIs and services* category. Note that the *Authorised JavaScript
 origins* field should contain a callback URL in the following format:
-*https://<domain_name>/accounts/google/login/callback/*
+`https://<domain_name>/accounts/google/login/callback/`
 
 ![Oauth set-up](images/GCP-app-credential.png)
 
@@ -418,9 +400,9 @@ accept Google login.
 
 #### Set Allowed Users by Email Address
 
-Next, go to the *Authorised user* table. This is where further access control to
-the site is applied. Create new entries to grant access to users. A new entry
-can be:
+Next, go to the *Authorised user* table. This is where further access control 
+to the site is applied. Create new entries to grant access to users. A new
+entry can be:
 
 - a valid domain name to grant access to multiple users from authorised 
 organisations (e.g. *@example.com*)
@@ -431,9 +413,15 @@ All login attempts that do not match these patterns will be rejected.
 
 #### Note on external users
 
-If you wish to allow users from outside your Google Cloud organization to use the cluster you will need to additionally assign these users the `roles/compute.osLoginExternalUser` role at an Organization level (there is no way to assign at the project level).
+If you wish to allow users from outside your Google Cloud organization to use
+the cluster you will need to additionally assign these users the
+`roles/compute.osLoginExternalUser` role at an Organization level (there is no
+way to assign at the project level).
 
-User accounts will be automatically created for users when they log into the frontend for the first time, by default new accounts are created with quota disabled.  To enable job submission for an account, administrators must enable compute quota from the *Users* page.
+User accounts will be automatically created for users when they log into the
+FrontEnd for the first time, by default new accounts are created with quota
+disabled.  To enable job submission for an account, administrators must enable
+compute quota from the *Users* page.
 
 ### User Compute Quota
 
@@ -474,22 +462,28 @@ in the same directory that was used to deploy TKFE.
 
 The service machine produces log files in `/opt/gcluster/run/`. These log files will show errors from the Django web application.
 
-Cloud resource deployment log files (from Terraform) are typically shown via the Frontend web site.  If those logs are not being shown, they can be found on the service machine under `/opt/gcluster/hpc-toolkit/frontend/(clusters|fs|vpc)/...`.  HPC Toolkit log files will also be found in those directories.  The Terraform log files and status files will be down a few directories, based off of the Cluster Number, Deployment ID, and Terraform directory.
+Cloud resource deployment log files (from Terraform) are typically shown via
+the FrontEnd web site.  If those logs are not being shown, they can be found on
+the service machine under 
+`/opt/gcluster/hpc-toolkit/frontend/(clusters|fs|vpc)/...`.
+HPC Toolkit log files will also be found in those directories.  The Terraform
+log files and status files will be down a few directories, based off of the
+Cluster Number, Deployment ID, and Terraform directory.
 
 On Cluster controllers, most of the useful log files for debugging can be
 retrieved by executing the 'Sync Cluster' command.  These include Slurm log
-files as well as general system log files.  The daemon which communicates to the
-service machine logs to syslog, and can be viewed on the cluster controller node
-via `journalctl`, looking at the `ghpcfe_c2` service.
+files as well as general system log files.  The daemon which communicates to 
+the service machine logs to syslog, and can be viewed on the cluster controller
+node via `journalctl`, looking at the `ghpcfe_c2` service.
 
 Job logs and Spack application logs are uploaded upon job completion to Google
 Cloud Storage and viewable via the HPC Frontend.
 
 ### Deployment problems
 
-Most deployment problems are caused by not having the right permissions. If this
-is the case, error message will normally show what permissions are missing. Use
-the [IAM permissions reference](https://cloud.google.com/iam/docs/permissions-reference)
+Most deployment problems are caused by not having the right permissions. If
+this is the case, error message will normally show what permissions are
+missing. Use the [IAM permissions reference](https://cloud.google.com/iam/docs/permissions-reference)
 to research this and identify additional roles to add to your user account.
 
 Before any attempt to redeploy the TKFE, make sure to run
@@ -502,8 +496,9 @@ The FrontEnd should be quite reliable provisioning clusters. However, in cloud
 computing, errors will and do happen from time to time; usually due to changes
 in back-end services or other factors beyond scope of the TKFE. For example, a
 resource creation could fail because the hosting GCP project has ran out of
-certain resource quotas; or an upgrade of an underlying machine image might have
-introduced changes that are incompatible to the TKFE, which then needs updating.
+certain resource quotas; or an upgrade of an underlying machine image might
+have introduced changes that are incompatible to the TKFE, which then needs 
+updating.
 It is not possible to capture all such situations.  Here, a list of tips is
 given to help debug cluster creation problems. The
 [Developer's Guide](developer_guide.md) contains a lot of details on how the

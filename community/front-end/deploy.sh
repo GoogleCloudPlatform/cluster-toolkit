@@ -19,10 +19,6 @@
 #               Google HPC Toolkit FrontEnd deployment script                  #
 #                                                                              #
 ################################################################################
-
-
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
 #
 #   Deployment requires a GCP project and authenticated user to run the FrontEnd
 #   on GCP resources.
@@ -36,6 +32,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 #   prefer to use.
 #
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 # Default GCP zone to use for FrontEnd server
 #
@@ -59,17 +56,6 @@ PRJ_API['cloudbilling.googleapis.com']='Cloud Billing API'
 PRJ_API['aiplatform.googleapis.com']='Vertex AI API'
 
 
-# Roles needed by service account
-#
-declare -a SA_ROLES
-SA_ROLES=('aiplatform.admin'
-	  'compute.admin'
-	  'file.editor'
-	  'iam.serviceAccountAdmin'
-          'iam.serviceAccountUser'
-          'notebooks.admin'
-          'resourcemanager.projectIamAdmin')
-
 # Location for output credential file = pwd/credential.json
 #
 CREDENTIAL_FILE="${SCRIPT_DIR}/credential.json"
@@ -92,10 +78,10 @@ help() {
   A valid GCP project must already be created and cloud credentials must be
   associated with your GCP account.  If credentials haven't been authorised
   already, this command can be used:
-      $ gcloud auth application-default login
+      $ gcloud auth application-default login --project=<PROJECT_ID>
 
-  The GCP project must have a number of APIs enabled in order to deploy the
-  FrontEnd.  These are:
+  The GCP project must have a number of APIs enabled in order to deploy and host
+  the FrontEnd.  These are:
 HELP1
   local aa
   for aa in "${!PRJ_API[@]}"; do
@@ -107,11 +93,14 @@ HELP1
   If these are not enabled, you will be asked to confirm they can be
   enabled by this script.  Not confirming will cause the script to exit, so you
   can rectify the project manually, or start again with a different project.
+  If you do not have permission to modify APIs on the project, these will need
+  to be added by an administrator (with Owner or Editor privileges).
   Please see the Administrator's Guide for details on the APIs.
   
-  As this deployment creates many GCP resources, a number of permissions are
-  required.  An Owner or Editor of the hosting GCP project can deploy without
-  any problem. Otherwise, a workable set of GCP roles for successful deployment
+  This deployment creates GCP resources, so a number of roles/permissions are
+  also required on the account.  If the account is the Owner or Editor of the
+  GCP host project, this is sufficient and it can deploy without any problem.
+  Otherwise, a workable set of GCP roles for successful deployment need to be
   need to be added to the account, which includes:
       - Compute Admin
       - Storage Admin
@@ -157,11 +146,11 @@ ask() {
   # set if we are hiding the typing
   local hidden  
   unset hidden
-  if [[ "${1}" == '--hidden' ]]; then
+  if [[ ${1} == '--hidden' ]]; then
     hidden=1;
     shift
   fi
-    
+  
   # get the question string
   local question="${1}"
   shift
@@ -262,7 +251,7 @@ check_account() {
     error "Error: No authorized GCP account was found."
     error ""
     error "   Please ensure your account has been authorized with this command:"
-    error "   $ gcloud auth application-default login"
+    error "   $ gcloud auth application-default login --project=<PROJECT_ID>"
     error ""
     exit 1
   fi
@@ -274,7 +263,7 @@ check_account() {
   local roles
   roles=$(gcloud projects get-iam-policy "${project}" \
 		 --flatten="bindings[].members" \
-		 --format="table(bindings.role)" \
+		 --format="table[no-heading](bindings.role)" \
 		 --filter="bindings.members:${account}" | grep '^roles')
   set +e
   echo "${roles}" | grep -q 'roles/owner';  is_owner=$?
@@ -287,7 +276,7 @@ check_account() {
     echo "         Please ensure account has correct permissions before proceeding."
     echo "         See HPC Toolkit FrontEnd Administrator's Guide for details."
     echo ""
-    case $(ask "         Proceed [y/N]: ") in
+    case $(ask "         Proceed [y/N] ") in
       [Yy]*) ;;
       *)
 	echo "Exiting."
@@ -332,7 +321,7 @@ check_apis() {
     if [[ ${ok} -ne 0 ]]; then
 	echo ""
 	echo "Warning: Required API is not enabled: ${desc}"
-	read -r -p "         Enable this API? [y/N]: " reply
+	read -r -p "         Enable this API? [y/N] " reply
 	case "${reply}" in
 	  [Yy]*)
 	    echo ""
@@ -344,7 +333,8 @@ check_apis() {
 	    # but would need to check later if did this.
 	    set +e
 	    if ! gcloud services enable "${id}" \
-		      --project="${project}" >/dev/null 2>&1; then
+		      --project="${project}" &> /dev/null; then
+	      error ""
 	      error "  Error: Unable to modify project APIs"
 	      error "         Please contact to administrator"
 	      error ""
@@ -372,57 +362,49 @@ create_service_account() {
   local project=$1
   local server_name=$2
   local credfile=$3
-  
   local service_account="${server_name}-tkfe-sa"
-  local sa_fullname="${service_account}@${project}.iam.gserviceaccount.com"
-  
   
   # Check for existing service account with this name
   # - if there is an account, it can be used and a new credential generated
   #   if required.
   #
-  verbose "checking no previous existing account"
-  
-  local ex_acc
-  ex_acc=$(gcloud iam service-accounts list \
-	| awk -v SA="${sa_fullname}" '$1 ~ SA')
+  verbose "checking for any previous existing account"
   
   local create=0
   local getcred=0
   
-  if [[ -n ${ex_acc} ]]; then
-    echo "Warning: Service account already exists (it is likely the deployment name is"
-    echo "         being reused)."
-    echo "         If the credential still exists this can be reused (assuming it has the"
-    echo "         correct roles)."
-    echo "         Or the account and credential can be overwritten."
+  if bash "${SCRIPT_DIR}/script/service_account.sh" check \
+	  "${project}" "${service_account}"; then
+
     echo ""
-    case $(ask "         Overwrite? [y/N]: ") in
+    echo "    Warning: Service account already exists (it is likely the deployment name"
+    echo "             is being reused or a previous deployment was aborted after the"
+    echo "             service account had already been created)."
+    echo ""
+    echo "             If the credential still exists this can be reused (assuming it"
+    echo "             has the correct roles)."
+    echo "             Or the account and credential can be deleted and recreated."
+    echo ""
+    case $(ask "    Delete and recreate? [y/N] ") in
       [Yy]*)
-	verbose "deleting service account: ${sa_fullname}"
-	# Deleting previous service account may fail if user doesn't
-	# have permissions
-	set +e
-	if ! gcloud iam service-accounts delete "${sa_fullname}" \
-	     --quiet --project="${project}" >/dev/null 2>&1; then
-	  error "Error: failed to overwrite existing service account."
-	  error "       Your account may not have permissions to do this."
-	  error "       Please contact your administrator."
+	if ! bash "${SCRIPT_DIR}/script/service_account.sh" delete \
+	     "${project}" "${service_account}"; then
+	  echo "Exiting."  
 	  exit 1
-	fi	  
-	set -e
+	fi
 	create=1
 	getcred=1
 	;;
       *)
 	verbose "assuming re-use of account"
-	echo "         Using existing service account: ${service_account}"
-	case $(ask "         Do you want to regenerate the credential? [y/N]: ") in
+	echo ""
+	echo "    Using existing service account: ${service_account}"
+	case $(ask "    Do you want to regenerate a credential? [y/N] ") in
 	  [Yy]*)
 	    getcred=1
 	    ;;
 	  *)
-	    echo "         Please register existing credential with FrontEnd once it is running."
+	    echo "    Please register existing credential with FrontEnd once it is running."
 	    ;;
 	esac
 	;;
@@ -433,46 +415,27 @@ create_service_account() {
   fi
   
   if [[ ${create} -ne 0 ]]; then
-    verbose "creating service account: ${sa_fullname}"
-
-    echo "      This may take a few seconds..."
-    # Create the service account
-    # - may fail if user doesn'thave permissions
-    #
-    set +e
-    if ! gcloud iam service-accounts create "${service_account}" \
-	   --description="TKFE service account" --project="${project}"; then
-      error "Error: failed to create service account."
-      error "       Your account may not have permissions to do this."
-      error "       Please contact your administrator."
+    verbose "creating service account: ${account}"
+    echo "    This may take a few seconds..."
+    if ! bash "${SCRIPT_DIR}/script/service_account.sh" create \
+	 "${project}" "${service_account}"; then
+      echo "Exiting."  
       exit 1
-    fi
-    set -e
-    
-    # Add all required roles to new service account
-    # - can assume we can do this if account creation above worke
-    #
-    local role
-    for role in ${SA_ROLES[*]}; do
-      verbose "adding role: ${role}"
-      gcloud projects add-iam-policy-binding "${project}" \
-	     --member="serviceAccount:${sa_fullname}" \
-	     --role="roles/${role}" > /dev/null 2>&1
-    done
+    fi  
   fi
-
+  
   if [[ ${getcred} -ne 0 ]]; then
     verbose "creating credential file: ${credfile}"
-	
-    # Create credential for new service account and put into file
-    #
-    gcloud iam service-accounts keys create "${credfile}" \
-	   --iam-account="${sa_fullname}"
-    echo "  Credential written to:"
+    if ! bash "${SCRIPT_DIR}/script/service_account.sh" credential \
+	 "${project}" "${service_account}" "${credfile}"; then
+      echo "Exiting."  
+      exit 1
+    fi
+    echo "    Credential written to:"
     echo "      ${credfile}"
     echo ""
-    echo "  You will need to register the contents of this file as a credential to the"
-    echo "  FrontEnd once it is running."
+    echo "    You will need to register the contents of this file as a credential to the"
+    echo "    FrontEnd once it is running."
   fi
 }
 
@@ -528,10 +491,10 @@ extra_labels = {
     creator = "${USER}"
 }
 TFVARS
-    if [ -n "${dns_hostname}" ]; then
+    if [[ ${dns_hostname} ]]; then
       echo "webserver_hostname = \"${dns_hostname}\"" >>terraform.tfvars
     fi
-    if [ -n "${ip_address}" ]; then
+    if [[ ${ip_address} ]]; then
       echo "static_ip = \"${ip_address}\"" >>terraform.tfvars
     fi
     
@@ -558,7 +521,7 @@ TFVARS
     # TODO - upload terraform files to the FE server, so that they can be recovered if ever
     #        needed
     
-    case $(ask "  Proceed to deploy? [y/N]: ") in
+    case $(ask "    Proceed to deploy? [y/N] ") in
       [Yy]*) ;;
       *)
 	echo "Exiting."
@@ -575,6 +538,7 @@ TFVARS
     terraform init
     terraform apply -auto-approve | tee tfapply.log
     if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+	error ""
 	error "Error:  Terraform failed."
 	error "        Please check parameters and/or seek assistance."
 	error ""
@@ -588,7 +552,7 @@ TFVARS
     echo "  Started at: $(date)"
     echo "  Initialization should take about 15 minutes."
     echo "  After that time, please point your web browser to the above server_ip."
-    if [ -n "${dns_hostname}" ]; then
+    if [[ ${dns_hostname} ]]; then
       echo "  Also update your DNS record to point '${dns_hostname}' to that IP."
     fi
 
@@ -607,8 +571,8 @@ TFVARS
 
     # -- Set FE lock file, to ensure only one deployment is performed.
     #
+    setlock
   )
-  setlock
 }
 
 
@@ -635,14 +599,14 @@ LINE
 	
   # -- Check for terraform and gsutil
   #
-  if ! command -v terraform &>/dev/null; then
+  if ! command -v terraform &> /dev/null; then
     error "Error:"
-    error "   Please ensure terraform (version 0.13 or higher) is in your \$PATH"
+    error "    Please ensure terraform (version 0.13 or higher) is in your \$PATH"
     exit 1
   fi
-  if ! command -v gsutil &>/dev/null; then
+  if ! command -v gsutil &> /dev/null; then
     error "Error:"
-    error "   Please ensure gsutil (part of Google Cloud Tools)  is in your \$PATH"
+    error "    Please ensure gsutil (part of Google Cloud Tools)  is in your \$PATH"
     exit 1
   fi
     
@@ -650,12 +614,12 @@ LINE
 
 * GCP deployment name, project and location
 
-    The webserver will need a name within GCP and will be run within a specified
+    The webserver will need a name and will be run within a specified
     project and zone.  The project must have authorization and quota to use
     resources in the zone.
     
-    The deployment name must contain only lowercase letters and numbers (no
-    spaces)
+    The deployment name must contain only lowercase letters and numbers
+    (no spaces)
 
 FUNDAMENTALS
     
@@ -686,7 +650,7 @@ FUNDAMENTALS
       # Check project_id is valid.
       # Toggle error exit so check works.
       set +e
-      if ! gcloud projects describe "${project_id}" >/dev/null 2>&1; then
+      if ! gcloud projects describe "${project_id}" &> /dev/null; then
 	echo "    Error: Invalid project ID"
 	echo "           Please check you are using the project ID and not the project name"
 	echo "           and that you have access to the project"
@@ -699,6 +663,7 @@ FUNDAMENTALS
   
   # -- Check/set project APIs are all good
   #
+  #echo "    (... checking project and account...)"
   verbose "checking APIs..."
   check_apis "${project_id}"
 
@@ -744,13 +709,15 @@ DNSHOST
     If not specified, an ephemeral public IP address will be created.
     You can create and get a static IP address with the commands:
 
-    $ gcloud compute addresses create <NAME> --project ${project_id} \\
+    $ gcloud compute addresses create <NAME> \\
+           --project ${project_id} \\
            --region=${region}
-    $ gcloud compute addresses describe <NAME> --project ${project_id} \\
+    $ gcloud compute addresses describe <NAME> \\
+           --project ${project_id} \\
            --region=${region} | grep 'address:'
 
     If you have set a DNS hostname above, it is recommended that you use a
-    static IP address and set the DNS record for the hostname to point at this.
+    static IP address and set the DNS record for the hostname to point at it.
    
 IPADDRESS
   ip_address=$(ask "    Static IP address (or just press Enter)")
@@ -797,8 +764,9 @@ ADMIN
     via the GCP Console or gcloud CLI.  Multiple credentials can then be
     registered to the FrontEnd for different projects, allowing the
     FrontEnd to deploy resources against these, and/or manage access at a
-    finer level.  Existing service accounts with the necessary roles/permissions
-    can also be used.  Please see Administrator's Guide for more details.
+    finer level.  Existing service accounts with the necessary
+    roles/permissions can also be used.  Please see Administrator's Guide for
+    more details.
 
     The single service account and credential is sufficient for most use cases.
 
