@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: slurm-gcp-v5-cluster
+blueprint_name: slurm-gcp-v5-centos7
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
