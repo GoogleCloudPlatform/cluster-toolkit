@@ -93,7 +93,7 @@ After you have inspected the file, use the ghpc binary to create a deployment
 folder by running:
 
 ```bash
-./ghpc create community/examples/workshops/spack-gromacs.yaml --vars project_id=<walkthrough-project-id/>
+./ghpc create docs/tutorials/gromacs/spack-gromacs.yaml --vars project_id=<walkthrough-project-id/>
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
