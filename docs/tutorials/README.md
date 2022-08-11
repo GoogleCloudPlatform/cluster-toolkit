@@ -46,6 +46,11 @@ Click the button below to launch the HTCondor tutorial.
 The following three tutorials deploy a cluster, install an hpc application
 (Growmacs, Openfoam, or WRF), and walk through submitting a real workload.
 
+By default these tutorials build the applications from source, which takes
+several hours on deployment. If a complete Spack cache is provided using the
+`spack_cache_mirror_url` variable, application installation can be reduced to 6
+minutes.
+
 ### Gromacs
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=develop&cloudshell_open_in_editor=docs%2Ftutorials%2Fgromacs%2Fspack-gromacs.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fgromacs%2Fspack-gromacs.md)

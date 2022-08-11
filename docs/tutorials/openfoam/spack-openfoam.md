@@ -13,6 +13,13 @@ In this tutorial you will use the HPC Toolkit to:
   cluster
 * Tear down the cluster
 
+Estimated time to complete:  
+The tutorial takes 3 hr. to complete,  
+of which 2.5 hr is for installing software  
+(without cache).  
+
+> **_NOTE:_** With a complete Spack cache, the tutorial takes 30 min.
+
 ## Select a Project
 
 Select a project in which to deploy an HPC cluster on Google.
@@ -135,7 +142,8 @@ Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 
 Although the cluster has been successfully deployed, the startup scripts that
 install Spack and OpenFOAM take additional time to complete. When run without a
-Spack cache, this installation takes about 2.5 hrs.
+Spack cache, this installation takes about 2.5 hrs (or 6 min with complete
+cache).
 
 The following command will print logging from the startup script running on the
 controller. This command can be used to view progress and check for completion

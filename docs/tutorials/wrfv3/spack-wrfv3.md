@@ -13,6 +13,13 @@ In this tutorial you will use the HPC Toolkit to:
   cluster
 * Tear down the cluster
 
+Estimated time to complete:  
+The tutorial takes 2 hr. to complete,  
+of which 1.5 hr is for installing software  
+(without cache).  
+
+> **_NOTE:_** With a complete Spack cache, the tutorial takes 30 min.
+
 ## Select a Project
 
 Select a project in which to deploy an HPC cluster on Google.
@@ -134,8 +141,9 @@ Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 ## Waiting for the cluster to be configured
 
 Although the cluster has been successfully deployed, the startup scripts that
-install Spack and Weather Research and Forecasting (WRF) Model take additional time to complete. When run without a
-Spack cache, this installation takes about 1.5 hrs.
+install Spack and Weather Research and Forecasting (WRF) Model take additional
+time to complete. When run without a Spack cache, this installation takes about
+1.5 hrs (or 6 min with complete cache).
 
 The following command will print logging from the startup script running on the
 controller. This command can be used to view progress and check for completion
