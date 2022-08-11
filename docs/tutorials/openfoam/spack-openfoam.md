@@ -134,8 +134,8 @@ Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 ## Waiting for the cluster to be configured
 
 Although the cluster has been successfully deployed, the startup scripts that
-install Spack and OpenFOAM take additional time to complete. Typically, this
-takes around 6 minutes.
+install Spack and OpenFOAM take additional time to complete. When run without a
+Spack cache, this installation takes about 2.5 hrs.
 
 The following command will print logging from the startup script running on the
 controller. This command can be used to view progress and check for completion

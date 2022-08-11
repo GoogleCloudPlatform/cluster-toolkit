@@ -21,7 +21,7 @@ vars:
   deployment_name: spack-gromacs
   region: us-central1
   zone: us-central1-c
-  spack_cache_mirror_url: ## Set Spack Buildcache URL here ##
+  spack_cache_mirror_url: gs://optionally_set_spack_cache_bucket
 
 deployment_groups:
 - group: primary
