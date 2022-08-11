@@ -28,7 +28,7 @@
   - name: install HTCondor
     ansible.builtin.yum:
       name: condor
-      state: latest
+      state: present
   - name: ensure token directory
     ansible.builtin.file:
       path: /etc/condor/tokens.d

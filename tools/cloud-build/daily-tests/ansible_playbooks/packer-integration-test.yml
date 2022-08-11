@@ -29,6 +29,7 @@
       ROOT_DIR: "{{ workspace }}"
       BLUEPRINT_DIR: "{{ blueprint_dir }}"
       DEPLOYMENT_NAME: "{{ deployment_name }}"
+      NETWORK: "{{ network }}"
     args:
       creates: "{{ workspace }}/{{ deployment_name }}.tgz"
   - name: Create Infrastructure and test
@@ -46,14 +47,20 @@
       - terraform validate
       - terraform apply -auto-approve -no-color
     - name: Create VM image with Packer
-      command:
-        cmd: "{{ item }}"
+      register: image_created
+      changed_when: image_created.rc == 0
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        packer init .
+        packer validate .
+        packer build .
+      args:
         chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
-      with_items:
-      - packer init .
-      - packer validate .
-      - packer build .
+        executable: /bin/bash
     - name: Delete VM Image
+      register: image_deleted
+      changed_when: image_deleted.rc == 0
+      when: image_created.rc == 0
       ansible.builtin.shell: |
         gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
       args:
@@ -61,6 +68,7 @@
     ## Always cleanup network
     always:
     - name: Tear Down Network
+      changed_when: true # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:

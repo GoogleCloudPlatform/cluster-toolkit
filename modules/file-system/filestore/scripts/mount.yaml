@@ -23,17 +23,17 @@
   tasks:
   - name: Read metadata network_storage information
     uri:
-      url: "{{url}}/{{meta_key}}"
+      url: "{{ url }}/{{ meta_key }}"
       method: GET
       headers:
         Metadata-Flavor: "Google"
     register: storage
   - name: Mount file systems
     mount:
-      src: "{{item.server_ip}}:/{{item.remote_mount}}"
-      path: "{{item.local_mount}}"
-      opts: "{{item.mount_options}}"
+      src: "{{ item.server_ip }}:/{{ item.remote_mount }}"
+      path: "{{ item.local_mount }}"
+      opts: "{{ item.mount_options }}"
       boot: true
-      fstype: "{{item.fs_type}}"
+      fstype: "{{ item.fs_type }}"
       state: "mounted"
-    loop: "{{storage.json}}"
+    loop: "{{ storage.json }}"

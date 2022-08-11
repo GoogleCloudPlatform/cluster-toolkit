@@ -10,9 +10,30 @@ For more information, please refer to the [Google Cloud DAOS repo on GitHub](htt
 
 Working examples of a DAOS deployment and how it can be used in conjunction with Slurm [can be found in the community examples folder](../../../examples/intel/).
 
-Using the DAOS server module implies that one has DAOS server images created as [instructed in the images section here](https://github.com/daos-stack/google-cloud-daos/tree/main/images).
+A full list of server module parameters can be found at [the DAOS Server module README](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server).
 
-A full list of module parameters can be found at [the DAOS Server module README](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server).
+### DAOS Server Images
+
+In order to use the DAOS server terraform module a DAOS server image must be created as instructed in the *images* directory [here](https://github.com/daos-stack/google-cloud-daos/tree/main/images).
+
+DAOS server images must be built from the same tagged version of the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repository that is specified in the `source:` attribute for modules used in the [community examples](../../../examples/intel/).
+
+For example, in the following snippet taken from the [community/example/intel/daos-cluster.yml](../../../examples/intel/daos-cluster.yaml) the `source:` attribute specifies v0.2.1 of the  daos_server terraform module
+
+```yaml
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
+    kind: terraform
+    id: daos-server
+    use: [network1]
+    settings:
+      number_of_instances: 2
+      labels: {ghpc_role: file-system}
+```
+
+In order to use the daos_server module v0.2.1 , you need to
+
+1. Clone the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repo and check out v0.2.1
+2. Follow the instructions in the images/README.md directory to build a DAOS server image
 
 ## Recommended settings
 
@@ -21,7 +42,7 @@ By default, the DAOS system is created with 4 servers will be configured for bes
 The following settings will configure this [system for TCO](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/examples/daos_cluster#the-terraformtfvarstcoexample-file) (default):
 
 ```yaml
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.0
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
     kind: terraform
     id: daos-server
     use: [network1]
@@ -37,7 +58,7 @@ The following settings will configure this [system for TCO](https://github.com/d
 The following settings will configure this system for [best performance](https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#the-terraformtfvarsperfexample-file):
 
 ```yaml
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.0
+  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
     kind: terraform
     id: daos-server
     use: [network1]
@@ -75,3 +96,5 @@ Intel Corporation provides several ways for the users to get technical support:
 2. Commercial L3 support is available on an on-demand basis. Please get in touch with Intel Corporation to obtain more information.
 
    - You may inquire about the L3 support via the Slack channel (https://daos-stack.slack.com/archives/C03GLTLHA59)
+
+[here](https://github.com/daos-stack/google-cloud-daos/tree/main/images)

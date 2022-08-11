@@ -22,7 +22,7 @@ locals {
 }
 
 module "slurm_login_template" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.0.2"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.0.3"
 
   additional_disks         = var.additional_disks
   can_ip_forward           = var.can_ip_forward
@@ -58,7 +58,7 @@ module "slurm_login_template" {
 }
 
 module "slurm_login_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=v5.0.2"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=v5.0.3"
 
   access_config         = var.access_config
   slurm_cluster_name    = var.slurm_cluster_name

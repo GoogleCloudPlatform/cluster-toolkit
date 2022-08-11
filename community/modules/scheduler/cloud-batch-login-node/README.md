@@ -109,6 +109,7 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_batch_job_directory"></a> [batch\_job\_directory](#input\_batch\_job\_directory) | The path of the directory on the login node in which to place the Google Cloud Batch job template | `string` | `"/home/batch-jobs"` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, also used for the job\_id | `string` | n/a | yes |
+| <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
 | <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions. Valid inputs are `"alpha"`, `"beta"` and "" (empty string for default version). Typically supplied by a cloud-batch-job module. | `string` | `"alpha"` | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Login VM instance template self-link. Typically supplied by a cloud-batch-job module. | `string` | n/a | yes |
 | <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file. Typically supplied by a cloud-batch-job module. | `string` | n/a | yes |

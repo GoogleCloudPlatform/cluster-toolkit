@@ -513,7 +513,7 @@
                     "crossSeriesReducer": "REDUCE_NONE",
                     "perSeriesAligner": "ALIGN_MEAN"
                   },
-                  "filter": "metric.type=\"agent.googleapis.com/network/tcp_connections\""
+                  "filter": "metric.type=\"agent.googleapis.com/network/tcp_connections\" metadata.user_labels.\"ghpc_deployment\"=\"${deployment_name}\""
                 },
                 "unitOverride": "1"
               }

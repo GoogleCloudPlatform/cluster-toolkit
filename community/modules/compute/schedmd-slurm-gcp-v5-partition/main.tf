@@ -64,7 +64,7 @@ locals {
 
 
 module "slurm_partition" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.2"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.3"
 
   slurm_cluster_name      = var.slurm_cluster_name
   partition_nodes         = local.partition_nodes
@@ -74,6 +74,8 @@ module "slurm_partition" {
   partition_name          = var.partition_name
   project_id              = var.project_id
   region                  = var.region
+  zone_policy_allow       = var.zone_policy_allow
+  zone_policy_deny        = var.zone_policy_deny
   subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   partition_conf          = local.partition_conf
 }

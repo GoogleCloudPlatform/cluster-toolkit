@@ -56,15 +56,18 @@
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
     - name: Gather instance information
+      changed_when: false
       delegate_to: localhost
       register: instances_list
       command: >-
         gcloud compute instances list
         --filter="labels.ghpc_deployment={{ deployment_name }}"
         --format='table(name,zone,id,status)'
-    - debug:
+    - name: Print instance information
+      ansible.builtin.debug:
         var: instances_list.stdout_lines
     - name: Get remote IP
+      changed_when: false
       register: remote_ip
       command: >-
         gcloud compute instances describe --zone={{ zone }} {{ remote_node }}
@@ -72,11 +75,14 @@
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
+      changed_when: false
       shell: >-
         dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
          awk -F'"' '{print $2}'
       register: build_ip
     - name: Create firewall rule
+      register: fw_result
+      changed_when: fw_result.rc == 0
       command:
         argv:
         - gcloud
@@ -92,6 +98,8 @@
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
     - name: 'Add SSH Keys to OS-Login'
+      register: key_result
+      changed_when: key_result.rc == 0
       command:
         argv:
         - gcloud
@@ -112,6 +120,9 @@
     ## Cleanup and fail gracefully
     rescue:
     - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false
       command:
         argv:
         - gcloud
@@ -119,9 +130,9 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-      ignore_errors: true
     - name: Tear Down Cluster
       run_once: true
+      changed_when: true # assume something got destroyed
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
@@ -150,8 +161,7 @@
       vars:
         remote_node: "{{ remote_node }}"
         deployment_name: "{{ deployment_name }}"
-        mounts: "{{ mounts }}"
-        partitions: "{{ partitions }}"
+        custom_vars: "{{ custom_vars }}"
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
@@ -159,6 +169,9 @@
     ## Always cleanup, even on failure
     always:
     - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false
       run_once: true
       delegate_to: localhost
       command:
@@ -168,9 +181,9 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-      ignore_errors: true
     - name: Tear Down Cluster
       run_once: true
+      changed_when: true # assume something got destroyed
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"

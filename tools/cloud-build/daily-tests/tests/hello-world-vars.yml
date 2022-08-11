@@ -11,17 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# The hello world integration test exists to demonstrate the test interaction between test files
 ---
-deployment_name: cloud-batch-{{ build }}
-zone: us-central1-c
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/cloud-batch.yaml"
-blueprint_dir: deployment-cloud-batch
-network: "default"
-remote_node: "{{ deployment_name }}-batch-login"
-post_deploy_tests:
-- test-batch-submission.yml
-- test-mounts.yml
+top_level_var: "top level var"
+post_deploy_tests: [test-hello-world.yml]
 custom_vars:
-  project: "{{ project }}"
-  mounts: [/sw]
+  foo: "foo var"
+  bar: "bar var"

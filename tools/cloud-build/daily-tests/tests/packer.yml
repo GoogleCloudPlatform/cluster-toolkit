@@ -19,3 +19,4 @@ zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/image-builder.yaml"
 blueprint_dir: image-builder
+network: "{{ deployment_name }}-net"

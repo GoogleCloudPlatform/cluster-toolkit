@@ -16,10 +16,10 @@
 # Test Packer image building and monitoring dashboard in parallel
 # ├── build_ghpc
 # └── fetch_builder
-#    └── packer      (group 3)
 #    └── monitoring  (group 3)
 #        └── omnia
 #            └── lustre-new-vpc
+#                └── packer
 
 
 timeout: 14400s  # 4hr
@@ -110,8 +110,7 @@ steps:
 # image in it
 - id: packer
   waitFor:
-  - fetch_builder
-  - build_ghpc
+  - lustre-new-vpc
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash

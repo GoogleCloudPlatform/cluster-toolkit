@@ -26,7 +26,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=v5.0.2"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=v5.0.3"
 
   access_config                = var.access_config
   slurm_cluster_name           = var.slurm_cluster_name
@@ -48,6 +48,7 @@ module "slurm_controller_instance" {
   enable_cleanup_subscriptions = var.enable_cleanup_subscriptions
   enable_bigquery_load         = var.enable_bigquery_load
   epilog_scripts               = var.epilog_scripts
+  disable_default_mounts       = var.disable_default_mounts
   login_network_storage        = var.network_storage
   network_storage              = var.network_storage
   partitions                   = var.partition
@@ -57,7 +58,7 @@ module "slurm_controller_instance" {
 }
 
 module "slurm_controller_template" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.0.2"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.0.3"
 
   additional_disks         = var.additional_disks
   can_ip_forward           = var.can_ip_forward

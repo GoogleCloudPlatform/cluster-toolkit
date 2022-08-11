@@ -11,17 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 ---
-deployment_name: cloud-batch-{{ build }}
-zone: us-central1-c
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/cloud-batch.yaml"
-blueprint_dir: deployment-cloud-batch
-network: "default"
-remote_node: "{{ deployment_name }}-batch-login"
-post_deploy_tests:
-- test-batch-submission.yml
-- test-mounts.yml
-custom_vars:
-  project: "{{ project }}"
-  mounts: [/sw]
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - custom_vars.mounts is defined
+
+- name: Get mount info
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: stat_mounts
+  loop: "{{ custom_vars.mounts }}"
+- name: Check if mount exists
+  ansible.builtin.fail:
+    msg: "{{ item.item }} not mounted"
+  when: not item.stat.exists
+  loop: "{{ stat_mounts.results }}"

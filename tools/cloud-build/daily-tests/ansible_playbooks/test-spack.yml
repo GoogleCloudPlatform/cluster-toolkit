@@ -11,17 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 ---
-deployment_name: cloud-batch-{{ build }}
-zone: us-central1-c
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/cloud-batch.yaml"
-blueprint_dir: deployment-cloud-batch
-network: "default"
-remote_node: "{{ deployment_name }}-batch-login"
-post_deploy_tests:
-- test-batch-submission.yml
-- test-mounts.yml
-custom_vars:
-  project: "{{ project }}"
-  mounts: [/sw]
+
+- name: Include wait for startup script
+  ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
+  vars:
+    vm_name: "{{ login_node }}"
+    timeout_seconds: 7200
+- name: Ensure spack is installed
+  command: spack --version
+  changed_when: False
+- name: Test gromacs is available on compute nodes
+  shell: |
+    spack load gromacs
+    srun -N 1 gmx_mpi -version
+    sleep 120
+  register: srun_gromacs
+  changed_when: srun_gromacs.rc == 0

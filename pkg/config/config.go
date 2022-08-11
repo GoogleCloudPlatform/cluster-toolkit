@@ -396,6 +396,10 @@ func checkUsedModuleNames(
 
 // validateConfig runs a set of simple early checks on the imported input YAML
 func (dc *DeploymentConfig) validateConfig() {
+	_, err := dc.Config.DeploymentName()
+	if err != nil {
+		log.Fatal(err)
+	}
 	moduleToGroup, err := checkModuleAndGroupNames(dc.Config.DeploymentGroups)
 	if err != nil {
 		log.Fatal(err)
@@ -519,8 +523,8 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 // global variables, then they are replaced by the cty.Value of the
 // corresponding entry in the origin. All other cty.Values are unmodified.
 // ERROR: if (somehow) the cty.String cannot be converted to a Go string
-// ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global variable
-//        being resolved does not exist in b.Vars
+// ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global
+// variable being resolved does not exist in b.Vars
 func ResolveVariables(
 	ctyMap map[string]cty.Value,
 	origin map[string]cty.Value,

@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+# Most variables have been sourced and modified from the SchedMD/slurm-gcp
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3
+
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
   type = list(object({
@@ -93,6 +96,21 @@ variable "cgroup_conf_tpl" {
   type        = string
   description = "Slurm cgroup.conf template file path."
   default     = null
+}
+
+variable "disable_default_mounts" {
+  description = <<-EOD
+    Disable default global network storage from the controller
+    * /usr/local/etc/slurm
+    * /etc/munge
+    * /home
+    * /apps
+    Warning: If these are disabled, the slurm etc and munge dirs must be added
+    manually, or some other mechanism must be used to synchronize the slurm conf
+    files and the munge key across the cluster.
+    EOD
+  type        = bool
+  default     = false
 }
 
 variable "disable_smt" {
