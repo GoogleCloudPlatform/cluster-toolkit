@@ -43,6 +43,7 @@ deployment_groups:
     use: [network1]
     settings:
       image: debian-cloud/debian-10
+      auto_delete_disk: true
 
   - source: ./community//modules/scripts/spack-install
     kind: terraform

@@ -41,6 +41,8 @@ deployment_groups:
     kind: terraform
     id: nfs
     use: [network1]
+    settings:
+      auto_delete_disk: true
 
   - source: ./community//modules/scripts/spack-install
     kind: terraform

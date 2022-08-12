@@ -43,7 +43,7 @@ deployment_groups:
     use: [network1]
     settings:
       image: centos-cloud/centos-stream-8
-      #image: rocky-linux-cloud/rocky-linux-8
+      auto_delete_disk: true
 
   - source: ./community//modules/scripts/spack-install
     kind: terraform

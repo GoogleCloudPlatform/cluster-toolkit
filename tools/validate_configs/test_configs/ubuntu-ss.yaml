@@ -18,7 +18,7 @@ blueprint_name: rocky-ss-test
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: rocky-ss-test
+  deployment_name: ubuntu-ss-test
   region: us-central1
   zone: us-central1-a
 
@@ -43,6 +43,7 @@ deployment_groups:
     use: [network1]
     settings:
       image: ubuntu-os-cloud/ubuntu-1804-lts
+      auto_delete_disk: true
 
   - source: ./community//modules/scripts/spack-install
     kind: terraform

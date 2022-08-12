@@ -18,7 +18,7 @@ blueprint_name: rocky-linux
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: rocky-linux
+  deployment_name: rocky-ss-test
   region: us-central1
   zone: us-central1-a
 
@@ -43,6 +43,7 @@ deployment_groups:
     use: [network1]
     settings:
       image: rocky-linux-cloud/rocky-linux-8
+      auto_delete_disk: true
 
   - source: ./community//modules/scripts/spack-install
     kind: terraform
