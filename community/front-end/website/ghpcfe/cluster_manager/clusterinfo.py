@@ -151,7 +151,7 @@ class ClusterInfo:
             )
             yaml.append(
                 f"""
-  - source: resources/file-system/pre-existing-network-storage
+  - source: modules/file-system/pre-existing-network-storage
     kind: terraform
     id: {storage_id}
     settings:
@@ -174,7 +174,7 @@ class ClusterInfo:
             part_id = f"partition_{count}"
             yaml.append(
                 f"""
-  - source: resources/third-party/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
     id: {part_id}
     settings:
@@ -264,10 +264,10 @@ vars:
   labels:
     created_by: {SITE_NAME}
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: resources/network/pre-existing-vpc
+  modules:
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     settings:
       network_name: {self.cluster.subnet.vpc.cloud_id}
@@ -276,7 +276,7 @@ resource_groups:
 
 {filesystems_yaml}
 
-  - source: resources/project/service-account
+  - source: community/modules/project/service-account
     kind: terraform
     id: hpc_service_account
     settings:
@@ -293,7 +293,7 @@ resource_groups:
 
 {partitions_yaml}
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
     id: slurm_controller
     settings:
@@ -318,7 +318,7 @@ resource_groups:
     use:
 {controller_uses}
 
-  - source: resources/third-party/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
     id: slurm_login
     settings:

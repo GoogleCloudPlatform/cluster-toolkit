@@ -48,10 +48,10 @@ vars:
   labels:
     created_by: {SITE_NAME}
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: resources/file-system/filestore
+  modules:
+  - source: modules/file-system/filestore
     kind: terraform
     id: {fs.name}
     settings:
