@@ -631,6 +631,11 @@ FUNDAMENTALS
     if [ -z "${deployment_name}" ]; then
       echo "    Error: This cannot be left blank"
     fi
+    echo 
+    if [[ "${deployment_name}" =~ [A-Z] ]]; then
+      echo "    Error: Name cannot contain uppercase letters"
+      deployment_name=""
+    fi
   done
   
   # -- GCP project to deploy into
