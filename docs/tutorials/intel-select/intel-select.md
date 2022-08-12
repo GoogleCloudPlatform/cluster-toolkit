@@ -3,7 +3,9 @@
 HPC Toolkit is an open-source software offered by Google Cloud which makes it
 easy for customers to deploy HPC environments on Google Cloud.
 
-This tutorial will walk you through deploying an HPC cluster that is based on the [HPC virtual machine (VM) image](https://cloud.google.com/compute/docs/instances/create-hpc-vm) and comply to the [Intel Select Solution for Simulation and Modeling criteria](https://www.intel.com/content/www/us/en/products/solutions/select-solutions/hpc/simulation-modeling.html).
+This tutorial will walk you through deploying an HPC cluster that is based on
+the [HPC virtual machine (VM) image](https://cloud.google.com/compute/docs/instances/create-hpc-vm)
+and comply to the [Intel Select Solution for Simulation and Modeling criteria](https://www.intel.com/content/www/us/en/products/solutions/select-solutions/hpc/simulation-modeling.html).
 
 [Click here for more information](https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters).
 
@@ -64,7 +66,7 @@ build run:
 
 This should show you the version of the HPC Toolkit you are using.
 
-## Generate a Blueprint
+## Generate a Deployment
 
 This tutorial will use the blueprint docs/tutorials/intel-select/hpc-cluster-intel-select.yaml, which should be open in the Cloud Shell Editor (on the left).
 
@@ -81,16 +83,16 @@ This file describes the cluster you will deploy. It contains:
 
 Do you notice the difference between this blueprint and the hpc-cluster-small example?
 
-After you have inspected the file, use the ghpc binary to create a blueprint by running:
+After you have inspected the file, use the ghpc binary to create a deployment folder by running:
 
 ```bash
 ./ghpc create --vars project_id=<walkthrough-project-id/> docs/tutorials/intel-select/hpc-cluster-intel-select.yaml
 ```
 
-> **_NOTE:_** The `--vars` argument is used to override `project_id` in the YAML
-> configuration variables.
+> **_NOTE:_** The `--vars` argument is used to override `project_id` in the
+> deployment variables.
 
-This will create a blueprint directory named `hpc-cluster-intel-select/`, which
+This will create a deployment directory named `hpc-intel-select/`, which
 contains the terraform needed to deploy your cluster.
 
 ## Deploy the Cluster
@@ -98,8 +100,8 @@ contains the terraform needed to deploy your cluster.
 Use the following commands to run terraform and deploy your cluster.
 
 ```bash
-terraform -chdir=hpc-cluster-intel-select/primary init
-terraform -chdir=hpc-cluster-intel-select/primary apply
+terraform -chdir=hpc-intel-select/primary init
+terraform -chdir=hpc-intel-select/primary apply
 ```
 
 The `terraform apply` command will generate a _plan_ that describes the Google
@@ -123,13 +125,14 @@ Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 
 ## Waiting for the cluster to be configured
 
-Although the blueprint has been successfully deployed, the startup scripts that
-install the additional required software take time to complete. Typically, this can be
-around 8 minutes on the controller and 2-3 minutes on the login and compute
-nodes.
+Although the cluster has been successfully deployed, the startup scripts that
+install the additional required software take time to complete. Typically, this
+can be around 8 minutes on the controller and 2-3 minutes on the login and
+compute nodes.
 
-If you see the following message when you SSH into the login node following the instructions in the next step, you should
-logout and give more time for the startup script to complete.
+If you see the following message when you SSH into the login node following the
+instructions in the next step, you should logout and give more time for the
+startup script to complete.
 
 > _`Slurm is currently being configured in the background`_
 
@@ -226,7 +229,7 @@ To avoid incurring ongoing charges we will want to destroy our cluster. Run the
 following command in the cloud shell terminal (not in the pop-up):
 
 ```bash
-terraform -chdir=hpc-cluster-intel-select/primary destroy -auto-approve
+terraform -chdir=hpc-intel-select/primary destroy -auto-approve
 ```
 
 When complete you should see something like:

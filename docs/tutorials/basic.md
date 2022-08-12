@@ -8,7 +8,7 @@ Cloud using the HPC Toolkit.
 
 ## Select a Project
 
-Select a project in which to deploy an HPC cluster on Google .
+Select a project in which to deploy an HPC cluster on Google.
 
 <walkthrough-project-setup billing="true"></walkthrough-project-setup>
 
@@ -61,13 +61,22 @@ build run:
 
 This should show you the version of the HPC Toolkit you are using.
 
-## Generate a Blueprint
+(Optional) To install the `ghpc` binary in your home directory under bin,
+run the following command:
 
-To create a blueprint, an input YAML file needs to be written or adapted from
-one of the examples found in the `examples/` directory.
+```bash
+make install
+exec $SHELL -l
+```
+
+## Generate a Deployment
+
+To create a deployment, an input blueprint file needs to be written or adapted
+from one of the examples found in the `examples/` or `community/examples`
+directories.
 
 This tutorial will use examples/hpc-cluster-small.yaml, which is a good starting
-point and creates a blueprint containing:
+point and creates a deployment containing:
 
 * a new network
 * a filestore instance
@@ -79,16 +88,18 @@ The blueprint examples/hpc-cluster-small.yaml should be open in the Cloud Shell
 Editor (on the left).
 
 This file describes the cluster you will deploy. After you have inspected the
-file, use the ghpc binary to create a blueprint by running:
+file, use the ghpc binary to create a deployment directory by running:
 
 ```bash
 ./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=<walkthrough-project-id/>"
 ```
 
-> **_NOTE:_** The `--vars` argument is used to override `project_id` in the YAML
-> configuration variables.
+> **_NOTE:_** The `--vars` argument is used to override `project_id` in the
+> blueprint variables. The `--vars` argument supports comma-separated list of
+> name=value variables to override blueprint variables. This feature only
+> supports variables of string type.
 
-This will create a blueprint directory named `hpc-cluster-small/`, which
+This will create a deployment directory named `hpc-small/`, which
 contains the terraform needed to deploy your cluster.
 
 ## Deploy the Cluster
@@ -96,8 +107,8 @@ contains the terraform needed to deploy your cluster.
 Use the following commands to run terraform and deploy your cluster.
 
 ```bash
-terraform -chdir=hpc-cluster-small/primary init
-terraform -chdir=hpc-cluster-small/primary apply
+terraform -chdir=hpc-small/primary init
+terraform -chdir=hpc-small/primary apply
 ```
 
 The `terraform apply` command will generate a _plan_ that describes the Google
@@ -119,9 +130,20 @@ displayed:
 Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 ```
 
+> **_NOTE:_** This example does not contain any Packer-based modules but for
+> completeness, you can use the following command to deploy a Packer-based
+> deployment group:
+>
+> ```shell
+> cd <deployment-directory>/<packer-group>/<custom-vm-image>
+> packer init .
+> packer validate .
+> packer build .
+> ```
+
 ## Run a Job on the Cluster
 
-Once the blueprint has successfully been deployed, take the following steps to
+Once the cluster has successfully been deployed, take the following steps to
 run a job:
 
 1. Open the following URL in a new tab. This will take you to `Compute Engine` >
@@ -165,6 +187,10 @@ $ srun -N 3 hostname
     slurm-hpc-small-compute-0-1
     slurm-hpc-small-compute-0-2
 ```
+
+By default, this runs the job on the `debug` partition. See details in
+[examples/](examples/README.md#compute-partition) for how to run on the more
+performant `compute` partition.
 
 Running the same job again will run much faster as Slurm will reuse the nodes.
 

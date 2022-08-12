@@ -1,4 +1,4 @@
-// Copyright 2021 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,13 +24,15 @@ import (
 )
 
 func init() {
-	expandCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
-		"Configuration file for the new blueprints")
+	expandCmd.Flags().StringVarP(&bpFilename, "config", "c", "",
+		"HPC Environment Blueprint file to be expanded.")
 	cobra.CheckErr(expandCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
+
 	expandCmd.Flags().StringVarP(&outputFilename, "out", "o", "expanded.yaml",
-		"Output file for the expanded yaml.")
+		"Output file for the expanded HPC Environment Definition.")
 	expandCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
+	expandCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
 	expandCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
 	rootCmd.AddCommand(expandCmd)
@@ -39,32 +41,39 @@ func init() {
 var (
 	outputFilename string
 	expandCmd      = &cobra.Command{
-		Use:   "expand",
-		Short: "Expand the YAML Config.",
-		Long:  "Updates the YAML Config in the same way as create, but without writing the blueprint.",
+		Use:   "expand BLUEPRINT_NAME",
+		Short: "Expand the Environment Blueprint.",
+		Long:  "Updates the Environment Blueprint in the same way as create, but without writing the deployment.",
 		Run:   runExpandCmd,
+		Args:  cobra.ExactArgs(1),
 	}
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	if yamlFilename == "" {
+	if bpFilename == "" {
 		if len(args) == 0 {
 			fmt.Println(cmd.UsageString())
 			return
 		}
 
-		yamlFilename = args[0]
+		bpFilename = args[0]
 	}
 
-	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
-	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
-		log.Fatalf("Failed to set the variables at CLI: %v", err)
-	}
-	if err := blueprintConfig.SetValidationLevel(validationLevel); err != nil {
+	deploymentConfig, err := config.NewDeploymentConfig(bpFilename)
+	if err != nil {
 		log.Fatal(err)
 	}
-	blueprintConfig.ExpandConfig()
-	blueprintConfig.ExportYamlConfig(outputFilename)
+	if err := deploymentConfig.SetCLIVariables(cliVariables); err != nil {
+		log.Fatalf("Failed to set the variables at CLI: %v", err)
+	}
+	if err := deploymentConfig.SetBackendConfig(cliBEConfigVars); err != nil {
+		log.Fatalf("Failed to set the backend config at CLI: %v", err)
+	}
+	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
+		log.Fatal(err)
+	}
+	deploymentConfig.ExpandConfig()
+	deploymentConfig.ExportBlueprint(outputFilename)
 	fmt.Printf(
-		"Expanded config created successfully, saved as %s.\n", outputFilename)
+		"Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)
 }

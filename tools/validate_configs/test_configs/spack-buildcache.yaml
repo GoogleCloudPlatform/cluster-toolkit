@@ -22,25 +22,25 @@ vars:
   region: us-central1
   zone: us-central1-c
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: resources/network/pre-existing-vpc
+  modules:
+  - source: modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: resources/scripts/spack-install
+  - source: ./community/modules/scripts/spack-install
     kind: terraform
     id: spack
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
-      spack_ref: v0.17.1
+      spack_ref: v0.18.0
       log_file: /var/log/spack.log
       configs:
       - type: 'single-config'
         scope: 'site'
-        value: 'config:install_tree:padded_length:128'
+        content: 'config:install_tree:padded_length:128'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
@@ -53,7 +53,7 @@ resource_groups:
       - type: 'mirror'
         path: ##  Add GCS bucket to populate here ##
 
-  - source: resources/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: spack-startup
     settings:
@@ -80,7 +80,7 @@ resource_groups:
         destination: shutdown.sh
         content: shutdown -h
 
-  - source: resources/compute/simple-instance
+  - source: modules/compute/vm-instance
     kind: terraform
     id: spack-build
     use:

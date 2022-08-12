@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,25 +19,27 @@
   vars:
     scripts_dir: "{{ workspace }}/tools/cloud-build/daily-tests"
   tasks:
-  ## Create blueprint
-  - name: Create blueprint
-    command: "{{ scripts_dir }}/create_blueprint.sh"
+  ## Create Deployment
+  - name: Create Deployment Directory
+    command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
+      ALWAYS_RECOMPILE: "no"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
       BLUEPRINT_DIR: "{{ blueprint_dir }}"
       DEPLOYMENT_NAME: "{{ deployment_name }}"
+      NETWORK: "{{ network }}"
     args:
-      creates: "{{ workspace }}/{{ blueprint_dir }}.tgz"
+      creates: "{{ workspace }}/{{ deployment_name }}.tgz"
   - name: Create Infrastructure and test
     block:
     - name: Create Network with Terraform
       command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/network"
+        chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"
       args:
-        creates: "{{ workspace }}/{{ blueprint_dir }}/.terraform"
+        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
       environment:
         TF_IN_AUTOMATION: "TRUE"
       with_items:
@@ -45,25 +47,32 @@
       - terraform validate
       - terraform apply -auto-approve -no-color
     - name: Create VM image with Packer
-      command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/packer/custom-image"
-      with_items:
-      - packer init .
-      - packer validate .
-      - packer build .
+      register: image_created
+      changed_when: image_created.rc == 0
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        packer init .
+        packer validate .
+        packer build .
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+        executable: /bin/bash
     - name: Delete VM Image
+      register: image_deleted
+      changed_when: image_deleted.rc == 0
+      when: image_created.rc == 0
       ansible.builtin.shell: |
         gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
       args:
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/packer/custom-image"
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
     ## Always cleanup network
     always:
     - name: Tear Down Network
+      changed_when: true # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve -no-color
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/network"
+        chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"

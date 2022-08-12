@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,9 +18,11 @@ steps:
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
   env:
+  - "BUILD_ID=${BUILD_ID}"
   - "PROJECT_ID=${PROJECT_ID}"
   args:
   - -c
   - |
     set -e
     /workspace/tools/clean-resource-policies.sh
+    /workspace/tools/clean-filestore-limit.sh

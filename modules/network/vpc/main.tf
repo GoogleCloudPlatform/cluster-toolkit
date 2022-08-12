@@ -1,0 +1,187 @@
+/**
+ * Copyright 2022 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+*/
+
+locals {
+  network_name    = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
+  subnetwork_name = var.subnetwork_name == null ? "${var.deployment_name}-primary-subnet" : var.subnetwork_name
+
+  # define a default subnetwork for cases in which no explicit subnetworks are
+  # defined in var.primary_subnetwork or var.subnetworks
+  default_primary_subnetwork_new_bits   = coalesce(try(var.primary_subnetwork.new_bits, var.subnetwork_size), var.default_primary_subnetwork_size)
+  default_primary_subnetwork_cidr_block = cidrsubnet(var.network_address_range, local.default_primary_subnetwork_new_bits, 0)
+  default_primary_subnetwork = {
+    subnet_name           = local.subnetwork_name
+    subnet_ip             = local.default_primary_subnetwork_cidr_block
+    subnet_region         = var.region
+    subnet_private_access = true
+    subnet_flow_logs      = false
+    description           = "primary subnetwork in ${local.network_name}"
+    purpose               = null
+    role                  = null
+  }
+
+  # Identify user-supplied primary subnetwork
+  # (1) explicit var.primary_subnetwork
+  # (2) explicit var.subnetworks[0]
+  # (3) implicit local default subnetwork
+  input_primary_subnetwork = try(coalesce(
+    var.primary_subnetwork,
+    try(var.subnetworks[0], null)
+  ), local.default_primary_subnetwork)
+
+  # Identify user-supplied additional subnetworks
+  # (1) explicit var.additional_subnetworks
+  # (2) explicit var.subnetworks[1:end]
+  # (3) empty list
+  input_additional_subnetworks = try(coalescelist(
+    var.additional_subnetworks,
+    try(slice(var.subnetworks, 1, length(var.subnetworks)), []),
+  ), [])
+
+  # at this point we have constructed a list of subnetworks but need to extract
+  # user-provided CIDR blocks or calculate them from user-provided new_bits
+  # after we complete deprecation, local.all_subnetworks can be replaced with
+  # var.subnetworks (or local.default_primary_subnetwork if that is null)
+  input_subnetworks = concat([local.input_primary_subnetwork], local.input_additional_subnetworks)
+  subnetworks_cidr_blocks = try(
+    local.input_subnetworks[*]["subnet_ip"],
+    cidrsubnets(var.network_address_range, local.input_subnetworks[*]["new_bits"]...)
+  )
+
+  # merge in the CIDR blocks (even when already there) and remove new_bits
+  subnetworks = [for i, subnet in local.input_subnetworks :
+    merge({ for k, v in subnet : k => v if k != "new_bits" }, { "subnet_ip" = local.subnetworks_cidr_blocks[i] })
+  ]
+
+  # gather the unique regions for purposes of creating Router/NAT
+  regions = distinct([for subnet in local.subnetworks : subnet.subnet_region])
+
+  # this comprehension should have 1 and only 1 match
+  output_primary_subnetwork               = one([for k, v in module.vpc.subnets : v if k == "${local.subnetworks[0].subnet_region}/${local.subnetworks[0].subnet_name}"])
+  output_primary_subnetwork_name          = local.output_primary_subnetwork.name
+  output_primary_subnetwork_self_link     = local.output_primary_subnetwork.self_link
+  output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
+
+  allow_iap_ssh_ingress = {
+    name                    = "${local.network_name}-fw-allow-iap-ssh-ingress"
+    description             = "allow console SSH access"
+    direction               = "INGRESS"
+    priority                = null
+    ranges                  = ["35.235.240.0/20"]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = ["22"]
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
+  allow_internal_traffic = {
+    name                    = "${local.network_name}-fw-allow-internal-traffic"
+    priority                = null
+    description             = "allow traffic between nodes of this VPC"
+    direction               = "INGRESS"
+    ranges                  = [var.network_address_range]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = ["0-65535"]
+      }, {
+      protocol = "udp"
+      ports    = ["0-65535"]
+      }, {
+      protocol = "icmp"
+      ports    = null
+      },
+    ]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
+  firewall_rules = concat(var.firewall_rules,
+    var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
+    var.enable_iap_ssh_ingress ? [local.allow_iap_ssh_ingress] : []
+  )
+}
+
+module "vpc" {
+  source  = "terraform-google-modules/network/google"
+  version = "~> 5.0"
+
+  network_name                           = local.network_name
+  project_id                             = var.project_id
+  auto_create_subnetworks                = false
+  subnets                                = local.subnetworks
+  secondary_ranges                       = var.secondary_ranges
+  routing_mode                           = var.network_routing_mode
+  mtu                                    = var.mtu
+  description                            = var.network_description
+  shared_vpc_host                        = var.shared_vpc_host
+  delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
+  firewall_rules                         = local.firewall_rules
+}
+
+# This use of the module may appear odd when var.ips_per_nat = 0. The module
+# will be called for all regions with subnetworks but names will be set to the
+# empty list. This is a perfectly valid value (the default!). In this scenario,
+# no IP addresses are created and all module outputs are empty lists.
+#
+# https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/variables.tf#L27
+# https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/outputs.tf
+module "nat_ip_addresses" {
+  source  = "terraform-google-modules/address/google"
+  version = "~> 3.1"
+
+  for_each = toset(local.regions)
+
+  project_id = var.project_id
+  region     = each.value
+  # an external, regional (not global) IP address is suited for a regional NAT
+  address_type = "EXTERNAL"
+  global       = false
+  names        = [for idx in range(var.ips_per_nat) : "${local.network_name}-nat-ips-${each.value}-${idx}"]
+}
+
+module "cloud_router" {
+  source  = "terraform-google-modules/cloud-router/google"
+  version = "~> 2.0"
+
+  for_each = toset(local.regions)
+
+  project = var.project_id
+  name    = "${local.network_name}-router"
+  region  = each.value
+  network = module.vpc.network_name
+  # in scenario with no NAT IPs, no NAT is created even if router is created
+  # https://github.com/terraform-google-modules/terraform-google-cloud-router/blob/v2.0.0/nat.tf#L18-L20
+  nats = length(module.nat_ip_addresses[each.value].self_links) == 0 ? [] : [
+    {
+      name : "cloud-nat-${each.value}",
+      nat_ips : module.nat_ip_addresses[each.value].self_links
+    },
+  ]
+}

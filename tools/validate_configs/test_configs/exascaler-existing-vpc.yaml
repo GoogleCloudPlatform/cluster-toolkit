@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,14 +22,14 @@ vars:
   region: europe-west4
   zone: europe-west4-a
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: ./resources/network/pre-existing-vpc
+  modules:
+  - source: ./modules/network/pre-existing-vpc
     kind: terraform
     id: network1
 
-  - source: ./resources/third-party/file-system/DDN-EXAScaler
+  - source: community/modules/file-system/DDN-EXAScaler
     kind: terraform
     id: scratchfs
     use: [network1]

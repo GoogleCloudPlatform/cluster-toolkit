@@ -3,22 +3,42 @@ MIN_PACKER_VERSION=1.6 # for building images
 MIN_TERRAFORM_VERSION=1.0 # for deploying modules
 MIN_GOLANG_VERSION=1.16 # for building ghpc
 
-.PHONY: tests format add-google-license install-dev-deps \
+.PHONY: install install-user tests format add-google-license install-dev-deps \
         warn-go-missing warn-terraform-missing warn-packer-missing \
-				warn-go-version warn-terraform-version warn-packer-version \
-				test-engine validate_configs packer-check \
-				terraform-format packer-format \
+        warn-go-version warn-terraform-version warn-packer-version \
+        test-engine validate_configs packer-check \
+        terraform-format packer-format \
         check-tflint check-pre-commit
 
 ENG = ./cmd/... ./pkg/...
+<<<<<<< HEAD
 TERRAFORM_FOLDERS=$(shell find ./resources ./tools ./frontend -type f -name "*.tf" -not -path '*/\.*' -printf '%h\n' | sort -u)
 PACKER_FOLDERS=$(shell find ./resources ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -printf '%h\n' | sort -u)
+=======
+TERRAFORM_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.tf" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
+PACKER_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
+>>>>>>> hpc-toolkit/main
 
 # RULES MEANT TO BE USED DIRECTLY
 
 ghpc: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg ghpc.go -type f)
 	$(info **************** building ghpc ************************)
 	go build ghpc.go
+
+install-user:
+	$(info ******** installing ghpc in ~/bin *********************)
+	mkdir -p ~/bin
+	install ./ghpc ~/bin
+
+ifeq ($(shell id -u), 0)
+install:
+	$(info ***** installing ghpc in /usr/local/bin ***************)
+	install ./ghpc /usr/local/bin
+
+else
+install: install-user
+
+endif
 
 tests: warn-terraform-version warn-packer-version test-engine validate_configs packer-check
 

@@ -1,0 +1,145 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: htcondor-pool
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: htcondor-001
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: htcondor
+  modules:
+  - source: modules/network/vpc
+    kind: terraform
+    id: network1
+    settings:
+      network_name: htcondor-pool
+      subnetwork_name: htcondor-pool-usc1
+    outputs:
+    - network_name
+
+  - source: community/modules/scripts/htcondor-install
+    kind: terraform
+    id: htcondor_install
+
+  - source: community/modules/project/service-enablement
+    kind: terraform
+    id: htcondor_services
+    use:
+    - htcondor_install
+
+  - source: community/modules/scheduler/htcondor-configure
+    kind: terraform
+    id: htcondor_configure
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: htcondor_configure_central_manager
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(htcondor_install.install_htcondor_runner)
+      - $(htcondor_configure.central_manager_runner)
+
+  - source: modules/compute/vm-instance
+    kind: terraform
+    id: htcondor_cm
+    use:
+    - network1
+    - htcondor_configure_central_manager
+    settings:
+      name_prefix: central-manager
+      machine_type: c2-standard-4
+      disable_public_ips: true
+      service_account:
+        email: $(htcondor_configure.central_manager_service_account)
+        scopes:
+        - cloud-platform
+    outputs:
+    - internal_ip
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: htcondor_configure_execute_point
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(htcondor_install.install_htcondor_runner)
+      - $(htcondor_configure.execute_point_runner)
+
+  - source: community/modules/compute/htcondor-execute-point
+    kind: terraform
+    id: htcondor_execute_point
+    use:
+    - network1
+    - htcondor_configure_execute_point
+    settings:
+      metadata:
+        enable-oslogin: "TRUE"
+        central-manager: ((module.htcondor_cm.internal_ip[0]))
+      service_account:
+        email: $(htcondor_configure.execute_point_service_account)
+        scopes:
+        - cloud-platform
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: htcondor_configure_access_point
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(htcondor_install.install_htcondor_runner)
+      - $(htcondor_install.install_autoscaler_deps_runner)
+      - $(htcondor_install.install_autoscaler_runner)
+      - $(htcondor_configure.access_point_runner)
+      - $(htcondor_execute_point.configure_autoscaler_runner)
+      - type: data
+        destination: /var/tmp/helloworld.sub
+        content: |
+          universe       = docker
+          docker_image   = hello-world
+          output         = out
+          error          = err
+          log            = log
+          request_cpus   = 1
+          request_memory = 100MB
+          queue
+  - source: modules/compute/vm-instance
+    kind: terraform
+    id: htcondor_access
+    use:
+    - network1
+    - htcondor_configure_access_point
+    settings:
+      name_prefix: access-point
+      machine_type: c2-standard-4
+      disable_public_ips: true
+      metadata:
+        central-manager: ((module.htcondor_cm.internal_ip[0]))
+      service_account:
+        email: $(htcondor_configure.access_point_service_account)
+        scopes:
+        - cloud-platform
+    outputs:
+    - internal_ip

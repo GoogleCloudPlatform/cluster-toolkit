@@ -16,179 +16,179 @@ package config
 
 import (
 	"fmt"
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 
 	. "gopkg.in/check.v1"
 )
 
 func (s *MySuite) TestExpand(c *C) {
-	bc := getBlueprintConfigForTest()
-	bc.expand()
+	dc := getDeploymentConfigForTest()
+	dc.expand()
 }
 
 func (s *MySuite) TestExpandBackends(c *C) {
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 
 	// Simple test: Does Nothing
-	err := bc.expandBackends()
+	err := dc.expandBackends()
 	c.Assert(err, IsNil)
 
 	tfBackend := &TerraformBackend{
 		Type:          "gcs",
 		Configuration: make(map[string]interface{}),
 	}
-	bc.Config.TerraformBackendDefaults = *tfBackend
-	err = bc.expandBackends()
+	dc.Config.TerraformBackendDefaults = *tfBackend
+	err = dc.expandBackends()
 	c.Assert(err, IsNil)
-	grp := bc.Config.ResourceGroups[0]
+	grp := dc.Config.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix := grp.TerraformBackend.Configuration["prefix"]
-	expPrefix := fmt.Sprintf("%s/%s", bc.Config.BlueprintName, grp.Name)
+	expPrefix := fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName,
+		dc.Config.Vars["deployment_name"], grp.Name)
 	c.Assert(gotPrefix, Equals, expPrefix)
 
 	// Add a new resource group, ensure each group name is included
-	newGroup := ResourceGroup{
+	newGroup := DeploymentGroup{
 		Name: "group2",
 	}
-	bc.Config.ResourceGroups = append(bc.Config.ResourceGroups, newGroup)
-	bc.Config.Vars["deployment_name"] = "testDeployment"
-	err = bc.expandBackends()
+	dc.Config.DeploymentGroups = append(dc.Config.DeploymentGroups, newGroup)
+	err = dc.expandBackends()
 	c.Assert(err, IsNil)
-	newGrp := bc.Config.ResourceGroups[1]
+	newGrp := dc.Config.DeploymentGroups[1]
 	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix = newGrp.TerraformBackend.Configuration["prefix"]
-	expPrefix = fmt.Sprintf("%s/%s/%s", bc.Config.BlueprintName,
-		bc.Config.Vars["deployment_name"], newGrp.Name)
+	expPrefix = fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName,
+		dc.Config.Vars["deployment_name"], newGrp.Name)
 	c.Assert(gotPrefix, Equals, expPrefix)
 }
 
-func (s *MySuite) TestGetResourceVarName(c *C) {
-	resID := "resID"
+func (s *MySuite) TestGetModuleVarName(c *C) {
+	modID := "modID"
 	varName := "varName"
-	expected := fmt.Sprintf("$(%s.%s)", resID, varName)
-	got := getResourceVarName(resID, varName)
+	expected := fmt.Sprintf("$(%s.%s)", modID, varName)
+	got := getModuleVarName(modID, varName)
 	c.Assert(got, Equals, expected)
 }
 
-func (s *MySuite) TestUseResource(c *C) {
+func (s *MySuite) TestUseModule(c *C) {
 	// Setup
-	resSource := "resSource"
-	res := Resource{
-		ID:       "PrimaryResource",
-		Source:   resSource,
+	modSource := "modSource"
+	mod := Module{
+		ID:       "PrimaryModule",
+		Source:   modSource,
 		Settings: make(map[string]interface{}),
 	}
-	useResSource := "useSource"
-	useRes := Resource{
-		ID:     "UsedResource",
-		Source: useResSource,
+	useModSource := "useSource"
+	useMod := Module{
+		ID:     "UsedModule",
+		Source: useModSource,
 	}
-	resInfo := resreader.ResourceInfo{}
-	useInfo := resreader.ResourceInfo{}
+	modInfo := modulereader.ModuleInfo{}
+	useInfo := modulereader.ModuleInfo{}
 	hasChanged := make(map[string]bool)
 
 	// Pass: No Inputs, No Outputs
-	resInputs := getResourceInputMap(resInfo.Inputs)
-	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
-	c.Assert(len(res.Settings), Equals, 0)
+	modInputs := getModuleInputMap(modInfo.Inputs)
+	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	c.Assert(len(mod.Settings), Equals, 0)
 	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Has Output, no maching input
-	varInfoNumber := resreader.VarInfo{
+	varInfoNumber := modulereader.VarInfo{
 		Name: "val1",
 		Type: "number",
 	}
-	useInfo.Outputs = []resreader.VarInfo{varInfoNumber}
-	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
-	c.Assert(len(res.Settings), Equals, 0)
+	useInfo.Outputs = []modulereader.VarInfo{varInfoNumber}
+	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	c.Assert(len(mod.Settings), Equals, 0)
 	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Single Input/Output match - no lists
-	resInfo.Inputs = []resreader.VarInfo{varInfoNumber}
-	resInputs = getResourceInputMap(resInfo.Inputs)
-	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
-	expectedSetting := getResourceVarName("UsedResource", "val1")
-	c.Assert(res.Settings["val1"], Equals, expectedSetting)
+	modInfo.Inputs = []modulereader.VarInfo{varInfoNumber}
+	modInputs = getModuleInputMap(modInfo.Inputs)
+	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	expectedSetting := getModuleVarName("UsedModule", "val1")
+	c.Assert(mod.Settings["val1"], Equals, expectedSetting)
 	c.Assert(len(hasChanged), Equals, 1)
 
-	// Pass: Already set, has been changed by useResource
-	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
-	c.Assert(len(res.Settings), Equals, 1)
+	// Pass: Already set, has been changed by useModule
+	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	c.Assert(len(mod.Settings), Equals, 1)
 	c.Assert(len(hasChanged), Equals, 1)
 
-	// Pass: Already set, has not been changed by useResource
+	// Pass: Already set, has not been changed by useModule
 	hasChanged = make(map[string]bool)
-	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
-	c.Assert(len(res.Settings), Equals, 1)
+	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	c.Assert(len(mod.Settings), Equals, 1)
 	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Single Input/Output match, input is list, not already set
-	varInfoList := resreader.VarInfo{
+	varInfoList := modulereader.VarInfo{
 		Name: "val1",
 		Type: "list",
 	}
-	resInfo.Inputs = []resreader.VarInfo{varInfoList}
-	resInputs = getResourceInputMap(resInfo.Inputs)
-	res.Settings = make(map[string]interface{})
-	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
-	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 1)
-	c.Assert(res.Settings["val1"], DeepEquals, []interface{}{expectedSetting})
+	modInfo.Inputs = []modulereader.VarInfo{varInfoList}
+	modInputs = getModuleInputMap(modInfo.Inputs)
+	mod.Settings = make(map[string]interface{})
+	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	c.Assert(len(mod.Settings["val1"].([]interface{})), Equals, 1)
+	c.Assert(mod.Settings["val1"], DeepEquals, []interface{}{expectedSetting})
 	c.Assert(len(hasChanged), Equals, 1)
 
 	// Pass: Setting exists, Input is List, Output is not a list
-	useResource(&res, useRes, resInputs, useInfo.Outputs, hasChanged)
-	c.Assert(len(res.Settings["val1"].([]interface{})), Equals, 2)
+	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	c.Assert(len(mod.Settings["val1"].([]interface{})), Equals, 2)
 	c.Assert(
-		res.Settings["val1"],
+		mod.Settings["val1"],
 		DeepEquals,
 		[]interface{}{expectedSetting, expectedSetting})
 }
 
-func (s *MySuite) TestApplyUseResources(c *C) {
+func (s *MySuite) TestApplyUseModules(c *C) {
 	// Setup
-	usingResourceID := "usingResource"
-	usingResourceSource := "path/using"
-	usedResourceID := "usedResource"
-	usedResourceSource := "path/used"
+	usingModuleID := "usingModule"
+	usingModuleSource := "path/using"
+	usedModuleID := "usedModule"
+	usedModuleSource := "path/used"
 	sharedVarName := "sharedVar"
-	usingResource := Resource{
-		ID:     usingResourceID,
-		Source: usingResourceSource,
-		Use:    []string{usedResourceID},
+	usingModule := Module{
+		ID:     usingModuleID,
+		Source: usingModuleSource,
+		Use:    []string{usedModuleID},
 	}
-	usedResource := Resource{
-		ID:     usedResourceID,
-		Source: usedResourceSource,
+	usedModule := Module{
+		ID:     usedModuleID,
+		Source: usedModuleSource,
 	}
-	sharedVar := resreader.VarInfo{
+	sharedVar := modulereader.VarInfo{
 		Name: sharedVarName,
 		Type: "number",
 	}
 
 	// Simple Case
-	bc := getBlueprintConfigForTest()
-	err := bc.applyUseResources()
+	dc := getDeploymentConfigForTest()
+	err := dc.applyUseModules()
 	c.Assert(err, IsNil)
 
-	// Has Use Resources
-	bc.Config.ResourceGroups[0].Resources = append(
-		bc.Config.ResourceGroups[0].Resources, usingResource)
-	bc.Config.ResourceGroups[0].Resources = append(
-		bc.Config.ResourceGroups[0].Resources, usedResource)
+	// Has Use Modules
+	dc.Config.DeploymentGroups[0].Modules = append(
+		dc.Config.DeploymentGroups[0].Modules, usingModule)
+	dc.Config.DeploymentGroups[0].Modules = append(
+		dc.Config.DeploymentGroups[0].Modules, usedModule)
 
-	grpName := bc.Config.ResourceGroups[0].Name
-	usingInfo := bc.ResourcesInfo[grpName][usingResourceSource]
-	usedInfo := bc.ResourcesInfo[grpName][usedResourceSource]
-	usingInfo.Inputs = []resreader.VarInfo{sharedVar}
-	usedInfo.Outputs = []resreader.VarInfo{sharedVar}
-	err = bc.applyUseResources()
+	grpName := dc.Config.DeploymentGroups[0].Name
+	usingInfo := dc.ModulesInfo[grpName][usingModuleSource]
+	usedInfo := dc.ModulesInfo[grpName][usedModuleSource]
+	usingInfo.Inputs = []modulereader.VarInfo{sharedVar}
+	usedInfo.Outputs = []modulereader.VarInfo{sharedVar}
+	err = dc.applyUseModules()
 	c.Assert(err, IsNil)
 
 	// Use ID doesn't exists (fail)
-	resLen := len(bc.Config.ResourceGroups[0].Resources)
-	bc.Config.ResourceGroups[0].Resources[resLen-1].ID = "wrongID"
-	err = bc.applyUseResources()
-	c.Assert(err, ErrorMatches, "could not find resource .* used by .* in group .*")
+	modLen := len(dc.Config.DeploymentGroups[0].Modules)
+	dc.Config.DeploymentGroups[0].Modules[modLen-1].ID = "wrongID"
+	err = dc.applyUseModules()
+	c.Assert(err, ErrorMatches, "could not find module .* used by .* in group .*")
 
 }
 
@@ -197,129 +197,129 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 	// empty
 	testSlice := []interface{}{}
 	ctx := varContext{}
-	resToGrp := make(map[string]int)
-	ret, err := updateVariableType(testSlice, ctx, resToGrp)
+	modToGrp := make(map[string]int)
+	ret, err := updateVariableType(testSlice, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// single string
 	testSlice = append(testSlice, "string")
-	ret, err = updateVariableType(testSlice, ctx, resToGrp)
+	ret, err = updateVariableType(testSlice, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// add list
 	testSlice = append(testSlice, []interface{}{})
-	ret, err = updateVariableType(testSlice, ctx, resToGrp)
+	ret, err = updateVariableType(testSlice, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// add map
 	testSlice = append(testSlice, make(map[string]interface{}))
-	ret, err = updateVariableType(testSlice, ctx, resToGrp)
+	ret, err = updateVariableType(testSlice, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 
 	// map, success
 	testMap := make(map[string]interface{})
-	ret, err = updateVariableType(testMap, ctx, resToGrp)
+	ret, err = updateVariableType(testMap, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add string
 	testMap["string"] = "string"
-	ret, err = updateVariableType(testMap, ctx, resToGrp)
+	ret, err = updateVariableType(testMap, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add map
 	testMap["map"] = make(map[string]interface{})
-	ret, err = updateVariableType(testMap, ctx, resToGrp)
+	ret, err = updateVariableType(testMap, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add slice
 	testMap["slice"] = []interface{}{}
-	ret, err = updateVariableType(testMap, ctx, resToGrp)
+	ret, err = updateVariableType(testMap, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 
 	// string, success
 	testString := "string"
-	ret, err = updateVariableType(testString, ctx, resToGrp)
+	ret, err = updateVariableType(testString, ctx, modToGrp)
 	c.Assert(err, IsNil)
 	c.Assert(testString, DeepEquals, ret)
 }
 
 func (s *MySuite) TestCombineLabels(c *C) {
-	bc := getBlueprintConfigForTest()
+	dc := getDeploymentConfigForTest()
 
-	err := bc.combineLabels()
+	err := dc.combineLabels()
 	c.Assert(err, IsNil)
 
 	// Were global labels created?
-	_, exists := bc.Config.Vars["labels"]
+	_, exists := dc.Config.Vars["labels"]
 	c.Assert(exists, Equals, true)
 
 	// Was the ghpc_blueprint label set correctly?
-	globalLabels := bc.Config.Vars["labels"].(map[string]interface{})
+	globalLabels := dc.Config.Vars["labels"].(map[string]interface{})
 	ghpcBlueprint, exists := globalLabels[blueprintLabel]
 	c.Assert(exists, Equals, true)
-	c.Assert(ghpcBlueprint, Equals, bc.Config.BlueprintName)
+	c.Assert(ghpcBlueprint, Equals, dc.Config.BlueprintName)
 
 	// Was the ghpc_deployment label set correctly?
 	ghpcDeployment, exists := globalLabels[deploymentLabel]
 	c.Assert(exists, Equals, true)
-	c.Assert(ghpcDeployment, Equals, "undefined")
+	c.Assert(ghpcDeployment, Equals, "deployment_name")
 
-	// Was "labels" created for the resource with no settings?
-	_, exists = bc.Config.ResourceGroups[0].Resources[0].Settings["labels"]
+	// Was "labels" created for the module with no settings?
+	_, exists = dc.Config.DeploymentGroups[0].Modules[0].Settings["labels"]
 	c.Assert(exists, Equals, true)
 
-	resourceLabels := bc.Config.ResourceGroups[0].Resources[0].
-		Settings["labels"].(map[interface{}]interface{})
+	moduleLabels := dc.Config.DeploymentGroups[0].Modules[0].
+		Settings["labels"].(map[string]interface{})
 
 	// Was the role created correctly?
-	ghpcRole, exists := resourceLabels[roleLabel]
+	ghpcRole, exists := moduleLabels[roleLabel]
 	c.Assert(exists, Equals, true)
 	c.Assert(ghpcRole, Equals, "other")
 
 	// Test invalid labels
-	bc.Config.Vars["labels"] = "notAMap"
-	err = bc.combineLabels()
+	dc.Config.Vars["labels"] = "notAMap"
+	err = dc.combineLabels()
 	expectedErrorStr := fmt.Sprintf("%s: found %T",
-		errorMessages["globalLabelType"], bc.Config.Vars["labels"])
+		errorMessages["globalLabelType"], dc.Config.Vars["labels"])
 	c.Assert(err, ErrorMatches, expectedErrorStr)
 
 }
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {
-	bc := getBlueprintConfigForTest()
-	testResource := bc.Config.ResourceGroups[0].Resources[0]
+	dc := getDeploymentConfigForTest()
+	testModule := dc.Config.DeploymentGroups[0].Modules[0]
 
 	// Test no inputs, none required
-	err := bc.applyGlobalVariables()
+	err := dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 
 	// Test no inputs, one required, doesn't exist in globals
-	bc.ResourcesInfo["group1"][testResource.Source] = resreader.ResourceInfo{
-		Inputs: []resreader.VarInfo{requiredVar},
+	dc.ModulesInfo["group1"][testModule.Source] = modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{requiredVar},
 	}
-	err = bc.applyGlobalVariables()
-	expectedErrorStr := fmt.Sprintf("%s: Resource.ID: %s Setting: %s",
-		errorMessages["missingSetting"], testResource.ID, requiredVar.Name)
+	err = dc.applyGlobalVariables()
+	expectedErrorStr := fmt.Sprintf("%s: Module ID: %s Setting: %s",
+		errorMessages["missingSetting"], testModule.ID, requiredVar.Name)
 	c.Assert(err, ErrorMatches, expectedErrorStr)
 
 	// Test no input, one required, exists in globals
-	bc.Config.Vars[requiredVar.Name] = "val"
-	err = bc.applyGlobalVariables()
+	dc.Config.Vars[requiredVar.Name] = "val"
+	err = dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 	c.Assert(
-		bc.Config.ResourceGroups[0].Resources[0].Settings[requiredVar.Name],
+		dc.Config.DeploymentGroups[0].Modules[0].Settings[requiredVar.Name],
 		Equals, fmt.Sprintf("((var.%s))", requiredVar.Name))
 
 	// Test one input, one required
-	bc.Config.ResourceGroups[0].Resources[0].Settings[requiredVar.Name] = "val"
-	err = bc.applyGlobalVariables()
+	dc.Config.DeploymentGroups[0].Modules[0].Settings[requiredVar.Name] = "val"
+	err = dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 
 	// Test one input, none required, exists in globals
-	bc.ResourcesInfo["group1"][testResource.Source].Inputs[0].Required = false
-	err = bc.applyGlobalVariables()
+	dc.ModulesInfo["group1"][testModule.Source].Inputs[0].Required = false
+	err = dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 }
 
@@ -379,77 +379,77 @@ func (s *MySuite) TestHasVariable(c *C) {
 
 func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Setup
-	testResID := "existingResource"
-	testResource := Resource{
-		ID:     testResID,
+	testModID := "existingModule"
+	testModule := Module{
+		ID:     testModID,
 		Kind:   "terraform",
-		Source: "./resource/testpath",
+		Source: "./module/testpath",
 	}
-	testYamlConfig := YamlConfig{
+	testBlueprint := Blueprint{
 		BlueprintName: "",
 		Vars:          make(map[string]interface{}),
-		ResourceGroups: []ResourceGroup{{
+		DeploymentGroups: []DeploymentGroup{{
 			Name:             "",
 			TerraformBackend: TerraformBackend{},
-			Resources:        []Resource{testResource},
+			Modules:          []Module{testModule},
 		}},
 		TerraformBackendDefaults: TerraformBackend{},
 	}
 	testVarContext := varContext{
-		yamlConfig: testYamlConfig,
-		resIndex:   0,
+		blueprint:  testBlueprint,
+		modIndex:   0,
 		groupIndex: 0,
 	}
-	testResToGrp := make(map[string]int)
+	testModToGrp := make(map[string]int)
 
 	// Invalid variable -> no .
 	testVarContext.varString = "$(varsStringWithNoDot)"
-	_, err := expandSimpleVariable(testVarContext, testResToGrp)
+	_, err := expandSimpleVariable(testVarContext, testModToGrp)
 	expectedErr := fmt.Sprintf("%s.*", errorMessages["invalidVar"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Invalid -> not found
 	testVarContext.varString = "$(vars.doesntExists)"
-	_, err = expandSimpleVariable(testVarContext, testResToGrp)
+	_, err = expandSimpleVariable(testVarContext, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Success
-	testVarContext.yamlConfig.Vars["globalExists"] = "existsValue"
+	testVarContext.blueprint.Vars["globalExists"] = "existsValue"
 	testVarContext.varString = "$(vars.globalExists)"
-	got, err := expandSimpleVariable(testVarContext, testResToGrp)
+	got, err := expandSimpleVariable(testVarContext, testModToGrp)
 	c.Assert(err, IsNil)
 	expected := "((var.globalExists))"
 	c.Assert(got, Equals, expected)
 
-	// Resource variable: Invalid -> Resource not found
-	testVarContext.varString = "$(notARes.someVar)"
-	_, err = expandSimpleVariable(testVarContext, testResToGrp)
+	// Module variable: Invalid -> Module not found
+	testVarContext.varString = "$(notAMod.someVar)"
+	_, err = expandSimpleVariable(testVarContext, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
-	// Resource variable: Invalid -> Output not found
-	reader := resreader.Factory("terraform")
-	reader.SetInfo(testResource.Source, resreader.ResourceInfo{})
-	testResToGrp[testResID] = 0
+	// Module variable: Invalid -> Output not found
+	reader := modulereader.Factory("terraform")
+	reader.SetInfo(testModule.Source, modulereader.ModuleInfo{})
+	testModToGrp[testModID] = 0
 	fakeOutput := "doesntExist"
-	testVarContext.varString = fmt.Sprintf("$(%s.%s)", testResource.ID, fakeOutput)
-	_, err = expandSimpleVariable(testVarContext, testResToGrp)
-	expectedErr = fmt.Sprintf("%s: resource %s did not have output %s",
-		errorMessages["noOutput"], testResID, fakeOutput)
+	testVarContext.varString = fmt.Sprintf("$(%s.%s)", testModule.ID, fakeOutput)
+	_, err = expandSimpleVariable(testVarContext, testModToGrp)
+	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
+		errorMessages["noOutput"], testModID, fakeOutput)
 	c.Assert(err, ErrorMatches, expectedErr)
 
-	// Resource variable: Success
+	// Module variable: Success
 	existingOutput := "outputExists"
-	testVarInfoOutput := resreader.VarInfo{Name: existingOutput}
-	testResInfo := resreader.ResourceInfo{
-		Outputs: []resreader.VarInfo{testVarInfoOutput},
+	testVarInfoOutput := modulereader.VarInfo{Name: existingOutput}
+	testModInfo := modulereader.ModuleInfo{
+		Outputs: []modulereader.VarInfo{testVarInfoOutput},
 	}
-	reader.SetInfo(testResource.Source, testResInfo)
+	reader.SetInfo(testModule.Source, testModInfo)
 	testVarContext.varString = fmt.Sprintf(
-		"$(%s.%s)", testResource.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext, testResToGrp)
+		"$(%s.%s)", testModule.ID, existingOutput)
+	got, err = expandSimpleVariable(testVarContext, testModToGrp)
 	c.Assert(err, IsNil)
-	expected = fmt.Sprintf("((module.%s.%s))", testResource.ID, existingOutput)
+	expected = fmt.Sprintf("((module.%s.%s))", testModule.ID, existingOutput)
 	c.Assert(got, Equals, expected)
 }

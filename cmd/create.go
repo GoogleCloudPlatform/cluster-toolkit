@@ -1,5 +1,5 @@
 /*
-Copyright 2021 Google LLC
+Copyright 2022 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,27 +21,29 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/reswriter"
+	"hpc-toolkit/pkg/modulewriter"
 	"log"
 
 	"github.com/spf13/cobra"
 )
 
-const msgCLIVars = "Comma-separated list of name=value variables to override YAML configuration. Can be invoked multiple times."
+const msgCLIVars = "Comma-separated list of name=value variables to override YAML configuration. Can be used multiple times."
+const msgCLIBackendConfig = "Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times."
 
 func init() {
-	createCmd.Flags().StringVarP(&yamlFilename, "config", "c", "",
-		"Configuration file for the new blueprints")
+	createCmd.Flags().StringVarP(&bpFilename, "config", "c", "",
+		"HPC Environment Blueprint file to be used to create an HPC deployment dir.")
 	cobra.CheckErr(createCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
 
-	createCmd.Flags().StringVarP(&bpDirectory, "out", "o", "",
-		"Output directory for the new blueprints")
+	createCmd.Flags().StringVarP(&outputDir, "out", "o", "",
+		"Sets the output directory where the HPC deployment directory will be created.")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
+	createCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
 	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
 		validationLevelDesc)
-	createCmd.Flags().BoolVarP(&overwriteBlueprint, "overwrite-blueprint", "w", false,
-		"if set, an existing blueprint dir can be overwritten by the created blueprint. \n"+
+	createCmd.Flags().BoolVarP(&overwriteDeployment, "overwrite-deployment", "w", false,
+		"If specified, an existing deployment directory is overwritten by the new deployment. \n"+
 			"Note: Terraform state IS preserved. \n"+
 			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
 			"Note: Packer is NOT supported.")
@@ -49,40 +51,49 @@ func init() {
 }
 
 var (
-	yamlFilename        string
-	bpDirectory         string
-	cliVariables        []string
-	overwriteBlueprint  bool
+	bpFilename   string
+	outputDir    string
+	cliVariables []string
+
+	cliBEConfigVars     []string
+	overwriteDeployment bool
 	validationLevel     string
 	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
 	createCmd           = &cobra.Command{
-		Use:   "create FILENAME",
-		Short: "Create a new blueprint.",
-		Long:  "Create a new blueprint based on a provided YAML config.",
+		Use:   "create BLUEPRINT_NAME",
+		Short: "Create a new deployment.",
+		Long:  "Create a new deployment based on a provided blueprint.",
 		Run:   runCreateCmd,
+		Args:  cobra.ExactArgs(1),
 	}
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	if yamlFilename == "" {
+	if bpFilename == "" {
 		if len(args) == 0 {
 			fmt.Println(cmd.UsageString())
 			return
 		}
 
-		yamlFilename = args[0]
+		bpFilename = args[0]
 	}
 
-	blueprintConfig := config.NewBlueprintConfig(yamlFilename)
-	if err := blueprintConfig.SetCLIVariables(cliVariables); err != nil {
-		log.Fatalf("Failed to set the variables at CLI: %v", err)
-	}
-	if err := blueprintConfig.SetValidationLevel(validationLevel); err != nil {
+	deploymentConfig, err := config.NewDeploymentConfig(bpFilename)
+	if err != nil {
 		log.Fatal(err)
 	}
-	blueprintConfig.ExpandConfig()
-	if err := reswriter.WriteBlueprint(&blueprintConfig.Config, bpDirectory, overwriteBlueprint); err != nil {
-		var target *reswriter.OverwriteDeniedError
+	if err := deploymentConfig.SetCLIVariables(cliVariables); err != nil {
+		log.Fatalf("Failed to set the variables at CLI: %v", err)
+	}
+	if err := deploymentConfig.SetBackendConfig(cliBEConfigVars); err != nil {
+		log.Fatalf("Failed to set the backend config at CLI: %v", err)
+	}
+	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
+		log.Fatal(err)
+	}
+	deploymentConfig.ExpandConfig()
+	if err := modulewriter.WriteDeployment(&deploymentConfig.Config, outputDir, overwriteDeployment); err != nil {
+		var target *modulewriter.OverwriteDeniedError
 		if errors.As(err, &target) {
 			fmt.Printf("\n%s\n", err.Error())
 		} else {

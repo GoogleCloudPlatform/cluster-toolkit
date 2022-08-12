@@ -1,0 +1,275 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: "Setup Integration tests for HPC toolkit"
+  hosts: localhost
+  vars:
+    scripts_dir: "{{ workspace }}/tools/cloud-build/daily-tests"
+  tasks:
+  ## Create SSH Keys
+  - name: "Create .ssh folder"
+    ansible.builtin.file:
+      path: "/builder/home/.ssh"
+      state: directory
+      mode: 0700
+  - name: Create SSH Key
+    openssh_keypair:
+      path: "/builder/home/.ssh/id_rsa"
+
+  ## Create cluster
+  - name: Create Deployment Directory
+    ansible.builtin.command: "{{ scripts_dir }}/create_deployment.sh"
+    environment:
+      EXAMPLE_YAML: "{{ blueprint_yaml }}"
+      PROJECT_ID: "{{ project }}"
+      ROOT_DIR: "{{ workspace }}"
+      BLUEPRINT_DIR: "{{ blueprint_dir }}"
+      DEPLOYMENT_NAME: "{{ deployment_name }}"
+      NETWORK: "{{ network }}"
+    args:
+      creates: "{{ workspace }}/{{ deployment_name }}.tgz"
+  - name: Create Infrastructure and test
+    block:
+    - name: Setup network and HTCondor install scripts
+      ansible.builtin.command:
+        cmd: "{{ item }}"
+        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
+      args:
+        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+      with_items:
+      - terraform init
+      - terraform validate
+      - terraform apply -auto-approve -no-color
+    - name: Get startup_script
+      register: network_name
+      changed_when: false
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
+        executable: /bin/bash
+      ansible.builtin.shell: |
+        terraform output -raw startup_script_htcondor_install_scripts > \
+          ../packer/custom-image/startup_script.sh
+    - name: Create VM image with Packer
+      register: image_created
+      changed_when: image_created.rc == 0
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+        executable: /bin/bash
+      ansible.builtin.shell: |
+        packer init .
+        packer validate -var startup_script_file=startup_script.sh .
+        packer build -var startup_script_file=startup_script.sh .
+    - name: Setup HTCondor Pool
+      ansible.builtin.command:
+        cmd: "{{ item }}"
+        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
+      args:
+        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+      with_items:
+      - terraform init
+      - terraform validate
+      - terraform apply -auto-approve -no-color
+    - name: Get Access Point public IP address
+      register: access_ip
+      changed_when: false
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
+        executable: /bin/bash
+      ansible.builtin.shell: |
+        set -o pipefail
+        terraform output -json external_ip_htcondor_access | jq -r '.[0]'
+    - name: Add Login node as host
+      ansible.builtin.add_host:
+        hostname: "{{ access_ip.stdout }}"
+        groups: [remote_host]
+    ## Setup firewall for cloud build
+    - name: Get Builder IP
+      register: build_ip
+      changed_when: false
+      ansible.builtin.shell: >-
+        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
+         awk -F'"' '{print $2}'
+    - name: Create firewall rule
+      register: fw_result
+      changed_when: fw_result.rc == 0
+      ansible.builtin.command:
+        argv:
+        - gcloud
+        - compute
+        - --project={{ project }}
+        - firewall-rules
+        - create
+        - "{{ deployment_name }}"
+        - --direction=INGRESS
+        - --priority=1000
+        - --network={{ network }}
+        - --action=ALLOW
+        - --rules=tcp:22
+        - --source-ranges={{ build_ip.stdout }}
+    - name: Add SSH Keys to OS Login
+      register: key_result
+      changed_when: key_result.rc == 0
+      ansible.builtin.command:
+        argv:
+        - gcloud
+        - compute
+        - os-login
+        - ssh-keys
+        - add
+        - --ttl
+        - 2h
+        - "--key-file=/builder/home/.ssh/id_rsa.pub"
+    rescue:
+    - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false # keep cleaning up
+      ansible.builtin.command:
+        argv:
+        - gcloud
+        - compute
+        - firewall-rules
+        - delete
+        - "{{ deployment_name }}"
+    - name: Tear Down Pool
+      changed_when: true # assume something destroyed
+      failed_when: false # keep cleaning up
+      run_once: true
+      delegate_to: localhost
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+      ansible.builtin.command:
+        cmd: "{{ item }}"
+        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
+      with_items:
+      - terraform init
+      - terraform destroy -auto-approve
+    - name: Get image name
+      when: image_created is defined and image_created.rc == 0
+      register: image_name
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+        executable: /bin/bash
+      ansible.builtin.shell: |
+        set -o pipefail
+        jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2
+    - name: Delete custom image
+      register: image_deleted
+      when: image_created is defined and image_created.rc == 0
+      changed_when: image_deleted.rc == 0
+      ansible.builtin.command:
+        cmd: gcloud compute images delete {{ image_name.stdout }}
+    - name: Tear Down Network
+      changed_when: true # assume something destroyed
+      delegate_to: localhost
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+      ansible.builtin.command:
+        cmd: "{{ item }}"
+        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
+      with_items:
+      - terraform init
+      - terraform destroy -auto-approve
+
+- name: Run Integration Tests
+  hosts: remote_host
+  gather_facts: no # must wait until host is reachable
+  ignore_unreachable: true # ensure always block will run even if SSH fails
+  tasks:
+  - name: HTCondor Test Block
+    vars:
+      ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
+    block:
+    - name: Wait until host is reachable
+      ansible.builtin.wait_for_connection:
+        delay: 60
+        timeout: 300
+    - name: Gather facts
+      ansible.builtin.setup:
+    - name: Wait until HTCondor daemon is up
+      ansible.builtin.wait_for:
+        port: 9618
+        delay: 10
+        timeout: 180
+    - name: Run Integration tests for HPC toolkit
+      include_tasks: "{{ test }}"
+      run_once: true
+      vars:
+        access_point: "{{ access_point }}"
+      loop: "{{ post_deploy_tests }}"
+      loop_control:
+        loop_var: test
+    always:
+    - name: Tear Down Pool
+      changed_when: true # assume something destroyed
+      delegate_to: localhost
+      run_once: true
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+      ansible.builtin.command:
+        cmd: "{{ item }}"
+        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
+      with_items:
+      - terraform init
+      - terraform destroy -auto-approve
+    - name: Get image name
+      changed_when: false
+      run_once: true
+      delegate_to: localhost
+      register: image_name
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+        executable: /bin/bash
+      ansible.builtin.shell: |
+        set -o pipefail
+        jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2
+    - name: Delete custom image
+      register: image_deleted
+      changed_when: image_deleted.rc == 0
+      failed_when: false # keep cleaning up
+      run_once: true
+      delegate_to: localhost
+      ansible.builtin.command:
+        cmd: gcloud compute images delete {{ image_name.stdout }}
+    - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false # keep cleaning up
+      run_once: true
+      delegate_to: localhost
+      ansible.builtin.command:
+        argv:
+        - gcloud
+        - compute
+        - firewall-rules
+        - delete
+        - "{{ deployment_name }}"
+    - name: Tear Down Network
+      changed_when: true # assume something destroyed
+      run_once: true
+      delegate_to: localhost
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+      ansible.builtin.command:
+        cmd: "{{ item }}"
+        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
+      with_items:
+      - terraform init
+      - terraform destroy -auto-approve

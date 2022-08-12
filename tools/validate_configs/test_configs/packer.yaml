@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,18 +21,18 @@ vars:
   deployment_name: hpc-slurm1
   region: europe-west4
   zone: europe-west4-a
+  network_name: image-builder-net
+  subnetwork_name: image-builder-primary-subnet
 
-resource_groups:
+deployment_groups:
 - group: network
-  resources:
-  - source: resources/network/vpc
+  modules:
+  - source: modules/network/vpc
     kind: terraform
     id: network1
-    settings:
-      network_name: $(vars.deployment_name)
 - group: packer
-  resources:
-  - source: resources/packer/custom-image
+  modules:
+  - source: modules/packer/custom-image
     kind: packer
     id: my-custom-image
     settings:

@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,13 +13,13 @@
 # limitations under the License.
 
 ---
-# Current parallel execution tree, built to minimize total execution time and faster tests first.
-# ├── build_hpc
+# Test Packer image building and monitoring dashboard in parallel
+# ├── build_ghpc
 # └── fetch_builder
-#    └── packer      (group 3)
 #    └── monitoring  (group 3)
 #        └── omnia
 #            └── lustre-new-vpc
+#                └── packer
 
 
 timeout: 14400s  # 4hr
@@ -106,11 +106,11 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/lustre-new-vpc.yml"
 
-# test building an image using Packer
+# test image creation by provisioning a new VPC and using Packer to build an
+# image in it
 - id: packer
   waitFor:
-  - fetch_builder
-  - build_ghpc
+  - lustre-new-vpc
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash

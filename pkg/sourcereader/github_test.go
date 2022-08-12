@@ -22,7 +22,7 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-func (s *MySuite) TestCopyGitHubResources(c *C) {
+func (s *MySuite) TestCopyGitHubModules(c *C) {
 	// Setup
 	destDir := filepath.Join(testDir, "TestCopyGitHubRepository")
 	if err := os.Mkdir(destDir, 0755); err != nil {
@@ -31,7 +31,7 @@ func (s *MySuite) TestCopyGitHubResources(c *C) {
 
 	// Success via HTTPS
 	destDirForHTTPS := filepath.Join(destDir, "https")
-	err := copyGitHubResources("github.com/terraform-google-modules/terraform-google-project-factory//helpers", destDirForHTTPS)
+	err := copyGitHubModules("github.com/terraform-google-modules/terraform-google-project-factory//helpers", destDirForHTTPS)
 	c.Assert(err, IsNil)
 	fInfo, err := os.Stat(filepath.Join(destDirForHTTPS, "terraform_validate"))
 	c.Assert(err, IsNil)
@@ -41,7 +41,7 @@ func (s *MySuite) TestCopyGitHubResources(c *C) {
 
 	// Success via HTTPS (Root directory)
 	destDirForHTTPSRootDir := filepath.Join(destDir, "https-rootdir")
-	err = copyGitHubResources("github.com/terraform-google-modules/terraform-google-service-accounts.git?ref=v4.1.1", destDirForHTTPSRootDir)
+	err = copyGitHubModules("github.com/terraform-google-modules/terraform-google-service-accounts.git?ref=v4.1.1", destDirForHTTPSRootDir)
 	c.Assert(err, IsNil)
 	fInfo, err = os.Stat(filepath.Join(destDirForHTTPSRootDir, "main.tf"))
 	c.Assert(err, IsNil)
@@ -50,34 +50,34 @@ func (s *MySuite) TestCopyGitHubResources(c *C) {
 	c.Assert(fInfo.IsDir(), Equals, false)
 }
 
-func (s *MySuite) TestGetResourceInfo_GitHub(c *C) {
+func (s *MySuite) TestGetModuleInfo_GitHub(c *C) {
 	reader := GitHubSourceReader{}
 
 	// Invalid GitHub repository - path does not exists
 	badGitRepo := "github.com:not/exist.git"
-	_, err := reader.GetResourceInfo(badGitRepo, tfKindString)
-	expectedErr := "failed to clone GitHub resource at .*"
+	_, err := reader.GetModuleInfo(badGitRepo, tfKindString)
+	expectedErr := "failed to clone GitHub module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
-	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
-	_, err = reader.GetResourceInfo(badSource, tfKindString)
+	// Invalid: Unsupported Module Source
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
+	_, err = reader.GetModuleInfo(badSource, tfKindString)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
 
-func (s *MySuite) TestGetResource_GitHub(c *C) {
+func (s *MySuite) TestGetModule_GitHub(c *C) {
 	reader := GitHubSourceReader{}
 
 	// Invalid GitHub repository - path does not exists
 	badGitRepo := "github.com:not/exist.git"
-	err := reader.GetResource(badGitRepo, tfKindString)
-	expectedErr := "failed to clone GitHub resource at .*"
+	err := reader.GetModule(badGitRepo, tfKindString)
+	expectedErr := "failed to clone GitHub module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
-	// Invalid: Unsupported Resource Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/resources"
-	err = reader.GetResource(badSource, tfKindString)
+	// Invalid: Unsupported Module Source
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
+	err = reader.GetModule(badSource, tfKindString)
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }

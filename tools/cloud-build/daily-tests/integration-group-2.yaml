@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 ---
 # Current parallel execution tree, built to minimize total execution time and faster tests first.
-# ├── build_hpc
+# ├── build_ghpc
 # └── fetch_builder
 #    ├── spack-gromacks (group 2)
 
@@ -62,10 +62,11 @@ steps:
     set -x -e
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    SG_EXAMPLE=community/examples/spack-gromacs.yaml
 
-    sed -i "s/# spack_cache_url:/spack_cache_url:/" examples/spack-gromacs.yaml
-    sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" examples/spack-gromacs.yaml
-    sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE//\//\\\/}/" examples/spack-gromacs.yaml
+    sed -i "s/# spack_cache_url:/spack_cache_url:/" $${SG_EXAMPLE}
+    sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" $${SG_EXAMPLE}
+    sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE//\//\\\/}/" $${SG_EXAMPLE}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

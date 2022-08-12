@@ -1,0 +1,28 @@
+# Disable because {} are used as part of the template definition
+# https://github.com/koalaman/shellcheck/wiki/SC1083
+disable=SC1083
+
+# Disabled because it catches on the template for loop iterator
+# https://github.com/koalaman/shellcheck/wiki/SC2086
+disable=SC2086
+
+# Disabled because it misinterprets template loop iterator as a bash variable
+# https://github.com/koalaman/shellcheck/wiki/SC2154
+disable=SC2154
+
+# Disabled because paths will not be known until runtime (and will not be local)
+# https://github.com/koalaman/shellcheck/wiki/SC1090
+disable=SC1090
+
+# Disabled because variable is used with $$ for template
+# https://github.com/koalaman/shellcheck/wiki/SC2034
+disable=SC2034
+
+# Disabled because string is not literal, variable is prefaced with $$ for template
+# https://github.com/koalaman/shellcheck/wiki/SC2157
+disable=SC2157
+
+
+# Disabled because parenthesis are used in terraform code
+# https://github.com/koalaman/shellcheck/wiki/SC1036
+disable=SC1036

@@ -16,32 +16,32 @@ package sourcereader
 
 import (
 	"fmt"
-	"hpc-toolkit/pkg/resreader"
+	"hpc-toolkit/pkg/modulereader"
 	"os"
 )
 
-// LocalSourceReader reads resources from a local directory
+// LocalSourceReader reads modules from a local directory
 type LocalSourceReader struct{}
 
-// GetResourceInfo gets resreader.ResourceInfo for the given kind from the local source
-func (r LocalSourceReader) GetResourceInfo(resPath string, kind string) (resreader.ResourceInfo, error) {
-	if !IsLocalPath(resPath) {
-		return resreader.ResourceInfo{}, fmt.Errorf("Source is not valid: %s", resPath)
+// GetModuleInfo gets modulereader.ModuleInfo for the given kind from the local source
+func (r LocalSourceReader) GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error) {
+	if !IsLocalPath(modPath) {
+		return modulereader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
-	reader := resreader.Factory(kind)
-	return reader.GetInfo(resPath)
+	reader := modulereader.Factory(kind)
+	return reader.GetInfo(modPath)
 }
 
-// GetResource copies the local source to a provided destination (the blueprint directory)
-func (r LocalSourceReader) GetResource(resPath string, copyPath string) error {
-	if !IsLocalPath(resPath) {
-		return fmt.Errorf("Source is not valid: %s", resPath)
+// GetModule copies the local source to a provided destination (the deployment directory)
+func (r LocalSourceReader) GetModule(modPath string, copyPath string) error {
+	if !IsLocalPath(modPath) {
+		return fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
-	if _, err := os.Stat(resPath); os.IsNotExist(err) {
-		return fmt.Errorf("Local resource doesn't exist at %s", resPath)
+	if _, err := os.Stat(modPath); os.IsNotExist(err) {
+		return fmt.Errorf("Local module doesn't exist at %s", modPath)
 	}
 
-	return copyFromPath(resPath, copyPath)
+	return copyFromPath(modPath, copyPath)
 }

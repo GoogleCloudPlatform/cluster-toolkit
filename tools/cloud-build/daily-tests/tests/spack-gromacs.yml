@@ -17,16 +17,17 @@
 deployment_name: "spack-gromacs-{{ build }}"
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/spack-gromacs.yaml"
+blueprint_yaml: "{{ workspace }}/community/examples/spack-gromacs.yaml"
 blueprint_dir: spack-gromacs
 network: "default"
 max_nodes: 5
 login_node: slurm-{{ deployment_name }}-login0
 controller_node: slurm-{{ deployment_name }}-controller
 post_deploy_tests:
-- spack.yml
-partitions:
-- compute
-mounts:
-- /home
-- /sw
+- test-spack.yml
+custom_vars:
+  partitions:
+  - compute
+  mounts:
+  - /home
+  - /sw

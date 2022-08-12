@@ -1,16 +1,21 @@
 
-# Integration Test Configs
+# Integration Test Blueprints
 
-This directory contains a set of test YAML files that can be fed into gHPC
-to create a blueprint. These configs are used to run integration tests against
-`ghpc`. These configs can also be used independently and locally to verify a
-local `ghpc` build.
+This directory contains a set of test blueprint files that can be fed into gHPC
+to create a deployment. These blueprints are used to run integration tests
+against `ghpc`. These blueprints can also be used independently and locally to
+verify a local `ghpc` build.
 
-## Config Descriptions
+## Blueprint Descriptions
+
+**2-nfs-servers.yaml**: Creates 2 NFS servers with different local mount points,
+but otherwise the same variables. This test exists to ensure there will be no
+naming collisions when more than one NFS server is created in a projects with
+the same deployment name.
 
 **hpc-cluster-simple.yaml**: Creates a simple cluster with a single compute VM,
 filestore as a /home directory and a network. This has been used as a demo
-config when presenting the toolkit.
+blueprint when presenting the toolkit.
 
 **hpc-cluster-high-io-remote-state.yaml**: Creates a cluster with high
 performance IO system with all Terraform state stored remotely.
@@ -29,7 +34,7 @@ one manager node and eight compute nodes that share a `/home` mounted filestore
 instance. The pre-existing default VPC network is used.
 
 **instance_with_startup.yaml**: Creates a simple cluster with one
-simple-instance and filestore using the startup-script resource to setup and
+vm-instance and filestore using the startup-script module to setup and
 mount the filestore instance.
 
 **packer.yaml**: Creates a network for Packer to create a custom VM image.

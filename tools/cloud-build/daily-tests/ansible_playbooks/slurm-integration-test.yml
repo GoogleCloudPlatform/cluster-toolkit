@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,9 +30,10 @@
       path: "/builder/home/.ssh/id_rsa"
 
   ## Create cluster
-  - name: Create blueprint
-    command: "{{ scripts_dir }}/create_blueprint.sh"
+  - name: Create Deployment Directory
+    command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
+      ALWAYS_RECOMPILE: "no"
       MAX_NODES: "{{ max_nodes }}"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
@@ -41,26 +42,39 @@
       DEPLOYMENT_NAME: "{{ deployment_name }}"
       NETWORK: "{{ network }}"
     args:
-      creates: "{{ workspace }}/{{ blueprint_dir }}.tgz"
+      creates: "{{ workspace }}/{{ deployment_name }}.tgz"
   - name: Create Infrastructure and test
     block:
     - name: Create Cluster with Terraform
       command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
+        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
       args:
-        creates: "{{ workspace }}/{{ blueprint_dir }}/.terraform"
+        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
       environment:
         TF_IN_AUTOMATION: "TRUE"
       with_items:
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
+    - name: Gather instance information
+      changed_when: false
+      delegate_to: localhost
+      register: instances_list
+      command: >-
+        gcloud compute instances list
+        --filter="labels.ghpc_deployment={{ deployment_name }}"
+        --format='table(name,zone,id,status)'
+    - name: Print instance information
+      ansible.builtin.debug:
+        var: instances_list.stdout_lines
     - name: Get login IP
+      changed_when: false
       register: login_ip
       command: >-
         gcloud compute instances describe --zone={{ zone }} {{ login_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
     - name: Get Controller IP
+      changed_when: false
       register: controller_ip
       command: >-
         gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
@@ -68,11 +82,14 @@
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
+      changed_when: false
       shell: >-
         dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
          awk -F'"' '{print $2}'
       register: build_ip
     - name: Create firewall rule
+      register: fw_created
+      changed_when: fw_created.rc == 0
       command:
         argv:
         - gcloud
@@ -88,6 +105,8 @@
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
     - name: 'Add SSH Keys to OS-Login'
+      register: key_created
+      changed_when: key_created.rc == 0
       command:
         argv:
         - gcloud
@@ -102,12 +121,13 @@
       add_host:
         hostname: "{{ login_ip.stdout }}"
         groups: [remote_host]
-    - name: Wait for cluster
-      wait_for_connection:
 
     ## Cleanup and fail gracefully
     rescue:
     - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false # keep cleaning up
       command:
         argv:
         - gcloud
@@ -115,15 +135,15 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-      ignore_errors: true
     - name: Tear Down Cluster
+      changed_when: true # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
+        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
     - name: Fail Out
       fail:
         msg: "Failed while setting up test infrastructure"
@@ -131,22 +151,29 @@
 
 - name: Run Integration Tests
   hosts: remote_host
-  gather_facts: false
+  gather_facts: no # must wait until host is reachable
+  ignore_unreachable: true # ensure always block will run even if SSH fails
   tasks:
   - name: Slurm Test Block
     vars:
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     block:
-    - name: Pause for 2 minutes to allow cluster setup
-      pause:
-        minutes: 2
+    - name: Wait until host is reachable
+      ansible.builtin.wait_for_connection:
+        delay: 60
+        timeout: 300
+    - name: Gather facts
+      ansible.builtin.setup:
+    - name: Wait until Munge is active
+      ansible.builtin.wait_for:
+        path: /var/run/munge/munge.socket.2
+        timeout: 600
     - name: Run Integration tests for HPC toolkit
       include_tasks: "{{ test }}"
       run_once: true
       vars:
         login_node: "{{ login_node }}"
-        mounts: "{{ mounts }}"
-        partitions: "{{ partitions }}"
+        custom_vars: "{{ custom_vars }}"
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
@@ -154,22 +181,27 @@
     ## Always cleanup, even on failure
     always:
     - name: Recover Resume Logs
+      changed_when: false
+      failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
       command: cat /var/log/slurm/resume.log
       register: resume_output
-      ignore_errors: true
-    - debug:
+    - name: Print Slurm resume.log
+      ansible.builtin.debug:
         var: resume_output.stdout_lines
-
     - name: Recover Suspend Logs
+      changed_when: false
+      failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
       command: cat /var/log/slurm/suspend.log
       register: suspend_output
-      ignore_errors: true
-    - debug:
+    - name: Print Slurm suspend.log
+      ansible.builtin.debug:
         var: suspend_output.stdout_lines
-
     - name: Delete Firewall Rule
+      register: fw_deleted
+      changed_when: fw_deleted.rc == 0
+      failed_when: false # keep cleaning up
       run_once: true
       delegate_to: localhost
       command:
@@ -179,12 +211,12 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-      ignore_errors: true
     - name: Tear Down Cluster
+      changed_when: true # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
       command:
         cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ blueprint_dir }}/primary"
+        chdir: "{{ workspace }}/{{ deployment_name }}/primary"

@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,10 +16,13 @@
 
 blueprint_name: new_project
 
-resource_groups:
+vars:
+  deployment_name: new_project_deployment
+
+deployment_groups:
 - group: primary
-  resources:
-  - source: ./resources/project/new-project
+  modules:
+  - source: ./community/modules/project/new-project
     kind: terraform
     id: project
     settings:

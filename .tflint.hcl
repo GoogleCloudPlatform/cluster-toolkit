@@ -1,4 +1,4 @@
-// Copyright 2021 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ rule "terraform_module_version" {
 rule "terraform_workspace_remote" {
   enabled = true
 }
-// Disable because many of our resources do not have nor need main.tf files
+// Disable because many of our HPC modules do not have nor need main.tf files
 rule "terraform_standard_module_structure" {
   enabled = false
 }

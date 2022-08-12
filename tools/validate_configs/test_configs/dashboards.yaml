@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ vars:
   region: europe-west4
   zone: europe-west4-a
 
-resource_groups:
+deployment_groups:
 - group: primary
-  resources:
-  - source: resources/monitoring/dashboard
+  modules:
+  - source: modules/monitoring/dashboard
     kind: terraform
     id: hpc_dash
     settings:
@@ -46,7 +46,7 @@ resource_groups:
             },
             "title": "HPC Toolkit - TEST 2"
           }
-  - source: resources/monitoring/dashboard
+  - source: modules/monitoring/dashboard
     kind: terraform
     id: empty_dash
     settings:
