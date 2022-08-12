@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: rocky-linux
+blueprint_name: hpc-centos-ss-test
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: rocky-linux
+  deployment_name: hpc-centos-ss-test
   region: us-central1
   zone: us-central1-a
 
@@ -41,8 +41,6 @@ deployment_groups:
     kind: terraform
     id: nfs
     use: [network1]
-    settings:
-      image: rocky-linux-cloud/rocky-linux-8
 
   - source: ./community//modules/scripts/spack-install
     kind: terraform
@@ -103,6 +101,3 @@ deployment_groups:
     use: [network1, startup, nfs, appsfs]
     settings:
       machine_type: e2-standard-4
-      instance_image:
-        family: rocky-linux-8
-        project: rocky-linux-cloud
