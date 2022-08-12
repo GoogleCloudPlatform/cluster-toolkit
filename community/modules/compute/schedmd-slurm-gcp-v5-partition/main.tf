@@ -60,13 +60,18 @@ locals {
       instance_template = null
     },
   ]
+
+  # Since deployment name may be used to create a cluster name, we remove any invalid character from the beginning
+  # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
+  tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 8)
+  slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
 }
 
 
 module "slurm_partition" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.3"
 
-  slurm_cluster_name      = var.slurm_cluster_name
+  slurm_cluster_name      = local.slurm_cluster_name
   partition_nodes         = local.partition_nodes
   enable_job_exclusive    = var.exclusive
   enable_placement_groups = var.enable_placement
