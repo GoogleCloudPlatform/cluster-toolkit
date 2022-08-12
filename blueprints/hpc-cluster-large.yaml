@@ -1,4 +1,4 @@
-blueprint_name: hpc-cluster-small
+blueprint_name: hpc-cluster-large
 
 vars:
   billing_account: ## Set GCP Billing Account Here ##
@@ -49,7 +49,7 @@ deployment_groups:
           max_node_count: 4
           enable_placement: false
           exclusive: false
-          machine_type: n2-standard-2
+          machine_type: n2-standard-8
 
       # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
       - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
