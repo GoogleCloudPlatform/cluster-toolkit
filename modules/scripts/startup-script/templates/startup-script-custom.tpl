@@ -29,7 +29,7 @@ stdlib::runner() {
   case "$1" in
     ansible-local) stdlib::run_playbook "$destpath/$filename" "$args";;
     # shellcheck source=/dev/null
-    shell)  sh -c "source '$destpath/$filename' $args";;
+    shell)  sh -c ". '$destpath/$filename' $args";;
   esac
 }
 
