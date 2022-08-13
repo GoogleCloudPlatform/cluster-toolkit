@@ -23,6 +23,9 @@ vars:
   zone: us-central1-c
   slurm_cluster_name: ghpc
 
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
 deployment_groups:
 - group: primary
   modules:
