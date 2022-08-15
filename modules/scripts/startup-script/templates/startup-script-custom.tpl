@@ -7,6 +7,7 @@ stdlib::run_playbook() {
     exit 1
   fi
   /usr/bin/ansible-playbook --connection=local --inventory=localhost, --limit localhost $1 $2
+  return $?
 }
 
 stdlib::runner() {
@@ -28,9 +29,15 @@ stdlib::runner() {
 
   case "$1" in
     ansible-local) stdlib::run_playbook "$destpath/$filename" "$args";;
-    # shellcheck source=/dev/null
-    shell)  sh -c "source '$destpath/$filename' $args";;
+    shell) . $destpath/$filename $args;;
   esac
+  
+  exit_code=$?
+  stdlib::info "=== $object finished with exit_code=$exit_code ==="
+  if [ "$exit_code" -ne "0" ] ; then
+    stdlib::error "=== execution of $object failed, exiting ==="
+    exit $exit_code
+  fi
 }
 
 stdlib::load_runners(){

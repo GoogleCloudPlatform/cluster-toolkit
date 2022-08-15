@@ -25,12 +25,7 @@ In a new Google Cloud project there are several apis that must be enabled to
 deploy your HPC cluster. These will be caught when you perform `terraform apply`
 but you can save time by enabling them now by running:
 
-<!-- Tried the native way to do this and it timed out. Leaving comment here for future reference. -->
-<!-- <walkthrough-enable-apis apis="file.googleapis.com,compute.googleapis.com"></walkthrough-enable-apis> -->
-
-```bash
-gcloud services enable --project <walkthrough-project-id/> file.googleapis.com compute.googleapis.com
-```
+<walkthrough-enable-apis apis="file.googleapis.com,compute.googleapis.com"></walkthrough-enable-apis>
 
 We also need to grant the default compute service account project edit access so
 the slurm controller can perform actions such as auto-scaling.

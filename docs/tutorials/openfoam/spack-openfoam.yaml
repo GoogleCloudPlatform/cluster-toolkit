@@ -1,0 +1,180 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: spack-openfoam
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: spack-openfoam
+  region: us-central1
+  zone: us-central1-c
+  spack_cache_mirror_url: gs://optionally_set_spack_cache_bucket
+
+deployment_groups:
+- group: primary
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    id: network1
+
+  - source: modules/monitoring/dashboard
+    kind: terraform
+    id: hpc_dash
+
+  ## Install Scripts
+  - source: community/modules/scripts/spack-install
+    kind: terraform
+    id: spack
+    settings:
+      install_dir: /apps/spack
+      spack_url: https://github.com/spack/spack
+      spack_ref: v0.18.0
+      log_file: /var/log/spack.log
+      configs:
+      - type: file
+        scope: defaults
+        content: |
+          config:
+            build_stage:
+              - /apps/spack/spack-stage
+      - type: file
+        scope: defaults
+        content: |
+          modules:
+            default:
+              tcl:
+                hash_length: 0
+                all:
+                  conflict:
+                    - '{name}'
+                projections:
+                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
+      - type: 'file'
+        scope: 'site'
+        content: |
+          packages:
+            slurm:
+              externals:
+                - spec: slurm@21-08-8-2
+                  prefix: /usr/local
+              buildable: False
+      compilers:
+      - gcc@9.3.0 %gcc@4.8.5 target=x86_64
+      environments:
+      - name: openfoam
+        type: file
+        content: |
+          spack:
+            definitions:
+            - compilers:
+              - gcc@9.3.0
+            - mpis:
+              - openmpi@4.1.3~atomics~cuda+cxx~cxx_exceptions~gpfs~internal-hwloc~java+legacylaunchers~lustre~memchecker+pmi+romio+rsh~singularity+static+vt+wrapper-rpath fabrics=none schedulers=slurm
+            - packages:
+              - flex@2.6.4
+            - mpi_packages:
+              - openfoam-org@7 ^flex@2.6.4
+            specs:
+            - matrix:
+              - - $mpis
+              - - $%compilers
+            - matrix:
+              - - $packages
+              - - $%compilers
+            - matrix:
+              - - $mpi_packages
+              - - $%compilers
+              - - $^mpis
+            concretizer:
+              unify: when_possible
+      spack_cache_url:
+      - mirror_name: gcs_cache
+        mirror_url: $(vars.spack_cache_mirror_url)
+
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: controller-setup
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
+      - type: shell
+        destination: setup_openfoam.sh
+        content: |
+          #!/bin/bash
+          source /apps/spack/share/spack/setup-env.sh
+          spack env activate openfoam
+          spack env loads -r
+          chmod -R a+rwX /apps/spack/var/spack/environments/openfoam
+          mkdir -p /apps/openfoam
+          chmod a+rwx /apps/openfoam
+      - type: data
+        destination: /apps/openfoam/submit_openfoam.sh
+        content: |
+          #!/bin/bash
+          #SBATCH -N 2
+          #SBATCH --ntasks-per-node 30
+
+          source /apps/spack/share/spack/setup-env.sh
+          spack env activate openfoam
+
+          cd $SLURM_SUBMIT_DIR
+          cp -R $FOAM_TUTORIALS/incompressible/simpleFoam/motorBike/* .
+          mkdir -p constant/triSurface
+          mkdir -p constant/geometry
+          cp $FOAM_TUTORIALS/resources/geometry/motorBikemotorBike.obj.gz constant/triSurface/.
+          cp $FOAM_TUTORIALS/resources/geometry/motorBikemotorBike.obj.gz constant/geometry/.
+
+          sed "/^numberOfSubdomains/ c\\numberOfSubdomains 60;" -i system/decomposeParDict*
+          sed "/^method/c\\method          scotch;" -i system/decomposeParDict*
+          ln -s 0 0.orig
+
+          surfaceFeatures
+          blockMesh
+          decomposePar -copyZero
+
+          scontrol show hostnames ${SLURM_JOB_NODELIST} > hostfile
+          mpirun -n 60 -npernode 30 -hostfile hostfile snappyHexMesh -overwrite -parallel
+          mpirun -n 60 -npernode 30 -hostfile hostfile potentialFoam -parallel
+          mpirun -n 60 -npernode 30 -hostfile hostfile simpleFoam -parallel
+  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    id: compute_partition
+    use:
+    - network1
+    settings:
+      partition_name: compute
+      max_node_count: 20
+
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    kind: terraform
+    id: slurm_controller
+    use:
+    - network1
+    - compute_partition
+    settings:
+      controller_startup_script: $(controller-setup.startup_script)
+      login_node_count: 1
+
+  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    kind: terraform
+    id: slurm_login
+    use:
+    - network1
+    - slurm_controller

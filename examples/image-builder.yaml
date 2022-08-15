@@ -24,6 +24,9 @@ vars:
   network_name: image-builder
   subnetwork_name: image-builder-us-central1
 
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
 deployment_groups:
 - group: builder-env
   modules:
