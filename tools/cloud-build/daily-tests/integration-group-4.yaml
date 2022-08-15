@@ -84,4 +84,4 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/cloud-build.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/cloud-batch.yml"
