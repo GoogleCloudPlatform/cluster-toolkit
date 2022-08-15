@@ -99,8 +99,7 @@ folder by running:
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
-> deployment variables. Similarly we are using a prebuilt Spack cache to speed
-> up deployment.
+> deployment variables.
 
 This will create a deployment directory named `spack-openfoam/`, which
 contains the terraform needed to deploy your cluster.
