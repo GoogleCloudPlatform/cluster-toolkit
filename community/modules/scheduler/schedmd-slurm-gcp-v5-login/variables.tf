@@ -34,14 +34,15 @@ variable "disable_smt" {
   default     = false
 }
 
+variable "deployment_name" {
+  description = "Name of the deployment."
+  type        = string
+}
+
 variable "slurm_cluster_name" {
   type        = string
-  description = "Cluster name, used for resource naming and slurm accounting."
-
-  validation {
-    condition     = can(regex("(^[a-z][a-z0-9]*$)", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be composed of only alphanumeric values and begin with a leter. regex: '(^[a-z][a-z0-9]*$)'."
-  }
+  description = "Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters)."
+  default     = null
 }
 
 variable "controller_instance_id" {
