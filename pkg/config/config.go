@@ -402,6 +402,10 @@ func (dc *DeploymentConfig) validateConfig() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	err = dc.Config.checkBlueprintName()
+	if err != nil {
+		log.Fatal(err)
+	}
 	moduleToGroup, err := checkModuleAndGroupNames(dc.Config.DeploymentGroups)
 	if err != nil {
 		log.Fatal(err)
@@ -568,6 +572,15 @@ func (err *DeploymentNameError) Error() string {
 	return fmt.Sprintf("deployment_name must be a string and cannot be empty, cause: %v", err.cause)
 }
 
+// BlueprintNameError signifies a problem with the blueprint name.
+type BlueprintNameError struct {
+	cause string
+}
+
+func (err *BlueprintNameError) Error() string {
+	return fmt.Sprintf("blueprint_name input error, cause: %v", err.cause)
+}
+
 // ResolveGlobalVariables will resolve literal variables "((var.*))" in the
 // provided map to their corresponding value in the global variables of the
 // Blueprint.
@@ -595,4 +608,15 @@ func (b *Blueprint) DeploymentName() (string, error) {
 		return "", &DeploymentNameError{"deployment_name was an empty string."}
 	}
 	return deploymentName, nil
+}
+
+// checkBlueprintName returns an error if blueprint_name does not comply with
+// requirements for correct label values as per https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
+func (b *Blueprint) checkBlueprintName() error {
+
+	if !regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`).MatchString(b.BlueprintName) {
+		return &BlueprintNameError{"blueprint_name can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long."}
+	}
+
+	return nil
 }

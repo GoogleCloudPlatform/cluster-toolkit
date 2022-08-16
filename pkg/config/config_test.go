@@ -232,6 +232,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	}
 	return DeploymentConfig{
 		Config: Blueprint{
+			BlueprintName:    "simple",
 			Vars:             map[string]interface{}{"deployment_name": "deployment_name"},
 			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
 		},
@@ -341,6 +342,30 @@ func (s *MySuite) TestDeploymentName(c *C) {
 	delete(dc.Config.Vars, "deployment_name")
 	deploymentName, err = dc.Config.DeploymentName()
 	c.Assert(deploymentName, Equals, "")
+	c.Check(errors.As(err, &e), Equals, true)
+}
+
+func (s *MySuite) TestCheckBlueprintName(c *C) {
+	dc := getDeploymentConfigForTest()
+	var e *BlueprintNameError
+
+	// Is blueprint_name a valid string?
+	err := dc.Config.checkBlueprintName()
+	c.Assert(err, IsNil)
+
+	// Is blueprint_name an empty string?
+	dc.Config.BlueprintName = ""
+	err = dc.Config.checkBlueprintName()
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Is blueprint_name longer than 63 characters?
+	dc.Config.BlueprintName = "blueprint-name-blueprint-name-blueprint-name-blueprint-name-0123"
+	err = dc.Config.checkBlueprintName()
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Does deployment_name contain special characters other than dashes or underscores?
+	dc.Config.BlueprintName = "blueprint.name"
+	err = dc.Config.checkBlueprintName()
 	c.Check(errors.As(err, &e), Equals, true)
 }
 
