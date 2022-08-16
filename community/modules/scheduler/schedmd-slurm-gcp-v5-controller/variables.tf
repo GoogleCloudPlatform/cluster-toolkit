@@ -103,6 +103,12 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "disable_controller_public_ips" {
+  description = "If set to false. The controller will have a random public IP assigned to it. Ignored if access_config is set."
+  type        = bool
+  default     = true
+}
+
 variable "disable_default_mounts" {
   description = <<-EOD
     Disable default global network storage from the controller

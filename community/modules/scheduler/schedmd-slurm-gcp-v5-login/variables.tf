@@ -39,6 +39,12 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "disable_login_public_ips" {
+  description = "If set to false. The login will have a random public IP assigned to it. Ignored if access_config is set."
+  type        = bool
+  default     = true
+}
+
 variable "slurm_cluster_name" {
   type        = string
   description = "Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters)."

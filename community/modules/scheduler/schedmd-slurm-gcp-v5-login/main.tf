@@ -23,6 +23,9 @@ locals {
   # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
   tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 8)
   slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
+
+  enable_public_ip_access_config = var.disable_login_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
+  access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
 }
 
 module "slurm_login_template" {
@@ -64,7 +67,7 @@ module "slurm_login_template" {
 module "slurm_login_instance" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=v5.0.3"
 
-  access_config         = var.access_config
+  access_config         = local.access_config
   slurm_cluster_name    = local.slurm_cluster_name
   instance_template     = module.slurm_login_template.self_link
   network               = var.network_self_link
