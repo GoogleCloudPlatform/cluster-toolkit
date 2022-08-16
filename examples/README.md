@@ -13,7 +13,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-)
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
-  * [slurm-gcp-v5-cluster.yaml](#slurm-gcp-v5-clusteryaml--)
+  * [slurm-gcp-v5-hpc-centos7.yaml](#slurm-gcp-v5-hpc-centos7yaml-)
+  * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-)
   * [image-builder.yaml](#image-builderyaml-)
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
   * [daos-cluster.yaml](#daos-clusteryaml-)
@@ -174,7 +175,7 @@ For this example the following is needed in the selected region:
 
 [hpc-cluster-high-io.yaml]: ./hpc-cluster-high-io.yaml
 
-### [slurm-gcp-v5-cluster.yaml] ![community-badge]
+### [slurm-gcp-v5-hpc-centos7.yaml] ![community-badge]
 
 This example creates an HPC cluster similar to the one created by
 [hpc-cluster-small.yaml], but uses modules built from version 5 of
@@ -187,7 +188,7 @@ specifying in the `srun` command via the `--partition` flag. The `compute`
 partition runs on compute optimized nodes of type `cs-standard-60`. The
 `compute` partition may require additional quota before using.
 
-#### Quota Requirements for slurm-gcp-v5-cluster.yaml
+#### Quota Requirements for slurm-gcp-v5-hpc-centos7.yaml
 
 For this example the following is needed in the selected region:
 
@@ -203,8 +204,43 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-[slurm-gcp-v5-cluster.yaml]: ../community/examples/slurm-gcp-v5-cluster.yaml
+[slurm-gcp-v5-hpc-centos7.yaml]: ../community/examples/slurm-gcp-v5-hpc-centos7.yaml
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
+
+### [slurm-gcp-v5-ubuntu2004.yaml] ![community-badge]
+
+Similar to the previous example, but using Ubuntu 20.04 instead of CentOS 7.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+
+This example creates an HPC cluster similar to the one created by
+[hpc-cluster-small.yaml], but uses modules built from version 5 of
+[slurm-gcp] and Ubuntu.
+
+The cluster will support 2 partitions named `debug` and `compute`.
+The `debug` partition is the default partition and runs on smaller
+`n2-standard-2` nodes. The `compute` partition is not default and requires
+specifying in the `srun` command via the `--partition` flag. The `compute`
+partition runs on compute optimized nodes of type `cs-standard-60`. The
+`compute` partition may require additional quota before using.
+
+[Other operating systems]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
+[slurm-gcp-v5-ubuntu2004.yaml]: ../community/examples/slurm-gcp-v5-ubuntu2004.yaml
+
+#### Quota Requirements for slurm-gcp-v5-ubuntu2004.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
 
 ### [image-builder.yaml] ![core-badge]
 
