@@ -4,10 +4,11 @@ vars:
   billing_account: ## Set GCP Billing Account Here ##
   org_id: ## Set GCP Organization ID Here ##
   folder_id: ## Set GCP Folder ID Here ##
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: ## Set Deployment Name Here ##
-  project_id: ## Set Project ID Here ##
   region: ## Set Region Here ##
   zone: ## Set Zone Here ##
+  slurm_cluster_name: hpcsmall
   activate_apis:
     - compute.googleapis.com
     - file.googleapis.com
@@ -15,9 +16,9 @@ vars:
 deployment_groups:
   - group: primary
     modules:
-      # Source is an embedded module, denoted by "modules/*" without ./, ../, /
-      # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
-      # Example - ./modules/network/vpc
+      # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+      # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+      # Example - ./resources/network/vpc
       - source: community/modules/project/new-project
         kind: terraform
         id: project1
@@ -30,14 +31,13 @@ deployment_groups:
       - source: modules/file-system/filestore
         kind: terraform
         id: homefs
-        use:
+        use: 
           - project1
           - network1
         settings:
           local_mount: /home
 
-      # This debug_partition will work out of the box without requesting additional GCP quota.
-      - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+      - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
         kind: terraform
         id: debug_partition
         use:
@@ -46,13 +46,13 @@ deployment_groups:
           - homefs
         settings:
           partition_name: debug
-          max_node_count: 4
+          node_count_dynamic_max: 4
           enable_placement: false
-          exclusive: false
           machine_type: n2-standard-2
+          is_default: true
+          enable_shielded_vm: true
 
-      # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
-      - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+      - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
         kind: terraform
         id: compute_partition
         use:
@@ -61,26 +61,28 @@ deployment_groups:
           - homefs
         settings:
           partition_name: compute
-          max_node_count: 20
+          node_count_dynamic_max: 20
+          enable_shielded_vm: true
 
-      - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+      - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
         kind: terraform
         id: slurm_controller
         use:
           - project1
           - network1
-          - homefs
-          - debug_partition # debug partition will be default as it is listed first
+          - debug_partition
           - compute_partition
+          - homefs
         settings:
-          login_node_count: 1
-          suspend_time: 60
+          enable_shielded_vm: true
 
-      - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+      - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
         kind: terraform
         id: slurm_login
         use:
           - project1
           - network1
-          - homefs
           - slurm_controller
+        settings:
+          machine_type: n2-standard-2
+          enable_shielded_vm: true
