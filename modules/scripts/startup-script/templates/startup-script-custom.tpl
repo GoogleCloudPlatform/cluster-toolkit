@@ -1,12 +1,18 @@
 
 
 stdlib::run_playbook() {
+  if [ -f /usr/local/ghpc-venv ]; then
+    . /usr/local/ghpc-venv/bin/activate
+  fi
   if [ ! "$(which ansible-playbook)" ]; then
     stdlib::error "ansible-playbook not found"\
     "Please install ansible before running ansible-local runners."
     exit 1
   fi
   /usr/bin/ansible-playbook --connection=local --inventory=localhost, --limit localhost $1 $2
+  if [ -f /usr/local/ghpc-venv ]; then
+    deactivate
+  fi
   return $?
 }
 
