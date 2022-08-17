@@ -27,6 +27,7 @@ stdlib::runner() {
 
   stdlib::get_from_bucket -u "gs://${bucket}/$object" -d "$destpath" -f "$filename"
 
+  stdlib::info "=== start executing runner: $object ==="
   case "$1" in
     ansible-local) stdlib::run_playbook "$destpath/$filename" "$args";;
     shell) . $destpath/$filename $args;;
