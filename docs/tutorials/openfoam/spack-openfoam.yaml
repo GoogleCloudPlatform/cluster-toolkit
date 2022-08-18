@@ -26,18 +26,18 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: modules/monitoring/dashboard
+  - id: hpc_dash
+    source: modules/monitoring/dashboard
     kind: terraform
-    id: hpc_dash
 
   ## Install Scripts
-  - source: community/modules/scripts/spack-install
+  - id: spack
+    source: community/modules/scripts/spack-install
     kind: terraform
-    id: spack
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
@@ -104,9 +104,9 @@ deployment_groups:
       - mirror_name: gcs_cache
         mirror_url: $(vars.spack_cache_mirror_url)
 
-  - source: modules/scripts/startup-script
+  - id: controller-setup
+    source: modules/scripts/startup-script
     kind: terraform
-    id: controller-setup
     settings:
       runners:
       - type: shell
@@ -153,18 +153,18 @@ deployment_groups:
           mpirun -n 60 -npernode 30 -hostfile hostfile snappyHexMesh -overwrite -parallel
           mpirun -n 60 -npernode 30 -hostfile hostfile potentialFoam -parallel
           mpirun -n 60 -npernode 30 -hostfile hostfile simpleFoam -parallel
-  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: compute_partition
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute_partition
     use:
     - network1
     settings:
       partition_name: compute
       max_node_count: 20
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - id: slurm_controller
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm_controller
     use:
     - network1
     - compute_partition
@@ -172,9 +172,9 @@ deployment_groups:
       controller_startup_script: $(controller-setup.startup_script)
       login_node_count: 1
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm_login
     use:
     - network1
     - slurm_controller
