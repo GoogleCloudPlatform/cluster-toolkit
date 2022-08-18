@@ -3,7 +3,7 @@ module hpc-toolkit
 go 1.16
 
 require (
-	cloud.google.com/go/compute v1.8.0
+	cloud.google.com/go/compute v1.9.0
 	github.com/hashicorp/go-getter v1.6.2
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.13.0
