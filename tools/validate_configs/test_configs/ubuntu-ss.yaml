@@ -42,7 +42,6 @@ deployment_groups:
     kind: terraform
     use: [network1]
     settings:
-      image: ubuntu-os-cloud/ubuntu-1804-lts
       auto_delete_disk: true
 
   - id: spack
@@ -51,10 +50,8 @@ deployment_groups:
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
-      spack_ref: v0.17.0
+      spack_ref: v0.18.0
       spack_cache_url:
-      - mirror_name: 'gcs_cache'
-        mirror_url: gs://example-buildcache/linux-centos7
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
@@ -94,6 +91,7 @@ deployment_groups:
         destination: "install-nfs-client.sh"
       - $(appsfs.install_nfs_client_runner)
       - $(nfs.mount_runner)
+      - $(spack.install_spack_deps_runner)
       - type: shell
         content: $(spack.startup_script)
         destination: "/apps/spack-install.sh"

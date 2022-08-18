@@ -93,6 +93,7 @@ deployment_groups:
         destination: "install-nfs-client.sh"
       - $(appsfs.install_nfs_client_runner)
       - $(nfs.mount_runner)
+      - $(spack.install_spack_deps_runner)
       - type: shell
         content: $(spack.startup_script)
         destination: "/apps/spack-install.sh"

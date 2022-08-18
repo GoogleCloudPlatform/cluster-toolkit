@@ -1,7 +1,7 @@
 
 
 stdlib::run_playbook() {
-  if [ -f /usr/local/ghpc-venv ]; then
+  if [ -d /usr/local/ghpc-venv ]; then
     . /usr/local/ghpc-venv/bin/activate
   fi
   if [ ! "$(which ansible-playbook)" ]; then
@@ -9,8 +9,8 @@ stdlib::run_playbook() {
     "Please install ansible before running ansible-local runners."
     exit 1
   fi
-  /usr/bin/ansible-playbook --connection=local --inventory=localhost, --limit localhost $1 $2
-  if [ -f /usr/local/ghpc-venv ]; then
+  ansible-playbook --connection=local --inventory=localhost, --limit localhost $1 $2
+  if [ -d /usr/local/ghpc-venv ]; then
     deactivate
   fi
   return $?

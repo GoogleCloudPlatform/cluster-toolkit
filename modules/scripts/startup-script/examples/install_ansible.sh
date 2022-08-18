@@ -34,7 +34,7 @@ apt_wait() {
 install_python_deps() {
 	if [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
 		grep -qi ubuntu /etc/os-release 2>/dev/null; then
-		apt install -y python3-distutils
+		apt-get install -y python3-distutils
 	fi
 }
 
@@ -68,15 +68,15 @@ get_python_minor_version() {
 install_python3_yum() {
 	## TODO restrict repos to search through in centos to decrease overhead
 	yum install -y python3
-	python_path=$(rpm -ql python3 | grep 'python3$')
+	python_path=$(rpm -ql python3 | grep 'bin/python3$')
 }
 
 # Install python3 with the apt package manager. Updates python_path to the
 # newly installed packaged.
 install_python3_apt() {
 	apt_wait
-	apt install -y python3 python3-distutils
-	python_path=$(dpkg -L python3 | grep 'python3$')
+	apt-get install -y python3 python3-distutils
+	python_path=$(which python3)
 }
 
 install_python3() {

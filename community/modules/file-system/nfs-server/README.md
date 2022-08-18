@@ -6,6 +6,10 @@ files with other clients over a network. `nfs-server` can be used by
 [vm-instance](../../../../modules/compute/vm-instance/README.md) and SchedMD
 community modules that create compute VMs.
 
+> **_WARNING:_** This module has only been tested against the HPC centos7 OS
+> disk image (the default). Using other images may work, but have not been
+> verified.
+
 [disk]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk
 
 ### Example

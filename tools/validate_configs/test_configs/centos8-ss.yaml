@@ -42,7 +42,6 @@ deployment_groups:
     kind: terraform
     use: [network1]
     settings:
-      image: centos-cloud/centos-stream-8
       auto_delete_disk: true
 
   - id: spack
@@ -94,6 +93,7 @@ deployment_groups:
         destination: "install-nfs-client.sh"
       - $(appsfs.install_nfs_client_runner)
       - $(nfs.mount_runner)
+      - $(spack.install_spack_deps_runner)
       - type: shell
         content: $(spack.startup_script)
         destination: "/apps/spack-install.sh"
