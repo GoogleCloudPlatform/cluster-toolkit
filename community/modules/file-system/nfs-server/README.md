@@ -11,9 +11,9 @@ community modules that create compute VMs.
 ### Example
 
 ```yaml
-- source: community/modules/file-system/nfs-server
+- id: homefs
+  source: community/modules/file-system/nfs-server
   kind: terraform
-  id: homefs
   use: [network1]
   settings:
     auto_delete_disk: true

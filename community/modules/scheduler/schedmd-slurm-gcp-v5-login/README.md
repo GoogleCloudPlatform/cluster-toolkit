@@ -12,9 +12,9 @@ terraform modules. The login node is used in conjunction with the
 ### Example
 
 ```yaml
-- source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+- id: slurm_login
+  source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
   kind: terraform
-  id: slurm_login
   use:
   - network1
   - slurm_controller

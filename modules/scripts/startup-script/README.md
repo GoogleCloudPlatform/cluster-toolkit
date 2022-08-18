@@ -96,9 +96,9 @@ sudo journalctl -u google-startup-scripts.service
 ### Example
 
 ```yaml
-- source: ./modules/scripts/startup-script
+- id: startup
+  source: ./modules/scripts/startup-script
   kind: terraform
-  id: startup
   settings:
     runners:
       - type: shell
@@ -124,9 +124,9 @@ sudo journalctl -u google-startup-scripts.service
           tar zxvf /tmp/$1 -C /
         args: "bar.tgz 'Expanding file'"
 
-- source: ./modules/compute/vm-instance
+- id: compute-cluster
+  source: ./modules/compute/vm-instance
   kind: terraform
-  id: compute-cluster
   use: [homefs, startup]
 ```
 

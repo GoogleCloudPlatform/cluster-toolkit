@@ -6,9 +6,9 @@ This module creates one or more
 ### Example
 
 ```yaml
-- source: modules/compute/vm-instance
+- id: compute
+  source: modules/compute/vm-instance
   kind: terraform
-  id: compute
   use: [network1]
   settings:
     instance_count: 8
