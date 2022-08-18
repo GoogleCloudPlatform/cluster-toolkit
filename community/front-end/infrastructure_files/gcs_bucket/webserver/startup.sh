@@ -18,22 +18,28 @@
 
 # based on a CentOS 8 system
 
-# obtain metadata of this server
+#set -v
+
+
+# Obtain metadata of this server
+#
 GCP_PROJECT=$(curl --silent --show-error http://metadata.google.internal/computeMetadata/v1/project/project-id -H "Metadata-Flavor: Google")
 SERVER_IP_ADDRESS=$(curl --silent --fail http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
 if [ -z "${SERVER_IP_ADDRESS}" ]; then
-	# No public IP.  Fall back to internal
-	SERVER_IP_ADDRESS=$(curl --silent --fail http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip -H "Metadata-Flavor: Google")
+  # No public IP.  Fall back to internal
+  SERVER_IP_ADDRESS=$(curl --silent --fail http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip -H "Metadata-Flavor: Google")
 fi
 SERVER_HOSTNAME=$(curl --silent --fail http://metadata/computeMetadata/v1/instance/attributes/hostname -H "Metadata-Flavor: Google")
 config_bucket=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/webserver-config-bucket -H "Metadata-Flavor: Google")
 c2_topic=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/ghpcfe-c2-topic -H "Metadata-Flavor: Google")
 deploy_mode=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deploy_mode -H "Metadata-Flavor: Google")
 
+
 # Exit if deployment already exists to stop startup script running on reboots
+#
 if [[ -d /opt/gcluster/hpc-toolkit ]]; then
-	printf "It appears gcluster has already been deployed. Exiting...\n"
-	exit 0
+  printf "It appears gcluster has already been deployed. Exiting...\n"
+  exit 0
 fi
 
 printf "\n############## Setting SELinux to Permissive ###############\n"
@@ -45,19 +51,22 @@ dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
-	rsync nginx bind-utils policycoreutils-python-utils \
-	terraform packer supervisor python3-certbot-nginx \
-	grafana
+    rsync nginx bind-utils policycoreutils-python-utils \
+    terraform packer supervisor python3-certbot-nginx \
+    grafana
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
 chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
 tar xfa /tmp/shellcheck.tar.xz --strip=1 --directory /usr/local/bin
 
-# donwload configuration file
+
+# Download configuration file
+#
 gsutil cp "gs://${config_bucket}/webserver/config" /tmp/config
 gsutil rm "gs://${config_bucket}/webserver/config"
 
-# load configurations
+# Load configurations
+#
 DJANGO_USERNAME=$(/usr/local/bin/yq e '.django_username' /tmp/config)
 DJANGO_PASSWORD=$(/usr/local/bin/yq e '.django_password' /tmp/config)
 DJANGO_EMAIL=$(/usr/local/bin/yq e '.django_email' /tmp/config)
@@ -69,11 +78,13 @@ repo_branch=$(/usr/local/bin/yq e '.git_branch' /tmp/config)
 DEPLOY_KEY1=$(/usr/local/bin/yq e '.deploy_key1' /tmp/config | tr ' ' '\n' | base64 -d)
 rm -f /tmp/config
 
-#install go from golang as repo version is too low for hpc-toolkit
+
+# Install go from golang as repo version is too low for hpc-toolkit
+#
 curl --silent --show-error --location https://golang.org/dl/go1.17.3.linux-amd64.tar.gz --output /tmp/go1.17.3.linux-amd64.tar.gz
 rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go1.17.3.linux-amd64.tar.gz
 
-#Add path entry for Go binaries to bashrc for all users (only works on future logins)
+# Add path entry for Go binaries to bashrc for all users (only works on future logins)
 # shellcheck disable=SC2016
 echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
 
@@ -88,40 +99,66 @@ printf "Reloading firewall: "
 firewall-cmd --reload
 setsebool httpd_can_network_connect on -P
 
+
 printf "\n####################\n#### Create gcluster user & create deployment key\n####################\n"
 printf "Adding gcluster user...\n"
+#
+# The gcluster user may already have been created by the google_guest_agent
+#
+# - This agent picks up any users identified in the GCP project ssh-keys
+#   metadata and automatically creates user accounts (and dirs in /home) on
+#   the VM.
+#
+# - The gcluster ssh-key will only exist if the admin has used it with gcloud,
+#   however, this is a gotcha - we need the gcluster $HOME be /opt/gcluster,
+#   otherwise the webserver will not deploy.
+#
+# - Need to make sure gcluster account as we need it to be.  Simplest thing to
+#   do, is remove the account if it already exists.
+#
+# - Create the account as required, as a system account
+#   (Note: if google_guest_agent creates the account, it is not a system account
+#    so it is better to recreate it as one, rather than just usermod it).
+#
+if id gcluster >/dev/null 2>&1; then
+  userdel -r gcluster 2>/dev/null
+fi
 useradd -r -m -d /opt/gcluster gcluster
 
-if [ "${deploy_mode}" == "git" ]; then
-	printf "Adding deployment keys..\n"
-	mkdir -p /opt/gcluster/.ssh
 
-	echo "$DEPLOY_KEY1" >/opt/gcluster/.ssh/gcluster-deploykey
-	sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-deploykey
-	cat >>/opt/gcluster/.ssh/config <<+
+if [ "${deploy_mode}" == "git" ]; then
+  printf "Adding deployment keys..\n"
+  mkdir -p /opt/gcluster/.ssh
+  
+  echo "$DEPLOY_KEY1" >/opt/gcluster/.ssh/gcluster-deploykey
+  sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-deploykey
+  cat >>/opt/gcluster/.ssh/config <<+
 
 host github.com
         hostname github.com
         IdentityFile ~/.ssh/gcluster-deploykey
         StrictHostKeyChecking=accept-new
 +
-	chmod 700 /opt/gcluster/.ssh
-	chmod 600 /opt/gcluster/.ssh/*
-	chown gcluster -R /opt/gcluster/.ssh
-
-	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" git@github.com:${repo_fork}/hpc-toolkit.git"
+  chmod 700 /opt/gcluster/.ssh
+  chmod 600 /opt/gcluster/.ssh/*
+  chown gcluster -R /opt/gcluster/.ssh
+  
+  fetch_hpc_toolkit="git clone -b \"${repo_branch}\" git@github.com:${repo_fork}/hpc-toolkit.git"
 
 elif [ "${deploy_mode}" == "tarball" ]; then
-	printf "\n####################\n#### Download web application files\n####################\n"
-	gsutil cp "gs://${config_bucket}/webserver/deployment.tar.gz" /tmp/deployment.tar.gz
-
-	fetch_hpc_toolkit="tar xfz /tmp/deployment.tar.gz"
+  printf "\n####################\n#### Download web application files\n####################\n"
+  gsutil cp "gs://${config_bucket}/webserver/deployment.tar.gz" /tmp/deployment.tar.gz
+  
+  fetch_hpc_toolkit="tar xfz /tmp/deployment.tar.gz"
 fi
 
-#Clean up anything we may have missed
+
+# Clean up anything we may have missed
+#
 chown gcluster:gcluster -R /opt/gcluster
 
-# run the following as 'gcluster' user
+# Run the following as 'gcluster' user
+#
 sudo su - gcluster -c /bin/bash <<EOF
   cd /opt/gcluster
   ${fetch_hpc_toolkit}
@@ -183,15 +220,16 @@ sudo su - gcluster -c /bin/bash <<EOF
 
 EOF
 
-# Tweak Grafana settings
 
+# Tweak Grafana settings
+#
 sed -i \
-	-e '/^\[server]/,/^\[/{s/serve_from_sub_path = false/serve_from_sub_path = true/}' \
-	-e '/^\[server]/,/^\[/{s/root_url = \(.*\)\/$/root_url = \1\/grafana\//}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/enabled = false/enabled = true/}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/whitelist =.*/whitelist = 127.0.0.1/}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/header_property =.*/header_property = email/}' \
-	/etc/grafana/grafana.ini
+    -e '/^\[server]/,/^\[/{s/serve_from_sub_path = false/serve_from_sub_path = true/}' \
+    -e '/^\[server]/,/^\[/{s/root_url = \(.*\)\/$/root_url = \1\/grafana\//}' \
+    -e '/^\[auth.proxy]/,/^\[/{s/enabled = false/enabled = true/}' \
+    -e '/^\[auth.proxy]/,/^\[/{s/whitelist =.*/whitelist = 127.0.0.1/}' \
+    -e '/^\[auth.proxy]/,/^\[/{s/header_property =.*/header_property = email/}' \
+    /etc/grafana/grafana.ini
 
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]
@@ -228,22 +266,35 @@ systemctl enable gcluster.service
 systemctl start gcluster.service
 systemctl status gcluster.service
 
+
 # Now that Grafana and Django are running, initialize integration
+#
 sudo su - gcluster -c /bin/bash <<EOF
   source /opt/gcluster/django-env/bin/activate
   cd /opt/gcluster/hpc-toolkit/community/front-end/website
   python manage.py setup_grafana "${DJANGO_EMAIL}"
 EOF
 
-# IF we have a hostname, configure for TLS
-if [ -n "${SERVER_HOSTNAME}" ]; then
-	printf "Installing LetsEncrypt Certificate"
-	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
 
-	printf "Installing Cron entry to keep Cert up to date"
-	tmpcron=$(mktemp)
-	crontab -l root >"${tmpcron}" 2>/dev/null
-	echo "0 12 * * * /usr/bin/certbot renew --quiet" >>"${tmpcron}"
-	crontab -u root "${tmpcron}"
-	rm "${tmpcron}"
+# If we have a hostname, configure for TLS
+#
+if [ -n "${SERVER_HOSTNAME}" ]; then
+  printf "Installing LetsEncrypt Certificate"
+  /usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
+
+  printf "Installing Cron entry to keep Cert up to date"
+  tmpcron=$(mktemp)
+  crontab -l root >"${tmpcron}" 2>/dev/null
+  echo "0 12 * * * /usr/bin/certbot renew --quiet" >>"${tmpcron}"
+
+# .. if something more forceful/complete is needed:  
+#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
+
+  crontab -u root "${tmpcron}"
+  rm "${tmpcron}"
 fi
+
+
+#set +v
+
+# eof
