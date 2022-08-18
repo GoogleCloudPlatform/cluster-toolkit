@@ -551,9 +551,9 @@ deployment_groups:
   modules:
 
   # Local source, prefixed with ./ (/ and ../ also accepted)
-  - source: ./modules/role/module-name # Required: Points to the module directory.
+  - id: <a unique id> # Required: Name of this module used to uniquely identify it.
+    source: ./modules/role/module-name # Required: Points to the module directory.
     kind: < terraform | packer > # Required: Type of module, currently choose from terraform or packer.
-    id: <a unique id> # Required: Name of this module used to uniquely identify it.
     # Optional: All configured settings for the module. For terraform, each
     # variable listed in variables.tf can be set here, and are mandatory if no
     # default was provided and are not defined elsewhere (like the top-level vars)
@@ -711,10 +711,11 @@ vars:
 deployment_groups:
   - group: primary
      modules:
-       - source: path/to/module/1
-         id: resource1
+       - id: resource1
+         source: path/to/module/1
          ...
-       - source: path/to/module/2
+       - id: resource2
+         source: path/to/module/2
          ...
          settings:
             key1: $(vars.zone)
