@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -318,6 +318,7 @@ variable "partition" {
       partition_conf = map(string)
       partition_name = string
       partition_nodes = map(object({
+        bandwidth_tier         = string
         node_count_dynamic_max = number
         node_count_static      = number
         enable_spot_vm         = bool

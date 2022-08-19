@@ -29,6 +29,7 @@ locals {
 
       # Template By Definition
       additional_disks         = var.additional_disks
+      bandwidth_tier           = "platform_default"
       can_ip_forward           = var.can_ip_forward
       disable_smt              = var.disable_smt
       disk_auto_delete         = var.disk_auto_delete
@@ -69,7 +70,7 @@ locals {
 
 
 module "slurm_partition" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.0.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.1.0"
 
   slurm_cluster_name      = local.slurm_cluster_name
   partition_nodes         = local.partition_nodes
