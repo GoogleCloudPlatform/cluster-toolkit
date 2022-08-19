@@ -79,7 +79,7 @@ deployment_groups:
         path: '/tmp/spack_key.gpg'
       caches_to_populate:
       - type: 'mirror'
-        path: ##  Add GCS bucket to populate here ##
+        path:   ##  Add GCS bucket to populate here ##
 
   - source: modules/scripts/startup-script
     kind: terraform
@@ -87,7 +87,7 @@ deployment_groups:
     settings:
       runners:
       - type: data
-        source: ##  Add path to GPG key here ##
+        source:  ##  Add path to GPG key here ##
         destination: /tmp/spack_key.gpg
       - type: shell
         content: |

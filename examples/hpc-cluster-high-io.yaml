@@ -44,7 +44,7 @@ deployment_groups:
 
   - id: projectsfs
     source: modules/file-system/filestore
-    kind: terraform 
+    kind: terraform
     use: [network1]
     settings:
       filestore_tier: HIGH_SCALE_SSD
