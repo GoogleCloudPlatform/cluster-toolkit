@@ -34,7 +34,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=v5.0.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=v5.1.0"
 
   access_config                = local.access_config
   slurm_cluster_name           = local.slurm_cluster_name
@@ -66,7 +66,7 @@ module "slurm_controller_instance" {
 }
 
 module "slurm_controller_template" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.0.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.1.0"
 
   additional_disks         = var.additional_disks
   can_ip_forward           = var.can_ip_forward
