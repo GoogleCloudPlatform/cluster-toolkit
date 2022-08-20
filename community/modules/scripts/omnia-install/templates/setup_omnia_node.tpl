@@ -19,14 +19,24 @@
     username: ${username}
   tasks:
   - name: Create user omnia
-    user:
+    ansible.builtin.user:
       name: "{{ username }}"
   - name: Allow '{{ username }}' user to have passwordless sudo
-    lineinfile:
+    ansible.builtin.lineinfile:
       dest: /etc/sudoers
       state: present
       regexp: '^%%{{ username }}'
       line: '%%{{ username }} ALL=(ALL) NOPASSWD: ALL'
+
+- name: Setup selinux
+  hosts: localhost
+  tasks:
+  - name: Install selinux into ghpc-venv
+    ansible.builtin.pip:
+      name: selinux
+      virtualenv: /usr/local/ghpc-venv
+  - name: Allow SSH on NFS-based home directory
+    ansible.builtin.command: setsebool -P use_nfs_home_dirs 1
 
 - name: Set Status file
   hosts: localhost
@@ -35,13 +45,13 @@
     state_dir: "{{ install_dir }}/state"
   tasks:
   - name: Get hostname
-    command: hostname
+    ansible.builtin.command: hostname
     register: machine_hostname
   - name: Create state dir if not already created
-    file:
+    ansible.builtin.file:
       path: "{{ state_dir }}"
       state: directory
   - name: Create file
-    file:
+    ansible.builtin.file:
       path: "{{ state_dir }}/{{ machine_hostname.stdout }}"
       state: touch

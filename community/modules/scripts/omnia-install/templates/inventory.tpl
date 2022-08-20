@@ -6,3 +6,7 @@ ${vm}
 %{for vm in omnia_compute ~}
 ${vm}
 %{endfor}
+
+[nfs_node]
+
+[login_node]
