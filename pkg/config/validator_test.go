@@ -29,6 +29,7 @@ import (
 )
 
 const (
+	tooManyInputRegex            = "only [0-9]+ inputs \\[.*\\] should be provided to .*"
 	missingRequiredInputRegex    = "at least one required input was not provided to .*"
 	passedWrongValidatorRegex    = "passed wrong validator to .*"
 	undefinedGlobalVariableRegex = ".* was not defined$"
@@ -422,4 +423,29 @@ func (s *MySuite) TestZoneInRegionValidator(c *C) {
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
 	// TODO: implement a mock client to test success of test_zone_in_region
+}
+
+func (s *MySuite) TestApisEnabledValidator(c *C) {
+	var err error
+	dc := getDeploymentConfigForTest()
+	emptyValidator := validatorConfig{}
+
+	// test validator fails for config without validator id
+	err = dc.testApisEnabled(emptyValidator)
+	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
+
+	// this validator reads blueprint directly so 0 inputs should succeed
+	apisEnabledValidator := validatorConfig{
+		Validator: testApisEnabledName.String(),
+		Inputs:    map[string]interface{}{},
+	}
+	err = dc.testApisEnabled(apisEnabledValidator)
+	c.Assert(err, IsNil)
+
+	// this validator reads blueprint directly so 1 inputs should fail
+	apisEnabledValidator.Inputs["foo"] = "bar"
+	err = dc.testApisEnabled(apisEnabledValidator)
+	c.Assert(err, ErrorMatches, tooManyInputRegex)
+
+	// TODO: implement a mock client to test success of test_apis_enabled
 }

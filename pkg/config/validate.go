@@ -282,6 +282,7 @@ func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) err
 		testRegionExistsName.String():  dc.testRegionExists,
 		testZoneExistsName.String():    dc.testZoneExists,
 		testZoneInRegionName.String():  dc.testZoneInRegion,
+		testApisEnabledName.String():   dc.testApisEnabled,
 	}
 	return allValidators
 }
@@ -471,4 +472,20 @@ func (dc *DeploymentConfig) getStringValue(inputReference interface{}) (string, 
 		}
 	}
 	return "", fmt.Errorf("the value %s is not a deployment variable or was not defined", inputReference)
+}
+
+func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
+	requiredInputs := []string{}
+	funcName := testApisEnabledName.String()
+
+	if validator.Validator != funcName {
+		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
+	}
+
+	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
