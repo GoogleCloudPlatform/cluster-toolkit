@@ -18,7 +18,7 @@ blueprint_name: slurm-gcp-v5-ubuntu2004
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: slurm-gcp-v5-ubuntu2004
+  deployment_name: slurm-ubuntu-v5
   region: us-central1
   zone: us-central1-c
   source_image_family: "schedmd-v5-slurm-22-05-2-ubuntu-2004-lts"
