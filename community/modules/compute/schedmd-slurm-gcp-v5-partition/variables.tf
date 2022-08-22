@@ -359,3 +359,22 @@ variable "spot_instance_config" {
   })
   default = null
 }
+
+variable "bandwidth_tier" {
+  description = <<EOT
+  Configures the network interface card and the maximum egress bandwidth for VMs.
+  - Setting `platform_default` respects the Google Cloud Platform API default values for networking.
+  - Setting `virtio_enabled` explicitly selects the VirtioNet network adapter.
+  - Setting `gvnic_enabled` selects the gVNIC network adapter (without Tier 1 high bandwidth).
+  - Setting `tier_1_enabled` selects both the gVNIC adapter and Tier 1 high bandwidth networking.
+  - Note: both gVNIC and Tier 1 networking require a VM image with gVNIC support as well as specific VM families and shapes.
+  - See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details.
+  EOT
+  type        = string
+  default     = "platform_default"
+
+  validation {
+    condition     = contains(["platform_default", "virtio_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
+    error_message = "Allowed values for bandwidth_tier are 'platform_default', 'virtio_enabled', 'gvnic_enabled', or 'tier_1_enabled'."
+  }
+}
