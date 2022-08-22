@@ -18,7 +18,7 @@ blueprint_name: slurm-gcp-v5-hpc-centos7
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: slurm-gcp-v5
+  deployment_name: slurm-gcp-v5-centos7
   region: us-central1
   zone: us-central1-c
 
