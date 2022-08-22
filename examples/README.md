@@ -526,7 +526,7 @@ A user defined blueprint should follow the following schema:
 
 ```yaml
 # Required: Name your blueprint.
-blueprint_name: MyBlueprintName
+blueprint_name: my-blueprint-name
 
 # Top-level variables, these will be pulled from if a required variable is not
 # provided as part of a module. Any variables can be set here by the user,
@@ -586,6 +586,10 @@ below.
 
 * **blueprint_name** (required): This name can be used to track resources and
   usage across multiple deployments that come from the same blueprint.
+  `blueprint_name` is used as a value for the `ghpc_blueprint` label key, and
+   must abide to label value naming constraints: `blueprint_name` must be at most
+   63 characters long, and can only contain lowercase letters, numeric
+   characters, underscores and dashes.
 
 ### Deployment Variables
 
