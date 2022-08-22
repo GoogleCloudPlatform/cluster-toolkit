@@ -35,7 +35,10 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 )
 
-const expectedVarFormat = "$(vars.var_name) or $(module_id.var_name)"
+const (
+	expectedVarFormat string = "$(vars.var_name) or $(module_id.var_name)"
+	matchLabelExp     string = `^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`
+)
 
 var errorMessages = map[string]string{
 	// general
@@ -66,6 +69,10 @@ var errorMessages = map[string]string{
 	"emptyGroupName":     "group name must be set for each deployment group",
 	"illegalChars":       "invalid character(s) found in group name",
 	"invalidOutput":      "requested output was not found in the module",
+	"varNotDefined":      "variable not defined",
+	"valueNotString":     "value was not of type string",
+	"valueEmptyString":   "value is an empty string",
+	"labelReqs":          "value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long.",
 }
 
 // DeploymentGroup defines a group of Modules that are all executed together
@@ -563,22 +570,14 @@ func ResolveVariables(
 	return nil
 }
 
-// DeploymentNameError signifies a problem with the blueprint deployment name.
-type DeploymentNameError struct {
-	cause string
+// InputValueError signifies a problem with the blueprint name.
+type InputValueError struct {
+	inputKey string
+	cause    string
 }
 
-func (err *DeploymentNameError) Error() string {
-	return fmt.Sprintf("deployment_name must be a string and cannot be empty, cause: %v", err.cause)
-}
-
-// BlueprintNameError signifies a problem with the blueprint name.
-type BlueprintNameError struct {
-	cause string
-}
-
-func (err *BlueprintNameError) Error() string {
-	return fmt.Sprintf("blueprint_name input error, cause: %v", err.cause)
+func (err *InputValueError) Error() string {
+	return fmt.Sprintf("%v input error, cause: %v", err.inputKey, err.cause)
 }
 
 // ResolveGlobalVariables will resolve literal variables "((var.*))" in the
@@ -596,17 +595,35 @@ func (b Blueprint) ResolveGlobalVariables(ctyVars map[string]cty.Value) error {
 func (b *Blueprint) DeploymentName() (string, error) {
 	nameInterface, found := b.Vars["deployment_name"]
 	if !found {
-		return "", &DeploymentNameError{"deployment_name variable not defined."}
+		return "", &InputValueError{
+			inputKey: "deployment_name",
+			cause:    errorMessages["varNotFound"],
+		}
 	}
 
 	deploymentName, ok := nameInterface.(string)
 	if !ok {
-		return "", &DeploymentNameError{"deployment_name was not of type string."}
+		return "", &InputValueError{
+			inputKey: "deployment_name",
+			cause:    errorMessages["valueNotString"],
+		}
 	}
 
 	if len(deploymentName) == 0 {
-		return "", &DeploymentNameError{"deployment_name was an empty string."}
+		return "", &InputValueError{
+			inputKey: "deployment_name",
+			cause:    errorMessages["valueEmptyString"],
+		}
 	}
+
+	// Check that deployment_name is a valid label
+	if !regexp.MustCompile(matchLabelExp).MatchString(deploymentName) {
+		return "", &InputValueError{
+			inputKey: "deployment_name",
+			cause:    errorMessages["labelReqs"],
+		}
+	}
+
 	return deploymentName, nil
 }
 
@@ -614,8 +631,11 @@ func (b *Blueprint) DeploymentName() (string, error) {
 // requirements for correct label values as per https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
 func (b *Blueprint) checkBlueprintName() error {
 
-	if !regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`).MatchString(b.BlueprintName) {
-		return &BlueprintNameError{"blueprint_name can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long."}
+	if !regexp.MustCompile(matchLabelExp).MatchString(b.BlueprintName) {
+		return &InputValueError{
+			inputKey: "blueprint_name",
+			cause:    errorMessages["labelReqs"],
+		}
 	}
 
 	return nil

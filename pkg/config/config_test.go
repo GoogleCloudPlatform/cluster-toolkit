@@ -319,7 +319,7 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 
 func (s *MySuite) TestDeploymentName(c *C) {
 	dc := getDeploymentConfigForTest()
-	var e *DeploymentNameError
+	var e *InputValueError
 
 	// Is deployment_name a valid string?
 	deploymentName, err := dc.Config.DeploymentName()
@@ -334,7 +334,25 @@ func (s *MySuite) TestDeploymentName(c *C) {
 
 	// Is deployment_name not a string?
 	dc.Config.Vars["deployment_name"] = 100
-	_, err = dc.Config.DeploymentName()
+	deploymentName, err = dc.Config.DeploymentName()
+	c.Assert(deploymentName, Equals, "")
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Is deployment_names longer than 63 characters?
+	dc.Config.Vars["deployment_name"] = "deployment_name-deployment_name-deployment_name-deployment_name-0123"
+	deploymentName, err = dc.Config.DeploymentName()
+	c.Assert(deploymentName, Equals, "")
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Does deployment_name contain special characters other than dashes or underscores?
+	dc.Config.Vars["deployment_name"] = "deployment.name"
+	deploymentName, err = dc.Config.DeploymentName()
+	c.Assert(deploymentName, Equals, "")
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Does deployment_name contain capital letters?
+	dc.Config.Vars["deployment_name"] = "Deployment_name"
+	deploymentName, err = dc.Config.DeploymentName()
 	c.Assert(deploymentName, Equals, "")
 	c.Check(errors.As(err, &e), Equals, true)
 
@@ -347,11 +365,16 @@ func (s *MySuite) TestDeploymentName(c *C) {
 
 func (s *MySuite) TestCheckBlueprintName(c *C) {
 	dc := getDeploymentConfigForTest()
-	var e *BlueprintNameError
+	var e *InputValueError
 
 	// Is blueprint_name a valid string?
 	err := dc.Config.checkBlueprintName()
 	c.Assert(err, IsNil)
+
+	// Is blueprint_name a valid string with an underscore and dash?
+	dc.Config.BlueprintName = "blue-print_name"
+	err = dc.Config.checkBlueprintName()
+	c.Check(err, IsNil)
 
 	// Is blueprint_name an empty string?
 	dc.Config.BlueprintName = ""
@@ -363,8 +386,13 @@ func (s *MySuite) TestCheckBlueprintName(c *C) {
 	err = dc.Config.checkBlueprintName()
 	c.Check(errors.As(err, &e), Equals, true)
 
-	// Does deployment_name contain special characters other than dashes or underscores?
+	// Does blueprint_name contain special characters other than dashes or underscores?
 	dc.Config.BlueprintName = "blueprint.name"
+	err = dc.Config.checkBlueprintName()
+	c.Check(errors.As(err, &e), Equals, true)
+
+	// Does blueprint_name contain capital letters?
+	dc.Config.BlueprintName = "Blueprint_name"
 	err = dc.Config.checkBlueprintName()
 	c.Check(errors.As(err, &e), Equals, true)
 }

@@ -227,7 +227,7 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 
 func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
 	testBlueprint := getBlueprintForTest()
-	var e *config.DeploymentNameError
+	var e *config.InputValueError
 
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": 100}
 	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
