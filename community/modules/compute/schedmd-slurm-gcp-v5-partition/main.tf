@@ -29,7 +29,7 @@ locals {
 
       # Template By Definition
       additional_disks         = var.additional_disks
-      bandwidth_tier           = "platform_default"
+      bandwidth_tier           = var.bandwidth_tier
       can_ip_forward           = var.can_ip_forward
       disable_smt              = var.disable_smt
       disk_auto_delete         = var.disk_auto_delete
