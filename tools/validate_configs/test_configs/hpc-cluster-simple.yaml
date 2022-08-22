@@ -25,22 +25,22 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/filestore
+  - id: homefs
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs
     use: [network1]
     settings:
       local_mount: /home
       labels:
         ghpc_role: storage-home
 
-  - source: modules/scripts/startup-script
+  - id: startup
+    source: modules/scripts/startup-script
     kind: terraform
-    id: startup
     settings:
       runners:
       - type: shell
@@ -53,9 +53,9 @@ deployment_groups:
         source: "modules/startup-script/examples/mount.yaml"
         destination: mount.yaml
 
-  - source: modules/compute/vm-instance
+  - id: workstation
+    source: modules/compute/vm-instance
     kind: terraform
-    id: workstation
     use:
     - network1
     - homefs

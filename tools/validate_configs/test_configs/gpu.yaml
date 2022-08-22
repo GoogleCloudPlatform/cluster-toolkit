@@ -28,13 +28,13 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: ./modules/compute/vm-instance
+  - id: workstation
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: workstation
     use:
     - network1
     settings:

@@ -27,25 +27,25 @@ vars:
 deployment_groups:
 - group: htcondor-env
   modules:
-  - source: modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
     kind: terraform
-    id: network1
     outputs:
     - network_name
 
-  - source: community/modules/scripts/htcondor-install
+  - id: htcondor_install
+    source: community/modules/scripts/htcondor-install
     kind: terraform
-    id: htcondor_install
 
-  - source: community/modules/project/service-enablement
+  - id: htcondor_services
+    source: community/modules/project/service-enablement
     kind: terraform
-    id: htcondor_services
     use:
     - htcondor_install
 
-  - source: modules/scripts/startup-script
+  - id: htcondor_install_scripts
+    source: modules/scripts/startup-script
     kind: terraform
-    id: htcondor_install_scripts
     settings:
       runners:
       - type: shell
@@ -57,39 +57,39 @@ deployment_groups:
 
 - group: packer
   modules:
-  - source: modules/packer/custom-image
+  - id: custom-image
+    source: modules/packer/custom-image
     kind: packer
-    id: custom-image
     settings:
       image_family: $(vars.htcondor_image_family)
 
 - group: pool
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: cluster_network
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: cluster_network
 
-  - source: community/modules/scheduler/htcondor-configure
+  - id: htcondor_configure
+    source: community/modules/scheduler/htcondor-configure
     kind: terraform
-    id: htcondor_configure
 
-  - source: modules/scripts/startup-script
+  - id: htcondor_configure_central_manager
+    source: modules/scripts/startup-script
     kind: terraform
-    id: htcondor_configure_central_manager
     settings:
       runners:
       - $(htcondor_configure.central_manager_runner)
 
-  - source: modules/scripts/startup-script
+  - id: htcondor_configure_access_point
+    source: modules/scripts/startup-script
     kind: terraform
-    id: htcondor_configure_access_point
     settings:
       runners:
       - $(htcondor_configure.access_point_runner)
 
-  - source: modules/compute/vm-instance
+  - id: htcondor_cm
+    source: modules/compute/vm-instance
     kind: terraform
-    id: htcondor_cm
     use:
     - cluster_network
     - htcondor_configure_central_manager
@@ -107,9 +107,9 @@ deployment_groups:
     outputs:
     - internal_ip
 
-  - source: modules/compute/vm-instance
+  - id: htcondor_access
+    source: modules/compute/vm-instance
     kind: terraform
-    id: htcondor_access
     use:
     - cluster_network
     - htcondor_configure_access_point

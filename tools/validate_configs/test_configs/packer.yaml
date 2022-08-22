@@ -27,14 +27,14 @@ vars:
 deployment_groups:
 - group: network
   modules:
-  - source: modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
     kind: terraform
-    id: network1
 - group: packer
   modules:
-  - source: modules/packer/custom-image
+  - id: my-custom-image
+    source: modules/packer/custom-image
     kind: packer
-    id: my-custom-image
     settings:
       use_iap: true
       omit_external_ip: true

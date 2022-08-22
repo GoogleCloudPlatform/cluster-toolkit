@@ -31,36 +31,36 @@ terraform_backend_defaults:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/filestore
+  - id: homefs
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs
     use: [network1]
     settings:
       local_mount: /home
 
-  - source: modules/file-system/filestore
+  - id: projectsfs
+    source: modules/file-system/filestore
     kind: terraform
-    id: projectsfs
     use: [network1]
     settings:
       filestore_tier: HIGH_SCALE_SSD
       size_gb: 10240
       local_mount: /projects
 
-  - source: community/modules/file-system/DDN-EXAScaler
+  - id: scratchfs
+    source: community/modules/file-system/DDN-EXAScaler
     kind: terraform
-    id: scratchfs
     use: [network1]
     settings:
       local_mount: /scratch
 
-  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: compute_partition
+    source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute_partition
     use:
     - homefs
     - scratchfs
@@ -70,9 +70,9 @@ deployment_groups:
       max_node_count: 200
       partition_name: compute
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - id: slurm_controller
+    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm_controller
     use:
     - homefs
     - scratchfs
@@ -80,9 +80,9 @@ deployment_groups:
     - compute_partition
     - network1
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm_login
     use:
     - homefs
     - scratchfs
