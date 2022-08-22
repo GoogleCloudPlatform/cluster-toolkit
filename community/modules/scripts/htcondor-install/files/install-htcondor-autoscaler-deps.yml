@@ -24,13 +24,13 @@
   - name: Create virtual environment for HTCondor autoscaler
     ansible.builtin.pip:
       name: pip
-      version: 21.3.1 # last Python 2.7-compatible release
+      version: 21.3.1  # last Python 2.7-compatible release
       virtualenv: /usr/local/htcondor
       virtualenv_command: /usr/bin/python3 -m venv
   - name: Install latest setuptools
     ansible.builtin.pip:
       name: setuptools
-      state: 44.1.1 # last Python 2.7-compatible release
+      state: 44.1.1  # last Python 2.7-compatible release
       virtualenv: /usr/local/htcondor
       virtualenv_command: /usr/bin/python3 -m venv
   - name: Install HTCondor autoscaler dependencies
@@ -41,6 +41,6 @@
     - htcondor
     ansible.builtin.pip:
       name: "{{ item }}"
-      state: present # rely on pip resolver to pick latest compatible releases
+      state: present  # rely on pip resolver to pick latest compatible releases
       virtualenv: /usr/local/htcondor
       virtualenv_command: /usr/bin/python3 -m venv

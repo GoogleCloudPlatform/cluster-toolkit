@@ -9,9 +9,9 @@ This module is meant for use with Terraform 0.13.
 ### Example
 
 ```yaml
-- source: community/modules/project/new-project
+- id: project
+  source: community/modules/project/new-project
   kind: terraform
-  id: project
   settings:
     project_id: test_project
     folder_id: 334688113020 # random number

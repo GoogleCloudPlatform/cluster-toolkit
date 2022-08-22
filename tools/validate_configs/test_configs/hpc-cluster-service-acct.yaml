@@ -25,22 +25,22 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/pre-existing-network-storage
+  - id: homefs
+    source: modules/file-system/pre-existing-network-storage
     kind: terraform
-    id: homefs
     settings:
       server_ip: '$controller'
       remote_mount: /home
       local_mount: /home
       fs_type: nfs
 
-  - source: ./community/modules/project/service-account
+  - id: service_acct
+    source: ./community/modules/project/service-account
     kind: terraform
-    id: service_acct
     settings:
       project_id: $(vars.project_id)
       names:
@@ -49,18 +49,18 @@ deployment_groups:
       - "compute.instanceAdmin.v1"
 
 
-  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: compute-partition
+    source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute-partition
     use: [network1]
     settings:
       partition_name: compute
       network_storage:
       - $(homefs.network_storage)
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - id: slurm
+    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm
     use: [network1]
     settings:
       network_storage:

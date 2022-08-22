@@ -25,9 +25,9 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/monitoring/dashboard
+  - id: hpc_dash
+    source: modules/monitoring/dashboard
     kind: terraform
-    id: hpc_dash
     settings:
       widgets:
       - |
@@ -46,9 +46,9 @@ deployment_groups:
             },
             "title": "HPC Toolkit - TEST 2"
           }
-  - source: modules/monitoring/dashboard
+  - id: empty_dash
+    source: modules/monitoring/dashboard
     kind: terraform
-    id: empty_dash
     settings:
       base_dashboard: Empty
       widgets:

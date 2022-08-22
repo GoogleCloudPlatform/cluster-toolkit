@@ -18,14 +18,14 @@ systems and test installed software before submitting a Google Cloud Batch job.
 ## Example
 
 ```yaml
-- source: community/modules/scheduler/cloud-batch-job
+- id: batch-job
+  source: community/modules/scheduler/cloud-batch-job
   kind: terraform
-  id: batch-job
   ...
   
-- source: community/modules/scheduler/cloud-batch-login-node
+- id: batch-login
+  source: community/modules/scheduler/cloud-batch-login-node
   kind: terraform
-  id: batch-login
   use: [batch-job]
   outputs: [instructions]
 ```

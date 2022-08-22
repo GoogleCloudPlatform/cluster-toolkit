@@ -25,13 +25,13 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: ./modules/network/pre-existing-vpc
+  - id: network1
+    source: ./modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: ./modules/scripts/startup-script
+  - id: startup
+    source: ./modules/scripts/startup-script
     kind: terraform
-    id: startup
     settings:
       runners:
       - type: shell
@@ -48,35 +48,35 @@ deployment_groups:
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
 
-  - source: ./modules/compute/vm-instance
+  - id: instance-explicit-startup
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: instance-explicit-startup
     use: [network1]
     settings:
       name_prefix: explicit
       machine_type: e2-standard-4
       startup_script: $(startup.startup_script)
 
-  - source: ./modules/compute/vm-instance
+  - id: instance-no-startup
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: instance-no-startup
     use: [network1]
     settings:
       name_prefix: no-startup
       machine_type: e2-standard-4
 
-  - source: ./modules/compute/vm-instance
+  - id: instance-use-startup
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: instance-use-startup
     use: [network1, startup]
     settings:
       name_prefix: use-startup
       machine_type: e2-standard-4
       startup_script: $(startup.startup_script)
 
-  - source: ./modules/compute/vm-instance
+  - id: instance-metadata-startup
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: instance-metadata-startup
     use: [network1]
     settings:
       name_prefix: metadata-startup

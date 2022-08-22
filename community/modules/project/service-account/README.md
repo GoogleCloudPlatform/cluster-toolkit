@@ -5,9 +5,9 @@ Allows creation of service accounts for a Google Cloud Platform project.
 ### Example
 
 ```yaml
-- source: community/modules/project/service-account
+- id: service_acct
+  source: community/modules/project/service-account
   kind: terraform
-  id: service_acct
   settings:
   - project_id: $(vars.project_id)
   - names: [ "instance_acct" ]

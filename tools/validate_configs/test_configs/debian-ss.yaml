@@ -25,29 +25,29 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: ./modules/network/pre-existing-vpc
+  - id: network1
+    source: ./modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/filestore
+  - id: appsfs
+    source: modules/file-system/filestore
     kind: terraform
-    id: appsfs
     use: [network1]
     settings:
       name: appsfs
       local_mount: /apps
 
-  - source: community/modules/file-system/nfs-server
+  - id: nfs
+    source: community/modules/file-system/nfs-server
     kind: terraform
-    id: nfs
     use: [network1]
     settings:
       image: debian-cloud/debian-10
       auto_delete_disk: true
 
-  - source: ./community//modules/scripts/spack-install
+  - id: spack
+    source: ./community//modules/scripts/spack-install
     kind: terraform
-    id: spack
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
@@ -65,9 +65,9 @@ deployment_groups:
         fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5
         target=x86_64
 
-  - source: ./modules/scripts/startup-script
+  - id: startup
+    source: ./modules/scripts/startup-script
     kind: terraform
-    id: startup
     settings:
       runners:
       - type: shell
@@ -98,9 +98,9 @@ deployment_groups:
         content: $(spack.startup_script)
         destination: "/apps/spack-install.sh"
 
-  - source: ./modules/compute/vm-instance
+  - id: instance
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: instance
     use: [network1, startup, nfs, appsfs]
     settings:
       machine_type: e2-standard-4

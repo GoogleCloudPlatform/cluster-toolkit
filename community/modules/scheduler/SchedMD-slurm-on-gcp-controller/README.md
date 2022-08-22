@@ -17,9 +17,9 @@ controller for optimal performance at different scales.
 ### Example
 
 ```yaml
-- source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+- id: slurm_controller
+  source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
   kind: terraform
-  id: slurm_controller
   use:
   - network1
   - homefs

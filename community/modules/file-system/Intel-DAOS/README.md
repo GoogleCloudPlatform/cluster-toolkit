@@ -21,9 +21,9 @@ DAOS server images must be built from the same tagged version of the [google-clo
 For example, in the following snippet taken from the [community/example/intel/daos-cluster.yml](../../../examples/intel/daos-cluster.yaml) the `source:` attribute specifies v0.2.1 of the  daos_server terraform module
 
 ```yaml
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
+  - id: daos-server
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
     kind: terraform
-    id: daos-server
     use: [network1]
     settings:
       number_of_instances: 2
@@ -42,9 +42,9 @@ By default, the DAOS system is created with 4 servers will be configured for bes
 The following settings will configure this [system for TCO](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/examples/daos_cluster#the-terraformtfvarstcoexample-file) (default):
 
 ```yaml
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
+  - id: daos-server
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
     kind: terraform
-    id: daos-server
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}
@@ -58,9 +58,9 @@ The following settings will configure this [system for TCO](https://github.com/d
 The following settings will configure this system for [best performance](https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#the-terraformtfvarsperfexample-file):
 
 ```yaml
-  - source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
+  - id: daos-server
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
     kind: terraform
-    id: daos-server
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}

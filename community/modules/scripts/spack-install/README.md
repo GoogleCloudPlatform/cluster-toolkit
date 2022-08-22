@@ -30,9 +30,9 @@ As an example, the below is a possible definition of a spack installation. To
 see this module used in a full blueprint, see the [spack-gromacs.yaml] example.
 
 ```yaml
-  - source: community/modules/scripts/spack-install
+  - id: spack
+    source: community/modules/scripts/spack-install
     kind: terraform
-    id: spack
     settings:
       install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
@@ -95,23 +95,23 @@ Following the above description of this module, it can be added to a Slurm
 deployment via the following:
 
 ```yaml
-- source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
-    id: slurm_controller
-    use: [spack]
-    settings:
-      subnetwork_name: ((module.network1.primary_subnetwork.name))
-      login_node_count: 1
-      partitions:
-      - $(compute_partition.partition)
+- id: slurm_controller
+  source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  kind: terraform
+  use: [spack]
+  settings:
+    subnetwork_name: ((module.network1.primary_subnetwork.name))
+    login_node_count: 1
+    partitions:
+    - $(compute_partition.partition)
 ```
 
 Alternatively, it can be added as a startup script via:
 
 ```yaml
-  - source: modules/scripts/startup-script
+  - id: startup
+    source: modules/scripts/startup-script
     kind: terraform
-    id: startup
     settings:
       runners:
       - $(spack.install_spack_deps_runner)
