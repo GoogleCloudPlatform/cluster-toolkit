@@ -591,6 +591,13 @@ func (b Blueprint) ResolveGlobalVariables(ctyVars map[string]cty.Value) error {
 	return ResolveVariables(ctyVars, origin)
 }
 
+// isValidLabelValue checks if a string is a valid value for a GCP label.
+// For more information on valid label values, see the docs at:
+// https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
+func isValidLabelValue(value string) bool {
+	return regexp.MustCompile(matchLabelExp).MatchString(value)
+}
+
 // DeploymentName returns the deployment_name from the config and does approperate checks.
 func (b *Blueprint) DeploymentName() (string, error) {
 	nameInterface, found := b.Vars["deployment_name"]
@@ -617,7 +624,7 @@ func (b *Blueprint) DeploymentName() (string, error) {
 	}
 
 	// Check that deployment_name is a valid label
-	if !regexp.MustCompile(matchLabelExp).MatchString(deploymentName) {
+	if !isValidLabelValue(deploymentName) {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["labelReqs"],
@@ -628,10 +635,17 @@ func (b *Blueprint) DeploymentName() (string, error) {
 }
 
 // checkBlueprintName returns an error if blueprint_name does not comply with
-// requirements for correct label values as per https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
+// requirements for correct GCP label values.
 func (b *Blueprint) checkBlueprintName() error {
 
-	if !regexp.MustCompile(matchLabelExp).MatchString(b.BlueprintName) {
+	if len(b.BlueprintName) == 0 {
+		return &InputValueError{
+			inputKey: "blueprint_name",
+			cause:    errorMessages["valueEmptyString"],
+		}
+	}
+
+	if !isValidLabelValue(b.BlueprintName) {
 		return &InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["labelReqs"],
