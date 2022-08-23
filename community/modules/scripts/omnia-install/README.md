@@ -53,6 +53,7 @@ No resources.
 | <a name="input_manager_ips"></a> [manager\_ips](#input\_manager\_ips) | IPs of the Omnia manager nodes | `list(string)` | n/a | yes |
 | <a name="input_omnia_username"></a> [omnia\_username](#input\_omnia\_username) | Name of the user that installs omnia | `string` | `"omnia"` | no |
 | <a name="input_slurm_uid"></a> [slurm\_uid](#input\_slurm\_uid) | User ID of the slurm user | `number` | `981` | no |
+| <a name="input_virtualenv"></a> [virtualenv](#input\_virtualenv) | Path to a virtualenv on the Omnai manager and compute VMs that should be<br>used for installing packages with pip. Defaults to the virtualenv created by<br>the startup-scripts module, /usr/local/ghpc-venv. | `string` | `"/usr/local/ghpc-venv"` | no |
 
 ## Outputs
 

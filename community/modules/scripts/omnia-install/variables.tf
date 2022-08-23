@@ -44,3 +44,13 @@ variable "slurm_uid" {
   default     = 981
   type        = number
 }
+
+variable "virtualenv" {
+  description = <<-EOT
+    Path to a virtualenv on the Omnai manager and compute VMs that should be
+    used for installing packages with pip. Defaults to the virtualenv created by
+    the startup-scripts module, /usr/local/ghpc-venv.
+    EOT
+  default     = "/usr/local/ghpc-venv"
+  type        = string
+}

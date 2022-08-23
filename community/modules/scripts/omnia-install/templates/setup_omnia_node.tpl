@@ -13,15 +13,15 @@
 # limitations under the License.
 
 ---
-- name: Create Omnia User
+- name: Create user for installing Omnia
   hosts: localhost
   vars:
     username: ${username}
   tasks:
-  - name: Create user omnia
+  - name: Create a new user
     ansible.builtin.user:
       name: "{{ username }}"
-  - name: Allow '{{ username }}' user to have passwordless sudo
+  - name: Allow '{{ username }}' user to have passwordless sudo access
     ansible.builtin.lineinfile:
       dest: /etc/sudoers
       state: present
@@ -30,11 +30,22 @@
 
 - name: Setup selinux
   hosts: localhost
+  vars:
+    venv: ${virtualenv_path}
   tasks:
-  - name: Install selinux into ghpc-venv
+  - name: Checking if the provided virtualenv exists
+    stat:
+      path: "{{ venv }}"
+    register: venv_dir
+  - name: Install selinux using system pip
+    ansible.builtin.pip:
+      name: selinux
+    when: not venv_dir.stat.exists
+  - name: Install selinux into provided virtualenv
     ansible.builtin.pip:
       name: selinux
       virtualenv: /usr/local/ghpc-venv
+    when: venv_dir.stat.exists
   - name: Allow SSH on NFS-based home directory
     ansible.builtin.command: setsebool -P use_nfs_home_dirs 1
 

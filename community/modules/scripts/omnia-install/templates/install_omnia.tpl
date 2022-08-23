@@ -19,24 +19,24 @@
   vars:
     username: ${username}
     pub_key_path: "/home/{{ username }}/.ssh"
-    pub_key_file: "{{pub_key_path}}/id_rsa"
-    auth_key_file: "{{pub_key_path}}/authorized_keys"
+    pub_key_file: "{{ pub_key_path }}/id_rsa"
+    auth_key_file: "{{ pub_key_path }}/authorized_keys"
   tasks:
-  - name: "Create {{pub_key_path}} folder"
+  - name: "Create {{ pub_key_path }} folder"
     ansible.builtin.file:
-      path: "{{pub_key_path}}"
+      path: "{{ pub_key_path }}"
       state: directory
       mode: 0700
-      owner: "{{username}}"
+      owner: "{{ username }}"
   - name: Create keys
     ansible.builtin.openssh_keypair:
-      path: "{{pub_key_file}}"
-      owner: "{{username}}"
+      path: "{{ pub_key_file }}"
+      owner: "{{ username }}"
   - name: Copy public key to authorized keys
     ansible.builtin.copy:
-      src: "{{pub_key_file}}.pub"
-      dest: "{{auth_key_file}}"
-      owner: "{{username}}"
+      src: "{{ pub_key_file }}.pub"
+      dest: "{{ auth_key_file }}"
+      owner: "{{ username }}"
       mode: 0644
 
 - name: Install necessary dependencies
@@ -73,6 +73,11 @@
       path: "{{ omnia_dir }}/omnia_config.yml"
       regexp: '^login_node_required: .*'
       line: 'login_node_required: false'
+  - name: Update omnia config to set the slurm UID
+    ansible.builtin.lineinfile:
+      path: "{{ omnia_dir }}/roles/slurm_common/vars/main.yml"
+      regexp: '^slurm_uid: .*'
+      line: "slurm_uid: \"{{ slurm_uid }}\""
 
 - name: Run the Omnia installation once all nodes are ready
   hosts: localhost
@@ -80,6 +85,7 @@
     nodecount: ${nodecount}
     install_dir: ${install_dir}
     username: ${username}
+    venv: ${virtualenv_path}
     omnia_dir: "{{ install_dir }}/omnia"
     state_dir: "{{ install_dir }}/state"
   become_user: "{{ username }}"
@@ -93,15 +99,32 @@
       exit 1
     delay: 2
     retries: 300
+  - name: Checking if the provided virtualenv exists
+    stat:
+      path: "{{ venv }}"
+    register: venv_dir
+  - name: Run omnia using provided virtualenv for the python provider
+    ansible.builtin.shell: |
+      ansible-playbook omnia.yml \
+        --private-key /home/{{ username }}/.ssh/id_rsa \
+        --inventory inventory \
+        --user "{{ username }}" --become \
+        --e "ansible_python_interpreter={{ venv }}/bin/python3" \
+        --skip-tags "kubernetes,nfs_client"
+    args:
+      chdir: "{{ omnia_dir }}"
+    environment:
+      ANSIBLE_HOST_KEY_CHECKING: False
+    when: venv_dir.stat.exists
   - name: Run omnia
     ansible.builtin.shell: |
       ansible-playbook omnia.yml \
         --private-key /home/{{ username }}/.ssh/id_rsa \
         --inventory inventory \
         --user "{{ username }}" --become \
-        --e "ansible_python_interpreter=/usr/local/ghpc-venv/bin/python3" \
         --skip-tags "kubernetes,nfs_client"
     args:
       chdir: "{{ omnia_dir }}"
     environment:
       ANSIBLE_HOST_KEY_CHECKING: False
+    when: not venv_dir.stat.exists
