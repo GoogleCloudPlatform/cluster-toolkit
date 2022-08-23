@@ -146,8 +146,8 @@ Modules that are still in development and less stable are labeled with the
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
 * **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
-  via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of compute
-  VMs.
+  via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of VMs
+  instances.
 * **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install [Spack](https://github.com/spack/spack) on an
   instance or a slurm login or controller.

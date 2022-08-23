@@ -1,13 +1,15 @@
 ## Description
 
-This module will install [DellHPC Omnia](https://github.com/dellhpc/omnia)
-onto a cluster supporting a slurm controller and compute nodes. To see a full
-example using omnia-install, see the
-[omnia-cluster example](../../../community/examples/omnia-cluster.yaml).
+This module will create a set of startup-script runners that will install and
+run [DellHPC Omnia](https://github.com/dellhpc/omnia) version 1.3 onto a set of
+VMs representing a slurm controller and compute nodes. For a full example using
+omnia-install, see the [omnia-cluster example].
 
 **Warning**: This module will create a user named "omnia" by default which has
 sudo permissions. You may want to remove this user and/or it's permissions from
 each node.
+
+[omnia-cluster example]: ../../../community/examples/omnia-cluster.yaml
 
 ## License
 

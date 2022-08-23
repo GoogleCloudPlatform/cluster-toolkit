@@ -484,9 +484,9 @@ spack load gromacs
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
 Creates a simple [Dell Omnia][omnia-github] provisioned cluster with an
-omnia-manager node and 2 omnia-compute nodes on the pre-existing default
-network. Omnia will be automatically installed after the nodes are provisioned.
-All nodes mount a filestore instance on `/home`.
+omnia-manager node that acts as the slurm manager and 2 omnia-compute nodes on
+the pre-existing default network. Omnia will be automatically installed after
+the nodes are provisioned. All nodes mount a filestore instance on `/home`.
 
 > **_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to
 > create the cluster. For these instances, Simultaneous Multithreading (SMT) is
