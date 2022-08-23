@@ -88,8 +88,8 @@ steps:
 
 ## Test DDN Lustre with new VPC
 - id: lustre-new-vpc
-  # waitFor:
-  # # - omnia
+  waitFor:
+  - monitoring
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
