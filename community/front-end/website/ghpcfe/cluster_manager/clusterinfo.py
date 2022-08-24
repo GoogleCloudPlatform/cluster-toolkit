@@ -174,24 +174,28 @@ class ClusterInfo:
             part_id = f"partition_{count}"
             yaml.append(
                 f"""
-  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     kind: terraform
     id: {part_id}
     settings:
+#      slurm_cluster_name: {self.cluster.cloud_id.replace('-','')}
       partition_name: {part.name}
-      subnetwork_name: {self.cluster.subnet.cloud_id}
-      max_node_count: {part.max_node_count}
+      subnetwork_self_link: {self.cluster.subnet.cloud_id}
+#      subnetwork_name: {self.cluster.subnet.cloud_id}
+      node_count_dynamic_max: {part.max_node_count}
       machine_type: {part.machine_type}
       enable_placement: {part.enable_placement}
-      image_hyperthreads: {part.enable_hyperthreads}
+#      enable_placement_groups: {part.enable_placement}
+      disable_smt: {not part.enable_hyperthreads}
       exclusive: {part.enable_placement or not part.enable_node_reuse}
+#      enable_job_exclusive: {part.enable_placement or not part.enable_node_reuse}
 """
             )
 
             if part.image:
                 yaml[-1] += (
                     f"""\
-      image: {part.image}
+      source_image: {part.image}
 """
                 )
 
@@ -199,8 +203,8 @@ class ClusterInfo:
             if part.GPU_per_node > 0:
                 yaml[-1] += (
                     f"""\
-      gpu_count: {part.GPU_per_node}
-      gpu_type: {part.GPU_type}
+      gpu.count: {part.GPU_per_node}
+      gpu.type: {part.GPU_type}
 """
                 )
             yaml[-1] += (
@@ -238,7 +242,7 @@ class ClusterInfo:
             ["hpc_network"] + partitions_references + filesystems_references
         )
         login_uses = self._yaml_refs_to_uses(
-            ["hpc_network"] + filesystems_references + ["slurm_controller"]
+            ["hpc_network"] + filesystems_references
         )
 
         controller_sa = f"{self.cluster.cloud_id}-sa"
@@ -290,53 +294,82 @@ deployment_groups:
       - storage.objectAdmin
       - pubsub.publisher
       - pubsub.subscriber
+      - compute.securityAdmin
+      - iam.serviceAccountAdmin
+      - resourcemanager.projectIamAdmin
+      - compute.networkAdmin
+
+# From Slurm-GCP V5 docs (
+#
+# Compute Instance Admin (v1) (roles/compute.instanceAdmin.v1)
+# Compute Security Admin (roles/compute.securityAdmin)
+# Service Account Admin (roles/iam.serviceAccountAdmin)
+# Project IAM Admin (roles/resourcemanager.projectIamAdmin)
+# Compute Network Admin (roles/compute.networkAdmin)
+# pubsub.admin
 
 {partitions_yaml}
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     kind: terraform
     id: slurm_controller
     settings:
-      login_node_count: {self.cluster.num_login_nodes}
-      controller_machine_type: {self.cluster.controller_instance_type}
-      boot_disk_type: {self.cluster.controller_disk_type}
-      boot_disk_size: {self.cluster.controller_disk_size}
-      controller_service_account: $(hpc_service_account.email)
+#      slurm_cluster_name: {self.cluster.cloud_id.replace('-','')}
+      machine_type: {self.cluster.controller_instance_type}
+      disk_type: {self.cluster.controller_disk_type}
+      disk_size_gb: {self.cluster.controller_disk_size}
+      service_account:
+        email: $(hpc_service_account.email)
+        scopes:
+        - https://www.googleapis.com/auth/monitoring.write
+        - https://www.googleapis.com/auth/logging.write
+        - https://www.googleapis.com/auth/devstorage.read_write
+        - https://www.googleapis.com/auth/pubsub
       controller_startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING CONTROLLER STARTUP"
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_controller.sh - | bash
-      compute_node_service_account: $(hpc_service_account.email)
-      compute_node_scopes:
-      - https://www.googleapis.com/auth/monitoring.write
-      - https://www.googleapis.com/auth/logging.write
-      - https://www.googleapis.com/auth/devstorage.read_write
-      - https://www.googleapis.com/auth/pubsub
+#      compute_node_service_account: $(hpc_service_account.email)
+#      compute_node_scopes:
+#      - https://www.googleapis.com/auth/monitoring.write
+#      - https://www.googleapis.com/auth/logging.write
+#      - https://www.googleapis.com/auth/devstorage.read_write
+#      - https://www.googleapis.com/auth/pubsub
       compute_startup_script: |
         #!/bin/bash
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
+#TODO:     enable_cleanup_compute: True
+#TODO:     enable_cleanup_subscriptions: True
     use:
 {controller_uses}
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     kind: terraform
     id: slurm_login
     settings:
-      login_node_count: {self.cluster.num_login_nodes}
-      subnetwork_name: {self.cluster.subnet.cloud_id}
-      login_machine_type: {self.cluster.login_node_instance_type}
-      boot_disk_type: {self.cluster.login_node_disk_type}
-      boot_disk_size: {self.cluster.login_node_disk_size}
-      login_service_account: $(hpc_service_account.email)
-      login_scopes:
-      - https://www.googleapis.com/auth/monitoring.write
-      - https://www.googleapis.com/auth/logging.write
-      - https://www.googleapis.com/auth/devstorage.read_write
-      login_startup_script: |
+#      slurm_cluster_name: {self.cluster.cloud_id.replace('-','')}
+      num_instances: {self.cluster.num_login_nodes}
+#      login_node_count: {self.cluster.num_login_nodes}
+      subnetwork_self_link: {self.cluster.subnet.cloud_id}
+      machine_type: {self.cluster.login_node_instance_type}
+      disk_type: {self.cluster.login_node_disk_type}
+      disk_size_gb: {self.cluster.login_node_disk_size}
+      service_account:
+        email: $(hpc_service_account.email)
+        scopes:
+        - https://www.googleapis.com/auth/monitoring.write
+        - https://www.googleapis.com/auth/logging.write
+        - https://www.googleapis.com/auth/devstorage.read_write
+#      login_scopes:
+#      - https://www.googleapis.com/auth/monitoring.write
+#      - https://www.googleapis.com/auth/logging.write
+#      - https://www.googleapis.com/auth/devstorage.read_write
+      startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING LOGIN STARTUP"
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_login.sh - | bash
     use:
+    - slurm_controller
 {login_uses}
 
 """
