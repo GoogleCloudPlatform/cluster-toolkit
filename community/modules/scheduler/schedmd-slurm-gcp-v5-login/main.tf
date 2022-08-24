@@ -19,6 +19,13 @@ locals {
     filename = "ghpc_startup.sh"
     content  = var.startup_script
   }]
+  # Since deployment name may be used to create a cluster name, we remove any invalid character from the beginning
+  # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
+  tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 8)
+  slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
+
+  enable_public_ip_access_config = var.disable_login_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
+  access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
 }
 
 module "slurm_login_template" {
@@ -26,7 +33,7 @@ module "slurm_login_template" {
 
   additional_disks         = var.additional_disks
   can_ip_forward           = var.can_ip_forward
-  slurm_cluster_name       = var.slurm_cluster_name
+  slurm_cluster_name       = local.slurm_cluster_name
   disable_smt              = var.disable_smt
   disk_auto_delete         = var.disk_auto_delete
   disk_labels              = var.labels
@@ -54,14 +61,14 @@ module "slurm_login_template" {
   network                  = var.network_self_link == null ? "" : var.network_self_link
   subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
-  tags                     = concat([var.slurm_cluster_name], var.tags)
+  tags                     = concat([local.slurm_cluster_name], var.tags)
 }
 
 module "slurm_login_instance" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=v5.0.3"
 
-  access_config         = var.access_config
-  slurm_cluster_name    = var.slurm_cluster_name
+  access_config         = local.access_config
+  slurm_cluster_name    = local.slurm_cluster_name
   instance_template     = module.slurm_login_template.self_link
   network               = var.network_self_link
   num_instances         = var.num_instances

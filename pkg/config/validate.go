@@ -34,6 +34,16 @@ const (
 	validationErrorMsg = "validation failed due to the issues listed above"
 )
 
+// InvalidSettingError signifies a problem with the supplied setting name in a
+// module definition.
+type InvalidSettingError struct {
+	cause string
+}
+
+func (err *InvalidSettingError) Error() string {
+	return fmt.Sprintf("invalid setting provided to a module, cause: %v", err.cause)
+}
+
 // validate is the top-level function for running the validation suite.
 func (dc DeploymentConfig) validate() {
 	// Drop the flags for log to improve readability only for running the validation suite
@@ -217,12 +227,31 @@ func validateSettings(
 	for _, input := range info.Inputs {
 		cVars.Inputs[input.Name] = input.Required
 	}
-	// Make sure we only define variables that exist
+
 	for k := range mod.Settings {
-		if _, ok := cVars.Inputs[k]; !ok {
-			return fmt.Errorf("%s: Module ID: %s Setting: %s",
-				errorMessages["extraSetting"], mod.ID, k)
+		errData := fmt.Sprintf("Module ID: %s Setting: %s", mod.ID, k)
+		// Setting name included a period
+		// The user was likely trying to set a subfield which is not supported.
+		// HCL does not support periods in variables names either:
+		// https://hcl.readthedocs.io/en/latest/language_design.html#language-keywords-and-identifiers
+		if strings.Contains(k, ".") {
+			return &InvalidSettingError{
+				fmt.Sprintf("%s\n%s", errorMessages["settingWithPeriod"], errData),
+			}
 		}
+		// Setting includes invalid characters
+		if !regexp.MustCompile(`^[a-zA-Z-_][a-zA-Z0-9-_]*$`).MatchString(k) {
+			return &InvalidSettingError{
+				fmt.Sprintf("%s\n%s", errorMessages["settingInvalidChar"], errData),
+			}
+		}
+		// Module not found
+		if _, ok := cVars.Inputs[k]; !ok {
+			return &InvalidSettingError{
+				fmt.Sprintf("%s\n%s", errorMessages["extraSetting"], errData),
+			}
+		}
+
 	}
 	return nil
 }

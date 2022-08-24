@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: rocky-linux
+blueprint_name: debian-ss-test
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: rocky-ss-test
+  deployment_name: debian-ss-test
   region: us-central1
   zone: us-central1-a
 
@@ -42,7 +42,7 @@ deployment_groups:
     id: nfs
     use: [network1]
     settings:
-      image: rocky-linux-cloud/rocky-linux-8
+      image: debian-cloud/debian-10
       auto_delete_disk: true
 
   - source: ./community//modules/scripts/spack-install
@@ -105,5 +105,5 @@ deployment_groups:
     settings:
       machine_type: e2-standard-4
       instance_image:
-        family: rocky-linux-8
-        project: rocky-linux-cloud
+        family: debian-10
+        project: debian-cloud

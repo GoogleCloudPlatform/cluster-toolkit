@@ -15,7 +15,7 @@
 ---
 
 steps:
-- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+- name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
   env:
   - "BUILD_ID=${BUILD_ID}"
