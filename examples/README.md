@@ -131,18 +131,6 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [hpc-cluster-small-slurm-v5.yaml] ![community-badge]
-
-This examples creates an HPC cluster similar to the one created by
-[hpc-cluster-small.yaml], but uses modules built from version 5 of
-[slurm-gcp].
-
-The partitions created are the same as in [hpc-cluster-small.yaml] and have the
-same quota requirements.
-
-[hpc-cluster-small-slurm-v5.yaml]: ../community/examples/hpc-cluster-small-slurm-v5.yaml
-[slurm-gcp]: github.com/SchedMD/slurm-gcp
-
 ### [hpc-cluster-high-io.yaml] ![core-badge]
 
 Creates a Slurm cluster with tiered file systems for higher performance. It
