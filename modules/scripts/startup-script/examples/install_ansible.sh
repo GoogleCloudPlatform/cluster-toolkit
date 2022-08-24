@@ -47,12 +47,10 @@ install_python_deps() {
 # checking python. Sets the variable to an empty string if neither are found.
 get_python_path() {
 	python_path=""
-	if [ -f /bin/python3 ]; then
-		python_path="/bin/python3"
-	elif [ -f /bin/python ]; then
-		python_path="/bin/python"
-	else
+	if which python3 2>/dev/null; then
 		python_path=$(which python3 2>/dev/null)
+	elif which python 2>/dev/null; then
+		python_path=$(which python 2>/dev/null)
 	fi
 }
 

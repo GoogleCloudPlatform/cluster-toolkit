@@ -53,6 +53,34 @@ Each runner receives the following attributes:
   Therefore`args` should not include any arguments that alter this behavior,
   such as `--connection`, `--inventory`, or `--limit`.
 
+### Runner dependencies
+
+The `ansible-local` runner requires ansible to be installed in the VM before
+running. To support other playbook runners in the HPC Toolkit, we require
+version 2.11 of ansible-core or higher. Note that this is distinct from the
+package version used to install ansible with pip. The minimum pip package
+of ansible is 4.10.0.
+
+To install ansible, a runner supplied by this module can be added as a prior
+runner. An example of this can be found in the [Example](#example) section below
+as the first runner in the list of runners. This script will do the following in
+your VM instance:
+
+- Install python3 if not already installed using system package managers (yum,
+  apt-get, etc)
+- Install pip3 if not already installed and upgrade pip3 if the version is not
+  at least 18.0.
+- Install and create a virtualenv located at `/usr/local/ghpc-venv`.
+- Install ansible into this virtualenv if the current version of ansible is not
+  version 2.11 or higher.
+
+To use the virtualenv created by this script, you can activate it by running the
+following commmand on the VM:
+
+```shell
+source /usr/local/ghpc-venv/bin/activate
+```
+
 ### Staging the runners
 
 Runners will be uploaded to a
