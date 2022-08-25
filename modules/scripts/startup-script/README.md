@@ -68,18 +68,33 @@ your VM instance:
 
 - Install system-wide python3 if not already installed using system package
   managers (yum, apt-get, etc)
+- Install `python3-distutils` system-wide in debian and ubuntu based
+  environments. This can be a missing dependency on system installations of
+  python3 for installing and upgrading pip.
 - Install system-wide pip3 if not already installed and upgrade pip3 if the
   version is not at least 18.0.
 - Install and create a virtual environment located at `/usr/local/ghpc-venv`.
 - Install ansible into this virtual environment if the current version of
   ansible is not version 2.11 or higher.
 
-To use the virtualenv created by this script, you can activate it by running the
-following commmand on the VM:
+To use the virtual environment created by this script, you can activate it by
+running the following commmand on the VM:
 
 ```shell
 source /usr/local/ghpc-venv/bin/activate
 ```
+
+You may also need to provide the correct python interpreter as the python3
+binary in the virtual environment. This can be done by adding the following flag
+when calling `ansible-playbook`:
+
+```shell
+-e ansible_python_interpreter=/usr/local/ghpc-venv/bin/activate
+```
+
+> **_NOTE:_** ansible-playbook and other ansible command line tools will only be
+> accessible from the command line (and in your PATH variable) after activating
+> this environment.
 
 ### Staging the runners
 
