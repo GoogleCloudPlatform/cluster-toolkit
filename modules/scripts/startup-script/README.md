@@ -66,13 +66,13 @@ runner. An example of this can be found in the [Example](#example) section below
 as the first runner in the list of runners. This script will do the following in
 your VM instance:
 
-- Install python3 if not already installed using system package managers (yum,
-  apt-get, etc)
-- Install pip3 if not already installed and upgrade pip3 if the version is not
-  at least 18.0.
-- Install and create a virtualenv located at `/usr/local/ghpc-venv`.
-- Install ansible into this virtualenv if the current version of ansible is not
-  version 2.11 or higher.
+- Install system-wide python3 if not already installed using system package
+  managers (yum, apt-get, etc)
+- Install system-wide pip3 if not already installed and upgrade pip3 if the
+  version is not at least 18.0.
+- Install and create a virtual environment located at `/usr/local/ghpc-venv`.
+- Install ansible into this virtual environment if the current version of
+  ansible is not version 2.11 or higher.
 
 To use the virtualenv created by this script, you can activate it by running the
 following commmand on the VM:

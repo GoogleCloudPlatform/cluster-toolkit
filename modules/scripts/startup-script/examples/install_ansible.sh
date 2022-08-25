@@ -15,21 +15,21 @@
 
 REQ_ANSIBLE_VERSION=2.11
 REQ_ANSIBLE_PIP_VERSION=4.10.0
-REQ_PIP_VERSION=18
+REQ_PIP_MINOR_VERSION=18
 REQ_PYTHON3_VERSION=6
 
 apt_wait() {
-	while fuser /var/lib/dpkg/lock 2>/dev/null 2>&1; do
+	while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
 		echo "Sleeping for dpkg lock"
 		sleep 3
 	done
-	while fuser /var/lib/apt/lists/lock 2>/dev/null 2>&1; do
+	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
 		echo "Sleeping for apt lists lock"
 		sleep 3
 	done
 	if [ -f /var/log/unattended-upgrades/unattended-upgrades.log ]; then
 		echo "Sleeping until unattended-upgrades finishes"
-		while fuser /var/log/unattended-upgrades/unattended-upgrades.log 2>/dev/null 2>&1; do
+		while fuser /var/log/unattended-upgrades/unattended-upgrades.log >/dev/null 2>&1; do
 			sleep 3
 		done
 	fi
@@ -165,8 +165,7 @@ main() {
 	fi
 	pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
 	pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
-	echo "pip version: ${pip_version}"
-	if [ "${pip_major_version}" -lt "${REQ_PIP_VERSION}" ]; then
+	if [ "${pip_major_version}" -lt "${REQ_PIP_MINOR_VERSION}" ]; then
 		${python_path} -m pip install --upgrade pip
 	fi
 
