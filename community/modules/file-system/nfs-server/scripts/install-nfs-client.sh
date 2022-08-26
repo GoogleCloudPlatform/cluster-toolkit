@@ -24,7 +24,7 @@ if [ ! "$(which mount.nfs)" ]; then
 			enable_repo="baseos"
 		else
 			echo "Unsupported version of centos/RHEL/Rocky"
-			exit 1
+			return 1
 		fi
 		yum install --disablerepo="*" --enablerepo=${enable_repo} -y nfs-utils
 	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
@@ -32,6 +32,6 @@ if [ ! "$(which mount.nfs)" ]; then
 		apt-get -y install nfs-common
 	else
 		echo 'Unsuported distribution'
-		exit 1
+		return 1
 	fi
 fi

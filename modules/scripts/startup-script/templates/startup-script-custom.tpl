@@ -1,12 +1,20 @@
 
 
 stdlib::run_playbook() {
+  python_interpreter_flag=""
+  if [ -d /usr/local/ghpc-venv ]; then
+    . /usr/local/ghpc-venv/bin/activate
+    python_interpreter_flag="-e ansible_python_interpreter=/usr/local/ghpc-venv/bin/python3"
+  fi
   if [ ! "$(which ansible-playbook)" ]; then
     stdlib::error "ansible-playbook not found"\
     "Please install ansible before running ansible-local runners."
     exit 1
   fi
-  /usr/bin/ansible-playbook --connection=local --inventory=localhost, --limit localhost $1 $2
+  ansible-playbook $${python_interpreter_flag} --connection=local --inventory=localhost, --limit localhost $1 $2
+  if [ -d /usr/local/ghpc-venv ]; then
+    deactivate
+  fi
   return $?
 }
 
