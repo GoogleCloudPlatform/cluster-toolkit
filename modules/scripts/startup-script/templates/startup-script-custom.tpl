@@ -12,10 +12,11 @@ stdlib::run_playbook() {
     exit 1
   fi
   ansible-playbook $${python_interpreter_flag} --connection=local --inventory=localhost, --limit localhost $1 $2
+  ret_code=$?
   if [ -d /usr/local/ghpc-venv ]; then
     deactivate
   fi
-  return $?
+  return $${ret_code}
 }
 
 stdlib::runner() {
