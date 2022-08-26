@@ -59,6 +59,9 @@
       changed_when: false
       delegate_to: localhost
       register: instances_list
+      retries: 2
+      delay: 60
+      until: instances_list.rc == 0
       command: >-
         gcloud compute instances list
         --filter="labels.ghpc_deployment={{ deployment_name }}"

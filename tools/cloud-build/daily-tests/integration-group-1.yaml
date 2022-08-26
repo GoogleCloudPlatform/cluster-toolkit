@@ -17,6 +17,7 @@
 # ├── build_ghpc
 # └── fetch_builder
 #    ├── hpc-high-io (group 1)
+#    ├── slurm-gcp-v5-centos7 (group 1)
 
 
 timeout: 14400s  # 4hr
@@ -60,3 +61,23 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-high-io.yml"
+## Test Slurm V5 with HPC CentOS 7
+- id: slurm-v5-centos7
+  waitFor:
+  - hpc-high-io
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    BUILD_ID_EXTRA_SHORT=$${BUILD_ID_FULL:0:2}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} buildxshort=$${BUILD_ID_EXTRA_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-gcp-v5-centos7.yml"

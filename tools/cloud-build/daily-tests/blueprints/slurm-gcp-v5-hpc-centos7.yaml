@@ -14,16 +14,18 @@
 
 ---
 
-blueprint_name: slurm-gcp-v5-ubuntu2004
+blueprint_name: slurm-gcp-v5-hpc-centos7
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: slurm-gcp-v5
   region: us-central1
   zone: us-central1-c
-  source_image_family: "schedmd-v5-slurm-22-05-2-ubuntu-2004-lts"
-  source_image_project: "projects/schedmd-slurm-public/global/images/family"
+  disable_login_public_ips: false
+  disable_controller_public_ips: false
 
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
 deployment_groups:
 - group: primary

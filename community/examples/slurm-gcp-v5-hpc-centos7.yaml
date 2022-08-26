@@ -80,5 +80,6 @@ deployment_groups:
     use:
     - network1
     - slurm_controller
+    - homefs
     settings:
       machine_type: n2-standard-4
