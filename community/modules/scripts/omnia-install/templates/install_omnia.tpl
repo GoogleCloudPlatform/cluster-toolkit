@@ -76,8 +76,8 @@
   - name: Update omnia config to set the slurm UID
     ansible.builtin.lineinfile:
       path: "{{ omnia_dir }}/roles/slurm_common/vars/main.yml"
-      regexp: '^slurm_uid: .*'
-      line: "slurm_uid: \"{{ slurm_uid }}\""
+      regexp: '^slurm_uid: ".*"'
+      line: 'slurm_uid: "{{ slurm_uid }}"'
 
 - name: Run the Omnia installation once all nodes are ready
   hosts: localhost
