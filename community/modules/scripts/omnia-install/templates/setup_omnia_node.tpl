@@ -13,20 +13,41 @@
 # limitations under the License.
 
 ---
-- name: Create Omnia User
+- name: Create user for installing Omnia
   hosts: localhost
   vars:
     username: ${username}
   tasks:
-  - name: Create user omnia
-    user:
+  - name: Create a new user
+    ansible.builtin.user:
       name: "{{ username }}"
-  - name: Allow '{{ username }}' user to have passwordless sudo
-    lineinfile:
+  - name: Allow '{{ username }}' user to have passwordless sudo access
+    ansible.builtin.lineinfile:
       dest: /etc/sudoers
       state: present
       regexp: '^%%{{ username }}'
       line: '%%{{ username }} ALL=(ALL) NOPASSWD: ALL'
+
+- name: Setup selinux
+  hosts: localhost
+  vars:
+    venv: ${virtualenv_path}
+  tasks:
+  - name: Checking if the provided virtualenv exists
+    stat:
+      path: "{{ venv }}"
+    register: venv_dir
+  - name: Install selinux using system pip
+    ansible.builtin.pip:
+      name: selinux
+    when: not venv_dir.stat.exists
+  - name: Install selinux into provided virtualenv
+    ansible.builtin.pip:
+      name: selinux
+      virtualenv: /usr/local/ghpc-venv
+    when: venv_dir.stat.exists
+  - name: Allow SSH on NFS-based home directory
+    ansible.builtin.command: setsebool -P use_nfs_home_dirs 1
 
 - name: Set Status file
   hosts: localhost
@@ -35,13 +56,13 @@
     state_dir: "{{ install_dir }}/state"
   tasks:
   - name: Get hostname
-    command: hostname
+    ansible.builtin.command: hostname
     register: machine_hostname
   - name: Create state dir if not already created
-    file:
+    ansible.builtin.file:
       path: "{{ state_dir }}"
       state: directory
   - name: Create file
-    file:
+    ansible.builtin.file:
       path: "{{ state_dir }}/{{ machine_hostname.stdout }}"
       state: touch

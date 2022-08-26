@@ -21,6 +21,9 @@ vars:
   deployment_name: omnia-cluster
   zone: us-central1-c
   region: us-central1
+  instance_image:
+    family: rocky-linux-8
+    project: rocky-linux-cloud
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
