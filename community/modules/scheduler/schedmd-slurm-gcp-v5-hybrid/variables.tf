@@ -177,6 +177,7 @@ variable "partition" {
       partition_conf = map(string)
       partition_name = string
       partition_nodes = map(object({
+        bandwidth_tier         = string
         node_count_dynamic_max = number
         node_count_static      = number
         enable_spot_vm         = bool

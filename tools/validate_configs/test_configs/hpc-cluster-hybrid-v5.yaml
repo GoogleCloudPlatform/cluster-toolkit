@@ -22,6 +22,8 @@ vars:
   region: us-central1
   zone: us-central1-c
   slurm_cluster_name: hybrid
+  on_prem_controller_host_name:  ## <instance name>.c.<project name>.internal
+  on_prem_network_storage_ip:  ## internal ip address for nfs to be mounted
 
 deployment_groups:
 - group: primary
@@ -39,7 +41,7 @@ deployment_groups:
     outputs:
     - network_storage
     settings:
-      server_ip: 10.0.0.17
+      server_ip: $(vars.on_prem_network_storage_ip)
       remote_mount: /exports/home
       local_mount: /home
       fs_type: nfs
@@ -55,7 +57,6 @@ deployment_groups:
       machine_type: n2-standard-2
       partition_conf:
         Default: NO
-      source_image_project: $(vars.project_id)
 
   - source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
     kind: terraform
@@ -64,4 +65,4 @@ deployment_groups:
     settings:
       output_dir: /etc/slurm/hybrid
       slurm_bin_dir: /usr/local/bin
-      slurm_control_host: hybrid-controller
+      slurm_control_host: $(vars.on_prem_controller_host_name)
