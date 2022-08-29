@@ -60,6 +60,13 @@ Use the following settings for compact placement:
       availability_domain_count: null
 ```
 
+> **Warning** When creating a compact placement with more than 10 VMs, you must
+> add `-parallelism=<n>` argument on apply. For example if you have 15 VMs in a
+> placement group: `terraform apply -parallelism=15`. This is because terraform
+> self limits to 10 parallel requests by default but the create instance
+> requests will not succeed until all VMs in the placement group have been
+> requested, forming a deadlock.
+
 Use the following settings for spread placement:
 
 ```yaml
