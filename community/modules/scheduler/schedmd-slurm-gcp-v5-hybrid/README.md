@@ -7,6 +7,10 @@ requested nodes in a GCP project on-demand and scale after a period of not being
 used, in the same way as the [schedmd-slurm-gcp-v5-controller] module
 auto-scales VMs.
 
+> **_NOTE:_** This module has only been tested in limited capacity with the HPC
+> Toolkit. On Premise configurations can vary significantly, this module should
+> be used as a starting point, not a complete solution.
+
 [schedmd-slurm-gcp-v5-controller]: ../schedmd-slurm-gcp-v5-controller/
 
 ### Usage
@@ -67,7 +71,8 @@ This defines a HPC module that create a hybrid configuration with the following
 attributes:
 
 * 2 partitions defined in previous modules with the IDs of `debug-partition` and
-  `compute-partition`.
+  `compute-partition`. These are the same partition modules used by
+  [schedmd-slurm-gcp-v5-controller].
 * Network storage to be mounted on the compute nodes when created, defined in
   `pre-existing-storage`.
 * `output_directory` set to `/etc/slurm/hybrid`. This is where the hybrid
@@ -77,6 +82,8 @@ attributes:
 * `slurm_control_host`: The name of the on premise host is provided to the
   module for configuring NFS mounts and communicating with the controller after
   VM creation.
+
+[schedmd-slurm-gcp-v5-controller]: ../schedmd-slurm-gcp-v5-controller/
 
 ### Assumptions and Limitations
 **Shared directories from the controller:** By default, the following

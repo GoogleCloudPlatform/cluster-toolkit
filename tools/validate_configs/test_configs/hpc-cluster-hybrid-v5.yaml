@@ -22,8 +22,8 @@ vars:
   region: us-central1
   zone: us-central1-c
   slurm_cluster_name: hybrid
-  on_prem_controller_host_name:  ## <instance name>.c.<project name>.internal
-  on_prem_network_storage_ip:  ## internal ip address for nfs to be mounted
+  on_prem_controller_host_name: static-controller.c.PROJECT_NAME.internal ## <instance name>.c.<project name>.internal
+  on_prem_network_storage_ip: storage-ip-placeholder ## internal ip address for nfs to be mounted
 
 deployment_groups:
 - group: primary
@@ -63,6 +63,6 @@ deployment_groups:
     id: slurm-controller
     use: [compute-partition, pre-existing-storage]
     settings:
-      output_dir: /etc/slurm/hybrid
+      output_dir: ./hybrid
       slurm_bin_dir: /usr/local/bin
       slurm_control_host: $(vars.on_prem_controller_host_name)
