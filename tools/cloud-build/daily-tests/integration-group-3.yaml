@@ -66,25 +66,25 @@ steps:
       --extra-vars="@tools/cloud-build/daily-tests/tests/monitoring.yml"
 
 # ## Test Omnia Example
-# - id: omnia
-#   waitFor:
-#   - monitoring
-#   name: >-
-#     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-#   entrypoint: /bin/bash
-#   env:
-#   - "ANSIBLE_HOST_KEY_CHECKING=false"
-#   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-#   args:
-#   - -c
-#   - |
-#     set -x -e
-#     BUILD_ID_FULL=$BUILD_ID
-#     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+- id: omnia
+  waitFor:
+  - monitoring
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
-#     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-#       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-#       --extra-vars="@tools/cloud-build/daily-tests/tests/omnia.yml"
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/omnia.yml"
 
 ## Test DDN Lustre with new VPC
 - id: lustre-new-vpc
