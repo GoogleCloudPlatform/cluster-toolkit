@@ -239,7 +239,7 @@ The solution here is to [request more of the specified quota](#gcp-quotas),
 
 [partition-machine-type]: community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md#input_machine_type
 
-#### Placement Groups
+#### Placement Groups (Slurm)
 
 By default, placement groups (also called affinity groups) are enabled on the
 compute partition. This places VMs close to each other to achieve lower network
@@ -259,6 +259,14 @@ One way to resolve this is to set [enable_placement][partition-enable-placement]
 to `false` on the partition in question.
 
 [partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
+
+#### VMs Get Stuck in Status Staging When Using Placement Groups With vm-instance
+
+If VMs get stuck in `status: staging` when using the `vm-instance` module with
+placement enabled, it may be because you need to allow terraform to make more
+concurrent requests. See
+[this note](modules/compute/vm-instance/README.md#placement) in the vm-instance
+README.
 
 #### Insufficient Service Account Permissions
 
