@@ -62,7 +62,7 @@ The hybrid module can be added to a blueprint as follows:
   - compute-partition
   - pre-existing-storage
   settings:
-    output_dir: /etc/slurm/hybrid
+    output_dir: ./hybrid
     slurm_bin_dir: /usr/local/bin
     slurm_control_host: static-controller
 ```
@@ -75,7 +75,7 @@ attributes:
   [schedmd-slurm-gcp-v5-controller].
 * Network storage to be mounted on the compute nodes when created, defined in
   `pre-existing-storage`.
-* `output_directory` set to `/etc/slurm/hybrid`. This is where the hybrid
+* `output_directory` set to `./hybrid`. This is where the hybrid
   configurations will be created.
 * `slurm_bin_dir` located at `/usr/local/bin`. Set this to whereever the slurm
   executables are installed on your system.
@@ -110,7 +110,7 @@ be mounted from the controller. Those will need to be managed manually if the
 `disable_default_mounts` variable is set to true.
 
 **Power Saving Logic:** The cloud partitions will make use of the power saving
-logic and the suspend and resume scripts will be set. If any local partitions
+logic and the suspend and resume programs will be set. If any local partitions
 also make use of these `slurm.conf` variables, a conflict will likely occur.
 There is no support currently for partition level suspend and resume scripts,
 therefore either the local partition will need to turn this off or the hybrid
