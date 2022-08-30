@@ -639,7 +639,7 @@ func (s *MySuite) TestConvertMapToCty(c *C) {
 	}
 	testcty, err = ConvertMapToCty(testmap)
 	c.Assert(err, NotNil)
-	ctyval, found = testcty[testkey]
+	_, found = testcty[testkey]
 	c.Assert(found, Equals, false)
 }
 
