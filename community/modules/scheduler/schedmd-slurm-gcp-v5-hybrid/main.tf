@@ -35,7 +35,7 @@ module "slurm_controller_instance" {
   prolog_scripts               = var.prolog_scripts
   epilog_scripts               = var.epilog_scripts
   network_storage              = var.network_storage
-  login_network_storage        = var.login_network_storage
+  login_network_storage        = var.network_storage
   partitions                   = var.partition
   google_app_cred_path         = var.google_app_cred_path
   slurm_bin_dir                = var.slurm_bin_dir

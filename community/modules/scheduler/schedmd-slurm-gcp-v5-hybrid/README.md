@@ -7,8 +7,10 @@ requested nodes in a GCP project on-demand and scale after a period of not being
 used, in the same way as the [schedmd-slurm-gcp-v5-controller] module
 auto-scales VMs.
 
-> **_NOTE:_** This module has only been tested in limited capacity with the HPC
-> Toolkit. On Premise configurations can vary significantly, this module should
+> **_NOTE:_** This is an experimental module and the functionality and
+> documentation will likely be updated in the near future. This module has only
+> been tested in limited capacity with the HPC Toolkit. On Premise
+> Slurm configurations can vary significantly, this module should
 > be used as a starting point, not a complete solution.
 
 [schedmd-slurm-gcp-v5-controller]: ../schedmd-slurm-gcp-v5-controller/
@@ -33,12 +35,18 @@ permissions. For more information see the [hybrid.md] documentation on
 >
 > * [terraform]
 > * [addict]
+> * [httplib2]
+> * [pyyaml]
+> * [google-api-python-client]
 > * [google-cloud-pubsub]
 > * A full list of recommended python packages is available in a
 >   [requirements.txt] file in the [slurm-gcp] repo.
 
 [terraform]: https://learn.hashicorp.com/tutorials/terraform/install-cli
 [addict]: https://pypi.org/project/addict/
+[httplib2]: https://pypi.org/project/httplib2/
+[pyyaml]: https://pypi.org/project/PyYAML/
+[google-api-python-client]: https://pypi.org/project/google-api-python-client/
 [google-cloud-pubsub]: https://pypi.org/project/google-cloud-pubsub/
 [requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/v5.0.3/scripts/requirements.txt
 
@@ -100,9 +108,9 @@ directories.
 
 If this does not match your slurm cluster, these directories can be overwritten
 with a custom NFS mount using [pre-existing-network-storage] or by setting the
-`network_storage` variable directly in the hybrid module. Any value in
+`network_storage` variable directly in the hybrid module. **Any value in
 `network_storage`, added directly or with `use`, will override the default
-directories above.
+directories above.**
 
 The variable `disable_default_mounts` will disregard these defaults. Note that
 at a minimum, the cloud VMs require `/etc/munge` and `/usr/local/slurm/etc` to
@@ -184,7 +192,6 @@ No resources.
 | <a name="input_enable_reconfigure"></a> [enable\_reconfigure](#input\_enable\_reconfigure) | Enables automatic Slurm reconfigure on when Slurm configuration changes (e.g.<br>slurm.conf.tpl, partition details). Compute instances and resource policies<br>(e.g. placement groups) will be destroyed to align with new configuration.<br>NOTE: Requires Python and Google Pub/Sub API.<br>*WARNING*: Toggling this will impact the running workload. Deployed compute nodes<br>will be destroyed and their jobs will be requeued. | `bool` | `false` | no |
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br>on every node when a user's job completes.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
 | <a name="input_google_app_cred_path"></a> [google\_app\_cred\_path](#input\_google\_app\_cred\_path) | Path to Google Applicaiton Credentials. | `string` | `null` | no |
-| <a name="input_login_network_storage"></a> [login\_network\_storage](#input\_login\_network\_storage) | Storage to mounted on login and controller instances<br>* server\_ip     : Address of the storage server.<br>* remote\_mount  : The location in the remote instance filesystem to mount from.<br>* local\_mount   : The location on the instance filesystem to mount to.<br>* fs\_type       : Filesystem type (e.g. "nfs").<br>* mount\_options : Options to mount with. | <pre>list(object({<br>    server_ip     = string<br>    remote_mount  = string<br>    local_mount   = string<br>    fs_type       = string<br>    mount_options = string<br>  }))</pre> | `[]` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | Storage to mounted on all instances.<br>- server\_ip     : Address of the storage server.<br>- remote\_mount  : The location in the remote instance filesystem to mount from.<br>- local\_mount   : The location on the instance filesystem to mount to.<br>- fs\_type       : Filesystem type (e.g. "nfs").<br>- mount\_options : Options to mount with. | <pre>list(object({<br>    server_ip     = string<br>    remote_mount  = string<br>    local_mount   = string<br>    fs_type       = string<br>    mount_options = string<br>  }))</pre> | `[]` | no |
 | <a name="input_output_dir"></a> [output\_dir](#input\_output\_dir) | Directory where this module will write its files to. These files include:<br>cloud.conf; cloud\_gres.conf; config.yaml; resume.py; suspend.py; and util.py. | `string` | `null` | no |
 | <a name="input_partition"></a> [partition](#input\_partition) | Cluster partitions as a list. | <pre>list(object({<br>    compute_list = list(string)<br>    partition = object({<br>      enable_job_exclusive    = bool<br>      enable_placement_groups = bool<br>      network_storage = list(object({<br>        server_ip     = string<br>        remote_mount  = string<br>        local_mount   = string<br>        fs_type       = string<br>        mount_options = string<br>      }))<br>      partition_conf = map(string)<br>      partition_name = string<br>      partition_nodes = map(object({<br>        bandwidth_tier         = string<br>        node_count_dynamic_max = number<br>        node_count_static      = number<br>        enable_spot_vm         = bool<br>        group_name             = string<br>        instance_template      = string<br>        node_conf              = map(string)<br>        spot_instance_config = object({<br>          termination_action = string<br>        })<br>      }))<br>      subnetwork        = string<br>      zone_policy_allow = list(string)<br>      zone_policy_deny  = list(string)<br>    })<br>  }))</pre> | `[]` | no |
@@ -198,7 +205,5 @@ No resources.
 
 ## Outputs
 
-| Name | Description |
-|------|-------------|
-| <a name="output_instructions"></a> [instructions](#output\_instructions) | Installation instructions for the hybrid configurations created by this module. |
+No outputs.
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
