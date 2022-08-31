@@ -327,7 +327,7 @@ func (s *MySuite) TestProjectExistsValidator(c *C) {
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
-	projectValidator.Inputs["project_id"] = "((var.project_id))"
+	projectValidator.Inputs["project_id"] = "((var.undefined))"
 	err = dc.testProjectExists(projectValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 

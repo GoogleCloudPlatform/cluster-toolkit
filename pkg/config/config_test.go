@@ -41,6 +41,7 @@ var (
 	expectedYaml = []byte(`
 blueprint_name: simple
 vars:
+  project_id: test-project
   labels:
     ghpc_blueprint: simple
     deployment_name: deployment_name
@@ -56,7 +57,6 @@ deployment_groups:
     id: "vpc"
     settings:
       network_name: $"${var.deployment_name}_net
-      project_id: project_name
 `)
 	testModules = []Module{
 		{
@@ -75,8 +75,10 @@ deployment_groups:
 		"deployment_name": "deployment_name",
 	}
 	expectedSimpleBlueprint Blueprint = Blueprint{
-		BlueprintName:    "simple",
-		Vars:             map[string]interface{}{"labels": defaultLabels},
+		BlueprintName: "simple",
+		Vars: map[string]interface{}{
+			"project_id": "test-project",
+			"labels":     defaultLabels},
 		DeploymentGroups: []DeploymentGroup{{Name: "DeploymentGroup1", TerraformBackend: TerraformBackend{}, Modules: testModules}},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
@@ -189,7 +191,10 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testBlueprint := Blueprint{
 		BlueprintName: "simple",
 		Validators:    []validatorConfig{},
-		Vars:          map[string]interface{}{"deployment_name": "deployment_name"},
+		Vars: map[string]interface{}{
+			"deployment_name": "deployment_name",
+			"project_id":      "test-project",
+		},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
 			Configuration: map[string]interface{}{},
@@ -206,7 +211,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 		},
 	}
 
-	return DeploymentConfig{
+	dc := DeploymentConfig{
 		Config: testBlueprint,
 		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
 			"group1": {
@@ -215,6 +220,8 @@ func getDeploymentConfigForTest() DeploymentConfig {
 			},
 		},
 	}
+	dc.addMetadataToModules()
+	return dc
 }
 
 func getBasicDeploymentConfigWithTestModule() DeploymentConfig {

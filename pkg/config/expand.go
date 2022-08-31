@@ -44,6 +44,10 @@ const (
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() {
 	dc.addSettingsToModules()
+	if err := dc.addMetadataToModules(); err != nil {
+		log.Printf("could not add module metadata: %v", err)
+	}
+
 	if err := dc.expandBackends(); err != nil {
 		log.Fatalf("failed to apply default backend to deployment groups: %v", err)
 	}
@@ -80,6 +84,32 @@ func (dc *DeploymentConfig) addSettingsToModules() {
 			}
 		}
 	}
+}
+
+func (dc *DeploymentConfig) addMetadataToModules() error {
+	for iGrp, grp := range dc.Config.DeploymentGroups {
+		for iMod, mod := range grp.Modules {
+			if mod.RequiredApis == nil {
+				_, projectIDExists := dc.Config.Vars["project_id"].(string)
+				if !projectIDExists {
+					// it is OK to error
+					return fmt.Errorf("global variable project_id must be defined")
+				}
+
+				// handle possibility that ModulesInfo does not have this module in it
+				// this occurs in unit testing because they do not run dc.ExpandConfig()
+				// and dc.setModulesInfo()
+				requiredAPIs := dc.ModulesInfo[grp.Name][mod.Source].RequiredApis
+				if requiredAPIs == nil {
+					requiredAPIs = []string{}
+				}
+				dc.Config.DeploymentGroups[iGrp].Modules[iMod].RequiredApis = map[string][]string{
+					"(( var.project_id ))": requiredAPIs,
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (dc *DeploymentConfig) expandBackends() error {
