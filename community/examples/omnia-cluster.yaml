@@ -107,7 +107,5 @@ deployment_groups:
   - id: wait
     source: community/modules/scripts/wait-for-startup
     kind: terraform
-    use:
-    - network
     settings:
       instance_name: ((module.manager.name[0]))
