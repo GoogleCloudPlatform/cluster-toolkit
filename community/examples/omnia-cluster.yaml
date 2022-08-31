@@ -34,7 +34,7 @@ deployment_groups:
 
   ## Network
   - id: network
-    source: modules/network/vpc
+    source: modules/network/pre-existing-vpc
     kind: terraform
 
   ## File Systems
