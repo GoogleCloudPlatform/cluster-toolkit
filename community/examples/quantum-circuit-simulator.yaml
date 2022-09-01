@@ -19,9 +19,12 @@ blueprint_name: quantum-circuit
 # for availability of A2 machine types
 vars:
   project_id:  ## Set project id here
-  deployment_name: demo0
+  deployment_name: qsim-demo
   region: us-west4
   zone: us-west4-b
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
 deployment_groups:
 - group: primary
@@ -30,7 +33,7 @@ deployment_groups:
     id: network1
     kind: terraform
   - source: modules/scripts/startup-script
-    id: startup-example
+    id: quantum-simulator-setup
     kind: terraform
     settings:
       runners:
@@ -38,9 +41,7 @@ deployment_groups:
         destination: install-qsim.sh
         content: |
           #!/bin/bash
-          #
-          # https://quantumai.google/qsim/tutorials/gcp_gpu
-          #
+          # This script implements https://quantumai.google/qsim/tutorials/gcp_gpu
           set -e -o pipefail
           curl -O https://raw.githubusercontent.com/GoogleCloudPlatform/compute-gpu-installation/main/linux/install_gpu_driver.py
           python3 install_gpu_driver.py
@@ -111,7 +112,7 @@ deployment_groups:
     kind: terraform
     use:
     - network1
-    - startup-example
+    - quantum-simulator-setup
     settings:
       machine_type: a2-highgpu-1g
       instance_image:
