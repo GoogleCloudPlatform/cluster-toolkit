@@ -244,7 +244,20 @@ variable "output_dir" {
   description = <<-EOD
     Directory where this module will write its files to. These files include:
     cloud.conf; cloud_gres.conf; config.yaml; resume.py; suspend.py; and util.py.
+    If not specified explicitly, this will also be used as the default value
+    for the `install_dir` variable.
     EOD
+  default     = null
+}
+
+variable "install_dir" {
+  description = <<-EOD
+    Directory where the hybrid configuration directory will be installed on the
+    on-premise controller. This updates the prefix path for the resume and
+    suspend scripts in the generated `cloud.conf` file. The value defaults to
+    output_dir if not specified.
+    EOD
+  type        = string
   default     = null
 }
 
