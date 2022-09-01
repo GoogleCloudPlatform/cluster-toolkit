@@ -105,7 +105,7 @@ deployment_groups:
               sim(width=width, height=height, reps=reps, use_gpu=False, gpu_mode=0)
               print("\nRunning on GPU (CUDA):")
               sim(width=width, height=height, reps=reps, use_gpu=True, gpu_mode=0)
-              print("\nRunning on GPU (cuQuantum):")
+              print("\nRunning on GPU (CUDA + cuQuantum):")
               sim(width=width, height=height, reps=reps, use_gpu=True, gpu_mode=1)
   - source: modules/compute/vm-instance
     id: qsimvm
