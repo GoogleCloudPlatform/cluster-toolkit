@@ -115,6 +115,13 @@ resource "google_compute_instance" "compute_vm" {
     auto_delete = true
   }
 
+  dynamic "scratch_disk" {
+    for_each = range(var.local_ssd_count)
+    content {
+      interface = var.local_ssd_interface
+    }
+  }
+
   network_interface {
     dynamic "access_config" {
       for_each = var.disable_public_ips == true ? [] : [1]
