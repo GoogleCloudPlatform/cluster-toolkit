@@ -278,11 +278,11 @@ func (dc DeploymentConfig) validateModuleSettings() error {
 
 func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) error {
 	allValidators := map[string]func(validatorConfig) error{
+		testApisEnabledName.String():   dc.testApisEnabled,
 		testProjectExistsName.String(): dc.testProjectExists,
 		testRegionExistsName.String():  dc.testRegionExists,
 		testZoneExistsName.String():    dc.testZoneExists,
 		testZoneInRegionName.String():  dc.testZoneInRegion,
-		testApisEnabledName.String():   dc.testApisEnabled,
 	}
 	return allValidators
 }
@@ -306,6 +306,25 @@ func testInputList(function string, inputs map[string]interface{}, requiredInput
 		errStr := "only %v inputs %s should be provided to %s"
 		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, function)
 	}
+
+	return nil
+}
+
+func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
+	requiredInputs := []string{}
+	funcName := testApisEnabledName.String()
+
+	if validator.Validator != funcName {
+		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
+	}
+
+	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
+	if err != nil {
+		return err
+	}
+
+	// TODO: implement calls to Service Usage API that validate which APIs
+	// are enabled
 
 	return nil
 }
@@ -472,20 +491,4 @@ func (dc *DeploymentConfig) getStringValue(inputReference interface{}) (string, 
 		}
 	}
 	return "", fmt.Errorf("the value %s is not a deployment variable or was not defined", inputReference)
-}
-
-func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
-	requiredInputs := []string{}
-	funcName := testApisEnabledName.String()
-
-	if validator.Validator != funcName {
-		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
-	}
-
-	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
