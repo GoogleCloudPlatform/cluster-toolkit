@@ -108,6 +108,7 @@ const (
 	testRegionExistsName
 	testZoneExistsName
 	testZoneInRegionName
+	testApisEnabledName
 )
 
 // this enum will be used to control how fatal validator failures will be
@@ -148,6 +149,8 @@ func (v validatorName) String() string {
 		return "test_zone_exists"
 	case testZoneInRegionName:
 		return "test_zone_in_region"
+	case testApisEnabledName:
+		return "test_apis_enabled"
 	default:
 		return "unknown_validator"
 	}
