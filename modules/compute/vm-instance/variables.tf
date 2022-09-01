@@ -50,13 +50,13 @@ variable "disk_type" {
 }
 
 variable "local_ssd_count" {
-  description = "The number of local SSD to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
+  description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
   type        = number
   default     = 0
 }
 
 variable "local_ssd_interface" {
-  description = "Interface to be used with local SSD. Can be either 'NVME' or 'SCSI'."
+  description = "Interface to be used with local SSDs. Can be either 'NVME' or 'SCSI'. No effect unless `local_ssd_count` is also set."
   type        = string
   default     = "NVME"
 }
