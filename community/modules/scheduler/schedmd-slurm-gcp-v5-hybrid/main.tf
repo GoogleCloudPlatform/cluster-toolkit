@@ -19,12 +19,9 @@ locals {
     filename = "ghpc_startup.sh"
     content  = var.compute_startup_script
   }]
-  install_dir         = var.install_dir != null ? var.install_dir : var.output_dir
-  install_dir_pattern = replace(replace(local.install_dir, "/", "\\/"), ".", "\\.")
-  abs_output_dir      = abspath(var.output_dir)
-  output_dir_pattern  = replace(replace(local.abs_output_dir, "/", "\\/"), ".", "\\.")
-  cloud_conf_path     = "${local.abs_output_dir}/cloud.conf"
-  install_path_cmd    = "sed -i 's/Program=${local.output_dir_pattern}/Program=${local.install_dir_pattern}/g' ${local.cloud_conf_path}"
+  install_dir         = var.install_dir != null ? var.install_dir : abspath(var.output_dir)
+  install_dir_pattern = replace(local.install_dir, ".", "\\.")
+  install_path_cmd    = "sed -i -E 's|Program=/.*/(resume\\|suspend).py|Program=${local.install_dir_pattern}/\\1\\.py|g' cloud.conf"
 }
 
 module "slurm_controller_instance" {
@@ -57,6 +54,10 @@ resource "null_resource" "set_prefix_cloud_conf" {
   depends_on = [
     module.slurm_controller_instance
   ]
+  triggers = {
+    output_dir  = var.output_dir
+    install_dir = var.install_dir
+  }
   provisioner "local-exec" {
     working_dir = var.output_dir
     command     = local.install_path_cmd
