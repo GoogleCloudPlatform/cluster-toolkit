@@ -165,10 +165,21 @@ Modules that are still in development and less stable are labeled with the
 
 ## Module Fields
 
+### ID (Required)
+
+The `id` field is used to uniquely identify and reference a defined module.
+ID's are used in [variables](../examples/README.md#variables) and become the
+name of each module when writing the terraform `main.tf` file. They are also
+used in the [use](#use-optional) and [outputs](#outputs-optional) lists
+described below.
+
+For terraform modules, the ID will be rendered into the terraform module label
+at the top level main.tf file.
+
 ### Source (Required)
 
 The source is a path or URL that points to the source files for a module. The
-actual content of those files is determined by the [kind](#kind-required) of the
+actual content of those files is determined by the [kind](#kind-may-be-required) of the
 module.
 
 A source can be a path which may refer to a module embedded in the `ghpc`
@@ -253,21 +264,10 @@ Toolkit vpc module, use:
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
 [daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
 
-### Kind (Required)
+### Kind (May be Required)
 
 `kind` refers to the way in which a module is deployed. Currently, `kind` can be
-either `terraform` or `packer`.
-
-### ID (Required)
-
-The `id` field is used to uniquely identify and reference a defined module.
-ID's are used in [variables](../examples/README.md#variables) and become the
-name of each module when writing the terraform `main.tf` file. They are also
-used in the [use](#use-optional) and [outputs](#outputs-optional) lists
-described below.
-
-For terraform modules, the ID will be rendered into the terraform module label
-at the top level main.tf file.
+either `terraform` or `packer`. It must be specified for modules of type `packer`. If omitted, it will default to `terraform`.
 
 ### Settings (May Be Required)
 
