@@ -151,7 +151,7 @@ func (s *MySuite) TestValidateModule(c *C) {
 
 	// Catch invalid kind
 	testModule.Source = "testSource"
-	testModule.Kind = ""
+	testModule.Kind = "invalidKind"
 	err = validateModule(testModule)
 	expectedErrorStr = fmt.Sprintf(
 		"%s\n%s", errorMessages["wrongKind"], module2String(testModule))
