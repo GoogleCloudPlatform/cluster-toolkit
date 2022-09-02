@@ -239,11 +239,79 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	}
 }
 
+func getDeploymentConfigWithTestModuleEmtpyKind() DeploymentConfig {
+	testModuleSource := filepath.Join(tmpTestDir, "module")
+	testDeploymentGroup := DeploymentGroup{
+		Name: "primary",
+		Modules: []Module{
+			{
+				ID:       "TestModule1",
+				Source:   testModuleSource,
+				Settings: map[string]interface{}{"test_variable": "test_value"},
+			},
+			{
+				ID:       "TestModule2",
+				Kind:     "",
+				Source:   testModuleSource,
+				Settings: map[string]interface{}{"test_variable": "test_value"},
+			},
+		},
+	}
+	return DeploymentConfig{
+		Config: Blueprint{
+			BlueprintName:    "simple",
+			Vars:             map[string]interface{}{"deployment_name": "deployment_name"},
+			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
+		},
+	}
+}
+
 /* Tests */
 // config.go
 func (s *MySuite) TestExpandConfig(c *C) {
 	dc := getBasicDeploymentConfigWithTestModule()
 	dc.ExpandConfig()
+}
+
+func (s *MySuite) TestAddKindToModules(c *C) {
+	/* Test addKindToModules() works when nothing to do */
+	dc := getBasicDeploymentConfigWithTestModule()
+	expected := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
+	dc.addKindToModules()
+	got := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
+	c.Assert(got, Equals, expected)
+
+	/* Test addKindToModules() works when kind is absent*/
+	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	expected = "terraform"
+	dc.addKindToModules()
+	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
+	c.Assert(got, Equals, expected)
+
+	/* Test addKindToModules() works when kind is empty*/
+	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	expected = "terraform"
+	dc.addKindToModules()
+	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule2").Kind
+	c.Assert(got, Equals, expected)
+
+	/* Test addKindToModules() does nothing to packer types*/
+	moduleID := "packerModule"
+	expected = "packer"
+	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
+	dc.addKindToModules()
+	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
+	c.Assert(got, Equals, expected)
+
+	/* Test addKindToModules() does nothing to invalid types*/
+	moduleID = "funnyModule"
+	expected = "funnyType"
+	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
+	dc.addKindToModules()
+	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
+	c.Assert(got, Equals, expected)
 }
 
 func (s *MySuite) TestSetModulesInfo(c *C) {

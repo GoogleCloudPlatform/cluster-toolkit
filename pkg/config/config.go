@@ -219,6 +219,7 @@ type DeploymentConfig struct {
 
 // ExpandConfig expands the yaml config in place
 func (dc *DeploymentConfig) ExpandConfig() {
+	dc.addKindToModules()
 	dc.setModulesInfo()
 	dc.validateConfig()
 	dc.expand()
@@ -330,6 +331,18 @@ func createModuleInfo(
 		}
 	}
 	return modInfo
+}
+
+// addKindToModules sets the kind to 'terraform' when empty.
+func (dc *DeploymentConfig) addKindToModules() {
+	for iGrp, grp := range dc.Config.DeploymentGroups {
+		for iMod, mod := range grp.Modules {
+			if mod.Kind == "" {
+				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Kind =
+					"terraform"
+			}
+		}
+	}
 }
 
 // setModulesInfo populates needed information from modules
