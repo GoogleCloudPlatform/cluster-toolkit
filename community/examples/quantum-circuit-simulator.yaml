@@ -75,21 +75,23 @@ deployment_groups:
       - type: data
         destination: /var/tmp/qsim-example.py
         content: |
+          import sys
           import time
           import cirq, cirq_google
           import qsimcirq
 
-          # These defaults will take a long time on a single device!
           def sim(width: int, height: int, reps: int, use_gpu: bool, gpu_mode: int):
               rqc_fn = cirq.experiments.random_rotations_between_grid_interaction_layers_circuit
               qvm_fn = cirq_google.engine.create_default_noisy_quantum_virtual_machine
 
               qubits = cirq.GridQubit.rect(width, height, 3, 2)
-              circuit = rqc_fn(qubits, depth=5, seed=0) + cirq.measure(*qubits, key="final_state")
+              circuit = rqc_fn(qubits, depth=10, seed=0) + cirq.measure(*qubits, key="final_state")
 
               processor_id = "weber"
               qsim_options = qsimcirq.QSimOptions(use_gpu=use_gpu, gpu_mode=gpu_mode)
-              qvm = qvm_fn(processor_id, qsimcirq.QSimSimulator, qsim_options=qsim_options)
+              # we do not recommend using seed=0 in production usage; in this
+              # example it helps compare performance between runs
+              qvm = qvm_fn(processor_id, qsimcirq.QSimSimulator, seed=0, qsim_options=qsim_options)
 
               start = time.time()
               results = qvm.get_sampler(processor_id).run(circuit, repetitions=reps)
@@ -100,12 +102,15 @@ deployment_groups:
           if __name__ == "__main__":
               width, height, reps = 5, 5, 10
 
-              print("This series of simulations should take <1 minute on an A2 series VM\n")
+              print("This series of simulations should last approximately 1 minute on an A2 series VM\n")
               print("Running on CPU:")
+              sys.stdout.flush()
               sim(width=width, height=height, reps=reps, use_gpu=False, gpu_mode=0)
               print("\nRunning on GPU (CUDA):")
+              sys.stdout.flush()
               sim(width=width, height=height, reps=reps, use_gpu=True, gpu_mode=0)
               print("\nRunning on GPU (CUDA + cuQuantum):")
+              sys.stdout.flush()
               sim(width=width, height=height, reps=reps, use_gpu=True, gpu_mode=1)
   - source: modules/compute/vm-instance
     id: qsimvm
