@@ -66,3 +66,4 @@ deployment_groups:
       output_dir: ./hybrid
       slurm_bin_dir: /usr/local/bin
       slurm_control_host: $(vars.on_prem_controller_host_name)
+      install_dir: /etc/slurm/hybrid
