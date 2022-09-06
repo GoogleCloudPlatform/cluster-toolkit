@@ -29,7 +29,7 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
+  - source: modules/network/vpc
     id: network1
     kind: terraform
   - source: modules/scripts/startup-script
@@ -112,6 +112,14 @@ deployment_groups:
               print("\nRunning on GPU (CUDA + cuQuantum):")
               sys.stdout.flush()
               sim(width=width, height=height, reps=reps, use_gpu=True, gpu_mode=1)
+      - type: shell
+        destination: run-qsim.sh
+        content: |
+          #!/bin/bash
+          # this script demonstrates how to run the qsim example application and
+          # also "warms up" the GPU to give reliable performance metrics
+          conda activate qsim
+          python /var/tmp/qsim-example.py
   - source: modules/compute/vm-instance
     id: qsimvm
     kind: terraform
