@@ -53,15 +53,15 @@ minutes.
 
 ### Gromacs
 
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=develop&cloudshell_open_in_editor=docs%2Ftutorials%2Fgromacs%2Fspack-gromacs.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fgromacs%2Fspack-gromacs.md)
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=main&cloudshell_open_in_editor=docs%2Ftutorials%2Fgromacs%2Fspack-gromacs.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fgromacs%2Fspack-gromacs.md)
 
 ### Openfoam
 
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=develop&cloudshell_open_in_editor=docs%2Ftutorials%2Fopenfoam%2Fspack-openfoam.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fopenfoam%2Fspack-openfoam.md)
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=main&cloudshell_open_in_editor=docs%2Ftutorials%2Fopenfoam%2Fspack-openfoam.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fopenfoam%2Fspack-openfoam.md)
 
 ### Weather Research and Forecasting (WRF) Model
 
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=develop&cloudshell_open_in_editor=docs%2Ftutorials%2Fwrfv3%2Fspack-wrfv3.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fwrfv3%2Fspack-wrfv3.md)
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=main&cloudshell_open_in_editor=docs%2Ftutorials%2Fwrfv3%2Fspack-wrfv3.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fwrfv3%2Fspack-wrfv3.md)
 
 ### Blueprint Diagram for Application Tutorials
 
