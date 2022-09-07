@@ -56,10 +56,6 @@ Google Cloud Batch cli is not available it can generally be mitigated by either
 updating `gcloud` by running `gcloud components update`, or using an image that
 contains a more recent version of `gcloud`.
 
-> _**WARNING:**_ It is a known issue that the version of `gcloud` on the
-> [HPC VM image](https://cloud.google.com/compute/docs/instances/create-hpc-vm)
-> does not contain the Google Cloud Batch cli.
-
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

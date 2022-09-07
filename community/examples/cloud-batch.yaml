@@ -60,9 +60,6 @@ deployment_groups:
     settings:
       runnable: "cat /sw/hello.txt"
       machine_type: n2-standard-4
-      image:
-        family: centos-7
-        project: centos-cloud
 
   - id: batch-login
     source: community/modules/scheduler/cloud-batch-login-node
