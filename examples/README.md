@@ -522,8 +522,8 @@ the [HPC VM Image][hpcvmimage].
 
 This blueprint provisions an [A2 series VM with NVIDIA A100 GPU accelerator][a2]
 and compiles [qsim], a [Google Quantum AI][gqai]-developed tool that simulates
-quantum circuits using CPUs and GPUs. The installation of qsim, the CUDA
-Toolkit, and the [cuQuantum SDK][cqsdk] is fully automated but takes a
+quantum circuits using CPUs and GPUs. The installation of qsim, the [CUDA
+Toolkit][cudatk], and the [cuQuantum SDK][cqsdk] is fully automated but takes a
 significant time (approx. 20 minutes). Once complete, a qsim example can be run
 by connecting to the VM by SSH and running
 
@@ -537,6 +537,7 @@ python /var/tmp/qsim-example.py
 [a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
 [qsim]: https://quantumai.google/qsim
 [cqsdk]: https://developer.nvidia.com/cuquantum-sdk
+[cudatk]: https://developer.nvidia.com/cuda-toolkit
 
 ## Blueprint Schema
 

@@ -29,12 +29,10 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/vpc
-    id: network1
-    kind: terraform
-  - source: modules/scripts/startup-script
-    id: quantum-simulator-setup
-    kind: terraform
+  - id: network1
+    source: modules/network/vpc
+  - id: quantum-simulator-setup
+    source: modules/scripts/startup-script
     settings:
       runners:
       - type: shell
@@ -120,9 +118,8 @@ deployment_groups:
           # also "warms up" the GPU to give reliable performance metrics
           conda activate qsim
           python /var/tmp/qsim-example.py
-  - source: modules/compute/vm-instance
-    id: qsimvm
-    kind: terraform
+  - id: qsimvm
+    source: modules/compute/vm-instance
     use:
     - network1
     - quantum-simulator-setup
@@ -133,6 +130,5 @@ deployment_groups:
         family: ubuntu-2004-lts
   - id: wait
     source: community/modules/scripts/wait-for-startup
-    kind: terraform
     settings:
       instance_name: ((module.qsimvm.name[0]))
