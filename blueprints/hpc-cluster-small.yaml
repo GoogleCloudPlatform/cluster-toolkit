@@ -1,13 +1,13 @@
 blueprint_name: hpc-cluster-small
 
 vars:
-  billing_account: ## Set GCP Billing Account Here ##
-  org_id: ## Set GCP Organization ID Here ##
-  folder_id: ## Set GCP Folder ID Here ##
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: ## Set Deployment Name Here ##
-  region: ## Set Region Here ##
-  zone: ## Set Zone Here ##
+  billing_account: 019162-C95952-41672F ## Set GCP Billing Account Here ##
+  org_id: 556641523717 ## Set GCP Organization ID Here ##
+  folder_id: 88910510716 ## Set GCP Folder ID Here ##
+  project_id: ssc-gr-test ## Set GCP Project ID Here ##
+  deployment_name: test-hpc ## Set Deployment Name Here ##
+  region: northamerica-northeast1 ## Set Region Here ##
+  zone: northamerica-northeast1-a ## Set Zone Here ##
   slurm_cluster_name: hpcsmall
   activate_apis:
     - compute.googleapis.com
@@ -27,6 +27,15 @@ deployment_groups:
         kind: terraform
         id: network1
         use: [project1]
+
+      - source: ./modules/billing
+        kind: terraform
+        id: billing
+        settings:
+          display_name: example-alert"
+          amount: 1000
+          currency_code: USD
+          threshold_rules: [10]
 
       - source: modules/file-system/filestore
         kind: terraform
