@@ -36,6 +36,8 @@ deployment_groups:
           amount: 1000
           currency_code: USD
           threshold_rules: [10]
+          owner: test
+          manager: test
 
       - source: modules/file-system/filestore
         kind: terraform

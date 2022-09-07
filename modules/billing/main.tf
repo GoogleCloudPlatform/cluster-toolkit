@@ -64,3 +64,24 @@ resource "google_billing_budget" "budget" {
 
   depends_on = [var.module_depends_on]
 }
+
+
+resource "google_monitoring_notification_channel" "scientist_notification_channel" {
+  display_name = "Budget Notification Channel for scientist"
+  type         = "email"
+  project      = var.project_id
+
+  labels = {
+    email_address = var.owner
+  }
+}
+
+resource "google_monitoring_notification_channel" "manager_notification_channel" {
+  display_name = "Budget Notification Channel for manager"
+  type         = "email"
+  project      = var.project_id
+
+  labels = {
+    email_address = var.manager
+  }
+}

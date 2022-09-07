@@ -115,3 +115,19 @@ variable "module_depends_on" {
   description = "(Optional) A list of external resources the module depends on."
   default     = []
 }
+
+variable "project_id" {
+  description = "project ID"
+  type = string
+}
+
+
+variable "owner" {
+  description = "Owner of the project"
+  type = string
+}
+
+variable "manager" {
+  description = "Manager who approved the project"
+  type = string
+}
