@@ -40,3 +40,7 @@ Examples using Intel HPC technologies can be found in the
 ### htcondor-pool.yaml
 
 [See description in core](../../examples/README.md#htcondor-poolyaml--)
+
+### quantum-circuit-simulator.yaml
+
+[See description in core](../../examples/README.md#quantum-circuit-simulatoryaml-)
