@@ -484,9 +484,9 @@ spack load gromacs
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
 Creates a simple [Dell Omnia][omnia-github] provisioned cluster with an
-omnia-manager node and 2 omnia-compute nodes on the pre-existing default
-network. Omnia will be automatically installed after the nodes are provisioned.
-All nodes mount a filestore instance on `/home`.
+omnia-manager node that acts as the slurm manager and 2 omnia-compute nodes on
+the pre-existing default network. Omnia will be automatically installed after
+the nodes are provisioned. All nodes mount a filestore instance on `/home`.
 
 > **_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to
 > create the cluster. For these instances, Simultaneous Multithreading (SMT) is
@@ -526,7 +526,7 @@ A user defined blueprint should follow the following schema:
 
 ```yaml
 # Required: Name your blueprint.
-blueprint_name: MyBlueprintName
+blueprint_name: my-blueprint-name
 
 # Top-level variables, these will be pulled from if a required variable is not
 # provided as part of a module. Any variables can be set here by the user,
@@ -551,9 +551,9 @@ deployment_groups:
   modules:
 
   # Local source, prefixed with ./ (/ and ../ also accepted)
-  - source: ./modules/role/module-name # Required: Points to the module directory.
+  - id: <a unique id> # Required: Name of this module used to uniquely identify it.
+    source: ./modules/role/module-name # Required: Points to the module directory.
     kind: < terraform | packer > # Required: Type of module, currently choose from terraform or packer.
-    id: <a unique id> # Required: Name of this module used to uniquely identify it.
     # Optional: All configured settings for the module. For terraform, each
     # variable listed in variables.tf can be set here, and are mandatory if no
     # default was provided and are not defined elsewhere (like the top-level vars)
@@ -586,6 +586,10 @@ below.
 
 * **blueprint_name** (required): This name can be used to track resources and
   usage across multiple deployments that come from the same blueprint.
+  `blueprint_name` is used as a value for the `ghpc_blueprint` label key, and
+   must abide to label value naming constraints: `blueprint_name` must be at most
+   63 characters long, and can only contain lowercase letters, numeric
+   characters, underscores and dashes.
 
 ### Deployment Variables
 
@@ -711,10 +715,11 @@ vars:
 deployment_groups:
   - group: primary
      modules:
-       - source: path/to/module/1
-         id: resource1
+       - id: resource1
+         source: path/to/module/1
          ...
-       - source: path/to/module/2
+       - id: resource2
+         source: path/to/module/2
          ...
          settings:
             key1: $(vars.zone)

@@ -29,13 +29,13 @@ vars:
 deployment_groups:
 - group: infrastructure
   modules:
-  - source: modules/network/vpc
+  - id: network
+    source: modules/network/vpc
     kind: terraform
-    id: network
 
-  - source: modules/file-system/filestore
+  - id: homefs
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs
     use: [network]
     settings:
       name: homefs
@@ -44,9 +44,9 @@ deployment_groups:
       labels:
         custom_label: some_value
 
-  - source: modules/file-system/filestore
+  - id: homefs1
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs1
     use: [network]
     settings:
       name: homefs
@@ -55,9 +55,9 @@ deployment_groups:
       labels:
         ghpc_role: storage-home
 
-  - source: modules/file-system/filestore
+  - id: homefs2
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs2
     use: [network]
     settings:
       name: homefs
@@ -66,9 +66,9 @@ deployment_groups:
       labels:
         ghpc_deployment: storage_deployment
 
-  - source: modules/file-system/filestore
+  - id: homefs3
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs3
     use: [network]
     settings:
       name: homefs

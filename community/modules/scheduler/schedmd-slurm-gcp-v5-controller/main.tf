@@ -25,7 +25,7 @@ locals {
   }]
   # Since deployment name may be used to create a cluster name, we remove any invalid character from the beginning
   # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
-  tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 8)
+  tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 10)
   slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
 
   enable_public_ip_access_config = var.disable_controller_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
@@ -34,7 +34,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=v5.0.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=v5.1.0"
 
   access_config                = local.access_config
   slurm_cluster_name           = local.slurm_cluster_name
@@ -66,7 +66,7 @@ module "slurm_controller_instance" {
 }
 
 module "slurm_controller_template" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.0.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.1.0"
 
   additional_disks         = var.additional_disks
   can_ip_forward           = var.can_ip_forward

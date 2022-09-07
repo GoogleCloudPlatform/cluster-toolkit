@@ -127,7 +127,7 @@
     - name: Delete Firewall Rule
       register: fw_deleted
       changed_when: fw_deleted.rc == 0
-      failed_when: false # keep cleaning up
+      failed_when: false  # keep cleaning up
       command:
         argv:
         - gcloud
@@ -136,7 +136,7 @@
         - delete
         - "{{ deployment_name }}"
     - name: Tear Down Cluster
-      changed_when: true # assume something destroyed
+      changed_when: true  # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:
@@ -151,8 +151,8 @@
 
 - name: Run Integration Tests
   hosts: remote_host
-  gather_facts: no # must wait until host is reachable
-  ignore_unreachable: true # ensure always block will run even if SSH fails
+  gather_facts: false  # must wait until host is reachable
+  ignore_unreachable: true  # ensure always block will run even if SSH fails
   tasks:
   - name: Slurm Test Block
     vars:
@@ -201,7 +201,7 @@
     - name: Delete Firewall Rule
       register: fw_deleted
       changed_when: fw_deleted.rc == 0
-      failed_when: false # keep cleaning up
+      failed_when: false  # keep cleaning up
       run_once: true
       delegate_to: localhost
       command:
@@ -212,7 +212,7 @@
         - delete
         - "{{ deployment_name }}"
     - name: Tear Down Cluster
-      changed_when: true # assume something destroyed
+      changed_when: true  # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:

@@ -25,29 +25,29 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
     kind: terraform
-    id: network1
 
-  - source: ./community/modules/file-system/nfs-server
+  - id: homefs
+    source: ./community/modules/file-system/nfs-server
     kind: terraform
-    id: homefs
     use: [network1]
     settings:
       labels:
         ghpc_role: storage-home
 
-  - source: ./community/modules/database/slurm-cloudsql-federation
+  - id: slurm-sql
+    source: ./community/modules/database/slurm-cloudsql-federation
     kind: terraform
-    id: slurm-sql
     use: [network1]
     settings:
       sql_instance_name: slurm-sql8
       tier: "db-f1-micro"
 
-  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: compute-partition
+    source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute-partition
     use:
     - homefs
     - network1
@@ -56,9 +56,9 @@ deployment_groups:
       max_node_count: 20
       machine_type: c2-standard-4
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - id: slurm-controller
+    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm-controller
     use:
     - homefs
     - compute-partition
@@ -69,9 +69,9 @@ deployment_groups:
       disable_compute_public_ips: true
       disable_controller_public_ips: true
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - id: slurm-login
+    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm-login
     use:
     - slurm-controller
     - network1

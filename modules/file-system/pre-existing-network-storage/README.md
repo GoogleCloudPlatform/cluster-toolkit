@@ -11,9 +11,9 @@ Toolkit supported file-system such as [filestore](../filestore/README.md).
 ### Example
 
 ```yaml
-- source: modules/file-system/pre-existing-network-storage
+- id: homefs
+  source: modules/file-system/pre-existing-network-storage
   kind: terraform
-  id: homefs
   settings:
     server_ip: ## Set server IP here ##
     remote_mount: nfsshare

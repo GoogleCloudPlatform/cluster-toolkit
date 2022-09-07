@@ -12,9 +12,9 @@ terraform modules. The login node is used in conjunction with the
 ### Example
 
 ```yaml
-- source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+- id: slurm_login
+  source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
   kind: terraform
-  id: slurm_login
   use:
   - network1
   - slurm_controller
@@ -72,8 +72,8 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance | v5.0.3 |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | v5.0.3 |
+| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance | v5.1.0 |
+| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | v5.1.0 |
 
 ## Resources
 

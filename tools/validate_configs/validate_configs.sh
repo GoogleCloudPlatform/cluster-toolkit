@@ -19,7 +19,7 @@ run_test() {
 	example=$1
 	tmpdir="$(mktemp -d)"
 	exampleFile=$(basename "$example")
-	DEPLOYMENT="${exampleFile%.yaml}-$(basename "${tmpdir##*.}")"
+	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
 
 	echo "testing ${example} in ${tmpdir}"

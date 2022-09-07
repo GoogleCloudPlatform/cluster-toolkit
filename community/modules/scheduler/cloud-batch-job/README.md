@@ -15,9 +15,9 @@ job unless one is provided. See the
 ## Example
 
 ```yaml
-- source: community/modules/scheduler/cloud-batch-job
+- id: batch-job
+  source: community/modules/scheduler/cloud-batch-job
   kind: terraform
-  id: batch-job
   use: [network1]
   settings:
     runnable: "echo 'hello world'"
@@ -51,24 +51,24 @@ trying to set a property not natively supported in the `cloud-batch-job` module.
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/filestore
+  - id: appfs
+    source: modules/file-system/filestore
     kind: terraform
-    id: appfs
     use: [network1]
 
-  - source: modules/scripts/startup-script
+  - id: batch-startup-script
+    source: modules/scripts/startup-script
     kind: terraform
-    id: batch-startup-script
     settings:
       runners: ...
           
-  - source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
+  - id: batch-compute-template
+    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
     kind: terraform
-    id: batch-compute-template
     use: [batch-startup-script]
     settings:
       # Boiler plate to work with Cloud Foundation Toolkit
@@ -82,9 +82,9 @@ deployment_groups:
       source_image_family: hpc-centos-7
       source_image_project: cloud-hpc-image-public
 
-  - source: ./community/modules/scheduler/cloud-batch-job
+  - id: batch-job
+    source: ./community/modules/scheduler/cloud-batch-job
     kind: terraform
-    id: batch-job
     settings:
       instance_template: $(batch-compute-template.self_link)
     outputs: [instructions]

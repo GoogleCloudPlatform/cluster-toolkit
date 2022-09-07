@@ -106,9 +106,9 @@ compact set of subnetworks possible.
 ### Example
 
 ```yaml
-- source: modules/network/vpc
+- id: network1
+  source: modules/network/vpc
   kind: terraform
-  id: network1
   settings:
   - deployment_name: $(vars.deployment_name)
 ```

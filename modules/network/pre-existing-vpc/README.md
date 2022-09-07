@@ -12,9 +12,9 @@ sharing a single network module between deployment groups.
 ### Example
 
 ```yaml
-- source: modules/network/pre-existing-vpc
+- id: network1
+  source: modules/network/pre-existing-vpc
   kind: terraform
-  id: network1
   settings:
   - project_id: $(vars.project_id)
 ```

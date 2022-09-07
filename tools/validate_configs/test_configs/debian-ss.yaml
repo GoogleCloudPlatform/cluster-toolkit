@@ -25,49 +25,40 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: ./modules/network/pre-existing-vpc
+  - id: network1
+    source: ./modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/filestore
+  - id: appsfs
+    source: modules/file-system/filestore
     kind: terraform
-    id: appsfs
     use: [network1]
     settings:
       name: appsfs
       local_mount: /apps
 
-  - source: community/modules/file-system/nfs-server
+  - id: nfs
+    source: community/modules/file-system/nfs-server
     kind: terraform
-    id: nfs
     use: [network1]
     settings:
-      image: debian-cloud/debian-10
       auto_delete_disk: true
 
-  - source: ./community//modules/scripts/spack-install
+  - id: spack
+    source: ./community//modules/scripts/spack-install
     kind: terraform
-    id: spack
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
-      spack_ref: v0.17.0
-      spack_cache_url:
-      - mirror_name: 'gcs_cache'
-        mirror_url: gs://example-buildcache/linux-centos7
+      spack_ref: v0.18.0
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
       - cmake%gcc@10.3.0 target=x86_64
-      - intel-mkl%gcc@10.3.0 target=skylake
-      - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
-      - >-
-        fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5
-        target=x86_64
 
-  - source: ./modules/scripts/startup-script
+  - id: startup
+    source: ./modules/scripts/startup-script
     kind: terraform
-    id: startup
     settings:
       runners:
       - type: shell
@@ -93,14 +84,15 @@ deployment_groups:
         content: $(nfs.install_nfs_client)
         destination: "install-nfs-client.sh"
       - $(appsfs.install_nfs_client_runner)
-      - $(nfs.mount_runner)
+      - $(appsfs.mount_runner)
+      - $(spack.install_spack_deps_runner)
       - type: shell
         content: $(spack.startup_script)
         destination: "/apps/spack-install.sh"
 
-  - source: ./modules/compute/vm-instance
+  - id: instance
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: instance
     use: [network1, startup, nfs, appsfs]
     settings:
       machine_type: e2-standard-4

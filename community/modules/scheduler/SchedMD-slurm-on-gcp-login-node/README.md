@@ -14,9 +14,9 @@ node is used in conjunction with the
 ### Example
 
 ```yaml
-- source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+- id: slurm_login
+  source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
   kind: terraform
-  id: slurm_login
   use:
   - network1
   - homefs

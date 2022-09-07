@@ -31,6 +31,9 @@
     until: result.stdout.find("SUCCEEDED") != -1
     retries: 60
     delay: 10
+  - name: Call batch list command printed in instructions
+    changed_when: false
+    ansible.builtin.command: gcloud alpha batch jobs list --project={{ custom_vars.project }}
 
   always:
   - name: delete job

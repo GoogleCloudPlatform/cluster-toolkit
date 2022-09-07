@@ -27,18 +27,20 @@ locals {
   setup_omnia_node_file = templatefile(
     "${path.module}/templates/setup_omnia_node.tpl",
     {
-      username    = var.omnia_username
-      install_dir = local.install_dir
+      username        = var.omnia_username
+      install_dir     = local.install_dir
+      virtualenv_path = var.virtualenv
     }
   )
   install_file = templatefile(
     "${path.module}/templates/install_omnia.tpl",
     {
-      username      = var.omnia_username
-      install_dir   = local.install_dir
-      omnia_compute = var.compute_ips
-      nodecount     = local.nodecount
-      slurm_uid     = var.slurm_uid
+      username        = var.omnia_username
+      install_dir     = local.install_dir
+      omnia_compute   = var.compute_ips
+      nodecount       = local.nodecount
+      slurm_uid       = var.slurm_uid
+      virtualenv_path = var.virtualenv
     }
   )
   inventory_path = "${local.install_dir}/inventory"

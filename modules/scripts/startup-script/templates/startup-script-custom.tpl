@@ -1,13 +1,22 @@
 
 
 stdlib::run_playbook() {
+  python_interpreter_flag=""
+  if [ -d /usr/local/ghpc-venv ]; then
+    . /usr/local/ghpc-venv/bin/activate
+    python_interpreter_flag="-e ansible_python_interpreter=/usr/local/ghpc-venv/bin/python3"
+  fi
   if [ ! "$(which ansible-playbook)" ]; then
     stdlib::error "ansible-playbook not found"\
     "Please install ansible before running ansible-local runners."
     exit 1
   fi
-  /usr/bin/ansible-playbook --connection=local --inventory=localhost, --limit localhost $1 $2
-  return $?
+  ansible-playbook $${python_interpreter_flag} --connection=local --inventory=localhost, --limit localhost $1 $2
+  ret_code=$?
+  if [ -d /usr/local/ghpc-venv ]; then
+    deactivate
+  fi
+  return $${ret_code}
 }
 
 stdlib::runner() {
@@ -27,6 +36,7 @@ stdlib::runner() {
 
   stdlib::get_from_bucket -u "gs://${bucket}/$object" -d "$destpath" -f "$filename"
 
+  stdlib::info "=== start executing runner: $object ==="
   case "$1" in
     ansible-local) stdlib::run_playbook "$destpath/$filename" "$args";;
     shell) . $destpath/$filename $args;;
