@@ -41,6 +41,14 @@ resource "google_billing_budget" "budget" {
     }
   }
 
+  all_updates_rule {
+    monitoring_notification_channels = [
+      google_monitoring_notification_channel.scientist_notification_channel.id,
+      google_monitoring_notification_channel.manager_notification_channel.id
+    ]
+    disable_default_iam_recipients = true
+  }
+
   dynamic "all_updates_rule" {
     for_each = var.notifications != null ? [var.notifications] : []
 
