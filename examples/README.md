@@ -19,6 +19,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
   * [daos-cluster.yaml](#daos-clusteryaml-)
   * [daos-slurm.yaml](#daos-slurmyaml-)
+  * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-)
   * [cloud-batch.yaml](#cloud-batchyaml--)
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
@@ -419,6 +420,18 @@ more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
 [daos-slurm.yaml]: ../community/examples/intel/daos-slurm.yaml
+
+### [hpc-cluster-amd-slurmv5.yaml] ![community-badge]
+
+This example provisions a Slurm cluster using AMD VM machine types. It
+automates the initial setup of Spack, including a script that can be used to
+install the AMD Optimizing C/C++ Compiler ([AOCC]) and compile OpenMPI with
+AOCC. It is more extensively discussed in a dedicated [README for AMD
+examples][amd-examples-readme].
+
+[hpc-cluster-amd-slurmv5.yaml]: ../community/examples/AMD/hpc-cluster-amd-slurmv5.yaml
+[AOCC]: https://developer.amd.com/amd-aocc/
+[amd-examples-readme]: ../community/examples/AMD/README.md
 
 ### [cloud-batch.yaml] ![community-badge] ![experimental-badge]
 
