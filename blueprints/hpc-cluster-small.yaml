@@ -37,8 +37,6 @@ deployment_groups:
         settings:
           currency_code: CAD
           threshold_rules: [0.25,0.5, 0.9,1.0]
-          owner: test
-          manager: test
 
       - source: modules/file-system/filestore
         kind: terraform
