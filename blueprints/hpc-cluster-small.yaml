@@ -87,3 +87,4 @@ deployment_groups:
         settings:
           machine_type: n2-standard-2
           enable_shielded_vm: true
+        outputs: [login_instance]
