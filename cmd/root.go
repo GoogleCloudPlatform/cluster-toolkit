@@ -23,8 +23,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Git references when use Makefile
 var (
-	rootCmd = &cobra.Command{
+	GitTagVersion string
+	GitBranch     string
+	GitCommitInfo string
+)
+
+var (
+	annotation = make(map[string]string)
+	rootCmd    = &cobra.Command{
 		Use:   "ghpc",
 		Short: "A blueprint and deployment engine for HPC clusters in GCP.",
 		Long: `gHPC provides a flexible and simple to use interface to accelerate
@@ -34,12 +42,25 @@ HPC deployments on the Google Cloud Platform.`,
 				log.Fatalf("cmd.Help function failed: %s", err)
 			}
 		},
-		Version: "v1.4.2",
+		Version:     "v1.4.2",
+		Annotations: annotation,
 	}
 )
 
 // Execute the root command
 func Execute() error {
+	if len(GitBranch) > 0 {
+		if len(GitTagVersion) == 0 {
+			GitTagVersion = "- not built from oficial release"
+		}
+		annotation["version"] = GitTagVersion
+		annotation["branch"] = GitBranch
+		annotation["commitInfo"] = GitCommitInfo
+		rootCmd.SetVersionTemplate(`ghpc version {{index .Annotations "version"}}
+Built from '{{index .Annotations "branch"}}' branch.
+Commit info: {{index .Annotations "commitInfo"}}
+`)
+	}
 	return rootCmd.Execute()
 }
 
