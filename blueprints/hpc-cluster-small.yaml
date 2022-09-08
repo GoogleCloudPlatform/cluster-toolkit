@@ -12,6 +12,9 @@ vars:
   activate_apis:
     - compute.googleapis.com
     - file.googleapis.com
+  amount: ## set budget amount
+  owner: ## set owner email
+  manager: ## set manager email
 
 deployment_groups:
   - group: primary
@@ -32,10 +35,8 @@ deployment_groups:
         kind: terraform
         id: billing
         settings:
-          display_name: example-alert"
-          amount: 1000
-          currency_code: USD
-          threshold_rules: [10]
+          currency_code: CAD
+          threshold_rules: [0.25,0.5, 0.9,1.0]
           owner: test
           manager: test
 

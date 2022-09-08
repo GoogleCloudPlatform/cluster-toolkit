@@ -2,7 +2,7 @@ resource "google_billing_budget" "budget" {
   count = var.module_enabled ? 1 : 0
 
   billing_account = var.billing_account
-  display_name    = var.display_name
+  display_name    = "budget-hpc-${var.project_id}"
 
   dynamic "budget_filter" {
     for_each = var.budget_filter != null ? [var.budget_filter] : []
