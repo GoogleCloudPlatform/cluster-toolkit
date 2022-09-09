@@ -54,19 +54,14 @@ variable "threshold_rules" {
   description = "(Required) Rules that trigger alerts (notifications of thresholds being crossed) when spend exceeds the specified percentages of the budget."
 }
 
-# ----------------------------------------------------------------------------------------------------------------------
-# OPTIONAL PARAMETERS
-# These variables have defaults, but may be overridden.
-# ----------------------------------------------------------------------------------------------------------------------
-
 variable "amount" {
   type        = number
-  description = "(Optional) A specified amount to use as the budget."
+  description = "A specified amount to use as the budget."
 }
 
 variable "currency_code" {
   type        = string
-  description = "(Optional) The 3-letter currency code defined in ISO 4217. If specified, it must match the currency of the billing account. For a list of currency codes, please see https://en.wikipedia.org/wiki/ISO_4217"
+  description = "The 3-letter currency code defined in ISO 4217. If specified, it must match the currency of the billing account. For a list of currency codes, please see https://en.wikipedia.org/wiki/ISO_4217"
 }
 
 
@@ -84,13 +79,6 @@ variable "module_enabled" {
 variable "module_timeouts" {
   description = "(Optional) How long certain operations (per resource type) are allowed to take before being considered to have failed."
   type        = any
-  # type = object({
-  #   google_billing_budget = optional(object({
-  #     create = optional(string)
-  #     update = optional(string)
-  #     delete = optional(string)
-  #   }))
-  # })
   default = {}
 }
 
