@@ -142,8 +142,6 @@ func defaultAPIList(source string) []string {
 		},
 		"community/modules/project/new-project": {
 			"admin.googleapis.com",
-			"appengine.googleapis.com",      // optional
-			"billingbudgets.googleapis.com", // optional
 			"cloudresourcemanager.googleapis.com",
 			"cloudbilling.googleapis.com",
 			"iam.googleapis.com",
