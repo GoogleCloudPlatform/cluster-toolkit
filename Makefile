@@ -13,9 +13,16 @@ MIN_GOLANG_VERSION=1.16 # for building ghpc
 ENG = ./cmd/... ./pkg/...
 TERRAFORM_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.tf" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
 PACKER_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
+
+ifneq (, $(shell which git))
+## GIT IS PRESENT
+ifneq (,$(wildcard .git))
+## GIT DIRECTORY EXISTS
 GIT_TAG_VERSION=$(shell git tag --points-at HEAD)
 GIT_BRANCH=$(shell git branch --show-current)
 GIT_COMMIT_INFO=$(shell git describe --tags --dirty --long)
+endif
+endif
 
 # RULES MEANT TO BE USED DIRECTLY
 
