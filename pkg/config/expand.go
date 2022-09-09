@@ -45,7 +45,7 @@ const (
 func (dc *DeploymentConfig) expand() {
 	dc.addSettingsToModules()
 	if err := dc.addMetadataToModules(); err != nil {
-		log.Printf("could not add module metadata: %v", err)
+		log.Printf("could not determine required APIs: %v", err)
 	}
 
 	if err := dc.expandBackends(); err != nil {
@@ -92,7 +92,6 @@ func (dc *DeploymentConfig) addMetadataToModules() error {
 			if mod.RequiredApis == nil {
 				_, projectIDExists := dc.Config.Vars["project_id"].(string)
 				if !projectIDExists {
-					// it is OK to error
 					return fmt.Errorf("global variable project_id must be defined")
 				}
 
