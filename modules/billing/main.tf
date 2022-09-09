@@ -4,32 +4,31 @@ resource "google_billing_budget" "budget" {
   billing_account = var.billing_account
   display_name    = "budget-hpc-${var.project_id}"
 
-  dynamic "budget_filter" {
-    for_each = var.budget_filter != null ? [var.budget_filter] : []
-
-    content {
-      projects               = try(toset(budget_filter.value.projects), null)
-      credit_types_treatment = try(budget_filter.value.credit_types_treatment, "INCLUDE_ALL_CREDITS")
-      services               = try(toset(budget_filter.value.services), null)
-      credit_types           = try(toset(budget_filter.value.credit_types), null)
-      subaccounts            = try(toset(budget_filter.value.subaccounts), null)
-      labels                 = try(budget_filter.value.labels, null)
+  budget_filter {
+    projects = ["projects/${var.project_id}"]
+    credit_types_treatment = "EXCLUDE_ALL_CREDITS"
+    custom_period { 
+      start_date {
+        year = var.budget_start_date_year
+        month = var.budget_start_date_month
+        day = var.budget_start_date_day
+      }
+      end_date {
+        year = var.budget_end_date_year
+        month = var.budget_end_date_month
+        day = var.budget_end_date_day
+      }
     }
   }
-
   amount {
-    dynamic "specified_amount" {
-      for_each = !var.use_last_period_amount ? [true] : []
-
-      content {
+    specified_amount {
         currency_code = var.currency_code
         units         = var.amount
-      }
     }
 
     #NOTE: according to the docs, this needs to be set to null if unsed.
     # For details please see https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/billing_budget#last_period_amount
-    last_period_amount = var.use_last_period_amount ? true : null
+    last_period_amount =  null
   }
 
   dynamic "threshold_rules" {
@@ -47,27 +46,6 @@ resource "google_billing_budget" "budget" {
       google_monitoring_notification_channel.manager_notification_channel.id
     ]
     disable_default_iam_recipients = true
-  }
-
-  dynamic "all_updates_rule" {
-    for_each = var.notifications != null ? [var.notifications] : []
-
-    content {
-      pubsub_topic                     = try(all_updates_rule.value.pubsub_topic, null)
-      schema_version                   = try(all_updates_rule.value.pubsub_topic, null)
-      monitoring_notification_channels = try(all_updates_rule.value.monitoring_notification_channels, null)
-      disable_default_iam_recipients   = try(all_updates_rule.value.disable_default_iam_recipients, false)
-    }
-  }
-
-  dynamic "timeouts" {
-    for_each = try([var.module_timeouts.google_billing_budget], [])
-
-    content {
-      create = try(timeouts.value.create, null)
-      update = try(timeouts.value.update, null)
-      delete = try(timeouts.value.delete, null)
-    }
   }
 
   depends_on = [var.module_depends_on]

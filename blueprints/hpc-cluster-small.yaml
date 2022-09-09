@@ -13,6 +13,12 @@ vars:
     - compute.googleapis.com
     - file.googleapis.com
   amount: ## set budget amount
+  budget_start_date_year: ## set budget start date year
+  budget_start_date_month: ## set budget start date month
+  budget_start_date_day: ## set budget start date day
+  budget_end_date_year: ## set budget end date year
+  budget_end_date_month: ## set budget end date month
+  budget_end_date_day: ## set budget end date day
   owner: ## set owner email
   manager: ## set manager email
 
