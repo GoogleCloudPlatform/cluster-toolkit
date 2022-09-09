@@ -45,12 +45,6 @@ variable "billing_account" {
 
 variable "threshold_rules" {
   type = list(number)
-  # type = list(object({
-  #   # (Required) Send an alert when this threshold is exceeded. This is a 1.0-based percentage, so 0.5 = 50%. Must be >= 0.
-  #   threshold_percent = number
-  #   # Optional) The type of basis used to determine if spend has passed the threshold. Default value is `CURRENT_SPEND`. Possible values are `CURRENT_SPEND` and `FORECASTED_SPEND`.
-  #   spend_basis = optional(string)
-  # }))
   description = "(Required) Rules that trigger alerts (notifications of thresholds being crossed) when spend exceeds the specified percentages of the budget."
 }
 
