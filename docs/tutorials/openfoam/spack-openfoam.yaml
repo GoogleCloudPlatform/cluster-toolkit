@@ -120,7 +120,6 @@ deployment_groups:
           #!/bin/bash
           source /apps/spack/share/spack/setup-env.sh
           spack env activate openfoam
-          spack env loads -r
           chmod -R a+rwX /apps/spack/var/spack/environments/openfoam
           mkdir -p /apps/openfoam
           chmod a+rwx /apps/openfoam

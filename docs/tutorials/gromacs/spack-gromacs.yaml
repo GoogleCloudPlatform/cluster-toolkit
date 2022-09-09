@@ -113,7 +113,6 @@ deployment_groups:
           #!/bin/bash
           source /apps/spack/share/spack/setup-env.sh
           spack env activate gromacs
-          spack env loads -r
           chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
           mkdir -p /apps/gromacs
           chmod a+rwx /apps/gromacs
