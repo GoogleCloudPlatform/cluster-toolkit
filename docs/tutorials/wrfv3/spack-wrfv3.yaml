@@ -113,7 +113,6 @@ deployment_groups:
           #!/bin/bash
           source /apps/spack/share/spack/setup-env.sh
           spack env activate wrfv3
-          spack env loads -r
           chmod -R a+rwX /apps/spack/var/spack/environments/wrfv3
           mkdir -p /apps/wrfv3
           chmod a+rwx /apps/wrfv3
