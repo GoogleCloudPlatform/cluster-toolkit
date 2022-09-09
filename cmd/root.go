@@ -49,9 +49,12 @@ HPC deployments on the Google Cloud Platform.`,
 
 // Execute the root command
 func Execute() error {
-	if len(GitBranch) > 0 {
+	if len(GitCommitInfo) > 0 {
 		if len(GitTagVersion) == 0 {
 			GitTagVersion = "- not built from oficial release"
+		}
+		if len(GitBranch) == 0 {
+			GitBranch = "detached HEAD"
 		}
 		annotation["version"] = GitTagVersion
 		annotation["branch"] = GitBranch
