@@ -54,6 +54,7 @@ module "slurm_controller_instance" {
   enable_devel                 = var.enable_devel
   enable_cleanup_compute       = var.enable_cleanup_compute
   enable_cleanup_subscriptions = var.enable_cleanup_subscriptions
+  enable_reconfigure           = var.enable_reconfigure
   enable_bigquery_load         = var.enable_bigquery_load
   epilog_scripts               = var.epilog_scripts
   disable_default_mounts       = var.disable_default_mounts
