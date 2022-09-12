@@ -239,7 +239,7 @@ variable "budget_monitoring_notification_channels" {
 variable "budget_alert_spent_percents" {
   description = "A list of percentages of the budget to alert on when threshold is exceeded"
   type        = list(number)
-  default     = [0.5, 0.7, 1.0]
+  default     = []
 }
 
 variable "vpc_service_control_attach_enabled" {
