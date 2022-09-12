@@ -153,7 +153,7 @@ variable "guest_accelerator" {
     type  = string,
     count = number
   }))
-  default = []
+  default = null
 }
 
 variable "on_host_maintenance" {
