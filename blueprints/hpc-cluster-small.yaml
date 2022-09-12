@@ -40,6 +40,8 @@ deployment_groups:
       - source: ./community/modules/billing
         kind: terraform
         id: budget
+        use:
+          - project1
         settings:
           currency_code: CAD
           threshold_rules: [0.25,0.5, 0.9,1.0]
