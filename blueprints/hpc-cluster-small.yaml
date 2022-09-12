@@ -12,7 +12,7 @@ vars:
   activate_apis:
     - compute.googleapis.com
     - file.googleapis.com
-  amount: ## set budget amount
+  budget_amount: ## set budget amount
   budget_start_date_year: ## set budget start date year
   budget_start_date_month: ## set budget start date month
   budget_start_date_day: ## set budget start date day
@@ -43,6 +43,7 @@ deployment_groups:
         settings:
           currency_code: CAD
           threshold_rules: [0.25,0.5, 0.9,1.0]
+          
 
       - source: modules/file-system/filestore
         kind: terraform

@@ -23,7 +23,7 @@ resource "google_billing_budget" "budget" {
   amount {
     specified_amount {
         currency_code = var.currency_code
-        units         = var.amount
+        units         = var.budget_amount
     }
 
     #NOTE: according to the docs, this needs to be set to null if unsed.
