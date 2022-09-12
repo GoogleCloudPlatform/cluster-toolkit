@@ -7,6 +7,12 @@ and configure a custom blueprint, see
 
 ## Community Examples
 
+### AMD
+
+Examples using AMD HPC technologies can be found in the
+[AMD folder](AMD). More information can be found in the
+[readme](AMD/README.md).
+
 ### Intel
 
 Examples using Intel HPC technologies can be found in the
