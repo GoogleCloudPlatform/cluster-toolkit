@@ -178,17 +178,13 @@ class ClusterInfo:
     kind: terraform
     id: {part_id}
     settings:
-#      slurm_cluster_name: {self.cluster.cloud_id.replace('-','')}
       partition_name: {part.name}
       subnetwork_self_link: {self.cluster.subnet.cloud_id}
-#      subnetwork_name: {self.cluster.subnet.cloud_id}
       node_count_dynamic_max: {part.max_node_count}
       machine_type: {part.machine_type}
       enable_placement: {part.enable_placement}
-#      enable_placement_groups: {part.enable_placement}
       disable_smt: {not part.enable_hyperthreads}
       exclusive: {part.enable_placement or not part.enable_node_reuse}
-#      enable_job_exclusive: {part.enable_placement or not part.enable_node_reuse}
 """
             )
 
@@ -299,22 +295,12 @@ deployment_groups:
       - resourcemanager.projectIamAdmin
       - compute.networkAdmin
 
-# From Slurm-GCP V5 docs (
-#
-# Compute Instance Admin (v1) (roles/compute.instanceAdmin.v1)
-# Compute Security Admin (roles/compute.securityAdmin)
-# Service Account Admin (roles/iam.serviceAccountAdmin)
-# Project IAM Admin (roles/resourcemanager.projectIamAdmin)
-# Compute Network Admin (roles/compute.networkAdmin)
-# pubsub.admin
-
 {partitions_yaml}
 
   - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     kind: terraform
     id: slurm_controller
     settings:
-#      slurm_cluster_name: {self.cluster.cloud_id.replace('-','')}
       machine_type: {self.cluster.controller_instance_type}
       disk_type: {self.cluster.controller_disk_type}
       disk_size_gb: {self.cluster.controller_disk_size}
@@ -342,7 +328,6 @@ deployment_groups:
     kind: terraform
     id: slurm_login
     settings:
-#      slurm_cluster_name: {self.cluster.cloud_id.replace('-','')}
       num_instances: {self.cluster.num_login_nodes}
       subnetwork_self_link: {self.cluster.subnet.cloud_id}
       machine_type: {self.cluster.login_node_instance_type}
