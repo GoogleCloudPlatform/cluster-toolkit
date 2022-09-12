@@ -21,6 +21,7 @@ vars:
   budget_end_date_day: ## set budget end date day
   owner: ## set owner email
   manager: ## set manager email
+  budget_alert_spent_percents: []
 
 deployment_groups:
   - group: primary
