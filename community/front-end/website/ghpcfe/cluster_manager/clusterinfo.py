@@ -321,6 +321,7 @@ deployment_groups:
       service_account:
         email: $(hpc_service_account.email)
         scopes:
+        - https://www.googleapis.com/auth/cloud-platform
         - https://www.googleapis.com/auth/monitoring.write
         - https://www.googleapis.com/auth/logging.write
         - https://www.googleapis.com/auth/devstorage.read_write
@@ -329,12 +330,6 @@ deployment_groups:
         #!/bin/bash
         echo "******************************************** CALLING CONTROLLER STARTUP"
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_controller.sh - | bash
-#      compute_node_service_account: $(hpc_service_account.email)
-#      compute_node_scopes:
-#      - https://www.googleapis.com/auth/monitoring.write
-#      - https://www.googleapis.com/auth/logging.write
-#      - https://www.googleapis.com/auth/devstorage.read_write
-#      - https://www.googleapis.com/auth/pubsub
       compute_startup_script: |
         #!/bin/bash
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
@@ -349,7 +344,6 @@ deployment_groups:
     settings:
 #      slurm_cluster_name: {self.cluster.cloud_id.replace('-','')}
       num_instances: {self.cluster.num_login_nodes}
-#      login_node_count: {self.cluster.num_login_nodes}
       subnetwork_self_link: {self.cluster.subnet.cloud_id}
       machine_type: {self.cluster.login_node_instance_type}
       disk_type: {self.cluster.login_node_disk_type}
@@ -357,13 +351,10 @@ deployment_groups:
       service_account:
         email: $(hpc_service_account.email)
         scopes:
+        - https://www.googleapis.com/auth/cloud-platform
         - https://www.googleapis.com/auth/monitoring.write
         - https://www.googleapis.com/auth/logging.write
         - https://www.googleapis.com/auth/devstorage.read_write
-#      login_scopes:
-#      - https://www.googleapis.com/auth/monitoring.write
-#      - https://www.googleapis.com/auth/logging.write
-#      - https://www.googleapis.com/auth/devstorage.read_write
       startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING LOGIN STARTUP"
@@ -507,21 +498,17 @@ deployment_groups:
         # controller & login until we start setting them.
 
         filters = {
-            "module": "module.slurm_controller.module.slurm_cluster_controller",
-            "name": "controller_node",
+            "module": "module.slurm_controller.module.slurm_controller_instance.module.slurm_controller_instance",
+            "name": "slurm_instance",
         }
-        tf_node = self._get_tf_state_resource(tf_state, filters)[0][
-            "instances"
-        ][0]
+        tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]
         ctrl_sa = tf_node["attributes"]["service_account"][0]["email"]
 
         filters = {
-            "module": "module.slurm_login.module.slurm_cluster_login_node",
-            "name": "login_node",
+            "module": "module.slurm_login.module.slurm_login_instance.module.slurm_login_instance",
+            "name": "slurm_instance",
         }
-        tf_node = self._get_tf_state_resource(tf_state, filters)[0][
-            "instances"
-        ][0]
+        tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]
         login_sa = tf_node["attributes"]["service_account"][0]["email"]
 
         return {"controller": ctrl_sa, "login": login_sa, "compute": login_sa}
@@ -590,8 +577,8 @@ deployment_groups:
                 mgmt_nodes = self._create_model_instances_from_tf_state(
                     state,
                     {
-                        "module": "module.slurm_controller.module.slurm_cluster_controller",  # pylint: disable=line-too-long
-                        "name": "controller_node",
+                        "module": "module.slurm_controller.module.slurm_controller_instance.module.slurm_controller_instance",  # pylint: disable=line-too-long
+                        "name": "slurm_instance",
                     },
                 )
                 if len(mgmt_nodes) != 1:
@@ -611,8 +598,8 @@ deployment_groups:
                 login_nodes = self._create_model_instances_from_tf_state(
                     state,
                     {
-                        "module": "module.slurm_login.module.slurm_cluster_login_node",  # pylint: disable=line-too-long
-                        "name": "login_node",
+                        "module": "module.slurm_login.module.slurm_login_instance.module.slurm_login_instance",   # pylint: disable=line-too-long
+                        "name": "slurm_instance",
                     },
                 )
                 if len(login_nodes) != self.cluster.num_login_nodes:
