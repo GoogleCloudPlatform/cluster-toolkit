@@ -14,6 +14,8 @@
 
 # Getting Terraform and Packer
 FROM golang:bullseye
+ARG TFLINT_VERSION
+
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get -y update && apt-get -y install \
     software-properties-common \
