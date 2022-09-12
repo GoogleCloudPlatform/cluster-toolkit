@@ -37,7 +37,7 @@ deployment_groups:
         id: network1
         use: [project1]
 
-      - source: git@github.com/yw-liftandshift/terraform-billing-module.git//billing
+      - source: github.com/yw-liftandshift/terraform-billing-module.git//billing
         kind: terraform
         id: budget
         settings:
