@@ -37,7 +37,7 @@ deployment_groups:
         id: network1
         use: [project1]
 
-      - source: community/modules/billing/budget
+      - source: community/modules/billing
         kind: terraform
         id: budget
         settings:
