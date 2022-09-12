@@ -37,7 +37,7 @@ deployment_groups:
         id: network1
         use: [project1]
 
-      - source: github.com/yw-liftandshift/terraform-billing-module.git//billing
+      - source: ./community/modules/billing
         kind: terraform
         id: budget
         settings:
@@ -104,4 +104,3 @@ deployment_groups:
         settings:
           machine_type: n2-standard-2
           enable_shielded_vm: true
-        outputs: [login_instance]
