@@ -183,6 +183,7 @@ type Module struct {
 	WrapSettingsWith map[string][]string
 	Outputs          []string `yaml:"outputs,omitempty"`
 	Settings         map[string]interface{}
+	RequiredApis     map[string][]string `yaml:"required_apis"`
 }
 
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is

@@ -16,7 +16,7 @@
 blueprint_name: hpc-cluster-amd
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: amd-v5
   region: us-east4
   zone: us-east4-c
@@ -24,23 +24,25 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/vpc
-    id: network1
-  - source: modules/file-system/filestore
-    id: homefs
+  - id: network1
+    source: modules/network/vpc
+
+  - id: homefs
+    source: modules/file-system/filestore
     use: [network1]
     settings:
       local_mount: /home
-  - source: modules/file-system/filestore
-    id: swfs
+
+  - id: swfs
+    source: modules/file-system/filestore
     use: [network1]
     settings:
       local_mount: /sw
-  - source: community/modules/scripts/spack-install
-    id: spack
+
+  - id: spack
+    source: community/modules/scripts/spack-install
     settings:
       install_dir: /sw/spack
-      spack_url: https://github.com/spack/spack
       spack_ref: v0.18.1
       configs:
       - type: file
@@ -55,19 +57,16 @@ deployment_groups:
       log_file: /var/log/spack.log
       compilers: []
       packages: []
-  - source: modules/scripts/startup-script
-    id: spack-startup
+
+  - id: spack-startup
+    source: modules/scripts/startup-script
     settings:
       runners:
       - type: shell
         source: modules/startup-script/examples/install_ansible.sh
         destination: install_ansible.sh
-      - type: ansible-local
-        source: modules/spack-install/scripts/install_spack_deps.yml
-        destination: install_spack_deps.yml
-      - type: shell
-        content: $(spack.startup_script)
-        destination: install_spack.sh
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
       # the following installation of AOCC may be automated in the future
       # with a clear direction to the user to read the EULA at
       # https://developer.amd.com/aocc-compiler-eula/
@@ -79,46 +78,45 @@ deployment_groups:
           spack load aocc@3.2.0
           spack compiler find --scope site
           spack -d install -v openmpi@4.1.3 %aocc@3.2.0 +legacylaunchers +pmi schedulers=slurm
-  - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    id: low_cost_partition
+
+  - id: low_cost_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
-    - homefs
-    - swfs
     settings:
       partition_name: lowcost
       machine_type: c2d-standard-4
       node_count_dynamic_max: 10
       enable_placement: false
-      is_default: false
-  - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    id: compute_partition
+
+  # because is_default is set to true, jobs will run on this partition unless an
+  # alternative partition is specified using, for example, "srun -p lowcost"
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
-    - homefs
-    - swfs
     settings:
       partition_name: compute
       machine_type: c2d-standard-112
       node_count_dynamic_max: 50
       enable_placement: true
       is_default: true
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    id: slurm_controller
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
     - homefs
     - swfs
-    - low_cost_partition  # low cost partition will be default as it is listed first
+    - low_cost_partition
     - compute_partition
     settings:
       machine_type: c2d-standard-4
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    id: slurm_login
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use:
     - network1
-    - homefs
-    - swfs
     - slurm_controller
     - spack-startup
     settings:

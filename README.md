@@ -485,9 +485,11 @@ Follow these steps to install and setup pre-commit in your cloned repository:
 
    > **_NOTE:_** The version of TFLint must be compatible with the Google plugin
    > version identified in [tflint.hcl](.tflint.hcl). Versions of the plugin
-   > `>=0.16.0` should use `tflint>=0.35.0` and versions of the plugin
-   > `<=0.15.0` should preferably use `tflint==0.34.1`. These versions are
-   > readily available via GitHub or package managers.
+   > `>=0.20.0` should use `tflint>=0.40.0`. These versions are readily
+   > available via GitHub or package managers. Please review the [TFLint Ruleset
+   > for Google Release Notes][tflint-google] for up-to-date requirements.
+
+[tflint-google]: https://github.com/terraform-linters/tflint-ruleset-google/releases
 
 1. Install ShellCheck using the instructions from
    [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)
