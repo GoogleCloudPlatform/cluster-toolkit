@@ -13,7 +13,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-)
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
-  * [slurm-gcp-v5-cluster.yaml](#slurm-gcp-v5-clusteryaml--)
+  * [slurm-gcp-v5-hpc-centos7.yaml](#slurm-gcp-v5-hpc-centos7yaml-)
+  * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-)
   * [image-builder.yaml](#image-builderyaml-)
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
   * [daos-cluster.yaml](#daos-clusteryaml-)
@@ -174,7 +175,7 @@ For this example the following is needed in the selected region:
 
 [hpc-cluster-high-io.yaml]: ./hpc-cluster-high-io.yaml
 
-### [slurm-gcp-v5-cluster.yaml] ![community-badge]
+### [slurm-gcp-v5-hpc-centos7.yaml] ![community-badge]
 
 This example creates an HPC cluster similar to the one created by
 [hpc-cluster-small.yaml], but uses modules built from version 5 of
@@ -187,7 +188,7 @@ specifying in the `srun` command via the `--partition` flag. The `compute`
 partition runs on compute optimized nodes of type `cs-standard-60`. The
 `compute` partition may require additional quota before using.
 
-#### Quota Requirements for slurm-gcp-v5-cluster.yaml
+#### Quota Requirements for slurm-gcp-v5-hpc-centos7.yaml
 
 For this example the following is needed in the selected region:
 
@@ -203,8 +204,43 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-[slurm-gcp-v5-cluster.yaml]: ../community/examples/slurm-gcp-v5-cluster.yaml
+[slurm-gcp-v5-hpc-centos7.yaml]: ../community/examples/slurm-gcp-v5-hpc-centos7.yaml
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
+
+### [slurm-gcp-v5-ubuntu2004.yaml] ![community-badge]
+
+Similar to the previous example, but using Ubuntu 20.04 instead of CentOS 7.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+
+This example creates an HPC cluster similar to the one created by
+[hpc-cluster-small.yaml], but uses modules built from version 5 of
+[slurm-gcp] and Ubuntu.
+
+The cluster will support 2 partitions named `debug` and `compute`.
+The `debug` partition is the default partition and runs on smaller
+`n2-standard-2` nodes. The `compute` partition is not default and requires
+specifying in the `srun` command via the `--partition` flag. The `compute`
+partition runs on compute optimized nodes of type `cs-standard-60`. The
+`compute` partition may require additional quota before using.
+
+[Other operating systems]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
+[slurm-gcp-v5-ubuntu2004.yaml]: ../community/examples/slurm-gcp-v5-ubuntu2004.yaml
+
+#### Quota Requirements for slurm-gcp-v5-ubuntu2004.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
 
 ### [image-builder.yaml] ![core-badge]
 
@@ -448,9 +484,9 @@ spack load gromacs
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
 Creates a simple [Dell Omnia][omnia-github] provisioned cluster with an
-omnia-manager node and 2 omnia-compute nodes on the pre-existing default
-network. Omnia will be automatically installed after the nodes are provisioned.
-All nodes mount a filestore instance on `/home`.
+omnia-manager node that acts as the slurm manager and 2 omnia-compute nodes on
+the pre-existing default network. Omnia will be automatically installed after
+the nodes are provisioned. All nodes mount a filestore instance on `/home`.
 
 > **_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to
 > create the cluster. For these instances, Simultaneous Multithreading (SMT) is
@@ -490,7 +526,7 @@ A user defined blueprint should follow the following schema:
 
 ```yaml
 # Required: Name your blueprint.
-blueprint_name: MyBlueprintName
+blueprint_name: my-blueprint-name
 
 # Top-level variables, these will be pulled from if a required variable is not
 # provided as part of a module. Any variables can be set here by the user,
@@ -515,9 +551,9 @@ deployment_groups:
   modules:
 
   # Local source, prefixed with ./ (/ and ../ also accepted)
-  - source: ./modules/role/module-name # Required: Points to the module directory.
+  - id: <a unique id> # Required: Name of this module used to uniquely identify it.
+    source: ./modules/role/module-name # Required: Points to the module directory.
     kind: < terraform | packer > # Required: Type of module, currently choose from terraform or packer.
-    id: <a unique id> # Required: Name of this module used to uniquely identify it.
     # Optional: All configured settings for the module. For terraform, each
     # variable listed in variables.tf can be set here, and are mandatory if no
     # default was provided and are not defined elsewhere (like the top-level vars)
@@ -550,6 +586,10 @@ below.
 
 * **blueprint_name** (required): This name can be used to track resources and
   usage across multiple deployments that come from the same blueprint.
+  `blueprint_name` is used as a value for the `ghpc_blueprint` label key, and
+   must abide to label value naming constraints: `blueprint_name` must be at most
+   63 characters long, and can only contain lowercase letters, numeric
+   characters, underscores and dashes.
 
 ### Deployment Variables
 
@@ -675,10 +715,11 @@ vars:
 deployment_groups:
   - group: primary
      modules:
-       - source: path/to/module/1
-         id: resource1
+       - id: resource1
+         source: path/to/module/1
          ...
-       - source: path/to/module/2
+       - id: resource2
+         source: path/to/module/2
          ...
          settings:
             key1: $(vars.zone)

@@ -28,13 +28,13 @@ vars:
 deployment_groups:
 - group: infrastructure
   modules:
-  - source: modules/network/vpc
+  - id: network
+    source: modules/network/vpc
     kind: terraform
-    id: network
 
-  - source: modules/file-system/filestore
+  - id: homefs
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs
     use: [network]
     settings:
       name: homefs
@@ -44,9 +44,9 @@ deployment_groups:
         local_custom: "some_value"
         ghpc_deployment: "deployment_override"
 
-  - source: modules/file-system/filestore
+  - id: homefs1
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs1
     use: [network]
     settings:
       name: homefs

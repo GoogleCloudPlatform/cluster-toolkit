@@ -28,13 +28,13 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: ./modules/compute/vm-instance
+  - id: n1-2-threads
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: n1-2-threads
     use:
     - network1
     settings:
@@ -42,9 +42,9 @@ deployment_groups:
       machine_type: n1-standard-32
       threads_per_core: 2
 
-  - source: ./modules/compute/vm-instance
+  - id: n1-1-thread
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: n1-1-thread
     use:
     - network1
     settings:
@@ -52,9 +52,9 @@ deployment_groups:
       machine_type: n1-standard-32
       threads_per_core: 1
 
-  - source: ./modules/compute/vm-instance
+  - id: n1-0-threads
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: n1-0-threads
     use:
     - network1
     settings:
@@ -62,9 +62,9 @@ deployment_groups:
       machine_type: n1-standard-32
       threads_per_core: 0
 
-  - source: ./modules/compute/vm-instance
+  - id: n1-null-threads
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: n1-null-threads
     use:
     - network1
     settings:
@@ -72,9 +72,9 @@ deployment_groups:
       machine_type: n1-standard-32
       threads_per_core: null
 
-  - source: ./modules/compute/vm-instance
+  - id: n2-2-threads
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: n2-2-threads
     use:
     - network1
     settings:
@@ -82,9 +82,9 @@ deployment_groups:
       machine_type: n2-standard-32
       threads_per_core: 2
 
-  - source: ./modules/compute/vm-instance
+  - id: n2-1-thread
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: n2-1-thread
     use:
     - network1
     settings:
@@ -92,9 +92,9 @@ deployment_groups:
       machine_type: n2-standard-32
       threads_per_core: 1
 
-  - source: ./modules/compute/vm-instance
+  - id: c2-2-threads
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: c2-2-threads
     use:
     - network1
     settings:
@@ -102,9 +102,9 @@ deployment_groups:
       machine_type: c2-standard-30
       threads_per_core: 2
 
-  - source: ./modules/compute/vm-instance
+  - id: c2-1-thread
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: c2-1-thread
     use:
     - network1
     settings:
@@ -112,9 +112,9 @@ deployment_groups:
       machine_type: c2-standard-30
       threads_per_core: 1
 
-  - source: ./modules/compute/vm-instance
+  - id: e2-medium-0-thread
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: e2-medium-0-thread
     use:
     - network1
     settings:
@@ -122,9 +122,9 @@ deployment_groups:
       machine_type: e2-medium
       threads_per_core: 0
 
-  - source: ./modules/compute/vm-instance
+  - id: e2-medium-null-thread
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: e2-medium-null-thread
     use:
     - network1
     settings:

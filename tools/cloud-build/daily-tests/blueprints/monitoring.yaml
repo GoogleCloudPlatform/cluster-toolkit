@@ -25,23 +25,23 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/vpc
+  - id: network
+    source: modules/network/vpc
     kind: terraform
-    id: network
     settings:
       network_name: monitoring-net
 
-  - source: community/modules/file-system/nfs-server
+  - id: homefs
+    source: community/modules/file-system/nfs-server
     kind: terraform
-    id: homefs
     use: [network]
     settings:
       local_mounts: [/home]
       auto_delete_disk: true
 
-  - source: ./modules/scripts/startup-script
+  - id: startup
+    source: ./modules/scripts/startup-script
     kind: terraform
-    id: startup
     settings:
       runners:
       - type: shell
@@ -53,9 +53,9 @@ deployment_groups:
       - $(homefs.install_nfs_client_runner)
       - $(homefs.mount_runner)
 
-  - source: ./modules/compute/vm-instance
+  - id: workstation
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: workstation
     use:
     - network
     - homefs
@@ -63,10 +63,10 @@ deployment_groups:
     settings:
       machine_type: c2-standard-4
       metadata:
-        enable-oslogin: TRUE
+        enable-oslogin: true
 
-  - source: ./modules/monitoring/dashboard
+  - id: hpc-dash
+    source: ./modules/monitoring/dashboard
     kind: terraform
-    id: hpc-dash
     settings:
       title: $(vars.deployment_name)

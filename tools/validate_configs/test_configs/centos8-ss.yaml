@@ -1,0 +1,101 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: centos8-ss-test
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: centos8-ss-test
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: ./modules/network/pre-existing-vpc
+    kind: terraform
+
+  - id: appsfs
+    source: modules/file-system/filestore
+    kind: terraform
+    use: [network1]
+    settings:
+      name: appsfs
+      local_mount: /apps
+
+  - id: nfs
+    source: community/modules/file-system/nfs-server
+    kind: terraform
+    use: [network1]
+    settings:
+      auto_delete_disk: true
+
+  - id: spack
+    source: ./community//modules/scripts/spack-install
+    kind: terraform
+    settings:
+      install_dir: /apps/spack
+      spack_url: https://github.com/spack/spack
+      spack_ref: v0.18.0
+      compilers:
+      - gcc@10.3.0 target=x86_64
+      packages:
+      - cmake%gcc@10.3.0 target=x86_64
+
+  - id: startup
+    source: ./modules/scripts/startup-script
+    kind: terraform
+    settings:
+      runners:
+      - type: shell
+        source: "modules/startup-script/examples/hello.sh"
+        destination: "hello.sh"
+      - type: data
+        source: /tmp/foo.tgz
+        destination: /tmp/foo.tgz
+      - type: shell
+        destination: "decompress.sh"
+        content: |
+          #!/bin/sh
+          echo $2
+          tar zxvf /tmp/$1 -C /
+        args: "foo.tgz 'Expanding the file'"
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - type: "ansible-local"
+        source: modules/startup-script/examples/hello.yaml
+        destination: hello.yaml
+      - type: shell
+        content: $(nfs.install_nfs_client)
+        destination: "install-nfs-client.sh"
+      - $(appsfs.install_nfs_client_runner)
+      - $(nfs.mount_runner)
+      - $(spack.install_spack_deps_runner)
+      - type: shell
+        content: $(spack.startup_script)
+        destination: "/apps/spack-install.sh"
+
+  - id: instance
+    source: ./modules/compute/vm-instance
+    kind: terraform
+    use: [network1, startup, nfs, appsfs]
+    settings:
+      machine_type: e2-standard-4
+      instance_image:
+        family: centos-stream-8
+        project: centos-cloud

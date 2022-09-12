@@ -9,6 +9,11 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+# Activate ghpc-venv virtual environment if it exists
+if [ -d /usr/local/ghpc-venv ]; then
+  source /usr/local/ghpc-venv/bin/activate
+fi
+
 # Only install and configure spack if ${INSTALL_DIR} doesn't exist
 if [ ! -d ${INSTALL_DIR} ]; then
 
@@ -151,4 +156,3 @@ echo "source ${INSTALL_DIR}/share/spack/setup-env.sh" >> /etc/profile.d/spack.sh
 chmod a+rx /etc/profile.d/spack.sh
 
 echo "$PREFIX Setup complete..."
-exit 0

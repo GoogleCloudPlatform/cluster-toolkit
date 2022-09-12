@@ -53,6 +53,49 @@ Each runner receives the following attributes:
   Therefore`args` should not include any arguments that alter this behavior,
   such as `--connection`, `--inventory`, or `--limit`.
 
+### Runner dependencies
+
+The `ansible-local` runner requires ansible to be installed in the VM before
+running. To support other playbook runners in the HPC Toolkit, we require
+version 2.11 of ansible-core or higher. Note that this is distinct from the
+package version used to install ansible with pip. The minimum pip package
+of ansible is 4.10.0.
+
+To install ansible, a runner supplied by this module can be added as a prior
+runner. An example of this can be found in the [Example](#example) section below
+as the first runner in the list of runners. This script will do the following in
+your VM instance:
+
+- Install system-wide python3 if not already installed using system package
+  managers (yum, apt-get, etc)
+- Install `python3-distutils` system-wide in debian and ubuntu based
+  environments. This can be a missing dependency on system installations of
+  python3 for installing and upgrading pip.
+- Install system-wide pip3 if not already installed and upgrade pip3 if the
+  version is not at least 18.0.
+- Install and create a virtual environment located at `/usr/local/ghpc-venv`.
+- Install ansible into this virtual environment if the current version of
+  ansible is not version 2.11 or higher.
+
+To use the virtual environment created by this script, you can activate it by
+running the following commmand on the VM:
+
+```shell
+source /usr/local/ghpc-venv/bin/activate
+```
+
+You may also need to provide the correct python interpreter as the python3
+binary in the virtual environment. This can be done by adding the following flag
+when calling `ansible-playbook`:
+
+```shell
+-e ansible_python_interpreter=/usr/local/ghpc-venv/bin/activate
+```
+
+> **_NOTE:_** ansible-playbook and other ansible command line tools will only be
+> accessible from the command line (and in your PATH variable) after activating
+> this environment.
+
 ### Staging the runners
 
 Runners will be uploaded to a
@@ -96,9 +139,9 @@ sudo journalctl -u google-startup-scripts.service
 ### Example
 
 ```yaml
-- source: ./modules/scripts/startup-script
+- id: startup
+  source: ./modules/scripts/startup-script
   kind: terraform
-  id: startup
   settings:
     runners:
       - type: shell
@@ -124,9 +167,9 @@ sudo journalctl -u google-startup-scripts.service
           tar zxvf /tmp/$1 -C /
         args: "bar.tgz 'Expanding file'"
 
-- source: ./modules/compute/vm-instance
+- id: compute-cluster
+  source: ./modules/compute/vm-instance
   kind: terraform
-  id: compute-cluster
   use: [homefs, startup]
 ```
 

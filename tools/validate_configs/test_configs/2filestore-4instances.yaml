@@ -25,13 +25,13 @@ vars:
 deployment_groups:
 - group: infrastructure
   modules:
-  - source: ./modules/network/vpc
+  - id: network
+    source: ./modules/network/vpc
     kind: terraform
-    id: network
 
-  - source: modules/file-system/filestore
+  - id: homefs
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs
     use: [network]
     settings:
       name: homefs
@@ -39,9 +39,9 @@ deployment_groups:
       labels:
         ghpc_role: storage-home
 
-  - source: ./modules/file-system/filestore
+  - id: apps
+    source: ./modules/file-system/filestore
     kind: terraform
-    id: apps
     use: [network]
     settings:
       name: apps
@@ -49,9 +49,9 @@ deployment_groups:
       labels:
         ghpc_role: storage-apps
 
-  - source: ./modules/scripts/startup-script
+  - id: startup
+    source: ./modules/scripts/startup-script
     kind: terraform
-    id: startup
     settings:
       runners:
       - type: shell
@@ -64,9 +64,9 @@ deployment_groups:
         source: "modules/startup-script/examples/mount.yaml"
         destination: "mount.yaml"
 
-  - source: ./modules/compute/vm-instance
+  - id: license-server-1
+    source: ./modules/compute/vm-instance
     kind: terraform
-    id: license-server-1
     use: [network]
     settings:
       name_prefix: ls1
@@ -74,9 +74,9 @@ deployment_groups:
       labels:
         ghpc_role: license
 
-  - source: modules/compute/vm-instance
+  - id: license-server-2
+    source: modules/compute/vm-instance
     kind: terraform
-    id: license-server-2
     use: [network]
     settings:
       name_prefix: ls2
@@ -84,9 +84,9 @@ deployment_groups:
       labels:
         ghpc_role: license
 
-  - source: modules/compute/vm-instance
+  - id: head-node
+    source: modules/compute/vm-instance
     kind: terraform
-    id: head-node
     use:
     - network
     - homefs
@@ -99,9 +99,9 @@ deployment_groups:
       metadata:
         startup-script: $(startup.startup_script)
 
-  - source: modules/compute/vm-instance
+  - id: compute
+    source: modules/compute/vm-instance
     kind: terraform
-    id: compute
     use:
     - network
     - homefs

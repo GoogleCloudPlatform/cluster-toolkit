@@ -22,9 +22,9 @@ a startup script and network created in previous steps.
 > OS Login on all HTCondor nodes, including execute points.
 
 ```yaml
-- source: community/modules/compute/htcondor-execute-point
+- id: htcondor_execute_point
+  source: community/modules/compute/htcondor-execute-point
   kind: terraform
-  id: htcondor_execute_point
   use:
   - network1
   - htcondor_configure_execute_point

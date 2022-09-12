@@ -25,20 +25,20 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/filestore
+  - id: homefs
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs
     use: [network1]
     settings:
       local_mount: /home
 
-  - source: modules/scripts/startup-script
+  - id: startup
+    source: modules/scripts/startup-script
     kind: terraform
-    id: startup
     settings:
       runners:
       - type: shell
@@ -51,9 +51,9 @@ deployment_groups:
         source: "modules/startup-script/examples/mount.yaml"
         destination: "tmp.sh"
 
-  - source: modules/compute/vm-instance
+  - id: workstation
+    source: modules/compute/vm-instance
     kind: terraform
-    id: workstation
     use:
     - network1
     - homefs
@@ -63,27 +63,27 @@ deployment_groups:
       metadata:
         startup-script: $(startup.startup_script)
 
-  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: compute-partition
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute-partition
     use:
     - homefs
     - network1
     settings:
       partition_name: compute
 
-  - source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: debug-partition
+    source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: debug-partition
     use:
     - homefs
     - network1
     settings:
       partition_name: debug
 
-  - source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - id: slurm
+    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm
     use:
     - homefs
     - compute-partition

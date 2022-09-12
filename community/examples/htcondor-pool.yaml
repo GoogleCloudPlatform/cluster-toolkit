@@ -21,35 +21,38 @@ vars:
   region: us-central1
   zone: us-central1-c
 
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
 deployment_groups:
 - group: htcondor
   modules:
-  - source: modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
     kind: terraform
-    id: network1
     settings:
       network_name: htcondor-pool
       subnetwork_name: htcondor-pool-usc1
     outputs:
     - network_name
 
-  - source: community/modules/scripts/htcondor-install
+  - id: htcondor_install
+    source: community/modules/scripts/htcondor-install
     kind: terraform
-    id: htcondor_install
 
-  - source: community/modules/project/service-enablement
+  - id: htcondor_services
+    source: community/modules/project/service-enablement
     kind: terraform
-    id: htcondor_services
     use:
     - htcondor_install
 
-  - source: community/modules/scheduler/htcondor-configure
+  - id: htcondor_configure
+    source: community/modules/scheduler/htcondor-configure
     kind: terraform
-    id: htcondor_configure
 
-  - source: modules/scripts/startup-script
+  - id: htcondor_configure_central_manager
+    source: modules/scripts/startup-script
     kind: terraform
-    id: htcondor_configure_central_manager
     settings:
       runners:
       - type: shell
@@ -58,9 +61,9 @@ deployment_groups:
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.central_manager_runner)
 
-  - source: modules/compute/vm-instance
+  - id: htcondor_cm
+    source: modules/compute/vm-instance
     kind: terraform
-    id: htcondor_cm
     use:
     - network1
     - htcondor_configure_central_manager
@@ -75,9 +78,9 @@ deployment_groups:
     outputs:
     - internal_ip
 
-  - source: modules/scripts/startup-script
+  - id: htcondor_configure_execute_point
+    source: modules/scripts/startup-script
     kind: terraform
-    id: htcondor_configure_execute_point
     settings:
       runners:
       - type: shell
@@ -86,9 +89,9 @@ deployment_groups:
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.execute_point_runner)
 
-  - source: community/modules/compute/htcondor-execute-point
+  - id: htcondor_execute_point
+    source: community/modules/compute/htcondor-execute-point
     kind: terraform
-    id: htcondor_execute_point
     use:
     - network1
     - htcondor_configure_execute_point
@@ -101,9 +104,9 @@ deployment_groups:
         scopes:
         - cloud-platform
 
-  - source: modules/scripts/startup-script
+  - id: htcondor_configure_access_point
+    source: modules/scripts/startup-script
     kind: terraform
-    id: htcondor_configure_access_point
     settings:
       runners:
       - type: shell
@@ -125,9 +128,9 @@ deployment_groups:
           request_cpus   = 1
           request_memory = 100MB
           queue
-  - source: modules/compute/vm-instance
+  - id: htcondor_access
+    source: modules/compute/vm-instance
     kind: terraform
-    id: htcondor_access
     use:
     - network1
     - htcondor_configure_access_point

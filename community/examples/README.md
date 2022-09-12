@@ -29,9 +29,13 @@ Examples using Intel HPC technologies can be found in the
 
 [See description in core](../../examples/README.md#hpc-cluster-small-sharedvpcyaml--)
 
-### slurm-gcp-v5-cluster.yaml
+### slurm-gcp-v5-hpc-centos7.yaml
 
-[See description in core](../../examples/README.md#slurm-gcp-v5-clusteryaml--)
+[See description in core](../../examples/README.md#slurm-gcp-v5-hpc-centos7yaml-)
+
+### slurm-gcp-v5-ubuntu2004.yaml
+
+[See description in core](../../examples/README.md#slurm-gcp-v5-ubuntu2004yaml-)
 
 ### htcondor-pool.yaml
 

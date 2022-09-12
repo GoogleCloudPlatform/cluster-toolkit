@@ -25,13 +25,13 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: ./community/modules/scripts/spack-install
+  - id: spack
+    source: ./community/modules/scripts/spack-install
     kind: terraform
-    id: spack
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
@@ -51,15 +51,15 @@ deployment_groups:
         path: '/tmp/spack_key.gpg'
       caches_to_populate:
       - type: 'mirror'
-        path: ##  Add GCS bucket to populate here ##
+        path:  ##  Add GCS bucket to populate here ##
 
-  - source: modules/scripts/startup-script
+  - id: spack-startup
+    source: modules/scripts/startup-script
     kind: terraform
-    id: spack-startup
     settings:
       runners:
       - type: data
-        source: ##  Add path to GPG key here ##
+        source:  ##  Add path to GPG key here ##
         destination: /tmp/spack_key.gpg
       - type: shell
         content: |
@@ -80,9 +80,9 @@ deployment_groups:
         destination: shutdown.sh
         content: shutdown -h
 
-  - source: modules/compute/vm-instance
+  - id: spack-build
+    source: modules/compute/vm-instance
     kind: terraform
-    id: spack-build
     use:
     - network1
     - spack-startup

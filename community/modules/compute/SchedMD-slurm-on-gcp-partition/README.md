@@ -18,9 +18,9 @@ The following code snippet creates a partition module with:
 * Mounted to homefs via `use`
 
 ```yaml
-- source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+- id: compute_partition
+  source: community/modules/compute/SchedMD-slurm-on-gcp-partition
   kind: terraform
-  id: compute_partition
   use: [network1, homefs]
   settings:
     max_node_count: 200

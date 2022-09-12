@@ -146,8 +146,8 @@ Modules that are still in development and less stable are labeled with the
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
 * **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
-  via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of compute
-  VMs.
+  via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of VMs
+  instances.
 * **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install [Spack](https://github.com/spack/spack) on an
   instance or a slurm login or controller.
@@ -184,9 +184,9 @@ review the directory structure of [the core modules](./) and
 example, the following code is using the embedded pre-existing-vpc module:
 
 ```yaml
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 ```
 
 #### Local Modules
@@ -197,9 +197,9 @@ the source to a path starting with `/`, `./`, or `../`. For instance, the
 following module definition refers the local pre-existing-vpc modules.
 
 ```yaml
-  - source: ./modules/network/pre-existing-vpc
+  - id: network1
+    source: ./modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 ```
 
 > **_NOTE:_** This example would have to be run from the HPC Toolkit repository
@@ -216,17 +216,17 @@ Toolkit GitHub repository:
 Get module from GitHub over SSH:
 
 ```yaml
-  - source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc
+  - id: network1
+    source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc
     kind: terraform
-    id: network1
 ```
 
 Get module from GitHub over HTTPS:
 
 ```yaml
-  - source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc
+  - id: network1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc
     kind: terraform
-    id: network1
 ```
 
 Both examples above use the [double-slash notation][tfsubdir] (`//`) to indicate
@@ -240,9 +240,9 @@ of this feature. For example, to temporarily point to a development copy of the
 Toolkit vpc module, use:
 
 ```yaml
-  - source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
+  - id: network1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
     kind: terraform
-    id: network1
 ```
 
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
@@ -289,16 +289,16 @@ the used module's output. For example, see the following blueprint snippet:
 
 ```yaml
 modules:
-- source: modules/network/vpc
+- id: network1
+  source: modules/network/vpc
   kind: terraform
-  id: network1
 
-- resource: modules/compute/vm-instance
+- id: workstation
+  source: modules/compute/vm-instance
   kind: terraform
-  id: workstation
   use: [network1]
   settings:
-    ...
+  ...
 ```
 
 In this snippet, the VM instance `workstation` uses the outputs of vpc

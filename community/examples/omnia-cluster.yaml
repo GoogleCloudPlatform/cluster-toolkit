@@ -21,36 +21,42 @@ vars:
   deployment_name: omnia-cluster
   zone: us-central1-c
   region: us-central1
+  instance_image:
+    family: rocky-linux-8
+    project: rocky-linux-cloud
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
 deployment_groups:
 - group: primary
   modules:
 
   ## Network
-  - source: modules/network/vpc
+  - id: network
+    source: modules/network/vpc
     kind: terraform
-    id: network
 
   ## File Systems
-  - source: modules/file-system/filestore
+  - id: homefs
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs
     use: [network]
     settings:
       local_mount: "/home"
 
   ## Installation Scripts
-  - source: community/modules/scripts/omnia-install
+  - id: omnia
+    source: community/modules/scripts/omnia-install
     kind: terraform
-    id: omnia
     outputs: [inventory_file, omnia_user_warning]
     settings:
       manager_ips: [localhost]
       compute_ips: $(compute.internal_ip)
 
-  - source: modules/scripts/startup-script
+  - id: startup-manager
+    source: modules/scripts/startup-script
     kind: terraform
-    id: startup-manager
     settings:
       runners:
       - type: shell
@@ -62,9 +68,9 @@ deployment_groups:
       - $(omnia.copy_inventory_runner)
       - $(omnia.install_omnia_runner)
 
-  - source: modules/scripts/startup-script
+  - id: startup-compute
+    source: modules/scripts/startup-script
     kind: terraform
-    id: startup-compute
     settings:
       runners:
       - type: shell
@@ -75,9 +81,9 @@ deployment_groups:
       - $(omnia.setup_omnia_node_runner)
 
   ## Compute
-  - source: modules/compute/vm-instance
+  - id: manager
+    source: modules/compute/vm-instance
     kind: terraform
-    id: manager
     use:
     - network
     - homefs
@@ -86,9 +92,9 @@ deployment_groups:
       name_prefix: omnia-manager
       machine_type: n2-standard-4
 
-  - source: modules/compute/vm-instance
+  - id: compute
+    source: modules/compute/vm-instance
     kind: terraform
-    id: compute
     use:
     - network
     - homefs
@@ -98,9 +104,9 @@ deployment_groups:
       instance_count: 2
 
   # This module simply makes terraform wait until the startup script is complete
-  - source: community/modules/scripts/wait-for-startup
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
     kind: terraform
-    id: wait
     use:
     - network
     settings:

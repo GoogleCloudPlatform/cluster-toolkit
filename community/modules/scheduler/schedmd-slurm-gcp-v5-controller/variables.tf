@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -96,6 +96,17 @@ variable "cgroup_conf_tpl" {
   type        = string
   description = "Slurm cgroup.conf template file path."
   default     = null
+}
+
+variable "deployment_name" {
+  description = "Name of the deployment."
+  type        = string
+}
+
+variable "disable_controller_public_ips" {
+  description = "If set to false. The controller will have a random public IP assigned to it. Ignored if access_config is set."
+  type        = bool
+  default     = true
 }
 
 variable "disable_default_mounts" {
@@ -307,6 +318,7 @@ variable "partition" {
       partition_conf = map(string)
       partition_name = string
       partition_nodes = map(object({
+        bandwidth_tier         = string
         node_count_dynamic_max = number
         node_count_static      = number
         enable_spot_vm         = bool
@@ -394,12 +406,8 @@ EOD
 
 variable "slurm_cluster_name" {
   type        = string
-  description = "Cluster name, used for resource naming and slurm accounting."
-
-  validation {
-    condition     = can(regex("(^[a-z][a-z0-9]*$)", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be composed of only alphanumeric values and begin with a leter. regex: '(^[a-z][a-z0-9]*$)'."
-  }
+  description = "Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters)."
+  default     = null
 }
 
 variable "slurmdbd_conf_tpl" {

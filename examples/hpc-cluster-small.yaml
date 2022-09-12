@@ -22,27 +22,30 @@ vars:
   region: us-central1
   zone: us-central1-c
 
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
 deployment_groups:
 - group: primary
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - source: modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/filestore
+  - id: homefs
+    source: modules/file-system/filestore
     kind: terraform
-    id: homefs
     use: [network1]
     settings:
       local_mount: /home
 
   # This debug_partition will work out of the box without requesting additional GCP quota.
-  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: debug_partition
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: debug_partition
     use:
     - network1
     - homefs
@@ -54,9 +57,9 @@ deployment_groups:
       machine_type: n2-standard-2
 
   # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
-  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: compute_partition
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute_partition
     use:
     - network1
     - homefs
@@ -64,9 +67,9 @@ deployment_groups:
       partition_name: compute
       max_node_count: 20
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - id: slurm_controller
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm_controller
     use:
     - network1
     - homefs
@@ -76,9 +79,9 @@ deployment_groups:
       login_node_count: 1
       suspend_time: 60
 
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm_login
     use:
     - network1
     - homefs

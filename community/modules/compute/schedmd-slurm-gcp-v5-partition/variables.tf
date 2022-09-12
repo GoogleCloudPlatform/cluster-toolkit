@@ -15,16 +15,17 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.0.3
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
+
+variable "deployment_name" {
+  description = "Name of the deployment."
+  type        = string
+}
 
 variable "slurm_cluster_name" {
   type        = string
-  description = "Cluster name, used for resource naming and slurm accounting."
-
-  validation {
-    condition     = can(regex("(^[a-z][a-z0-9]*$)", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be composed of only alphanumeric values and begin with a leter. regex: '(^[a-z][a-z0-9]*$)'."
-  }
+  description = "Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters)."
+  default     = null
 }
 
 variable "project_id" {
@@ -357,4 +358,23 @@ variable "spot_instance_config" {
     termination_action = string
   })
   default = null
+}
+
+variable "bandwidth_tier" {
+  description = <<EOT
+  Configures the network interface card and the maximum egress bandwidth for VMs.
+  - Setting `platform_default` respects the Google Cloud Platform API default values for networking.
+  - Setting `virtio_enabled` explicitly selects the VirtioNet network adapter.
+  - Setting `gvnic_enabled` selects the gVNIC network adapter (without Tier 1 high bandwidth).
+  - Setting `tier_1_enabled` selects both the gVNIC adapter and Tier 1 high bandwidth networking.
+  - Note: both gVNIC and Tier 1 networking require a VM image with gVNIC support as well as specific VM families and shapes.
+  - See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details.
+  EOT
+  type        = string
+  default     = "platform_default"
+
+  validation {
+    condition     = contains(["platform_default", "virtio_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
+    error_message = "Allowed values for bandwidth_tier are 'platform_default', 'virtio_enabled', 'gvnic_enabled', or 'tier_1_enabled'."
+  }
 }

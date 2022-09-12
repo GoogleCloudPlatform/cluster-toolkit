@@ -1,0 +1,168 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: spack-gromacs
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: spack-gromacs
+  region: us-central1
+  zone: us-central1-c
+  spack_cache_mirror_url: gs://optionally_set_spack_cache_bucket
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+    kind: terraform
+
+  - id: hpc_dash
+    source: modules/monitoring/dashboard
+    kind: terraform
+
+  ## Install Scripts
+  - id: spack
+    source: community/modules/scripts/spack-install
+    kind: terraform
+    settings:
+      install_dir: /apps/spack
+      spack_url: https://github.com/spack/spack
+      spack_ref: v0.18.0
+      log_file: /var/log/spack.log
+      configs:
+      - type: file
+        scope: defaults
+        content: |
+          config:
+            build_stage:
+              - /apps/spack/spack-stage
+      - type: file
+        scope: defaults
+        content: |
+          modules:
+            default:
+              tcl:
+                hash_length: 0
+                all:
+                  conflict:
+                    - '{name}'
+                projections:
+                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
+      - type: 'file'
+        scope: 'site'
+        content: |
+          packages:
+            slurm:
+              externals:
+                - spec: slurm@21-08-8-2
+                  prefix: /usr/local
+              buildable: False
+      compilers:
+      - gcc@9.3.0 target=x86_64
+      environments:
+      - name: gromacs
+        type: file
+        content: |
+          spack:
+            definitions:
+            - compilers:
+              - gcc@9.3.0
+            - mpis:
+              - intel-mpi@2018.4.274
+            - mpi_packages:
+              - gromacs@2020.5
+            specs:
+            - matrix:
+              - - $mpis
+              - - $%compilers
+            - matrix:
+              - - $mpi_packages
+              - - $%compilers
+              - - $^mpis
+      spack_cache_url:
+      - mirror_name: gcs_cache
+        mirror_url: $(vars.spack_cache_mirror_url)
+
+  - id: controller-setup
+    source: modules/scripts/startup-script
+    kind: terraform
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
+      - type: shell
+        destination: setup_gromacs.sh
+        content: |
+          #!/bin/bash
+          source /apps/spack/share/spack/setup-env.sh
+          spack env activate gromacs
+          chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
+          mkdir -p /apps/gromacs
+          chmod a+rwx /apps/gromacs
+          cd /apps/gromacs
+          wget --no-verbose https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz
+          tar xzf water_GMX50_bare.tar.gz
+
+      - type: data
+        destination: /apps/gromacs/submit_gromacs.sh
+        content: |
+          #!/bin/bash
+          #SBATCH -N 2
+          #SBATCH --ntasks-per-node 30
+
+          # Size can be 0000.65  0000.96  0001.5  0003  0006  0012  0024  0048  0096  0192  0384  0768  1536  3072
+          # Type can be 'pme' or 'rf'
+
+          source /apps/spack/share/spack/setup-env.sh
+          spack env activate gromacs
+
+          # Check that gmx_mpi exists
+          which gmx_mpi
+          cd $SLURM_SUBMIT_DIR
+          cp /apps/gromacs/water-cut1.0_GMX50_bare/1536/* .
+          scontrol show hostnames ${SLURM_JOB_NODELIST} > hostfile
+          gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
+          mpirun -n 60 -hostfile hostfile -ppn 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
+
+  - id: compute_partition
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    use:
+    - network1
+    settings:
+      partition_name: compute
+      max_node_count: 20
+
+  - id: slurm_controller
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    kind: terraform
+    use:
+    - network1
+    - compute_partition
+    settings:
+      controller_startup_script: $(controller-setup.startup_script)
+      login_node_count: 1
+
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    kind: terraform
+    use:
+    - network1
+    - slurm_controller

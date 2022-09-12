@@ -140,7 +140,7 @@
     - name: Delete Firewall Rule
       register: fw_deleted
       changed_when: fw_deleted.rc == 0
-      failed_when: false # keep cleaning up
+      failed_when: false  # keep cleaning up
       ansible.builtin.command:
         argv:
         - gcloud
@@ -149,8 +149,8 @@
         - delete
         - "{{ deployment_name }}"
     - name: Tear Down Pool
-      changed_when: true # assume something destroyed
-      failed_when: false # keep cleaning up
+      changed_when: true  # assume something destroyed
+      failed_when: false  # keep cleaning up
       run_once: true
       delegate_to: localhost
       environment:
@@ -177,7 +177,7 @@
       ansible.builtin.command:
         cmd: gcloud compute images delete {{ image_name.stdout }}
     - name: Tear Down Network
-      changed_when: true # assume something destroyed
+      changed_when: true  # assume something destroyed
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
@@ -190,8 +190,8 @@
 
 - name: Run Integration Tests
   hosts: remote_host
-  gather_facts: no # must wait until host is reachable
-  ignore_unreachable: true # ensure always block will run even if SSH fails
+  gather_facts: false  # must wait until host is reachable
+  ignore_unreachable: true  # ensure always block will run even if SSH fails
   tasks:
   - name: HTCondor Test Block
     vars:
@@ -218,7 +218,7 @@
         loop_var: test
     always:
     - name: Tear Down Pool
-      changed_when: true # assume something destroyed
+      changed_when: true  # assume something destroyed
       delegate_to: localhost
       run_once: true
       environment:
@@ -243,7 +243,7 @@
     - name: Delete custom image
       register: image_deleted
       changed_when: image_deleted.rc == 0
-      failed_when: false # keep cleaning up
+      failed_when: false  # keep cleaning up
       run_once: true
       delegate_to: localhost
       ansible.builtin.command:
@@ -251,7 +251,7 @@
     - name: Delete Firewall Rule
       register: fw_deleted
       changed_when: fw_deleted.rc == 0
-      failed_when: false # keep cleaning up
+      failed_when: false  # keep cleaning up
       run_once: true
       delegate_to: localhost
       ansible.builtin.command:
@@ -262,7 +262,7 @@
         - delete
         - "{{ deployment_name }}"
     - name: Tear Down Network
-      changed_when: true # assume something destroyed
+      changed_when: true  # assume something destroyed
       run_once: true
       delegate_to: localhost
       environment:

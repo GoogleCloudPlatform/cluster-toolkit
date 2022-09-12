@@ -24,15 +24,18 @@ vars:
   network_name: image-builder
   subnetwork_name: image-builder-us-central1
 
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
 deployment_groups:
 - group: builder-env
   modules:
-  - source: modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
     kind: terraform
-    id: network1
-  - source: modules/scripts/startup-script
+  - id: scripts_for_image
+    source: modules/scripts/startup-script
     kind: terraform
-    id: scripts_for_image
     settings:
       runners:
       - type: shell
@@ -44,9 +47,9 @@ deployment_groups:
 
 - group: packer
   modules:
-  - source: modules/packer/custom-image
+  - id: custom-image
+    source: modules/packer/custom-image
     kind: packer
-    id: custom-image
     settings:
       disk_size: 20
       source_image_project_id: [schedmd-slurm-public]
@@ -55,12 +58,12 @@ deployment_groups:
 
 - group: cluster
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: cluster-network
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: cluster-network
-  - source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: compute_partition
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     kind: terraform
-    id: compute_partition
     use: [cluster-network]
     settings:
       partition_name: compute
@@ -68,18 +71,18 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+  - id: slurm_controller
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     kind: terraform
-    id: slurm_controller
     use: [cluster-network, compute_partition]
     settings:
       login_node_count: 1
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
-  - source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     kind: terraform
-    id: slurm_login
     use: [cluster-network, slurm_controller]
     settings:
       instance_image:

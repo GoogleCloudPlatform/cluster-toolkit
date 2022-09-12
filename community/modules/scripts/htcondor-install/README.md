@@ -21,13 +21,13 @@ install the HTCondor software and adds custom configurations using
 [htcondor-configure] and [htcondor-execute-point].
 
 ```yaml
-- source: community/modules/scripts/htcondor-install
+- id: htcondor_install
+  source: community/modules/scripts/htcondor-install
   kind: terraform
-  id: htcondor_install
 
-- source: modules/scripts/startup-script
+- id: htcondor_configure_central_manager
+  source: modules/scripts/startup-script
   kind: terraform
-  id: htcondor_configure_central_manager
   settings:
     runners:
     - type: shell
@@ -36,9 +36,9 @@ install the HTCondor software and adds custom configurations using
     - $(htcondor_install.install_htcondor_runner)
     - $(htcondor_configure.central_manager_runner)
 
-- source: modules/scripts/startup-script
+- id: htcondor_configure_access_point
+  source: modules/scripts/startup-script
   kind: terraform
-  id: htcondor_configure_access_point
   settings:
     runners:
     - type: shell

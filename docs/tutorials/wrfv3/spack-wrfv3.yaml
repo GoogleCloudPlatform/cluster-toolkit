@@ -1,0 +1,166 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: spack-wrfv3
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: spack-wrfv3
+  region: us-central1
+  zone: us-central1-c
+  spack_cache_mirror_url: gs://optionally_set_spack_cache_bucket
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+    kind: terraform
+
+  - id: hpc_dash
+    source: modules/monitoring/dashboard
+    kind: terraform
+
+  ## Install Scripts
+  - id: spack
+    source: community/modules/scripts/spack-install
+    kind: terraform
+    settings:
+      install_dir: /apps/spack
+      spack_url: https://github.com/spack/spack
+      spack_ref: v0.18.0
+      log_file: /var/log/spack.log
+      configs:
+      - type: file
+        scope: defaults
+        content: |
+          config:
+            build_stage:
+              - /apps/spack/spack-stage
+      - type: file
+        scope: defaults
+        content: |
+          modules:
+            default:
+              tcl:
+                hash_length: 0
+                all:
+                  conflict:
+                    - '{name}'
+                projections:
+                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
+      - type: 'file'
+        scope: 'site'
+        content: |
+          packages:
+            slurm:
+              externals:
+                - spec: slurm@21-08-8-2
+                  prefix: /usr/local
+              buildable: False
+      compilers:
+      - gcc@8.2.0 target=x86_64
+      environments:
+      - name: wrfv3
+        type: file
+        content: |
+          spack:
+            definitions:
+            - compilers:
+              - gcc@8.2.0
+            - mpis:
+              - intel-mpi@2018.4.274
+            - mpi_packages:
+              - wrf@3.9.1.1 build_type=dm+sm compile_type=em_real nesting=basic ~pnetcdf
+            specs:
+            - matrix:
+              - - $mpis
+              - - $%compilers
+            - matrix:
+              - - $mpi_packages
+              - - $%compilers
+              - - $^mpis
+      spack_cache_url:
+      - mirror_name: gcs_cache
+        mirror_url: $(vars.spack_cache_mirror_url)
+
+  - id: controller-setup
+    source: modules/scripts/startup-script
+    kind: terraform
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
+      - type: shell
+        destination: wrfv3_setup.sh
+        content: |
+          #!/bin/bash
+          source /apps/spack/share/spack/setup-env.sh
+          spack env activate wrfv3
+          chmod -R a+rwX /apps/spack/var/spack/environments/wrfv3
+          mkdir -p /apps/wrfv3
+          chmod a+rwx /apps/wrfv3
+          cd /apps/wrfv3
+          wget --no-verbose https://www2.mmm.ucar.edu/wrf/bench/conus12km_v3911/bench_12km.tar.bz2
+          tar xjf bench_12km.tar.bz2
+      - type: data
+        destination: /apps/wrfv3/submit_wrfv3.sh
+        content: |
+          #!/bin/bash
+          #SBATCH -N 2
+          #SBATCH --ntasks-per-node 30
+
+          source /apps/spack/share/spack/setup-env.sh
+          spack env activate wrfv3
+
+          # Check that wrf.exe exists
+          which wrf.exe
+          cd $SLURM_SUBMIT_DIR
+          cp /apps/wrfv3/bench_12km/* .
+          WRF=`spack location -i wrf`
+          ln -s $WRF/run/* .
+          scontrol show hostnames ${SLURM_JOB_NODELIST} > hostfile
+
+          mpirun -n 60 -hostfile hostfile -ppn ${SLURM_NTASKS_PER_NODE} wrf.exe
+
+  - id: compute_partition
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+    kind: terraform
+    use:
+    - network1
+    settings:
+      partition_name: compute
+      max_node_count: 20
+
+  - id: slurm_controller
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    kind: terraform
+    use:
+    - network1
+    - compute_partition
+    settings:
+      controller_startup_script: $(controller-setup.startup_script)
+      login_node_count: 1
+
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    kind: terraform
+    use:
+    - network1
+    - slurm_controller

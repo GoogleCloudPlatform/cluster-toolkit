@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 ---
 blueprint_name: cloud-batch
 
@@ -20,22 +21,25 @@ vars:
   region: us-central1
   zone: us-central1-c
 
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
 
-  - source: modules/file-system/filestore
+  - id: appfs
+    source: modules/file-system/filestore
     kind: terraform
-    id: appfs
     use: [network1]
     settings: {local_mount: /sw}
 
-  - source: modules/scripts/startup-script
+  - id: hello-startup-script
+    source: modules/scripts/startup-script
     kind: terraform
-    id: hello-startup-script
     settings:
       runners:
       - type: shell
@@ -49,9 +53,9 @@ deployment_groups:
           #!/bin/sh
           echo "Hello World" > /sw/hello.txt
 
-  - source: community/modules/scheduler/cloud-batch-job
+  - id: batch-job
+    source: community/modules/scheduler/cloud-batch-job
     kind: terraform
-    id: batch-job
     use: [network1, appfs, hello-startup-script]
     settings:
       runnable: "cat /sw/hello.txt"
@@ -60,8 +64,8 @@ deployment_groups:
         family: centos-7
         project: centos-cloud
 
-  - source: community/modules/scheduler/cloud-batch-login-node
+  - id: batch-login
+    source: community/modules/scheduler/cloud-batch-login-node
     kind: terraform
-    id: batch-login
     use: [batch-job]
     outputs: [instructions]
