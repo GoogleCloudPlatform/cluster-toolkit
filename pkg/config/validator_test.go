@@ -15,12 +15,8 @@
 package config
 
 import (
-	"bytes"
 	"fmt"
-	"log"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"hpc-toolkit/pkg/modulereader"
 
@@ -50,16 +46,6 @@ func (s *MySuite) TestValidateVars(c *C) {
 	dc.Config.Vars["project_id"] = nil
 	err = dc.validateVars()
 	c.Assert(err, ErrorMatches, "deployment variable project_id was not set")
-
-	// Success: project_id not set
-	delete(dc.Config.Vars, "project_id")
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	err = dc.validateVars()
-	log.SetOutput(os.Stderr)
-	c.Assert(err, IsNil)
-	hasWarning := strings.Contains(buf.String(), "WARNING: No project_id")
-	c.Assert(hasWarning, Equals, true)
 
 	// Fail: labels not a map
 	dc.Config.Vars["labels"] = "a_string"
@@ -327,7 +313,7 @@ func (s *MySuite) TestProjectExistsValidator(c *C) {
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
-	projectValidator.Inputs["project_id"] = "((var.project_id))"
+	projectValidator.Inputs["project_id"] = "((var.undefined))"
 	err = dc.testProjectExists(projectValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 

@@ -32,8 +32,9 @@ type VarInfo struct {
 
 // ModuleInfo stores information about a module
 type ModuleInfo struct {
-	Inputs  []VarInfo
-	Outputs []VarInfo
+	Inputs       []VarInfo
+	Outputs      []VarInfo
+	RequiredApis []string
 }
 
 // GetOutputsAsMap returns the outputs list as a map for quicker access

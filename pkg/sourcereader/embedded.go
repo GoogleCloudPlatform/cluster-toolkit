@@ -103,7 +103,121 @@ func (r EmbeddedSourceReader) GetModuleInfo(modPath string, kind string) (module
 	}
 
 	reader := modulereader.Factory(kind)
-	return reader.GetInfo(modDir)
+	mi, err := reader.GetInfo(modDir)
+	mi.RequiredApis = defaultAPIList(modPath)
+	return mi, err
+}
+
+func defaultAPIList(source string) []string {
+	// API lists at
+	// https://console.cloud.google.com/apis/dashboard and
+	// https://console.cloud.google.com/apis/library
+	staticAPIMap := map[string][]string{
+		"community/modules/compute/SchedMD-slurm-on-gcp-partition": {
+			"compute.googleapis.com",
+		},
+		"community/modules/compute/htcondor-execute-point": {
+			"compute.googleapis.com",
+		},
+		"community/modules/compute/schedmd-slurm-gcp-v5-partition": {
+			"compute.googleapis.com",
+		},
+		"community/modules/database/slurm-cloudsql-federation": {
+			"bigqueryconnection.googleapis.com",
+			"sqladmin.googleapis.com",
+		},
+		"community/modules/file-system/DDN-EXAScaler": {
+			"compute.googleapis.com",
+			"deploymentmanager.googleapis.com",
+			"iam.googleapis.com",
+			"runtimeconfig.googleapis.com",
+		},
+		"community/modules/file-system/Intel-DAOS": {
+			"compute.googleapis.com",
+			"iam.googleapis.com",
+			"secretmanager.googleapis.com",
+		},
+		"community/modules/file-system/nfs-server": {
+			"compute.googleapis.com",
+		},
+		"community/modules/project/new-project": {
+			"admin.googleapis.com",
+			"cloudresourcemanager.googleapis.com",
+			"cloudbilling.googleapis.com",
+			"iam.googleapis.com",
+		},
+		"community/modules/project/service-account": {
+			"iam.googleapis.com",
+		},
+		"community/modules/project/service-enablement": {
+			"serviceusage.googleapis.com",
+		},
+		"community/modules/scheduler/SchedMD-slurm-on-gcp-controller": {
+			"compute.googleapis.com",
+		},
+		"community/modules/scheduler/SchedMD-slurm-on-gcp-login-node": {
+			"compute.googleapis.com",
+		},
+		"community/modules/scheduler/cloud-batch-job": {
+			"compute.googleapis.com",
+		},
+		"community/modules/scheduler/cloud-batch-login-node": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
+		"community/modules/scheduler/htcondor-configure": {
+			"iam.googleapis.com",
+			"secretmanager.googleapis.com",
+		},
+		"community/modules/scheduler/schedmd-slurm-gcp-v5-controller": {
+			"compute.googleapis.com",
+			"iam.googleapis.com",
+			"pubsub.googleapis.com",
+			"secretmanager.googleapis.com",
+		},
+		"community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid": {
+			"compute.googleapis.com",
+			"pubsub.googleapis.com",
+		},
+		"community/modules/scheduler/schedmd-slurm-gcp-v5-login": {
+			"compute.googleapis.com",
+		},
+		"community/modules/scripts/htcondor-install": {},
+		"community/modules/scripts/omnia-install":    {},
+		"community/modules/scripts/spack-install":    {},
+		"community/modules/scripts/wait-for-startup": {
+			"compute.googleapis.com",
+		},
+		"modules/compute/vm-instance": {
+			"compute.googleapis.com",
+		},
+		"modules/file-system/filestore": {
+			"file.googleapis.com",
+		},
+		"modules/file-system/pre-existing-network-storage": {},
+		"modules/monitoring/dashboard": {
+			"stackdriver.googleapis.com",
+		},
+		"modules/network/pre-existing-vpc": {
+			"compute.googleapis.com",
+		},
+		"modules/network/vpc": {
+			"compute.googleapis.com",
+		},
+		"modules/packer/custom-image": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
+		"modules/scripts/startup-script": {
+			"storage.googleapis.com",
+		},
+	}
+
+	requiredAPIs, found := staticAPIMap[source]
+	if !found {
+		return []string{}
+	}
+	return requiredAPIs
 }
 
 // GetModule copies the embedded source to a provided destination (the deployment directory)

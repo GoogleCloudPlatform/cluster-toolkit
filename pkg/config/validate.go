@@ -132,11 +132,6 @@ func (dc DeploymentConfig) validateVars() error {
 	vars := dc.Config.Vars
 	nilErr := "deployment variable %s was not set"
 
-	// Check for project_id
-	if _, ok := vars["project_id"]; !ok {
-		log.Println("WARNING: No project_id in deployment variables")
-	}
-
 	// Check type of labels (if they are defined)
 	if labels, ok := vars["labels"]; ok {
 		if _, ok := labels.(map[string]interface{}); !ok {
