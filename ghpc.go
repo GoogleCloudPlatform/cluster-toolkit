@@ -25,8 +25,16 @@ import (
 //go:embed modules community/modules
 var moduleFS embed.FS
 
+// Git references when use Makefile
+var gitTagVersion string
+var gitBranch string
+var gitCommitInfo string
+
 func main() {
 	sourcereader.ModuleFS = moduleFS
+	cmd.GitTagVersion = gitTagVersion
+	cmd.GitBranch = gitBranch
+	cmd.GitCommitInfo = gitCommitInfo
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
