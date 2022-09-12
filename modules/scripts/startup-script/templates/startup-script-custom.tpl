@@ -39,7 +39,7 @@ stdlib::runner() {
   stdlib::info "=== start executing runner: $object ==="
   case "$1" in
     ansible-local) stdlib::run_playbook "$destpath/$filename" "$args";;
-    shell) . $destpath/$filename $args;;
+    shell) chmod u+x /$destpath/$filename && ./$destpath/$filename $args;;
   esac
   
   exit_code=$?
