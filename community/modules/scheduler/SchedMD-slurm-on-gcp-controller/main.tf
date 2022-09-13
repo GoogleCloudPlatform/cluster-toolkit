@@ -16,6 +16,7 @@
 locals {
   controller_startup_script = var.controller_startup_script != null ? var.controller_startup_script : var.startup_script
   compute_startup_script    = var.compute_startup_script != null ? var.compute_startup_script : var.startup_script
+  cluster_name              = var.cluster_name != null ? var.cluster_name : "slurm-${var.deployment_name}"
 }
 
 data "google_compute_image" "compute_image" {
@@ -29,7 +30,7 @@ module "slurm_cluster_controller" {
   boot_disk_type                = var.boot_disk_type
   image                         = data.google_compute_image.compute_image.self_link
   instance_template             = var.controller_instance_template
-  cluster_name                  = var.cluster_name != null ? var.cluster_name : "slurm-${var.deployment_name}"
+  cluster_name                  = local.cluster_name
   compute_node_scopes           = var.compute_node_scopes
   compute_node_service_account  = var.compute_node_service_account
   disable_compute_public_ips    = var.disable_compute_public_ips
@@ -57,4 +58,24 @@ module "slurm_cluster_controller" {
   zone                          = var.zone
   intel_select_solution         = var.intel_select_solution
   cloudsql                      = var.cloudsql
+}
+
+module "slurm_cluster_compute_node" {
+  source                     = "github.com/SchedMD/slurm-gcp//tf/modules/compute/?ref=v4.2.0"
+  project                    = var.project_id
+  cluster_name               = local.cluster_name
+  region                     = var.region
+  zone                       = var.zone
+  controller_name            = module.slurm_cluster_controller.controller_node_name
+  controller_secondary_disk  = var.controller_secondary_disk
+  disable_compute_public_ips = var.disable_compute_public_ips
+  network_storage            = var.network_storage
+  partitions                 = var.partition
+  compute_startup_script     = local.compute_startup_script
+  scopes                     = var.compute_node_scopes
+  service_account            = var.compute_node_service_account
+  shared_vpc_host_project    = var.shared_vpc_host_project
+  subnetwork_name            = var.subnetwork_name
+  intel_select_solution      = var.intel_select_solution
+  munge_key                  = var.munge_key
 }
