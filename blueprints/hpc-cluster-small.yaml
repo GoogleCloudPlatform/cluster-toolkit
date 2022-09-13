@@ -68,7 +68,7 @@ deployment_groups:
           partition_name: debug
           node_count_dynamic_max: 2
           enable_placement: false
-          machine_type: n2-standard-1
+          machine_type: n2-standard-2
           is_default: true
           enable_shielded_vm: true
 
