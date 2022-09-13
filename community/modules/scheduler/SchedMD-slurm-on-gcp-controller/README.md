@@ -76,6 +76,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
+| <a name="module_slurm_cluster_compute_node"></a> [slurm\_cluster\_compute\_node](#module\_slurm\_cluster\_compute\_node) | github.com/SchedMD/slurm-gcp//tf/modules/compute/ | v4.2.0 |
 | <a name="module_slurm_cluster_controller"></a> [slurm\_cluster\_controller](#module\_slurm\_cluster\_controller) | github.com/SchedMD/slurm-gcp//tf/modules/controller/ | v4.2.0 |
 
 ## Resources
