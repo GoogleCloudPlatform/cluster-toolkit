@@ -27,11 +27,9 @@ deployment_groups:
   modules:
   - id: network
     source: ./modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network]
     settings:
       name: homefs
@@ -41,7 +39,6 @@ deployment_groups:
 
   - id: apps
     source: ./modules/file-system/filestore
-    kind: terraform
     use: [network]
     settings:
       name: apps
@@ -51,7 +48,6 @@ deployment_groups:
 
   - id: startup
     source: ./modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -66,7 +62,6 @@ deployment_groups:
 
   - id: license-server-1
     source: ./modules/compute/vm-instance
-    kind: terraform
     use: [network]
     settings:
       name_prefix: ls1
@@ -76,7 +71,6 @@ deployment_groups:
 
   - id: license-server-2
     source: modules/compute/vm-instance
-    kind: terraform
     use: [network]
     settings:
       name_prefix: ls2
@@ -86,7 +80,6 @@ deployment_groups:
 
   - id: head-node
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network
     - homefs
@@ -101,7 +94,6 @@ deployment_groups:
 
   - id: compute
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network
     - homefs

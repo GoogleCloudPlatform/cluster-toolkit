@@ -30,18 +30,15 @@ deployment_groups:
   # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
 
   - id: startup
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -50,7 +47,6 @@ deployment_groups:
 
   - id: compute_partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -63,7 +59,6 @@ deployment_groups:
 
   - id: slurm_controller
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - network1
     - homefs
@@ -75,7 +70,6 @@ deployment_groups:
 
   - id: slurm_login
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use:
     - network1
     - homefs

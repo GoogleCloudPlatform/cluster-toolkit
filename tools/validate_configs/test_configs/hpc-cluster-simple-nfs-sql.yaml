@@ -27,11 +27,9 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: ./community/modules/file-system/nfs-server
-    kind: terraform
     use: [network1]
     settings:
       labels:
@@ -39,7 +37,6 @@ deployment_groups:
 
   - id: slurm-sql
     source: ./community/modules/database/slurm-cloudsql-federation
-    kind: terraform
     use: [network1]
     settings:
       sql_instance_name: slurm-sql8
@@ -47,7 +44,6 @@ deployment_groups:
 
   - id: compute-partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - homefs
     - network1
@@ -58,7 +54,6 @@ deployment_groups:
 
   - id: slurm-controller
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - homefs
     - compute-partition
@@ -71,7 +66,6 @@ deployment_groups:
 
   - id: slurm-login
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use:
     - slurm-controller
     - network1

@@ -20,7 +20,6 @@ The following code snippet creates a partition module with:
 ```yaml
 - id: compute_partition
   source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-  kind: terraform
   use: [network1, homefs]
   settings:
     max_node_count: 200

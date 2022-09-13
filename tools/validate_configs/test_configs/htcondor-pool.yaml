@@ -29,23 +29,19 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    kind: terraform
     outputs:
     - network_name
 
   - id: htcondor_install
     source: community/modules/scripts/htcondor-install
-    kind: terraform
 
   - id: htcondor_services
     source: community/modules/project/service-enablement
-    kind: terraform
     use:
     - htcondor_install
 
   - id: htcondor_install_scripts
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -67,29 +63,24 @@ deployment_groups:
   modules:
   - id: cluster_network
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: htcondor_configure
     source: community/modules/scheduler/htcondor-configure
-    kind: terraform
 
   - id: htcondor_configure_central_manager
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - $(htcondor_configure.central_manager_runner)
 
   - id: htcondor_configure_access_point
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - $(htcondor_configure.access_point_runner)
 
   - id: htcondor_cm
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - cluster_network
     - htcondor_configure_central_manager
@@ -109,7 +100,6 @@ deployment_groups:
 
   - id: htcondor_access
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - cluster_network
     - htcondor_configure_access_point

@@ -588,7 +588,7 @@ deployment_groups:
   # Local source, prefixed with ./ (/ and ../ also accepted)
   - id: <a unique id> # Required: Name of this module used to uniquely identify it.
     source: ./modules/role/module-name # Required: Points to the module directory.
-    kind: < terraform | packer > # Required: Type of module, currently choose from terraform or packer.
+    kind: < terraform | packer > # Optional: Type of module, currently choose from terraform or packer. If not specified, `kind` will default to `terraform`
     # Optional: All configured settings for the module. For terraform, each
     # variable listed in variables.tf can be set here, and are mandatory if no
     # default was provided and are not defined elsewhere (like the top-level vars)

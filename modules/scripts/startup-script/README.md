@@ -141,7 +141,6 @@ sudo journalctl -u google-startup-scripts.service
 ```yaml
 - id: startup
   source: ./modules/scripts/startup-script
-  kind: terraform
   settings:
     runners:
       - type: shell
@@ -169,7 +168,6 @@ sudo journalctl -u google-startup-scripts.service
 
 - id: compute-cluster
   source: ./modules/compute/vm-instance
-  kind: terraform
   use: [homefs, startup]
 ```
 

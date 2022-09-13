@@ -33,10 +33,8 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    kind: terraform
   - id: startup_controller
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -49,7 +47,6 @@ deployment_groups:
     - startup_script
   - id: startup_compute
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -98,10 +95,8 @@ deployment_groups:
   modules:
   - id: cluster-network
     source: modules/network/pre-existing-vpc
-    kind: terraform
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use:
     - cluster-network
     settings:
@@ -109,7 +104,6 @@ deployment_groups:
   # This debug_partition will work out of the box without requesting additional GCP quota.
   - id: debug_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - cluster-network
     - homefs
@@ -124,7 +118,6 @@ deployment_groups:
         project: $(vars.project_id)
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - cluster-network
     - homefs
@@ -137,7 +130,6 @@ deployment_groups:
       machine_type: c2-standard-60
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - cluster-network
     - compute_partition
@@ -150,7 +142,6 @@ deployment_groups:
       controller_machine_type: c2-standard-4
   - id: slurm_login
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use:
     - cluster-network
     - slurm_controller

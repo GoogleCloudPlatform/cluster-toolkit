@@ -14,7 +14,6 @@ sharing a single network module between deployment groups.
 ```yaml
 - id: network1
   source: modules/network/pre-existing-vpc
-  kind: terraform
   settings:
   - project_id: $(vars.project_id)
 ```

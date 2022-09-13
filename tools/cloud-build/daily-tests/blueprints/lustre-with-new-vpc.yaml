@@ -30,13 +30,11 @@ deployment_groups:
   # Example - ./modules/network/pre-existing-vpc
   - id: network1
     source: modules/network/vpc
-    kind: terraform
     settings:
       network_name: lustre-new-vpc
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
@@ -44,7 +42,6 @@ deployment_groups:
   # Explicitly picking the local version of the module
   - id: scratchfs
     source: community/modules/file-system/DDN-EXAScaler
-    kind: terraform
     settings:
       local_mount: /scratch
       network_self_link: $(network1.network_self_link)
@@ -54,7 +51,6 @@ deployment_groups:
   # Create a separate workstation to catch regressions in vm-instance
   - id: workstation
     source: ./modules/compute/vm-instance
-    kind: terraform
     use:
     - network1
     - homefs
@@ -65,7 +61,6 @@ deployment_groups:
 
   - id: compute_partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -76,7 +71,6 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - network1
     - homefs
@@ -85,7 +79,6 @@ deployment_groups:
 
   - id: slurm_login
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use:
     - network1
     - homefs

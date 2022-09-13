@@ -14,7 +14,6 @@ terraform modules. The login node is used in conjunction with the
 ```yaml
 - id: slurm_login
   source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-  kind: terraform
   use:
   - network1
   - slurm_controller

@@ -30,14 +30,12 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   # This module creates a DAOS server. Server images MUST be created before running this.
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
   - id: daos-server
     source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
-    kind: terraform
     use: [network1]
     settings:
       number_of_instances: 2
@@ -48,7 +46,6 @@ deployment_groups:
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_client
   - id: daos-client
     source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_client?ref=v0.2.1
-    kind: terraform
     use: [network1, daos-server]
     settings:
       number_of_instances: 2

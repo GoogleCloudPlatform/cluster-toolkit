@@ -29,17 +29,14 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: appfs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings: {local_mount: /sw}
 
   - id: hello-startup-script
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -55,7 +52,6 @@ deployment_groups:
 
   - id: batch-job
     source: community/modules/scheduler/cloud-batch-job
-    kind: terraform
     use: [network1, appfs, hello-startup-script]
     settings:
       runnable: "cat /sw/hello.txt"
@@ -66,6 +62,5 @@ deployment_groups:
 
   - id: batch-login
     source: community/modules/scheduler/cloud-batch-login-node
-    kind: terraform
     use: [batch-job]
     outputs: [instructions]

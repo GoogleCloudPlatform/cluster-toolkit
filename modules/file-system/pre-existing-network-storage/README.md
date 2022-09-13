@@ -13,7 +13,6 @@ Toolkit supported file-system such as [filestore](../filestore/README.md).
 ```yaml
 - id: homefs
   source: modules/file-system/pre-existing-network-storage
-  kind: terraform
   settings:
     server_ip: ## Set server IP here ##
     remote_mount: nfsshare

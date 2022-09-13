@@ -30,7 +30,6 @@ controller for optimal performance at different scales.
 ```yaml
 - id: slurm_controller
   source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-  kind: terraform
   use:
   - network1
   - homefs

@@ -200,7 +200,6 @@ example, the following code is using the embedded pre-existing-vpc module:
 ```yaml
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 ```
 
 #### Local Modules
@@ -213,7 +212,6 @@ following module definition refers the local pre-existing-vpc modules.
 ```yaml
   - id: network1
     source: ./modules/network/pre-existing-vpc
-    kind: terraform
 ```
 
 > **_NOTE:_** This example would have to be run from the HPC Toolkit repository
@@ -232,7 +230,6 @@ Get module from GitHub over SSH:
 ```yaml
   - id: network1
     source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc
-    kind: terraform
 ```
 
 Get module from GitHub over HTTPS:
@@ -240,7 +237,6 @@ Get module from GitHub over HTTPS:
 ```yaml
   - id: network1
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc
-    kind: terraform
 ```
 
 Both examples above use the [double-slash notation][tfsubdir] (`//`) to indicate
@@ -256,7 +252,6 @@ Toolkit vpc module, use:
 ```yaml
   - id: network1
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
-    kind: terraform
 ```
 
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
@@ -294,11 +289,9 @@ the used module's output. For example, see the following blueprint snippet:
 modules:
 - id: network1
   source: modules/network/vpc
-  kind: terraform
 
 - id: workstation
   source: modules/compute/vm-instance
-  kind: terraform
   use: [network1]
   settings:
   ...

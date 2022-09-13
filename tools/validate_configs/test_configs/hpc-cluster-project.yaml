@@ -34,7 +34,6 @@ deployment_groups:
   modules:
   - id: project
     source: ./community/modules/project/new-project
-    kind: terraform
     settings:
       project_id: $(vars.project_id)
       folder_id: 334688113020  # random number
@@ -43,7 +42,6 @@ deployment_groups:
 
   - id: enable-apis
     source: ./community/modules/project/service-enablement
-    kind: terraform
     use: [project]
     settings:
       gcp_service_list:
@@ -57,18 +55,15 @@ deployment_groups:
   # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
 
   - id: compute_partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -80,7 +75,6 @@ deployment_groups:
 
   - id: slurm_controller
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - network1
     - homefs
@@ -90,7 +84,6 @@ deployment_groups:
 
   - id: slurm_login
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use:
     - network1
     - homefs

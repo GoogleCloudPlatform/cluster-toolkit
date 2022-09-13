@@ -35,12 +35,10 @@ deployment_groups:
   ## Network
   - id: network
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   ## File Systems
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network]
     settings:
       local_mount: "/home"
@@ -48,7 +46,6 @@ deployment_groups:
   ## Installation Scripts
   - id: omnia
     source: community/modules/scripts/omnia-install
-    kind: terraform
     outputs: [inventory_file, omnia_user_warning]
     settings:
       manager_ips: [localhost]
@@ -56,7 +53,6 @@ deployment_groups:
 
   - id: startup-manager
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -70,7 +66,6 @@ deployment_groups:
 
   - id: startup-compute
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -83,7 +78,6 @@ deployment_groups:
   ## Compute
   - id: manager
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network
     - homefs
@@ -94,7 +88,6 @@ deployment_groups:
 
   - id: compute
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network
     - homefs
@@ -106,6 +99,5 @@ deployment_groups:
   # This module simply makes terraform wait until the startup script is complete
   - id: wait
     source: community/modules/scripts/wait-for-startup
-    kind: terraform
     settings:
       instance_name: ((module.manager.name[0]))

@@ -26,11 +26,9 @@ install the HTCondor software and adds custom configurations using
 ```yaml
 - id: htcondor_install
   source: community/modules/scripts/htcondor-install
-  kind: terraform
 
 - id: htcondor_configure_central_manager
   source: modules/scripts/startup-script
-  kind: terraform
   settings:
     runners:
     - type: shell
@@ -41,7 +39,6 @@ install the HTCondor software and adds custom configurations using
 
 - id: htcondor_configure_access_point
   source: modules/scripts/startup-script
-  kind: terraform
   settings:
     runners:
     - type: shell
