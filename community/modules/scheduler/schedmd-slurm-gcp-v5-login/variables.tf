@@ -31,7 +31,7 @@ variable "labels" {
 variable "disable_smt" {
   type        = bool
   description = "Disables Simultaneous Multi-Threading (SMT) on instance."
-  default     = false
+  default     = true
 }
 
 variable "deployment_name" {
