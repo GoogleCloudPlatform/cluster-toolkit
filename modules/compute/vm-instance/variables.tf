@@ -49,6 +49,12 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "auto_delete_boot_disk" {
+  description = "Controls if boot disk should be auto-deleted when instance is deleted."
+  type        = bool
+  default     = true
+}
+
 variable "local_ssd_count" {
   description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
   type        = number
