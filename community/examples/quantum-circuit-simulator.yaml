@@ -113,7 +113,8 @@ deployment_groups:
       - type: shell
         destination: run-qsim.sh
         content: |
-          #!/bin/bash
+          #!/bin/bash -i
+          # The -i above (for interactive) is required so that conda command will be accessible.
           # this script demonstrates how to run the qsim example application and
           # also "warms up" the GPU to give reliable performance metrics
           conda activate qsim
