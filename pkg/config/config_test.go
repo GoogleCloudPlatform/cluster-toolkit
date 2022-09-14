@@ -41,6 +41,7 @@ var (
 	expectedYaml = []byte(`
 blueprint_name: simple
 vars:
+  project_id: test-project
   labels:
     ghpc_blueprint: simple
     deployment_name: deployment_name
@@ -56,7 +57,6 @@ deployment_groups:
     id: "vpc"
     settings:
       network_name: $"${var.deployment_name}_net
-      project_id: project_name
 `)
 	testModules = []Module{
 		{
@@ -75,8 +75,10 @@ deployment_groups:
 		"deployment_name": "deployment_name",
 	}
 	expectedSimpleBlueprint Blueprint = Blueprint{
-		BlueprintName:    "simple",
-		Vars:             map[string]interface{}{"labels": defaultLabels},
+		BlueprintName: "simple",
+		Vars: map[string]interface{}{
+			"project_id": "test-project",
+			"labels":     defaultLabels},
 		DeploymentGroups: []DeploymentGroup{{Name: "DeploymentGroup1", TerraformBackend: TerraformBackend{}, Modules: testModules}},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
@@ -189,7 +191,10 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testBlueprint := Blueprint{
 		BlueprintName: "simple",
 		Validators:    []validatorConfig{},
-		Vars:          map[string]interface{}{"deployment_name": "deployment_name"},
+		Vars: map[string]interface{}{
+			"deployment_name": "deployment_name",
+			"project_id":      "test-project",
+		},
 		TerraformBackendDefaults: TerraformBackend{
 			Type:          "",
 			Configuration: map[string]interface{}{},
@@ -206,7 +211,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 		},
 	}
 
-	return DeploymentConfig{
+	dc := DeploymentConfig{
 		Config: testBlueprint,
 		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
 			"group1": {
@@ -215,6 +220,8 @@ func getDeploymentConfigForTest() DeploymentConfig {
 			},
 		},
 	}
+	dc.addMetadataToModules()
+	return dc
 }
 
 func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
@@ -239,11 +246,79 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	}
 }
 
+func getDeploymentConfigWithTestModuleEmtpyKind() DeploymentConfig {
+	testModuleSource := filepath.Join(tmpTestDir, "module")
+	testDeploymentGroup := DeploymentGroup{
+		Name: "primary",
+		Modules: []Module{
+			{
+				ID:       "TestModule1",
+				Source:   testModuleSource,
+				Settings: map[string]interface{}{"test_variable": "test_value"},
+			},
+			{
+				ID:       "TestModule2",
+				Kind:     "",
+				Source:   testModuleSource,
+				Settings: map[string]interface{}{"test_variable": "test_value"},
+			},
+		},
+	}
+	return DeploymentConfig{
+		Config: Blueprint{
+			BlueprintName:    "simple",
+			Vars:             map[string]interface{}{"deployment_name": "deployment_name"},
+			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
+		},
+	}
+}
+
 /* Tests */
 // config.go
 func (s *MySuite) TestExpandConfig(c *C) {
 	dc := getBasicDeploymentConfigWithTestModule()
 	dc.ExpandConfig()
+}
+
+func (s *MySuite) TestAddKindToModules(c *C) {
+	/* Test addKindToModules() works when nothing to do */
+	dc := getBasicDeploymentConfigWithTestModule()
+	expected := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
+	dc.addKindToModules()
+	got := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
+	c.Assert(got, Equals, expected)
+
+	/* Test addKindToModules() works when kind is absent*/
+	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	expected = "terraform"
+	dc.addKindToModules()
+	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
+	c.Assert(got, Equals, expected)
+
+	/* Test addKindToModules() works when kind is empty*/
+	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	expected = "terraform"
+	dc.addKindToModules()
+	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule2").Kind
+	c.Assert(got, Equals, expected)
+
+	/* Test addKindToModules() does nothing to packer types*/
+	moduleID := "packerModule"
+	expected = "packer"
+	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
+	dc.addKindToModules()
+	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
+	c.Assert(got, Equals, expected)
+
+	/* Test addKindToModules() does nothing to invalid types*/
+	moduleID = "funnyModule"
+	expected = "funnyType"
+	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
+	dc.addKindToModules()
+	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
+	c.Assert(got, Equals, expected)
 }
 
 func (s *MySuite) TestSetModulesInfo(c *C) {
@@ -639,7 +714,7 @@ func (s *MySuite) TestConvertMapToCty(c *C) {
 	}
 	testcty, err = ConvertMapToCty(testmap)
 	c.Assert(err, NotNil)
-	ctyval, found = testcty[testkey]
+	_, found = testcty[testkey]
 	c.Assert(found, Equals, false)
 }
 

@@ -15,12 +15,8 @@
 package config
 
 import (
-	"bytes"
 	"fmt"
-	"log"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"hpc-toolkit/pkg/modulereader"
 
@@ -29,6 +25,7 @@ import (
 )
 
 const (
+	tooManyInputRegex            = "only [0-9]+ inputs \\[.*\\] should be provided to .*"
 	missingRequiredInputRegex    = "at least one required input was not provided to .*"
 	passedWrongValidatorRegex    = "passed wrong validator to .*"
 	undefinedGlobalVariableRegex = ".* was not defined$"
@@ -49,16 +46,6 @@ func (s *MySuite) TestValidateVars(c *C) {
 	dc.Config.Vars["project_id"] = nil
 	err = dc.validateVars()
 	c.Assert(err, ErrorMatches, "deployment variable project_id was not set")
-
-	// Success: project_id not set
-	delete(dc.Config.Vars, "project_id")
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	err = dc.validateVars()
-	log.SetOutput(os.Stderr)
-	c.Assert(err, IsNil)
-	hasWarning := strings.Contains(buf.String(), "WARNING: No project_id")
-	c.Assert(hasWarning, Equals, true)
 
 	// Fail: labels not a map
 	dc.Config.Vars["labels"] = "a_string"
@@ -151,7 +138,7 @@ func (s *MySuite) TestValidateModule(c *C) {
 
 	// Catch invalid kind
 	testModule.Source = "testSource"
-	testModule.Kind = ""
+	testModule.Kind = "invalidKind"
 	err = validateModule(testModule)
 	expectedErrorStr = fmt.Sprintf(
 		"%s\n%s", errorMessages["wrongKind"], module2String(testModule))
@@ -326,7 +313,7 @@ func (s *MySuite) TestProjectExistsValidator(c *C) {
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
-	projectValidator.Inputs["project_id"] = "((var.project_id))"
+	projectValidator.Inputs["project_id"] = "((var.undefined))"
 	err = dc.testProjectExists(projectValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
@@ -422,4 +409,29 @@ func (s *MySuite) TestZoneInRegionValidator(c *C) {
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
 	// TODO: implement a mock client to test success of test_zone_in_region
+}
+
+func (s *MySuite) TestApisEnabledValidator(c *C) {
+	var err error
+	dc := getDeploymentConfigForTest()
+	emptyValidator := validatorConfig{}
+
+	// test validator fails for config without validator id
+	err = dc.testApisEnabled(emptyValidator)
+	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
+
+	// this validator reads blueprint directly so 0 inputs should succeed
+	apisEnabledValidator := validatorConfig{
+		Validator: testApisEnabledName.String(),
+		Inputs:    map[string]interface{}{},
+	}
+	err = dc.testApisEnabled(apisEnabledValidator)
+	c.Assert(err, IsNil)
+
+	// this validator reads blueprint directly so 1 inputs should fail
+	apisEnabledValidator.Inputs["foo"] = "bar"
+	err = dc.testApisEnabled(apisEnabledValidator)
+	c.Assert(err, ErrorMatches, tooManyInputRegex)
+
+	// TODO: implement a mock client to test success of test_apis_enabled
 }

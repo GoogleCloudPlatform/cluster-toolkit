@@ -31,7 +31,7 @@ locals {
   # compact_placement : true when placement policy is provided and collocation set; false if unset
   compact_placement = try(var.placement_policy.collocation, null) != null
 
-  gpu_attached = contains(["a2"], local.machine_family) || length(var.guest_accelerator) > 0
+  gpu_attached = contains(["a2"], local.machine_family) || var.guest_accelerator != null
 
   # both of these must be false if either compact placement or preemptible/spot instances are used
   # automatic restart is tolerant of GPUs while on host maintenance is not
@@ -113,6 +113,13 @@ resource "google_compute_instance" "compute_vm" {
     source      = google_compute_disk.boot_disk[count.index].self_link
     device_name = google_compute_disk.boot_disk[count.index].name
     auto_delete = true
+  }
+
+  dynamic "scratch_disk" {
+    for_each = range(var.local_ssd_count)
+    content {
+      interface = var.local_ssd_interface
+    }
   }
 
   network_interface {

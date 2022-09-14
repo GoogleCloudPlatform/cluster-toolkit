@@ -34,7 +34,7 @@ deployment_groups:
 
   ## Network
   - id: network
-    source: modules/network/vpc
+    source: modules/network/pre-existing-vpc
     kind: terraform
 
   ## File Systems
@@ -107,7 +107,5 @@ deployment_groups:
   - id: wait
     source: community/modules/scripts/wait-for-startup
     kind: terraform
-    use:
-    - network
     settings:
       instance_name: ((module.manager.name[0]))
