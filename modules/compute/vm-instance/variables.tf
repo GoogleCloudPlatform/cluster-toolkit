@@ -115,7 +115,7 @@ variable "service_account" {
   })
   default = {
     email = null
-    scopes = ["https://www.googleapis.com/auth/devstorage.read_only",
+    scopes = ["https://www.googleapis.com/auth/devstorage.read_write",
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring.write",
       "https://www.googleapis.com/auth/servicecontrol",
