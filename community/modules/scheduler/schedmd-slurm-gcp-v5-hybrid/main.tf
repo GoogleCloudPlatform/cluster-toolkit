@@ -22,13 +22,19 @@ locals {
   install_dir         = var.install_dir != null ? var.install_dir : abspath(var.output_dir)
   install_dir_pattern = replace(local.install_dir, ".", "\\.")
   install_path_cmd    = "sed -i -E 's|Program=/.*/(resume\\|suspend).py|Program=${local.install_dir_pattern}/\\1\\.py|g' cloud.conf"
+
+  # Since deployment name may be used to create a cluster name, we remove any invalid character from the beginning
+  # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
+  tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 10)
+  slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
+
 }
 
 module "slurm_controller_instance" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=v5.1.0"
 
   project_id                   = var.project_id
-  slurm_cluster_name           = var.slurm_cluster_name
+  slurm_cluster_name           = local.slurm_cluster_name
   enable_devel                 = var.enable_devel
   enable_cleanup_compute       = var.enable_cleanup_compute
   enable_cleanup_subscriptions = var.enable_cleanup_subscriptions
