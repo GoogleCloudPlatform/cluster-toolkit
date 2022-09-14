@@ -112,7 +112,7 @@ resource "google_compute_instance" "compute_vm" {
   boot_disk {
     source      = google_compute_disk.boot_disk[count.index].self_link
     device_name = google_compute_disk.boot_disk[count.index].name
-    auto_delete = true
+    auto_delete = var.auto_delete_boot_disk
   }
 
   dynamic "scratch_disk" {
