@@ -21,23 +21,22 @@ vars:
   deployment_name: hybrid-controller
   region: us-central1
   zone: us-central1-c
-  slurm_cluster_name: hybrid
   on_prem_controller_host_name: static-controller.c.PROJECT_NAME.internal ## <instance name>.c.<project name>.internal
   on_prem_network_storage_ip: storage-ip-placeholder ## internal ip address for nfs to be mounted
 
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
     kind: terraform
-    id: network1
     settings:
       network_name: cloud-vpc-network
       subnetwork_name: primary-subnet
 
-  - source: modules/file-system/pre-existing-network-storage
+  - id: pre-existing-storage
+    source: modules/file-system/pre-existing-network-storage
     kind: terraform
-    id: pre-existing-storage
     outputs:
     - network_storage
     settings:
@@ -46,9 +45,9 @@ deployment_groups:
       local_mount: /home
       fs_type: nfs
 
-  - source: ./community/modules/compute/schedmd-slurm-gcp-v5-partition
+  - id: compute-partition
+    source: ./community/modules/compute/schedmd-slurm-gcp-v5-partition
     kind: terraform
-    id: compute-partition
     use: [network1]
     settings:
       partition_name: cloud
@@ -58,9 +57,9 @@ deployment_groups:
       partition_conf:
         Default: NO
 
-  - source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
+  - id: slurm-controller
+    source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
     kind: terraform
-    id: slurm-controller
     use: [compute-partition, pre-existing-storage]
     settings:
       output_dir: ./hybrid
