@@ -24,15 +24,46 @@ output "ssh_console" {
   value       = module.ddn_exascaler.ssh_console
 }
 
+output "client_config" {
+  description = "Script that will install DDN EXAScaler lustre client. The machine running this script must be on the same network & subnet as the EXAScaler."
+  value       = module.ddn_exascaler.client_config
+}
+
+output "install_ddn_lustre_client_runner" {
+  description = "Runner that encapsulates the `client_config` output on this module."
+  value = {
+    "type"        = "shell"
+    "content"     = module.ddn_exascaler.client_config
+    "destination" = "install_ddn_lustre_client.sh"
+  }
+}
+
+locals {
+  split_mount_cmd               = split(" ", module.ddn_exascaler.mount_command)
+  split_mount_cmd_wo_mountpoint = slice(local.split_mount_cmd, 0, length(local.split_mount_cmd) - 1)
+  mount_cmd                     = "${join(" ", local.split_mount_cmd_wo_mountpoint)} ${var.local_mount}"
+  mount_cmd_w_mkdir             = "mkdir -p ${var.local_mount} && ${local.mount_cmd}"
+}
+
 output "mount_command" {
-  description = "Command to mount the file system."
-  value       = module.ddn_exascaler.mount_command
+  description = "Command to mount the file system. `client_config` script must be run first."
+  value       = local.mount_cmd_w_mkdir
+}
+
+output "mount_runner" {
+  description = "Runner to mount the DDN EXAScaler Lustre file system"
+  value = {
+    "type"        = "shell"
+    "content"     = local.mount_cmd_w_mkdir
+    "destination" = "mount-ddn-lustre.sh"
+  }
 }
 
 output "http_console" {
   description = "HTTP address to access the system web console."
   value       = module.ddn_exascaler.http_console
 }
+
 
 output "network_storage" {
   description = "Describes a EXAScaler system to be mounted by other systems."
