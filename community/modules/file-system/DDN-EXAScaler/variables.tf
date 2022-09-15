@@ -189,25 +189,27 @@ variable "boot" {
   type = object({
     disk_type   = string
     auto_delete = bool
+    script_url  = string
   })
   default = {
     disk_type   = "pd-standard"
     auto_delete = true
+    script_url  = null
   }
 }
 
 # Source image properties
 # project: project name
-# name: image name
+# family: image family name
 variable "image" {
   description = "Source image properties"
   type = object({
     project = string
-    name    = string
+    family  = string
   })
   default = {
     project = "ddn-public"
-    name    = "exascaler-cloud-v523-centos7"
+    family  = "exascaler-cloud-6-1-centos"
   }
 }
 
