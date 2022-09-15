@@ -58,7 +58,9 @@ func IsEmbeddedPath(source string) bool {
 
 // IsGitHubPath checks if a source path points to GitHub
 func IsGitHubPath(source string) bool {
-	return strings.HasPrefix(source, "github.com") || strings.HasPrefix(source, "git@github.com")
+	return strings.HasPrefix(source, "github.com") ||
+		strings.HasPrefix(source, "git@github.com") ||
+		strings.HasPrefix(source, "git::")
 }
 
 // Factory returns a SourceReader of module path
