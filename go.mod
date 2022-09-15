@@ -3,7 +3,7 @@ module hpc-toolkit
 go 1.16
 
 require (
-	cloud.google.com/go/compute v1.9.0
+	cloud.google.com/go/compute v1.10.0
 	github.com/hashicorp/go-getter v1.6.2
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.14.0
@@ -16,9 +16,7 @@ require (
 	github.com/spf13/afero v1.9.2
 	github.com/spf13/cobra v1.5.0
 	github.com/zclconf/go-cty v1.10.0
-	golang.org/x/net v0.0.0-20220722155237-a158d28d115b // indirect
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
-	google.golang.org/genproto v0.0.0-20220804142021-4e6b2dfa6612
+	google.golang.org/genproto v0.0.0-20220915135415-7fd63a7952de
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
 	gopkg.in/yaml.v3 v3.0.1
 )
