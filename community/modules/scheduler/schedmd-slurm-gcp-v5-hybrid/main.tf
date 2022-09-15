@@ -21,7 +21,7 @@ locals {
   }]
   install_dir         = var.install_dir != null ? var.install_dir : abspath(var.output_dir)
   install_dir_pattern = replace(local.install_dir, ".", "\\.")
-  install_path_cmd    = "sed -i -E 's|Program=/.*/(resume\\|suspend).py|Program=${local.install_dir_pattern}/\\1\\.py|g' cloud.conf"
+  install_path_cmd    = "sed -i -E 's|(Program\\|logSlurmctld)=/.*/(resume\\|suspend).py|\\1=${local.install_dir_pattern}/\\2\\.py|g' cloud.conf"
 
   # Since deployment name may be used to create a cluster name, we remove any invalid character from the beginning
   # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
