@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	cloud.google.com/go/compute v1.10.0
+	cloud.google.com/go/storage v1.26.0 // indirect
 	github.com/hashicorp/go-getter v1.6.2
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.14.0
