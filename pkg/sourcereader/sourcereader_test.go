@@ -127,6 +127,10 @@ func (s *MySuite) TestIsGitHubRepository(c *C) {
 	// True, other
 	ret = IsGitHubPath("github.com/modules")
 	c.Assert(ret, Equals, true)
+
+	// True, genetic git repository
+	ret = IsGitHubPath("git::https://gitlab.com/modules")
+	c.Assert(ret, Equals, true)
 }
 
 func (s *MySuite) TestFactory(c *C) {
@@ -141,6 +145,10 @@ func (s *MySuite) TestFactory(c *C) {
 	// GitHub modules
 	ghSrcString := Factory("github.com/modules")
 	c.Assert(reflect.TypeOf(ghSrcString), Equals, reflect.TypeOf(GitHubSourceReader{}))
+
+	// Git modules
+	gitSrcString := Factory("git::https://gitlab.com/modules")
+	c.Assert(reflect.TypeOf(gitSrcString), Equals, reflect.TypeOf(GitHubSourceReader{}))
 }
 
 func (s *MySuite) TestCopyFromPath(c *C) {
