@@ -152,7 +152,9 @@ echo "$PREFIX Populating defined buildcaches"
   %{endif ~}
 %{endfor ~}
 
-echo "source ${INSTALL_DIR}/share/spack/setup-env.sh" >> /etc/profile.d/spack.sh
-chmod a+rx /etc/profile.d/spack.sh
+if [ ! -f /etc/profile.d/spack.sh ]; then
+        echo "source ${INSTALL_DIR}/share/spack/setup-env.sh" > /etc/profile.d/spack.sh
+        chmod a+rx /etc/profile.d/spack.sh
+fi
 
 echo "$PREFIX Setup complete..."
