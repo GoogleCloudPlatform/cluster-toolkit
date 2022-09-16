@@ -201,15 +201,22 @@ variable "boot" {
 # Source image properties
 # project: project name
 # family: image family name
+# name: !!DEPRECATED!! - image name
 variable "image" {
   description = "Source image properties"
-  type = object({
-    project = string
-    family  = string
-  })
+  type        = any
+  # Ommiting type checking so validation can provide more useful error message
+  # type = object({
+  #   project = string
+  #   family  = string
+  # })
   default = {
     project = "ddn-public"
     family  = "exascaler-cloud-6-1-centos"
+  }
+  validation {
+    condition     = lookup(var.image, "name", null) == null && lookup(var.image, "project", null) != null && lookup(var.image, "family", null) != null
+    error_message = "Use image.family & image.project to specify the image. Field image.name is deprecated. See EXAScaler documentation for input options:(https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp#boot-image-options)."
   }
 }
 
