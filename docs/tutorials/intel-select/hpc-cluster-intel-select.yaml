@@ -27,18 +27,15 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
 
   - id: startup-controller
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -50,7 +47,6 @@ deployment_groups:
 
   - id: startup-compute
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -63,7 +59,6 @@ deployment_groups:
   # This debug_partition will work out of the box without requesting additional GCP quota.
   - id: debug_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -77,7 +72,6 @@ deployment_groups:
   # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -87,7 +81,6 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - network1
     - homefs
@@ -101,7 +94,6 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use:
     - network1
     - homefs

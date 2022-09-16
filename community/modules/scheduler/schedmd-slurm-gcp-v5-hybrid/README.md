@@ -64,7 +64,6 @@ The hybrid module can be added to a blueprint as follows:
 ```yaml
 - id: slurm-controller
   source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
-  kind: terraform
   use:
   - debug-partition
   - compute-partition

@@ -8,7 +8,6 @@ This module creates one or more
 ```yaml
 - id: compute
   source: modules/compute/vm-instance
-  kind: terraform
   use: [network1]
   settings:
     instance_count: 8

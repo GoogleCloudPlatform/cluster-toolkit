@@ -20,7 +20,6 @@ The following code snippet creates a partition module with:
 ```yaml
 - id: compute_partition
   source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-  kind: terraform
   use:
   - network1
   - homefs

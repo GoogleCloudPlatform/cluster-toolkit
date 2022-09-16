@@ -17,7 +17,6 @@ job unless one is provided. See the
 ```yaml
 - id: batch-job
   source: community/modules/scheduler/cloud-batch-job
-  kind: terraform
   use: [network1]
   settings:
     runnable: "echo 'hello world'"
@@ -53,22 +52,18 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: appfs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
 
   - id: batch-startup-script
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners: ...
           
   - id: batch-compute-template
     source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
-    kind: terraform
     use: [batch-startup-script]
     settings:
       # Boiler plate to work with Cloud Foundation Toolkit
@@ -84,7 +79,6 @@ deployment_groups:
 
   - id: batch-job
     source: ./community/modules/scheduler/cloud-batch-job
-    kind: terraform
     settings:
       instance_template: $(batch-compute-template.self_link)
     outputs: [instructions]

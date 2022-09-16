@@ -27,11 +27,9 @@ deployment_groups:
   modules:
   - id: network1
     source: ./modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: appsfs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       name: appsfs
@@ -39,7 +37,6 @@ deployment_groups:
 
   - id: nfs
     source: community/modules/file-system/nfs-server
-    kind: terraform
     use: [network1]
     settings:
       image: rocky-linux-cloud/rocky-linux-8
@@ -47,7 +44,6 @@ deployment_groups:
 
   - id: spack
     source: ./community//modules/scripts/spack-install
-    kind: terraform
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
@@ -60,7 +56,6 @@ deployment_groups:
 
   - id: startup
     source: ./modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -94,7 +89,6 @@ deployment_groups:
 
   - id: instance
     source: ./modules/compute/vm-instance
-    kind: terraform
     use: [network1, startup, nfs, appsfs]
     settings:
       machine_type: e2-standard-4

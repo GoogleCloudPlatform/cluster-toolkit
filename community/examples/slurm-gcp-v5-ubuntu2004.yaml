@@ -33,18 +33,15 @@ deployment_groups:
   # Example - ./resources/network/vpc
   - id: network1
     source: modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -57,7 +54,6 @@ deployment_groups:
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -67,7 +63,6 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    kind: terraform
     use:
     - network1
     - debug_partition
@@ -76,7 +71,6 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    kind: terraform
     use:
     - network1
     - slurm_controller

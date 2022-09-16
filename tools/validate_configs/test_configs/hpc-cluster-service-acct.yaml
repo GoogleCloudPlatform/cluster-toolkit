@@ -27,11 +27,9 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/pre-existing-network-storage
-    kind: terraform
     settings:
       server_ip: '$controller'
       remote_mount: /home
@@ -40,7 +38,6 @@ deployment_groups:
 
   - id: service_acct
     source: ./community/modules/project/service-account
-    kind: terraform
     settings:
       project_id: $(vars.project_id)
       names:
@@ -51,7 +48,6 @@ deployment_groups:
 
   - id: compute-partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use: [network1]
     settings:
       partition_name: compute
@@ -60,7 +56,6 @@ deployment_groups:
 
   - id: slurm
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use: [network1]
     settings:
       network_storage:
