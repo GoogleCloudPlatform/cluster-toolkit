@@ -30,9 +30,11 @@ deployment_groups:
   # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/pre-existing-vpc
+    kind: terraform
 
   - id: n1-2-threads
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -42,6 +44,7 @@ deployment_groups:
 
   - id: n1-1-thread
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -51,6 +54,7 @@ deployment_groups:
 
   - id: n1-0-threads
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -60,6 +64,7 @@ deployment_groups:
 
   - id: n1-null-threads
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -69,6 +74,7 @@ deployment_groups:
 
   - id: n2-2-threads
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -78,6 +84,7 @@ deployment_groups:
 
   - id: n2-1-thread
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -87,6 +94,7 @@ deployment_groups:
 
   - id: c2-2-threads
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -96,6 +104,7 @@ deployment_groups:
 
   - id: c2-1-thread
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -105,6 +114,7 @@ deployment_groups:
 
   - id: e2-medium-0-thread
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
@@ -114,6 +124,7 @@ deployment_groups:
 
   - id: e2-medium-null-thread
     source: ./modules/compute/vm-instance
+    kind: terraform
     use:
     - network1
     settings:
