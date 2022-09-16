@@ -1,0 +1,2 @@
+addict~=2.0
+google-cloud-pubsub~=2.0
