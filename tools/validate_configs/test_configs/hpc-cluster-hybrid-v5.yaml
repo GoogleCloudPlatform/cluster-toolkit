@@ -21,21 +21,20 @@ vars:
   deployment_name: hybrid-controller
   region: us-central1
   zone: us-central1-c
-  slurm_cluster_name: hybrid
   on_prem_controller_host_name: static-controller.c.PROJECT_NAME.internal ## <instance name>.c.<project name>.internal
   on_prem_network_storage_ip: storage-ip-placeholder ## internal ip address for nfs to be mounted
 
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
-    id: network1
+  - id: network1
+    source: modules/network/pre-existing-vpc
     settings:
       network_name: cloud-vpc-network
       subnetwork_name: primary-subnet
 
-  - source: modules/file-system/pre-existing-network-storage
-    id: pre-existing-storage
+  - id: pre-existing-storage
+    source: modules/file-system/pre-existing-network-storage
     outputs:
     - network_storage
     settings:
@@ -44,20 +43,28 @@ deployment_groups:
       local_mount: /home
       fs_type: nfs
 
-  - source: ./community/modules/compute/schedmd-slurm-gcp-v5-partition
-    id: compute-partition
+  - id: debug-partition
+    source: ./community/modules/compute/schedmd-slurm-gcp-v5-partition
     use: [network1]
     settings:
-      partition_name: cloud
+      partition_name: debug
       node_count_dynamic_max: 10
       exclusive: false
       machine_type: n2-standard-2
       partition_conf:
         Default: NO
 
-  - source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
-    id: slurm-controller
-    use: [compute-partition, pre-existing-storage]
+  - id: compute-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    settings:
+      partition_name: compute
+      node_count_dynamic_max: 20
+
+  - id: slurm-controller
+    source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
+    use: [debug-partition, compute-partition, pre-existing-storage]
     settings:
       output_dir: ./hybrid
       slurm_bin_dir: /usr/local/bin
