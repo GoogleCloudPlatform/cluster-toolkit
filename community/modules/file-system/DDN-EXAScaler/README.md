@@ -61,7 +61,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_ddn_exascaler"></a> [ddn\_exascaler](#module\_ddn\_exascaler) | github.com/DDNStorage/exascaler-cloud-terraform//gcp | 3eec46e |
+| <a name="module_ddn_exascaler"></a> [ddn\_exascaler](#module\_ddn\_exascaler) | github.com/DDNStorage/exascaler-cloud-terraform//gcp | 78deadb |
 
 ## Resources
 
@@ -71,11 +71,11 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_boot"></a> [boot](#input\_boot) | Boot disk properties | <pre>object({<br>    disk_type   = string<br>    auto_delete = bool<br>  })</pre> | <pre>{<br>  "auto_delete": true,<br>  "disk_type": "pd-standard"<br>}</pre> | no |
+| <a name="input_boot"></a> [boot](#input\_boot) | Boot disk properties | <pre>object({<br>    disk_type   = string<br>    auto_delete = bool<br>    script_url  = string<br>  })</pre> | <pre>{<br>  "auto_delete": true,<br>  "disk_type": "pd-standard",<br>  "script_url": null<br>}</pre> | no |
 | <a name="input_cls"></a> [cls](#input\_cls) | Compute client properties | <pre>object({<br>    node_type  = string<br>    node_cpu   = string<br>    nic_type   = string<br>    node_count = number<br>    public_ip  = bool<br>  })</pre> | <pre>{<br>  "nic_type": "GVNIC",<br>  "node_count": 0,<br>  "node_cpu": "Intel Cascade Lake",<br>  "node_type": "n2-standard-2",<br>  "public_ip": true<br>}</pre> | no |
 | <a name="input_clt"></a> [clt](#input\_clt) | Compute client target properties | <pre>object({<br>    disk_bus   = string<br>    disk_type  = string<br>    disk_size  = number<br>    disk_count = number<br>  })</pre> | <pre>{<br>  "disk_bus": "SCSI",<br>  "disk_count": 0,<br>  "disk_size": 256,<br>  "disk_type": "pd-standard"<br>}</pre> | no |
 | <a name="input_fsname"></a> [fsname](#input\_fsname) | EXAScaler filesystem name, only alphanumeric characters are allowed, and the value must be 1-8 characters long | `string` | `"exacloud"` | no |
-| <a name="input_image"></a> [image](#input\_image) | Source image properties | <pre>object({<br>    project = string<br>    name    = string<br>  })</pre> | <pre>{<br>  "name": "exascaler-cloud-v523-centos7",<br>  "project": "ddn-public"<br>}</pre> | no |
+| <a name="input_image"></a> [image](#input\_image) | Source image properties | <pre>object({<br>    project = string<br>    family  = string<br>  })</pre> | <pre>{<br>  "family": "exascaler-cloud-6-1-centos",<br>  "project": "ddn-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to EXAScaler Cloud deployment. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint (at the client instances) for this EXAScaler system | `string` | `"/shared"` | no |
 | <a name="input_mds"></a> [mds](#input\_mds) | Metadata server properties | <pre>object({<br>    node_type  = string<br>    node_cpu   = string<br>    nic_type   = string<br>    node_count = number<br>    public_ip  = bool<br>  })</pre> | <pre>{<br>  "nic_type": "GVNIC",<br>  "node_count": 1,<br>  "node_cpu": "Intel Cascade Lake",<br>  "node_type": "n2-standard-32",<br>  "public_ip": true<br>}</pre> | no |
