@@ -139,10 +139,10 @@ No resources.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_client_config"></a> [client\_config](#output\_client\_config) | Script that will install DDN EXAScaler lustre client. The machine running this script must be on the same network & subnet as the EXAScaler. |
+| <a name="output_client_config_script"></a> [client\_config\_script](#output\_client\_config\_script) | Script that will install DDN EXAScaler lustre client. The machine running this script must be on the same network & subnet as the EXAScaler. |
 | <a name="output_http_console"></a> [http\_console](#output\_http\_console) | HTTP address to access the system web console. |
-| <a name="output_install_ddn_lustre_client_runner"></a> [install\_ddn\_lustre\_client\_runner](#output\_install\_ddn\_lustre\_client\_runner) | Runner that encapsulates the `client_config` output on this module. |
-| <a name="output_mount_command"></a> [mount\_command](#output\_mount\_command) | Command to mount the file system. `client_config` script must be run first. |
+| <a name="output_install_ddn_lustre_client_runner"></a> [install\_ddn\_lustre\_client\_runner](#output\_install\_ddn\_lustre\_client\_runner) | Runner that encapsulates the `client_config_script` output on this module. |
+| <a name="output_mount_command"></a> [mount\_command](#output\_mount\_command) | Command to mount the file system. `client_config_script` must be run first. |
 | <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the DDN EXAScaler Lustre file system |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a EXAScaler system to be mounted by other systems. |
 | <a name="output_private_addresses"></a> [private\_addresses](#output\_private\_addresses) | Private IP addresses for all instances. |

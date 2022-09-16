@@ -24,13 +24,13 @@ output "ssh_console" {
   value       = module.ddn_exascaler.ssh_console
 }
 
-output "client_config" {
+output "client_config_script" {
   description = "Script that will install DDN EXAScaler lustre client. The machine running this script must be on the same network & subnet as the EXAScaler."
   value       = module.ddn_exascaler.client_config
 }
 
 output "install_ddn_lustre_client_runner" {
-  description = "Runner that encapsulates the `client_config` output on this module."
+  description = "Runner that encapsulates the `client_config_script` output on this module."
   value = {
     "type"        = "shell"
     "content"     = module.ddn_exascaler.client_config
@@ -46,7 +46,7 @@ locals {
 }
 
 output "mount_command" {
-  description = "Command to mount the file system. `client_config` script must be run first."
+  description = "Command to mount the file system. `client_config_script` must be run first."
   value       = local.mount_cmd_w_mkdir
 }
 
@@ -63,7 +63,6 @@ output "http_console" {
   description = "HTTP address to access the system web console."
   value       = module.ddn_exascaler.http_console
 }
-
 
 output "network_storage" {
   description = "Describes a EXAScaler system to be mounted by other systems."
