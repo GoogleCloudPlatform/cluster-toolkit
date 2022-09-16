@@ -41,15 +41,18 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  # Explicitly picking the local version of the module
   - id: scratchfs
     source: community/modules/file-system/DDN-EXAScaler
-    kind: terraform
+    use: [network1]
     settings:
       local_mount: /scratch
-      network_self_link: $(network1.network_self_link)
-      subnetwork_self_link: $(network1.subnetwork_self_link)
-      subnetwork_address: $(network1.subnetwork_address)
+
+  - id: mount-exascaler
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(scratchfs.install_ddn_lustre_client_runner)
+      - $(scratchfs.mount_runner)
 
   # Create a separate workstation to catch regressions in vm-instance
   - id: workstation
@@ -58,10 +61,15 @@ deployment_groups:
     use:
     - network1
     - homefs
-    - scratchfs
+    - mount-exascaler
     settings:
       name_prefix: test-workstation
       machine_type: c2-standard-4
+
+  - id: wait0
+    source: ./community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.workstation.name[0]))
 
   - id: compute_partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
