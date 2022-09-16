@@ -59,5 +59,7 @@ No resources.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Runner that performs client installation needed to use file system. |
+| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner that mounts the file system. |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a remote network storage to be mounted by fs-tab. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
