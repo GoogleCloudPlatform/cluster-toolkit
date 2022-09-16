@@ -24,7 +24,7 @@ if [ ! -d ${INSTALL_DIR} ]; then
   chmod a+rwx ${INSTALL_DIR};
   chmod a+s ${INSTALL_DIR};
   cd ${INSTALL_DIR};
-  git clone ${SPACK_URL} .
+  git clone --no-checkout ${SPACK_URL} .
   } &>> ${LOG_FILE}
   echo "$PREFIX Checking out ${SPACK_REF}..."
   git checkout ${SPACK_REF} >> ${LOG_FILE} 2>&1
