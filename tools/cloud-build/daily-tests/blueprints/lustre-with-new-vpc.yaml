@@ -60,13 +60,43 @@ deployment_groups:
     - homefs
     - mount-exascaler
     settings:
-      name_prefix: test-workstation
+      name_prefix: test-workstation1
       machine_type: c2-standard-4
 
   - id: wait0
     source: ./community/modules/scripts/wait-for-startup
     settings:
       instance_name: ((module.workstation.name[0]))
+
+  # test installing luster from pre-existing-network-storage
+  - id: pre-fs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: ((module.scratchfs.network_storage.server_ip))
+      remote_mount: ((module.scratchfs.network_storage.remote_mount))
+      local_mount: ((module.scratchfs.network_storage.local_mount))
+      fs_type: ((module.scratchfs.network_storage.fs_type))
+
+  - id: mount-exascaler-from-pre-existing
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(pre-fs.client_install_runner)
+      - $(pre-fs.mount_runner)
+
+  - id: install-luster-from-pre-existing
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - mount-exascaler-from-pre-existing
+    settings:
+      name_prefix: test-workstation2
+      machine_type: n2-standard-4
+
+  - id: wait1
+    source: ./community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.install-luster-from-pre-existing.name[0]))
 
   - id: compute_partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
