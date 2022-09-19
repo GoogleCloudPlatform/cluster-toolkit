@@ -34,16 +34,20 @@ deployment_groups:
     id: network0
     settings:
       network_name: static-cluster-network
-      subnetwork_name: primary-subnet
       network_address_range: 10.0.0.0/16
-      subnetwork_size: 0
+      subnetworks:
+      - subnet_name: primary-subnet
+        subnet_region: $(vars.region)
+        new_bits: 8
 
   - source: modules/network/vpc
     kind: terraform
     id: network1
     settings:
       network_name: compute-vpc-network
-      subnetwork_name: primary-subnet
       project_id: $(vars.project_id_compute)
       network_address_range: 10.1.0.0/16
-      subnetwork_size: 0
+      subnetworks:
+      - subnet_name: primary-subnet
+        subnet_region: $(vars.region)
+        new_bits: 8

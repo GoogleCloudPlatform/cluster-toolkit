@@ -31,7 +31,7 @@ for the purposes of this all-GCP demo. The static cluster will be deployed with
 slurm-gcp and optionally have a set of statically created VMs populating it's
 local partition.
 
-**hybrid deployment:** A deployment using the [schedmd-slurm-gcp-v5-hybrid]
+**hybrid deployment:** A deployment using the [schedmd-slurm-gcp-v5-hybrid][hybridmodule]
 module. The deployment itself includes the hybrid configuration directory as
 well as metadata in the cloud bursting project.
 
@@ -93,8 +93,13 @@ debian/ubuntu based images. Instructions for viewing these logs can be found in
 ### Connectivity Issues
 To verify the network and DNS peering setup was successful, you can create a VM
 in each project attached to the networks created in these instructions. You can
-run ping `<VM NAME>.c.<OTHER PROJECT ID>.internal` to verify the settings are
-correct. This should succeed in both directions.
+run ping to verify the settings are correct:
+
+```shell
+<VM NAME>.c.<OTHER PROJECT ID>.internal
+```
+
+This should succeed in both directions.
 
 If the ping test doesn’t work, the DNS may not be configured correctly, or the
 networks may not be able to peer correctly. If it’s the former, you should be
@@ -104,7 +109,6 @@ or network peering setting are likely not correct.
 ## Instructions
 
 ### Before you begin
-* Build ghpc
 
 #### Select or Create 2 GCP Projects
 
@@ -146,7 +150,7 @@ command to install the pip packages outlined in
 [requirements.txt](./requirements.txt):
 
 ```shell
-pip install -r requirements.txt
+pip install -r docs/hybrid-slurm-cluster/requirements.txt
 ```
 
 #### Build ghpc
@@ -169,7 +173,7 @@ blueprint will do the following:
 Create a deployment directory for the networks using `ghpc`:
 
 ```shell
-ghpc create blueprints/create-networks.yaml --vars project_id="<<Project_A_ID>>",project_id_compute="<<Project_B_ID>>"
+ghpc create docs/hybrid-slurm-cluster/blueprints/create-networks.yaml --vars project_id="<<Project_A_ID>>",project_id_compute="<<Project_B_ID>>"
 ```
 
 If successful, this command will provide 3 terraform operations that can be
@@ -299,7 +303,7 @@ First, use the HPC Toolkit to create the deployment directory, replacing
 "<<Project A ID>>" with the ID of your project A:
 
 ```shell
-ghpc create blueprints/static-cluster.yaml --vars project_id="<<Project A ID>>"
+ghpc create docs/hybrid-slurm-cluster/blueprints/static-cluster.yaml --vars project_id="<<Project A ID>>"
 ```
 
 If successful, this command will provide 3 terraform operations that can be
@@ -347,7 +351,7 @@ If the deployment vars have been added directly to the blueprint, the following
 command will create the deployment directory:
 
 ```shell
-ghpc create blueprints/hybrid-configuration.yaml
+ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml
 ```
 
 To create the deployment directory with deployment variables passed through the
@@ -355,7 +359,7 @@ command line, run the following command with the updated values of
 `<<Project_B>>`, `<<Hostname>>` and `<<Homefs_IP>>` instead:
 
 ```shell
-ghpc create blueprints/hybrid-configuration.yaml --vars project_id="<<Project_B>>",static_controller_hostname="<<Hostname>>.c.<<Project_A>>.internal"
+ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml --vars project_id="<<Project_B>>",static_controller_hostname="<<Hostname>>.c.<<Project_A>>.internal"
 ```
 
 If successful, this command will provide 3 terraform operations that can be
