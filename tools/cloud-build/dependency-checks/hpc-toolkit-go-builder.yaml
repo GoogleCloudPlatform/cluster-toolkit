@@ -14,7 +14,7 @@
 
 ---
 
-timeout: 1800s
+timeout: 3600s
 steps:
 - name: golang:bullseye
   entrypoint: /bin/bash
