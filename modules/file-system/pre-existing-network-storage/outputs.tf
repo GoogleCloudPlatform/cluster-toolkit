@@ -61,18 +61,18 @@ locals {
 
 output "client_install_runner" {
   description = "Runner that performs client installation needed to use file system."
-  value = lookup(local.install_scripts, var.fs_type, null) == null ? null : {
+  value = {
     "type"        = "shell"
-    "content"     = lookup(local.install_scripts, var.fs_type, "")
+    "content"     = lookup(local.install_scripts, var.fs_type, "echo 'skipping: client_install_runner not yet supported for ${var.fs_type}'")
     "destination" = "install_filesystem_client${replace(var.local_mount, "/", "_")}.sh"
   }
 }
 
 output "mount_runner" {
   description = "Runner that mounts the file system."
-  value = lookup(local.mount_commands, var.fs_type, null) == null ? null : {
+  value = {
     "type"        = "shell"
-    "content"     = local.mount_script
+    "content"     = (lookup(local.mount_commands, var.fs_type, null) == null ? "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'" : local.mount_script)
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
   }
 }
