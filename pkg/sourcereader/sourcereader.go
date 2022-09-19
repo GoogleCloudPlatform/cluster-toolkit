@@ -41,7 +41,7 @@ type SourceReader interface {
 var readers = map[int]SourceReader{
 	local:    LocalSourceReader{},
 	embedded: EmbeddedSourceReader{},
-	github:   GitHubSourceReader{},
+	github:   GitSourceReader{},
 }
 
 // IsLocalPath checks if a source path is a local FS path
@@ -56,8 +56,8 @@ func IsEmbeddedPath(source string) bool {
 	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
 }
 
-// IsGitHubPath checks if a source path points to GitHub
-func IsGitHubPath(source string) bool {
+// IsGitPath checks if a source path points to GitHub or has the git:: prefix
+func IsGitPath(source string) bool {
 	return strings.HasPrefix(source, "github.com") ||
 		strings.HasPrefix(source, "git@github.com") ||
 		strings.HasPrefix(source, "git::")
@@ -75,7 +75,7 @@ func Factory(modPath string) SourceReader {
 		return readers[local]
 	case IsEmbeddedPath(modPath):
 		return readers[embedded]
-	case IsGitHubPath(modPath):
+	case IsGitPath(modPath):
 		return readers[github]
 	default:
 		log.Fatalf(

@@ -115,7 +115,7 @@ func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFla
 func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) {
 	for iGrp, grp := range *deploymentGroups {
 		for iMod, module := range grp.Modules {
-			if sourcereader.IsGitHubPath(module.Source) {
+			if sourcereader.IsGitPath(module.Source) {
 				continue
 			}
 

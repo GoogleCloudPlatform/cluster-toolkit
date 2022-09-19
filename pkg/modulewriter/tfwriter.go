@@ -236,7 +236,7 @@ func writeMain(
 
 		// Add source attribute
 		var moduleSource cty.Value
-		if sourcereader.IsGitHubPath(mod.Source) {
+		if sourcereader.IsGitPath(mod.Source) {
 			moduleSource = cty.StringVal(mod.Source)
 		} else {
 			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", mod.ModuleName))
