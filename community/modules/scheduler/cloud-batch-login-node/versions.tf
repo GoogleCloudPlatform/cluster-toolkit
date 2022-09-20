@@ -22,7 +22,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:cloud-batch-login-node/v1.4.1"
+    module_name = "blueprints/terraform/hpc-toolkit:cloud-batch-login-node/v1.5.0"
   }
 
   required_version = ">= 0.14.0"

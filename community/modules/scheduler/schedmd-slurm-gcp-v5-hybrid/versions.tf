@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2021 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,21 +16,10 @@
 
 terraform {
   required_providers {
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.4"
-    }
-    random = {
-      source  = "hashicorp/random"
+    null = {
+      source  = "hashicorp/null"
       version = "~> 3.0"
     }
   }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.5.0"
-  }
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.5.0"
-  }
-
   required_version = ">= 0.14.0"
 }

@@ -239,7 +239,7 @@ The solution here is to [request more of the specified quota](#gcp-quotas),
 
 [partition-machine-type]: community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md#input_machine_type
 
-#### Placement Groups
+#### Placement Groups (Slurm)
 
 By default, placement groups (also called affinity groups) are enabled on the
 compute partition. This places VMs close to each other to achieve lower network
@@ -259,6 +259,14 @@ One way to resolve this is to set [enable_placement][partition-enable-placement]
 to `false` on the partition in question.
 
 [partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
+
+#### VMs Get Stuck in Status Staging When Using Placement Groups With vm-instance
+
+If VMs get stuck in `status: staging` when using the `vm-instance` module with
+placement enabled, it may be because you need to allow terraform to make more
+concurrent requests. See
+[this note](modules/compute/vm-instance/README.md#placement) in the vm-instance
+README.
 
 #### Insufficient Service Account Permissions
 
@@ -477,9 +485,11 @@ Follow these steps to install and setup pre-commit in your cloned repository:
 
    > **_NOTE:_** The version of TFLint must be compatible with the Google plugin
    > version identified in [tflint.hcl](.tflint.hcl). Versions of the plugin
-   > `>=0.16.0` should use `tflint>=0.35.0` and versions of the plugin
-   > `<=0.15.0` should preferably use `tflint==0.34.1`. These versions are
-   > readily available via GitHub or package managers.
+   > `>=0.20.0` should use `tflint>=0.40.0`. These versions are readily
+   > available via GitHub or package managers. Please review the [TFLint Ruleset
+   > for Google Release Notes][tflint-google] for up-to-date requirements.
+
+[tflint-google]: https://github.com/terraform-linters/tflint-ruleset-google/releases
 
 1. Install ShellCheck using the instructions from
    [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)

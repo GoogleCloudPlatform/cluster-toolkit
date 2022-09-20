@@ -108,6 +108,7 @@ const (
 	testRegionExistsName
 	testZoneExistsName
 	testZoneInRegionName
+	testApisEnabledName
 )
 
 // this enum will be used to control how fatal validator failures will be
@@ -148,6 +149,8 @@ func (v validatorName) String() string {
 		return "test_zone_exists"
 	case testZoneInRegionName:
 		return "test_zone_in_region"
+	case testApisEnabledName:
+		return "test_apis_enabled"
 	default:
 		return "unknown_validator"
 	}
@@ -180,6 +183,7 @@ type Module struct {
 	WrapSettingsWith map[string][]string
 	Outputs          []string `yaml:"outputs,omitempty"`
 	Settings         map[string]interface{}
+	RequiredApis     map[string][]string `yaml:"required_apis"`
 }
 
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
@@ -216,6 +220,7 @@ type DeploymentConfig struct {
 
 // ExpandConfig expands the yaml config in place
 func (dc *DeploymentConfig) ExpandConfig() {
+	dc.addKindToModules()
 	dc.setModulesInfo()
 	dc.validateConfig()
 	dc.expand()
@@ -327,6 +332,18 @@ func createModuleInfo(
 		}
 	}
 	return modInfo
+}
+
+// addKindToModules sets the kind to 'terraform' when empty.
+func (dc *DeploymentConfig) addKindToModules() {
+	for iGrp, grp := range dc.Config.DeploymentGroups {
+		for iMod, mod := range grp.Modules {
+			if mod.Kind == "" {
+				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Kind =
+					"terraform"
+			}
+		}
+	}
 }
 
 // setModulesInfo populates needed information from modules

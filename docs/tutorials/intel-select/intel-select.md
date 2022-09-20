@@ -33,7 +33,7 @@ the slurm controller can perform actions such as auto-scaling.
 <!-- Tried getting PROJECT_NUMBER using <walkthrough-project-number/> but returns empty string. -->
 
 ```bash
-PROJECT_NUMBER=$(gcloud projects list --filter=<walkthrough-project-id/> --format='value(PROJECT_NUMBER)')
+PROJECT_NUMBER=$(gcloud projects describe <walkthrough-project-id/> --format='value(projectNumber)')
 
 echo "granting roles/editor to $PROJECT_NUMBER-compute@developer.gserviceaccount.com"
 

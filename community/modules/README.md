@@ -57,3 +57,9 @@ module documentation](../../modules/README.md).
 * [**SchedMD-slurm-on-gcp-login-node**](scheduler/SchedMD-slurm-on-gcp-login-node/README.md):
   Creates a SLURM login node using
   [slurm-gcp](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login)
+
+* [**schedmd-slurm-gcp-v5-hybrid**](scheduler/schedmd-slurm-gcp-v5-hybrid/README.md):
+  Creates configurations for hybrid partitions that can be used with an
+  on-premise Slurm cluster. This module uses the
+  [slurm-controller-hybrid](https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster/modules/slurm_controller_hybrid)
+  from the slurm-gcp project.
