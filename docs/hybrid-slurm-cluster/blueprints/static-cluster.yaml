@@ -18,7 +18,7 @@ blueprint_name: static-slurm-cluster
 
 vars:
   project_id:  ## <<PROJECT_A>>
-  deployment_name: static-slurm-cluster
+  deployment_name: cluster
   region: us-central1
   zone: us-central1-c
 

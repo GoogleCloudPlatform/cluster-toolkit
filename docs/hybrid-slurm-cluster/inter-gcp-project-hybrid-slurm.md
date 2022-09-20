@@ -128,9 +128,11 @@ The following APIs are required to complete this demo:
 
 * [Compute Engine API][computeapi]
 * [Cloud DNS API][clouddnsapi]
+* [Filestore API][fileapi]
 
 [computeapi]: https://cloud.google.com/compute/docs/reference/rest/v1
 [clouddnsapi]: https://cloud.google.com/dns/docs/reference/v1
+[fileapi]: https://cloud.google.com/filestore/docs/reference/rest
 
 #### Set IAM Roles
 The service account attaches to the slurm controller in Project A
@@ -157,6 +159,15 @@ pip install -r docs/hybrid-slurm-cluster/requirements.txt
 
 Before you begin, ensure that you have built the `ghpc` tool in the HPC Toolkit.
 For more information see the [README.md](../../README.md#quickstart) Quickstart.
+
+The commands in these instructions assume the ghpc binary is installed in a
+directory represented in the PATH environment variable. To ensure this is the
+case, run `make install` after building `ghpc`:
+
+```shell
+make
+make install
+```
 
 ### Create VPC Networks
 A blueprint for creating VPC networks in each project that can support network
@@ -313,9 +324,9 @@ following:
 ```shell
 Terraform group was successfully created in directory peering-networks-demo/primary
 To deploy, run the following commands:
-  terraform -chdir=static-slurm-cluster/primary init
-  terraform -chdir=static-slurm-cluster/primary validate
-  terraform -chdir=static-slurm-cluster/primary apply
+  terraform -chdir=cluster/primary init
+  terraform -chdir=cluster/primary validate
+  terraform -chdir=cluster/primary apply
 ```
 
 Execute the terraform commands to deploy the static Slurm cluster in project A.
@@ -339,27 +350,20 @@ a deployment that does the following:
     configure themselves.
   * Create pubsub actions triggered by changes to the hybrid configuration.
 
-Either in the blueprint directly or on the command line, update the following
-deployment variables in the [hybrid-configuration.yaml] blueprint:
+The following deployment variables in the [hybrid-configuration.yaml] blueprint
+will be set based on your configuration via the command line:
 
 * **_project\_id:_** The ID of project B.
 * **_static\_controller\_hostname:_** The fully qualified internal hostname of
   the static cluster's controller in project A. The format is
-  `<<instance_name>>.c.<<Project_A_ID>>.internal`.
-
-If the deployment vars have been added directly to the blueprint, the following
-command will create the deployment directory:
-
-```shell
-ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml
-```
+  `cluster-controller.c.<<Project_A_ID>>.internal`.
 
 To create the deployment directory with deployment variables passed through the
-command line, run the following command with the updated values of
-`<<Project_B>>`, `<<Hostname>>` and `<<Homefs_IP>>` instead:
+command line, run the following command with the updated values for
+`<<Project_A>>` and `<<Project_B>>`:
 
 ```shell
-ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml --vars project_id="<<Project_B>>",static_controller_hostname="<<Hostname>>.c.<<Project_A>>.internal"
+ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml --vars project_id="<<Project_B>>",static_controller_hostname="cluster-controller.c.<<Project_A>>.internal"
 ```
 
 If successful, this command will provide 3 terraform operations that can be
@@ -399,14 +403,14 @@ Copy the `hybrid.tar.gz` file to the controller VM instance. This can be done
 in whichever way is easiest for you, `gcloud compute scp` is used here.
 
 ```shell
-gcloud compute scp --project="<<Project_A>>" --zone=us-central1-c ./hybrid.tar.gz "<<Controller_Name>>:~"
+gcloud compute scp --project="<<Project_A>>" --zone=us-central1-c ./hybrid.tar.gz "cluster-controller:~"
 ```
 
 Now SSH to the controller VM either using the console or the following gcloud
 command:
 
 ```shell
-gcloud compute ssh --project="<<Project_A>>" --zone=us-central1-c "<<Controller_Name>>"
+gcloud compute ssh --project="<<Project_A>>" --zone=us-central1-c "cluster-controller"
 ```
 
 Decompress the `hybrid.tar.gz` file:
@@ -432,11 +436,11 @@ lines that need to be copied will look similar to the following block:
 
 ```text
 NodeName=DEFAULT State=UNKNOWN RealMemory=7552 Boards=1 Sockets=1 CoresPerSocket=1 ThreadsPerCore=1 CPUs=1
-NodeName=staticslur-static-ghpc-[0-3] State=CLOUD
-NodeSet=staticslur-static-ghpc Nodes=staticslur-static-ghpc-[0-3]
-PartitionName=static Nodes=staticslur-static-ghpc State=UP DefMemPerCPU=7552 SuspendTime=300 Oversubscribe=Exclusive Default=YES
+NodeName=cluster-static-ghpc-[0-3] State=CLOUD
+NodeSet=cluster-static-ghpc Nodes=cluster-static-ghpc-[0-3]
+PartitionName=static Nodes=cluster-static-ghpc State=UP DefMemPerCPU=7552 SuspendTime=300 Oversubscribe=Exclusive Default=YES
 
-SuspendExcNodes=staticslur-static-ghpc-[0-3]
+SuspendExcNodes=cluster-static-ghpc-[0-3]
 ```
 
 Depending on the configuration of the static partitions, the `SuspendExcNodes`
@@ -453,7 +457,7 @@ Make the following changes to the `/etc/slurm/slurm.conf` file:
 ```text
 # slurm.conf
 ...
-SlurmctldHost=<<Controller_Hostname>>(<<Controller_Hostname>>.c.<<Project_A_ID>>.internal)
+SlurmctldHost=cluster-controller(cluster-controller.c.<<Project_A_ID>>.internal)
 ...
 include hybrid/cloud.conf
 ...
@@ -517,8 +521,9 @@ side:
 ```shell
 $ sinfo
 PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
-static*      up   infinite      4   idle staticslur-static-ghpc-[0-3]
-cloud        up   infinite     10  idle~ hybridconf-cloud-ghpc-[0-9]
+static*      up   infinite      4   idle cluster-static-ghpc-[0-3]
+compute      up   infinite     20  idle~ hybridconf-compute-ghpc-[0-19]
+debug        up   infinite     10  idle~ hybridconf-debug-ghpc-[0-9]
 ```
 
 To verify that your local partitions are still active, run a simple test with
@@ -526,7 +531,7 @@ To verify that your local partitions are still active, run a simple test with
 
 ```shell
 $ srun -N 1 hostname
-staticslur-static-ghpc-0
+cluster-static-ghpc-0
 ```
 
 Now verify the cloud partition is running with a similar test. Note that since a
@@ -535,6 +540,6 @@ Subsequent uses of the cloud nodes before being suspended will be near
 instantaneous after the initial startup cost.
 
 ```shell
-$ srun -N 1 -p cloud hostname
-hybridconf-cloud-ghpc-0
+$ srun -N 1 -p debug hostname
+hybridconf-debug-ghpc-0
 ```
