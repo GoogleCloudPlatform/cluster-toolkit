@@ -24,3 +24,55 @@ output "network_storage" {
     mount_options = var.mount_options
   }
 }
+
+locals {
+  # Client Install
+  ddn_lustre_client_install_script = templatefile(
+    "${path.module}/templates/ddn_exascaler_luster_client_install.tftpl",
+    {
+      server_ip    = split("@", var.server_ip)[0]
+      remote_mount = var.remote_mount
+      local_mount  = var.local_mount
+    }
+  )
+
+  install_scripts = {
+    "lustre" = local.ddn_lustre_client_install_script
+  }
+
+  # Mounting
+  ddn_lustre_mount_cmd = "mount -t ${var.fs_type} ${var.server_ip}:/${var.remote_mount} ${var.local_mount}"
+  mount_commands = {
+    "lustre" = local.ddn_lustre_mount_cmd
+  }
+
+  mount_script = <<-EOT
+    #!/bin/bash
+    findmnt --source ${var.server_ip}:/${var.remote_mount} --target ${var.local_mount} &> /dev/null
+    if [[ $? != 0 ]]; then
+      echo "Mounting --source ${var.server_ip}:/${var.remote_mount} --target ${var.local_mount}"
+      mkdir -p ${var.local_mount}
+      ${lookup(local.mount_commands, var.fs_type, "exit 1")}
+    else
+      echo "Skipping mounting source: ${var.server_ip}:/${var.remote_mount}, already mounted to target:${var.local_mount}"
+    fi
+  EOT
+}
+
+output "client_install_runner" {
+  description = "Runner that performs client installation needed to use file system."
+  value = {
+    "type"        = "shell"
+    "content"     = lookup(local.install_scripts, var.fs_type, "echo 'skipping: client_install_runner not yet supported for ${var.fs_type}'")
+    "destination" = "install_filesystem_client${replace(var.local_mount, "/", "_")}.sh"
+  }
+}
+
+output "mount_runner" {
+  description = "Runner that mounts the file system."
+  value = {
+    "type"        = "shell"
+    "content"     = (lookup(local.mount_commands, var.fs_type, null) == null ? "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'" : local.mount_script)
+    "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
+  }
+}
