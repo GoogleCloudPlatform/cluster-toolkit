@@ -84,6 +84,10 @@ func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFla
 		return err
 	}
 
+	if err := createGroupDirs(deploymentDir, &blueprint.DeploymentGroups); err != nil {
+		return err
+	}
+
 	for _, grp := range blueprint.DeploymentGroups {
 
 		deploymentName, err := blueprint.DeploymentName()
@@ -115,17 +119,24 @@ func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFla
 	return nil
 }
 
+func createGroupDirs(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
+	for _, grp := range *deploymentGroups {
+		groupPath := filepath.Join(deploymentPath, grp.Name)
+		// Create the deployment group directory if not already created.
+		if _, err := os.Stat(groupPath); errors.Is(err, os.ErrNotExist) {
+			if err := os.Mkdir(groupPath, 0755); err != nil {
+				return fmt.Errorf("failed to create directory at %s for deployment group %s: err=%w",
+					groupPath, grp.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
 func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 
 	for iGrp, grp := range *deploymentGroups {
 		basePath := filepath.Join(deploymentPath, grp.Name)
-		// Create the deployment group directory if not already created.
-		if _, err := os.Stat(basePath); errors.Is(err, os.ErrNotExist) {
-			deploymentio := deploymentio.GetDeploymentioLocal()
-			if err := deploymentio.CreateDirectory(basePath); err != nil {
-				return fmt.Errorf("failed to create directory at %s for deployment group %s: err=%w", basePath, grp.Name, err)
-			}
-		}
 		for iMod, module := range grp.Modules {
 			if sourcereader.IsGitPath(module.Source) {
 				continue
