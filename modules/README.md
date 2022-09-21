@@ -259,6 +259,14 @@ Toolkit vpc module, use:
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
 [daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
 
+#### Generic Git Modules
+To use a Terraform module available in a non-GitHub git repository such as
+gitlab, set the source to a path starting `git::`. Two Standard git protocols
+are supported, `git::https://` for HTTPS or `git::git@github.com` for SSH.
+
+Additional formatting and features after `git::` are identical to that of the
+[GitHub Modules](#github-modules) described above.
+
 ### Kind (May be Required)
 
 `kind` refers to the way in which a module is deployed. Currently, `kind` can be
