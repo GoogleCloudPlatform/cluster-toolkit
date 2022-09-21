@@ -29,7 +29,7 @@
       mode: 0700
       owner: "{{ username }}"
   - name: Create keys
-    ansible.builtin.openssh_keypair:
+    community.crypto.openssh_keypair:
       path: "{{ pub_key_file }}"
       owner: "{{ username }}"
   - name: Copy public key to authorized keys
