@@ -27,6 +27,22 @@ ACTIVE_FILESTORE=$(gcloud filestore instances list --project "${PROJECT_ID}" --f
 if [[ -z "$ACTIVE_BUILDS" && -z "$ACTIVE_FILESTORE" ]]; then
 	echo "Disabling Filestore API..."
 	gcloud services disable file.googleapis.com --force --project "${PROJECT_ID}"
+
+	echo "Deleting all Filestore peering networks"
+	peerings=$(gcloud compute networks peerings list --project "${PROJECT_ID}" --format="value(peerings.name,name)")
+	while read -r peering; do
+		parr=("$peering")
+		IFS=";" read -ra peers <<<"${parr[0]}"
+		network=${parr[1]}
+
+		for peer in "${peers[@]}"; do
+			if [[ "$peer" =~ ^filestore-peer-[0-9]+$ ]]; then
+				echo "Deleting $peer from $network"
+				gcloud --project "${PROJECT_ID}" compute networks peerings delete --network "$network" "$peer"
+			fi
+		done
+	done <<<"$peerings"
+
 	echo "Re-enabling Filestore API..."
 	gcloud services enable file.googleapis.com --project "${PROJECT_ID}"
 	echo "Re-enabled Filestore API..."
