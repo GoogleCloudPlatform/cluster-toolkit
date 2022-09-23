@@ -29,9 +29,8 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - source: modules/network/vpc
-    kind: terraform
-    id: network0
+  - id: network0
+    source: modules/network/vpc
     settings:
       network_name: static-cluster-network
       network_address_range: 10.0.0.0/16
@@ -40,9 +39,8 @@ deployment_groups:
         subnet_region: $(vars.region)
         new_bits: 8
 
-  - source: modules/network/vpc
-    kind: terraform
-    id: network1
+  - id: network1
+    source: modules/network/vpc
     settings:
       network_name: compute-vpc-network
       project_id: $(vars.project_id_compute)

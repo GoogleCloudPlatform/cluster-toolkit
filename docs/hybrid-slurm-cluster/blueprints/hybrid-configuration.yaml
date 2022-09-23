@@ -22,15 +22,19 @@ vars:
   region: us-central1
   zone: us-central1-c
   static_controller_hostname:  ## <<instance name>>.c.<<Project_A>>.internal
+  network_name: compute-vpc-network
+  subnetwork_name: primary-subnet
 
 deployment_groups:
+- group: create_network
+  modules:
+  - id: created_network
+    source: modules/network/vpc
+
 - group: primary
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    settings:
-      network_name: compute-vpc-network
-      subnetwork_name: primary-subnet
 
   - id: scratchfs
     source: modules/file-system/filestore
@@ -47,6 +51,8 @@ deployment_groups:
       exclusive: false
       machine_type: n2-standard-2
       is_default: false
+      source_image_project: $(vars.project_id)
+      source_image_family: schedmd-v5-slurm-21-08-8-hpc-centos-7
 
   - id: compute-partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -55,6 +61,8 @@ deployment_groups:
     settings:
       partition_name: compute
       node_count_dynamic_max: 20
+      source_image_project: $(vars.project_id)
+      source_image_family: schedmd-v5-slurm-21-08-8-hpc-centos-7
 
   - id: slurm-controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
@@ -64,6 +72,18 @@ deployment_groups:
     - scratchfs
     settings:
       output_dir: ./hybrid
-      slurm_bin_dir: /usr/local/bin
+      slurm_bin_dir: /usr/bin
       slurm_control_host: $(vars.static_controller_hostname)
       install_dir: /etc/slurm/hybrid
+      disable_default_mounts: true
+      network_storage:
+      - server_ip: slurm-controller-0.c.heyealex-test-0.internal
+        remote_mount: /etc/slurm
+        local_mount: /usr/local/etc/slurm
+        fs_type: nfs
+        mount_options: ""
+      - server_ip: slurm-controller-0.c.heyealex-test-0.internal
+        remote_mount: /etc/munge
+        local_mount: /etc/munge
+        fs_type: nfs
+        mount_options: ""
