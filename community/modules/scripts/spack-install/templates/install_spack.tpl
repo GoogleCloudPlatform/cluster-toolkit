@@ -99,6 +99,7 @@ echo "$PREFIX Installing root spack specs..."
 echo "$PREFIX Configuring spack environments"
 %{if ENVIRONMENTS != null ~}
 %{for e in ENVIRONMENTS ~}
+if [ ! -d ${INSTALL_DIR}/var/spack/environments/${e.name} ]; then
   %{if e.content != null}
     {
       cat << 'EOF' > ${INSTALL_DIR}/spack_env.yaml
@@ -129,6 +130,7 @@ EOF
 
   spack env deactivate >> ${LOG_FILE} 2>&1
   spack clean -s >> ${LOG_FILE} 2>&1
+fi
 %{endfor ~}
 %{endif ~}
 
