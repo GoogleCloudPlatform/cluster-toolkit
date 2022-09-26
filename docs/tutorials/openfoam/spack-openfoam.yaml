@@ -37,7 +37,6 @@ deployment_groups:
     source: community/modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
-      spack_url: https://github.com/spack/spack
       spack_ref: v0.18.0
       log_file: /var/log/spack.log
       configs:
