@@ -29,10 +29,17 @@ if [[ -z "$ACTIVE_BUILDS" && -z "$ACTIVE_FILESTORE" ]]; then
 	gcloud services disable file.googleapis.com --force --project "${PROJECT_ID}"
 
 	echo "Deleting all Filestore peering networks"
+	# the output of this command matches
+	# filestore-peer-426414172628;filestore-peer-646290499454 default
 	peerings=$(gcloud compute networks peerings list --project "${PROJECT_ID}" --format="value(peerings.name,name)")
 	while read -r peering; do
-		parr=("$peering")
+		# split the output into:
+		# 0: a semi-colon separated list of peerings
+		# 1: the name of a VPC network
+		read -ra parr <<<"$peering"
+		# split the list of peerings into an array
 		IFS=";" read -ra peers <<<"${parr[0]}"
+		# capture the VPC network
 		network=${parr[1]}
 
 		for peer in "${peers[@]}"; do
