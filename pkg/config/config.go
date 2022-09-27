@@ -450,7 +450,11 @@ func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
 		}
 
-		key, value := arr[0], arr[1]
+		// Convert the variable's string litteral to its equivalent default type.
+		var out interface{}
+		yaml.Unmarshal([]byte(arr[1]), &out)
+
+		key, value := arr[0], out
 		dc.Config.Vars[key] = value
 	}
 

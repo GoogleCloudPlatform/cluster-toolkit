@@ -22,6 +22,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -542,12 +543,18 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	cliRegion := "cli_region"
 	cliZone := "cli_zone"
 	cliKeyVal := "key=val"
+	cliKeyBool := "true"
+	cliKeyInt := "15"
+	cliKeyFloat := "15.43"
 	cliVars := []string{
 		fmt.Sprintf("project_id=%s", cliProjectID),
 		fmt.Sprintf("deployment_name=%s", cliDeploymentName),
 		fmt.Sprintf("region=%s", cliRegion),
 		fmt.Sprintf("zone=%s", cliZone),
 		fmt.Sprintf("kv=%s", cliKeyVal),
+		fmt.Sprintf("keyBool=%s", cliKeyBool),
+		fmt.Sprintf("keyInt=%s", cliKeyInt),
+		fmt.Sprintf("keyFloat=%s", cliKeyFloat),
 	}
 	err := dc.SetCLIVariables(cliVars)
 
@@ -557,6 +564,18 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	c.Assert(dc.Config.Vars["region"], Equals, cliRegion)
 	c.Assert(dc.Config.Vars["zone"], Equals, cliZone)
 	c.Assert(dc.Config.Vars["kv"], Equals, cliKeyVal)
+
+	// Bool in string is converted to bool
+	boolValue, _ := strconv.ParseBool(cliKeyBool)
+	c.Assert(dc.Config.Vars["keyBool"], Equals, boolValue)
+
+	// Int in string is converted to int
+	intValue, _ := strconv.Atoi(cliKeyInt)
+	c.Assert(dc.Config.Vars["keyInt"], Equals, intValue)
+
+	// Float in string is converted to float
+	floatValue, _ := strconv.ParseFloat(cliKeyFloat, 64)
+	c.Assert(dc.Config.Vars["keyFloat"], Equals, floatValue)
 
 	// Failure: Variable without '='
 	dc = getBasicDeploymentConfigWithTestModule()
