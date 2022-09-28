@@ -319,19 +319,15 @@ func mergeBlueprintRequirements(base map[string][]string, new map[string][]strin
 	dest := make(map[string][]string)
 	maps.Copy(dest, base)
 
-	// sort each value in dest to ensure all output is sorted in case that the
-	// new map does not contain all keys in base
+	// sort each value in dest in-place to ensure output is sorted when new map
+	// does not contain all keys in base
 	for _, v := range dest {
 		slices.Sort(v)
 	}
 
-	destKeys := maps.Keys(dest)
 	for newProject, newRequirements := range new {
-		if slices.Contains(destKeys, newProject) {
-			dest[newProject] = append(dest[newProject], newRequirements...)
-		} else {
-			dest[newProject] = slices.Clone(newRequirements)
-		}
+		// this code is safe even if dest[newProject] has not yet been populated
+		dest[newProject] = append(dest[newProject], newRequirements...)
 		slices.Sort(dest[newProject])
 		dest[newProject] = slices.Compact(dest[newProject])
 	}
