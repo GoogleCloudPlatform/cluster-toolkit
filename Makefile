@@ -1,7 +1,7 @@
 # PREAMBLE
 MIN_PACKER_VERSION=1.6 # for building images
 MIN_TERRAFORM_VERSION=1.0 # for deploying modules
-MIN_GOLANG_VERSION=1.16 # for building ghpc
+MIN_GOLANG_VERSION=1.18 # for building ghpc
 
 .PHONY: install install-user tests format add-google-license install-dev-deps \
         warn-go-missing warn-terraform-missing warn-packer-missing \
