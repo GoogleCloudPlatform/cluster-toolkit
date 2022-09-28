@@ -220,6 +220,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 			},
 		},
 	}
+	// the next two steps simulate relevant steps in ghpc expand
 	dc.addMetadataToModules()
 	dc.addDefaultValidators()
 	return dc
@@ -475,7 +476,6 @@ func (s *MySuite) TestCheckBlueprintName(c *C) {
 
 func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
-	// to compare to exported output, must add default validators to input
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
 	dc.ExportBlueprint(outFile)
 	newDC, err := NewDeploymentConfig(outFile)

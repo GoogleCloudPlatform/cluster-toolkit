@@ -27,11 +27,14 @@ import (
 	"hpc-toolkit/pkg/validators"
 
 	"github.com/pkg/errors"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	validationErrorMsg = "validation failed due to the issues listed above"
+	validationErrorMsg   = "validation failed due to the issues listed above"
+	funcErrorMsgTemplate = "validator %s failed"
 )
 
 // InvalidSettingError signifies a problem with the supplied setting name in a
@@ -94,6 +97,7 @@ func (dc DeploymentConfig) executeValidators() error {
 				log.Print(prefix, err)
 				log.Println()
 
+				// do not bother running further validators if project ID could not be found
 				if validator.Validator == testProjectExistsName.String() {
 					break
 				}
@@ -305,9 +309,36 @@ func testInputList(function string, inputs map[string]interface{}, requiredInput
 	return nil
 }
 
+// merge the []string of new[key] into the []string of base[key], removing
+// duplicate elements and sorting the remaining elements; if base[key] does not
+// exist, initialize it with new[key]
+func mergeMaps(base map[string][]string, new map[string][]string) map[string][]string {
+	dest := make(map[string][]string)
+	maps.Copy(dest, base)
+
+	// sort each value in dest to ensure all output is sorted in case that the
+	// new map does not contain all keys in base
+	for _, v := range dest {
+		slices.Sort(v)
+	}
+
+	destKeys := maps.Keys(dest)
+	for newProject, newRequiredApis := range new {
+		if slices.Contains(destKeys, newProject) {
+			dest[newProject] = append(dest[newProject], newRequiredApis...)
+		} else {
+			dest[newProject] = slices.Clone(newRequiredApis)
+		}
+		slices.Sort(dest[newProject])
+		dest[newProject] = slices.Compact(dest[newProject])
+	}
+	return dest
+}
+
 func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
 	requiredInputs := []string{}
 	funcName := testApisEnabledName.String()
+	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
 	if validator.Validator != funcName {
 		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
@@ -318,16 +349,38 @@ func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
 		return err
 	}
 
-	// TODO: implement calls to Service Usage API that validate which APIs
-	// are enabled
+	requiredApis := make(map[string][]string)
+	for _, grp := range dc.Config.DeploymentGroups {
+		for _, mod := range grp.Modules {
+			requiredApis = mergeMaps(requiredApis, mod.RequiredApis)
+		}
+	}
 
+	var errored bool
+	for pid, apis := range requiredApis {
+		var project string
+		if IsLiteralVariable(pid) {
+			project, _ = dc.getStringValue(pid)
+		} else {
+			project = pid
+		}
+		err = validators.TestApisEnabled(project, apis)
+		if err != nil {
+			log.Println(err)
+			errored = true
+		}
+	}
+
+	if errored {
+		return fmt.Errorf(funcErrorMsg)
+	}
 	return nil
 }
 
 func (dc *DeploymentConfig) testProjectExists(validator validatorConfig) error {
 	requiredInputs := []string{"project_id"}
 	funcName := testProjectExistsName.String()
-	funcErrorMsg := fmt.Sprintf("validator %s failed", funcName)
+	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
 	if validator.Validator != funcName {
 		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
@@ -348,15 +401,16 @@ func (dc *DeploymentConfig) testProjectExists(validator validatorConfig) error {
 	// err is nil or an error
 	err = validators.TestProjectExists(projectID)
 	if err != nil {
-		log.Print(funcErrorMsg)
+		log.Print(err)
+		return fmt.Errorf(funcErrorMsg)
 	}
-	return err
+	return nil
 }
 
 func (dc *DeploymentConfig) testRegionExists(validator validatorConfig) error {
 	requiredInputs := []string{"project_id", "region"}
 	funcName := testRegionExistsName.String()
-	funcErrorMsg := fmt.Sprintf("validator %s failed", funcName)
+	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
 	if validator.Validator != funcName {
 		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
@@ -381,15 +435,16 @@ func (dc *DeploymentConfig) testRegionExists(validator validatorConfig) error {
 	// err is nil or an error
 	err = validators.TestRegionExists(projectID, region)
 	if err != nil {
-		log.Print(funcErrorMsg)
+		log.Print(err)
+		return fmt.Errorf(funcErrorMsg)
 	}
-	return err
+	return nil
 }
 
 func (dc *DeploymentConfig) testZoneExists(validator validatorConfig) error {
 	requiredInputs := []string{"project_id", "zone"}
 	funcName := testZoneExistsName.String()
-	funcErrorMsg := fmt.Sprintf("validator %s failed", funcName)
+	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
 	if validator.Validator != funcName {
 		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
@@ -414,15 +469,16 @@ func (dc *DeploymentConfig) testZoneExists(validator validatorConfig) error {
 	// err is nil or an error
 	err = validators.TestZoneExists(projectID, zone)
 	if err != nil {
-		log.Print(funcErrorMsg)
+		log.Print(err)
+		return fmt.Errorf(funcErrorMsg)
 	}
-	return err
+	return nil
 }
 
 func (dc *DeploymentConfig) testZoneInRegion(validator validatorConfig) error {
 	requiredInputs := []string{"project_id", "region", "zone"}
 	funcName := testZoneInRegionName.String()
-	funcErrorMsg := fmt.Sprintf("validator %s failed", funcName)
+	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
 	if validator.Validator != funcName {
 		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
@@ -452,9 +508,10 @@ func (dc *DeploymentConfig) testZoneInRegion(validator validatorConfig) error {
 	// err is nil or an error
 	err = validators.TestZoneInRegion(projectID, zone, region)
 	if err != nil {
-		log.Print(funcErrorMsg)
+		log.Print(err)
+		return fmt.Errorf(funcErrorMsg)
 	}
-	return err
+	return nil
 }
 
 // return the actual value of a global variable specified by the literal

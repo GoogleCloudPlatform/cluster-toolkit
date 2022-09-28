@@ -17,10 +17,13 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 
 	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/pkg/errors"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	. "gopkg.in/check.v1"
 )
 
@@ -263,6 +266,53 @@ func (s *MySuite) TestGetStringValue(c *C) {
 	c.Assert(err, Not(IsNil))
 }
 
+func (s *MySuite) TestMergeMaps(c *C) {
+	map1 := make(map[string][]string)
+	map2 := make(map[string][]string)
+
+	// each expected value should individually be sorted and have no duplicate
+	// elements, although different values may share elements
+	expectedValues1 := []string{"bar", "bat"}
+	expectedValues2 := []string{"value2", "value3"}
+
+	reversedValues1 := slices.Clone(expectedValues1)
+	sort.Sort(sort.Reverse(sort.StringSlice(reversedValues1)))
+
+	// TEST: merge with identical keys and duplicate elements in values
+	map1["key1"] = slices.Clone(reversedValues1)
+	map2["key1"] = []string{expectedValues1[0], expectedValues1[0]}
+	map3 := mergeMaps(map1, map2)
+
+	// expected value (duplicates removed and sorted)
+	expectedMap := map[string][]string{
+		"key1": expectedValues1,
+	}
+	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
+
+	// unexpected value (duplicates removed and reverse sorted)
+	unexpectedMap := map[string][]string{
+		"key1": reversedValues1,
+	}
+	c.Assert(maps.EqualFunc(map3, unexpectedMap, slices.Equal[string]), Equals, false)
+
+	// TEST: merge with additional key in 2nd map
+	map1["key2"] = []string{expectedValues2[1], expectedValues2[0]}
+	map3 = mergeMaps(map1, map2)
+
+	// test the expected value (duplicates removed and sorted)
+	expectedMap = map[string][]string{
+		"key1": slices.Clone(expectedValues1),
+		"key2": slices.Clone(expectedValues2),
+	}
+	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
+
+	// TEST: merge with additional key in 1st map (expected value unchanged!)
+	delete(map1, "key2")
+	map2["key2"] = slices.Clone(expectedValues2)
+	map3 = mergeMaps(map1, map2)
+	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
+}
+
 func (s *MySuite) TestExecuteValidators(c *C) {
 	dc := getDeploymentConfigForTest()
 	dc.Config.Validators = []validatorConfig{
@@ -284,6 +334,29 @@ func (s *MySuite) TestExecuteValidators(c *C) {
 
 	err = dc.executeValidators()
 	c.Assert(err, ErrorMatches, validationErrorMsg)
+}
+
+func (s *MySuite) TestApisEnabledValidator(c *C) {
+	var err error
+	dc := getDeploymentConfigForTest()
+	emptyValidator := validatorConfig{}
+
+	// test validator fails for config without validator id
+	err = dc.testApisEnabled(emptyValidator)
+	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
+
+	apisEnabledValidator := validatorConfig{
+		Validator: testApisEnabledName.String(),
+		Inputs:    map[string]interface{}{},
+	}
+
+	// TODO: implement a mock client to test success of test_apis_enabled when
+	// 0 inputs are provided
+
+	// this validator reads blueprint directly so 1 inputs should fail
+	apisEnabledValidator.Inputs["foo"] = "bar"
+	err = dc.testApisEnabled(apisEnabledValidator)
+	c.Assert(err, ErrorMatches, tooManyInputRegex)
 }
 
 // this function tests that the "gateway" functions in this package for our
@@ -404,29 +477,4 @@ func (s *MySuite) TestZoneInRegionValidator(c *C) {
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
 	// TODO: implement a mock client to test success of test_zone_in_region
-}
-
-func (s *MySuite) TestApisEnabledValidator(c *C) {
-	var err error
-	dc := getDeploymentConfigForTest()
-	emptyValidator := validatorConfig{}
-
-	// test validator fails for config without validator id
-	err = dc.testApisEnabled(emptyValidator)
-	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
-
-	// this validator reads blueprint directly so 0 inputs should succeed
-	apisEnabledValidator := validatorConfig{
-		Validator: testApisEnabledName.String(),
-		Inputs:    map[string]interface{}{},
-	}
-	err = dc.testApisEnabled(apisEnabledValidator)
-	c.Assert(err, IsNil)
-
-	// this validator reads blueprint directly so 1 inputs should fail
-	apisEnabledValidator.Inputs["foo"] = "bar"
-	err = dc.testApisEnabled(apisEnabledValidator)
-	c.Assert(err, ErrorMatches, tooManyInputRegex)
-
-	// TODO: implement a mock client to test success of test_apis_enabled
 }
