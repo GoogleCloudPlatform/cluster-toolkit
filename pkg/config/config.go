@@ -452,7 +452,10 @@ func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 
 		// Convert the variable's string litteral to its equivalent default type.
 		var out interface{}
-		yaml.Unmarshal([]byte(arr[1]), &out)
+		err := yaml.Unmarshal([]byte(arr[1]), &out)
+		if err != nil {
+			return err
+		}
 
 		key, value := arr[0], out
 		dc.Config.Vars[key] = value
