@@ -73,4 +73,8 @@ output "network_storage" {
     fs_type       = "lustre"
     mount_options = ""
   }
+  depends_on = [
+    # do not release before ddn is ready to hand out client config script
+    module.ddn_exascaler.client_config,
+  ]
 }

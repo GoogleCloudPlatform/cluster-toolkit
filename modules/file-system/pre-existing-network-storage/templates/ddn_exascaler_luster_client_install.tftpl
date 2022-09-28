@@ -41,7 +41,7 @@ EOF
 
 for i in 1 2 3 4 5 6 7 8 9 10;
 do
-  echo $i
+  echo "Pulling client-setup-tool, try: $i"
   curl -fsSL http://${server_ip}/client-setup-tool -o /usr/sbin/esc-client && break || sleep 3;
 done
 chmod +x /usr/sbin/esc-client

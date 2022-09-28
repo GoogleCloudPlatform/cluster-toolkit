@@ -49,6 +49,10 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
+      # TODO: remove this sleep once DDN implements retry logic
+      - type: shell
+        destination: "sleep.sh"
+        content: sleep 30
       - $(scratchfs.install_ddn_lustre_client_runner)
       - $(scratchfs.mount_runner)
 
