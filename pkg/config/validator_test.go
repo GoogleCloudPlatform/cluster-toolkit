@@ -295,7 +295,7 @@ func (s *MySuite) TestMergeMaps(c *C) {
 	}
 	c.Assert(maps.EqualFunc(map3, unexpectedMap, slices.Equal[string]), Equals, false)
 
-	// TEST: merge with additional key in 2nd map
+	// TEST: merge with additional key in 1st map
 	map1["key2"] = []string{expectedValues2[1], expectedValues2[0]}
 	map3 = mergeMaps(map1, map2)
 
@@ -306,7 +306,7 @@ func (s *MySuite) TestMergeMaps(c *C) {
 	}
 	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
 
-	// TEST: merge with additional key in 1st map (expected value unchanged!)
+	// TEST: merge with additional key in 2nd map (expected value unchanged!)
 	delete(map1, "key2")
 	map2["key2"] = slices.Clone(expectedValues2)
 	map3 = mergeMaps(map1, map2)
