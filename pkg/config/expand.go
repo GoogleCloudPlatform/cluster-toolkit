@@ -614,6 +614,8 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	_, regionExists := dc.Config.Vars["region"]
 	_, zoneExists := dc.Config.Vars["zone"]
 
+	// always add the project ID validator first; remaining validators can only
+	// succeed if credentials can access the project
 	if projectIDExists {
 		v := validatorConfig{
 			Validator: testProjectExistsName.String(),
@@ -623,6 +625,13 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 		}
 		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
+
+	// it is safe to run this validator even if vars.project_id is undefined;
+	// it will likely fail but will do so helpfully to the user
+	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+		Validator: "test_apis_enabled",
+		Inputs:    map[string]interface{}{},
+	})
 
 	if projectIDExists && regionExists {
 		v := validatorConfig{
