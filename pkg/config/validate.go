@@ -309,10 +309,13 @@ func testInputList(function string, inputs map[string]interface{}, requiredInput
 	return nil
 }
 
-// merge the []string of new[key] into the []string of base[key], removing
-// duplicate elements and sorting the remaining elements; if base[key] does not
-// exist, initialize it with new[key]
-func mergeMaps(base map[string][]string, new map[string][]string) map[string][]string {
+// The expected use case of this function is to merge blueprint requirements
+// that are maps from project_id to string slices containing APIs or IAM roles
+// required for provisioning. It will remove duplicate elements and ensure that
+// the output is sorted for easy visual and automatic comparison.
+// Solution: merge []string of new[key] into []string of base[key], removing
+// duplicate elements and sorting the result
+func mergeBlueprintRequirements(base map[string][]string, new map[string][]string) map[string][]string {
 	dest := make(map[string][]string)
 	maps.Copy(dest, base)
 
@@ -323,11 +326,11 @@ func mergeMaps(base map[string][]string, new map[string][]string) map[string][]s
 	}
 
 	destKeys := maps.Keys(dest)
-	for newProject, newRequiredApis := range new {
+	for newProject, newRequirements := range new {
 		if slices.Contains(destKeys, newProject) {
-			dest[newProject] = append(dest[newProject], newRequiredApis...)
+			dest[newProject] = append(dest[newProject], newRequirements...)
 		} else {
-			dest[newProject] = slices.Clone(newRequiredApis)
+			dest[newProject] = slices.Clone(newRequirements)
 		}
 		slices.Sort(dest[newProject])
 		dest[newProject] = slices.Compact(dest[newProject])
@@ -352,7 +355,7 @@ func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
 	requiredApis := make(map[string][]string)
 	for _, grp := range dc.Config.DeploymentGroups {
 		for _, mod := range grp.Modules {
-			requiredApis = mergeMaps(requiredApis, mod.RequiredApis)
+			requiredApis = mergeBlueprintRequirements(requiredApis, mod.RequiredApis)
 		}
 	}
 

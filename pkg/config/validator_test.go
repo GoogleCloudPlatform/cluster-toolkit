@@ -266,7 +266,7 @@ func (s *MySuite) TestGetStringValue(c *C) {
 	c.Assert(err, Not(IsNil))
 }
 
-func (s *MySuite) TestMergeMaps(c *C) {
+func (s *MySuite) TestMergeBlueprintRequirements(c *C) {
 	map1 := make(map[string][]string)
 	map2 := make(map[string][]string)
 
@@ -281,7 +281,7 @@ func (s *MySuite) TestMergeMaps(c *C) {
 	// TEST: merge with identical keys and duplicate elements in values
 	map1["key1"] = slices.Clone(reversedValues1)
 	map2["key1"] = []string{expectedValues1[0], expectedValues1[0]}
-	map3 := mergeMaps(map1, map2)
+	map3 := mergeBlueprintRequirements(map1, map2)
 
 	// expected value (duplicates removed and sorted)
 	expectedMap := map[string][]string{
@@ -297,7 +297,7 @@ func (s *MySuite) TestMergeMaps(c *C) {
 
 	// TEST: merge with additional key in 1st map
 	map1["key2"] = []string{expectedValues2[1], expectedValues2[0]}
-	map3 = mergeMaps(map1, map2)
+	map3 = mergeBlueprintRequirements(map1, map2)
 
 	// test the expected value (duplicates removed and sorted)
 	expectedMap = map[string][]string{
@@ -309,7 +309,7 @@ func (s *MySuite) TestMergeMaps(c *C) {
 	// TEST: merge with additional key in 2nd map (expected value unchanged!)
 	delete(map1, "key2")
 	map2["key2"] = slices.Clone(expectedValues2)
-	map3 = mergeMaps(map1, map2)
+	map3 = mergeBlueprintRequirements(map1, map2)
 	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
 }
 
