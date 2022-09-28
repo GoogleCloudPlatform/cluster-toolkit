@@ -119,30 +119,11 @@
 
     ## Cleanup and fail gracefully
     rescue:
-    - name: Delete Firewall Rule
-      register: fw_deleted
-      changed_when: fw_deleted.rc == 0
-      failed_when: false
-      command:
-        argv:
-        - gcloud
-        - compute
-        - firewall-rules
-        - delete
-        - "{{ deployment_name }}"
-    - name: Tear Down Cluster
-      run_once: true
-      changed_when: true # assume something got destroyed
-      delegate_to: localhost
-      environment:
-        TF_IN_AUTOMATION: "TRUE"
-      command:
-        cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
-    - name: Fail Out
-      fail:
-        msg: "Failed while setting up test infrastructure"
-      when: true
+    - name: Include rescue from terraform failure
+      ansible.builtin.include_tasks: "tasks/rescue_terraform_failure.yml"
+      vars:
+        deployment_name: "{{ deployment_name }}"
+        workspace: "{{ workspace }}"
 
 - name: Run Integration Tests
   hosts: remote_host
