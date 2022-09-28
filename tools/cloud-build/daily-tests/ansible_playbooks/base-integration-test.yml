@@ -52,6 +52,7 @@
         creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
       environment:
         TF_IN_AUTOMATION: "TRUE"
+      register: terraform_output
       with_items:
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
@@ -124,6 +125,7 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
+        terraform_apply_stderr: "{{ terraform_output.results.1.stderr }}"
 
 - name: Run Integration Tests
   hosts: remote_host

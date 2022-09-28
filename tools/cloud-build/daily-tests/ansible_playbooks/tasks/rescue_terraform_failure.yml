@@ -17,6 +17,7 @@
     that:
     - deployment_name is defined
     - workspace is defined
+    - terraform_apply_stderr is defined
 
 - name: Delete Firewall Rule
   register: fw_deleted
@@ -29,6 +30,10 @@
     - firewall-rules
     - delete
     - "{{ deployment_name }}"
+- name: Wait for Startup Script Logs
+  ansible.builtin.pause:
+    minutes: 5
+  when: '"startup-script finished with errors" in terraform_apply_stderr'
 - name: Tear Down Cluster
   changed_when: true  # assume something destroyed
   run_once: true
