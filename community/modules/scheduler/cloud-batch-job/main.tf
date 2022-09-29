@@ -29,6 +29,9 @@ locals {
   job_id                   = var.job_id != null ? var.job_id : var.deployment_name
   job_filename             = var.job_filename != null ? var.job_filename : "cloud-batch-${local.job_id}.json"
   job_template_output_path = "${path.root}/${local.job_filename}"
+
+  subnetwork_name    = var.subnetwork != null ? var.subnetwork.name : "default"
+  subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
 }
 
 module "instance_template" {
@@ -36,13 +39,13 @@ module "instance_template" {
   version = "> 7.6.0"
   count   = var.instance_template == null ? 1 : 0
 
-  name_prefix     = "${local.job_id}-instance-template"
-  project_id      = var.project_id
-  network         = var.network_self_link
-  subnetwork      = var.subnetwork_self_link
-  service_account = var.service_account
-  access_config   = [{ nat_ip = null, network_tier = null }]
-  labels          = var.labels
+  name_prefix        = "${local.job_id}-instance-template"
+  project_id         = var.project_id
+  subnetwork         = local.subnetwork_name
+  subnetwork_project = local.subnetwork_project
+  service_account    = var.service_account
+  access_config      = [{ nat_ip = null, network_tier = null }]
+  labels             = var.labels
 
   machine_type         = var.machine_type
   startup_script       = var.startup_script

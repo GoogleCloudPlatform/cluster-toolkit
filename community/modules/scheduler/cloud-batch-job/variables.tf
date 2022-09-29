@@ -85,15 +85,9 @@ variable "instance_template" {
   default     = null
 }
 
-variable "network_self_link" {
-  description = "The self link of the network to attach the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
-  type        = string
-  default     = "default"
-}
-
-variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork to attach the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
-  type        = string
+variable "subnetwork" {
+  description = "The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided."
+  type        = any
   default     = null
 }
 
