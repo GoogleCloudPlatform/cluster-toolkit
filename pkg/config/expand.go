@@ -24,15 +24,18 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
+
+	"golang.org/x/exp/slices"
 )
 
 const (
-	blueprintLabel    string = "ghpc_blueprint"
-	deploymentLabel   string = "ghpc_deployment"
-	roleLabel         string = "ghpc_role"
-	simpleVariableExp string = `^\$\((.*)\)$`
-	anyVariableExp    string = `\$\((.*)\)`
-	literalExp        string = `^\(\((.*)\)\)$`
+	blueprintLabel        string = "ghpc_blueprint"
+	deploymentLabel       string = "ghpc_deployment"
+	roleLabel             string = "ghpc_role"
+	simpleVariableExp     string = `^\$\((.*)\)$`
+	deploymentVariableExp string = `^\$\(vars\.(.*)\)$`
+	anyVariableExp        string = `\$\((.*)\)`
+	literalExp            string = `^\(\((.*)\)\)$`
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
@@ -103,7 +106,7 @@ func (dc *DeploymentConfig) addMetadataToModules() error {
 					requiredAPIs = []string{}
 				}
 				dc.Config.DeploymentGroups[iGrp].Modules[iMod].RequiredApis = map[string][]string{
-					"(( var.project_id ))": requiredAPIs,
+					"((var.project_id))": requiredAPIs,
 				}
 			}
 		}
@@ -482,6 +485,15 @@ func expandVariable(
 	return "", fmt.Errorf("%s: expandVariable", errorMessages["notImplemented"])
 }
 
+// isDeploymentVariable checks if the entire string is just a single deployment variable
+func isDeploymentVariable(str string) bool {
+	matched, err := regexp.MatchString(deploymentVariableExp, str)
+	if err != nil {
+		log.Fatalf("isDeploymentVariable(%s): %v", str, err)
+	}
+	return matched
+}
+
 // isSimpleVariable checks if the entire string is just a single variable
 func isSimpleVariable(str string) bool {
 	matched, err := regexp.MatchString(simpleVariableExp, str)
@@ -585,7 +597,7 @@ func (dc *DeploymentConfig) expandVariables() {
 	}
 
 	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod := range grp.Modules {
+		for iMod, mod := range grp.Modules {
 			context := varContext{
 				groupIndex: iGrp,
 				modIndex:   iMod,
@@ -593,10 +605,22 @@ func (dc *DeploymentConfig) expandVariables() {
 			}
 			err := updateVariables(
 				context,
-				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings,
+				mod.Settings,
 				dc.ModuleToGroup)
 			if err != nil {
 				log.Fatalf("expandVariables: %v", err)
+			}
+
+			// ensure that variable references to projects in required APIs are expanded
+			for projectID, requiredAPIs := range mod.RequiredApis {
+				if isDeploymentVariable(projectID) {
+					s, err := updateVariableType(projectID, varContext{blueprint: dc.Config}, make(map[string]int))
+					if err != nil {
+						log.Fatalf("expandVariables: %v", err)
+					}
+					mod.RequiredApis[s.(string)] = slices.Clone(requiredAPIs)
+					delete(mod.RequiredApis, projectID)
+				}
 			}
 		}
 	}
