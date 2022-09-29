@@ -18,7 +18,6 @@ deployment_name: "lustre-new-vpc-{{ build }}"
 zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-with-new-vpc.yaml"
-blueprint_dir: blueprint-lustre-new-vcp
 network: "{{deployment_name}}"
 max_nodes: 5
 login_node: "slurm-{{ deployment_name }}-login0"
