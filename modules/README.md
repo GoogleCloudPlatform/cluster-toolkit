@@ -270,7 +270,8 @@ Additional formatting and features after `git::` are identical to that of the
 ### Kind (May be Required)
 
 `kind` refers to the way in which a module is deployed. Currently, `kind` can be
-either `terraform` or `packer`. It must be specified for modules of type `packer`. If omitted, it will default to `terraform`.
+either `terraform` or `packer`. It must be specified for modules of type
+`packer`. If omitted, it will default to `terraform`.
 
 ### Settings (May Be Required)
 
@@ -330,6 +331,41 @@ terraform-based deployment groups. This can useful for displaying the IP of a
 login node or simply displaying instructions on how to use a module, as we
 have in the
 [monitoring dashboard module](monitoring/dashboard/README.md#Outputs).
+
+### Required Services (APIs) (optional)
+
+Each Toolkit module depends upon Google Cloud services ("APIs") being enabled
+in the project used by the HPC environment. For example, the [creation of
+VMs](compute/vm-instance/) requires the Compute Engine API
+(compute.googleapis.com). The [startup-script](scripts/startup-script/) module
+requires the Cloud Storage API (storage.googleapis.com) for storage of the
+scripts themselves. Each module includes in the Toolkit source code describes
+its required APIs internally. The Toolkit will merge the requiements from all
+modules and [automatically validate](../README.md#blueprint-validation) that all
+APIs are enabled in the project specified by `$(vars.project_id)`.
+
+For advanced multi-project use cases and for modules not included with the
+Toolkit, you may manually add required APIs to each module with the following
+format:
+
+```yaml
+deployment_groups:
+- group: primary
+  modules:
+  ...
+  - id: examplevm
+    source: modules/example/module
+    required_apis:
+      $(vars.project_id):
+      - compute.googleapis.com
+      - storage.googleapis.com
+      $(vars.other_project_id):
+      - storage.googleapis.com
+      explicit-project-id:
+      - file.googleapis.com
+    settings:
+    ...
+```
 
 ## Common Settings
 
