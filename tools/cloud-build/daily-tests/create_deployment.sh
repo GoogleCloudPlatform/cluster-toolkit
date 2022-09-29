@@ -16,7 +16,6 @@
 # Set variables to default if not already set
 EXAMPLE_YAML=${EXAMPLE_YAML:-/workspace/examples/hpc-cluster-high-io.yaml}
 PROJECT=${PROJECT:-hpc-toolkit-dev}
-BLUEPRINT_DIR=${BLUEPRINT_DIR:-blueprint}
 DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-missing-deployment-name}
 NETWORK=${NETWORK:-missing-network-name}
 MAX_NODES=${MAX_NODES:-2}
@@ -49,11 +48,6 @@ else
 fi
 
 ## Customize config yaml
-sed -i "s/blueprint_name: .*/blueprint_name: ${BLUEPRINT_DIR}/" "${EXAMPLE_YAML}" ||
-	{
-		echo "could not set blueprint_name"
-		exit 1
-	}
 sed -i "s/network_name: .*/network_name: ${NETWORK}/" "${EXAMPLE_YAML}" ||
 	{
 		echo "could not set network_name, may be using pre-existing-vpc"

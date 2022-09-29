@@ -36,7 +36,6 @@
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
-      BLUEPRINT_DIR: "{{ blueprint_dir }}"
       DEPLOYMENT_NAME: "{{ deployment_name }}"
       NETWORK: "{{ network }}"
     args:

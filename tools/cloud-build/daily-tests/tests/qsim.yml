@@ -18,7 +18,6 @@ deployment_name: "qsim-{{ build }}"
 zone: us-west4-b
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/quantum-circuit-simulator.yaml"
-blueprint_dir: blueprint-qsim
 network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-0"
 post_deploy_tests: []
