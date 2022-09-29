@@ -17,25 +17,35 @@
     that:
     - deployment_name is defined
     - workspace is defined
+    - terraform_apply_stderr is defined
 
 - name: Delete Firewall Rule
   register: fw_deleted
   changed_when: fw_deleted.rc == 0
   failed_when: false  # keep cleaning up
-  command:
+  ansible.builtin.command:
     argv:
     - gcloud
     - compute
     - firewall-rules
     - delete
     - "{{ deployment_name }}"
+- name: Get Startup Script Logs
+  ansible.builtin.command: "{{ terraform_apply_stderr | replace('\n',' ') | regex_search('please run: (.+)', '\\1') | first }}"
+  register: serial_port_1_output
+  when: '"startup-script finished with errors" in terraform_apply_stderr'
+  failed_when: false
+- name: Log Startup Script Failure
+  ansible.builtin.debug:
+    var: serial_port_1_output
+  when: serial_port_1_output is defined
 - name: Tear Down Cluster
   changed_when: true  # assume something destroyed
   run_once: true
   delegate_to: localhost
   environment:
     TF_IN_AUTOMATION: "TRUE"
-  command:
+  ansible.builtin.command:
     cmd: terraform destroy -auto-approve
     chdir: "{{ workspace }}/{{ deployment_name }}/primary"
 - name: Fail Out
