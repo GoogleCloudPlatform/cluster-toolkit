@@ -29,6 +29,15 @@ See the
 for how to use the `cloud-batch-job` module with other HPC Toolkit modules such
 as `filestore` and `startup-script`.
 
+## Shared VPC
+
+This module supports using a [shared VPC] with a Batch job. To accomplish this,
+include a [`pre-existing-vpc`] module that references an existing shared VPC and
+then have the `cloud-batch-job` module `use` the `pre-existing-vpc`.
+
+[shared VPC]: https://cloud.google.com/vpc/docs/shared-vpc
+[`pre-existing-vpc`]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/network/pre-existing-vpc
+
 ## Instance Templates
 
 Many of the settings for a Google Cloud Batch job are set using an instance
