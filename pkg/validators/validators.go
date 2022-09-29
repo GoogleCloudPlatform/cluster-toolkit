@@ -36,6 +36,7 @@ const zoneError = "zone %s is not available in project ID %s or your credentials
 const zoneInRegionError = "zone %s is not in region %s in project ID %s or your credentials do not have permissions to access it"
 const computeDisabledError = "Compute Engine API has not been used in project"
 const computeDisabledMsg = "the Compute Engine API must be enabled in project %s to validate blueprint global variables"
+const serviceDisabledMsg = "the Service Usage API must be enabled in project %s to validate that all APIs needed by the blueprint are enabled"
 
 func handleClientError(e error) error {
 	if strings.Contains(e.Error(), "could not find default credentials") {
@@ -73,7 +74,7 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 			switch reason := ae.Reason(); reason {
 			case "SERVICE_DISABLED":
 				log.Printf(enableAPImsg, "serviceusage.googleapis.com", projectID)
-				return fmt.Errorf("the Service Usage API must be enabled in project %s to validate that all APIs needed by the blueprint are enabled", projectID)
+				return fmt.Errorf(serviceDisabledMsg, projectID)
 			case "SERVICE_CONFIG_NOT_FOUND_OR_PERMISSION_DENIED":
 				return fmt.Errorf("service %s does not exist in project %s", ae.Metadata()["services"], projectID)
 			case "USER_PROJECT_DENIED":
@@ -116,6 +117,8 @@ func TestProjectExists(projectID string) error {
 	if err != nil {
 		if strings.Contains(err.Error(), computeDisabledError) {
 			log.Printf(computeDisabledMsg, projectID)
+			log.Printf(serviceDisabledMsg, projectID)
+			log.Printf(enableAPImsg, "serviceusage.googleapis.com", projectID)
 			return fmt.Errorf(enableAPImsg, "compute.googleapis.com", projectID)
 		}
 		return fmt.Errorf(projectError, projectID)
