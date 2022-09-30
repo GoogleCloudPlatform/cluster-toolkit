@@ -104,7 +104,7 @@ minutes. Please consider it only for blueprints that are quickly deployed.
 ## Blueprint Validation
 
 The Toolkit contains "validator" functions that perform basic tests of
-the blueprint to enusre that deployment variables are valid and that the HPC
+the blueprint to ensure that deployment variables are valid and that the HPC
 environment can be provisioned in your Google Cloud project. To succeed,
 validators need the following services to be enabled in your blueprint
 project(s):
@@ -220,7 +220,7 @@ validators.
 
 ## Enable GCP APIs
 
-In a new GCP project there are several apis that must be enabled to deploy your
+In a new GCP project there are several APIs that must be enabled to deploy your
 HPC cluster. These will be caught when you perform `terraform apply` but you can
 save time by enabling them upfront.
 
@@ -378,7 +378,7 @@ README.
 
 #### Insufficient Service Account Permissions
 
-By default, the slurm controller, login and compute nodes use the
+By default, the Slurm controller, login and compute nodes use the
 [Google Compute Engine Service Account (GCE SA)][def-compute-sa]. If this
 service account or a custom SA used by the Slurm modules does not have
 sufficient permissions, configuring the controller or running a job in Slurm may
@@ -391,7 +391,7 @@ seen by viewing the startup script on the controller:
 sudo journalctl -u google-startup-scripts.service | less
 ```
 
-An error similar to the following indicates missing permissions for the serivce
+An error similar to the following indicates missing permissions for the service
 account:
 
 ```shell
@@ -415,7 +415,7 @@ with the following command:
 sudo cat /var/log/slurm/resume.log
 ```
 
-An error in `resume.log` simlar to the following indicates a permissions issue
+An error in `resume.log` similar to the following indicates a permissions issue
 as well:
 
 ```shell
@@ -460,8 +460,8 @@ message. Here are some common reasons for the deployment to fail:
   [Enable GCP APIs](#enable-gcp-apis).
 * **Insufficient Quota:** The GCP project does not have enough quota to
   provision the requested resources. See [GCP Quotas](#gcp-quotas).
-* **Filestore resource limit:** When regularly deploying filestore instances
-  with a new vpc you may see an error during deployment such as:
+* **Filestore resource limit:** When regularly deploying Filestore instances
+  with a new VPC you may see an error during deployment such as:
   `System limit for internal resources has been reached`. See
   [this doc](https://cloud.google.com/filestore/docs/troubleshooting#system_limit_for_internal_resources_has_been_reached_error_when_creating_an_instance)
   for the solution.
@@ -492,7 +492,7 @@ network. These resources should be deleted manually. The first message indicates
 that a new VM has been added to a subnetwork within the VPC network. The second
 message indicates that a new firewall rule has been added to the VPC network.
 If your error message does not look like these, examine it carefully to identify
-the type of resouce to delete and its unique name. In the two messages above,
+the type of resource to delete and its unique name. In the two messages above,
 the resource names appear toward the end of the error message. The following
 links will take you directly to the areas within the Cloud Console for managing
 VMs and Firewall rules. Make certain that your project ID is selected in the
@@ -627,6 +627,6 @@ If developing on a mac, a workaround is to install GNU tooling by installing
 
 ### Contributing
 
-Please refer to the [contributing file](CONTRIBUTING.md) in our github repo, or
-to
+Please refer to the [contributing file](CONTRIBUTING.md) in our GitHub
+repository, or to
 [Google’s Open Source documentation](https://opensource.google/docs/releasing/template/CONTRIBUTING/#).
