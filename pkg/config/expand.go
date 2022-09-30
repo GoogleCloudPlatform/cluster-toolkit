@@ -106,7 +106,7 @@ func (dc *DeploymentConfig) addMetadataToModules() error {
 					requiredAPIs = []string{}
 				}
 				dc.Config.DeploymentGroups[iGrp].Modules[iMod].RequiredApis = map[string][]string{
-					"((var.project_id))": requiredAPIs,
+					"$(vars.project_id)": requiredAPIs,
 				}
 			}
 		}
