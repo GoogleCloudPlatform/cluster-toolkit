@@ -112,12 +112,44 @@ Alternatively, it can be added as a startup script via:
     settings:
       runners:
       - $(spack.install_spack_deps_runner)
-      - type: shell
-        content: $(spack.startup_script)
-        destination: "/sw/spack-install.sh"
+      - $(spack.install_spack_runner)
 ```
 
 [spack-gromacs.yaml]: ../../../examples/spack-gromacs.yaml
+
+## Environment Setup
+
+[Spack installation] produces a setup script that adds `spack` to your `PATH` as
+well as some other command-line integration tools. This script can be found at
+`<install path>/share/spack/setup-env.sh`. This script will be automatically
+added to bash startup by the `install_spack_runner`. In the case that you are
+using Spack on a different machine than the one where Spack was installed, you
+can use the `setup_spack_runner` to make sure Spack is also available on that
+machine.
+
+[Spack installation]: https://spack-tutorial.readthedocs.io/en/latest/tutorial_basics.html#installing-spack
+
+### Example using `setup_spack_runner`
+
+The following examples assumes that a different machine is running
+`$(spack.install_spack_runner)` and the Slurm login node has access to the Spack
+instal through a shared file system.
+
+```yaml
+  - id: spack
+    source: community/modules/scripts/spack-install
+    ...
+
+  - id: spack-setup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack.setup_spack_runner)
+
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    use: [spack-setup, ...]
+```
 
 ## License
 
@@ -182,5 +214,6 @@ No resources.
 | <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Path to the Spack installation script, duplicate for SLURM controller. |
 | <a name="output_install_spack_deps_runner"></a> [install\_spack\_deps\_runner](#output\_install\_spack\_deps\_runner) | Runner to install dependencies for spack using the startup-script module<br>This runner requires ansible to be installed. This can be achieved using the<br>install\_ansible.sh script as a prior runner in the startup-script module:<br>runners:<br>- type: shell<br>  source: modules/startup-script/examples/install\_ansible.sh<br>  destination: install\_ansible.sh<br>- $(spack.install\_spack\_deps\_runner)<br>... |
 | <a name="output_install_spack_runner"></a> [install\_spack\_runner](#output\_install\_spack\_runner) | Runner to install Spack using the startup-script module |
+| <a name="output_setup_spack_runner"></a> [setup\_spack\_runner](#output\_setup\_spack\_runner) | Adds Spack setup-env.sh script to /etc/profile.d so that it is called at shell startup. Among other things this adds Spack binary to user PATH. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Path to the Spack installation script. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
