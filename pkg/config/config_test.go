@@ -190,7 +190,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	}
 	testBlueprint := Blueprint{
 		BlueprintName: "simple",
-		Validators:    []validatorConfig{},
+		Validators:    nil,
 		Vars: map[string]interface{}{
 			"deployment_name": "deployment_name",
 			"project_id":      "test-project",
@@ -220,7 +220,9 @@ func getDeploymentConfigForTest() DeploymentConfig {
 			},
 		},
 	}
+	// the next two steps simulate relevant steps in ghpc expand
 	dc.addMetadataToModules()
+	dc.addDefaultValidators()
 	return dc
 }
 
