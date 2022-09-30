@@ -122,7 +122,7 @@ func (dc DeploymentConfig) executeValidators() error {
 		log.Println("  with the flag \"--validation-level IGNORE\"")
 		log.Println("- a custom set of validators can be configured following")
 		log.Println("  instructions at:")
-		log.Println("https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/README.md#blueprint-warnings-and-errors")
+		log.Println("https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/docs/blueprint-validation.md")
 	}
 
 	if errored {
