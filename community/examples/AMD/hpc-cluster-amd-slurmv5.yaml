@@ -77,13 +77,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: data
-        destination: /etc/profile.d/spack.sh
-        content: |
-          #!/bin/sh
-          if [ -f /sw/spack/share/spack/setup-env.sh ]; then
-                  . /sw/spack/share/spack/setup-env.sh
-          fi
+      - $(spack.setup_spack_runner)
       # the following installation of AOCC may be automated in the future
       # with a clear direction to the user to read the EULA at
       # https://developer.amd.com/aocc-compiler-eula/
