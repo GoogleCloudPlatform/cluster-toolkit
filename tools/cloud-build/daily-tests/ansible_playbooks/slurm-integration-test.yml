@@ -76,26 +76,34 @@
         var: instances_list.stdout_lines
     - name: Get IP of a login node - Exact name provided
       changed_when: false
-      register: login_ip
-      command: >-
+      register: get_login_ip
+      ansible.builtin.command: >-
         gcloud compute instances describe --zone={{ zone }} {{ login_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
       when: '"*" not in login_node'
+    - name: Set login_ip variable - Exact name provided
+      ansible.builtin.set_fact:
+        login_ip: "{{ get_login_ip.stdout }}"
+      when: '"*" not in login_node'
     - name: Get IP of a login node - Name pattern provided
       changed_when: false
-      register: login_ip
-      command: >-
+      register: get_login_ip
+      ansible.builtin.command: >-
         gcloud compute instances list \
           --format='get(networkInterfaces[0].accessConfigs[0].natIP)' --limit=1 \
           --filter=NAME:{{ login_node }}
       when: '"*" in login_node'
+    - name: Set login_ip variable - Name pattern provided
+      ansible.builtin.set_fact:
+        login_ip: "{{ get_login_ip.stdout }}"
+      when: '"*" in login_node'
     - name: Print login public IP
       ansible.builtin.debug:
-        var: login_ip.stdout_lines
+        var: login_ip
     - name: Get Controller IP
       changed_when: false
       register: controller_ip
-      command: >-
+      ansible.builtin.command: >-
         gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
     - name: Print controller public IP
@@ -141,7 +149,7 @@
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
     - name: Add Login node as host
       add_host:
-        hostname: "{{ login_ip.stdout }}"
+        hostname: "{{ login_ip }}"
         groups: [remote_host]
 
     ## Cleanup and fail gracefully
@@ -161,7 +169,7 @@
   - name: Slurm Test Block
     vars:
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
-      ansible_remote_tmp: /tmp/ghpc/
+      ansible_remote_tmp: "/tmp/ghpc/"
     block:
     - name: Wait until host is reachable
       ansible.builtin.wait_for_connection:
