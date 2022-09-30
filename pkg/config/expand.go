@@ -614,7 +614,7 @@ func (dc *DeploymentConfig) expandVariables() {
 			// ensure that variable references to projects in required APIs are expanded
 			for projectID, requiredAPIs := range mod.RequiredApis {
 				if isDeploymentVariable(projectID) {
-					s, err := updateVariableType(projectID, varContext{blueprint: dc.Config}, make(map[string]int))
+					s, err := handleVariable(projectID, varContext{blueprint: dc.Config}, make(map[string]int))
 					if err != nil {
 						log.Fatalf("expandVariables: %v", err)
 					}
