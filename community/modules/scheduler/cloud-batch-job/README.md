@@ -1,16 +1,23 @@
 # Description
 
-This module will render a Google Cloud Batch job template that is written to a
-local file. When this module is used with the `cloud-batch-login-node` module,
-the generated job template is placed on the login node.
+This module creates:
+
+- **A local file:** A Google Cloud Batch job template file is created. See the
+  `instructions` output for the location of the file and instructions on how to
+  submit it to Batch.
+- **An [instance template]:** This instance template defines the compute settings to
+  be used for the Batch job such as network, machine type, image, and startup
+  script. This instance template is automatically referenced from the Batch job
+  template described above.
+
+[instance template]: https://cloud.google.com/compute/docs/instance-templates
+
+When this module is used with the `cloud-batch-login-node` module, the generated
+job template will be placed on the login node.
 
 In some cases the job template can be submitted to the Google Cloud Batch API
 without modification, but for more complex workloads it is expected that the
 user will modify the template after running the HPC Toolkit.
-
-This module will also generate an instance template for the Google Cloud Batch
-job unless one is provided. See the
-[Instance Templates section](#instance-templates) for more information.
 
 ## Example
 
@@ -28,6 +35,15 @@ See the
 [Google Cloud Batch Example](../../../../examples/README.md#cloud-batchyaml--)
 for how to use the `cloud-batch-job` module with other HPC Toolkit modules such
 as `filestore` and `startup-script`.
+
+## Shared VPC
+
+This module supports using a [shared VPC] with a Batch job. To accomplish this,
+include a [`pre-existing-vpc`] module that references an existing shared VPC and
+then have the `cloud-batch-job` module `use` the `pre-existing-vpc`.
+
+[shared VPC]: https://cloud.google.com/vpc/docs/shared-vpc
+[`pre-existing-vpc`]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/network/pre-existing-vpc
 
 ## Instance Templates
 
