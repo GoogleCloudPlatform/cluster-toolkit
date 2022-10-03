@@ -49,6 +49,11 @@ func handleClientError(e error) error {
 
 // TestApisEnabled tests whether APIs are enabled in given project
 func TestApisEnabled(projectID string, requiredAPIs []string) error {
+	// can return immediately if there are 0 APIs to test
+	if len(requiredAPIs) == 0 {
+		return nil
+	}
+
 	ctx := context.Background()
 
 	c, err := serviceusage.NewClient(ctx, option.WithQuotaProject(projectID))
@@ -63,6 +68,7 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 	for _, api := range requiredAPIs {
 		serviceNames = append(serviceNames, prefix+"/services/"+api)
 	}
+
 	req := &serviceusagepb.BatchGetServicesRequest{
 		Parent: prefix,
 		Names:  serviceNames,
@@ -79,6 +85,9 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 				return fmt.Errorf("service %s does not exist in project %s", ae.Metadata()["services"], projectID)
 			case "USER_PROJECT_DENIED":
 				return fmt.Errorf(projectError, projectID)
+			case "SU_MISSING_NAMES":
+				// occurs if API list is empty and 0 APIs to validate
+				return nil
 			default:
 				return fmt.Errorf("unhandled error: %s", err)
 			}

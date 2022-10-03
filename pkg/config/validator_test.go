@@ -350,8 +350,12 @@ func (s *MySuite) TestApisEnabledValidator(c *C) {
 		Inputs:    map[string]interface{}{},
 	}
 
-	// TODO: implement a mock client to test success of test_apis_enabled when
-	// 0 inputs are provided
+	// this test succeeds because the list of required APIs for the test
+	// Deployment Config is empty; no actual API calls get made in this case.
+	// When full automation of required API detection is implemented, we may
+	// need to modify this test
+	err = dc.testApisEnabled(apisEnabledValidator)
+	c.Assert(err, IsNil)
 
 	// this validator reads blueprint directly so 1 inputs should fail
 	apisEnabledValidator.Inputs["foo"] = "bar"
