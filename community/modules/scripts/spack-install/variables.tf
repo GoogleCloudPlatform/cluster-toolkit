@@ -224,6 +224,6 @@ EOT
 
 variable "log_file" {
   description = "Defines the logfile that script output will be written to"
-  default     = "/dev/null"
+  default     = "/var/log/spack.log"
   type        = string
 }
