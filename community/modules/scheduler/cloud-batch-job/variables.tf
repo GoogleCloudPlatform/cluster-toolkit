@@ -70,7 +70,7 @@ variable "task_count_per_node" {
 }
 
 variable "mpi_mode" {
-  description = "Sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`."
+  description = "Sets up barriers before and after runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`."
   type        = bool
   default     = false
 }

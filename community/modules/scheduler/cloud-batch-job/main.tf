@@ -22,6 +22,7 @@ locals {
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.json.tftpl",
     {
+      synchronized       = var.mpi_mode
       runnable           = var.runnable
       task_count         = var.task_count
       tasks_per_node     = local.tasks_per_node
