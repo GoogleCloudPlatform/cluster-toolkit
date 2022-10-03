@@ -321,4 +321,4 @@ Execute the terraform commands to deploy the static Slurm cluster in project A.
 Congratulations! You've configured and deployed your static Slurm cluster in GCP
 using Slurm on GCP modules in the HPC Toolkit. The next step is to create,
 deploy and validate a hybrid configuration using your static cluster. To do
-that, follow the instructions at [deploy-hybrid-slurm.md](./deploy-hybrid-slurm.md).
+that, follow the instructions at [deploy-instructions.md](./deploy-instructions.md).

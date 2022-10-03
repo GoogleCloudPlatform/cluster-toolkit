@@ -6,18 +6,21 @@ verification of a hybrid slurm cluster using the
 
 They assume that your on-premise or simulated on-premise slurm
 cluster has already been set up to allow hybrid partitions from the hybrid
-module. If you haven't already, see [hybrid-slurm.md](./hybrid-slurm.md) for
+module. If you haven't already, see [on-prem-instructions.md](./on-prem-instructions.md) for
 instructions on preparing your on-premise cluster or
-[inter-gcp-project-hybrid-slurm.md] for
+[demo-with-cloud-controller-instructions.md] for
 instructions on preparing a simulated on premise cluster in gcp using Slurm on
 GCP.
 
-> If you came to this page from [inter-gcp-project-hybrid-slurm.md],
+> If you came to this page from [demo-with-cloud-controller-instructions.md],
 > be aware that these instructions have been generalized and that "Project A" and
 > "Project B" are not longer used here. "Project A" will simply be referred to as
 > you on-premise environment and "Project B" is your cloud bursting project.
 > Additional notes for following these instructions using a Slurm on GCP static
 > cluster will be indented similar to this block.
+>
+> **The indented blocks can be ignored if you are deploying onto an on-premise
+> controller.**
 
 [schedmd-slurm-gcp-v5-controller]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 
@@ -112,7 +115,7 @@ Copy the `hybrid.tar.gz` file to the controller VM instance and SSH to the
 slurm controller machine.
 
 > If you are working with a static Slurm cluster created in
-> [inter-gcp-project-hybrid-slurm.md], the
+> [demo-with-cloud-controller-instructions.md], the
 > following steps can be used to copy the hybrid directory and access your
 > controller:
 >
@@ -151,7 +154,7 @@ sudo chmod 755 $SLURM_CONF_DIR/hybrid
 ```
 
 > The following instructions only apply if the static Slurm cluster was created
-> following the instructions in [inter-gcp-project-hybrid-slurm.md]:
+> following the instructions in [demo-with-cloud-controller-instructions.md]:
 >
 > Because the static cluster was also created by [Slurm on GCP][slurm-gcp]
 > terraform modules, the partition information must be copied from the file
@@ -225,7 +228,7 @@ updating `<<SLURM_CONF_SIR>>` based on your configuration:
 ```
 
 > If the controller was deployed using [Slurm on GCP][slurm-gcp] following the
-> instructions in [inter-gcp-project-hybrid-slurm.md], there will
+> instructions in [demo-with-cloud-controller-instructions.md], there will
 > already be a cronjob pointing to the `slurmsync.py` script in `/etc/slurm/`.
 > This cronjob can be removed by following these steps:
 >
@@ -249,7 +252,7 @@ should point you in the right direction.
 
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
 [slurm-gcp-hybrid]: https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/docs/hybrid.md
-[inter-gcp-project-hybrid-slurm.md]: ./inter-gcp-project-hybrid-slurm.md
+[demo-with-cloud-controller-instructions.md]: ./demo-with-cloud-controller-instructions.md
 
 ## Validate the Hybrid Cluster
 

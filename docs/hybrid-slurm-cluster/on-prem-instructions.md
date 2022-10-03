@@ -2,13 +2,13 @@
 
 ## Introduction
 
-This document intends to support the use of the hybrid slurm terraform modules
-provided by SchedMD via [Slurm on GCP][slurm-gcp] and are availabe in the HPC
-Toolkit through the [schedmd-slurm-gcp-v5-hybrid][hybridmodule] module.
-
 Cloud hybrid slurm clusters are slurm clusters that manage both local and cloud
 partitions, where cloud partitions can elastically create resources in Google
 Cloud as needed.
+
+This document intends to support the use of the hybrid slurm terraform modules
+provided by SchedMD via [Slurm on GCP][slurm-gcp] and are availabe in the HPC
+Toolkit through the [schedmd-slurm-gcp-v5-hybrid][hybridmodule] module.
 
 > **_NOTE:_** Since on-premise Slurm configurations can vary significantly,
 > it is likely that this document does not cover every edge case.
@@ -17,22 +17,19 @@ Cloud as needed.
 
 ## About the Hybrid Configuration Module
 
-The [schedmd-slurm-gcp-v5-hybrid][hybridmodule] module relies on the
-[slurm\_controller\_hybrid] terraform module in [Slurm on GCP][slurm-gcp]. The
-module defines a configuration for a hybrid environment using the Slurm
-on GCP scripts for deploying cloud hybrid compute resources. This includes:
+The [schedmd-slurm-gcp-v5-hybrid][hybridmodule] module creates the following:
 
-* Creating a configuration directory with:
+* Compute instance templates that describe the nodes created by each cloud
+  hybrid partition.
+* Metadata in the Google Cloud project that informs newly created cloud compute
+  resources how to configure themselves.
+* Cloud pubsub triggers that handle reconfiguration and cleanup of cloud
+  resources.
+* Creating a configuration directory on the local filesystem with:
   * a `cloud.conf` file that extends the `slurm.conf` configuration.
   * a `cloud_gres.conf` file that extends the `gres.conf` configuration.
   * the [slurm-gcp] resume, suspend and synchronization scripts for
     the hybrid partitions.
-* Compute instance templates that describe the nodes created by each cloud
-  hybrid partition.
-* Metadata in the target cloud project that informs newly created cloud compute
-  resources how to configure themselves.
-* Cloud pubsub triggers that handle reconfiguration and cleanup of cloud
-  resources.
 
 This configuration comes with a set of assumptions about the local Slurm cluster
 and cloud compute nodes. The following sections describe some of these in more
@@ -78,7 +75,7 @@ The [slurm-gcp hybrid module][hybridmodule] only supports versions 21 and 22 of
 Slurm on the cloud compute nodes. In addition, since the controller must be in
 sync with Slurm version installed in the cloud compute nodes, the controller
 must be upgraded to version 21 at minimum before making use of the
-[hybrid module][hybridmodule].
+hybrid module.
 
 The default Slurm cloud compute node images install version 22.05.3. If your
 controller is running with slurm version 21, you can create a custom image with
@@ -98,7 +95,7 @@ and group IDs for the slurm and munge users and groups:
   * Group ID: 980
 
 If your Slurm controller sets different user and group IDs for these users, a
-custome cloud compute VM disk image must be created with these values updated.
+custom cloud compute VM disk image must be created with these values updated.
 For more information and instructions, see
 [Creating a Slurm Compute Image](#creating-a-slurm-compute-image).
 
@@ -119,9 +116,9 @@ For troubleshooting suggestions, visit [troubleshooting.md](./troubleshooting.md
 
 ### Cloud Environment Setup
 
-#### Select or Create a GCP Project
+#### Select or Create a Google Cloud Project
 
-This process will require a GCP project where the cloud partitions will create
+This process will require a Google Cloud project where the cloud partitions will create
 new compute VM instances to complete slurm jobs.
 
 Identify or create the project you intend to use. For more information, visit
@@ -140,7 +137,7 @@ At minimum, the following APIs are required to complete these instructions:
 
 #### Set IAM Roles
 The authenticated service account used by the slurm controller must have the
-Editor role in the cloud burst project. For more information on authenticating
+Editor role in the Google Cloud project. For more information on authenticating
 a service account, see the [Setup Authentication](#setup-authentication) section
 and the Google Cloud documentation on
 [Service Accounts](https://cloud.google.com/iam/docs/service-accounts).
@@ -405,19 +402,14 @@ will create duplicated partitions with the name of the local partition for all
 of the cloud partitions. To avoid this, set `Nodes` equal to the actual node
 names of the local partition.
 
-Another point to consider is whether your on premise nodes are using the Slurm
-[power saving][powersaving] functionality as described in
-[Power Saving Operations](#power-saving-operations) section. If they are, it will
-conflict with the mechanism used for the hybrid deployment. Supporting two
-distinct mechanisms for power saving operations is not supported, therefore the
-hybrid module will not support your use-case out of the box. It may be possible
-to customize the scripts to allow this, but it is not tested or supported by the
-HPC Toolkit.
+If your on premise nodes are using the Slurm [power saving][powersaving]
+functionality, see the [Power Saving Operations](#power-saving-operations)
+section.
 
 ## Creating the Hybrid Configuration with the HPC Toolkit
 
 With these considerations in mind, you can now move on to creating and
 installing the hybrid HPC Toolkit deployment. To do so, follow the steps in
-[deploy-hybrid-slurm.md].
+[deploy-instructions.md].
 
-[deploy-hybrid-slurm.md]: ./deploy-hybrid-slurm.md
+[deploy-instructions.md]: ./deploy-instructions.md
