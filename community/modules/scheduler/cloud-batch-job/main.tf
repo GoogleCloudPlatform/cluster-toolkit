@@ -21,6 +21,7 @@ locals {
     "${path.module}/templates/batch-job-base.json.tftpl",
     {
       runnable          = var.runnable
+      task_count        = var.task_count
       log_policy        = var.log_policy
       instance_template = local.instance_template
     }

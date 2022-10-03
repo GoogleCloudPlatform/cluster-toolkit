@@ -162,6 +162,7 @@ limitations under the License.
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/devstorage.read_only",<br>    "https://www.googleapis.com/auth/logging.write",<br>    "https://www.googleapis.com/auth/monitoring.write",<br>    "https://www.googleapis.com/auth/servicecontrol",<br>    "https://www.googleapis.com/auth/service.management.readonly",<br>    "https://www.googleapis.com/auth/trace.append"<br>  ]<br>}</pre> | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script run before Google Cloud Batch job starts. Ignored if `instance_template` is provided. | `string` | `null` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided. | `any` | `null` | no |
+| <a name="input_task_count"></a> [task\_count](#input\_task\_count) | Number of parallel tasks | `number` | `1` | no |
 
 ## Outputs
 

@@ -57,6 +57,12 @@ variable "gcloud_version" {
   }
 }
 
+variable "task_count" {
+  description = "Number of parallel tasks"
+  type        = number
+  default     = 1
+}
+
 variable "log_policy" {
   description = <<-EOT
   Create a block to define log policy.
