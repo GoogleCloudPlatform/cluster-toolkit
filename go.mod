@@ -23,7 +23,7 @@ require (
 require (
 	cloud.google.com/go/serviceusage v1.2.0
 	github.com/googleapis/gax-go/v2 v2.4.0
-	google.golang.org/api v0.96.0
+	google.golang.org/api v0.98.0
 )
 
 require (
