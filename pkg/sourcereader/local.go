@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/modulereader"
 	"os"
+	"strings"
 )
 
 // LocalSourceReader reads modules from a local directory
@@ -30,7 +31,13 @@ func (r LocalSourceReader) GetModuleInfo(modPath string, kind string) (modulerea
 	}
 
 	reader := modulereader.Factory(kind)
-	return reader.GetInfo(modPath)
+	mi, err := reader.GetInfo(modPath)
+	if idx := strings.Index(modPath, "/community/modules/"); idx != -1 {
+		mi.RequiredApis = defaultAPIList(modPath[idx+1:])
+	} else if idx := strings.Index(modPath, "/modules/"); idx != -1 {
+		mi.RequiredApis = defaultAPIList(modPath[idx+1:])
+	}
+	return mi, err
 }
 
 // GetModule copies the local source to a provided destination (the deployment directory)
