@@ -14,6 +14,7 @@
 
 ---
 
+test_name: monitoring
 deployment_name: monitoring-{{ build }}
 zone: us-central1-c
 workspace: /workspace
