@@ -66,6 +66,7 @@ Contents:
 - `spack-gromacs`: Tests the [spack-gromacs.yaml] example blueprint.
 - `slurm-gcp-v5-hpc-centos7`: Tests the [slurm-gcp-v5-hpc-centos7.yaml] example
   blueprint.
+- `slurm-gcp-v5-ubuntu`: Tests the [slurm-gcp-v5-ubuntu2004.yaml] example blueprint.
 
 Notes:
 
@@ -74,6 +75,7 @@ Notes:
 
 [spack-gromacs.yaml]: ../../../community/examples/spack-gromacs.yaml
 [slurm-gcp-v5-hpc-centos7.yaml]: ../../../community/examples/slurm-gcp-v5-hpc-centos7.yaml
+[slurm-gcp-v5-hpc-centos7.yaml]: ../../../community/examples/slurm-gcp-v5-ubuntu2004.yaml
 
 ### Group 3
 
