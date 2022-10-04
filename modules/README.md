@@ -200,7 +200,6 @@ example, the following code is using the embedded pre-existing-vpc module:
 ```yaml
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 ```
 
 #### Local Modules
@@ -213,7 +212,6 @@ following module definition refers the local pre-existing-vpc modules.
 ```yaml
   - id: network1
     source: ./modules/network/pre-existing-vpc
-    kind: terraform
 ```
 
 > **_NOTE:_** This example would have to be run from the HPC Toolkit repository
@@ -232,7 +230,6 @@ Get module from GitHub over SSH:
 ```yaml
   - id: network1
     source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc
-    kind: terraform
 ```
 
 Get module from GitHub over HTTPS:
@@ -240,7 +237,6 @@ Get module from GitHub over HTTPS:
 ```yaml
   - id: network1
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc
-    kind: terraform
 ```
 
 Both examples above use the [double-slash notation][tfsubdir] (`//`) to indicate
@@ -256,13 +252,20 @@ Toolkit vpc module, use:
 ```yaml
   - id: network1
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
-    kind: terraform
 ```
 
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
 [gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
 [daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
+
+#### Generic Git Modules
+To use a Terraform module available in a non-GitHub git repository such as
+gitlab, set the source to a path starting `git::`. Two Standard git protocols
+are supported, `git::https://` for HTTPS or `git::git@github.com` for SSH.
+
+Additional formatting and features after `git::` are identical to that of the
+[GitHub Modules](#github-modules) described above.
 
 ### Kind (May be Required)
 
@@ -294,11 +297,9 @@ the used module's output. For example, see the following blueprint snippet:
 modules:
 - id: network1
   source: modules/network/vpc
-  kind: terraform
 
 - id: workstation
   source: modules/compute/vm-instance
-  kind: terraform
   use: [network1]
   settings:
   ...

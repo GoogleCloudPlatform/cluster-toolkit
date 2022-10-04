@@ -75,7 +75,7 @@ remounted and that you should logout and login. Follow its instructions.
 Once configuration is complete, install AOCC by running:
 
 ```shell
-sudo -i bash /var/tmp/install_aocc.sh
+sudo bash /var/tmp/install_aocc.sh
 ```
 
 Spack will prompt you to accept the AOCC End User License Agreement by opening a
@@ -83,12 +83,7 @@ text file containing information about the license. Leave the file unmodified
 and write it to disk by typing `:q` as two characters in sequence
 ([VI help][vihelp]).
 
-Installation of AOCC and OpenMPI will take approximately 15 minutes. Once they
-are  installed, you can install additional packages such as `amdblis`:
-
-```shell
-sudo -i spack -d install -v amdblis %aocc@3.2.0
-```
+Installation of AOCC and OpenMPI will take approximately 15 minutes.
 
 Configure SSH user keys for access between cluster nodes:
 

@@ -1,0 +1,65 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: static-slurm-cluster
+
+vars:
+  project_id:  ## <<PROJECT_A>>
+  deployment_name: cluster
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: static-cluster-network
+      subnetwork_name: primary-subnet
+
+  - id: scratchfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      local_mount: /scratch
+
+  - id: static_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    settings:
+      partition_name: static
+      node_count_static: 4
+      node_count_dynamic_max: 0
+      enable_placement: false
+      machine_type: n2-standard-2
+      is_default: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    use:
+    - network1
+    - static_partition
+    - scratchfs
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - network1
+    - slurm_controller
+    settings:
+      machine_type: n2-standard-4

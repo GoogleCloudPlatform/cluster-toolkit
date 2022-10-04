@@ -24,7 +24,6 @@ a startup script and network created in previous steps.
 ```yaml
 - id: htcondor_execute_point
   source: community/modules/compute/htcondor-execute-point
-  kind: terraform
   use:
   - network1
   - htcondor_configure_execute_point

@@ -27,11 +27,9 @@ deployment_groups:
   modules:
   - id: network1
     source: ./modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: startup
     source: ./modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -50,13 +48,11 @@ deployment_groups:
 
   - id: instance
     source: ./modules/compute/vm-instance
-    kind: terraform
     use: [network1, startup]
     settings:
       machine_type: e2-standard-4
 
   - id: waiter
     source: ./community/modules/scripts/wait-for-startup
-    kind: terraform
     settings:
       instance_name: ((module.instance.name[0]))

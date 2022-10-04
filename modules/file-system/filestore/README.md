@@ -48,7 +48,6 @@ The Filestore instance defined below will have the following attributes:
 ```yaml
 - id: homefs
   source: modules/file-system/filestore
-  kind: terraform
   use: [network1]
   settings:
     local_mount: /home
@@ -67,7 +66,6 @@ The Filestore instance defined below will have the following attributes:
 ```yaml
 - id: highscale
   source: modules/file-system/filestore
-  kind: terraform
   use: [network1]
   settings:
     filestore_tier: HIGH_SCALE_SSD

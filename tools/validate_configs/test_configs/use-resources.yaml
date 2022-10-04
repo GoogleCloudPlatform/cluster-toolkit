@@ -30,11 +30,9 @@ deployment_groups:
   # Example - ./modules/network/pre-existing-vpc
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
@@ -43,12 +41,10 @@ deployment_groups:
 
   - id: projectsfs
     source: community/modules/file-system/nfs-server
-    kind: terraform
     use: [network1]
 
   - id: scratchfs
     source: community/modules/file-system/DDN-EXAScaler
-    kind: terraform
     settings:
       local_mount: /scratch
       network_self_link: $(network1.network_self_link)
@@ -57,7 +53,6 @@ deployment_groups:
 
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - homefs
     - scratchfs
@@ -68,7 +63,6 @@ deployment_groups:
 
   - id: slurm_controller
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - projectsfs
     - compute_partition
@@ -76,7 +70,6 @@ deployment_groups:
 
   - id: slurm_login
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use:
     - homefs
     - scratchfs

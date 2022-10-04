@@ -27,7 +27,6 @@ deployment_groups:
   modules:
   - id: hpc_dash
     source: modules/monitoring/dashboard
-    kind: terraform
     settings:
       widgets:
       - |
@@ -48,7 +47,6 @@ deployment_groups:
           }
   - id: empty_dash
     source: modules/monitoring/dashboard
-    kind: terraform
     settings:
       base_dashboard: Empty
       widgets:

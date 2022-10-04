@@ -20,12 +20,10 @@ systems and test installed software before submitting a Google Cloud Batch job.
 ```yaml
 - id: batch-job
   source: community/modules/scheduler/cloud-batch-job
-  kind: terraform
   ...
   
 - id: batch-login
   source: community/modules/scheduler/cloud-batch-login-node
-  kind: terraform
   use: [batch-job]
   outputs: [instructions]
 ```

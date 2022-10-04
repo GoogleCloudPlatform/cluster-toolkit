@@ -27,11 +27,9 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
@@ -40,7 +38,6 @@ deployment_groups:
 
   - id: startup
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -55,7 +52,6 @@ deployment_groups:
 
   - id: workstation
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network1
     - homefs

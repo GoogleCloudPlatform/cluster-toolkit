@@ -49,6 +49,12 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "auto_delete_boot_disk" {
+  description = "Controls if boot disk should be auto-deleted when instance is deleted."
+  type        = bool
+  default     = true
+}
+
 variable "local_ssd_count" {
   description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
   type        = number
@@ -109,7 +115,7 @@ variable "service_account" {
   })
   default = {
     email = null
-    scopes = ["https://www.googleapis.com/auth/devstorage.read_only",
+    scopes = ["https://www.googleapis.com/auth/devstorage.read_write",
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring.write",
       "https://www.googleapis.com/auth/servicecontrol",
@@ -153,7 +159,7 @@ variable "guest_accelerator" {
     type  = string,
     count = number
   }))
-  default = []
+  default = null
 }
 
 variable "on_host_maintenance" {

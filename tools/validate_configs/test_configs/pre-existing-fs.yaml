@@ -31,17 +31,14 @@ deployment_groups:
   # network-name from deployment vars
   - id: homefs-filestore
     source: modules/file-system/filestore
-    kind: terraform
 
 - group: compute
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/pre-existing-network-storage
-    kind: terraform
     settings:
       server_ip: ""  # for now, must be completed manually in compute/main.tf
       remote_mount: nfsshare
@@ -50,7 +47,6 @@ deployment_groups:
 
   - id: compute-partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - homefs
     - network1
@@ -59,7 +55,6 @@ deployment_groups:
 
   - id: slurm
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - homefs
     - compute-partition

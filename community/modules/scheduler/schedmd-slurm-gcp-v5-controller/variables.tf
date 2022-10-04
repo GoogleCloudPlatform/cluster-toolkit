@@ -127,7 +127,7 @@ variable "disable_default_mounts" {
 variable "disable_smt" {
   type        = bool
   description = "Disables Simultaneous Multi-Threading (SMT) on instance."
-  default     = false
+  default     = true
 }
 
 variable "disk_type" {
@@ -184,6 +184,19 @@ variable "enable_cleanup_subscriptions" {
 
     *WARNING*: Toggling this may temporarily impact var.enable_reconfigure behavior.
     EOD
+  type        = bool
+  default     = false
+}
+
+variable "enable_reconfigure" {
+  description = <<EOD
+Enables automatic Slurm reconfiguration when Slurm configuration changes (e.g.
+slurm.conf.tpl, partition details). Compute instances and resource policies
+(e.g. placement groups) will be destroyed to align with new configuration.
+NOTE: Requires Python and Google Pub/Sub API.
+*WARNING*: Toggling this will impact the running workload. Deployed compute nodes
+will be destroyed and their jobs will be requeued.
+EOD
   type        = bool
   default     = false
 }

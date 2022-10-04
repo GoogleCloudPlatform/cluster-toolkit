@@ -22,14 +22,14 @@
     url: "http://metadata.google.internal/computeMetadata/v1/instance/attributes"
   tasks:
   - name: Read metadata network_storage information
-    uri:
+    ansible.builtin.uri:
       url: "{{ url }}/{{ meta_key }}"
       method: GET
       headers:
         Metadata-Flavor: "Google"
     register: storage
   - name: Mount file systems
-    mount:
+    ansible.posix.mount:
       src: "{{ item.server_ip }}:/{{ item.remote_mount }}"
       path: "{{ item.local_mount }}"
       opts: "{{ item.mount_options }}"

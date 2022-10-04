@@ -7,7 +7,6 @@ Allows management of multiple API services for a Google Cloud Platform project.
 ```yaml
 - id: services-api
   source: community/modules/project/service-enablement
-  kind: terraform
   settings:
     gcp_service_list: [
     "file.googleapis.com",

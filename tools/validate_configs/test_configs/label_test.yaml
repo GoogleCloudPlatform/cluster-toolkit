@@ -30,11 +30,9 @@ deployment_groups:
   modules:
   - id: network
     source: modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network]
     settings:
       name: homefs
@@ -46,7 +44,6 @@ deployment_groups:
 
   - id: homefs1
     source: modules/file-system/filestore
-    kind: terraform
     use: [network]
     settings:
       name: homefs

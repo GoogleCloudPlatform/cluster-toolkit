@@ -225,6 +225,64 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	c.Check(err, IsNil)
 }
 
+func (s *MySuite) TestCreateGroupDirs(c *C) {
+	// Setup
+	testDeployDir := filepath.Join(testDir, "test_createGroupDirs")
+	if err := os.Mkdir(testDeployDir, 0755); err != nil {
+		log.Fatal("Failed to create test deployment directory for createGroupDirs")
+	}
+	groupNames := []string{"group0", "group1", "group2"}
+
+	// No deployment groups
+	testDepGroups := []config.DeploymentGroup{}
+	err := createGroupDirs(testDeployDir, &testDepGroups)
+	c.Check(err, IsNil)
+
+	// Single deployment group
+	testDepGroups = []config.DeploymentGroup{{Name: groupNames[0]}}
+	err = createGroupDirs(testDeployDir, &testDepGroups)
+	c.Check(err, IsNil)
+	grp0Path := filepath.Join(testDeployDir, groupNames[0])
+	_, err = os.Stat(grp0Path)
+	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
+	c.Check(err, IsNil)
+	err = os.Remove(grp0Path)
+	c.Check(err, IsNil)
+
+	// Multiple deployment groups
+	testDepGroups = []config.DeploymentGroup{
+		{Name: groupNames[0]},
+		{Name: groupNames[1]},
+		{Name: groupNames[2]},
+	}
+	err = createGroupDirs(testDeployDir, &testDepGroups)
+	c.Check(err, IsNil)
+	// Check for group 0
+	_, err = os.Stat(grp0Path)
+	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
+	c.Check(err, IsNil)
+	err = os.Remove(grp0Path)
+	c.Check(err, IsNil)
+	// Check for group 1
+	grp1Path := filepath.Join(testDeployDir, groupNames[1])
+	_, err = os.Stat(grp1Path)
+	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
+	c.Check(err, IsNil)
+	err = os.Remove(grp1Path)
+	c.Check(err, IsNil)
+	// Check for group 2
+	grp2Path := filepath.Join(testDeployDir, groupNames[2])
+	_, err = os.Stat(grp2Path)
+	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
+	c.Check(err, IsNil)
+	err = os.Remove(grp2Path)
+	c.Check(err, IsNil)
+
+	// deployment group(s) already exists
+	err = createGroupDirs(testDeployDir, &testDepGroups)
+	c.Check(err, IsNil)
+}
+
 func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
 	testBlueprint := getBlueprintForTest()
 	var e *config.InputValueError

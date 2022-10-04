@@ -19,6 +19,7 @@ package modulewriter
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
@@ -79,7 +80,13 @@ func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFla
 		return err
 	}
 
-	copySource(deploymentDir, &blueprint.DeploymentGroups)
+	if err := copySource(deploymentDir, &blueprint.DeploymentGroups); err != nil {
+		return err
+	}
+
+	if err := createGroupDirs(deploymentDir, &blueprint.DeploymentGroups); err != nil {
+		return err
+	}
 
 	for _, grp := range blueprint.DeploymentGroups {
 
@@ -112,17 +119,32 @@ func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFla
 	return nil
 }
 
-func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) {
+func createGroupDirs(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
+	for _, grp := range *deploymentGroups {
+		groupPath := filepath.Join(deploymentPath, grp.Name)
+		// Create the deployment group directory if not already created.
+		if _, err := os.Stat(groupPath); errors.Is(err, os.ErrNotExist) {
+			if err := os.Mkdir(groupPath, 0755); err != nil {
+				return fmt.Errorf("failed to create directory at %s for deployment group %s: err=%w",
+					groupPath, grp.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
+
 	for iGrp, grp := range *deploymentGroups {
+		basePath := filepath.Join(deploymentPath, grp.Name)
 		for iMod, module := range grp.Modules {
-			if sourcereader.IsGitHubPath(module.Source) {
+			if sourcereader.IsGitPath(module.Source) {
 				continue
 			}
 
 			/* Copy source files */
 			moduleName := filepath.Base(module.Source)
 			(*deploymentGroups)[iGrp].Modules[iMod].ModuleName = moduleName
-			basePath := filepath.Join(deploymentPath, grp.Name)
 			var destPath string
 			switch module.Kind {
 			case "terraform":
@@ -137,7 +159,7 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 
 			reader := sourcereader.Factory(module.Source)
 			if err := reader.GetModule(module.Source, destPath); err != nil {
-				log.Fatalf("failed to get module from %s to %s: %v", module.Source, destPath, err)
+				return fmt.Errorf("failed to get module from %s to %s: %v", module.Source, destPath, err)
 			}
 
 			/* Create module level files */
@@ -145,6 +167,7 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 			writer.addNumModules(1)
 		}
 	}
+	return nil
 }
 
 func printInstructionsPreamble(kind string, path string) {

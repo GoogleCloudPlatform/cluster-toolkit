@@ -21,7 +21,45 @@ More information about the architecture can be found at
 [marketplace]: https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
 [architecture]: https://cloud.google.com/architecture/lustre-architecture
 
+## Mounting
+
+To mount the DDN EXAScaler Lustre file system you must first install the DDN
+Luster client and then call the proper `mount` command.
+
+When mounting to a Slurm resource both of these steps are automatically handled
+with the use of the `use` command. See the
+[hpc-cluster-high-io](../../../../examples/hpc-cluster-high-io.yaml) for an
+example of using this module with Slurm.
+
+The DDN-EXAScaler module outputs runners that can be used with the
+startup-script module to install the client and mount the file system when
+mounting to other compute resources such as `vm-instance` or `cloud-batch-job`.
+See the following example:
+
+```yaml
+  - id: lustrefs
+    source: community/modules/file-system/DDN-EXAScaler
+    use: [network1]
+    settings: {local_mount: /scratch}
+
+  - id: mount-at-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(lustrefs.install_ddn_lustre_client_runner)
+      - $(lustrefs.mount_runner)
+
+  - id: workstation
+    source: modules/compute/vm-instance
+    use: [network1, lustrefs, mount-at-startup]
+```
+
+See [additional documentation][ddn-install-docs] from DDN EXAScaler.
+
+[ddn-install-docs]: https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp#install-new-exascaler-cloud-clients
+
 ## Support
+
 EXAScaler Cloud includes self-help support with access to publicly available
 documents and videos. Premium support includes 24x7x365 access to DDN's experts,
 along with support community access, automated notifications of updates and
@@ -61,7 +99,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_ddn_exascaler"></a> [ddn\_exascaler](#module\_ddn\_exascaler) | github.com/DDNStorage/exascaler-cloud-terraform//gcp | 3eec46e |
+| <a name="module_ddn_exascaler"></a> [ddn\_exascaler](#module\_ddn\_exascaler) | github.com/DDNStorage/exascaler-cloud-terraform//gcp | 78deadb |
 
 ## Resources
 
@@ -71,11 +109,11 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_boot"></a> [boot](#input\_boot) | Boot disk properties | <pre>object({<br>    disk_type   = string<br>    auto_delete = bool<br>  })</pre> | <pre>{<br>  "auto_delete": true,<br>  "disk_type": "pd-standard"<br>}</pre> | no |
+| <a name="input_boot"></a> [boot](#input\_boot) | Boot disk properties | <pre>object({<br>    disk_type   = string<br>    auto_delete = bool<br>    script_url  = string<br>  })</pre> | <pre>{<br>  "auto_delete": true,<br>  "disk_type": "pd-standard",<br>  "script_url": null<br>}</pre> | no |
 | <a name="input_cls"></a> [cls](#input\_cls) | Compute client properties | <pre>object({<br>    node_type  = string<br>    node_cpu   = string<br>    nic_type   = string<br>    node_count = number<br>    public_ip  = bool<br>  })</pre> | <pre>{<br>  "nic_type": "GVNIC",<br>  "node_count": 0,<br>  "node_cpu": "Intel Cascade Lake",<br>  "node_type": "n2-standard-2",<br>  "public_ip": true<br>}</pre> | no |
 | <a name="input_clt"></a> [clt](#input\_clt) | Compute client target properties | <pre>object({<br>    disk_bus   = string<br>    disk_type  = string<br>    disk_size  = number<br>    disk_count = number<br>  })</pre> | <pre>{<br>  "disk_bus": "SCSI",<br>  "disk_count": 0,<br>  "disk_size": 256,<br>  "disk_type": "pd-standard"<br>}</pre> | no |
 | <a name="input_fsname"></a> [fsname](#input\_fsname) | EXAScaler filesystem name, only alphanumeric characters are allowed, and the value must be 1-8 characters long | `string` | `"exacloud"` | no |
-| <a name="input_image"></a> [image](#input\_image) | Source image properties | <pre>object({<br>    project = string<br>    name    = string<br>  })</pre> | <pre>{<br>  "name": "exascaler-cloud-v523-centos7",<br>  "project": "ddn-public"<br>}</pre> | no |
+| <a name="input_image"></a> [image](#input\_image) | Source image properties | `any` | <pre>{<br>  "family": "exascaler-cloud-6-1-centos",<br>  "project": "ddn-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to EXAScaler Cloud deployment. List of key key, value pairs. | `any` | `{}` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint (at the client instances) for this EXAScaler system | `string` | `"/shared"` | no |
 | <a name="input_mds"></a> [mds](#input\_mds) | Metadata server properties | <pre>object({<br>    node_type  = string<br>    node_cpu   = string<br>    nic_type   = string<br>    node_count = number<br>    public_ip  = bool<br>  })</pre> | <pre>{<br>  "nic_type": "GVNIC",<br>  "node_count": 1,<br>  "node_cpu": "Intel Cascade Lake",<br>  "node_type": "n2-standard-32",<br>  "public_ip": true<br>}</pre> | no |
@@ -101,8 +139,11 @@ No resources.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_client_config_script"></a> [client\_config\_script](#output\_client\_config\_script) | Script that will install DDN EXAScaler lustre client. The machine running this script must be on the same network & subnet as the EXAScaler. |
 | <a name="output_http_console"></a> [http\_console](#output\_http\_console) | HTTP address to access the system web console. |
-| <a name="output_mount_command"></a> [mount\_command](#output\_mount\_command) | Command to mount the file system. |
+| <a name="output_install_ddn_lustre_client_runner"></a> [install\_ddn\_lustre\_client\_runner](#output\_install\_ddn\_lustre\_client\_runner) | Runner that encapsulates the `client_config_script` output on this module. |
+| <a name="output_mount_command"></a> [mount\_command](#output\_mount\_command) | Command to mount the file system. `client_config_script` must be run first. |
+| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the DDN EXAScaler Lustre file system |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a EXAScaler system to be mounted by other systems. |
 | <a name="output_private_addresses"></a> [private\_addresses](#output\_private\_addresses) | Private IP addresses for all instances. |
 | <a name="output_ssh_console"></a> [ssh\_console](#output\_ssh\_console) | Instructions to ssh into the instances. |

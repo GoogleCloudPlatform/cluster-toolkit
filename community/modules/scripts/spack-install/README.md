@@ -32,7 +32,6 @@ see this module used in a full blueprint, see the [spack-gromacs.yaml] example.
 ```yaml
   - id: spack
     source: community/modules/scripts/spack-install
-    kind: terraform
     settings:
       install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
@@ -97,7 +96,6 @@ deployment via the following:
 ```yaml
 - id: slurm_controller
   source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-  kind: terraform
   use: [spack]
   settings:
     subnetwork_name: ((module.network1.primary_subnetwork.name))
@@ -111,7 +109,6 @@ Alternatively, it can be added as a startup script via:
 ```yaml
   - id: startup
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - $(spack.install_spack_deps_runner)

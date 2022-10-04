@@ -37,10 +37,10 @@ var goGetterGetters = map[string]getter.Getter{
 
 var goGetterDecompressors = map[string]getter.Decompressor{}
 
-// GitHubSourceReader reads modules from a GitHub repository
-type GitHubSourceReader struct{}
+// GitSourceReader reads modules from a git repository
+type GitSourceReader struct{}
 
-func copyGitHubModules(srcPath string, destPath string) error {
+func copyGitModules(srcPath string, destPath string) error {
 	client := getter.Client{
 		Src: srcPath,
 		Dst: destPath,
@@ -57,9 +57,9 @@ func copyGitHubModules(srcPath string, destPath string) error {
 	return err
 }
 
-// GetModuleInfo gets modulereader.ModuleInfo for the given kind from the GitHub source
-func (r GitHubSourceReader) GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error) {
-	if !IsGitHubPath(modPath) {
+// GetModuleInfo gets modulereader.ModuleInfo for the given kind from the git source
+func (r GitSourceReader) GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error) {
+	if !IsGitPath(modPath) {
 		return modulereader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
@@ -70,8 +70,8 @@ func (r GitHubSourceReader) GetModuleInfo(modPath string, kind string) (modulere
 		return modulereader.ModuleInfo{}, err
 	}
 
-	if err := copyGitHubModules(modPath, writeDir); err != nil {
-		return modulereader.ModuleInfo{}, fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
+	if err := copyGitModules(modPath, writeDir); err != nil {
+		return modulereader.ModuleInfo{}, fmt.Errorf("failed to clone git module at %s to tmp dir %s: %v",
 			modPath, writeDir, err)
 	}
 
@@ -79,9 +79,9 @@ func (r GitHubSourceReader) GetModuleInfo(modPath string, kind string) (modulere
 	return reader.GetInfo(writeDir)
 }
 
-// GetModule copies the GitHub source to a provided destination (the deployment directory)
-func (r GitHubSourceReader) GetModule(modPath string, copyPath string) error {
-	if !IsGitHubPath(modPath) {
+// GetModule copies the git source to a provided destination (the deployment directory)
+func (r GitSourceReader) GetModule(modPath string, copyPath string) error {
+	if !IsGitPath(modPath) {
 		return fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
@@ -92,8 +92,8 @@ func (r GitHubSourceReader) GetModule(modPath string, copyPath string) error {
 		return err
 	}
 
-	if err := copyGitHubModules(modPath, writeDir); err != nil {
-		return fmt.Errorf("failed to clone GitHub module at %s to tmp dir %s: %v",
+	if err := copyGitModules(modPath, writeDir); err != nil {
+		return fmt.Errorf("failed to clone git module at %s to tmp dir %s: %v",
 			modPath, writeDir, err)
 	}
 

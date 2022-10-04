@@ -27,11 +27,9 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: homefs
     source: community/modules/file-system/nfs-server
-    kind: terraform
     use: [network1]
     outputs: [network_storage]
     settings:
@@ -40,7 +38,6 @@ deployment_groups:
 
   - id: appsfs
     source: ./community/modules/file-system/nfs-server
-    kind: terraform
     use: [network1]
     outputs: [network_storage]
     settings:

@@ -28,19 +28,15 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: hpc_dash
     source: modules/monitoring/dashboard
-    kind: terraform
 
   ## Install Scripts
   - id: spack
     source: community/modules/scripts/spack-install
-    kind: terraform
     settings:
       install_dir: /apps/spack
-      spack_url: https://github.com/spack/spack
       spack_ref: v0.18.0
       log_file: /var/log/spack.log
       configs:
@@ -106,7 +102,6 @@ deployment_groups:
 
   - id: controller-setup
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -154,7 +149,6 @@ deployment_groups:
           mpirun -n 60 -npernode 30 -hostfile hostfile simpleFoam -parallel
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use:
     - network1
     settings:
@@ -163,7 +157,6 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - network1
     - compute_partition
@@ -173,7 +166,6 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use:
     - network1
     - slurm_controller
