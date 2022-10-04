@@ -22,15 +22,19 @@ vars:
   region: us-central1
   zone: us-central1-c
   static_controller_hostname:  ## <<instance name>>.c.<<Project_A>>.internal
+  network_name: compute-vpc-network
+  subnetwork_name: primary-subnet
 
 deployment_groups:
+- group: create_network
+  modules:
+  - id: created_network
+    source: modules/network/vpc
+
 - group: primary
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    settings:
-      network_name: compute-vpc-network
-      subnetwork_name: primary-subnet
 
   - id: scratchfs
     source: modules/file-system/filestore
@@ -64,6 +68,6 @@ deployment_groups:
     - scratchfs
     settings:
       output_dir: ./hybrid
-      slurm_bin_dir: /usr/local/bin
+      slurm_bin_dir: /usr/bin
       slurm_control_host: $(vars.static_controller_hostname)
       install_dir: /etc/slurm/hybrid
