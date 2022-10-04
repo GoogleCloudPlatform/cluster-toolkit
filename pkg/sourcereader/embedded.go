@@ -159,9 +159,11 @@ func defaultAPIList(source string) []string {
 			"compute.googleapis.com",
 		},
 		"community/modules/scheduler/cloud-batch-job": {
+			"batch.googleapis.com",
 			"compute.googleapis.com",
 		},
 		"community/modules/scheduler/cloud-batch-login-node": {
+			"batch.googleapis.com",
 			"compute.googleapis.com",
 			"storage.googleapis.com",
 		},
