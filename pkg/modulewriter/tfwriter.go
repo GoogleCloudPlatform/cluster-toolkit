@@ -65,8 +65,12 @@ func createBaseFile(path string) error {
 }
 
 func handleLiteralVariables(hclBytes []byte) []byte {
+	// Convert ((var.variable)) to var.variable
 	re := regexp.MustCompile(`"\(\((.*?)\)\)"`)
-	return re.ReplaceAll(hclBytes, []byte(`${1}`))
+	hclBytes = re.ReplaceAll(hclBytes, []byte(`${1}`))
+	// Convert \((not.variable)) to ((not.variable))
+	re = regexp.MustCompile(`\\\\\(\((.*?)\)\)`)
+	return re.ReplaceAll(hclBytes, []byte(`((${1}))`))
 }
 
 func appendHCLToFile(path string, hclBytes []byte) error {
