@@ -546,6 +546,10 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	cliKeyBool := "true"
 	cliKeyInt := "15"
 	cliKeyFloat := "15.43"
+	cliKeyArray := "[1, 2, 3]"
+	cliKeyMap := "{bar: baz, qux: 1}"
+	cliKeyArrayOfMaps := "[foo, {bar: baz, qux: 1}]"
+	cliKeyMapOfArrays := "{foo: [1, 2, 3], bar: [a, b, c]}"
 	cliVars := []string{
 		fmt.Sprintf("project_id=%s", cliProjectID),
 		fmt.Sprintf("deployment_name=%s", cliDeploymentName),
@@ -555,6 +559,10 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 		fmt.Sprintf("keyBool=%s", cliKeyBool),
 		fmt.Sprintf("keyInt=%s", cliKeyInt),
 		fmt.Sprintf("keyFloat=%s", cliKeyFloat),
+		fmt.Sprintf("keyMap=%s", cliKeyMap),
+		fmt.Sprintf("keyArray=%s", cliKeyArray),
+		fmt.Sprintf("keyArrayOfMaps=%s", cliKeyArrayOfMaps),
+		fmt.Sprintf("keyMapOfArrays=%s", cliKeyMapOfArrays),
 	}
 	err := dc.SetCLIVariables(cliVars)
 
@@ -576,6 +584,26 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	// Float in string is converted to float
 	floatValue, _ := strconv.ParseFloat(cliKeyFloat, 64)
 	c.Assert(dc.Config.Vars["keyFloat"], Equals, floatValue)
+
+	// Map in string is converted to map
+	mapValue := make(map[string]interface{})
+	mapValue["bar"] = "baz"
+	mapValue["qux"] = 1
+	c.Assert(dc.Config.Vars["keyMap"], DeepEquals, mapValue)
+
+	// Array in string is converted to array
+	arrayValue := []interface{}{1, 2, 3}
+	c.Assert(dc.Config.Vars["keyArray"], DeepEquals, arrayValue)
+
+	// Array of maps in string is converted to array
+	arrayOfMapsValue := []interface{}{"foo", mapValue}
+	c.Assert(dc.Config.Vars["keyArrayOfMaps"], DeepEquals, arrayOfMapsValue)
+
+	// Map of arrays in string is converted to array
+	mapOfArraysValue := make(map[string]interface{})
+	mapOfArraysValue["foo"] = []interface{}{1, 2, 3}
+	mapOfArraysValue["bar"] = []interface{}{"a", "b", "c"}
+	c.Assert(dc.Config.Vars["keyMapOfArrays"], DeepEquals, mapOfArraysValue)
 
 	// Failure: Variable without '='
 	dc = getBasicDeploymentConfigWithTestModule()

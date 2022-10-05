@@ -454,7 +454,7 @@ func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 		var out interface{}
 		err := yaml.Unmarshal([]byte(arr[1]), &out)
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid input: unable to convert '%s' value '%s'", arr[0], arr[1])
 		}
 
 		key, value := arr[0], out
