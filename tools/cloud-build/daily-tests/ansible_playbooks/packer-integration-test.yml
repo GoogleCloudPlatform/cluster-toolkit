@@ -31,6 +31,10 @@
       NETWORK: "{{ network }}"
     args:
       creates: "{{ workspace }}/{{ deployment_name }}.tgz"
+    register: create_output
+  - name: Print ghpc blueprint information
+    ansible.builtin.debug:
+      var: create_output.stdout_lines
   - name: Create Infrastructure and test
     block:
     - name: Create Network with Terraform

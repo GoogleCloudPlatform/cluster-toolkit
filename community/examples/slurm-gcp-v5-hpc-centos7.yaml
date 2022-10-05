@@ -68,6 +68,8 @@ deployment_groups:
     - debug_partition
     - compute_partition
     - homefs
+    settings:
+      disable_controller_public_ips: false
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
@@ -76,3 +78,4 @@ deployment_groups:
     - slurm_controller
     settings:
       machine_type: n2-standard-4
+      disable_login_public_ips: false
