@@ -454,7 +454,7 @@ func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 		var out interface{}
 		err := yaml.Unmarshal([]byte(arr[1]), &out)
 		if err != nil {
-			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type. Variables with commas should be enclosed in escaped double quotes", arr[0], arr[1])
+			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", arr[0], arr[1])
 		}
 
 		key, value := arr[0], out
