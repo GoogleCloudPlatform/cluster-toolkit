@@ -109,16 +109,10 @@ compact set of subnetworks possible.
 - id: network1
   source: modules/network/vpc
   settings:
-  - deployment_name: $(vars.deployment_name)
+    network_name: cluster-net
 ```
 
-This creates a new VPC network named based on the `deployment_name` variable
-with `_net` appended. `network_name` can be set manually as well as part of the
-settings.
-
-> **_NOTE:_** `deployment_name` does not need to be set explicitly here. It
-> would typically be inferred from the deployment variable of the same name. It
-> is included here for clarity.
+This creates a new VPC network named `cluster-net`.
 
 ## License
 
