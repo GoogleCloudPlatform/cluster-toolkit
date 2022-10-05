@@ -17,12 +17,19 @@
 locals {
   instance_template = var.instance_template != null ? var.instance_template : module.instance_template[0].self_link
 
+  tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
+
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.json.tftpl",
     {
-      runnable          = var.runnable
-      log_policy        = var.log_policy
-      instance_template = local.instance_template
+      synchronized       = var.mpi_mode
+      runnable           = var.runnable
+      task_count         = var.task_count
+      tasks_per_node     = local.tasks_per_node
+      require_hosts_file = var.mpi_mode
+      permissive_ssh     = var.mpi_mode
+      log_policy         = var.log_policy
+      instance_template  = local.instance_template
     }
   )
 

@@ -57,6 +57,24 @@ variable "gcloud_version" {
   }
 }
 
+variable "task_count" {
+  description = "Number of parallel tasks"
+  type        = number
+  default     = 1
+}
+
+variable "task_count_per_node" {
+  description = "Max number of tasks that can be run on a VM at the same time. If not specified, Batch will decide a value."
+  type        = number
+  default     = null
+}
+
+variable "mpi_mode" {
+  description = "Sets up barriers before and after runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`."
+  type        = bool
+  default     = false
+}
+
 variable "log_policy" {
   description = <<-EOT
   Create a block to define log policy.
