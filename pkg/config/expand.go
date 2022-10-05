@@ -36,6 +36,7 @@ const (
 	deploymentVariableExp string = `^\$\(vars\.(.*)\)$`
 	anyVariableExp        string = `\$\((.*)\)`
 	literalExp            string = `^\(\((.*)\)\)$`
+	escapeVariableExp     string = `\\\$\((.*?)\)`
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
@@ -398,6 +399,13 @@ type varContext struct {
 	blueprint  Blueprint
 }
 
+// Escape blueprint variable
+// Convert \$(var.variable) to $(var.variable)
+func expandEscapeVariable(str string) string {
+	re := regexp.MustCompile(escapeVariableExp)
+	return re.ReplaceAllString(str, (`$(${1})`))
+}
+
 // Needs DeploymentGroups, variable string, current group,
 func expandSimpleVariable(
 	context varContext,
@@ -503,6 +511,15 @@ func isSimpleVariable(str string) bool {
 	return matched
 }
 
+// isEscapeVariable checks if the entire string is an escaped variable \$(not.var)
+func isEscapeVariable(str string) bool {
+	matched, err := regexp.MatchString(escapeVariableExp, str)
+	if err != nil {
+		log.Fatalf("isEscapeVariable(%s): %v", str, err)
+	}
+	return matched
+}
+
 // hasVariable checks to see if any variable exists in a string
 func hasVariable(str string) bool {
 	matched, err := regexp.MatchString(anyVariableExp, str)
@@ -522,6 +539,9 @@ func handleVariable(
 		if hasVariable(val) {
 			if isSimpleVariable(val) {
 				return expandSimpleVariable(context, modToGrp)
+			}
+			if isEscapeVariable(val) {
+				return expandEscapeVariable(val), nil
 			}
 			return expandVariable(context, modToGrp)
 		}
