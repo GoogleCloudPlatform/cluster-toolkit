@@ -37,6 +37,7 @@ const (
 	anyVariableExp        string = `\$\((.*)\)`
 	literalExp            string = `^\(\((.*)\)\)$`
 	escapeVariableExp     string = `\\\$\((.*?)\)`
+	nonEscapeVariableExp  string = `(?:\s|^|[[:word:]]|[^\\])\$\((.*)\)`
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
@@ -513,9 +514,22 @@ func isSimpleVariable(str string) bool {
 
 // isEscapeVariable checks if the entire string is an escaped variable \$(not.var)
 func isEscapeVariable(str string) bool {
+	// if string has multiple variables all of them must have escape character
+	if hasNoEscapeVariable(str) {
+		return false
+	}
 	matched, err := regexp.MatchString(escapeVariableExp, str)
 	if err != nil {
 		log.Fatalf("isEscapeVariable(%s): %v", str, err)
+	}
+	return matched
+}
+
+// hasNoEscapeVariable checks to see if any variable in string is not escape
+func hasNoEscapeVariable(str string) bool {
+	matched, err := regexp.MatchString(nonEscapeVariableExp, str)
+	if err != nil {
+		log.Fatalf("hasNoEscapeVariable(%s): %v", str, err)
 	}
 	return matched
 }
