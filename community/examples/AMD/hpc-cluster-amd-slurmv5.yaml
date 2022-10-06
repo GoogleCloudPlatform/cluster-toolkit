@@ -44,19 +44,70 @@ deployment_groups:
     settings:
       install_dir: /sw/spack
       spack_ref: v0.18.1
+      log_file: /var/log/spack.log
       configs:
+      - type: file
+        scope: defaults
+        content: |
+          config:
+            build_stage:
+              - /opt/spack_build_stage
+      - type: file
+        scope: defaults
+        content: |
+          modules:
+            default:
+              tcl:
+                hash_length: 0
+                all:
+                  conflict:
+                    - '{name}'
+                projections:
+                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
       - type: file
         scope: site
         content: |
           packages:
             slurm:
               externals:
-                - spec: slurm@22-05-2
+                - spec: slurm@22-05-3
                   prefix: /usr/local
               buildable: False
-      log_file: /var/log/spack.log
-      compilers: []
-      packages: []
+      - type: file
+        scope: site
+        content: |
+          concretizer:
+            targets:
+              host_compatible: false
+      compilers:
+      - gcc@10.3.0 %gcc@4.8.5 target=x86_64
+      environments:
+      - name: openfoam
+        type: file
+        content: |
+          spack:
+            definitions:
+            - compilers:
+              - gcc@10.3.0
+            - mpis:
+              - openmpi@4.1.3+legacylaunchers+pmi fabrics=none schedulers=slurm
+            - packages:
+              - flex@2.6.4
+            - mpi_packages:
+              - openfoam-org@8 ^flex@2.6.4 target=zen3
+            specs:
+            - matrix:
+              - - $mpis
+              - - $%compilers
+            - matrix:
+              - - $packages
+              - - $%compilers
+            - matrix:
+              - - $mpi_packages
+              - - $%compilers
+              - - $^mpis
+            concretizer:
+              unify: when_possible
 
   - id: spack-startup
     source: modules/scripts/startup-script
@@ -70,8 +121,13 @@ deployment_groups:
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
       - type: shell
-        content: "shutdown -h +1"
         destination: shutdown.sh
+        content: |
+          #!/bin/bash
+          if [ ! -f /etc/block_auto_shutdown ]; then
+                  touch /etc/block_auto_shutdown
+                  shutdown -h +1
+          fi
 
   - id: slurm_startup
     source: modules/scripts/startup-script
@@ -91,13 +147,19 @@ deployment_groups:
           spack compiler find --scope site
           spack -d install -v openmpi@4.1.3 %aocc@3.2.0 +legacylaunchers +pmi schedulers=slurm
 
-  # must restart vm to re-initiate subsequent installs
   - id: spack_builder
     source: modules/compute/vm-instance
     use: [network1, swfs, spack-startup]
     settings:
       name_prefix: spack-builder
       machine_type: c2d-standard-16
+      disable_public_ips: true
+      instance_image:
+        # these images must match the images used by Slurm modules below because
+        # we are building OpenMPI with PMI support in libaries contained in
+        # Slurm installation
+        family: schedmd-v5-slurm-22-05-3-hpc-centos-7
+        project: schedmd-slurm-public
 
   - id: low_cost_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
