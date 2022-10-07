@@ -57,6 +57,9 @@ elif [[ -n "$ACTIVE_BUILDS" ]]; then
 	echo "There are active Cloud Build jobs. Refusing to disable/enable Filestore to reset internal limit."
 elif [[ -n "$ACTIVE_FILESTORE" ]]; then
 	echo "There are active Filestore instances. These may require manual cleanup."
+	# Fail if there are active filestore instances. This triggers an alert to the
+	# team, ensuring leftover resources are cleaned up if needed.
+	exit 1
 fi
 
 exit 0
