@@ -109,6 +109,12 @@ variable "subnetwork" {
   default     = null
 }
 
+variable "enable_public_ips" {
+  description = "If set to true, instances will have public IPs"
+  type        = bool
+  default     = true
+}
+
 variable "service_account" {
   description = "Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
   type = object({
