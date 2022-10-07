@@ -37,7 +37,10 @@ const (
 	anyVariableExp        string = `\$\((.*)\)`
 	literalExp            string = `^\(\((.*)\)\)$`
 	escapeVariableExp     string = `\\\$\((.*?)\)`
-	nonEscapeVariableExp  string = `(?:\s|^|[[:word:]]|[^\\])\$\((.*)\)`
+	// Checks if a non-escaped variable exists only as a substring, ex:
+	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
+	// Doesn't match: "\$(vars.example)", "no variable in this string"
+	nonEscapeVariableExp string = `(?:\s|^|[[:word:]]|[^\\])\$\((.*)\)`
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
@@ -512,10 +515,10 @@ func isSimpleVariable(str string) bool {
 	return matched
 }
 
-// isEscapeVariable checks if the entire string is an escaped variable \$(not.var)
+// isEscapeVariable checks if variables within string are escaped variables
 func isEscapeVariable(str string) bool {
 	// if string has multiple variables all of them must have escape character
-	if hasNoEscapeVariable(str) {
+	if hasNonEscapedVariable(str) {
 		return false
 	}
 	matched, err := regexp.MatchString(escapeVariableExp, str)
@@ -525,11 +528,11 @@ func isEscapeVariable(str string) bool {
 	return matched
 }
 
-// hasNoEscapeVariable checks to see if any variable in string is not escape
-func hasNoEscapeVariable(str string) bool {
+// hasNonEscapedVariable checks to see if any variable in string is not escape
+func hasNonEscapedVariable(str string) bool {
 	matched, err := regexp.MatchString(nonEscapeVariableExp, str)
 	if err != nil {
-		log.Fatalf("hasNoEscapeVariable(%s): %v", str, err)
+		log.Fatalf("hasNonEscapedVariable(%s): %v", str, err)
 	}
 	return matched
 }

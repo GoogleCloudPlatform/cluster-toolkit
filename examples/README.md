@@ -798,7 +798,7 @@ defined before creating a deployment, making debugging quicker and easier.
 
 ### Escape Variables
 
-Under circumstances where is needed escape either a literal variable or blueprint variables format, a non-quoted backslash `\` is the escape character. It preserves the literal value of the next character that follows:
+Under circumstances where the variable notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:
 
 * `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
 * `\((not.literal_var))` evaluates to `((not.literal_var))`.
