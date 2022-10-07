@@ -16,9 +16,8 @@
 # Current parallel execution tree, built to minimize total execution time and faster tests first.
 # ├── build_ghpc
 # └── fetch_builder
-#    ├── spack-gromacs (group 2)
-#    ├── slurm-gcp-v5-hpc-centos7 (group 2)
-
+#    └── spack-gromacs (group 2)
+#        └── slurm-gcp-v5-hpc-centos7
 
 timeout: 14400s  # 4hr
 availableSecrets:
@@ -76,8 +75,7 @@ steps:
 ## Test Slurm v5 HPC Centos7 Example
 - id: slurm-gcp-v5-hpc-centos7
   waitFor:
-  - fetch_builder
-  - build_ghpc
+  - spack-gromacs
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash

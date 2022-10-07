@@ -102,6 +102,8 @@ Contents:
 
 - `htcondor`: Tests the [htcondor-pool.yaml] example blueprint.
 - `cloud-batch`: Tests the [cloud-batch.yaml] example blueprint.
+- `slurm-gcp-v5-ubuntu`: Tests the [slurm-gcp-v5-ubuntu2004.yaml] example blueprint.
 
 [htcondor-pool.yaml]: ../../../community/examples/htcondor-pool.yaml
 [cloud-batch.yaml]: ../../../community/examples/cloud-batch.yaml
+[slurm-gcp-v5-ubuntu2004.yaml]: ../../../community/examples/slurm-gcp-v5-ubuntu2004.yaml
