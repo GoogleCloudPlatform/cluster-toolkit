@@ -24,6 +24,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
+  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssd--)
   * [htcondor-pool.yaml](#htcondor-poolyaml--)
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-)
 * [Blueprint Schema](#blueprint-schema)
@@ -521,6 +522,17 @@ a Shared VPC service project][fs-shared-vpc].
 
 [hpc-cluster-small-sharedvpc.yaml]: ../community/examples/hpc-cluster-small-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
+
+### [hpc-cluster-localssd.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates the use of Slurm and Filestore, with the definition
+of a partition which deploys compute nodes that have local ssd drives deployed.
+Before deploying this blueprint, one must first ensure to have an existing VPC
+properly configured (allowing Internet access and allowing inter virtual
+machine communications, for NFS and also for communications between the Slurm
+nodes)
+
+[hpc-cluster-localssd.yaml]: ../community/examples/hpc-cluster-localssd.yaml
 
 ### [htcondor-pool.yaml] ![community-badge] ![experimental-badge]
 
