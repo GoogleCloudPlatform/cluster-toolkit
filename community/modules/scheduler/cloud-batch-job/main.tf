@@ -51,7 +51,7 @@ module "instance_template" {
   subnetwork         = local.subnetwork_name
   subnetwork_project = local.subnetwork_project
   service_account    = var.service_account
-  access_config      = [{ nat_ip = null, network_tier = null }]
+  access_config      = var.enable_public_ips ? [{ nat_ip = null, network_tier = null }] : []
   labels             = var.labels
 
   machine_type         = var.machine_type
