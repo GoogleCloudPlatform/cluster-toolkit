@@ -77,7 +77,7 @@ $ cd community/frontend
 $ git clone https://github.com/ghpcfe/hpc-toolkit-private.git
 $ cd hpc-toolkit
 $ git checkout new_frontend
-$ cd community/frontend
+$ cd community/front-end
 ```
 All further deployment actions must be performed from this directory.
 
