@@ -2,7 +2,7 @@
 
 This is a web front-end for HPC applications on GCP. It delegates to the Google
 HPC Toolkit to create cloud resources for HPC clusters. Through the convenience
-of web interface, system administrators can manage the life cycles of HPC
+of a web interface, system administrators can manage the life cycles of HPC
 clusters and install applications; users can prepare & submit HPC jobs and run
 benchmarks. This web application is built upon the Django framework.
 
