@@ -101,6 +101,16 @@ Be aware that Cloud Shell has [several limitations][cloud-shell-limitations],
 in particular an inactivity timeout that will close running shells after 20
 minutes. Please consider it only for blueprints that are quickly deployed.
 
+## VM Image Support
+
+The HPC Toolkit officially supports the following VM images:
+
+* HPC CentOS 7
+* Ubuntu 20.04 LTS
+
+For more information on these and other images, see
+[docs/vm-images.md](docs/vm-images.md).
+
 ## Blueprint Validation
 
 The Toolkit contains "validator" functions that perform basic tests of the
