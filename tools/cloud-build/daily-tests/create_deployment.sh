@@ -21,18 +21,19 @@ NETWORK=${NETWORK:-missing-network-name}
 MAX_NODES=${MAX_NODES:-2}
 TEST_NAME=${TEST_NAME:unnamed_test}
 ALWAYS_RECOMPILE=${ALWAYS_RECOMPILE:-yes}
+GHPC_DEV_BUCKET=${GHPC_DEV_BUCKET:-daily-tests-tf-state}
 
 echo "Creating blueprint from ${EXAMPLE_YAML} in project ${PROJECT} for test ${TEST_NAME}"
 
 ## Add GCS Backend to example
-echo "Adding GCS Backend to the yaml (bucket: daily-tests-tf-state)"
+echo "Adding GCS Backend to the yaml (bucket: ${GHPC_DEV_BUCKET})"
 if ! grep -Fxq terraform_backend_defaults: "${EXAMPLE_YAML}"; then
 	cat <<EOT >>"${EXAMPLE_YAML}"
 
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: daily-tests-tf-state
+    bucket: ${GHPC_DEV_BUCKET}
 EOT
 fi
 
@@ -74,5 +75,5 @@ tar -czf "${DEPLOYMENT_NAME}.tgz" "${DEPLOYMENT_NAME}" ||
 		exit 1
 	}
 
-echo "Copying ${DEPLOYMENT_NAME}.tgz to gs://daily-tests-tf-state/${TEST_NAME}/"
-gsutil cp "${DEPLOYMENT_NAME}.tgz" "gs://daily-tests-tf-state/${TEST_NAME}/"
+echo "Copying ${DEPLOYMENT_NAME}.tgz to gs://${GHPC_DEV_BUCKET}/${TEST_NAME}/"
+gsutil cp "${DEPLOYMENT_NAME}.tgz" "gs://${GHPC_DEV_BUCKET}/${TEST_NAME}/"
