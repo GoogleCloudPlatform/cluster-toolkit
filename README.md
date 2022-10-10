@@ -103,12 +103,13 @@ minutes. Please consider it only for blueprints that are quickly deployed.
 
 ## VM Image Support
 
-The HPC Toolkit supports the following VM images:
+The HPC Toolkit officially supports the following VM images:
 
 * HPC CentOS 7
 * Ubuntu 20.04 LTS
 
-For more information, see [docs/vm-images.md](docs/vm-images.md).
+For more information on these and other images, see
+[docs/vm-images.md](docs/vm-images.md).
 
 ## Blueprint Validation
 
