@@ -1,7 +1,11 @@
 # Supported and Tested VM Images
 
+* [HPC CentOS 7 VM Image](#hpc-centos-7-vm-image)
+* [Ubuntu](#ubuntu)
+* [Other Images](#other-images)
+
 ## HPC CentOS 7 VM Image
-The HPC Toolkit has supported the [HPC CentOS 7 VM Image][hpcimage] as the
+The HPC Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage] as the
 primary VM image for HPC workloads on Google Cloud since it's release. Since the
 [HPC CentOS 7 VM Image][hpcimage] comes pre-tuned for optimal performance on
 typical HPC workloads, it is the default VM image in our modules, unless there
@@ -17,8 +21,8 @@ Exceptions:
 [hpcimage]: https://cloud.google.com/blog/topics/hpc/introducing-hpc-vm-images
 
 ## Ubuntu
-The HPC Toolkit supports Ubuntu based VM images in the majority of our modules,
-with a couple exceptions:
+The HPC Toolkit officially supports Ubuntu based VM images in the majority of
+our modules, with a couple exceptions:
 
 * [htcondor-configure]: Only provides support for the HPC CentOS 7 image.
 * [nfs-server]: Only provides support for CentOS 7 images for the server itself.
@@ -52,3 +56,11 @@ settings:
 [exascalerimages]: https://github.com/DDNStorage/exascaler-cloud-terraform/blob/master/gcp/README.md#boot-image-options
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
 [slurm-gcp-v5-ubuntu2004.yaml]: ../community/examples/slurm-gcp-v5-ubuntu2004.yaml
+
+## Other Images
+
+The HPC Toolkit strives to provide flexibility wherever possible. It is possible
+to set a VM image in many HPC Toolkit modules. While we do not officially
+support images not listed here, other public and custom images should work with
+the majority of modules with or without further customization, such as custom
+startup-scripts.
