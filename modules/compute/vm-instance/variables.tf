@@ -136,6 +136,33 @@ variable "subnetwork_self_link" {
   default     = null
 }
 
+variable "additional_network_interfaces" {
+  description = <<-EOT
+    A list of additional network interfaces. The options, with the exception of
+    `disable_public_ips`, match that of the terraform network_interface block of
+    google_compute_instance. For descriptions of the subfields or more
+    information see the documentation:
+    https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_network_interface
+
+    network            (string, required if subnetwork is not supplied)
+    subnetwork         (string, required if network is not supplied)
+    subnetwork_project (string, optional)
+    network_ip         (string, optional)
+    disable_public_ips (bool, optional, whether or not to create a public IP for the instance in this network, defaults to true)
+    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET"])
+    stack_type         (string, optional, choose from ["IPV4_ONLY", "IPV4_IPV6"])
+    queue_count        (number, optional)
+    EOT
+  type        = list(map(any))
+  default     = []
+  validation {
+    condition = alltrue([
+      for ni in var.additional_network_interfaces : can(ni["network"]) != can(ni["subnetwork"])
+    ])
+    error_message = "All additional network interfaces must define exactly one of \"network\" or \"subnetwork\"."
+  }
+}
+
 variable "zone" {
   description = "Compute Platform zone"
   type        = string

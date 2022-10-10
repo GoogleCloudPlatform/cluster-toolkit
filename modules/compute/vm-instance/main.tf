@@ -133,6 +133,24 @@ resource "google_compute_instance" "compute_vm" {
     nic_type   = local.enable_gvnic ? "GVNIC" : null
   }
 
+  dynamic "network_interface" {
+    for_each = var.additional_network_interfaces
+
+    content {
+      network            = lookup(network_interface.value, "network", null)
+      subnetwork         = lookup(network_interface.value, "subnetwork", null)
+      subnetwork_project = lookup(network_interface.value, "subnetwork_project", null)
+      network_ip         = lookup(network_interface.value, "network_ip", null)
+      nic_type           = lookup(network_interface.value, "nic_type", null)
+      stack_type         = lookup(network_interface.value, "stack_type", null)
+      queue_count        = lookup(network_interface.value, "queue_count", null)
+      dynamic "access_config" {
+        for_each = lookup(network_interface.value, "disable_public_ips", true) ? [] : [1]
+        content {}
+      }
+    }
+  }
+
   network_performance_config {
     total_egress_bandwidth_tier = local.enable_tier_1 ? "TIER_1" : "DEFAULT"
   }

@@ -1,0 +1,65 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: two-network-interfaces
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: two-nets
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  - id: network2
+    source: modules/network/vpc
+    settings:
+      network_address_range: 10.1.0.0/16
+      subnetworks:
+      - subnet_name: primary-subnet-two
+        subnet_region: $(vars.region)
+        new_bits: 8
+
+  - id: network3
+    source: modules/network/vpc
+    settings:
+      network_name: networkthree
+      network_address_range: 10.0.0.0/16
+      subnetworks:
+      - subnet_name: primary-subnet-three
+        subnet_region: $(vars.region)
+        new_bits: 8
+
+  - id: workstation
+    source: ./modules/compute/vm-instance
+    use:
+    - network1
+    settings:
+      additional_network_interfaces:
+      - subnetwork: $(network2.subnetwork_self_link)
+        nic_type: GVNIC
+        queue_count: 12
+        disable_public_ips: false
+      - subnetwork: $(network3.subnetwork_self_link)
+        nic_type: GVNIC
+        queue_count: 12
