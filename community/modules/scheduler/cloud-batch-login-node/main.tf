@@ -33,7 +33,7 @@ locals {
 }
 
 module "login_startup_script" {
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.0.0"
+  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.6.0"
   labels          = var.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name
@@ -41,12 +41,7 @@ module "login_startup_script" {
   runners = [
     {
       content     = local.batch_startup_script
-      destination = "/tmp/startup-scripts/batch_startup_script.sh"
-      type        = "data"
-    },
-    { # TODO: This workaround should be removed once startup-script supports Bash syntax
-      content     = "bash /tmp/startup-scripts/batch_startup_script.sh"
-      destination = "/tmp/startup-scripts/invoke_batch_startup_script.sh"
+      destination = "batch_startup_script.sh"
       type        = "shell"
     },
     {
