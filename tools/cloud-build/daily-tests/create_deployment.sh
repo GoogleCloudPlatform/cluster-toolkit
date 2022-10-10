@@ -19,18 +19,21 @@ PROJECT=${PROJECT:-hpc-toolkit-dev}
 DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-missing-deployment-name}
 NETWORK=${NETWORK:-missing-network-name}
 MAX_NODES=${MAX_NODES:-2}
+TEST_NAME=${TEST_NAME:unnamed_test}
 ALWAYS_RECOMPILE=${ALWAYS_RECOMPILE:-yes}
+GHPC_DEV_BUCKET=${GHPC_DEV_BUCKET:-daily-tests-tf-state}
 
-echo "Creating blueprint from ${EXAMPLE_YAML} in project ${PROJECT}"
+echo "Creating blueprint from ${EXAMPLE_YAML} in project ${PROJECT} for test ${TEST_NAME}"
 
 ## Add GCS Backend to example
+echo "Adding GCS Backend to the yaml (bucket: ${GHPC_DEV_BUCKET})"
 if ! grep -Fxq terraform_backend_defaults: "${EXAMPLE_YAML}"; then
 	cat <<EOT >>"${EXAMPLE_YAML}"
 
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: daily-tests-tf-state
+    bucket: ${GHPC_DEV_BUCKET}
 EOT
 fi
 
@@ -57,9 +60,11 @@ sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/" "${EXAMPLE_YAML}" ||
 		echo "could not set max_node_count"
 	}
 
+VARS="project_id=${PROJECT_ID},deployment_name=${DEPLOYMENT_NAME}"
+
 ## Create blueprint and create artifact
 ./ghpc create "${EXAMPLE_YAML}" \
-	--vars project_id="${PROJECT_ID}",deployment_name="${DEPLOYMENT_NAME}" ||
+	--vars "${VARS}" ||
 	{
 		echo "could not write blueprint"
 		exit 1
@@ -69,3 +74,6 @@ tar -czf "${DEPLOYMENT_NAME}.tgz" "${DEPLOYMENT_NAME}" ||
 		echo "could not tarball blueprint"
 		exit 1
 	}
+
+echo "Copying ${DEPLOYMENT_NAME}.tgz to gs://${GHPC_DEV_BUCKET}/${TEST_NAME}/"
+gsutil cp "${DEPLOYMENT_NAME}.tgz" "gs://${GHPC_DEV_BUCKET}/${TEST_NAME}/"

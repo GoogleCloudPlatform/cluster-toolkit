@@ -14,6 +14,7 @@
 
 ---
 
+test_name: hpc-high-io
 deployment_name: "hpc-high-io-{{ build }}"
 zone: us-central1-c
 workspace: /workspace
