@@ -172,9 +172,9 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_gcloud_version"></a> [gcloud\_version](#output\_gcloud\_version) | The version of gcloud to be used. |
-| <a name="output_instance_template"></a> [instance\_template](#output\_instance\_template) | Instance template used by the Google Cloud Batch job. |
-| <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting Google Cloud Batch job. |
-| <a name="output_job_filename"></a> [job\_filename](#output\_job\_filename) | The filename of the generated Google Cloud Batch job template. |
-| <a name="output_job_id"></a> [job\_id](#output\_job\_id) | The Google Cloud Batch job id. |
-| <a name="output_job_template_contents"></a> [job\_template\_contents](#output\_job\_template\_contents) | The generated Google Cloud Batch job template. |
+| <a name="output_instance_template"></a> [instance\_template](#output\_instance\_template) | Instance template used by the Batch job. |
+| <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the Batch job. |
+| <a name="output_job_filename"></a> [job\_filename](#output\_job\_filename) | The filename of the generated Batch job template. |
+| <a name="output_job_id"></a> [job\_id](#output\_job\_id) | The Batch job id. |
+| <a name="output_job_template_contents"></a> [job\_template\_contents](#output\_job\_template\_contents) | The generated Batch job template. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
