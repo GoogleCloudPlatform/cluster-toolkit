@@ -68,7 +68,7 @@ output "network_storage" {
   description = "Describes a EXAScaler system to be mounted by other systems."
   value = {
     server_ip     = split(":", split(" ", module.ddn_exascaler.mount_command)[3])[0]
-    remote_mount  = var.fsname
+    remote_mount  = length(regexall("^/.*", var.fsname)) > 0 ? var.fsname : format("/%s", var.fsname)
     local_mount   = var.local_mount != null ? var.local_mount : format("/mnt/%s", var.fsname)
     fs_type       = "lustre"
     mount_options = ""
