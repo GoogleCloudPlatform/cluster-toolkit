@@ -18,8 +18,11 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
 	"log"
+	"os"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +31,7 @@ var (
 	GitTagVersion string
 	GitBranch     string
 	GitCommitInfo string
+	GitCommitHash string
 )
 
 var (
@@ -50,8 +54,22 @@ HPC deployments on the Google Cloud Platform.`,
 // Execute the root command
 func Execute() error {
 	if len(GitCommitInfo) > 0 {
+		dir, err := os.Getwd()
+		if err == nil {
+			repo, err := git.PlainOpen(dir)
+			if err == nil {
+				head, err := repo.Head()
+				if err == nil && GitCommitHash != head.Hash().String() {
+					b := head.Name().Short()
+					h := head.Hash().String()
+					fmt.Fprintf(os.Stderr, "WARNING: ghpc binary was built from a different commit (%s/%s) than the working directory (%s/%s). You can rebuild the binary by running 'make'\n",
+						GitBranch, GitCommitHash[0:7], b, h[0:7])
+				}
+			}
+		}
+
 		if len(GitTagVersion) == 0 {
-			GitTagVersion = "- not built from oficial release"
+			GitTagVersion = "- not built from official release"
 		}
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"

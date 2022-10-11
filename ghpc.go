@@ -29,12 +29,15 @@ var moduleFS embed.FS
 var gitTagVersion string
 var gitBranch string
 var gitCommitInfo string
+var gitCommitHash string
 
 func main() {
 	sourcereader.ModuleFS = moduleFS
 	cmd.GitTagVersion = gitTagVersion
 	cmd.GitBranch = gitBranch
 	cmd.GitCommitInfo = gitCommitInfo
+	cmd.GitCommitHash = gitCommitHash
+
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
