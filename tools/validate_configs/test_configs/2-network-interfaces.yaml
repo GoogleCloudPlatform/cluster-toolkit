@@ -28,38 +28,132 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - id: network1
+  - id: default
     source: modules/network/pre-existing-vpc
 
-  - id: network2
+  - id: new-network-1
     source: modules/network/vpc
     settings:
       network_address_range: 10.1.0.0/16
+      subnetworks:
+      - subnet_name: primary-subnet-one
+        subnet_region: $(vars.region)
+        new_bits: 8
+
+  - id: new-network-2
+    source: modules/network/vpc
+    settings:
+      network_name: networktwo
+      network_address_range: 10.0.0.0/16
       subnetworks:
       - subnet_name: primary-subnet-two
         subnet_region: $(vars.region)
         new_bits: 8
 
-  - id: network3
-    source: modules/network/vpc
-    settings:
-      network_name: networkthree
-      network_address_range: 10.0.0.0/16
-      subnetworks:
-      - subnet_name: primary-subnet-three
-        subnet_region: $(vars.region)
-        new_bits: 8
-
-  - id: workstation
+  - id: one-used-existing-ni
     source: ./modules/compute/vm-instance
     use:
-    - network1
+    - default
     settings:
-      additional_network_interfaces:
-      - subnetwork: $(network2.subnetwork_self_link)
+      name_prefix: one-used-existing-ni
+      machine_type: n2-standard-2
+
+  - id: one-used-new-ni
+    source: ./modules/compute/vm-instance
+    use:
+    - new-network-1
+    settings:
+      name_prefix: one-used-new-ni
+      machine_type: n2-standard-2
+
+  - id: one-explicit-existing-ni
+    source: ./modules/compute/vm-instance
+    settings:
+      name_prefix: one-explicit-existing-ni
+      machine_type: n2-standard-2
+      network_interfaces:
+      - network: null
+        subnetwork: $(default.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: VIRTIO_NET
+        queue_count: null
+
+  - id: one-explicit-new-ni
+    source: ./modules/compute/vm-instance
+    settings:
+      name_prefix: one-explicit-new-ni
+      machine_type: n2-standard-2
+      network_interfaces:
+      - network: null
+        subnetwork: $(new-network-1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: VIRTIO_NET
+        queue_count: null
+
+  - id: two-explicit-mixed-ni
+    source: ./modules/compute/vm-instance
+    settings:
+      name_prefix: two-explicit-mixed-ni
+      network_interfaces:
+      - network: null
+        subnetwork: $(default.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config:
+        - nat_ip: null
+          public_ptr_domain_name: null
+          network_tier: null
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: null
+        queue_count: 8
+      - network: null
+        subnetwork: $(new-network-1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
         nic_type: GVNIC
         queue_count: 12
-        disable_public_ips: false
-      - subnetwork: $(network3.subnetwork_self_link)
+
+  - id: two-explicit-new-ni
+    source: ./modules/compute/vm-instance
+    settings:
+      name_prefix: two-explicit-new-ni
+      network_interfaces:
+      - network: null
+        subnetwork: $(new-network-1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: null
+        queue_count: 8
+      - network: null
+        subnetwork: $(new-network-2.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config:
+        - nat_ip: null
+          public_ptr_domain_name: null
+          network_tier: null
+        ipv6_access_config: []
+        alias_ip_range: []
         nic_type: GVNIC
         queue_count: 12
