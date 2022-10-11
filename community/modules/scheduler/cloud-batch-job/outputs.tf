@@ -15,8 +15,8 @@
  */
 
 locals {
-  provided_instance_tpl_msg  = "An instance template was provided to be used by your Batch job"
-  generated_instance_tpl_msg = "An instance template was created for your Batch job"
+  provided_instance_tpl_msg  = "The Batch job template uses the existing VM instance template:"
+  generated_instance_tpl_msg = "The Batch job template uses a new VM instance template created matching the provided settings:"
 }
 
 output "instructions" {
@@ -26,9 +26,8 @@ output "instructions" {
   A Batch job template file has been created locally at:
     ${abspath(local.job_template_output_path)}
 
-  ${var.instance_template == null ? local.generated_instance_tpl_msg : local.provided_instance_tpl_msg} & referenced in the above file:
+  ${var.instance_template == null ? local.generated_instance_tpl_msg : local.provided_instance_tpl_msg}
     ${local.instance_template}
-
 
   Use the following commands to:
   Submit your job:

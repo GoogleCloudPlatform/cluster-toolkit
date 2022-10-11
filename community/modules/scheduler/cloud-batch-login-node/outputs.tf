@@ -26,7 +26,6 @@ output "instructions" {
   A Batch job template file will be placed on the Batch login node at:
     ${local.job_template_destination}
 
-
   Use the following commands to:
   SSH into the login node:
     gcloud compute ssh --zone ${google_compute_instance_from_template.batch_login.zone} ${google_compute_instance_from_template.batch_login.name}  --project ${google_compute_instance_from_template.batch_login.project}
