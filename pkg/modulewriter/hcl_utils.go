@@ -23,6 +23,12 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+func escapeBlueprintVariables(hclBytes []byte) []byte {
+	// Convert \$(not.variable) to $(not.variable)
+	re := regexp.MustCompile(`\\\\\$\((.*?)\)`)
+	return re.ReplaceAll(hclBytes, []byte(`$(${1})`))
+}
+
 func escapeLiteralVariables(hclBytes []byte) []byte {
 	// Convert \((not.variable)) to ((not.variable))
 	re := regexp.MustCompile(`\\\\\(\((.*?)\)\)`)
@@ -46,6 +52,7 @@ func writeHclAttributes(vars map[string]cty.Value, dst string) error {
 
 	// Write file
 	hclBytes := escapeLiteralVariables(hclFile.Bytes())
+	hclBytes = escapeBlueprintVariables(hclBytes)
 	err := appendHCLToFile(dst, hclBytes)
 	if err != nil {
 		return fmt.Errorf("error writing HCL to %v: %v", filepath.Base(dst), err)

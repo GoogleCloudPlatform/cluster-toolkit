@@ -64,6 +64,12 @@ func createBaseFile(path string) error {
 	return err
 }
 
+func handleBlueprintVariables(hclBytes []byte) []byte {
+	// Convert \$(not.variable) to $(not.variable)
+	re := regexp.MustCompile(`\\\\\$\((.*?)\)`)
+	return re.ReplaceAll(hclBytes, []byte(`$(${1})`))
+}
+
 func handleLiteralVariables(hclBytes []byte) []byte {
 	// Convert ((var.variable)) to var.variable
 	re := regexp.MustCompile(`"\(\((.*?)\)\)"`)
@@ -118,6 +124,7 @@ func writeOutputs(
 
 	// Write file
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes = handleBlueprintVariables(hclBytes)
 	err := appendHCLToFile(outputsPath, hclBytes)
 	if err != nil {
 		return fmt.Errorf("error writing HCL to outputs.tf file: %v", err)
@@ -291,6 +298,7 @@ func writeMain(
 	}
 	// Write file
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes = handleBlueprintVariables(hclBytes)
 	if err := appendHCLToFile(mainPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
 	}
@@ -345,6 +353,7 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 
 	// Write file
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes = handleBlueprintVariables(hclBytes)
 	if err := appendHCLToFile(providersPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to providers.tf file: %v", err)
 	}

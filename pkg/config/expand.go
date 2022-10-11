@@ -34,13 +34,11 @@ const (
 	roleLabel             string = "ghpc_role"
 	simpleVariableExp     string = `^\$\((.*)\)$`
 	deploymentVariableExp string = `^\$\(vars\.(.*)\)$`
-	anyVariableExp        string = `\$\((.*)\)`
-	literalExp            string = `^\(\((.*)\)\)$`
-	escapeVariableExp     string = `\\\$\((.*?)\)`
-	// Checks if a non-escaped variable exists only as a substring, ex:
+	// Checks if a variable exists only as a substring, ex:
 	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
 	// Doesn't match: "\$(vars.example)", "no variable in this string"
-	nonEscapeVariableExp string = `(?:\s|^|[[:word:]]|[^\\])\$\((.*)\)`
+	anyVariableExp string = `(^|[^\\])\$\((.*)\)`
+	literalExp     string = `^\(\((.*)\)\)$`
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
@@ -403,13 +401,6 @@ type varContext struct {
 	blueprint  Blueprint
 }
 
-// Escape blueprint variable
-// Convert \$(var.variable) to $(var.variable)
-func expandEscapeVariable(str string) string {
-	re := regexp.MustCompile(escapeVariableExp)
-	return re.ReplaceAllString(str, (`$(${1})`))
-}
-
 // Needs DeploymentGroups, variable string, current group,
 func expandSimpleVariable(
 	context varContext,
@@ -515,28 +506,6 @@ func isSimpleVariable(str string) bool {
 	return matched
 }
 
-// isEscapeVariable checks if variables within string are escaped variables
-func isEscapeVariable(str string) bool {
-	// if string has multiple variables all of them must have escape character
-	if hasNonEscapedVariable(str) {
-		return false
-	}
-	matched, err := regexp.MatchString(escapeVariableExp, str)
-	if err != nil {
-		log.Fatalf("isEscapeVariable(%s): %v", str, err)
-	}
-	return matched
-}
-
-// hasNonEscapedVariable checks to see if any variable in string is not escape
-func hasNonEscapedVariable(str string) bool {
-	matched, err := regexp.MatchString(nonEscapeVariableExp, str)
-	if err != nil {
-		log.Fatalf("hasNonEscapedVariable(%s): %v", str, err)
-	}
-	return matched
-}
-
 // hasVariable checks to see if any variable exists in a string
 func hasVariable(str string) bool {
 	matched, err := regexp.MatchString(anyVariableExp, str)
@@ -556,9 +525,6 @@ func handleVariable(
 		if hasVariable(val) {
 			if isSimpleVariable(val) {
 				return expandSimpleVariable(context, modToGrp)
-			}
-			if isEscapeVariable(val) {
-				return expandEscapeVariable(val), nil
 			}
 			return expandVariable(context, modToGrp)
 		}
