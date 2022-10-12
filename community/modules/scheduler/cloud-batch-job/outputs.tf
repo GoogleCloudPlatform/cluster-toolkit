@@ -14,11 +14,22 @@
  * limitations under the License.
  */
 
+locals {
+  provided_instance_tpl_msg  = "The Batch job template uses the existing VM instance template:"
+  generated_instance_tpl_msg = "The Batch job template uses a new VM instance template created matching the provided settings:"
+}
+
 output "instructions" {
-  description = "Instructions for submitting Google Cloud Batch job."
+  description = "Instructions for submitting the Batch job."
   value       = <<-EOT
+
+  A Batch job template file has been created locally at:
+    ${abspath(local.job_template_output_path)}
+
+  ${var.instance_template == null ? local.generated_instance_tpl_msg : local.provided_instance_tpl_msg}
+    ${local.instance_template}
+
   Use the following commands to:
-  
   Submit your job:
     gcloud ${var.gcloud_version} batch jobs submit ${local.job_id} --config=${abspath(local.job_template_output_path)} --location=${var.region} --project=${var.project_id}
   
@@ -28,28 +39,28 @@ output "instructions" {
   Delete job:
     gcloud ${var.gcloud_version} batch jobs delete ${local.job_id} --location=${var.region} --project=${var.project_id}
 
-  List all jobs in region:
+  List all jobs:
     gcloud ${var.gcloud_version} batch jobs list --project=${var.project_id}
   EOT
 }
 
 output "instance_template" {
-  description = "Instance template used by the Google Cloud Batch job."
+  description = "Instance template used by the Batch job."
   value       = local.instance_template
 }
 
 output "job_template_contents" {
-  description = "The generated Google Cloud Batch job template."
+  description = "The generated Batch job template."
   value       = local.job_template_contents
 }
 
 output "job_filename" {
-  description = "The filename of the generated Google Cloud Batch job template."
+  description = "The filename of the generated Batch job template."
   value       = local.job_filename
 }
 
 output "job_id" {
-  description = "The Google Cloud Batch job id."
+  description = "The Batch job id."
   value       = local.job_id
 }
 
