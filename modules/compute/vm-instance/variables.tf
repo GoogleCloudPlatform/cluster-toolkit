@@ -169,8 +169,8 @@ variable "network_interfaces" {
     stack_type         = string,
     queue_count        = number,
     access_config = list(object({
-      nat_ip                 = string
-      public_ptr_domain_name = string
+      nat_ip                 = string,
+      public_ptr_domain_name = string,
       network_tier           = string
     })),
     ipv6_access_config = list(object({
@@ -178,7 +178,7 @@ variable "network_interfaces" {
       network_tier           = string
     })),
     alias_ip_range = list(object({
-      ip_cidr_range         = string
+      ip_cidr_range         = string,
       subnetwork_range_name = string
     }))
   }))

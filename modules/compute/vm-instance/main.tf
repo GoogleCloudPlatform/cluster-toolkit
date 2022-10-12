@@ -64,7 +64,12 @@ locals {
 
   # Network Interfaces
   # Support for `use` input and base network paramters like `network_self_link` and `subnetwork_self_link`
-  base_network_interface = {
+  empty_access_config = {
+    nat_ip                 = null,
+    public_ptr_domain_name = null,
+    network_tier           = null
+  }
+  default_network_interface = {
     network            = var.network_self_link
     subnetwork         = var.subnetwork_self_link
     subnetwork_project = var.project_id
@@ -72,11 +77,11 @@ locals {
     nic_type           = local.enable_gvnic ? "GVNIC" : null
     stack_type         = null
     queue_count        = null
-    access_config      = var.disable_public_ips ? [] : [{}]
+    access_config      = var.disable_public_ips ? [] : [local.empty_access_config]
     ipv6_access_config = []
     alias_ip_range     = []
   }
-  network_interfaces = length(var.network_interfaces) == 0 ? [local.base_network_interface] : var.network_interfaces
+  network_interfaces = coalescelist(var.network_interfaces, [local.default_network_interface])
 }
 
 data "google_compute_image" "compute_image" {

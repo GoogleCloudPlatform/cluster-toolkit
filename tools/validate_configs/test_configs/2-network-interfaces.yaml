@@ -28,7 +28,7 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - id: default
+  - id: default-network
     source: modules/network/pre-existing-vpc
 
   - id: new-network-1
@@ -50,14 +50,16 @@ deployment_groups:
         subnet_region: $(vars.region)
         new_bits: 8
 
+  # Test adding a pre-existing network via "use"
   - id: one-used-existing-ni
     source: ./modules/compute/vm-instance
     use:
-    - default
+    - default-network
     settings:
       name_prefix: one-used-existing-ni
       machine_type: n2-standard-2
 
+  # Test adding a newly created network via "use"
   - id: one-used-new-ni
     source: ./modules/compute/vm-instance
     use:
@@ -66,6 +68,7 @@ deployment_groups:
       name_prefix: one-used-new-ni
       machine_type: n2-standard-2
 
+  # Test adding one pre-existing network via "network_interfaces"
   - id: one-explicit-existing-ni
     source: ./modules/compute/vm-instance
     settings:
@@ -73,7 +76,7 @@ deployment_groups:
       machine_type: n2-standard-2
       network_interfaces:
       - network: null
-        subnetwork: $(default.subnetwork_self_link)
+        subnetwork: $(default-network.subnetwork_self_link)
         subnetwork_project: $(vars.project_id)
         network_ip: null
         stack_type: null
@@ -83,6 +86,7 @@ deployment_groups:
         nic_type: VIRTIO_NET
         queue_count: null
 
+  # Test adding one newly created network via "network_interfaces"
   - id: one-explicit-new-ni
     source: ./modules/compute/vm-instance
     settings:
@@ -100,13 +104,14 @@ deployment_groups:
         nic_type: VIRTIO_NET
         queue_count: null
 
+  # Test adding both a pre-existing network and a newly created network via "network_interfaces"
   - id: two-explicit-mixed-ni
     source: ./modules/compute/vm-instance
     settings:
       name_prefix: two-explicit-mixed-ni
       network_interfaces:
       - network: null
-        subnetwork: $(default.subnetwork_self_link)
+        subnetwork: $(default-network.subnetwork_self_link)
         subnetwork_project: $(vars.project_id)
         network_ip: null
         stack_type: null
@@ -129,6 +134,7 @@ deployment_groups:
         nic_type: GVNIC
         queue_count: 12
 
+  # Test adding two newly created networks via "network_interfaces"
   - id: two-explicit-new-ni
     source: ./modules/compute/vm-instance
     settings:
