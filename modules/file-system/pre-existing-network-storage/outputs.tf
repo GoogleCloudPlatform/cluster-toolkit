@@ -26,12 +26,13 @@ output "network_storage" {
 }
 
 locals {
+  remote_mount_with_slash = length(regexall("^/.*", var.remote_mount)) > 0 ? var.remote_mount : format("/%s", var.remote_mount)
   # Client Install
   ddn_lustre_client_install_script = templatefile(
     "${path.module}/templates/ddn_exascaler_luster_client_install.tftpl",
     {
       server_ip    = split("@", var.server_ip)[0]
-      remote_mount = var.remote_mount
+      remote_mount = local.remote_mount_with_slash
       local_mount  = var.local_mount
     }
   )
@@ -41,20 +42,20 @@ locals {
   }
 
   # Mounting
-  ddn_lustre_mount_cmd = "mount -t ${var.fs_type} ${var.server_ip}:/${var.remote_mount} ${var.local_mount}"
+  ddn_lustre_mount_cmd = "mount -t ${var.fs_type} ${var.server_ip}:${local.remote_mount_with_slash} ${var.local_mount}"
   mount_commands = {
     "lustre" = local.ddn_lustre_mount_cmd
   }
 
   mount_script = <<-EOT
     #!/bin/bash
-    findmnt --source ${var.server_ip}:/${var.remote_mount} --target ${var.local_mount} &> /dev/null
+    findmnt --source ${var.server_ip}:${local.remote_mount_with_slash} --target ${var.local_mount} &> /dev/null
     if [[ $? != 0 ]]; then
-      echo "Mounting --source ${var.server_ip}:/${var.remote_mount} --target ${var.local_mount}"
+      echo "Mounting --source ${var.server_ip}:${local.remote_mount_with_slash} --target ${var.local_mount}"
       mkdir -p ${var.local_mount}
       ${lookup(local.mount_commands, var.fs_type, "exit 1")}
     else
-      echo "Skipping mounting source: ${var.server_ip}:/${var.remote_mount}, already mounted to target:${var.local_mount}"
+      echo "Skipping mounting source: ${var.server_ip}:${local.remote_mount_with_slash}, already mounted to target:${var.local_mount}"
     fi
   EOT
 }
