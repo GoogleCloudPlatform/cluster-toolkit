@@ -24,7 +24,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
-  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssd--)
+  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--)
   * [htcondor-pool.yaml](#htcondor-poolyaml--)
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-)
 * [Blueprint Schema](#blueprint-schema)
