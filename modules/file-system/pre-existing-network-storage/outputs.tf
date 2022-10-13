@@ -46,18 +46,7 @@ locals {
   mount_commands = {
     "lustre" = local.ddn_lustre_mount_cmd
   }
-
-  mount_script = <<-EOT
-    #!/bin/bash
-    findmnt --source ${var.server_ip}:${local.remote_mount_with_slash} --target ${var.local_mount} &> /dev/null
-    if [[ $? != 0 ]]; then
-      echo "Mounting --source ${var.server_ip}:${local.remote_mount_with_slash} --target ${var.local_mount}"
-      mkdir -p ${var.local_mount}
-      ${lookup(local.mount_commands, var.fs_type, "exit 1")}
-    else
-      echo "Skipping mounting source: ${var.server_ip}:${local.remote_mount_with_slash}, already mounted to target:${var.local_mount}"
-    fi
-  EOT
+  mount_command = lookup(local.mount_commands, var.fs_type, "exit 1")
 }
 
 output "client_install_runner" {
@@ -73,7 +62,12 @@ output "mount_runner" {
   description = "Runner that mounts the file system."
   value = {
     "type"        = "shell"
-    "content"     = (lookup(local.mount_commands, var.fs_type, null) == null ? "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'" : local.mount_script)
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
+    "args"        = "\"${var.server_ip}\" \"${local.remote_mount_with_slash}\" \"${var.local_mount}\" \"${local.mount_command}\""
+    "content" = (
+      lookup(local.mount_commands, var.fs_type, null) == null ?
+      "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'" :
+      file("${path.module}/scripts/mount.sh")
+    )
   }
 }
