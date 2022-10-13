@@ -99,7 +99,11 @@ variable "sa_role" {
 variable "activate_apis" {
   description = "The list of apis to activate within the project"
   type        = list(string)
-  default     = ["compute.googleapis.com"]
+  default = [
+    "compute.googleapis.com",
+    "serviceusage.googleapis.com",
+    "storage.googleapis.com",
+  ]
 }
 
 variable "activate_api_identities" {

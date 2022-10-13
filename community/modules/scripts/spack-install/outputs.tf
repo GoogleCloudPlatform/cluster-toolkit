@@ -43,3 +43,17 @@ output "install_spack_runner" {
   description = "Runner to install Spack using the startup-script module"
   value       = local.install_spack_runner
 }
+
+output "setup_spack_runner" {
+  description = "Adds Spack setup-env.sh script to /etc/profile.d so that it is called at shell startup. Among other things this adds Spack binary to user PATH."
+  value = {
+    "type"        = "data"
+    "destination" = "/etc/profile.d/spack.sh"
+    "content"     = <<-EOT
+      #!/bin/sh
+      if [ -f ${var.install_dir}/share/spack/setup-env.sh ]; then
+              . ${var.install_dir}/share/spack/setup-env.sh
+      fi
+      EOT
+  }
+}

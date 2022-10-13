@@ -21,7 +21,6 @@ vars:
   deployment_name: spack-openfoam
   region: us-central1
   zone: us-central1-c
-  spack_cache_mirror_url: gs://optionally_set_spack_cache_bucket
 
 deployment_groups:
 - group: primary
@@ -96,9 +95,10 @@ deployment_groups:
               - - $^mpis
             concretizer:
               unify: when_possible
-      spack_cache_url:
-      - mirror_name: gcs_cache
-        mirror_url: $(vars.spack_cache_mirror_url)
+      # Un-comment and update mirror_url to install from spack cache
+      # spack_cache_url:
+      # - mirror_name: gcs_cache
+      #   mirror_url: gs://optionally_set_spack_cache_bucket
 
   - id: controller-setup
     source: modules/scripts/startup-script

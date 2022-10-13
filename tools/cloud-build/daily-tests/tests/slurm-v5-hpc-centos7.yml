@@ -14,20 +14,25 @@
 
 ---
 
-test_name: spack-gromacs
-deployment_name: "spack-gromacs-{{ build }}"
+test_name: slurm-gcp-v5-hpc-centos7
+deployment_name: "cent-v5-{{ build }}"
+# Manually adding the slurm_cluster_name for use in node names, which filters
+# non-alphanumeric chars and is capped at 10 chars.
+slurm_cluster_name: "centv5{{ build[0:4] }}"
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/spack-gromacs.yaml"
-network: "default"
+blueprint_yaml: "{{ workspace }}/community/examples/slurm-gcp-v5-hpc-centos7.yaml"
+network: "{{ deployment_name }}-net"
 max_nodes: 5
-login_node: slurm-{{ deployment_name }}-login0
-controller_node: slurm-{{ deployment_name }}-controller
+# Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
+login_node: "{{ slurm_cluster_name }}-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
-- test-spack.yml
+- test-mounts.yml
+- test-partitions.yml
 custom_vars:
   partitions:
   - compute
+  - debug
   mounts:
   - /home
-  - /sw

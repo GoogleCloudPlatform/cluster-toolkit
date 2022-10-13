@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: rocky-ss-test
+blueprint_name: ubuntu-ss-test
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
@@ -78,6 +78,9 @@ deployment_groups:
       - type: shell
         source: modules/startup-script/examples/install_ansible.sh
         destination: install_ansible.sh
+      - type: shell
+        source: modules/startup-script/examples/install_cloud_ops_agent.sh
+        destination: install_cloud_ops_agent.sh
       - type: "ansible-local"
         source: modules/startup-script/examples/hello.yaml
         destination: hello.yaml
@@ -97,5 +100,10 @@ deployment_groups:
     settings:
       machine_type: e2-standard-4
       instance_image:
-        family: ubuntu-1804-lts
+        family: ubuntu-2004-lts
         project: ubuntu-os-cloud
+
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.instance.name[0]))

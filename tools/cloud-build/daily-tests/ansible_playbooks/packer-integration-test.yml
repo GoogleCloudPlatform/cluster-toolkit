@@ -27,11 +27,15 @@
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
-      BLUEPRINT_DIR: "{{ blueprint_dir }}"
       DEPLOYMENT_NAME: "{{ deployment_name }}"
       NETWORK: "{{ network }}"
+      TEST_NAME: "{{ test_name }}"
     args:
       creates: "{{ workspace }}/{{ deployment_name }}.tgz"
+    register: create_output
+  - name: Print ghpc blueprint information
+    ansible.builtin.debug:
+      var: create_output.stdout_lines
   - name: Create Infrastructure and test
     block:
     - name: Create Network with Terraform

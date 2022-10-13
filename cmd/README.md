@@ -61,7 +61,16 @@ ghpc --version
 
 + `-l, --validation-level string`: sets validation level to one of ("ERROR", "WARNING", "IGNORE") (default "WARNING").
 
-+ `--vars strings`: comma-separated list of name=value variables to override YAML configuration. Can be used multiple times.
++ `--vars strings`: comma-separated list of name=value variables to override YAML configuration. Can be used multiple times. Arrays or maps containing comma-separated values must be enclosed in double quotes. The double quotes may require escaping depending on the shell used. Examples below have been tested using a `bash` shell:
+  + `--vars foo=bar,baz=2`
+  + `--vars bar=2 --vars baz=3.14`
+  + `--vars foo=true`
+  + `--vars "foo={bar: baz}"`
+  + `--vars "\"foo={bar: baz, qux: quux}\""`
+  + `--vars "\"foo={bar: baz}\"",\"b=[foo,3,3.14]\"`
+  + `--vars "\"a={foo: [bar, baz]}\"",\"b=[foo,3,3.14]\"`
+  + `--vars \"b=[foo,3,3.14]\"`
+  + `--vars \"b=[[foo,bar],3,3.14]\"`
 
 ### Example - create
 

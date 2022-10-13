@@ -38,11 +38,15 @@
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
-      BLUEPRINT_DIR: "{{ blueprint_dir }}"
       DEPLOYMENT_NAME: "{{ deployment_name }}"
       NETWORK: "{{ network }}"
+      TEST_NAME: "{{ test_name }}"
     args:
       creates: "{{ workspace }}/{{ deployment_name }}.tgz"
+    register: create_output
+  - name: Print ghpc blueprint information
+    ansible.builtin.debug:
+      var: create_output.stdout_lines
   - name: Create Infrastructure and test
     block:
     - name: Create Cluster with Terraform
@@ -53,6 +57,7 @@
         creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
       environment:
         TF_IN_AUTOMATION: "TRUE"
+      register: terraform_output
       with_items:
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
@@ -60,6 +65,9 @@
       changed_when: false
       delegate_to: localhost
       register: instances_list
+      retries: 2
+      delay: 60
+      until: instances_list.rc == 0
       command: >-
         gcloud compute instances list
         --filter="labels.ghpc_deployment={{ deployment_name }}"
@@ -67,18 +75,41 @@
     - name: Print instance information
       ansible.builtin.debug:
         var: instances_list.stdout_lines
-    - name: Get login IP
+    - name: Get IP of a login node - Exact name provided
       changed_when: false
-      register: login_ip
-      command: >-
+      register: get_login_ip
+      ansible.builtin.command: >-
         gcloud compute instances describe --zone={{ zone }} {{ login_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+      when: '"*" not in login_node'
+    - name: Set login_ip variable - Exact name provided
+      ansible.builtin.set_fact:
+        login_ip: "{{ get_login_ip.stdout }}"
+      when: '"*" not in login_node'
+    - name: Get IP of a login node - Name pattern provided
+      changed_when: false
+      register: get_login_ip
+      ansible.builtin.command: >-
+        gcloud compute instances list \
+          --format='get(networkInterfaces[0].accessConfigs[0].natIP)' --limit=1 \
+          --filter=NAME:{{ login_node }}
+      when: '"*" in login_node'
+    - name: Set login_ip variable - Name pattern provided
+      ansible.builtin.set_fact:
+        login_ip: "{{ get_login_ip.stdout }}"
+      when: '"*" in login_node'
+    - name: Print login public IP
+      ansible.builtin.debug:
+        var: login_ip
     - name: Get Controller IP
       changed_when: false
       register: controller_ip
-      command: >-
+      ansible.builtin.command: >-
         gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+    - name: Print controller public IP
+      ansible.builtin.debug:
+        var: controller_ip.stdout_lines
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
@@ -119,35 +150,17 @@
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
     - name: Add Login node as host
       add_host:
-        hostname: "{{ login_ip.stdout }}"
+        hostname: "{{ login_ip }}"
         groups: [remote_host]
 
     ## Cleanup and fail gracefully
     rescue:
-    - name: Delete Firewall Rule
-      register: fw_deleted
-      changed_when: fw_deleted.rc == 0
-      failed_when: false  # keep cleaning up
-      command:
-        argv:
-        - gcloud
-        - compute
-        - firewall-rules
-        - delete
-        - "{{ deployment_name }}"
-    - name: Tear Down Cluster
-      changed_when: true  # assume something destroyed
-      run_once: true
-      delegate_to: localhost
-      environment:
-        TF_IN_AUTOMATION: "TRUE"
-      command:
-        cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
-    - name: Fail Out
-      fail:
-        msg: "Failed while setting up test infrastructure"
-      when: true
+    - name: Include rescue from terraform failure
+      ansible.builtin.include_tasks: "tasks/rescue_terraform_failure.yml"
+      vars:
+        deployment_name: "{{ deployment_name }}"
+        workspace: "{{ workspace }}"
+        terraform_apply_stderr: "{{ terraform_output.results.1.stderr }}"
 
 - name: Run Integration Tests
   hosts: remote_host
@@ -157,6 +170,7 @@
   - name: Slurm Test Block
     vars:
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
+      ansible_remote_tmp: "/tmp/ghpc/"
     block:
     - name: Wait until host is reachable
       ansible.builtin.wait_for_connection:

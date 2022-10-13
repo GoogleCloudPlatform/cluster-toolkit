@@ -14,11 +14,11 @@
 
 ---
 
+test_name: htcondor
 deployment_name: "htcondor-{{ build }}"
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/htcondor-pool.yaml"
-blueprint_dir: blueprint-htcondor
+blueprint_yaml: "{{ workspace }}/community/examples/htcondor-pool.yaml"
 network: "{{ deployment_name }}-net"
 access_point: "access-point-0"
 central_manager: "central-manager-0"

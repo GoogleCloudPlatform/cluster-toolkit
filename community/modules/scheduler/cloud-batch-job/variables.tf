@@ -57,6 +57,24 @@ variable "gcloud_version" {
   }
 }
 
+variable "task_count" {
+  description = "Number of parallel tasks"
+  type        = number
+  default     = 1
+}
+
+variable "task_count_per_node" {
+  description = "Max number of tasks that can be run on a VM at the same time. If not specified, Batch will decide a value."
+  type        = number
+  default     = null
+}
+
+variable "mpi_mode" {
+  description = "Sets up barriers before and after runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`."
+  type        = bool
+  default     = false
+}
+
 variable "log_policy" {
   description = <<-EOT
   Create a block to define log policy.
@@ -85,16 +103,16 @@ variable "instance_template" {
   default     = null
 }
 
-variable "network_self_link" {
-  description = "The self link of the network to attach the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
-  type        = string
-  default     = "default"
+variable "subnetwork" {
+  description = "The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided."
+  type        = any
+  default     = null
 }
 
-variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork to attach the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
-  type        = string
-  default     = null
+variable "enable_public_ips" {
+  description = "If set to true, instances will have public IPs"
+  type        = bool
+  default     = true
 }
 
 variable "service_account" {
