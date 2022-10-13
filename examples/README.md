@@ -569,9 +569,11 @@ python /var/tmp/qsim-example.py
 ### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
-tutorial. 
+tutorial.
 
->> Not yet published.
+> **_NOTE:_** The tutorial has not yet been published.
+
+[starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
 
 ## Blueprint Schema
 
