@@ -32,7 +32,7 @@ cat >/etc/esc-client.conf<<EOF
 {
   "Version": "2.0.0",
   "MountConfig": {
-    "ClientDevice": "${server_ip}@tcp:/${remote_mount}",
+    "ClientDevice": "${server_ip}@tcp:${remote_mount}",
     "Mountpoint": "${local_mount}",
     "PackageSource": "http://${server_ip}/client-packages"
   }
