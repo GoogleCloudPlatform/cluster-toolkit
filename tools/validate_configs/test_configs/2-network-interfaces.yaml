@@ -1,0 +1,165 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: two-network-interfaces
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: two-nets
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - id: default-network
+    source: modules/network/pre-existing-vpc
+
+  - id: new-network-1
+    source: modules/network/vpc
+    settings:
+      network_address_range: 10.1.0.0/16
+      subnetworks:
+      - subnet_name: primary-subnet-one
+        subnet_region: $(vars.region)
+        new_bits: 8
+
+  - id: new-network-2
+    source: modules/network/vpc
+    settings:
+      network_name: networktwo
+      network_address_range: 10.0.0.0/16
+      subnetworks:
+      - subnet_name: primary-subnet-two
+        subnet_region: $(vars.region)
+        new_bits: 8
+
+  # Test adding a pre-existing network via "use"
+  - id: one-used-existing-ni
+    source: ./modules/compute/vm-instance
+    use:
+    - default-network
+    settings:
+      name_prefix: one-used-existing-ni
+      machine_type: n2-standard-2
+
+  # Test adding a newly created network via "use"
+  - id: one-used-new-ni
+    source: ./modules/compute/vm-instance
+    use:
+    - new-network-1
+    settings:
+      name_prefix: one-used-new-ni
+      machine_type: n2-standard-2
+
+  # Test adding one pre-existing network via "network_interfaces"
+  - id: one-explicit-existing-ni
+    source: ./modules/compute/vm-instance
+    settings:
+      name_prefix: one-explicit-existing-ni
+      machine_type: n2-standard-2
+      network_interfaces:
+      - network: null
+        subnetwork: $(default-network.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: VIRTIO_NET
+        queue_count: null
+
+  # Test adding one newly created network via "network_interfaces"
+  - id: one-explicit-new-ni
+    source: ./modules/compute/vm-instance
+    settings:
+      name_prefix: one-explicit-new-ni
+      machine_type: n2-standard-2
+      network_interfaces:
+      - network: null
+        subnetwork: $(new-network-1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: VIRTIO_NET
+        queue_count: null
+
+  # Test adding both a pre-existing network and a newly created network via "network_interfaces"
+  - id: two-explicit-mixed-ni
+    source: ./modules/compute/vm-instance
+    settings:
+      name_prefix: two-explicit-mixed-ni
+      network_interfaces:
+      - network: null
+        subnetwork: $(default-network.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config:
+        - nat_ip: null
+          public_ptr_domain_name: null
+          network_tier: null
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: null
+        queue_count: 8
+      - network: null
+        subnetwork: $(new-network-1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: GVNIC
+        queue_count: 12
+
+  # Test adding two newly created networks via "network_interfaces"
+  - id: two-explicit-new-ni
+    source: ./modules/compute/vm-instance
+    settings:
+      name_prefix: two-explicit-new-ni
+      network_interfaces:
+      - network: null
+        subnetwork: $(new-network-1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: null
+        queue_count: 8
+      - network: null
+        subnetwork: $(new-network-2.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: null
+        stack_type: null
+        access_config:
+        - nat_ip: null
+          public_ptr_domain_name: null
+          network_tier: null
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: GVNIC
+        queue_count: 12
