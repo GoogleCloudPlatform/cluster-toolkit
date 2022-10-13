@@ -17,11 +17,13 @@
 output "network_storage" {
   description = "export of all desired folder directories"
   value = [for mount in var.local_mounts : {
-    remote_mount  = "/exports${mount}"
-    local_mount   = mount
-    fs_type       = "nfs"
-    mount_options = "defaults,hard,intr"
-    server_ip     = google_compute_instance.compute_instance.network_interface[0].network_ip
+    remote_mount          = "/exports${mount}"
+    local_mount           = mount
+    fs_type               = "nfs"
+    mount_options         = "defaults,hard,intr"
+    server_ip             = google_compute_instance.compute_instance.network_interface[0].network_ip
+    client_install_runner = null
+    mount_runner          = null
     }
   ]
 }

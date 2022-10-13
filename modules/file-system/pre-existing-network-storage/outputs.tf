@@ -17,11 +17,13 @@
 output "network_storage" {
   description = "Describes a remote network storage to be mounted by fs-tab."
   value = {
-    server_ip     = var.server_ip
-    remote_mount  = var.remote_mount
-    local_mount   = var.local_mount
-    fs_type       = var.fs_type
-    mount_options = var.mount_options
+    server_ip             = var.server_ip
+    remote_mount          = var.remote_mount
+    local_mount           = var.local_mount
+    fs_type               = var.fs_type
+    mount_options         = var.mount_options
+    client_install_runner = null
+    mount_runner          = null
   }
 }
 
