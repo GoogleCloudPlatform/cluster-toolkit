@@ -55,6 +55,6 @@ Examples using Intel HPC technologies can be found in the
 
 [See description in core](../../examples/README.md#quantum-circuit-simulatoryaml-)
 
-### starccm-tutorial.yaml 
+### starccm-tutorial.yaml
 
 [See description in core](../../examples/README.md#starccm-tutorialyaml--)
