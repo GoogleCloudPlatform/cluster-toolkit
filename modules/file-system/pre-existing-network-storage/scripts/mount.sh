@@ -30,3 +30,13 @@ if ! findmnt --source "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" --target "${LO
 else
 	echo "Skipping mounting source: ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}, already mounted to target:${LOCAL_MOUNT}"
 fi
+
+MOUNT_IDENTIFIER="${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}[[:space:]]${LOCAL_MOUNT}"
+if ! grep -q "${MOUNT_IDENTIFIER}" /etc/fstab; then
+	echo "Adding ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} -> ${LOCAL_MOUNT} to /etc/fstab"
+
+	[[ -z "${MOUNT_OPTIONS}" ]] && POPULATED_MOUNT_OPTIONS="defaults" || POPULATED_MOUNT_OPTIONS="${MOUNT_OPTIONS}"
+	echo "${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} ${LOCAL_MOUNT} ${FS_TYPE} ${POPULATED_MOUNT_OPTIONS} 0 0" >>/etc/fstab
+else
+	echo "Skipping editing /etc/fstab as entry already exists"
+fi
