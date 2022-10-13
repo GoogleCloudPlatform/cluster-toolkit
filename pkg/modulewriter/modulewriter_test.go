@@ -646,45 +646,12 @@ func (s *MySuite) TestHandleLiteralVariables(c *C) {
 
 	// Set literal var value
 	hclBody.SetAttributeValue("dummyAttributeName1", cty.StringVal("((var.literal))"))
-
-	// Set escaped var value
-	hclBody.SetAttributeValue("dummyAttributeName2", cty.StringVal("\\((not.var))"))
-	hclBody.SetAttributeValue("dummyAttributeName3", cty.StringVal("abc\\((not.var))abc"))
-	hclBody.SetAttributeValue("dummyAttributeName4", cty.StringVal("abc \\((not.var)) abc"))
 	hclBody.AppendNewline()
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
 	hclString := string(hclBytes)
 
 	// Sucess
 	exists := strings.Contains(hclString, "dummyAttributeName1 = var.literal")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName2 = \"((not.var))\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName3 = \"abc((not.var))abc\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName4 = \"abc ((not.var)) abc\"")
-	c.Assert(exists, Equals, true)
-}
-
-func (s *MySuite) TestHandleBlueprintVariables(c *C) {
-	// Setup
-	hclFile := hclwrite.NewEmptyFile()
-	hclBody := hclFile.Body()
-
-	// Set escaped var value
-	hclBody.SetAttributeValue("dummyAttributeName1", cty.StringVal("\\$(not.var)"))
-	hclBody.SetAttributeValue("dummyAttributeName2", cty.StringVal("abc\\$(not.var)abc"))
-	hclBody.SetAttributeValue("dummyAttributeName3", cty.StringVal("abc \\$(not.var) abc"))
-	hclBody.AppendNewline()
-	hclBytes := handleBlueprintVariables(hclFile.Bytes())
-	hclString := string(hclBytes)
-
-	// Sucess
-	exists := strings.Contains(hclString, "dummyAttributeName1 = \"$(not.var)\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName2 = \"abc$(not.var)abc\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName3 = \"abc $(not.var) abc\"")
 	c.Assert(exists, Equals, true)
 }
 
@@ -763,6 +730,7 @@ func (s *MySuite) TestescapeLiteralVariables(c *C) {
 	hclBody.SetAttributeValue("dummyAttributeName1", cty.StringVal("\\((not.var))"))
 	hclBody.SetAttributeValue("dummyAttributeName2", cty.StringVal("abc\\((not.var))abc"))
 	hclBody.SetAttributeValue("dummyAttributeName3", cty.StringVal("abc \\((not.var)) abc"))
+	hclBody.SetAttributeValue("dummyAttributeName4", cty.StringVal("abc \\((not.var1)) abc \\((not.var2)) abc"))
 	hclBody.AppendNewline()
 	hclBytes := escapeLiteralVariables(hclFile.Bytes())
 	hclString := string(hclBytes)
@@ -773,6 +741,8 @@ func (s *MySuite) TestescapeLiteralVariables(c *C) {
 	exists = strings.Contains(hclString, "dummyAttributeName2 = \"abc((not.var))abc\"")
 	c.Assert(exists, Equals, true)
 	exists = strings.Contains(hclString, "dummyAttributeName3 = \"abc ((not.var)) abc\"")
+	c.Assert(exists, Equals, true)
+	exists = strings.Contains(hclString, "dummyAttributeName4 = \"abc ((not.var1)) abc ((not.var2)) abc\"")
 	c.Assert(exists, Equals, true)
 }
 
@@ -785,6 +755,7 @@ func (s *MySuite) TestescapeBlueprintVariables(c *C) {
 	hclBody.SetAttributeValue("dummyAttributeName1", cty.StringVal("\\$(not.var)"))
 	hclBody.SetAttributeValue("dummyAttributeName2", cty.StringVal("abc\\$(not.var)abc"))
 	hclBody.SetAttributeValue("dummyAttributeName3", cty.StringVal("abc \\$(not.var) abc"))
+	hclBody.SetAttributeValue("dummyAttributeName4", cty.StringVal("abc \\$(not.var1) abc \\$(not.var2) abc"))
 	hclBody.AppendNewline()
 	hclBytes := escapeBlueprintVariables(hclFile.Bytes())
 	hclString := string(hclBytes)
@@ -795,6 +766,8 @@ func (s *MySuite) TestescapeBlueprintVariables(c *C) {
 	exists = strings.Contains(hclString, "dummyAttributeName2 = \"abc$(not.var)abc\"")
 	c.Assert(exists, Equals, true)
 	exists = strings.Contains(hclString, "dummyAttributeName3 = \"abc $(not.var) abc\"")
+	c.Assert(exists, Equals, true)
+	exists = strings.Contains(hclString, "dummyAttributeName4 = \"abc $(not.var1) abc $(not.var2) abc\"")
 	c.Assert(exists, Equals, true)
 }
 

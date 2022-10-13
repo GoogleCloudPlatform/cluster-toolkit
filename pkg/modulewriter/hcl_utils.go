@@ -25,14 +25,14 @@ import (
 
 func escapeBlueprintVariables(hclBytes []byte) []byte {
 	// Convert \$(not.variable) to $(not.variable)
-	re := regexp.MustCompile(`\\\\\$\((.*?)\)`)
-	return re.ReplaceAll(hclBytes, []byte(`$(${1})`))
+	re := regexp.MustCompile(`\\\\\$\(`)
+	return re.ReplaceAll(hclBytes, []byte(`$(`))
 }
 
 func escapeLiteralVariables(hclBytes []byte) []byte {
 	// Convert \((not.variable)) to ((not.variable))
-	re := regexp.MustCompile(`\\\\\(\((.*?)\)\)`)
-	return re.ReplaceAll(hclBytes, []byte(`((${1}))`))
+	re := regexp.MustCompile(`\\\\\(\(`)
+	return re.ReplaceAll(hclBytes, []byte(`((`))
 }
 
 func writeHclAttributes(vars map[string]cty.Value, dst string) error {
