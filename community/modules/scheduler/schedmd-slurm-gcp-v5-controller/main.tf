@@ -101,4 +101,3 @@ module "slurm_controller_template" {
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   tags                     = concat([local.slurm_cluster_name], var.tags)
 }
-

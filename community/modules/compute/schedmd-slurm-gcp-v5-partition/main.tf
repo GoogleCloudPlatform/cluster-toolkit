@@ -85,4 +85,3 @@ module "slurm_partition" {
   subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   partition_conf          = local.partition_conf
 }
-

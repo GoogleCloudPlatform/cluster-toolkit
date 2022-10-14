@@ -37,4 +37,3 @@ if ($failed_coverage > 0) {
    print STDERR "Coverage must be above $min%, $failed_coverage packages were below that.\n";
    exit 1
 }
-

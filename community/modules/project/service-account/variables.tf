@@ -83,4 +83,3 @@ variable "project_roles" {
   description = "list of roles to apply to created service accounts"
   type        = list(string)
 }
-
