@@ -22,8 +22,8 @@ output "network_storage" {
     local_mount           = var.local_mount
     fs_type               = "nfs"
     mount_options         = "defaults,_netdev"
-    client_install_runner = null
-    mount_runner          = null
+    client_install_runner = local.install_nfs_client_runner
+    mount_runner          = local.mount_runner
   }
 }
 

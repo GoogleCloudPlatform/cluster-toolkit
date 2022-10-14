@@ -22,8 +22,8 @@ output "network_storage" {
     fs_type               = "nfs"
     mount_options         = "defaults,hard,intr"
     server_ip             = google_compute_instance.compute_instance.network_interface[0].network_ip
-    client_install_runner = null
-    mount_runner          = null
+    client_install_runner = local.install_nfs_client_runner
+    mount_runner          = local.mount_runner
     }
   ]
 }
