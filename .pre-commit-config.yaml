@@ -78,9 +78,13 @@ repos:
     # MD046 - Code block style
     args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046", scan]
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
-  rev: "3.0.0"  # or specific git tag
+  rev: "3.0.0"
   hooks:
   - id: script-must-have-extension
   - id: shellcheck
   - id: shfmt
     exclude: ".*tpl"
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.3.0
+  hooks:
+  - id: end-of-file-fixer
