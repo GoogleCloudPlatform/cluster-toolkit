@@ -22,8 +22,8 @@ output "network_storage" {
     local_mount           = var.local_mount
     fs_type               = var.fs_type
     mount_options         = var.mount_options
-    client_install_runner = null
-    mount_runner          = null
+    client_install_runner = local.client_install_runner
+    mount_runner          = local.mount_runner
   }
 }
 
@@ -42,21 +42,14 @@ locals {
   install_scripts = {
     "lustre" = local.ddn_lustre_client_install_script
   }
-  mount_supported_fstype = ["lustre"]
-}
-
-output "client_install_runner" {
-  description = "Runner that performs client installation needed to use file system."
-  value = {
+  client_install_runner = {
     "type"        = "shell"
     "content"     = lookup(local.install_scripts, var.fs_type, "echo 'skipping: client_install_runner not yet supported for ${var.fs_type}'")
     "destination" = "install_filesystem_client${replace(var.local_mount, "/", "_")}.sh"
   }
-}
 
-output "mount_runner" {
-  description = "Runner that mounts the file system."
-  value = {
+  mount_supported_fstype = ["lustre"]
+  mount_runner = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
     "args"        = "\"${var.server_ip}\" \"${local.remote_mount_with_slash}\" \"${var.local_mount}\" \"${var.fs_type}\" \"${var.mount_options}\""
@@ -66,4 +59,14 @@ output "mount_runner" {
       "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'"
     )
   }
+}
+
+output "client_install_runner" {
+  description = "Runner that performs client installation needed to use file system."
+  value       = local.client_install_runner
+}
+
+output "mount_runner" {
+  description = "Runner that mounts the file system."
+  value       = local.mount_runner
 }

@@ -41,7 +41,7 @@ locals {
     "destination" = "install_ddn_lustre_client.sh"
   }
 
-  # DDN mount command does not support custom local mount
+  # Mount command provided by DDN does not support custom local mount
   split_mount_cmd               = split(" ", module.ddn_exascaler.mount_command)
   split_mount_cmd_wo_mountpoint = slice(local.split_mount_cmd, 0, length(local.split_mount_cmd) - 1)
   mount_cmd                     = "${join(" ", local.split_mount_cmd_wo_mountpoint)} ${var.local_mount}"
