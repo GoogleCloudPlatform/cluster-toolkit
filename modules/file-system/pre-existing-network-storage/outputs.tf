@@ -40,13 +40,7 @@ locals {
   install_scripts = {
     "lustre" = local.ddn_lustre_client_install_script
   }
-
-  # Mounting
-  ddn_lustre_mount_cmd = "mount -t ${var.fs_type} ${var.server_ip}:${local.remote_mount_with_slash} ${var.local_mount}"
-  mount_commands = {
-    "lustre" = local.ddn_lustre_mount_cmd
-  }
-  mount_command = lookup(local.mount_commands, var.fs_type, "exit 1")
+  mount_supported_fstype = ["lustre"]
 }
 
 output "client_install_runner" {
@@ -63,11 +57,11 @@ output "mount_runner" {
   value = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = "\"${var.server_ip}\" \"${local.remote_mount_with_slash}\" \"${var.local_mount}\" \"${local.mount_command}\""
+    "args"        = "\"${var.server_ip}\" \"${local.remote_mount_with_slash}\" \"${var.local_mount}\" \"${var.fs_type}\""
     "content" = (
-      lookup(local.mount_commands, var.fs_type, null) == null ?
-      "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'" :
-      file("${path.module}/scripts/mount.sh")
+      contains(local.mount_supported_fstype, var.fs_type) ?
+      file("${path.module}/scripts/mount.sh") :
+      "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'"
     )
   }
 }

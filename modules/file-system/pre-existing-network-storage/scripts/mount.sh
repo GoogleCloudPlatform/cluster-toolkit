@@ -16,12 +16,12 @@
 SERVER_IP=$1
 REMOTE_MOUNT_WITH_SLASH=$2
 LOCAL_MOUNT=$3
-MOUNT_COMMAND=$4
+FS_TYPE=$4
 
 if ! findmnt --source "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" --target "${LOCAL_MOUNT}" &>/dev/null; then
 	echo "Mounting --source ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} --target ${LOCAL_MOUNT}"
 	mkdir -p "${LOCAL_MOUNT}"
-	${MOUNT_COMMAND}
+	mount -t "${FS_TYPE}" "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" "${LOCAL_MOUNT}"
 else
 	echo "Skipping mounting source: ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}, already mounted to target:${LOCAL_MOUNT}"
 fi
