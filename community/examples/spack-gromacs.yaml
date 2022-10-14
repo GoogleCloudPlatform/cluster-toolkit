@@ -83,9 +83,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
 

@@ -115,9 +115,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - $(swfs.install_nfs_client_runner)
       - $(swfs.mount_runner)
       - $(spack.install_spack_deps_runner)
