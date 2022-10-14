@@ -33,7 +33,7 @@
 - name: Get Startup Script Logs
   ansible.builtin.command: "{{ terraform_apply_stderr | replace('\n',' ') | regex_search('please run: (.+)', '\\1') | first }}"
   register: serial_port_1_output
-  when: '"startup-script finished with errors" in terraform_apply_stderr'
+  when: '"to inspect the startup script output, please run:" in terraform_apply_stderr'
   failed_when: false
 - name: Log Startup Script Failure
   ansible.builtin.debug:
