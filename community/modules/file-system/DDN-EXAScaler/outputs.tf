@@ -31,18 +31,26 @@ output "client_config_script" {
 
 output "install_ddn_lustre_client_runner" {
   description = "Runner that encapsulates the `client_config_script` output on this module."
-  value = {
+  value       = local.client_install_runner
+}
+
+locals {
+  client_install_runner = {
     "type"        = "shell"
     "content"     = module.ddn_exascaler.client_config
     "destination" = "install_ddn_lustre_client.sh"
   }
-}
 
-locals {
+  # DDN mount command does not support custom local mount
   split_mount_cmd               = split(" ", module.ddn_exascaler.mount_command)
   split_mount_cmd_wo_mountpoint = slice(local.split_mount_cmd, 0, length(local.split_mount_cmd) - 1)
   mount_cmd                     = "${join(" ", local.split_mount_cmd_wo_mountpoint)} ${var.local_mount}"
   mount_cmd_w_mkdir             = "mkdir -p ${var.local_mount} && ${local.mount_cmd}"
+  mount_runner = {
+    "type"        = "shell"
+    "content"     = local.mount_cmd_w_mkdir
+    "destination" = "mount-ddn-lustre.sh"
+  }
 }
 
 output "mount_command" {
@@ -52,11 +60,7 @@ output "mount_command" {
 
 output "mount_runner" {
   description = "Runner to mount the DDN EXAScaler Lustre file system"
-  value = {
-    "type"        = "shell"
-    "content"     = local.mount_cmd_w_mkdir
-    "destination" = "mount-ddn-lustre.sh"
-  }
+  value       = local.mount_runner
 }
 
 output "http_console" {
@@ -72,7 +76,7 @@ output "network_storage" {
     local_mount           = var.local_mount != null ? var.local_mount : format("/mnt/%s", var.fsname)
     fs_type               = "lustre"
     mount_options         = ""
-    client_install_runner = null
-    mount_runner          = null
+    client_install_runner = local.client_install_runner
+    mount_runner          = local.mount_runner
   }
 }
