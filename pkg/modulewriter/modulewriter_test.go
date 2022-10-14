@@ -731,6 +731,7 @@ func (s *MySuite) TestescapeLiteralVariables(c *C) {
 	hclBody.SetAttributeValue("dummyAttributeName2", cty.StringVal("abc\\((not.var))abc"))
 	hclBody.SetAttributeValue("dummyAttributeName3", cty.StringVal("abc \\((not.var)) abc"))
 	hclBody.SetAttributeValue("dummyAttributeName4", cty.StringVal("abc \\((not.var1)) abc \\((not.var2)) abc"))
+	hclBody.SetAttributeValue("dummyAttributeName5", cty.StringVal("abc \\\\((escape.backslash))"))
 	hclBody.AppendNewline()
 	hclBytes := escapeLiteralVariables(hclFile.Bytes())
 	hclString := string(hclBytes)
@@ -744,6 +745,8 @@ func (s *MySuite) TestescapeLiteralVariables(c *C) {
 	c.Assert(exists, Equals, true)
 	exists = strings.Contains(hclString, "dummyAttributeName4 = \"abc ((not.var1)) abc ((not.var2)) abc\"")
 	c.Assert(exists, Equals, true)
+	exists = strings.Contains(hclString, "dummyAttributeName5 = \"abc \\\\((escape.backslash))\"")
+	c.Assert(exists, Equals, true)
 }
 
 func (s *MySuite) TestescapeBlueprintVariables(c *C) {
@@ -756,6 +759,7 @@ func (s *MySuite) TestescapeBlueprintVariables(c *C) {
 	hclBody.SetAttributeValue("dummyAttributeName2", cty.StringVal("abc\\$(not.var)abc"))
 	hclBody.SetAttributeValue("dummyAttributeName3", cty.StringVal("abc \\$(not.var) abc"))
 	hclBody.SetAttributeValue("dummyAttributeName4", cty.StringVal("abc \\$(not.var1) abc \\$(not.var2) abc"))
+	hclBody.SetAttributeValue("dummyAttributeName5", cty.StringVal("abc \\\\$(escape.backslash)"))
 	hclBody.AppendNewline()
 	hclBytes := escapeBlueprintVariables(hclFile.Bytes())
 	hclString := string(hclBytes)
@@ -768,6 +772,8 @@ func (s *MySuite) TestescapeBlueprintVariables(c *C) {
 	exists = strings.Contains(hclString, "dummyAttributeName3 = \"abc $(not.var) abc\"")
 	c.Assert(exists, Equals, true)
 	exists = strings.Contains(hclString, "dummyAttributeName4 = \"abc $(not.var1) abc $(not.var2) abc\"")
+	c.Assert(exists, Equals, true)
+	exists = strings.Contains(hclString, "dummyAttributeName5 = \"abc \\\\$(escape.backslash)\"")
 	c.Assert(exists, Equals, true)
 }
 
