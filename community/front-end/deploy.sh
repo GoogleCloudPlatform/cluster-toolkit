@@ -244,7 +244,7 @@ check_account() {
   local project=$1
   local account
   
-  account=$(gcloud auth list 2>&1 | awk '$1 ~ /^*/ {print $2}')
+  account=$(gcloud config list --format 'value(core.account)' 2>/dev/null)
   
   if [[ ! ${account} ]]; then
     error ""
@@ -643,8 +643,7 @@ FUNDAMENTALS
   #    If there is no default in config, this will check it is not blank
   #
   local default_project
-  default_project=$(gcloud config list 2>/dev/null \
-			| awk '$1 ~ /^project/ {print $3}')
+  default_project=$(gcloud config list --format 'value(core.project)' 2>/dev/null)
   
   while [ -z "${project_id}" ]; do
     project_id=$(ask "    GCP Project ID" "${default_project}")
