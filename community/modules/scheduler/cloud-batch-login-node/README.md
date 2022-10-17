@@ -110,8 +110,10 @@ limitations under the License.
 | <a name="input_job_id"></a> [job\_id](#input\_job\_id) | The ID for the Google Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions. | `string` | n/a | yes |
 | <a name="input_job_template_contents"></a> [job\_template\_contents](#input\_job\_template\_contents) | The contents of the Google Cloud Batch job template. Typically supplied by a cloud-batch-job module. | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the login node. List key, value pairs | `any` | n/a | yes |
+| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Typically supplied by a cloud-batch-job module. | <pre>list(object({<br>    server_ip             = string<br>    remote_mount          = string<br>    local_mount           = string<br>    fs_type               = string<br>    mount_options         = string<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region in which to create the login node | `string` | n/a | yes |
+| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script run before Google Cloud Batch job starts. Typically supplied by a cloud-batch-job module. | `string` | `null` | no |
 
 ## Outputs
 

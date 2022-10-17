@@ -49,6 +49,16 @@ output "instance_template" {
   value       = local.instance_template
 }
 
+output "network_storage" {
+  description = "An array of network attached storage mounts used by the Batch job."
+  value       = var.network_storage
+}
+
+output "startup_script" {
+  description = "Startup script run before Google Cloud Batch job starts."
+  value       = var.startup_script
+}
+
 output "job_template_contents" {
   description = "The generated Batch job template."
   value       = local.job_template_contents

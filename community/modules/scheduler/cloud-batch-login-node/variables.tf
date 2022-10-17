@@ -39,6 +39,26 @@ variable "instance_template" {
   type        = string
 }
 
+variable "network_storage" {
+  description = "An array of network attached storage mounts to be configured. Typically supplied by a cloud-batch-job module."
+  type = list(object({
+    server_ip             = string
+    remote_mount          = string
+    local_mount           = string
+    fs_type               = string
+    mount_options         = string
+    client_install_runner = map(string)
+    mount_runner          = map(string)
+  }))
+  default = []
+}
+
+variable "startup_script" {
+  description = "Startup script run before Google Cloud Batch job starts. Typically supplied by a cloud-batch-job module."
+  type        = string
+  default     = null
+}
+
 variable "job_template_contents" {
   description = "The contents of the Google Cloud Batch job template. Typically supplied by a cloud-batch-job module."
   type        = string

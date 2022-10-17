@@ -22,7 +22,6 @@ locals {
   job_template_destination = "${var.batch_job_directory}/${var.job_filename}"
 
   instance_template_metadata = data.google_compute_instance_template.batch_instance_template.metadata
-  batch_startup_script       = lookup(local.instance_template_metadata, "startup-script", "echo 'Batch job template had no startup script'")
   startup_metadata           = { startup-script = module.login_startup_script.startup_script }
 
   oslogin_api_values = {
@@ -56,7 +55,23 @@ locals {
 
   Use the following commands to:
   ${local.batch_command_instructions}
-  EOT 
+  EOT
+
+  # Construct startup script for non-Batch network storage
+  storage_client_install_runners = [
+    for ns in var.network_storage :
+    ns.client_install_runner if ns.client_install_runner != null
+  ]
+  mount_runners = [
+    for ns in var.network_storage :
+    ns.mount_runner if ns.mount_runner != null
+  ]
+
+  startup_script_runner = {
+    content     = var.startup_script != null ? var.startup_script : "echo 'Batch job template had no startup script'"
+    destination = "passed_startup_script.sh"
+    type        = "shell"
+  }
 }
 
 module "login_startup_script" {
@@ -65,23 +80,23 @@ module "login_startup_script" {
   project_id      = var.project_id
   deployment_name = var.deployment_name
   region          = var.region
-  runners = [
-    {
-      content     = local.batch_startup_script
-      destination = "batch_startup_script.sh"
-      type        = "shell"
-    },
-    {
-      content     = local.readme_contents
-      destination = "${var.batch_job_directory}/README.md"
-      type        = "data"
-    },
-    {
-      content     = var.job_template_contents
-      destination = local.job_template_destination
-      type        = "data"
-    }
-  ]
+  runners = concat(
+    local.storage_client_install_runners,
+    local.mount_runners,
+    [local.startup_script_runner],
+    [
+      {
+        content     = local.readme_contents
+        destination = "${var.batch_job_directory}/README.md"
+        type        = "data"
+      },
+      {
+        content     = var.job_template_contents
+        destination = local.job_template_destination
+        type        = "data"
+      }
+    ]
+  )
 }
 
 resource "google_compute_instance_from_template" "batch_login" {
