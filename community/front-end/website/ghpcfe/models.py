@@ -743,7 +743,7 @@ class ClusterPartition(models.Model):
     enable_placement = models.BooleanField(
         default=True,
         help_text=(
-            "Enable Placement Groups (currently only valid for C2 and C2D "
+            "Enable Placement Groups (currently only valid for C2, C2D and C3"
             "instances)"
         ),
     )
