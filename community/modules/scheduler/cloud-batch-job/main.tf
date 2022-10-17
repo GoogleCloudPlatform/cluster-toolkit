@@ -15,7 +15,7 @@
  */
 
 locals {
-  instance_template = var.instance_template != null ? var.instance_template : module.instance_template[0].self_link
+  instance_template = var.instance_template != null ? var.instance_template : one(module.instance_template[*].self_link)
 
   tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
 
@@ -30,6 +30,7 @@ locals {
       permissive_ssh     = var.mpi_mode
       log_policy         = var.log_policy
       instance_template  = local.instance_template
+      nfs_volumes        = local.native_batch_network_storage
     }
   )
 
@@ -39,6 +40,50 @@ locals {
 
   subnetwork_name    = var.subnetwork != null ? var.subnetwork.name : "default"
   subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
+
+  # Filter network_storage for native Batch support
+  native_batch_fstype = ["nfs"]
+  native_batch_network_storage = [
+    for ns in var.network_storage :
+    ns if contains(local.native_batch_fstype, ns.fs_type)
+  ]
+  startup_script_network_storage = [
+    for ns in var.network_storage :
+    ns if !contains(local.native_batch_fstype, ns.fs_type)
+  ]
+
+  # Pull out runners to include in startup script
+  storage_client_install_runners = [
+    for ns in local.startup_script_network_storage :
+    ns.client_install_runner if ns.client_install_runner != null
+  ]
+  mount_runners = [
+    for ns in local.startup_script_network_storage :
+    ns.mount_runner if ns.mount_runner != null
+  ]
+
+  startup_script_runner = var.startup_script == null ? [] : [{
+    content     = var.startup_script
+    destination = "passed_startup_script.sh"
+    type        = "shell"
+  }]
+
+  full_runner_list = concat(
+    local.storage_client_install_runners,
+    local.mount_runners,
+    local.startup_script_runner
+  )
+}
+
+module "batch_job_startup_script" {
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.6.0"
+  count  = length(local.full_runner_list) > 0 ? 1 : 0
+
+  labels          = var.labels
+  project_id      = var.project_id
+  deployment_name = var.deployment_name
+  region          = var.region
+  runners         = local.full_runner_list
 }
 
 module "instance_template" {
@@ -55,7 +100,7 @@ module "instance_template" {
   labels             = var.labels
 
   machine_type         = var.machine_type
-  startup_script       = var.startup_script
+  startup_script       = one(module.batch_job_startup_script[*].startup_script)
   metadata             = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
   source_image_family  = var.image.family
   source_image_project = var.image.project

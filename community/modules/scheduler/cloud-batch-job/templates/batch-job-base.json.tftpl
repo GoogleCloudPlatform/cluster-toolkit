@@ -13,6 +13,20 @@
         {
           "barrier": {}
         }%{ endif }
+      ],
+      "volumes":[
+        %{~ for index, vol in nfs_volumes ~}
+        {
+          "nfs":{
+            "server":"${vol.server_ip}",
+            "remote_path": "${vol.remote_mount}"
+          },
+          %{~ if vol.mount_options != "" && vol.mount_options != null ~}
+          "mount_options": "${vol.mount_options}",
+          %{~ endif ~}
+          "mount_path": "${vol.local_mount}"
+        }%{~ if index != (length(nfs_volumes) -1) },%{ endif }
+        %{~ endfor ~}
       ]
     },
     "taskCount":${task_count},%{ if tasks_per_node != null }
