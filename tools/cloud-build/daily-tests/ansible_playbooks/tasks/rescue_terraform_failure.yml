@@ -49,6 +49,6 @@
     cmd: terraform destroy -auto-approve
     chdir: "{{ workspace }}/{{ deployment_name }}/primary"
 - name: Fail Out
-  fail:
+  ansible.builtin.fail:
     msg: "Failed while setting up test infrastructure"
   when: true

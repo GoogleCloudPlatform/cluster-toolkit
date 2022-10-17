@@ -21,17 +21,17 @@
   tasks:
   ## Create SSH Keys
   - name: "Create .ssh folder"
-    file:
+    ansible.builtin.file:
       path: "/builder/home/.ssh"
       state: directory
       mode: 0700
   - name: Create SSH Key
-    openssh_keypair:
+    community.crypto.openssh_keypair:
       path: "/builder/home/.ssh/id_rsa"
 
   ## Create cluster
   - name: Create Deployment Directory
-    command: "{{ scripts_dir }}/create_deployment.sh"
+    ansible.builtin.command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
       ALWAYS_RECOMPILE: "no"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
@@ -49,7 +49,7 @@
   - name: Create Infrastructure and test
     block:
     - name: Create Cluster with Terraform
-      command:
+      ansible.builtin.command:
         cmd: "{{ item }}"
         chdir: "{{ workspace }}/{{ deployment_name }}/primary"
       args:
@@ -67,7 +67,7 @@
       retries: 2
       delay: 60
       until: instances_list.rc == 0
-      command: >-
+      ansible.builtin.command: >-
         gcloud compute instances list
         --filter="labels.ghpc_deployment={{ deployment_name }}"
         --format='table(name,zone,id,status)'
@@ -77,21 +77,21 @@
     - name: Get remote IP
       changed_when: false
       register: remote_ip
-      command: >-
+      ansible.builtin.command: >-
         gcloud compute instances describe --zone={{ zone }} {{ remote_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
       changed_when: false
-      shell: >-
+      ansible.builtin.shell: >-
         dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
          awk -F'"' '{print $2}'
       register: build_ip
     - name: Create firewall rule
       register: fw_result
       changed_when: fw_result.rc == 0
-      command:
+      ansible.builtin.command:
         argv:
         - gcloud
         - compute
@@ -108,7 +108,7 @@
     - name: 'Add SSH Keys to OS-Login'
       register: key_result
       changed_when: key_result.rc == 0
-      command:
+      ansible.builtin.command:
         argv:
         - gcloud
         - compute
@@ -119,11 +119,11 @@
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
     - name: Add Remote node as host
-      add_host:
+      ansible.builtin.add_host:
         hostname: "{{ remote_ip.stdout }}"
         groups: [remote_host]
     - name: Wait for cluster
-      wait_for_connection:
+      ansible.builtin.wait_for_connection:
 
     ## Cleanup and fail gracefully
     rescue:
@@ -143,10 +143,10 @@
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     block:
     - name: Pause for 2 minutes to allow cluster setup
-      pause:
+      ansible.builtin.pause:
         minutes: 2
     - name: Run Integration tests for HPC toolkit
-      include_tasks: "{{ test }}"
+      ansible.builtin.include_tasks: "{{ test }}"
       run_once: true
       vars:
         remote_node: "{{ remote_node }}"
@@ -164,7 +164,7 @@
       failed_when: false
       run_once: true
       delegate_to: localhost
-      command:
+      ansible.builtin.command:
         argv:
         - gcloud
         - compute
@@ -177,6 +177,6 @@
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      command:
+      ansible.builtin.command:
         cmd: terraform destroy -auto-approve
         chdir: "{{ workspace }}/{{ deployment_name }}/primary"

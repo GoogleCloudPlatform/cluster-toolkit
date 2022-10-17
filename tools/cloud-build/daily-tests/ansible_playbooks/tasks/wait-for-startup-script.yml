@@ -26,6 +26,6 @@
     timeout: "{{ timeout_seconds }}"
   register: startup_status
 - name: Fail if startup script exited with a non-zero return code
-  fail:
+  ansible.builtin.fail:
     msg: There was a failure in the startup script
   when: startup_status['match_groups'][0] != "0"
