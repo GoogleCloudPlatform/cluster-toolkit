@@ -28,7 +28,7 @@ repos:
     name: terraform-readme
     entry: tools/autodoc/terraform_docs.sh
     language: script
-    types: ['terraform']
+    types: [terraform]
     exclude: \.terraform\/.*$
     pass_filenames: true
     require_serial: true
@@ -57,9 +57,14 @@ repos:
   - id: go-critic
     args: [-disable, "#experimental,sloppyTypeAssert"]
 - repo: https://github.com/ansible/ansible-lint.git
-  rev: v5.4.0
+  rev: v6.8.2
   hooks:
   - id: ansible-lint
+    always_run: false
+    exclude: '^(docs/|examples/|community/examples/)'
+    types: [yaml]
+    additional_dependencies:
+    - ansible==6.*
 - repo: https://github.com/adrienverge/yamllint.git
   rev: v1.28.0
   hooks:

@@ -21,17 +21,17 @@
   tasks:
   ## Create SSH Keys
   - name: "Create .ssh folder"
-    file:
+    ansible.builtin.file:
       path: "/builder/home/.ssh"
       state: directory
       mode: 0700
   - name: Create SSH Key
-    openssh_keypair:
+    community.crypto.openssh_keypair:
       path: "/builder/home/.ssh/id_rsa"
 
   ## Create cluster
   - name: Create Deployment Directory
-    command: "{{ scripts_dir }}/create_deployment.sh"
+    ansible.builtin.command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
       ALWAYS_RECOMPILE: "no"
       MAX_NODES: "{{ max_nodes }}"
@@ -50,7 +50,7 @@
   - name: Create Infrastructure and test
     block:
     - name: Create Cluster with Terraform
-      command:
+      ansible.builtin.command:
         cmd: "{{ item }}"
         chdir: "{{ workspace }}/{{ deployment_name }}/primary"
       args:
@@ -68,7 +68,7 @@
       retries: 2
       delay: 60
       until: instances_list.rc == 0
-      command: >-
+      ansible.builtin.command: >-
         gcloud compute instances list
         --filter="labels.ghpc_deployment={{ deployment_name }}"
         --format='table(name,zone,id,status)'
@@ -114,14 +114,14 @@
     ## Setup firewall for cloud build
     - name: Get Builder IP
       changed_when: false
-      shell: >-
+      ansible.builtin.shell: >-
         dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
          awk -F'"' '{print $2}'
       register: build_ip
     - name: Create firewall rule
       register: fw_created
       changed_when: fw_created.rc == 0
-      command:
+      ansible.builtin.command:
         argv:
         - gcloud
         - compute
@@ -138,7 +138,7 @@
     - name: 'Add SSH Keys to OS-Login'
       register: key_created
       changed_when: key_created.rc == 0
-      command:
+      ansible.builtin.command:
         argv:
         - gcloud
         - compute
@@ -149,7 +149,7 @@
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
     - name: Add Login node as host
-      add_host:
+      ansible.builtin.add_host:
         hostname: "{{ login_ip }}"
         groups: [remote_host]
 
@@ -183,7 +183,7 @@
         path: /var/run/munge/munge.socket.2
         timeout: 600
     - name: Run Integration tests for HPC toolkit
-      include_tasks: "{{ test }}"
+      ansible.builtin.include_tasks: "{{ test }}"
       run_once: true
       vars:
         login_node: "{{ login_node }}"
@@ -198,7 +198,7 @@
       changed_when: false
       failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
-      command: cat /var/log/slurm/resume.log
+      ansible.builtin.command: cat /var/log/slurm/resume.log
       register: resume_output
     - name: Print Slurm resume.log
       ansible.builtin.debug:
@@ -207,7 +207,7 @@
       changed_when: false
       failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
-      command: cat /var/log/slurm/suspend.log
+      ansible.builtin.command: cat /var/log/slurm/suspend.log
       register: suspend_output
     - name: Print Slurm suspend.log
       ansible.builtin.debug:
@@ -218,7 +218,7 @@
       failed_when: false  # keep cleaning up
       run_once: true
       delegate_to: localhost
-      command:
+      ansible.builtin.command:
         argv:
         - gcloud
         - compute
@@ -231,6 +231,6 @@
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      command:
+      ansible.builtin.command:
         cmd: terraform destroy -auto-approve
         chdir: "{{ workspace }}/{{ deployment_name }}/primary"

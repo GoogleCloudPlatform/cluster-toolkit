@@ -26,7 +26,7 @@
       state: directory
       mode: 0700
   - name: Create SSH Key
-    openssh_keypair:
+    community.crypto.openssh_keypair:
       path: "/builder/home/.ssh/id_rsa"
 
   ## Create cluster
@@ -157,7 +157,7 @@
         delay: 10
         timeout: 300
     - name: Run Integration tests for HPC toolkit
-      include_tasks: "{{ test }}"
+      ansible.builtin.include_tasks: "{{ test }}"
       run_once: true
       vars:
         access_point: "{{ access_point }}"

@@ -20,10 +20,10 @@
     vm_name: "{{ login_node }}"
     timeout_seconds: 7200
 - name: Ensure spack is installed
-  command: spack --version
+  ansible.builtin.command: spack --version
   changed_when: False
 - name: Test gromacs is available on compute nodes
-  shell: |
+  ansible.builtin.shell: |
     spack load gromacs
     srun -N 1 gmx_mpi -version
     sleep 120
