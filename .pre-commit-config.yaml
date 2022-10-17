@@ -28,7 +28,7 @@ repos:
     name: terraform-readme
     entry: tools/autodoc/terraform_docs.sh
     language: script
-    types: ['terraform']
+    types: [terraform]
     exclude: \.terraform\/.*$
     pass_filenames: true
     require_serial: true
