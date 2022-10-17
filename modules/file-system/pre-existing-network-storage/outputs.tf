@@ -57,7 +57,7 @@ output "mount_runner" {
   value = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = "\"${var.server_ip}\" \"${local.remote_mount_with_slash}\" \"${var.local_mount}\" \"${var.fs_type}\""
+    "args"        = "\"${var.server_ip}\" \"${local.remote_mount_with_slash}\" \"${var.local_mount}\" \"${var.fs_type}\" \"${var.mount_options}\""
     "content" = (
       contains(local.mount_supported_fstype, var.fs_type) ?
       file("${path.module}/scripts/mount.sh") :
