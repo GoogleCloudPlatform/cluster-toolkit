@@ -27,6 +27,32 @@ This creates a cluster of 8 compute VMs that are:
 > physical cores visible. To change this, set `threads_per_core=2` under
 > settings.
 
+### VPC Networks
+
+There are two methods for adding network connectivity to the `vm-instance`
+module. The first is shown in the example above, where a `vpc` module or
+`pre-existing-vpc` module is used by the `vm-instance` module. When this
+happens, the `network_self_link` and `subnetwork_self_link` outputs from the
+network are provided as input to the `vm-instance` and a network interface is
+defined based on that. This can also be done updating the `network_self_link` and
+`subnetwork_self_link` settings directly.
+
+The alternative option can be used when more than one network needs to be added
+to the `vm-instance` or further customization is needed beyond what is provided
+via other variables. For this option, the `network_interfaces` variable can be
+used to set up one or more network interfaces on the VM instance. The format is
+consistent with the terraform `google_compute_instance` `network_interface`
+block, and more information can be found in the
+[terraform docs][network-interface-tf].
+
+> **_NOTE:_** When supplying the `network_interfaces` variable, networks
+> associated with the `vm-instance` via use will be ignored in favor of the
+> networks added in `network_interfaces`. In addition, `bandwidth_tier` and
+> `disable_public_ips` will not apply to networks defined in
+> `network_interfaces`.
+
+[network-interface-tf]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_network_interface
+
 ### SSH key metadata
 
 This module will ignore all changes to the `ssh-keys` metadata field that are
