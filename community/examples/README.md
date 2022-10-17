@@ -54,3 +54,7 @@ Examples using Intel HPC technologies can be found in the
 ### quantum-circuit-simulator.yaml
 
 [See description in core](../../examples/README.md#quantum-circuit-simulatoryaml-)
+
+### starccm-tutorial.yaml
+
+[See description in core](../../examples/README.md#starccm-tutorialyaml--)

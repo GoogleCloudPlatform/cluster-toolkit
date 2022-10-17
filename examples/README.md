@@ -27,6 +27,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-cluster-localssd.yaml](#hpc-cluster-localssd--)
   * [htcondor-pool.yaml](#htcondor-poolyaml--)
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-)
+  * [starccm-tutorial.yaml](#starccm-tutorialyaml--)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -564,6 +565,15 @@ python /var/tmp/qsim-example.py
 [qsim]: https://quantumai.google/qsim
 [cqsdk]: https://developer.nvidia.com/cuquantum-sdk
 [cudatk]: https://developer.nvidia.com/cuda-toolkit
+
+### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
+tutorial.
+
+> **_NOTE:_** The tutorial has not yet been published.
+
+[starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
 
 ## Blueprint Schema
 
