@@ -55,9 +55,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        source: "modules/startup-script/examples/install_ansible.sh"
-        destination: "install_ansible.sh"
       - $(homefs.install_nfs_client_runner)
       - $(homefs.mount_runner)
       - $(omnia.setup_omnia_node_runner)
@@ -68,9 +65,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        source: "modules/startup-script/examples/install_ansible.sh"
-        destination: "install_ansible.sh"
       - $(homefs.install_nfs_client_runner)
       - $(homefs.mount_runner)
       - $(omnia.setup_omnia_node_runner)

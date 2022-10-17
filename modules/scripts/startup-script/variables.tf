@@ -79,3 +79,9 @@ EOT
   }
   default = []
 }
+
+variable "prepend_ansible_installer" {
+  description = "Prepend Ansible installation script if any of the specified runners are of type ansible-local"
+  type        = bool
+  default     = true
+}

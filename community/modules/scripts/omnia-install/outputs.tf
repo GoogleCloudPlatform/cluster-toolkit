@@ -46,15 +46,14 @@ output "setup_omnia_node_runner" {
 
 output "install_omnia_runner" {
   description = <<-EOT
-  Runner to install Omnia using the startup-script module
-  This runner requires ansible to be installed. This can be achieved using the
-  install_ansible.sh script as a prior runner in the startup-script module:
-  runners:
-  - type: shell
-    source: modules/startup-script/examples/install_ansible.sh
-    destination: install_ansible.sh
+  Runner to install Omnia using an ansible playbook. The startup-script module
+  will automatically handle installation of ansible.
+  - id: example-startup-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(your-omnia-id.install_omnia_runner)
   ...
-  - $(omnia.install_omnia_runner)
   EOT
   value       = local.install_omnia_runner
 }

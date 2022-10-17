@@ -76,9 +76,6 @@ deployment_groups:
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
       - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
-      - type: shell
         source: modules/startup-script/examples/install_cloud_ops_agent.sh
         destination: install_cloud_ops_agent.sh
       - type: "ansible-local"

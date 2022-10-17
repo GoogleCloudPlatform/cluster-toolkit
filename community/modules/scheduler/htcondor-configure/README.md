@@ -31,9 +31,6 @@ install the HTCondor software and adds custom configurations using
   source: modules/scripts/startup-script
   settings:
     runners:
-    - type: shell
-      source: modules/startup-script/examples/install_ansible.sh
-      destination: install_ansible.sh
     - $(htcondor_install.install_htcondor_runner)
     - $(htcondor_configure.central_manager_runner)
 
@@ -41,9 +38,6 @@ install the HTCondor software and adds custom configurations using
   source: modules/scripts/startup-script
   settings:
     runners:
-    - type: shell
-      source: modules/startup-script/examples/install_ansible.sh
-      destination: install_ansible.sh
     - $(htcondor_install.install_htcondor_runner)
     - $(htcondor_install.install_autoscaler_deps_runner)
     - $(htcondor_install.install_autoscaler_runner)

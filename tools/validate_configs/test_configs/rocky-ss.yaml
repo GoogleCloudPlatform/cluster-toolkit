@@ -71,9 +71,6 @@ deployment_groups:
           echo $2
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - type: "ansible-local"
         source: modules/startup-script/examples/hello.yaml
         destination: hello.yaml
