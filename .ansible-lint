@@ -1,5 +1,15 @@
 skip_list:
 - yaml
+- jinja[invalid]
+
+exclude_paths:
+  - .cache/ # implicit unless exclude_paths is defined in config
+  - .github/
+  - cmd/
+  - docs/
+  - examples/
+  - community/examples/
+  - pkg/
 
 mock_roles:
 - googlecloudplatform.google_cloud_ops_agents
