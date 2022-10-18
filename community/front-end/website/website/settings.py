@@ -74,7 +74,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "qn$u0rvaae-$k=c-@^$828f(wygoh85-qdz5jc)xg&6y7imqag"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = get_listen_hosts()
 
