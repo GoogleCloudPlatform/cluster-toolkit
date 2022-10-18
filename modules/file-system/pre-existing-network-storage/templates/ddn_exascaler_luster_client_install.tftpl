@@ -46,3 +46,5 @@ do
 done
 chmod +x /usr/sbin/esc-client
 esc-client auto setup --config /etc/esc-client.conf
+esc-client unmount -m "${local_mount}"
+mv /etc/fstab.last /etc/fstab
