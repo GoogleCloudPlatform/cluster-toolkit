@@ -50,6 +50,32 @@ This creates a controller node with the following attributes:
 For a complete example using this module, see
 [slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
 
+### Reconfigure Option
+The schedmd-slurm-gcp-v5-controller module supports the reconfiguration of
+partitions and slurm configuration in a running, active cluster. This option is
+activated through the `enable_reconfigure` setting:
+
+```yaml
+- id: slurm_controller
+  source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+  settings:
+    enable_reconfigure: true
+```
+
+Reconfigure has some additional requirements:
+
+* The Pub/Sub API must be activated in the target project:
+  `gcloud services enable file.googleapis.com --project "<<PROJECT_ID>>"`
+* Python package dependencies need to be installed with pip in the environment
+  deployment the cluster. See the [Slurm on GCP Documentation][optdeps] for more
+  info.
+* The project in your gcloud config must match the project the cluster is being
+  deployed onto due to a known issue with the reconfigure scripts. To set your
+  default config project, run the following command:
+  `gcloud config set core/<<PROJECT ID>>`
+
+[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster#optional
+
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
