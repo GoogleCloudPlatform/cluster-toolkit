@@ -18,21 +18,34 @@ REMOTE_MOUNT_WITH_SLASH=$2
 LOCAL_MOUNT=$3
 FS_TYPE=$4
 MOUNT_OPTIONS=$5
+[[ -z "${MOUNT_OPTIONS}" ]] && POPULATED_MOUNT_OPTIONS="defaults" || POPULATED_MOUNT_OPTIONS="${MOUNT_OPTIONS}"
 
-MOUNT_IDENTIFIER="${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}[[:space:]]${LOCAL_MOUNT}"
-if ! grep -q "${MOUNT_IDENTIFIER}" /etc/fstab; then
-	echo "Adding ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} -> ${LOCAL_MOUNT} to /etc/fstab"
+SAME_LOCAL_IDENTIFIER="^[^#].*[[:space:]]${LOCAL_MOUNT}"
+EXACT_MATCH_IDENTIFIER="${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}[[:space:]]${LOCAL_MOUNT}[[:space:]]${FS_TYPE}[[:space:]]${POPULATED_MOUNT_OPTIONS}[[:space:]]0[[:space:]]0"
 
-	[[ -z "${MOUNT_OPTIONS}" ]] && POPULATED_MOUNT_OPTIONS="defaults" || POPULATED_MOUNT_OPTIONS="${MOUNT_OPTIONS}"
-	echo "${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} ${LOCAL_MOUNT} ${FS_TYPE} ${POPULATED_MOUNT_OPTIONS} 0 0" >>/etc/fstab
-else
-	echo "Skipping editing /etc/fstab as entry already exists"
-fi
+grep -q "${SAME_LOCAL_IDENTIFIER}" /etc/fstab && SAME_LOCAL_IN_FSTAB=true || SAME_LOCAL_IN_FSTAB=false
+grep -q "${EXACT_MATCH_IDENTIFIER}" /etc/fstab && EXACT_IN_FSTAB=true || EXACT_IN_FSTAB=false
+findmnt --source "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" --target "${LOCAL_MOUNT}" &>/dev/null && EXACT_MOUNTED=true || EXACT_MOUNTED=false
 
-if ! findmnt --source "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" --target "${LOCAL_MOUNT}" &>/dev/null; then
-	echo "Mounting --target ${LOCAL_MOUNT} from fstab"
-	mkdir -p "${LOCAL_MOUNT}"
-	mount --target "${LOCAL_MOUNT}"
-else
+# Do nothing and success if exact entry is already in fstab and mounted
+if [ "$EXACT_IN_FSTAB" = true ] && [ "${EXACT_MOUNTED}" = true ]; then
 	echo "Skipping mounting source: ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}, already mounted to target:${LOCAL_MOUNT}"
+	exit 0
 fi
+
+# Fail if previous fstab entry is using same local mount
+if [ "$SAME_LOCAL_IN_FSTAB" = true ] && [ "${EXACT_IN_FSTAB}" = false ]; then
+	echo "Mounting failed as local mount: ${LOCAL_MOUNT} was already in use in fstab"
+	exit 1
+fi
+
+# Add to fstab if entry is not already there
+if [ "${EXACT_IN_FSTAB}" = false ]; then
+	echo "Adding ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} -> ${LOCAL_MOUNT} to /etc/fstab"
+	echo "${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} ${LOCAL_MOUNT} ${FS_TYPE} ${POPULATED_MOUNT_OPTIONS} 0 0" >>/etc/fstab
+fi
+
+# Mount from fstab
+echo "Mounting --target ${LOCAL_MOUNT} from fstab"
+mkdir -p "${LOCAL_MOUNT}"
+mount --target "${LOCAL_MOUNT}"

@@ -26,9 +26,9 @@ that the `server_ip` must be known before deployment.
 
 ### Mounting
 
-For some `fs_type`, this module will provide `client_install_runner` and
-`mount_runner` outputs. These can be used to create a startup script to mount
-the network storage system.
+For the `fs_type` listed below, this module will provide `client_install_runner`
+and `mount_runner` outputs. These can be used to create a startup script to
+mount the network storage system.
 
 Supported `fs_type`:
 
