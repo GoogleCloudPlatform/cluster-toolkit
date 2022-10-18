@@ -32,6 +32,7 @@ mount the network storage system.
 
 Supported `fs_type`:
 
+- nfs
 - lustre (DDN)
 
 [scripts/mount.sh](./scripts/mount.sh) is used as the contents of
