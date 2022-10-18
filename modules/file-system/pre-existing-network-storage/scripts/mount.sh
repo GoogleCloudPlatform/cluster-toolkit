@@ -19,18 +19,6 @@ LOCAL_MOUNT=$3
 FS_TYPE=$4
 MOUNT_OPTIONS=$5
 
-if ! findmnt --source "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" --target "${LOCAL_MOUNT}" &>/dev/null; then
-	echo "Mounting --source ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} --target ${LOCAL_MOUNT}"
-	mkdir -p "${LOCAL_MOUNT}"
-	if [ -z "${MOUNT_OPTIONS}" ]; then
-		mount -t "${FS_TYPE}" "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" "${LOCAL_MOUNT}"
-	else
-		mount -t "${FS_TYPE}" -o "${MOUNT_OPTIONS}" "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" "${LOCAL_MOUNT}"
-	fi
-else
-	echo "Skipping mounting source: ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}, already mounted to target:${LOCAL_MOUNT}"
-fi
-
 MOUNT_IDENTIFIER="${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}[[:space:]]${LOCAL_MOUNT}"
 if ! grep -q "${MOUNT_IDENTIFIER}" /etc/fstab; then
 	echo "Adding ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} -> ${LOCAL_MOUNT} to /etc/fstab"
@@ -39,4 +27,12 @@ if ! grep -q "${MOUNT_IDENTIFIER}" /etc/fstab; then
 	echo "${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH} ${LOCAL_MOUNT} ${FS_TYPE} ${POPULATED_MOUNT_OPTIONS} 0 0" >>/etc/fstab
 else
 	echo "Skipping editing /etc/fstab as entry already exists"
+fi
+
+if ! findmnt --source "${SERVER_IP}":"${REMOTE_MOUNT_WITH_SLASH}" --target "${LOCAL_MOUNT}" &>/dev/null; then
+	echo "Mounting --target ${LOCAL_MOUNT} from fstab"
+	mkdir -p "${LOCAL_MOUNT}"
+	mount --target "${LOCAL_MOUNT}"
+else
+	echo "Skipping mounting source: ${SERVER_IP}:${REMOTE_MOUNT_WITH_SLASH}, already mounted to target:${LOCAL_MOUNT}"
 fi

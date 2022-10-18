@@ -24,6 +24,22 @@ This creates a pre-existing-network-storage module in terraform at the
 provided IP in `server_ip` of type nfs that will be mounted at `/home`. Note
 that the `server_ip` must be known before deployment.
 
+### Mounting
+
+For some `fs_type`, this module will provide `client_install_runner` and
+`mount_runner` outputs. These can be used to create a startup script to mount
+the network storage system.
+
+Supported `fs_type`:
+
+- lustre (DDN)
+
+[scripts/mount.sh](./scripts/mount.sh) is used as the contents of
+`mount_runner`. This script will update `/etc/fstab` and mount the
+network storage. Behavior is undefined if:
+
+- System already has an entry in `/etc/fstab` for `local_mount`.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
