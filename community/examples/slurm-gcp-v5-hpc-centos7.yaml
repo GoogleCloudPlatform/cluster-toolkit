@@ -70,6 +70,7 @@ deployment_groups:
     - homefs
     settings:
       disable_controller_public_ips: false
+      enable_reconfigure: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
