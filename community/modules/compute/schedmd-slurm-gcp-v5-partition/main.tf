@@ -28,25 +28,28 @@ locals {
       node_conf              = var.node_conf
 
       # Template By Definition
-      additional_disks         = var.additional_disks
-      bandwidth_tier           = var.bandwidth_tier
-      can_ip_forward           = var.can_ip_forward
-      disable_smt              = var.disable_smt
-      disk_auto_delete         = var.disk_auto_delete
-      disk_labels              = var.labels
-      disk_size_gb             = var.disk_size_gb
-      disk_type                = var.disk_type
-      enable_confidential_vm   = var.enable_confidential_vm
-      enable_oslogin           = var.enable_oslogin
-      enable_shielded_vm       = var.enable_shielded_vm
-      gpu                      = var.gpu
-      labels                   = var.labels
-      machine_type             = var.machine_type
-      metadata                 = var.metadata
-      min_cpu_platform         = var.min_cpu_platform
-      on_host_maintenance      = var.on_host_maintenance
-      preemptible              = var.preemptible
-      service_account          = var.service_account
+      additional_disks       = var.additional_disks
+      bandwidth_tier         = var.bandwidth_tier
+      can_ip_forward         = var.can_ip_forward
+      disable_smt            = var.disable_smt
+      disk_auto_delete       = var.disk_auto_delete
+      disk_labels            = var.labels
+      disk_size_gb           = var.disk_size_gb
+      disk_type              = var.disk_type
+      enable_confidential_vm = var.enable_confidential_vm
+      enable_oslogin         = var.enable_oslogin
+      enable_shielded_vm     = var.enable_shielded_vm
+      gpu                    = var.gpu
+      labels                 = var.labels
+      machine_type           = var.machine_type
+      metadata               = var.metadata
+      min_cpu_platform       = var.min_cpu_platform
+      on_host_maintenance    = var.on_host_maintenance
+      preemptible            = var.preemptible
+      service_account = var.service_account != null ? var.service_account : {
+        email  = data.google_compute_default_service_account.default.email
+        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+      }
       shielded_instance_config = var.shielded_instance_config
       source_image_family      = var.source_image_family == null ? "" : var.source_image_family
       source_image_project     = var.source_image_project == null ? "" : var.source_image_project
@@ -68,6 +71,9 @@ locals {
   slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
 }
 
+data "google_compute_default_service_account" "default" {
+  project = var.project_id
+}
 
 module "slurm_partition" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.1.0"

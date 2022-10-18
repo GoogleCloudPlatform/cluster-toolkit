@@ -28,32 +28,39 @@ locals {
   access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
 }
 
+data "google_compute_default_service_account" "default" {
+  project = var.project_id
+}
+
 module "slurm_login_template" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=v5.1.0"
 
-  additional_disks         = var.additional_disks
-  bandwidth_tier           = "platform_default"
-  can_ip_forward           = var.can_ip_forward
-  slurm_cluster_name       = local.slurm_cluster_name
-  disable_smt              = var.disable_smt
-  disk_auto_delete         = var.disk_auto_delete
-  disk_labels              = var.labels
-  disk_size_gb             = var.disk_size_gb
-  disk_type                = var.disk_type
-  enable_confidential_vm   = var.enable_confidential_vm
-  enable_oslogin           = var.enable_oslogin
-  enable_shielded_vm       = var.enable_shielded_vm
-  gpu                      = var.gpu
-  labels                   = var.labels
-  machine_type             = var.machine_type
-  metadata                 = var.metadata
-  min_cpu_platform         = var.min_cpu_platform
-  network_ip               = var.network_ip != null ? var.network_ip : ""
-  on_host_maintenance      = var.on_host_maintenance
-  preemptible              = var.preemptible
-  project_id               = var.project_id
-  region                   = var.region
-  service_account          = var.service_account
+  additional_disks       = var.additional_disks
+  bandwidth_tier         = "platform_default"
+  can_ip_forward         = var.can_ip_forward
+  slurm_cluster_name     = local.slurm_cluster_name
+  disable_smt            = var.disable_smt
+  disk_auto_delete       = var.disk_auto_delete
+  disk_labels            = var.labels
+  disk_size_gb           = var.disk_size_gb
+  disk_type              = var.disk_type
+  enable_confidential_vm = var.enable_confidential_vm
+  enable_oslogin         = var.enable_oslogin
+  enable_shielded_vm     = var.enable_shielded_vm
+  gpu                    = var.gpu
+  labels                 = var.labels
+  machine_type           = var.machine_type
+  metadata               = var.metadata
+  min_cpu_platform       = var.min_cpu_platform
+  network_ip             = var.network_ip != null ? var.network_ip : ""
+  on_host_maintenance    = var.on_host_maintenance
+  preemptible            = var.preemptible
+  project_id             = var.project_id
+  region                 = var.region
+  service_account = var.service_account != null ? var.service_account : {
+    email  = data.google_compute_default_service_account.default.email
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+  }
   shielded_instance_config = var.shielded_instance_config
   slurm_instance_role      = "login"
   source_image_family      = var.source_image_family
