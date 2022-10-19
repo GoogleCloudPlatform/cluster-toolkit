@@ -22,7 +22,7 @@
 # and connected to the same network and subnet
 # to set up EXAScaler Cloud filesystem on a new client instance,
 # run the folowing commands on the client with root privileges:
-
+set -e
 if [[ ! -z $(cat /proc/filesystems | grep lustre) ]]; then
   echo "Skipping lustre client install as it is already supported"
   exit 0
@@ -46,3 +46,5 @@ do
 done
 chmod +x /usr/sbin/esc-client
 esc-client auto setup --config /etc/esc-client.conf
+esc-client unmount -m "${local_mount}"
+mv /etc/fstab.last /etc/fstab
