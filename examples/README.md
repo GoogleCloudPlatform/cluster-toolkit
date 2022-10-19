@@ -30,6 +30,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [starccm-tutorial.yaml](#starccm-tutorialyaml--)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
+  * [Blueprint Boilerplate](#blueprint-boilerplate)
   * [Top Level Parameters](#top-level-parameters)
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
@@ -638,6 +639,28 @@ deployment_groups:
 The blueprint file is composed of 3 primary parts, top-level parameters,
 deployment variables and deployment groups. These are described in more detail
 below.
+
+### Blueprint Boilerplate
+
+The following is a template that can be used to start writing a blueprint from
+scratch.
+
+```yaml
+---
+blueprint_name: # boilerplate-blueprint
+
+vars:
+  project_id: # my-project-id
+  deployment_name: # boilerplate-001
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: # network1
+    source: # modules/network/vpc
+```
 
 ### Top Level Parameters
 
