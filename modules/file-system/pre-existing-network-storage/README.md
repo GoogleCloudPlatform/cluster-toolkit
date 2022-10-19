@@ -35,10 +35,9 @@ Supported `fs_type`:
 - lustre (DDN)
 
 [scripts/mount.sh](./scripts/mount.sh) is used as the contents of
-`mount_runner`. This script will update `/etc/fstab` and mount the
-network storage. Behavior is undefined if:
-
-- System already has an entry in `/etc/fstab` for `local_mount`.
+`mount_runner`. This script will update `/etc/fstab` and mount the network
+storage. This script will fail if the specified `local_mount` is already being
+used by another entry in `/etc/fstab`.
 
 ## License
 
