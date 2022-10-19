@@ -38,9 +38,11 @@ locals {
       local_mount  = var.local_mount
     }
   )
+  nfs_client_install_script = file("${path.module}/scripts/install-nfs-client.sh")
 
   install_scripts = {
     "lustre" = local.ddn_lustre_client_install_script
+    "nfs"    = local.nfs_client_install_script
   }
   client_install_runner = {
     "type"        = "shell"
@@ -48,7 +50,7 @@ locals {
     "destination" = "install_filesystem_client${replace(var.local_mount, "/", "_")}.sh"
   }
 
-  mount_supported_fstype = ["lustre"]
+  mount_supported_fstype = ["lustre", "nfs"]
   mount_runner = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"

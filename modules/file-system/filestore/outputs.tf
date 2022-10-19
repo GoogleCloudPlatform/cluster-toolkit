@@ -17,11 +17,11 @@
 output "network_storage" {
   description = "Describes a filestore instance."
   value = {
-    server_ip             = google_filestore_instance.filestore_instance.networks[0].ip_addresses[0]
-    remote_mount          = format("/%s", google_filestore_instance.filestore_instance.file_shares[0].name)
+    server_ip             = local.server_ip
+    remote_mount          = local.remote_mount
     local_mount           = var.local_mount
-    fs_type               = "nfs"
-    mount_options         = "defaults,_netdev"
+    fs_type               = local.fs_type
+    mount_options         = local.mount_options
     client_install_runner = local.install_nfs_client_runner
     mount_runner          = local.mount_runner
   }
