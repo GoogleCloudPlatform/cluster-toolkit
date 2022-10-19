@@ -392,10 +392,11 @@ variable "service_account" {
     email  = string
     scopes = set(string)
   })
-  description = <<EOD
-Service account to attach to the instances. See
-'main.tf:local.service_account' for the default.
-EOD
+  description = <<-EOD
+    Service account to attach to the controller instance. If not set, the
+    default compute service account for the given project will be used with the
+    "https://www.googleapis.com/auth/cloud-platform" scope.
+    EOD
   default     = null
 }
 
