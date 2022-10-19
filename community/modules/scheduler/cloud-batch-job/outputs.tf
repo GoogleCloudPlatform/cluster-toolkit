@@ -44,6 +44,15 @@ output "instructions" {
   EOT
 }
 
+output "job_data" {
+  description = "All data associated with the defined job, typically provided as input to clout-batch-login-node."
+  value = {
+    template_contents = local.job_template_contents,
+    filename          = local.job_filename,
+    id                = local.job_id
+  }
+}
+
 output "instance_template" {
   description = "Instance template used by the Batch job."
   value       = local.instance_template
@@ -57,21 +66,6 @@ output "network_storage" {
 output "startup_script" {
   description = "Startup script run before Google Cloud Batch job starts."
   value       = var.startup_script
-}
-
-output "job_template_contents" {
-  description = "The generated Batch job template."
-  value       = local.job_template_contents
-}
-
-output "job_filename" {
-  description = "The filename of the generated Batch job template."
-  value       = local.job_filename
-}
-
-output "job_id" {
-  description = "The Batch job id."
-  value       = local.job_id
 }
 
 output "gcloud_version" {

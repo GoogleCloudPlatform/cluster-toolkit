@@ -23,13 +23,16 @@ output "instructions" {
   description = "Instructions for accessing the login node and submitting Google Cloud Batch jobs"
   value       = <<-EOT
 
-  A Batch job template file will be placed on the Batch login node at:
-    ${local.job_template_destination}
+  Batch job template files will be placed on the Batch login node in the following directory:
+    ${var.batch_job_directory}
 
   Use the following commands to:
   SSH into the login node:
     gcloud compute ssh --zone ${google_compute_instance_from_template.batch_login.zone} ${google_compute_instance_from_template.batch_login.name}  --project ${google_compute_instance_from_template.batch_login.project}
-  
+
+  List all jobs:
+    gcloud ${var.gcloud_version} batch jobs list --project=${var.project_id}
+
   ${local.batch_command_instructions}
   EOT
 }

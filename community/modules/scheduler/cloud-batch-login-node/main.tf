@@ -19,7 +19,21 @@ data "google_compute_instance_template" "batch_instance_template" {
 }
 
 locals {
-  job_template_destination = "${var.batch_job_directory}/${var.job_filename}"
+
+  # Handle directly created job data (deprecated). All of job_id, job_template_contents and job_filename must be set.
+  default_job_data = var.job_template_contents == null || var.job_id == null || var.job_filename == null ? [] : [{
+    id                = var.job_id
+    filename          = var.job_filename
+    template_contents = var.job_template_contents
+  }]
+
+  job_data = concat(local.default_job_data, var.job_data)
+
+  job_template_runners = [for job in local.job_data : {
+    content     = job.template_contents
+    destination = "${var.batch_job_directory}/${job.filename}"
+    type        = "data"
+  }]
 
   instance_template_metadata = data.google_compute_instance_template.batch_instance_template.metadata
   startup_metadata           = { startup-script = module.login_startup_script.startup_script }
@@ -32,19 +46,20 @@ locals {
 
   login_metadata = merge(local.instance_template_metadata, local.startup_metadata, local.oslogin_metadata)
 
-  batch_command_instructions = <<-EOT
+  batch_command_instructions = join("\n", [for job in local.job_data : <<-EOT
+  ## For job: ${job.id} ##
+
   Submit your job from login node:
-    gcloud ${var.gcloud_version} batch jobs submit ${var.job_id} --config=${local.job_template_destination} --location=${var.region} --project=${var.project_id}
+    gcloud ${var.gcloud_version} batch jobs submit ${job.id} --config=${var.batch_job_directory}/${job.filename} --location=${var.region} --project=${var.project_id}
   
   Check status:
-    gcloud ${var.gcloud_version} batch jobs describe ${var.job_id} --location=${var.region} --project=${var.project_id} | grep state:
+    gcloud ${var.gcloud_version} batch jobs describe ${job.id} --location=${var.region} --project=${var.project_id} | grep state:
   
   Delete job:
-    gcloud ${var.gcloud_version} batch jobs delete ${var.job_id} --location=${var.region} --project=${var.project_id}
+    gcloud ${var.gcloud_version} batch jobs delete ${job.id} --location=${var.region} --project=${var.project_id}
 
-  List all jobs:
-    gcloud ${var.gcloud_version} batch jobs list --project=${var.project_id}
   EOT
+  ])
 
   readme_contents = <<-EOT
   # Batch Job Templates
@@ -84,6 +99,7 @@ module "login_startup_script" {
     local.storage_client_install_runners,
     local.mount_runners,
     [local.startup_script_runner],
+    local.job_template_runners,
     [
       {
         content     = local.readme_contents
