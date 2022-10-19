@@ -14,11 +14,11 @@
 
 ---
 
+test_name: hpc-high-io
 deployment_name: "hpc-high-io-{{ build }}"
 zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io.yaml"
-blueprint_dir: blueprint-hpc-high-io
 network: "default"
 max_nodes: 5
 login_node: "slurm-{{ deployment_name }}-login0"

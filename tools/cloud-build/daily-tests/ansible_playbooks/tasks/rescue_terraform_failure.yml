@@ -1,0 +1,54 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - deployment_name is defined
+    - workspace is defined
+    - terraform_apply_stderr is defined
+
+- name: Delete Firewall Rule
+  register: fw_deleted
+  changed_when: fw_deleted.rc == 0
+  failed_when: false  # keep cleaning up
+  ansible.builtin.command:
+    argv:
+    - gcloud
+    - compute
+    - firewall-rules
+    - delete
+    - "{{ deployment_name }}"
+- name: Get Startup Script Logs
+  ansible.builtin.command: "{{ terraform_apply_stderr | replace('\n',' ') | regex_search('please run: (.+)', '\\1') | first }}"
+  register: serial_port_1_output
+  when: '"startup-script finished with errors" in terraform_apply_stderr'
+  failed_when: false
+- name: Log Startup Script Failure
+  ansible.builtin.debug:
+    var: serial_port_1_output
+  when: serial_port_1_output is defined
+- name: Tear Down Cluster
+  changed_when: true  # assume something destroyed
+  run_once: true
+  delegate_to: localhost
+  environment:
+    TF_IN_AUTOMATION: "TRUE"
+  ansible.builtin.command:
+    cmd: terraform destroy -auto-approve
+    chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+- name: Fail Out
+  fail:
+    msg: "Failed while setting up test infrastructure"
+  when: true

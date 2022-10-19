@@ -20,7 +20,7 @@ data "google_compute_instance_template" "batch_instance_template" {
 
 locals {
   instance_template_metadata = data.google_compute_instance_template.batch_instance_template.metadata
-  batch_startup_script       = local.instance_template_metadata["startup-script"]
+  batch_startup_script       = lookup(local.instance_template_metadata, "startup-script", "echo 'Batch job template had no startup script'")
   startup_metadata           = { startup-script = module.login_startup_script.startup_script }
 
   oslogin_api_values = {

@@ -24,10 +24,13 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
+  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssd--)
   * [htcondor-pool.yaml](#htcondor-poolyaml--)
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-)
+  * [starccm-tutorial.yaml](#starccm-tutorialyaml--)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
+  * [Blueprint Boilerplate](#blueprint-boilerplate)
   * [Top Level Parameters](#top-level-parameters)
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
@@ -522,6 +525,17 @@ a Shared VPC service project][fs-shared-vpc].
 [hpc-cluster-small-sharedvpc.yaml]: ../community/examples/hpc-cluster-small-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
+### [hpc-cluster-localssd.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates the use of Slurm and Filestore, with the definition
+of a partition which deploys compute nodes that have local ssd drives deployed.
+Before deploying this blueprint, one must first ensure to have an existing VPC
+properly configured (allowing Internet access and allowing inter virtual
+machine communications, for NFS and also for communications between the Slurm
+nodes)
+
+[hpc-cluster-localssd.yaml]: ../community/examples/hpc-cluster-localssd.yaml
+
 ### [htcondor-pool.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
@@ -551,6 +565,15 @@ python /var/tmp/qsim-example.py
 [qsim]: https://quantumai.google/qsim
 [cqsdk]: https://developer.nvidia.com/cuquantum-sdk
 [cudatk]: https://developer.nvidia.com/cuda-toolkit
+
+### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
+tutorial.
+
+> **_NOTE:_** The tutorial has not yet been published.
+
+[starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
 
 ## Blueprint Schema
 
@@ -616,6 +639,28 @@ deployment_groups:
 The blueprint file is composed of 3 primary parts, top-level parameters,
 deployment variables and deployment groups. These are described in more detail
 below.
+
+### Blueprint Boilerplate
+
+The following is a template that can be used to start writing a blueprint from
+scratch.
+
+```yaml
+---
+blueprint_name: # boilerplate-blueprint
+
+vars:
+  project_id: # my-project-id
+  deployment_name: # boilerplate-001
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: # network1
+    source: # modules/network/vpc
+```
 
 ### Top Level Parameters
 

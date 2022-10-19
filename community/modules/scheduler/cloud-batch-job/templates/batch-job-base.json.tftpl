@@ -1,14 +1,24 @@
 {
   "taskGroups": [{
     "taskSpec": {
-      "runnables": [
+      "runnables": [%{ if synchronized }
+        {
+          "barrier": {}
+        },%{ endif }
         {
           "script": {
             "text": "${runnable}"
           }
-        }
+        }%{ if synchronized },
+        {
+          "barrier": {}
+        }%{ endif }
       ]
-    }
+    },
+    "taskCount":${task_count},%{ if tasks_per_node != null }
+    "taskCountPerNode": ${tasks_per_node},%{ endif }
+    "requireHostsFile": ${require_hosts_file},
+    "permissiveSsh": ${permissive_ssh}
   }]%{ if instance_template != null },
   "allocationPolicy": {
     "instances": [{

@@ -58,7 +58,19 @@ ghpc create --vars project_id=<<PROJECT_ID>> hpc-cluster-amd-slurmv5.yaml
 It will create a directory containing a Terraform module. Follow the printed
 instructions to execute Terraform.
 
-### Login to the cluster and complete installation of AOCC
+### Run an OpenFOAM test suite
+
+Browse to the [Cloud Console][console] and use the SSH feature to access the
+Slurm login node. A script has been provisioned which will activate your
+OpenFOAM environment and run a test suite of applications. The output of this
+test suite will appear in `openfoam_test` under your home directory. To execute
+the test suite, run:
+
+```shell
+bash /var/tmp/openfoam_test.sh
+```
+
+### Complete installation of AOCC
 
 Because AOCC requires acceptance of a license, we advise a manual step to
 install AOCC and OpenMPI compiled with AOCC. You can browse to the

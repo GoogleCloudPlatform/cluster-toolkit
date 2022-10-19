@@ -24,7 +24,7 @@ In a new Google Cloud project there are several apis that must be enabled to
 deploy your HPC cluster. These will be caught when you perform `terraform apply`
 but you can save time by enabling them now by running:
 
-<walkthrough-enable-apis apis="storage.googleapis.com,compute.googleapis.com,secretmanager.googleapis.com"></walkthrough-enable-apis>
+<walkthrough-enable-apis apis="storage.googleapis.com,compute.googleapis.com,secretmanager.googleapis.com,serviceusage.googleapis.com"></walkthrough-enable-apis>
 
 ## Build the Toolkit Binary
 

@@ -133,3 +133,4 @@ deployment_groups:
     source: community/modules/scripts/wait-for-startup
     settings:
       instance_name: ((module.qsimvm.name[0]))
+      timeout: 2400

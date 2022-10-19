@@ -36,48 +36,21 @@
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
       PROJECT_ID: "{{ project }}"
       ROOT_DIR: "{{ workspace }}"
-      BLUEPRINT_DIR: "{{ blueprint_dir }}"
       DEPLOYMENT_NAME: "{{ deployment_name }}"
       NETWORK: "{{ network }}"
+      TEST_NAME: "{{ test_name }}"
     args:
       creates: "{{ workspace }}/{{ deployment_name }}.tgz"
+    register: create_output
+  - name: Print ghpc blueprint information
+    ansible.builtin.debug:
+      var: create_output.stdout_lines
   - name: Create Infrastructure and test
     block:
     - name: Setup network and HTCondor install scripts
       ansible.builtin.command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
-      args:
-        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
-      environment:
-        TF_IN_AUTOMATION: "TRUE"
-      with_items:
-      - terraform init
-      - terraform validate
-      - terraform apply -auto-approve -no-color
-    - name: Get startup_script
-      register: network_name
-      changed_when: false
-      args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
-        executable: /bin/bash
-      ansible.builtin.shell: |
-        terraform output -raw startup_script_htcondor_install_scripts > \
-          ../packer/custom-image/startup_script.sh
-    - name: Create VM image with Packer
-      register: image_created
-      changed_when: image_created.rc == 0
-      args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
-        executable: /bin/bash
-      ansible.builtin.shell: |
-        packer init .
-        packer validate -var startup_script_file=startup_script.sh .
-        packer build -var startup_script_file=startup_script.sh .
-    - name: Setup HTCondor Pool
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
+        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor"
       args:
         creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
       environment:
@@ -90,7 +63,7 @@
       register: access_ip
       changed_when: false
       args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
+        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor"
         executable: /bin/bash
       ansible.builtin.shell: |
         set -o pipefail
@@ -157,33 +130,7 @@
         TF_IN_AUTOMATION: "TRUE"
       ansible.builtin.command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
-      with_items:
-      - terraform init
-      - terraform destroy -auto-approve
-    - name: Get image name
-      when: image_created is defined and image_created.rc == 0
-      register: image_name
-      args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
-        executable: /bin/bash
-      ansible.builtin.shell: |
-        set -o pipefail
-        jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2
-    - name: Delete custom image
-      register: image_deleted
-      when: image_created is defined and image_created.rc == 0
-      changed_when: image_deleted.rc == 0
-      ansible.builtin.command:
-        cmd: gcloud compute images delete {{ image_name.stdout }}
-    - name: Tear Down Network
-      changed_when: true  # assume something destroyed
-      delegate_to: localhost
-      environment:
-        TF_IN_AUTOMATION: "TRUE"
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
+        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor"
       with_items:
       - terraform init
       - terraform destroy -auto-approve
@@ -204,10 +151,11 @@
     - name: Gather facts
       ansible.builtin.setup:
     - name: Wait until HTCondor daemon is up
+      # this step presently takes a while due to Docker installation
       ansible.builtin.wait_for:
         port: 9618
         delay: 10
-        timeout: 180
+        timeout: 300
     - name: Run Integration tests for HPC toolkit
       include_tasks: "{{ test }}"
       run_once: true
@@ -217,37 +165,6 @@
       loop_control:
         loop_var: test
     always:
-    - name: Tear Down Pool
-      changed_when: true  # assume something destroyed
-      delegate_to: localhost
-      run_once: true
-      environment:
-        TF_IN_AUTOMATION: "TRUE"
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
-      with_items:
-      - terraform init
-      - terraform destroy -auto-approve
-    - name: Get image name
-      changed_when: false
-      run_once: true
-      delegate_to: localhost
-      register: image_name
-      args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
-        executable: /bin/bash
-      ansible.builtin.shell: |
-        set -o pipefail
-        jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2
-    - name: Delete custom image
-      register: image_deleted
-      changed_when: image_deleted.rc == 0
-      failed_when: false  # keep cleaning up
-      run_once: true
-      delegate_to: localhost
-      ansible.builtin.command:
-        cmd: gcloud compute images delete {{ image_name.stdout }}
     - name: Delete Firewall Rule
       register: fw_deleted
       changed_when: fw_deleted.rc == 0
@@ -261,15 +178,15 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-    - name: Tear Down Network
+    - name: Tear Down Pool
       changed_when: true  # assume something destroyed
-      run_once: true
       delegate_to: localhost
+      run_once: true
       environment:
         TF_IN_AUTOMATION: "TRUE"
       ansible.builtin.command:
         cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor-env"
+        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor"
       with_items:
       - terraform init
       - terraform destroy -auto-approve

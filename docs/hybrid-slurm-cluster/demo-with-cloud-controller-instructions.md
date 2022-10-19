@@ -67,28 +67,13 @@ found at [docs/hybrid.md][slurm-gcp-hybrid].
 [static-cluster.yaml]: ./blueprints/static-cluster.yaml
 [hybrid-configuration.yaml]: ./blueprints/hybrid-configuration.yaml
 
-## Debugging Suggestions
+## Troubleshooting
 
-### Logging
-The logs from VMs created by the hybrid configuration will be populated under
-`/var/log/slurm/*.log`, a selection of pertinent logs are described below:
+For general troubleshooting advice related to the hybrid configuration
+deployment, visit [troubleshooting.md]. Additional troubleshooting tips related
+to this demo are included below.
 
-* `slurmctld.log`: The logging information for the slurm controller daemon. Any
-  issues with the config or permissions will be logged here.
-* `slurmd.log`: The logging information for the slurm daemon on the compute
-  nodes. Any issues with the config or permissions on the compute node can be
-  found here. Note: These logs require SSH'ing to the compute nodes and viewing
-  them directly.
-* `resume.log`: Output from the resume.py script that is used by hybrid
-  partitions to create the burst VM instances. Any issues creating new compute
-  VM nodes will be logged here.
-
-In addition, any startup failures can be tracked through the logs at
-`/var/log/messages` for centos/rhel based images and `/var/log/syslog` for
-debian/ubuntu based images. Instructions for viewing these logs can be found in
-[Google Cloud docs][view-ss-output].
-
-[view-ss-output]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux#viewing-output
+[troubleshooting.md]: ./troubleshooting.md
 
 ### Connectivity Issues
 To verify the network and DNS peering setup was successful, you can create a VM
@@ -135,7 +120,7 @@ The following APIs are required to complete this demo:
 [fileapi]: https://cloud.google.com/filestore/docs/reference/rest
 
 #### Set IAM Roles
-The service account attaches to the slurm controller in Project A
+The service account attached to the slurm controller in Project A
 ([see above](#select-or-create-2-gcp-projects))
 must have the Editor role in
 Project A and Project B. If not specified, this will be the
@@ -331,215 +316,9 @@ To deploy, run the following commands:
 
 Execute the terraform commands to deploy the static Slurm cluster in project A.
 
-### Use the Cloud HPC Toolkit to Create the Hybrid Deployment Directory
-The blueprint for creating a deploying the hybrid configuration can be found in
-the blueprints directory as [hybrid-configuration.yaml]. This blueprint defines
-a deployment that does the following:
+### Deploy and Install the Hybrid Configuration
 
-* Create a pointer to the network in project B created in
-  [Create VPC Networks](#create-vpc-networks).
-* Create a filestore for a cloud scratch network filesystem.
-* Create a single partition named "cloud" with a dynamic maximum size of 10
-  nodes of machine type n2-standard-2.
-* Creates a hybrid configuration using the
-  [`schedmd-slurm-gcp-v5-hybrid`][hybridmodule] module. This module will do the
-  following:
-  * Create a directory at `output_dir` locally containing the hybrid
-    configuration files and execution scripts.
-  * Set metadata in project B that inform the burst compute nodes how to
-    configure themselves.
-  * Create pubsub actions triggered by changes to the hybrid configuration.
-
-The following deployment variables in the [hybrid-configuration.yaml] blueprint
-will be set based on your configuration via the command line:
-
-* **_project\_id:_** The ID of project B.
-* **_static\_controller\_hostname:_** The fully qualified internal hostname of
-  the static cluster's controller in project A. The format is
-  `cluster-controller.c.<<Project_A_ID>>.internal`.
-
-To create the deployment directory with deployment variables passed through the
-command line, run the following command with the updated values for
-`<<Project_A>>` and `<<Project_B>>`:
-
-```shell
-ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml --vars project_id="<<Project_B>>",static_controller_hostname="cluster-controller.c.<<Project_A>>.internal"
-```
-
-If successful, this command will provide 3 terraform operations that can be
-performed to deploy the deployment directory. They should look similar to the
-following:
-
-```shell
-Terraform group was successfully created in directory peering-networks-demo/primary
-To deploy, run the following commands:
-  terraform -chdir=hybrid-config/primary init
-  terraform -chdir=hybrid-config/primary validate
-  terraform -chdir=hybrid-config/primary apply
-```
-
-Execute the terraform commands to create the hybrid configuration. A directory
-in `hybrid-configuration/primary` named `hyrid/` should be created which
-contains a `cloud.conf` file, `cloud_gres.conf` file and a set of support
-scripts.
-
-[hybridmodule]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-
-### Install and Configure Hybrid on the Controller Instance
-
-> **_NOTE:_** Many of the manual steps in this section have been adapted from the
-> hybrid documentation in [Slurm on GCP][slurm-gcp]. The source document can be
-> found at [docs/hybrid.md][slurm-gcp-hybrid]
-
-Now that the hybrid configuration directory has been created, it needs to be
-installed on the controller VM instance. First, tar the directory:
-
-```shell
-cd hybrid-config/primary
-tar czvf hybrid.tar.gz hybrid
-```
-
-Copy the `hybrid.tar.gz` file to the controller VM instance. This can be done
-in whichever way is easiest for you, `gcloud compute scp` is used here.
-
-```shell
-gcloud compute scp --project="<<Project_A>>" --zone=us-central1-c ./hybrid.tar.gz "cluster-controller:~"
-```
-
-Now SSH to the controller VM either using the console or the following gcloud
-command:
-
-```shell
-gcloud compute ssh --project="<<Project_A>>" --zone=us-central1-c "cluster-controller"
-```
-
-Decompress the `hybrid.tar.gz` file:
-
-```shell
-sudo tar xzvf hybrid.tar.gz --directory /etc/slurm
-rm hybrid.tar.gz
-```
-
-Set the correct permissions for the hybrid directory and the files contained in
-it:
-
-```shell
-sudo chown -R slurm: /etc/slurm/hybrid
-sudo chmod 644 /etc/slurm/hybrid/cloud.conf
-sudo chmod 755 /etc/slurm/hybrid
-```
-
-Because the static cluster was also created by [Slurm on GCP][slurm-gcp]
-terraform modules, the partition information must be copied from the file
-`/etc/slurm/cloud.conf` to the slurm config file at `/etc/slurm/slurm.conf`. The
-lines that need to be copied will look similar to the following block:
-
-```text
-NodeName=DEFAULT State=UNKNOWN RealMemory=7552 Boards=1 Sockets=1 CoresPerSocket=1 ThreadsPerCore=1 CPUs=1
-NodeName=cluster-static-ghpc-[0-3] State=CLOUD
-NodeSet=cluster-static-ghpc Nodes=cluster-static-ghpc-[0-3]
-PartitionName=static Nodes=cluster-static-ghpc State=UP DefMemPerCPU=7552 SuspendTime=300 Oversubscribe=Exclusive Default=YES
-
-SuspendExcNodes=cluster-static-ghpc-[0-3]
-```
-
-Depending on the configuration of the static partitions, the `SuspendExcNodes`
-may not be included.
-
-These lines can be copied to the bottom of the `slurm.conf` file.
-
-Make the following changes to the `/etc/slurm/slurm.conf` file:
-
-* replace `include cloud.conf` with `include hybrid/cloud.conf`
-* Add the fully qualified hostname in parentheses after the controller hostname
-  in the parameter `SlurmctldHost`.
-
-```text
-# slurm.conf
-...
-SlurmctldHost=cluster-controller(cluster-controller.c.<<Project_A_ID>>.internal)
-...
-include hybrid/cloud.conf
-...
-```
-
-Make the following changes to the `/etc/slurm/hybrid/cloud.conf` file:
-
-* `SlurmctldParameters`
-  * Remove `cloud_dns`
-  * Add `cloud_reg_addrs`
-* Add `TreeWidth=65533`
-
-```text
-# cloud.conf
-...
-SlurmctldParameters=idle_on_node_suspend,cloud_reg_addrs
-...
-TreeWidth=65533
-...
-```
-
-These changes will inform the controller to use the IP of compute nodes to
-communicate rather than the hostnames.
-
-Next, create a new cronjob as the slurm user that will periodically call the
-`/etc/slurm/hybrid/slurmsync.py` file.
-
-```shell
-sudo su slurm
-crontab -e
-```
-
-Since the controller was deployed using [Slurm on GCP][slurm-gcp], there will
-already be a cronjob pointing to the `slurmsync.py` script in `/etc/slurm/`,
-simply update it to the following:
-
-```text
-*/1 * * * * /etc/slurm/hybrid/slurmsync.py
-```
-
-Exit the editor and the slurm user when complete.
-
-Finally, restart the slurmctld service to enable the changes made:
-
-```shell
-sudo systemctl restart slurmctld
-```
-
-If the restart did not succeed, the logs at `/var/log/slurm/slurmctld.log`
-should point you in the right direction.
-
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
-[slurm-gcp-hybrid]: https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/docs/hybrid.md
-
-### Validate the Hybrid Cluster
-
-Now that the hybrid configuration has been installed, you can test your new
-cloud partition. First off, run `sinfo` to see your partitions listed side by
-side:
-
-```shell
-$ sinfo
-PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
-static*      up   infinite      4   idle cluster-static-ghpc-[0-3]
-compute      up   infinite     20  idle~ hybridconf-compute-ghpc-[0-19]
-debug        up   infinite     10  idle~ hybridconf-debug-ghpc-[0-9]
-```
-
-To verify that your local partitions are still active, run a simple test with
-`srun`:
-
-```shell
-$ srun -N 1 hostname
-cluster-static-ghpc-0
-```
-
-Now verify the cloud partition is running with a similar test. Note that since a
-node is being created, the same command will take much longer the first time.
-Subsequent uses of the cloud nodes before being suspended will be near
-instantaneous after the initial startup cost.
-
-```shell
-$ srun -N 1 -p debug hostname
-hybridconf-debug-ghpc-0
-```
+Congratulations! You've configured and deployed your static Slurm cluster in GCP
+using Slurm on GCP modules in the HPC Toolkit. The next step is to create,
+deploy and validate a hybrid configuration using your static cluster. To do
+that, follow the instructions at [deploy-instructions.md](./deploy-instructions.md).

@@ -1,16 +1,23 @@
 # Description
 
-This module will render a Google Cloud Batch job template that is written to a
-local file. When this module is used with the `cloud-batch-login-node` module,
-the generated job template is placed on the login node.
+This module creates:
+
+- **A local file:** A Google Cloud Batch job template file is created. See the
+  `instructions` output for the location of the file and instructions on how to
+  submit it to Batch.
+- **An [instance template]:** This instance template defines the compute settings to
+  be used for the Batch job such as network, machine type, image, and startup
+  script. This instance template is automatically referenced from the Batch job
+  template described above.
+
+[instance template]: https://cloud.google.com/compute/docs/instance-templates
+
+When this module is used with the `cloud-batch-login-node` module, the generated
+job template will be placed on the login node.
 
 In some cases the job template can be submitted to the Google Cloud Batch API
 without modification, but for more complex workloads it is expected that the
 user will modify the template after running the HPC Toolkit.
-
-This module will also generate an instance template for the Google Cloud Batch
-job unless one is provided. See the
-[Instance Templates section](#instance-templates) for more information.
 
 ## Example
 
@@ -28,6 +35,15 @@ See the
 [Google Cloud Batch Example](../../../../examples/README.md#cloud-batchyaml--)
 for how to use the `cloud-batch-job` module with other HPC Toolkit modules such
 as `filestore` and `startup-script`.
+
+## Shared VPC
+
+This module supports using a [shared VPC] with a Batch job. To accomplish this,
+include a [`pre-existing-vpc`] module that references an existing shared VPC and
+then have the `cloud-batch-job` module `use` the `pre-existing-vpc`.
+
+[shared VPC]: https://cloud.google.com/vpc/docs/shared-vpc
+[`pre-existing-vpc`]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/network/pre-existing-vpc
 
 ## Instance Templates
 
@@ -131,6 +147,7 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used for the job\_id | `string` | n/a | yes |
+| <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | If set to true, instances will have public IPs | `bool` | `true` | no |
 | <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions. Valid inputs are `"alpha"`, `"beta"` and "" (empty string for default version) | `string` | `"alpha"` | no |
 | <a name="input_image"></a> [image](#input\_image) | Google Cloud Batch compute node image. Ignored if `instance_template` is provided. | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Compute VM instance template self-link to be used for Google Cloud Batch compute node. If provided, a number of other variables will be ignored as noted by `Ignored if instance_template is provided` in descriptions. | `string` | `null` | no |
@@ -139,14 +156,16 @@ limitations under the License.
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Google Cloud Batch compute nodes. List key, value pairs. Ignored if `instance_template` is provided. | `any` | n/a | yes |
 | <a name="input_log_policy"></a> [log\_policy](#input\_log\_policy) | Create a block to define log policy.<br>When set to `CLOUD_LOGGING`, logs will be sent to Cloud Logging.<br>When set to `PATH`, path must be added to generated template.<br>When set to `DESTINATION_UNSPECIFIED`, logs will not be preserved. | `string` | `"CLOUD_LOGGING"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for Google Cloud Batch compute nodes. Ignored if `instance_template` is provided. | `string` | `"n2-standard-4"` | no |
-| <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the Google Cloud Batch compute node. Ignored if `instance_template` is provided. | `string` | `"default"` | no |
+| <a name="input_mpi_mode"></a> [mpi\_mode](#input\_mpi\_mode) | Sets up barriers before and after runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`. | `bool` | `false` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region in which to run the Google Cloud Batch job | `string` | n/a | yes |
 | <a name="input_runnable"></a> [runnable](#input\_runnable) | A string to be executed as the main workload of the Google Cloud Batch job. This will be used to populate the generated template. | `string` | `"## Add your workload here"` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/devstorage.read_only",<br>    "https://www.googleapis.com/auth/logging.write",<br>    "https://www.googleapis.com/auth/monitoring.write",<br>    "https://www.googleapis.com/auth/servicecontrol",<br>    "https://www.googleapis.com/auth/service.management.readonly",<br>    "https://www.googleapis.com/auth/trace.append"<br>  ]<br>}</pre> | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script run before Google Cloud Batch job starts. Ignored if `instance_template` is provided. | `string` | `null` | no |
-| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the Google Cloud Batch compute node. Ignored if `instance_template` is provided. | `string` | `null` | no |
+| <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided. | `any` | `null` | no |
+| <a name="input_task_count"></a> [task\_count](#input\_task\_count) | Number of parallel tasks | `number` | `1` | no |
+| <a name="input_task_count_per_node"></a> [task\_count\_per\_node](#input\_task\_count\_per\_node) | Max number of tasks that can be run on a VM at the same time. If not specified, Batch will decide a value. | `number` | `null` | no |
 
 ## Outputs
 
