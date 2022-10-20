@@ -39,6 +39,14 @@ repos:
     files: ^.*\.pkr\.hcl$
     pass_filenames: true
     require_serial: true
+  - id: duplicate-diff
+    name: duplicate-diff
+    entry: python3 tools/duplicate-diff.py
+    language: python
+    language_version: python3
+    types: [shell]
+    pass_filenames: true
+    require_serial: true
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
   hooks:
