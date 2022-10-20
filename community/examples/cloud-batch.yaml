@@ -39,8 +39,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(appfs.install_nfs_client_runner)
-      - $(appfs.mount_runner)
       - type: shell
         destination: generate_hello.sh
         content: |
