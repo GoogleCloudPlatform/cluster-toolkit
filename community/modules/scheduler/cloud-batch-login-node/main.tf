@@ -57,7 +57,7 @@ locals {
   ${local.batch_command_instructions}
   EOT
 
-  # Construct startup script for non-Batch network storage
+  # Construct startup script for network storage
   storage_client_install_runners = [
     for ns in var.network_storage :
     ns.client_install_runner if ns.client_install_runner != null
@@ -75,7 +75,7 @@ locals {
 }
 
 module "login_startup_script" {
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.6.0"
+  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.7.0"
   labels          = var.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name

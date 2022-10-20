@@ -76,7 +76,7 @@ locals {
 }
 
 module "batch_job_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.6.0"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.7.0"
   count  = length(local.full_runner_list) > 0 ? 1 : 0
 
   labels          = var.labels

@@ -134,7 +134,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_batch_job_startup_script"></a> [batch\_job\_startup\_script](#module\_batch\_job\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.6.0 |
+| <a name="module_batch_job_startup_script"></a> [batch\_job\_startup\_script](#module\_batch\_job\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.7.0 |
 | <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | > 7.6.0 |
 
 ## Resources
