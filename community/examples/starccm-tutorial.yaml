@@ -39,10 +39,6 @@ deployment_groups:
         destination: /tmp/install-deps.sh
 
       - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
-
-      - type: shell
         content: $(homefs.install_nfs_client)
         destination: "/tmp/nfs_client.sh"
 
