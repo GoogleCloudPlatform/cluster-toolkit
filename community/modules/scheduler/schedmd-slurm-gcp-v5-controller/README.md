@@ -11,19 +11,20 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
-> **_WARNING:_** The variables [enable\_cleanup\_compute] and
+> **_WARNING:_** The variables [enable\_reconfigure], [enable\_cleanup\_compute] and
 > [enable\_cleanup\_subscriptions], if set to true, require additional
 > dependencies **to be installed on the system running `terraform apply`**.
-> Python3 must be installed along with the pip packages listed in the
+> Python3 (>=3.6.0, <4.0.0) must be installed along with the pip packages listed in the
 > [requirements.txt] file of [SchedMD/slurm-gcp].
 
-[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
-[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
+[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/scripts/requirements.txt
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
+[enable\_reconfigure]: #input\_enable\_reconfigure
 
 ### Example
 
@@ -49,6 +50,35 @@ This creates a controller node with the following attributes:
 
 For a complete example using this module, see
 [slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
+
+### Live Cluster Reconfiguration (`enable_reconfigure`)
+The schedmd-slurm-gcp-v5-controller module supports the reconfiguration of
+partitions and slurm configuration in a running, active cluster. This option is
+activated through the `enable_reconfigure` setting:
+
+```yaml
+- id: slurm_controller
+  source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+  settings:
+    enable_reconfigure: true
+```
+
+This option has some additional requirements:
+
+* The Pub/Sub API must be activated in the target project:
+  `gcloud services enable file.googleapis.com --project "<<PROJECT_ID>>"`
+* The authenticated user in the local development environment (or where
+  `terraform apply` is called) must have the Pub/Sub Admin (roles/pubsub.admin)
+  IAM role.
+* Python and some python packages need to be installed with pip in the local
+  development environment deploying the cluster. For more information, see the
+  warning in the [description](#description) of this module.
+* The project in your gcloud config must match the project the cluster is being
+  deployed onto due to a known issue with the reconfigure scripts. To set your
+  default config project, run the following command:
+  `gcloud config set core/<<PROJECT ID>>`
+
+[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster#optional
 
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
