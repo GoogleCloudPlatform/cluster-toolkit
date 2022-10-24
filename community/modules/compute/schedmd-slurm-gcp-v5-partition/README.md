@@ -32,6 +32,42 @@ The following code snippet creates a partition module with:
 For a complete example using this module, see
 [slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
 
+### Compute VM Zone Policies
+
+> **_WARNING:_** Lenient zone policies can lead to additional egress costs when
+> moving data between Google Cloud resources in different zones in the same
+> region, such as between filestore and other VM instances. For more information
+> on egress fees, see the [Network Pricing][networkpricing] Google Cloud
+> documentation.
+>
+> To avoid egress charges, ensure your compute nodes are created in the same
+> zone as the other resources that share data with them by setting
+> `zone_policy_deny` to all other zones in the region.
+
+The Slurm on GCP partition modules provide the option to set policies regarding
+which zone the compute VM instances will be created in through the
+`zone_policy_allow` and `zone_policy_deny` variables.
+
+As an example, the following module will show preference for zones
+`us-central1-a` and `us-central1-b` while explicitly not allowing any VM
+instances to be created in `us-central1-f`:
+
+```yaml
+- id: partition-with-zone-policy
+  source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+  settings:
+    zone_policy_allow:
+    - us-central1-a
+    - us-central1-b
+    zone_policy_deny: [us-central1-f]
+```
+
+> **_NOTE:_** The default policy for  a zone is to allow them, therefore
+> `zone_policy_allow` will not guarantee the use of the specified zone. To
+> set hard requirements, use the `zone_policy_deny` variable instead.
+
+[networkpricing]: https://cloud.google.com/vpc/network-pricing
+
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
