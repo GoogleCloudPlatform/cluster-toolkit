@@ -38,6 +38,12 @@ variable "region" {
   type        = string
 }
 
+variable "zone" {
+  description = "Zone in which to create all compute VMs. If `zone_policy_deny` or `zone_policy_allow` are set, the `zone` variable will be ignored."
+  type        = string
+  default     = null
+}
+
 variable "zone_policy_allow" {
   description = <<-EOD
     Partition nodes will prefer to be created in the listed zones. If a zone appears

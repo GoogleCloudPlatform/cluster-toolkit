@@ -69,6 +69,15 @@ locals {
   # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
   tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 8)
   slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
+
+  uses_zone_policies = length(var.zone_policy_allow) + length(var.zone_policy_deny) > 0
+  excluded_zones     = var.zone == null ? [] : [for z in data.google_compute_zones.available.names : z if z != var.zone]
+  zone_policy_deny   = local.uses_zone_policies ? var.zone_policy_deny : local.excluded_zones
+}
+
+data "google_compute_zones" "available" {
+  project = var.project_id
+  region  = var.region
 }
 
 data "google_compute_default_service_account" "default" {
@@ -87,7 +96,7 @@ module "slurm_partition" {
   project_id              = var.project_id
   region                  = var.region
   zone_policy_allow       = var.zone_policy_allow
-  zone_policy_deny        = var.zone_policy_deny
+  zone_policy_deny        = local.zone_policy_deny
   subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   partition_conf          = local.partition_conf
 }
