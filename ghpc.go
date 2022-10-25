@@ -30,6 +30,7 @@ var gitTagVersion string
 var gitBranch string
 var gitCommitInfo string
 var gitCommitHash string
+var gitInitialHash string
 
 func main() {
 	sourcereader.ModuleFS = moduleFS
@@ -37,7 +38,7 @@ func main() {
 	cmd.GitBranch = gitBranch
 	cmd.GitCommitInfo = gitCommitInfo
 	cmd.GitCommitHash = gitCommitHash
-
+	cmd.GitInitialHash = gitInitialHash
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
