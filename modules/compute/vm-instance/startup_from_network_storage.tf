@@ -50,11 +50,11 @@ locals {
     local.startup_script_runner
   )
 
-  startup_from_network_storage = length(local.full_runner_list) > 0 ? module.netstorage_startup_script.startup_script : null
+  startup_from_network_storage = module.netstorage_startup_script.startup_script
 }
 
 module "netstorage_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.7.0"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=961ffdd"
 
   labels          = var.labels
   project_id      = var.project_id

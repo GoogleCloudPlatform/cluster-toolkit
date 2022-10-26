@@ -33,16 +33,10 @@ deployment_groups:
       - type: shell
         content: |
           #!/bin/bash
-          sudo google_mpi_tuning --hpcthroughput
-          sudo google_mpi_tuning --nomitigation
-          sudo yum -y install libExt libXext.x86_64 nmap
+          google_mpi_tuning --hpcthroughput
+          google_mpi_tuning --nomitigation
+          yum -y install libExt libXext.x86_64 nmap
         destination: /tmp/install-deps.sh
-
-      - type: shell
-        content: $(homefs.install_nfs_client)
-        destination: "/tmp/nfs_client.sh"
-
-      - $(homefs.mount_runner)
 
   - source: modules/network/vpc
     kind: terraform

@@ -45,6 +45,8 @@ deployment_groups:
     settings:
       local_mount: /scratch
 
+  # these runners are no longer necessary, but it is important that we test it still works
+  # even when added twice
   - id: mount-exascaler
     source: modules/scripts/startup-script
     settings:
