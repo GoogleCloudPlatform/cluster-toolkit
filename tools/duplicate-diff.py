@@ -17,6 +17,7 @@ import sys
 
 duplicates = [
     [
+        "community/modules/file-system/nfs-server/scripts/mount.sh",
         "modules/file-system/filestore/scripts/mount.sh",
         "modules/file-system/pre-existing-network-storage/scripts/mount.sh",
     ],
