@@ -28,13 +28,13 @@ locals {
   install_nfs_client_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/install-nfs-client.sh"
-    "destination" = "install-nfs.sh"
+    "destination" = "install-nfs${replace(var.local_mount, "/", "_")}.sh"
   }
   mount_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/mount.sh"
     "args"        = "\"${local.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
-    "destination" = "mount.yaml"
+    "destination" = "mount${replace(var.local_mount, "/", "_")}.sh"
   }
 }
 
