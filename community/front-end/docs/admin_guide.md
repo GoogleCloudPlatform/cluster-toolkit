@@ -396,7 +396,7 @@ site of the deployment, locate the *social applications* database table. A
 two placeholders with the client ID and client secret. The site is ready to
 accept Google login.
 
-![Social login set-up](images/register-social-app.png)]
+![Social login set-up](images/register-social-app.png)
 
 #### Set Allowed Users by Email Address
 
