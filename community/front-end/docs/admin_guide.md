@@ -520,7 +520,7 @@ back-end logic is handled, which can also help with certain issues.
 
 ### General clean-up tips
 
-- If a cluster is stucked in 'i' state, it is normally OK to find the *Destroy*
+- If a cluster is stuck in 'i' state, it is normally OK to find the *Destroy*
 button from its *Actions* menu to destroy it.
 - For failed network/filesystem/cluster creations, one may need to SSH into the
 service machine, locate the run-time data directory, and manually run
