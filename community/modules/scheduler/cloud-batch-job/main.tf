@@ -42,7 +42,7 @@ locals {
   subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
 
   # Filter network_storage for native Batch support
-  native_batch_fstype = ["nfs"]
+  native_batch_fstype = var.native_batch_mounting ? ["nfs"] : []
   native_batch_network_storage = [
     for ns in var.network_storage :
     ns if contains(local.native_batch_fstype, ns.fs_type)

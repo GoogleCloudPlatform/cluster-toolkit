@@ -160,6 +160,12 @@ variable "network_storage" {
   default = []
 }
 
+variable "native_batch_mounting" {
+  description = "Batch can mount some fs_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through HPC Toolkit starup scripts."
+  type        = bool
+  default     = true
+}
+
 variable "image" {
   description = "Google Cloud Batch compute node image. Ignored if `instance_template` is provided."
   type = object({
