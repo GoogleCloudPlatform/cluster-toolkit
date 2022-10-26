@@ -62,8 +62,8 @@ locals {
     ns.mount_runner if ns.mount_runner != null
   ]
 
-  startup_script_runner = var.startup_script == null ? [] : [{
-    content     = var.startup_script
+  startup_script_runner = [{
+    content     = var.startup_script != null ? var.startup_script : "echo 'No user provided startup script.'"
     destination = "passed_startup_script.sh"
     type        = "shell"
   }]
@@ -77,7 +77,6 @@ locals {
 
 module "batch_job_startup_script" {
   source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.7.0"
-  count  = length(local.full_runner_list) > 0 ? 1 : 0
 
   labels          = var.labels
   project_id      = var.project_id
@@ -100,7 +99,7 @@ module "instance_template" {
   labels             = var.labels
 
   machine_type         = var.machine_type
-  startup_script       = one(module.batch_job_startup_script[*].startup_script)
+  startup_script       = module.batch_job_startup_script.startup_script
   metadata             = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
   source_image_family  = var.image.family
   source_image_project = var.image.project
