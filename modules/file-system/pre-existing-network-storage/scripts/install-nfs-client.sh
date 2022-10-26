@@ -12,6 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+set -e
+
+apt_wait() {
+	while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+		echo "Sleeping for dpkg lock"
+		sleep 3
+	done
+	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+		echo "Sleeping for apt lists lock"
+		sleep 3
+	done
+	if [ -f /var/log/unattended-upgrades/unattended-upgrades.log ]; then
+		echo "Sleeping until unattended-upgrades finishes"
+		while fuser /var/log/unattended-upgrades/unattended-upgrades.log >/dev/null 2>&1; do
+			sleep 3
+		done
+	fi
+}
 
 if [ ! "$(which mount.nfs)" ]; then
 	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] ||
@@ -28,6 +46,7 @@ if [ ! "$(which mount.nfs)" ]; then
 		fi
 		yum install --disablerepo="*" --enablerepo=${enable_repo} -y nfs-utils
 	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
+		apt_wait
 		apt-get -y update
 		apt-get -y install nfs-common
 	else
