@@ -19,13 +19,24 @@ resource "random_id" "resource_name_suffix" {
 }
 
 locals {
-  name = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  name          = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  server_ip     = google_compute_instance.compute_instance.network_interface[0].network_ip
+  fs_type       = "nfs"
+  mount_options = "defaults,hard,intr"
   install_nfs_client_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/install-nfs-client.sh"
     "destination" = "install-nfs.sh"
   }
-  mount_runner = {
+  mount_runners = { for mount in var.local_mounts :
+    mount => {
+      "type"        = "shell"
+      "source"      = "${path.module}/scripts/mount.sh"
+      "args"        = "\"${local.server_ip}\" \"/exports${mount}\" \"${mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
+      "destination" = "mount${replace(mount, "/", "_")}.sh"
+    }
+  }
+  ansible_mount_runner = {
     "type"        = "ansible-local"
     "source"      = "${path.module}/scripts/mount.yaml"
     "destination" = "mount.yaml"
