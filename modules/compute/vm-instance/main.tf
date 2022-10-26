@@ -15,8 +15,9 @@
 */
 
 locals {
-  startup_script = var.startup_script != null ? (
-  { startup-script = var.startup_script }) : {}
+  native_fstype = []
+  startup_script = local.startup_from_network_storage != null ? (
+  { startup-script = local.startup_from_network_storage }) : {}
   network_storage = var.network_storage != null ? (
   { network_storage = jsonencode(var.network_storage) }) : {}
 
