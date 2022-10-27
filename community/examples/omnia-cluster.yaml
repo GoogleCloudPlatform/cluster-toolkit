@@ -55,8 +55,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(homefs.install_nfs_client_runner)
-      - $(homefs.mount_runner)
       - $(omnia.setup_omnia_node_runner)
       - $(omnia.copy_inventory_runner)
       - $(omnia.install_omnia_runner)
@@ -65,8 +63,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(homefs.install_nfs_client_runner)
-      - $(homefs.mount_runner)
       - $(omnia.setup_omnia_node_runner)
 
   ## Compute

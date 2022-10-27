@@ -115,8 +115,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(swfs.install_nfs_client_runner)
-      - $(swfs.mount_runner)
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
       - type: shell

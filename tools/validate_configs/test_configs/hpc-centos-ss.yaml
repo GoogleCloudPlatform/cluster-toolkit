@@ -72,11 +72,6 @@ deployment_groups:
       - type: "ansible-local"
         source: modules/startup-script/examples/hello.yaml
         destination: hello.yaml
-      - type: shell
-        content: $(nfs.install_nfs_client)
-        destination: "install-nfs-client.sh"
-      - $(appsfs.install_nfs_client_runner)
-      - $(nfs.mount_runner)
       - $(spack.install_spack_deps_runner)
       - type: shell
         content: $(spack.startup_script)
