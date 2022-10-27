@@ -74,12 +74,14 @@ locals {
 
   # Construct startup script for network storage
   storage_client_install_runners = [
-    for ns in var.network_storage :
-    ns.client_install_runner if ns.client_install_runner != null
+    for i, ns in var.network_storage : merge(ns.client_install_runner, {
+      destination = "${i}-${ns.client_install_runner.destination}"
+    }) if ns.client_install_runner != null
   ]
   mount_runners = [
-    for ns in var.network_storage :
-    ns.mount_runner if ns.mount_runner != null
+    for i, ns in var.network_storage : merge(ns.mount_runner, {
+      destination = "${i}-${ns.mount_runner.destination}"
+    }) if ns.mount_runner != null
   ]
 
   startup_script_runner = {
@@ -104,11 +106,6 @@ module "login_startup_script" {
       {
         content     = local.readme_contents
         destination = "${var.batch_job_directory}/README.md"
-        type        = "data"
-      },
-      {
-        content     = var.job_template_contents
-        destination = local.job_template_destination
         type        = "data"
       }
     ]
