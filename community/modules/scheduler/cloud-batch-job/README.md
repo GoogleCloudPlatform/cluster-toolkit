@@ -176,9 +176,7 @@ limitations under the License.
 | <a name="output_gcloud_version"></a> [gcloud\_version](#output\_gcloud\_version) | The version of gcloud to be used. |
 | <a name="output_instance_template"></a> [instance\_template](#output\_instance\_template) | Instance template used by the Batch job. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the Batch job. |
-| <a name="output_job_filename"></a> [job\_filename](#output\_job\_filename) | The filename of the generated Batch job template. |
-| <a name="output_job_id"></a> [job\_id](#output\_job\_id) | The Batch job id. |
-| <a name="output_job_template_contents"></a> [job\_template\_contents](#output\_job\_template\_contents) | The generated Batch job template. |
+| <a name="output_job_data"></a> [job\_data](#output\_job\_data) | All data associated with the defined job, typically provided as input to clout-batch-login-node. |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | An array of network attached storage mounts used by the Batch job. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Startup script run before Google Cloud Batch job starts. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

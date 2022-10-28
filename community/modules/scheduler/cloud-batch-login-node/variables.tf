@@ -35,7 +35,11 @@ variable "labels" {
 }
 
 variable "instance_template" {
-  description = "Login VM instance template self-link. Typically supplied by a cloud-batch-job module."
+  description = <<-EOT
+    Login VM instance template self-link. Typically supplied by a
+    cloud-batch-job module. If multiple cloud-batch-job modules supply the
+    instance_template, the first will be used.
+    EOT
   type        = string
 }
 
@@ -59,23 +63,48 @@ variable "startup_script" {
   default     = null
 }
 
+variable "job_data" {
+  description = "List of jobs and supporting data for each, typically provided via \"use\" from the cloud-batch-job module."
+  type = list(object({
+    template_contents = string,
+    filename          = string,
+    id                = string
+  }))
+  validation {
+    condition     = length(distinct([for job in var.job_data : job.filename])) == length(var.job_data)
+    error_message = "All filenames in var.job_data must be unique."
+  }
+  validation {
+    condition     = length(distinct([for job in var.job_data : job.id])) == length(var.job_data)
+    error_message = "All job IDs in var.job_data must be unique."
+  }
+}
+
 variable "job_template_contents" {
-  description = "The contents of the Google Cloud Batch job template. Typically supplied by a cloud-batch-job module."
+  description = "Deprecated (use `job_data`): The contents of the Google Cloud Batch job template. Typically supplied by a cloud-batch-job module."
   type        = string
+  default     = null
 }
 
 variable "job_filename" {
-  description = "The filename of the generated job template file. Typically supplied by a cloud-batch-job module."
+  description = "Deprecated (use `job_data`): The filename of the generated job template file. Typically supplied by a cloud-batch-job module."
   type        = string
+  default     = null
 }
 
 variable "job_id" {
-  description = "The ID for the Google Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions."
+  description = "Deprecated (use `job_data`): The ID for the Google Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions."
   type        = string
+  default     = null
 }
 
 variable "gcloud_version" {
-  description = "The version of the gcloud cli being used. Used for output instructions. Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default version). Typically supplied by a cloud-batch-job module."
+  description = <<-EOT
+    The version of the gcloud cli being used. Used for output instructions.
+    Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default
+    version). Typically supplied by a cloud-batch-job module. If multiple
+    cloud-batch-job modules supply the gcloud_version, only the first will be used.
+    EOT
   type        = string
   default     = "alpha"
 
