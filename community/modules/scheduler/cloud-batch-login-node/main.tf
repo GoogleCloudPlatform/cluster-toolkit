@@ -61,6 +61,11 @@ locals {
   EOT
   ])
 
+  list_all_jobs = <<-EOT
+  List all jobs:
+    gcloud ${var.gcloud_version} batch jobs list --project=${var.project_id}
+  EOT
+
   readme_contents = <<-EOT
   # Batch Job Templates
 
@@ -69,6 +74,8 @@ locals {
   complex workloads.
 
   Use the following commands to:
+  ${local.list_all_jobs}
+  
   ${local.batch_command_instructions}
   EOT
 

@@ -30,8 +30,7 @@ output "instructions" {
   SSH into the login node:
     gcloud compute ssh --zone ${google_compute_instance_from_template.batch_login.zone} ${google_compute_instance_from_template.batch_login.name}  --project ${google_compute_instance_from_template.batch_login.project}
 
-  List all jobs:
-    gcloud ${var.gcloud_version} batch jobs list --project=${var.project_id}
+  ${local.list_all_jobs}
 
   ${local.batch_command_instructions}
   EOT
