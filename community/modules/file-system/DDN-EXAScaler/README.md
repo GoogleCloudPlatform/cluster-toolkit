@@ -26,15 +26,14 @@ More information about the architecture can be found at
 To mount the DDN EXAScaler Lustre file system you must first install the DDN
 Luster client and then call the proper `mount` command.
 
-When mounting to a Slurm resource or in a `vm_instance` both of these steps are automatically handled
-with the use of the `use` command. See the
-[hpc-cluster-high-io](../../../../examples/hpc-cluster-high-io.yaml) for an
+When mounting to a Slurm resource, a `vm_instance`, or a `cloud-batch-job`, both
+of these steps are automatically handled with the use of the `use` command. See
+the [hpc-cluster-high-io](../../../../examples/hpc-cluster-high-io.yaml) for an
 example of using this module with Slurm.
 
-The DDN-EXAScaler module outputs runners that can be used with the
-startup-script module to install the client and mount the file system when
-mounting to other compute resources such `cloud-batch-job`.
-See the following example:
+If mounting is not automatically handled as described above, the DDN-EXAScaler
+module outputs runners that can be used with the startup-script module to
+install the client and mount the file system. See the following example:
 
 ```yaml
   - id: lustrefs
