@@ -73,6 +73,7 @@ locals {
   uses_zone_policies = length(var.zone_policy_allow) + length(var.zone_policy_deny) > 0
   excluded_zones     = var.zone == null ? [] : [for z in data.google_compute_zones.available.names : z if z != var.zone]
   zone_policy_deny   = local.uses_zone_policies ? var.zone_policy_deny : local.excluded_zones
+  zone_policy_allow  = local.uses_zone_policies || var.zone == null ? var.zone_policy_allow : [var.zone]
 }
 
 data "google_compute_zones" "available" {
@@ -95,7 +96,7 @@ module "slurm_partition" {
   partition_name          = var.partition_name
   project_id              = var.project_id
   region                  = var.region
-  zone_policy_allow       = var.zone_policy_allow
+  zone_policy_allow       = local.zone_policy_allow
   zone_policy_deny        = local.zone_policy_deny
   subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   partition_conf          = local.partition_conf

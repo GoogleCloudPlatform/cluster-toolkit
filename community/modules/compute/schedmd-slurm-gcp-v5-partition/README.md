@@ -73,6 +73,25 @@ In this module, the following is defined:
 > because zones are allowed by default. Configure `zone_policy_deny` to ensure
 > that zones outside the allowed list are not used.
 
+#### Setting a Single Zone
+
+The `zone` variable is another option for setting the zone policy. If `zone` is
+set and neither `zone_policy_deny` nor `zone_policy_allow` are set, the
+policy will be configured as follows:
+
+* All _currently active_ zones in the region **at deploy time** will be set in the
+ `zone_policy_deny` list, with the exception of the provided `zone`.
+* The provided `zone` will be set as the only value in the `zone_policy_allow`
+  list.
+
+`zone_policy_allow` and `zone_policy_deny` take precedence over `zone` if both
+are set.
+
+> **_NOTE:_** If a new zone is added to the region while the cluster is active,
+> nodes in the partition may be created in that zone as well. In this case, the
+> partition may need to be redeployed (possible via `enable_reconfigure` if set)
+> to ensure the newly added zone is set to "Deny".
+
 [networkpricing]: https://cloud.google.com/vpc/network-pricing
 
 ## Support
