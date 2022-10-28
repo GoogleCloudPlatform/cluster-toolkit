@@ -48,9 +48,7 @@ The Slurm on GCP partition modules provide the option to set policies regarding
 which zone the compute VM instances will be created in through the
 `zone_policy_allow` and `zone_policy_deny` variables.
 
-As an example, see the the following module: will show preference for zones
-`us-central1-a` and `us-central1-b` while explicitly not allowing any VM
-instances to be created in `us-central1-f`
+As an example, see the the following module:
 
 ```yaml
 - id: partition-with-zone-policy
@@ -68,8 +66,8 @@ In this module, the following is defined:
 * `us-central1-f` has been explicitly denied, therefore no nodes in this
   partition will be created in that zone.
 * Since `us-central1-c` was not included in the zone policy, it will default to
-  "Allow", which means the partition has the same liklihood of created a node in
-  that region as the 2 listed under `zone_policy_allow`.
+  "Allow", which means the partition has the same likelihood of creating a node in
+  that zone as the zones explicitly listed under `zone_policy_allow`.
 
 > **_NOTE:_** `zone_policy_allow` does not guarantee the use of specified zones
 > because zones are allowed by default. Configure `zone_policy_deny` to ensure
