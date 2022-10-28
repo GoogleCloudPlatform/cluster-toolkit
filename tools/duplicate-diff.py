@@ -25,7 +25,11 @@ duplicates = [
         "community/modules/file-system/nfs-server/scripts/install-nfs-client.sh",
         "modules/file-system/filestore/scripts/install-nfs-client.sh",
         "modules/file-system/pre-existing-network-storage/scripts/install-nfs-client.sh",
-    ]
+    ],
+    [
+        "community/modules/scheduler/cloud-batch-job/startup_from_network_storage.tf",
+        "modules/compute/vm-instance/startup_from_network_storage.tf",
+    ],
 ]
 
 for group in duplicates:

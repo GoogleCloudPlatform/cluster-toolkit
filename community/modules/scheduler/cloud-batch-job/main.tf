@@ -42,47 +42,12 @@ locals {
   subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
 
   # Filter network_storage for native Batch support
-  native_batch_fstype = var.native_batch_mounting ? ["nfs"] : []
+  native_fstype = var.native_batch_mounting ? ["nfs"] : []
   native_batch_network_storage = [
     for ns in var.network_storage :
-    ns if contains(local.native_batch_fstype, ns.fs_type)
+    ns if contains(local.native_fstype, ns.fs_type)
   ]
-  startup_script_network_storage = [
-    for ns in var.network_storage :
-    ns if !contains(local.native_batch_fstype, ns.fs_type)
-  ]
-
-  # Pull out runners to include in startup script
-  storage_client_install_runners = [
-    for ns in local.startup_script_network_storage :
-    ns.client_install_runner if ns.client_install_runner != null
-  ]
-  mount_runners = [
-    for ns in local.startup_script_network_storage :
-    ns.mount_runner if ns.mount_runner != null
-  ]
-
-  startup_script_runner = [{
-    content     = var.startup_script != null ? var.startup_script : "echo 'No user provided startup script.'"
-    destination = "passed_startup_script.sh"
-    type        = "shell"
-  }]
-
-  full_runner_list = concat(
-    local.storage_client_install_runners,
-    local.mount_runners,
-    local.startup_script_runner
-  )
-}
-
-module "batch_job_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.7.0"
-
-  labels          = var.labels
-  project_id      = var.project_id
-  deployment_name = var.deployment_name
-  region          = var.region
-  runners         = local.full_runner_list
+  # other processing happens in startup_from_network_storage.tf
 }
 
 module "instance_template" {
@@ -99,7 +64,7 @@ module "instance_template" {
   labels             = var.labels
 
   machine_type         = var.machine_type
-  startup_script       = module.batch_job_startup_script.startup_script
+  startup_script       = local.startup_from_network_storage
   metadata             = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
   source_image_family  = var.image.family
   source_image_project = var.image.project
