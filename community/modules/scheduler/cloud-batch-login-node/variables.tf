@@ -81,19 +81,19 @@ variable "job_data" {
 }
 
 variable "job_template_contents" {
-  description = "Deprecated: The contents of the Google Cloud Batch job template. Typically supplied by a cloud-batch-job module."
+  description = "Deprecated (use `job_data`): The contents of the Google Cloud Batch job template. Typically supplied by a cloud-batch-job module."
   type        = string
   default     = null
 }
 
 variable "job_filename" {
-  description = "Deprecated: The filename of the generated job template file. Typically supplied by a cloud-batch-job module."
+  description = "Deprecated (use `job_data`): The filename of the generated job template file. Typically supplied by a cloud-batch-job module."
   type        = string
   default     = null
 }
 
 variable "job_id" {
-  description = "Deprecated: The ID for the Google Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions."
+  description = "Deprecated (use `job_data`): The ID for the Google Cloud Batch job. Typically supplied by a cloud-batch-job module for use in the output instructions."
   type        = string
   default     = null
 }
