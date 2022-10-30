@@ -158,11 +158,11 @@ func defaultAPIList(source string) []string {
 		"community/modules/scheduler/SchedMD-slurm-on-gcp-login-node": {
 			"compute.googleapis.com",
 		},
-		"community/modules/scheduler/cloud-batch-job": {
+		"modules/scheduler/batch-job-template": {
 			"batch.googleapis.com",
 			"compute.googleapis.com",
 		},
-		"community/modules/scheduler/cloud-batch-login-node": {
+		"modules/scheduler/batch-login-node": {
 			"batch.googleapis.com",
 			"compute.googleapis.com",
 			"storage.googleapis.com",
