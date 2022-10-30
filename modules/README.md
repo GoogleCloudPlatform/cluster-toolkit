@@ -114,6 +114,10 @@ Modules that are still in development and less stable are labeled with the
 
 ### Scheduler
 
+* **[batch-job-template]** ![core-badge] : Creates a Google Cloud Batch job
+  template that works with other Toolkit modules.
+* **[batch-login-node]** ![core-badge] : Creates a VM that can be used for
+  submission of Google Cloud Batch jobs.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![experimental-badge] :
@@ -124,10 +128,6 @@ Modules that are still in development and less stable are labeled with the
   controller node using [slurm-gcp].
 * **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
   login node using [slurm-gcp].
-* **[batch-job-template]** ![community-badge] ![experimental-badge] : Creates a
-  Google Cloud Batch job template that works with other Toolkit modules.
-* **[batch-login-node]** ![community-badge] ![experimental-badge] :
-  Creates a VM that can be used for submission of Google Cloud Batch jobs.
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor pool.
 
