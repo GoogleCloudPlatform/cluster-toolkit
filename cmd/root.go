@@ -18,16 +18,23 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 )
 
 // Git references when use Makefile
 var (
-	GitTagVersion string
-	GitBranch     string
-	GitCommitInfo string
+	GitTagVersion  string
+	GitBranch      string
+	GitCommitInfo  string
+	GitCommitHash  string
+	GitInitialHash string
 )
 
 var (
@@ -49,9 +56,16 @@ HPC deployments on the Google Cloud Platform.`,
 
 // Execute the root command
 func Execute() error {
+
+	mismatch, branch, hash, dir := checkGitHashMismatch()
+	if mismatch {
+		fmt.Fprintf(os.Stderr, "WARNING: ghpc binary was built from a different commit (%s/%s) than the current git branch in %s (%s/%s). You can rebuild the binary by running 'make'\n",
+			GitBranch, GitCommitHash[0:7], dir, branch, hash[0:7])
+	}
+
 	if len(GitCommitInfo) > 0 {
 		if len(GitTagVersion) == 0 {
-			GitTagVersion = "- not built from oficial release"
+			GitTagVersion = "- not built from official release"
 		}
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"
@@ -68,3 +82,94 @@ Commit info: {{index .Annotations "commitInfo"}}
 }
 
 func init() {}
+
+// checkGitHashMismatch will compare the hash of the git repository vs the git
+// hash the ghpc binary was compiled against, if the git repository if found and
+// a mismatch is identified, then the function returns a positive bool along with
+// the branch details, and false for all other cases.
+func checkGitHashMismatch() (mismatch bool, branch, hash, dir string) {
+	// binary does not contain build-time git info
+	if len(GitCommitHash) == 0 {
+		mismatch = false
+		return
+	}
+
+	// could not find hpcToolkitRepo
+	repo, dir, err := hpcToolkitRepo()
+	if err != nil {
+		mismatch = false
+		return
+	}
+
+	// failed to open git
+	head, err := repo.Head()
+	if err != nil {
+		mismatch = false
+		return
+	}
+
+	// found hpc-toolkit git repo and hash does not match
+	if GitCommitHash != head.Hash().String() {
+		mismatch = true
+		branch = head.Name().Short()
+		hash = head.Hash().String()
+		return
+	}
+	mismatch = false
+	return
+}
+
+// hpcToolkitRepo will find the path of the directory containing the hpc-toolkit
+// starting with the working directory and evaluating the parent directories until
+// the toolkit repository is found. If the HPC Toolkit repository is not found by
+// traversing the path, then the executable directory is checked.
+func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
+	// first look in the working directory and it's parents until a git repo is
+	// found. If it's the hpc-toolkit repo, return it.
+	// repo := new(git.Repository)
+	dir, err = os.Getwd()
+	subdir := filepath.Dir(dir)
+	o := git.PlainOpenOptions{DetectDotGit: true}
+	repo, err = git.PlainOpenWithOptions(dir, &o)
+	if err == nil && isHpcToolkitRepo(*repo) {
+		return
+	} else if err == nil && !isHpcToolkitRepo(*repo) {
+		// found a repo that is not the hpc-toolkit repo. likely a submodule
+		// or another git repo checked out under ./hpc-toolkit. Keep walking
+		// the parents' path to find the hpc-toolkit repo until we hit root of
+		// filesystem
+		for dir != subdir {
+			dir = filepath.Dir(dir)
+			subdir = filepath.Dir(dir)
+			repo, err = git.PlainOpen(dir)
+
+			if err == nil && isHpcToolkitRepo(*repo) {
+				return
+			}
+		}
+	}
+
+	// fall back to the executable's directory
+	e, err := os.Executable()
+	if err != nil {
+		return nil, "", err
+	}
+	dir = filepath.Dir(e)
+
+	repo, err = git.PlainOpen(dir)
+	if err == nil && isHpcToolkitRepo(*repo) {
+		return repo, dir, err
+	}
+	return nil, "", err
+}
+
+// isHpcToolkitRepo will verify that the found git repository has a commit with
+// the known hash of the initial commit of the HPC Toolkit repository
+func isHpcToolkitRepo(r git.Repository) bool {
+	h := plumbing.NewHash(GitInitialHash)
+	_, err := r.CommitObject(h)
+	if err == nil {
+		return true
+	}
+	return false
+}
