@@ -631,9 +631,13 @@ FUNDAMENTALS
     if [ -z "${deployment_name}" ]; then
       echo "    Error: This cannot be left blank"
     fi
-    echo 
-    if [[ "${deployment_name}" =~ [A-Z] ]]; then
-      echo "    Error: Name cannot contain uppercase letters"
+    echo
+    good=^[a-z][\.a-z0-9\-]+[a-z0-9]+$
+    if [[ ! "${deployment_name}" =~ $good ]]; then
+      echo "    Error: Name is invalid"
+      echo "              Name must have a minimum 3 characters in length"
+      echo "              Only contain characters a-z (lowercase), 0-9, '-' and '.'"
+      echo "              End with an alphanumeric."
       deployment_name=""
     fi
   done
