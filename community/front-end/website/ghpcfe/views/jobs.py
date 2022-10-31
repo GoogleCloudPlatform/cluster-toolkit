@@ -359,7 +359,7 @@ class JobDeleteView(SuperUserRequiredMixin, generic.DeleteView):
         return context
 
 
-class JobLogFileView(StreamingFileView):
+class JobLogFileView(LoginRequiredMixin, StreamingFileView):
     """View job various job scripts and logs"""
 
     bucket = utils.load_config()["server"]["gcs_bucket"]
@@ -388,7 +388,7 @@ class JobLogFileView(StreamingFileView):
         return self._create_file_info_object(entry, *extra_args)
 
 
-class JobLogView(generic.DetailView):
+class JobLogView(LoginRequiredMixin, generic.DetailView):
     """View to display job log files"""
 
     model = Job
