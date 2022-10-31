@@ -61,7 +61,7 @@ deployment_groups:
           echo "Hello Second World" > /sw/hello2.txt
 
   - id: batch-job
-    source: community/modules/scheduler/cloud-batch-job
+    source: modules/scheduler/batch-job-template
     use: [network1, appfs, hello-startup-script]
     settings:
       runnable: "cat /sw/hello.txt"
@@ -71,7 +71,7 @@ deployment_groups:
         project: rocky-linux-cloud
 
   - id: batch-job-2
-    source: community/modules/scheduler/cloud-batch-job
+    source: modules/scheduler/batch-job-template
     use: [network1, appfs, mntfs, hello-startup-script-2]
     settings:
       runnable: "lscpu"
@@ -83,6 +83,6 @@ deployment_groups:
         project: rocky-linux-cloud
 
   - id: batch-login
-    source: community/modules/scheduler/cloud-batch-login-node
+    source: modules/scheduler/batch-login-node
     use: [batch-job, batch-job-2]
     outputs: [instructions]

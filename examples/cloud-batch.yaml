@@ -46,7 +46,7 @@ deployment_groups:
           echo "Hello World" > /sw/hello.txt
 
   - id: batch-job
-    source: community/modules/scheduler/cloud-batch-job
+    source: modules/scheduler/batch-job-template
     use: [network1, appfs]
     settings:
       runnable: "cat /sw/hello.txt"
@@ -56,7 +56,7 @@ deployment_groups:
         project: rocky-linux-cloud
 
   - id: batch-login
-    source: community/modules/scheduler/cloud-batch-login-node
+    source: modules/scheduler/batch-login-node
     use: [batch-job]
     settings: {startup_script: $(load-data-startup.startup_script)}
     outputs: [instructions]

@@ -12,7 +12,7 @@ This module creates:
 
 [instance template]: https://cloud.google.com/compute/docs/instance-templates
 
-When this module is used with the `cloud-batch-login-node` module, the generated
+When this module is used with the `batch-login-node` module, the generated
 job template will be placed on the login node.
 
 In some cases the job template can be submitted to the Google Cloud Batch API
@@ -23,7 +23,7 @@ user will modify the template after running the HPC Toolkit.
 
 ```yaml
 - id: batch-job
-  source: community/modules/scheduler/cloud-batch-job
+  source: modules/scheduler/batch-job-template
   use: [network1]
   settings:
     runnable: "echo 'hello world'"
@@ -33,14 +33,14 @@ user will modify the template after running the HPC Toolkit.
 
 See the
 [Google Cloud Batch Example](../../../../examples/README.md#cloud-batchyaml--)
-for how to use the `cloud-batch-job` module with other HPC Toolkit modules such
+for how to use the `batch-job-template` module with other HPC Toolkit modules such
 as `filestore` and `startup-script`.
 
 ## Shared VPC
 
 This module supports using a [shared VPC] with a Batch job. To accomplish this,
 include a [`pre-existing-vpc`] module that references an existing shared VPC and
-then have the `cloud-batch-job` module `use` the `pre-existing-vpc`.
+then have the `batch-job-template` module `use` the `pre-existing-vpc`.
 
 [shared VPC]: https://cloud.google.com/vpc/docs/shared-vpc
 [`pre-existing-vpc`]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/network/pre-existing-vpc
@@ -48,17 +48,17 @@ then have the `cloud-batch-job` module `use` the `pre-existing-vpc`.
 ## Instance Templates
 
 Many of the settings for a Google Cloud Batch job are set using an instance
-template, `machine_type` for example. The `cloud-batch-job` module accomplishes
+template, `machine_type` for example. The `batch-job-template` module accomplishes
 this by creating an instance template within the module, which is supplied to
 the Google Cloud Batch job.
 
-Alternatively, one can supply an instance template to the `cloud-batch-job`
+Alternatively, one can supply an instance template to the `batch-job-template`
 module using the `instance_template` setting. This supplied instance template
 could be generated outside of the HPC Toolkit (via the Cloud Console UI for
 example) or using a separate module within the blueprint. To define an instance
 template within a blueprint, one can use the Cloud Foundation Toolkit instance
 template module as shown in the following example. This can be useful when
-trying to set a property not natively supported in the `cloud-batch-job` module.
+trying to set a property not natively supported in the `batch-job-template` module.
 
 ### Example generating instance template using Cloud Foundation Toolkit module
 
@@ -94,7 +94,7 @@ deployment_groups:
       source_image_project: cloud-hpc-image-public
 
   - id: batch-job
-    source: ./community/modules/scheduler/cloud-batch-job
+    source: ./modules/scheduler/batch-job-template
     settings:
       instance_template: $(batch-compute-template.self_link)
     outputs: [instructions]

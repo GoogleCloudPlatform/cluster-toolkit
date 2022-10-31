@@ -442,13 +442,13 @@ This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Ba
 that mounts a Filestore instance and runs startup scripts.
 
 The blueprint creates a Filestore and uses the `startup-script` module to mount
-and load _"data"_ onto the shared storage. The `cloud-batch-job` module creates
+and load _"data"_ onto the shared storage. The `batch-job-template` module creates
 an instance template to be used for the Google Cloud Batch compute VMs and
 renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
-[cloud-batch.yaml]: ../community/examples/cloud-batch.yaml
+[cloud-batch.yaml]: ../examples/cloud-batch.yaml
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
