@@ -271,7 +271,7 @@ class ClusterCreateView2(LoginRequiredMixin, CreateView):
         return reverse("backend-create-cluster", kwargs={"pk": self.object.pk})
 
 
-class ClusterUpdateView(UpdateView):
+class ClusterUpdateView(LoginRequiredMixin, UpdateView):
     """Custom UpdateView for Cluster model"""
 
     model = Cluster
@@ -518,7 +518,7 @@ class ClusterUpdateView(UpdateView):
         return super().form_valid(form)
 
 
-class ClusterDeleteView(DeleteView):
+class ClusterDeleteView(LoginRequiredMixin, DeleteView):
     """Custom DeleteView for Cluster model"""
 
     model = Cluster
@@ -535,7 +535,7 @@ class ClusterDeleteView(DeleteView):
         return reverse("clusters")
 
 
-class ClusterDestroyView(generic.DetailView):
+class ClusterDestroyView(LoginRequiredMixin, generic.DetailView):
     """Custom View to confirm Cluster destroy"""
 
     model = Cluster
@@ -551,7 +551,7 @@ class ClusterDestroyView(generic.DetailView):
         return context
 
 
-class ClusterCostView(generic.DetailView):
+class ClusterCostView(LoginRequiredMixin, generic.DetailView):
     """Custom view for a cluster's cost analysis"""
 
     model = Cluster
@@ -586,7 +586,7 @@ class ClusterCostView(generic.DetailView):
         return context
 
 
-class ClusterLogFileView(StreamingFileView):
+class ClusterLogFileView(LoginRequiredMixin, StreamingFileView):
     """View for cluster provisioning logs"""
 
     bucket = utils.load_config()["server"]["gcs_bucket"]
@@ -645,7 +645,7 @@ class ClusterLogFileView(StreamingFileView):
         return self._create_file_info_object(entry, *extra_args)
 
 
-class ClusterLogView(generic.DetailView):
+class ClusterLogView(LoginRequiredMixin, generic.DetailView):
     """View to diplay cluster log files"""
 
     model = Cluster
@@ -661,7 +661,7 @@ class ClusterLogView(generic.DetailView):
         return context
 
 
-class ClusterCostExportView(generic.DetailView):
+class ClusterCostExportView(LoginRequiredMixin, generic.DetailView):
     """Export raw cost data per cluster as CSV"""
 
     model = Cluster
