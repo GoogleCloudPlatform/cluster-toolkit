@@ -817,3 +817,26 @@ func (s *MySuite) TestResolveGlobalVariables(c *C) {
 	c.Assert(ctyMap[testkey2], Equals, cty.StringVal(testGlobalValBool))
 	c.Assert(ctyMap[testkey3], Equals, cty.StringVal(testPlainString))
 }
+
+func (s *MySuite) TestCheckMovedModules(c *C) {
+
+	dc := DeploymentConfig{
+		Config: Blueprint{
+			DeploymentGroups: []DeploymentGroup{
+				{Modules: []Module{
+					{Source: "some/module/that/has/not/moved"}}}}}}
+
+	// base case should not err
+	err := dc.checkMovedModules()
+	c.Assert(err, IsNil)
+
+	// embedded moved
+	dc.Config.DeploymentGroups[0].Modules[0].Source = "community/modules/scheduler/cloud-batch-job"
+	err = dc.checkMovedModules()
+	c.Assert(err, NotNil)
+
+	// local moved
+	dc.Config.DeploymentGroups[0].Modules[0].Source = "./community/modules/scheduler/cloud-batch-job"
+	err = dc.checkMovedModules()
+	c.Assert(err, NotNil)
+}
