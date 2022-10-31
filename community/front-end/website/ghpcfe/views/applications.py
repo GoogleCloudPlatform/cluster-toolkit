@@ -128,7 +128,7 @@ class ApplicationDetailView(generic.DetailView):
         return context
 
 
-class ApplicationCreateSelectView(generic.ListView):
+class ApplicationCreateSelectView(LoginRequiredMixin, generic.ListView):
     """Custom view to select application install types"""
 
     model = Cluster
@@ -157,7 +157,7 @@ class ApplicationCreateSelectView(generic.ListView):
         )
 
 
-class ApplicationCreateView(generic.CreateView):
+class ApplicationCreateView(LoginRequiredMixin, generic.CreateView):
     """Custom CreateView for Application model"""
 
     success_url = reverse_lazy("applications")
@@ -184,7 +184,7 @@ class ApplicationCreateView(generic.CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class CustomInstallationApplicationCreateView(generic.CreateView):
+class CustomInstallationApplicationCreateView(LoginRequiredMixin, generic.CreateView):
     """CreateView for Custom Installation of Application"""
 
     template_name = "application/custom_install_create_form.html"
@@ -222,7 +222,7 @@ class CustomInstallationApplicationCreateView(generic.CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class SpackApplicationCreateView(generic.CreateView):
+class SpackApplicationCreateView(LoginRequiredMixin, generic.CreateView):
     """Custom CreateView for Application model"""
 
     # success_url = reverse_lazy('applications'})
@@ -262,7 +262,7 @@ class SpackApplicationCreateView(generic.CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class ApplicationUpdateView(generic.UpdateView):
+class ApplicationUpdateView(LoginRequiredMixin, generic.UpdateView):
     """Custom UpdateView for Application model"""
 
     model = Application
@@ -278,7 +278,7 @@ class ApplicationUpdateView(generic.UpdateView):
         return reverse_lazy("application-detail", kwargs={"pk": self.object.pk})
 
 
-class ApplicationDeleteView(generic.DeleteView):
+class ApplicationDeleteView(LoginRequiredMixin, generic.DeleteView):
     """Custom DeleteView for Application model"""
 
     model = Application
@@ -291,7 +291,7 @@ class ApplicationDeleteView(generic.DeleteView):
         return context
 
 
-class ApplicationLogFileView(StreamingFileView):
+class ApplicationLogFileView(LoginRequiredMixin, StreamingFileView):
     """View for application installation logs"""
 
     bucket = utils.load_config()["server"]["gcs_bucket"]
@@ -323,7 +323,7 @@ class ApplicationLogFileView(StreamingFileView):
         return self._create_file_info_object(entry, *[bucket_prefix])
 
 
-class ApplicationLogView(generic.DetailView):
+class ApplicationLogView(LoginRequiredMixin, generic.DetailView):
     """View to display application log files"""
 
     model = Application
