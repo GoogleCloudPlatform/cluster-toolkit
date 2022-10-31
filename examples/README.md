@@ -448,7 +448,7 @@ renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
-[cloud-batch.yaml]: ../community/examples/cloud-batch.yaml
+[cloud-batch.yaml]: ../examples/cloud-batch.yaml
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
