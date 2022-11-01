@@ -22,9 +22,6 @@ module as input with:
 ```yaml
 - id: node_group
   source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-  use:
-  - network1
-  - homefs
   settings:
     node_count_dynamic_max: 200
     machine_type: c2-standard-30
@@ -32,6 +29,8 @@ module as input with:
 - id: compute_partition
   source: community/modules/compute/schedmd-slurm-gcp-v5-partition
   use:
+  - network1
+  - homefs
   - node_group
   settings:
     partition_name: compute
@@ -171,5 +170,5 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_partition_nodes"></a> [partition\_nodes](#output\_partition\_nodes) | Details of the node group. Typically used as input to `schedmd-slurm-gcp-v5-partition`. |
+| <a name="output_node_groups"></a> [node\_groups](#output\_node\_groups) | Details of the node group. Typically used as input to `schedmd-slurm-gcp-v5-partition`. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

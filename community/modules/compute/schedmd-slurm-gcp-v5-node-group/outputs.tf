@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-output "partition_nodes" {
+output "node_groups" {
   description = "Details of the node group. Typically used as input to `schedmd-slurm-gcp-v5-partition`."
   value       = local.node_group
 }

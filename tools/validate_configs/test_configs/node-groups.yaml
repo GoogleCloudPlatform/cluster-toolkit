@@ -41,13 +41,75 @@ deployment_groups:
       local_mounts: [/home]
       auto_delete_disk: true
 
-  - id: debug_partition
+  ## Single node group, use defaults where appropriate
+  - id: default_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      name: simple
+
+  - id: one_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    - default_node_group
+    settings:
+      partition_name: simple
+
+  ## Complex partition using node groups
+  - id: node_group1
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      name: c30
+      machine_type: c2-standard-30
+
+  - id: node_group2
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      name: c60
+      machine_type: c2-standard-60
+
+  - id: node_group3
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      name: cd112
+      machine_type: c2d-standard-112
+
+  - id: node_group4
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      name: cd56
+      machine_type: c2d-standard-56
+
+  - id: multiple_node_groups
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    - node_group1
+    - node_group2
+    - node_group3
+    - node_group4
+    settings:
+      partition_name: multng
+
+  ## Simple partition, using the default node group only.
+  - id: default_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
     settings:
-      partition_name: debug
+      partition_name: defng
+
+  ## Explicitly set node partition with one node group
+  - id: one_node_group_explicit
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    settings:
+      partition_name: explng
       node_count_dynamic_max: 4
       enable_placement: false
       machine_type: n2-standard-2
@@ -55,7 +117,7 @@ deployment_groups:
       node_groups:
       - node_count_static: 0
         node_count_dynamic_max: 4
-        group_name: custom
+        group_name: expl
         node_conf: {}
         additional_disks: []
         bandwidth_tier: null
@@ -85,21 +147,14 @@ deployment_groups:
         source_image: null
         tags: []
 
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
-    settings:
-      partition_name: compute
-      node_count_dynamic_max: 20
-
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
-    - debug_partition
-    - compute_partition
+    - one_node_group
+    - multiple_node_groups
+    - default_partition
+    - one_node_group_explicit
     - homefs
     settings:
       disable_controller_public_ips: false
