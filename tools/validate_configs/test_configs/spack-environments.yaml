@@ -84,7 +84,7 @@ deployment_groups:
     settings:
       runners:
       - type: data
-        source:  ##  Add path to GPG key here ##
+        source: /local/path/to/spack/key.gpg
         destination: /tmp/spack_key.gpg
       - type: shell
         content: |
