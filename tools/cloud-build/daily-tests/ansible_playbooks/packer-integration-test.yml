@@ -21,7 +21,7 @@
   tasks:
   ## Create Deployment
   - name: Create Deployment Directory
-    command: "{{ scripts_dir }}/create_deployment.sh"
+    ansible.builtin.command: "{{ scripts_dir }}/create_deployment.sh"
     environment:
       ALWAYS_RECOMPILE: "no"
       EXAMPLE_YAML: "{{ blueprint_yaml }}"
@@ -39,7 +39,7 @@
   - name: Create Infrastructure and test
     block:
     - name: Create Network with Terraform
-      command:
+      ansible.builtin.command:
         cmd: "{{ item }}"
         chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"
       args:
@@ -77,6 +77,6 @@
       delegate_to: localhost
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      command:
+      ansible.builtin.command:
         cmd: terraform destroy -auto-approve -no-color
         chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"

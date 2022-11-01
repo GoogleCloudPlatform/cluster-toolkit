@@ -64,9 +64,6 @@ deployment_groups:
           mkdir /apps
           chmod a+rwx /apps
         destination: apps_create.sh
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - type: ansible-local
         source: modules/spack-install/scripts/install_spack_deps.yml
         destination: install_spack_deps.yml

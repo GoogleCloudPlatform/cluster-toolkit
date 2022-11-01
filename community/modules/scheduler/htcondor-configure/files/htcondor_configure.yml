@@ -27,7 +27,7 @@
     ansible.builtin.file:
       name: /etc/condor/config.d/00-htcondor-9.0.config
       state: absent
-  - name: set HTCondor role
+  - name: Set HTCondor role
     ansible.builtin.copy:
       dest: /etc/condor/config.d/01-role
       mode: 0644
@@ -36,7 +36,7 @@
   - name: Configure VM to be HTCondor Central Manager
     when: htcondor_role == 'get_htcondor_central_manager'
     block:
-    - name: set HTCondor Central Manager
+    - name: Set HTCondor Central Manager
       ansible.builtin.copy:
         dest: /etc/condor/config.d/00-central-manager
         mode: 0644
@@ -52,7 +52,7 @@
         headers:
           Metadata-Flavor: "Google"
       register: cm
-    - name: set HTCondor Central Manager
+    - name: Set HTCondor Central Manager
       ansible.builtin.copy:
         dest: /etc/condor/config.d/00-central-manager
         mode: 0644
@@ -95,12 +95,12 @@
       condor_token_create -identity condor@$TRUST_DOMAIN > /etc/condor/tokens.d/condor@$TRUST_DOMAIN
     args:
       creates: /etc/condor/passwords.d/POOL
-  - name: start HTCondor
+  - name: Start HTCondor
     ansible.builtin.service:
       name: condor
       state: started
       enabled: true
-  - name: inform users
+  - name: Inform users
     changed_when: false
     ansible.builtin.shell: |
       set -e -o pipefail

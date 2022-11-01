@@ -34,8 +34,11 @@ const (
 	roleLabel             string = "ghpc_role"
 	simpleVariableExp     string = `^\$\((.*)\)$`
 	deploymentVariableExp string = `^\$\(vars\.(.*)\)$`
-	anyVariableExp        string = `\$\((.*)\)`
-	literalExp            string = `^\(\((.*)\)\)$`
+	// Checks if a variable exists only as a substring, ex:
+	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
+	// Doesn't match: "\$(vars.example)", "no variable in this string"
+	anyVariableExp string = `(^|[^\\])\$\((.*)\)`
+	literalExp     string = `^\(\((.*)\)\)$`
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source

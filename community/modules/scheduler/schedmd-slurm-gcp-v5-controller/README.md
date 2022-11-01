@@ -11,19 +11,20 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
-> **_WARNING:_** The variables [enable\_cleanup\_compute] and
+> **_WARNING:_** The variables [enable\_reconfigure], [enable\_cleanup\_compute] and
 > [enable\_cleanup\_subscriptions], if set to true, require additional
 > dependencies **to be installed on the system running `terraform apply`**.
-> Python3 must be installed along with the pip packages listed in the
+> Python3 (>=3.6.0, <4.0.0) must be installed along with the pip packages listed in the
 > [requirements.txt] file of [SchedMD/slurm-gcp].
 
-[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
-[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
+[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/scripts/requirements.txt
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
+[enable\_reconfigure]: #input\_enable\_reconfigure
 
 ### Example
 
@@ -49,6 +50,35 @@ This creates a controller node with the following attributes:
 
 For a complete example using this module, see
 [slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
+
+### Live Cluster Reconfiguration (`enable_reconfigure`)
+The schedmd-slurm-gcp-v5-controller module supports the reconfiguration of
+partitions and slurm configuration in a running, active cluster. This option is
+activated through the `enable_reconfigure` setting:
+
+```yaml
+- id: slurm_controller
+  source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+  settings:
+    enable_reconfigure: true
+```
+
+This option has some additional requirements:
+
+* The Pub/Sub API must be activated in the target project:
+  `gcloud services enable file.googleapis.com --project "<<PROJECT_ID>>"`
+* The authenticated user in the local development environment (or where
+  `terraform apply` is called) must have the Pub/Sub Admin (roles/pubsub.admin)
+  IAM role.
+* Python and some python packages need to be installed with pip in the local
+  development environment deploying the cluster. For more information, see the
+  warning in the [description](#description) of this module.
+* The project in your gcloud config must match the project the cluster is being
+  deployed onto due to a known issue with the reconfigure scripts. To set your
+  default config project, run the following command:
+  `gcloud config set core/<<PROJECT ID>>`
+
+[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster#optional
 
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
@@ -80,10 +110,13 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 
 ## Providers
 
-No providers.
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 
 ## Modules
 
@@ -94,7 +127,9 @@ No providers.
 
 ## Resources
 
-No resources.
+| Name | Type |
+|------|------|
+| [google_compute_default_service_account.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
 
 ## Inputs
 
@@ -138,7 +173,7 @@ No resources.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_prolog_scripts"></a> [prolog\_scripts](#input\_prolog\_scripts) | List of scripts to be used for Prolog. Programs for the slurmd to execute<br>whenever it is asked to run a job step from a new job allocation.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
 | <a name="input_region"></a> [region](#input\_region) | Region where the instances should be created. | `string` | `null` | no |
-| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the instances. See<br>'main.tf:local.service\_account' for the default. | <pre>object({<br>    email  = string<br>    scopes = set(string)<br>  })</pre> | `null` | no |
+| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the controller instance. If not set, the<br>default compute service account for the given project will be used with the<br>"https://www.googleapis.com/auth/cloud-platform" scope. | <pre>object({<br>    email  = string<br>    scopes = set(string)<br>  })</pre> | `null` | no |
 | <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance. Note: not used unless<br>enable\_shielded\_vm is 'true'.<br>  enable\_integrity\_monitoring : Compare the most recent boot measurements to the<br>  integrity policy baseline and return a pair of pass/fail results depending on<br>  whether they match or not.<br>  enable\_secure\_boot : Verify the digital signature of all boot components, and<br>  halt the boot process if signature verification fails.<br>  enable\_vtpm : Use a virtualized trusted platform module, which is a<br>  specialized computer chip you can use to encrypt objects like keys and<br>  certificates. | <pre>object({<br>    enable_integrity_monitoring = bool<br>    enable_secure_boot          = bool<br>    enable_vtpm                 = bool<br>  })</pre> | <pre>{<br>  "enable_integrity_monitoring": true,<br>  "enable_secure_boot": true,<br>  "enable_vtpm": true<br>}</pre> | no |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters). | `string` | `null` | no |
 | <a name="input_slurm_conf_tpl"></a> [slurm\_conf\_tpl](#input\_slurm\_conf\_tpl) | Slurm slurm.conf template file path. | `string` | `null` | no |

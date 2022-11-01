@@ -46,12 +46,15 @@ locals {
       min_cpu_platform         = var.min_cpu_platform
       on_host_maintenance      = var.on_host_maintenance
       preemptible              = var.preemptible
-      service_account          = var.service_account
       shielded_instance_config = var.shielded_instance_config
       source_image_family      = var.source_image_family == null ? "" : var.source_image_family
       source_image_project     = var.source_image_project == null ? "" : var.source_image_project
       source_image             = var.source_image == null ? "" : var.source_image
       tags                     = var.tags
+      service_account = var.service_account != null ? var.service_account : {
+        email  = data.google_compute_default_service_account.default.email
+        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+      }
 
       # Spot VM settings
       enable_spot_vm       = var.enable_spot_vm
@@ -68,6 +71,9 @@ locals {
   slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
 }
 
+data "google_compute_default_service_account" "default" {
+  project = var.project_id
+}
 
 module "slurm_partition" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.1.0"
@@ -85,4 +91,3 @@ module "slurm_partition" {
   subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   partition_conf          = local.partition_conf
 }
-

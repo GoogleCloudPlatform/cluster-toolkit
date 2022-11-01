@@ -24,7 +24,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
-  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssd--)
+  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--)
   * [htcondor-pool.yaml](#htcondor-poolyaml--)
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-)
   * [starccm-tutorial.yaml](#starccm-tutorialyaml--)
@@ -840,3 +840,28 @@ everything inside will be provided as is to the module.
 Whenever possible, blueprint variables are preferred over literal variables.
 `ghpc` will perform basic validation making sure all blueprint variables are
 defined before creating a deployment, making debugging quicker and easier.
+
+### Escape Variables
+
+Under circumstances where the variable notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:
+
+* `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
+* `\((not.literal_var))` evaluates to `((not.literal_var))`.
+
+```yaml
+deployment_groups:
+  - group: primary
+     modules:
+       - id: resource1
+         source: path/to/module/1
+         settings:
+            key1: \((not.literal_var))   ## Evaluates to "((not.literal_var))".
+         ...
+       - id: resource2
+         source: path/to/module/2
+         ...
+         settings:
+            key1: |
+              #!/bin/bash
+              echo \$(cat /tmp/file1)    ## Evaluates to "echo $(cat /tmp/file1)"
+```

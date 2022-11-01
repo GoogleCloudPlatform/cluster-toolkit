@@ -17,10 +17,23 @@ package modulewriter
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 )
+
+func escapeBlueprintVariables(hclBytes []byte) []byte {
+	// Convert \$(not.variable) to $(not.variable)
+	re := regexp.MustCompile(`\\\\\$\(`)
+	return re.ReplaceAll(hclBytes, []byte(`$(`))
+}
+
+func escapeLiteralVariables(hclBytes []byte) []byte {
+	// Convert \((not.variable)) to ((not.variable))
+	re := regexp.MustCompile(`\\\\\(\(`)
+	return re.ReplaceAll(hclBytes, []byte(`((`))
+}
 
 func writeHclAttributes(vars map[string]cty.Value, dst string) error {
 	if err := createBaseFile(dst); err != nil {
@@ -38,7 +51,9 @@ func writeHclAttributes(vars map[string]cty.Value, dst string) error {
 	}
 
 	// Write file
-	err := appendHCLToFile(dst, hclFile.Bytes())
+	hclBytes := escapeLiteralVariables(hclFile.Bytes())
+	hclBytes = escapeBlueprintVariables(hclBytes)
+	err := appendHCLToFile(dst, hclBytes)
 	if err != nil {
 		return fmt.Errorf("error writing HCL to %v: %v", filepath.Base(dst), err)
 	}

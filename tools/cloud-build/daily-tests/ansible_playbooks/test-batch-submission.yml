@@ -36,7 +36,7 @@
     ansible.builtin.command: gcloud alpha batch jobs list --project={{ custom_vars.project }}
 
   always:
-  - name: delete job
+  - name: Delete job
     register: batch_deletion
     changed_when: batch_deletion.rc == 0
     ansible.builtin.command: gcloud alpha batch jobs delete {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}

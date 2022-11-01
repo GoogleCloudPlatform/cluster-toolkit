@@ -21,8 +21,8 @@
     - custom_vars.bar is defined
 
 - name: Print top_level_var
-  debug:
+  ansible.builtin.debug:
     msg: "{{ top_level_var }}"
 - name: Print item from custom_vars
-  debug:
+  ansible.builtin.debug:
     msg: "{{ custom_vars.bar }}"

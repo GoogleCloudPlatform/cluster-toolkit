@@ -16,16 +16,16 @@
 # Run this locally with the following command:
 # ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/hello-world-integration-test.yml --extra-vars="@tools/cloud-build/daily-tests/tests/hello-world-vars.yml"
 ---
-- name: hello world integration tests
+- name: Hello world integration tests
   hosts: 127.0.0.1
   connection: local
 
   tasks:
   - name: Print Hello World
-    debug:
+    ansible.builtin.debug:
       msg: Hello world from the base integration test.
   - name: Run post_deploy_tests
-    include_tasks: "{{ test }}"
+    ansible.builtin.include_tasks: "{{ test }}"
     run_once: true
     vars:
       top_level_var: "{{ top_level_var }}"

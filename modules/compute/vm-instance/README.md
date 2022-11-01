@@ -27,6 +27,32 @@ This creates a cluster of 8 compute VMs that are:
 > physical cores visible. To change this, set `threads_per_core=2` under
 > settings.
 
+### VPC Networks
+
+There are two methods for adding network connectivity to the `vm-instance`
+module. The first is shown in the example above, where a `vpc` module or
+`pre-existing-vpc` module is used by the `vm-instance` module. When this
+happens, the `network_self_link` and `subnetwork_self_link` outputs from the
+network are provided as input to the `vm-instance` and a network interface is
+defined based on that. This can also be done updating the `network_self_link` and
+`subnetwork_self_link` settings directly.
+
+The alternative option can be used when more than one network needs to be added
+to the `vm-instance` or further customization is needed beyond what is provided
+via other variables. For this option, the `network_interfaces` variable can be
+used to set up one or more network interfaces on the VM instance. The format is
+consistent with the terraform `google_compute_instance` `network_interface`
+block, and more information can be found in the
+[terraform docs][network-interface-tf].
+
+> **_NOTE:_** When supplying the `network_interfaces` variable, networks
+> associated with the `vm-instance` via use will be ignored in favor of the
+> networks added in `network_interfaces`. In addition, `bandwidth_tier` and
+> `disable_public_ips` will not apply to networks defined in
+> `network_interfaces`.
+
+[network-interface-tf]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_network_interface
+
 ### SSH key metadata
 
 This module will ignore all changes to the `ssh-keys` metadata field that are
@@ -149,6 +175,7 @@ No modules.
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for the instance creation | `string` | `"c2-standard-60"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name Prefix | `string` | `null` | no |
+| <a name="input_network_interfaces"></a> [network\_interfaces](#input\_network\_interfaces) | A list of network interfaces. The options match that of the terraform<br>network\_interface block of google\_compute\_instance. For descriptions of the<br>subfields or more information see the documentation:<br>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_network_interface<br><br>**\_NOTE:\_** If `network_interfaces` are set, `network_self_link` and<br>`subnetwork_self_link` will be ignored, even if they are provided through<br>the `use` field. `bandwidth_tier` and `disable_public_ips` also do not apply<br>to network interfaces defined in this variable.<br><br>Subfields:<br>network            (string, required if subnetwork is not supplied)<br>subnetwork         (string, required if network is not supplied)<br>subnetwork\_project (string, optional)<br>network\_ip         (string, optional)<br>nic\_type           (string, optional, choose from ["GVNIC", "VIRTIO\_NET"])<br>stack\_type         (string, optional, choose from ["IPV4\_ONLY", "IPV4\_IPV6"])<br>queue\_count        (number, optional)<br>access\_config      (object, optional)<br>ipv6\_access\_config (object, optional)<br>alias\_ip\_range     (list(object), optional) | <pre>list(object({<br>    network            = string,<br>    subnetwork         = string,<br>    subnetwork_project = string,<br>    network_ip         = string,<br>    nic_type           = string,<br>    stack_type         = string,<br>    queue_count        = number,<br>    access_config = list(object({<br>      nat_ip                 = string,<br>      public_ptr_domain_name = string,<br>      network_tier           = string<br>    })),<br>    ipv6_access_config = list(object({<br>      public_ptr_domain_name = string,<br>      network_tier           = string<br>    })),<br>    alias_ip_range = list(object({<br>      ip_cidr_range         = string,<br>      subnetwork_range_name = string<br>    }))<br>  }))</pre> | `[]` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the VM. | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. | <pre>list(object({<br>    server_ip     = string,<br>    remote_mount  = string,<br>    local_mount   = string,<br>    fs_type       = string,<br>    mount_options = string<br>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy`, spot provisioning, or GPUs require it to be `TERMINATE` | `string` | `null` | no |

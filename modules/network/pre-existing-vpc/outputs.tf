@@ -48,4 +48,3 @@ output "subnetwork_address" {
   description = "The subnetwork address in the specified primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork.ip_cidr_range
 }
-

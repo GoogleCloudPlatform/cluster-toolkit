@@ -19,6 +19,8 @@ data "google_compute_instance_template" "batch_instance_template" {
 }
 
 locals {
+  job_template_destination = "${var.batch_job_directory}/${var.job_filename}"
+
   instance_template_metadata = data.google_compute_instance_template.batch_instance_template.metadata
   batch_startup_script       = lookup(local.instance_template_metadata, "startup-script", "echo 'Batch job template had no startup script'")
   startup_metadata           = { startup-script = module.login_startup_script.startup_script }
@@ -30,10 +32,35 @@ locals {
   oslogin_metadata = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 
   login_metadata = merge(local.instance_template_metadata, local.startup_metadata, local.oslogin_metadata)
+
+  batch_command_instructions = <<-EOT
+  Submit your job from login node:
+    gcloud ${var.gcloud_version} batch jobs submit ${var.job_id} --config=${local.job_template_destination} --location=${var.region} --project=${var.project_id}
+  
+  Check status:
+    gcloud ${var.gcloud_version} batch jobs describe ${var.job_id} --location=${var.region} --project=${var.project_id} | grep state:
+  
+  Delete job:
+    gcloud ${var.gcloud_version} batch jobs delete ${var.job_id} --location=${var.region} --project=${var.project_id}
+
+  List all jobs:
+    gcloud ${var.gcloud_version} batch jobs list --project=${var.project_id}
+  EOT
+
+  readme_contents = <<-EOT
+  # Batch Job Templates
+
+  This folder contains Batch job templates created by the Cloud HPC Toolkit.
+  These templates can be edited before submitting to Batch to capture more
+  complex workloads.
+
+  Use the following commands to:
+  ${local.batch_command_instructions}
+  EOT 
 }
 
 module "login_startup_script" {
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.0.0"
+  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.6.0"
   labels          = var.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name
@@ -41,17 +68,17 @@ module "login_startup_script" {
   runners = [
     {
       content     = local.batch_startup_script
-      destination = "/tmp/startup-scripts/batch_startup_script.sh"
-      type        = "data"
-    },
-    { # TODO: This workaround should be removed once startup-script supports Bash syntax
-      content     = "bash /tmp/startup-scripts/batch_startup_script.sh"
-      destination = "/tmp/startup-scripts/invoke_batch_startup_script.sh"
+      destination = "batch_startup_script.sh"
       type        = "shell"
     },
     {
+      content     = local.readme_contents
+      destination = "${var.batch_job_directory}/README.md"
+      type        = "data"
+    },
+    {
       content     = var.job_template_contents
-      destination = "${var.batch_job_directory}/${var.job_filename}"
+      destination = local.job_template_destination
       type        = "data"
     }
   ]

@@ -44,9 +44,6 @@ deployment_groups:
       - type: shell
         source: modules/startup-script/examples/install_cloud_ops_agent.sh
         destination: install_cloud_ops_agent.sh
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - $(homefs.install_nfs_client_runner)
       - $(homefs.mount_runner)
 
