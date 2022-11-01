@@ -184,7 +184,7 @@ class ApplicationCreateView(LoginRequiredMixin, generic.CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class CustomInstallationApplicationCreateView(LoginRequiredMixin, generic.CreateView):
+class CustomInstallationApplicationCreateView(LoginRequiredMixin, generic.CreateView):  # pylint: disable=line-too-long
     """CreateView for Custom Installation of Application"""
 
     template_name = "application/custom_install_create_form.html"

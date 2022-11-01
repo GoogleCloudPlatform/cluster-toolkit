@@ -9,7 +9,7 @@ resources managed by the FrontEnd.
 ### Workbench Configuration
 
 The first stage of configuration, after selecting the desired cloud
-credential, is to select the basic profile of the workbench 
+credential, is to select the basic profile of the workbench
 including:
 
 - Workbench Name

@@ -8,10 +8,10 @@
 Administrators can install and manage applications in TKFE in the following
 ways:
 
-### Install Spack applications
+## Install Spack applications
 
 The recommended method of application installation is via
-[Spack](https://spack.readthedocs.io). Spack, an established package 
+[Spack](https://spack.readthedocs.io). Spack, an established package
 management system for HPC, contains build recipes of the most widely used
 open-source HPC applications. This method is completed automated. Spack
 installation is performed as a Slurm job. Simply choose a Slurm partition to
@@ -20,14 +20,14 @@ run Spack.
 Advanced users may also customise the installation by specifying a Spack spec
 string.
 
-### Install custom applications
+## Install custom applications
 
 For applications not yet covered by the Spack package repository, e.g., codes
 developed in-house, or those failed to build by Spack, use custom
 installations by specifying custom scripts containing steps to build the
 applications.
 
-### Register manually installed applications
+## Register manually installed applications
 
 Complex packages, such as some commercial applications that may require
 special steps to set up, can be installed manually on the cluster's shared
@@ -36,7 +36,7 @@ job submissions can be automated through the FrontEnd.
 
 ---
 
-### Application status
+## Application status
 
 Clicking the *Applications* item in the main menu leads to the application
 list page which displays all existing application installations. Applications
@@ -73,7 +73,7 @@ A visual indication is shown on the website for any application installation
 in progress. Also, the relevant web pages will refresh every 15 seconds to
 pick status changes.
 
-#### Install a Spack application
+### Install a Spack application
 
 A typical workflow for installing a new Spack application is as follows:
 
@@ -88,17 +88,17 @@ A typical workflow for installing a new Spack application is as follows:
    options. These may be special compiler flags or optional features that must
    be switched on manually. Advanced users may supply additional specs using
    the optional *Spack spec* field.
-    - For a guide to the Spack spec syntax see the [Spack documentation](https://spack.readthedocs.io/en/latest/basic_usage.html#building-a-specific-version)
-    - By default, the GCC 11.2 compiler is used for building all applications.
-    - Other compilers may be specified with the `%` compiler specifier and an
-      optional version number using the `@` version specifier (e.g.,
-      `%intel@19.1.1.217`). Obviously, admin users are responsible for
-      installing and configuring those additional compilers and, if
-      applicable, arrange their licenses.
-    - Spack is configured in this system to use Intel MPI to build
-      application.
-    - Other MPI libraries may be specified with the ^ dependency specifier and
-      an optional version number.
+   - For a guide to the Spack spec syntax see the [Spack documentation](https://spack.readthedocs.io/en/latest/basic_usage.html#building-a-specific-version)
+   - By default, the GCC 11.2 compiler is used for building all applications.
+   - Other compilers may be specified with the `%` compiler specifier and an
+     optional version number using the `@` version specifier (e.g.,
+     `%intel@19.1.1.217`). Obviously, admin users are responsible for
+     installing and configuring those additional compilers and, if
+     applicable, arrange their licenses.
+   - Spack is configured in this system to use Intel MPI to build
+     application.
+   - Other MPI libraries may be specified with the ^ dependency specifier and
+     an optional version number.
 1. The Description field is populated automatically from the information found
    in the Spack repository.
 1. Choose an Slurm partition from the drop-down list to run the Slurm job for
@@ -120,7 +120,7 @@ A typical workflow for installing a new Spack application is as follows:
 
 ---
 
-### Application problems
+## Application problems
 
 Spack installation is fairly reliable. However, there are thousands of
 packages in the Spack repository and packages are not always tested on all
@@ -137,4 +137,3 @@ the compute nodes.
 
 Complex bugs should be reported to Spack. If an easy fix can be found, note
 the procedure. This can be then used in a custom installation.
-

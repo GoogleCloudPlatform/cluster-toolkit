@@ -60,7 +60,7 @@ There are three types of applications:
 
 Most open-source applications are covered by Spack. For in-house applications,
 or those not yet supported by Spack, custom installation is often a good
-option. Alternatively, admin users can manually install applications on a 
+option. Alternatively, admin users can manually install applications on a
 shared filesystem and register them to the system by providing installation
 paths and load commands (e.g. modulefiles). In practice, end users do not need
 to distinguish these different types as they have access to a unified web

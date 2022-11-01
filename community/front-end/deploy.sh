@@ -632,8 +632,8 @@ FUNDAMENTALS
       echo "    Error: This cannot be left blank"
     fi
     echo
-    good=^[a-z][\.a-z0-9\-]+[a-z0-9]+$
-    if [[ ! "${deployment_name}" =~ $good ]]; then
+    validname='^[a-z][\.a-z0-9\-]+[a-z0-9]+$'
+    if [[ ! "${deployment_name}" =~ ${validname} ]]; then
       echo "    Error: Name is invalid"
       echo "              Name must have a minimum 3 characters in length"
       echo "              Only contain characters a-z (lowercase), 0-9, '-' and '.'"

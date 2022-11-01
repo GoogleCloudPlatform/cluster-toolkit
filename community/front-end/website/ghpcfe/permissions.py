@@ -23,7 +23,7 @@ class CredentialPermission(permissions.BasePermission):
 
     message = "Only users with 'cluster admin' role can access this function"
 
-    def has_permission(self, request, view):
+    def has_permission(self, request, view):   # pylint: disable=unused-argument
         permission = False
         if Role.CLUSTERADMIN in [x.id for x in request.user.roles.all()]:
             permission = True

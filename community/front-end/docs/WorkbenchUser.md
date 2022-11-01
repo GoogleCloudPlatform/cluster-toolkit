@@ -5,12 +5,12 @@
 -->
 
 Vertex AI Workbenches give the user a dedicated interactive environment to
-perform pre- or post- processing of data from the cluster. Using the FrontEnd 
+perform pre- or post- processing of data from the cluster. Using the FrontEnd
 one can create Vertex AI workbenches dedicated to the selected user. Filestore
 filesystems and storage from the cluster headnode can be mounted within the
 Workbench and accessed as the selected user.
 
-### Create a workbench
+## Create a workbench
 
 From the workbench menu select the option `Add workbench`. You will then be
 asked to select the appropriate cloud credential. Normal users and admin users
@@ -43,7 +43,7 @@ User, Machine Type, Boot disk type, Boot Disk Capacity and image family.
 - Image family - Currently the HPC Toolkit FrontEnd supports Base Python3,
   Tensorflow, PyTorch and R images
 
-### Add storage
+## Add storage
 
 The second part of the configuration is to add any desired shared file storage.
 Once the initial configuration is saved an additional configuration section
@@ -60,7 +60,7 @@ the time the workbench is started.
 Within the workbench there are methods for accessing GCP cloud storage (via the
 `gsutil` command) and `git`.
 
-### Access workbench
+## Access workbench
 
 Once the workbench is is configured you will be presented with the details
 page, which will contain a create link to start the workbench.
@@ -82,7 +82,7 @@ page. This is exactly the same view as notebooks opened from GCP console.
 
 ![Jupyter notebook](images/Workbench_userguide/JupyterLab.png)
 
-### Destroy workbench
+## Destroy workbench
 
 If the workbench is no longer required it can be deleted via the destroy link
 on the workbench page.

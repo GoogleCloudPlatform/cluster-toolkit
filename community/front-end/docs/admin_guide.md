@@ -25,8 +25,8 @@ within TKFE, once it is deployed and running.
 The TFKE web application server uses the
 [Google HPC Toolkit](https://github.com/GoogleCloudPlatform/hpc-toolkit) to
 provision resources for networks, filesystems and clusters, using a service
-account that has its credentials registered to TKFE. The service account is 
-used for access management and billing. 
+account that has its credentials registered to TKFE. The service account is
+used for access management and billing.
 
 This guide covers the deployment of TKFE, registering the service account, and
 the steps required to then create and manage clusters.  Further guides cover
@@ -35,18 +35,17 @@ installation of [Applications](Applications.md) and the
 An [Advanced Administrators Guide](AdvancedAdmin.md) also covers features for
 customising the TKFE deployment.
 
-
 ## TKFE Deployment
 
 TKFE is deployed from a client machine using a script. The script will guide
-the admin through the setup process, prompting for input of required 
+the admin through the setup process, prompting for input of required
 parameters, then deploy TKFE into the Google Cloud Platform.
 
 ### Prerequisites
 
 #### Client Machine
 
-The client machine must run Linux (or equivalent such as 
+The client machine must run Linux (or equivalent such as
 [WSL](https://docs.microsoft.com/en-us/windows/wsl/install)) and there are a
 small number of prerequisites that must be installed ahead of time:
 
@@ -58,7 +57,7 @@ small number of prerequisites that must be installed ahead of time:
   
 #### Download TKFE
 
-If not already downloaded, the TKFE repository needs to be cloned to the client 
+If not already downloaded, the TKFE repository needs to be cloned to the client
 machine.
 
 Clone the repository, checkout the corresponding branch, and switch to
@@ -73,14 +72,15 @@ $ cd hpc-toolkit
 $ cd community/frontend
 ```
 -->
+
 ```bash
 $ git clone https://github.com/ghpcfe/hpc-toolkit-private.git
 $ cd hpc-toolkit
 $ git checkout new_frontend
 $ cd community/front-end
 ```
-All further deployment actions must be performed from this directory.
 
+All further deployment actions must be performed from this directory.
 
 #### Google Cloud Platform
 
@@ -93,6 +93,7 @@ resources.
 **GCP project**
 
 A GCP project is required with the following APIs enabled:
+
 ```Text
  Compute Engine API
  Cloud Monitoring API
@@ -105,6 +106,7 @@ A GCP project is required with the following APIs enabled:
  Cloud Billing API
  Vertex AI API
 ```
+
 If these are not enabled, the deployment script will ask to enable them for
 you. It's not possible to complete a deployment without these APIs, so the
 script will abort if not selected.
@@ -119,6 +121,7 @@ used, which can help satisfy security concerns. The `gcloud` command can be
 used to [switch to another account](https://cloud.google.com/sdk/gcloud/reference/auth/login)
 and apply IAM roles.  IAM roles can also be applied via the GCP Console. The
 required roles are:
+
 ```Text
  Compute Admin
  Storage Admin
@@ -128,14 +131,17 @@ required roles are:
  Service Account User
  Project IAM Admin
 ```
+
 If required, an even stricter, or least-privilege custom role can be created -
 please refer to the [Advanced Admin Guide](AdvancedAdmin.md#Custom-roles/permissions-and-APIs).
 
 The user account must also be [authenticated to deploy GCP resources](https://cloud.google.com/sdk/gcloud/reference/auth/application-default/login).
 This can be done with the following command:
+
 ```bash
 $ gcloud auth application-default login --project=<PROJECT_ID>
 ```
+
 You will be prompted to open your web browser to authenticate.
 
 If further help is needed, please refer to GCP documentation for:
@@ -143,7 +149,6 @@ If further help is needed, please refer to GCP documentation for:
 - [Creating and managing projects](https://cloud.google.com/resource-manager/docs/creating-managing-projects)
 - [Enabling APIs](https://cloud.google.com/endpoints/docs/openapi/enable-api)
 - [Granting and roles/permissions](https://cloud.google.com/iam/docs/creating-custom-roles)
-
 
 ### Deployment Process
 TKFE uses a deployment script run on the client machine, prompting for required
@@ -155,15 +160,15 @@ parameters, to configure TKFE.
    The hosting VM will be referred to as the *service machine* from now on.
 1. Follow prompts to enter domain name (DNS hostname) and IP address for the
    service machine.
-    - For a production deployment, provide a domain name and static IP
-      address.  If a static IP is needed, follow the on-screen instructions. An
-      SSL certificate will automatically be obtained via
-      [LetsEncrypt](https://letsencrypt.org/) to secure the web application.
-    - For dev and testing purposes, the domain name and static IP address and
-      domain name can be left blank. The system can still be successfully
-      deployed and run with an ephemeral IP address, however OAuth2-based login
-      (see later) will not be available as this requires a publicly resolvable
-      domain name.
+   - For a production deployment, provide a domain name and static IP
+     address.  If a static IP is needed, follow the on-screen instructions. An
+     SSL certificate will automatically be obtained via
+     [LetsEncrypt](https://letsencrypt.org/) to secure the web application.
+   - For dev and testing purposes, the domain name and static IP address and
+     domain name can be left blank. The system can still be successfully
+     deployed and run with an ephemeral IP address, however OAuth2-based login
+     (see later) will not be available as this requires a publicly resolvable
+     domain name.
 1. Follow instructions to provide details for an Admin (the Django superuser)
    account - username, password, email address.
 1. Confirm whether to create a service account for managing clusters.  This
@@ -171,27 +176,28 @@ parameters, to configure TKFE.
    the GCP project specified earlier being used to deploy TKFE.  This service
    account may not be needed if using an existing one, or using multiple
    projects (see [advanced admin guide](AdvancedAdmin.md) for details).
-    - If selected, a credential file, `credential.json`. will be created in the
-      directory that needs to be registered in the FrontEnd (see below).
+   - If selected, a credential file, `credential.json`. will be created in the
+     directory that needs to be registered in the FrontEnd (see below).
 1. Confirm the parameters are correct when prompted and the deployment can
    proceed.
-    - If confirmed, the VM instance will be created.  This can take a few
-      minutes.
-    - **Note: after the deploy script has completed, it will still take up to
-      another 15 minutes to fully install the TKFE server with its full
-      software stack.**
+   - If confirmed, the VM instance will be created.  This can take a few
+     minutes.
+   - **Note: after the deploy script has completed, it will still take up to
+     another 15 minutes to fully install the TKFE server with its full
+     software stack.**
 
 <!--
 TODO:  Give instruction for a custom deployment.
 
-If a custom TKFE deployment is needed, the final step can be cancelled  Then hack any files in ./tf and manually run `terraform apply` in the `frontend/tf` directory after properly setting the `terraform.tfvars`.
+If a custom TKFE deployment is needed, the final step can be cancelled  Then
+hack any files in ./tf and manually run `terraform apply` in the `frontend/tf` directory after properly setting the `terraform.tfvars`.
 -->
 
 **Important: To ensure that the TKFE resources can be fully cleaned up at a
 later date, ensure that the directory containing the terraform configuration
 (`./tf`) is retained.**
 
-The deployment is now complete and after ~15 minutes, it will be possible to 
+The deployment is now complete and after ~15 minutes, it will be possible to
 log into the TKFE using the Admin account details given, at the specified
 domain name or IP address via a web browser.  The IP address will be output as
 `server_ip`.
@@ -204,7 +210,7 @@ domain name or IP address via a web browser.  The IP address will be output as
 
 To allow TKFE to manage cloud resources on behalf of users, a
 [service account](https://cloud.google.com/iam/docs/service-accounts)
-must be registered by the Admin.  This is done by entering a credential 
+must be registered by the Admin.  This is done by entering a credential
 corresponding to the service account - the credential will be a json format
 key file that needs to be copied into the *Credentials* form in TKFE.
 
@@ -244,14 +250,14 @@ button to trigger creation of the VPC and subnet(s).
 
 ### Import an existing VPC
 
-If your organisation already has predefined VPCs within the hosting GCP 
+If your organisation already has predefined VPCs within the hosting GCP
 project, they can be imported.  Simply select an existing VPC and associated
 subnets from the web interface to register them with TKFE.  Imported VPCs
 can be used in exactly the same way as newly created ones.
 
 ## Filesystem Management
 
-By default each cluster creates two shared filesystems: one at `/opt/cluster`	 to
+By default each cluster creates two shared filesystems: one at `/opt/cluster` to
 hold installed applications and one at `/home` to hold job files for individual
 users. Both can be customised if required. Optionally, additional filesystems
 may be created and mounted to the clusters. Note that filesystem resources have
@@ -339,24 +345,25 @@ A typical workflow for creating a new cluster is as follows:
 1. Click the *Edit* button to make additional changes. such as creating more
    Slurm partitions for different compute node instance types, or mounting
    additional filesystems.
-    - For filesystems, note the two existing shared filesystems defined by
-      default. Additional ones can be mounted if they have been created earlier.
-      Note the *Mounting order* parameter only matters if the *Mount path*
-      parameter has dependencies.
-    - For cluster partitions, note that one *c2-standard-60* partition is
-      defined by default. Additional partitions can be added, supporting
-      different instance types. Enable or disable hyperthreading and node reuse
-      as appropriate. Also, placement group can be enabled (for C2 and C2D
-      partitions only). In the *image* field one can optionally supply a custom
-      image to be used by the compute nodes. Administrators should ensure such
-      an image is compatible to the CentOS 7 based machine image used by Slurm 
-      GCP. Otherwise additional customisation done by this system might fail.
-1.  Finally, save the configurations and click the *Create* button to trigger
-    the cluster creation.
+   - For filesystems, note the two existing shared filesystems defined by
+     default. Additional ones can be mounted if they have been created earlier.
+     Note the *Mounting order* parameter only matters if the *Mount path*
+     parameter has dependencies.
+   - For cluster partitions, note that one *c2-standard-60* partition is
+     defined by default. Additional partitions can be added, supporting
+     different instance types. Enable or disable hyperthreading and node reuse
+     as appropriate. Also, placement group can be enabled (for C2 and C2D
+     partitions only). In the *image* field one can optionally supply a custom
+     image to be used by the compute nodes. Administrators should ensure such
+     an image is compatible to the CentOS 7 based machine image used by Slurm
+     GCP. Otherwise additional customisation done by this system might fail.
+1. Finally, save the configurations and click the *Create* button to trigger
+   the cluster creation.
 
 ### Deleting a cluster
 
-To destroy a cluster, first find the list of clusters in the *Clusters* menu, then simply select *Destroy* pop-down *Actions* menu and confirm.
+To destroy a cluster, first find the list of clusters in the *Clusters* menu,
+then simply select *Destroy* pop-down *Actions* menu and confirm.
 Any jobs still running on the Cluster will be automatically killed.
 
 ## User Management
@@ -378,8 +385,8 @@ While it is possible to use a Django user account to access the FrontEnd
 website, and indeed doing so is required for some administration tasks, standard
 users must authenticate using their Google identities via Google OAuth2.  This,
 combined with the use of Google OSLogin for access to clusters, ensures
-consistent Linux identities across VM instances that form the clusters. Web 
-frontend login is made possible by the *django-allauth* social login extension. 
+consistent Linux identities across VM instances that form the clusters. Web
+frontend login is made possible by the *django-allauth* social login extension.
 
 For a working  deployment, a fully-qualified domain name must be obtained and
 attached to the website as configured in the deployment script.  Next, register
@@ -400,11 +407,11 @@ accept Google login.
 
 #### Set Allowed Users by Email Address
 
-Next, go to the *Authorised user* table. This is where further access control 
+Next, go to the *Authorised user* table. This is where further access control
 to the site is applied. Create new entries to grant access to users. A new
 entry can be:
 
-- a valid domain name to grant access to multiple users from authorised 
+- a valid domain name to grant access to multiple users from authorised
 organisations (e.g. *@example.com*)
 - an email address to grant access to an individual user (e.g
 *user.name@example.com*)
@@ -441,7 +448,6 @@ Please see the [application installation guide](Applications.md).
 
 Please see the [Workbench Admin Guide](WorkbenchAdmin.md).
 
-
 ## Teardown Process
 
 The TKFE package contains a `teardown.sh` script that will destroy the running
@@ -451,20 +457,20 @@ FrontEnd instance. This script only removes the FrontEnd, not resources started 
 workbenches and filestores are removed using the TKFE web interface before
 destroying it. These resources will otherwise persist and accrue costs.**
 
-To tear down the web interface and its hosting infrastructure, run 
+To tear down the web interface and its hosting infrastructure, run
 directory `./teardown.sh` on the original client machine
 in the same directory that was used to deploy TKFE.
-
 
 ## Troubleshooting
 
 ### Finding Log Files
 
-The service machine produces log files in `/opt/gcluster/run/`. These log files will show errors from the Django web application.
+The service machine produces log files in `/opt/gcluster/run/`. These log
+files will show errors from the Django web application.
 
 Cloud resource deployment log files (from Terraform) are typically shown via
 the FrontEnd web site.  If those logs are not being shown, they can be found on
-the service machine under 
+the service machine under
 `/opt/gcluster/hpc-toolkit/frontend/(clusters|fs|vpc)/...`.
 HPC Toolkit log files will also be found in those directories.  The Terraform
 log files and status files will be down a few directories, based off of the
@@ -472,7 +478,7 @@ Cluster Number, Deployment ID, and Terraform directory.
 
 On Cluster controllers, most of the useful log files for debugging can be
 retrieved by executing the 'Sync Cluster' command.  These include Slurm log
-files as well as general system log files.  The daemon which communicates to 
+files as well as general system log files.  The daemon which communicates to
 the service machine logs to syslog, and can be viewed on the cluster controller
 node via `journalctl`, looking at the `ghpcfe_c2` service.
 
@@ -497,7 +503,7 @@ computing, errors will and do happen from time to time; usually due to changes
 in back-end services or other factors beyond scope of the TKFE. For example, a
 resource creation could fail because the hosting GCP project has ran out of
 certain resource quotas; or an upgrade of an underlying machine image might
-have introduced changes that are incompatible to the TKFE, which then needs 
+have introduced changes that are incompatible to the TKFE, which then needs
 updating.
 It is not possible to capture all such situations.  Here, a list of tips is
 given to help debug cluster creation problems. The
@@ -506,26 +512,26 @@ back-end logic is handled, which can also help with certain issues.
 
 - If a cluster is stuck at status 'c', something is wrong with the provisioning
   of cluster hardware.
-    - SSH into the service machine and identify the directory containing the
-      run-time data for that cluster at `frontend/clusters/cluster_<cluster_id>`
-      where `<cluster_id>` can be found on the web interface. Check the
-      Terraform log files there for debugging information.
+  - SSH into the service machine and identify the directory containing the
+    run-time data for that cluster at `frontend/clusters/cluster_<cluster_id>`
+    where `<cluster_id>` can be found on the web interface. Check the
+    Terraform log files there for debugging information.
 - If a cluster is stuck at status 'i', hardware resources should have been
   commissioned properly and there is something wrong in the software
   configuration stage.
-    - Locate the IP address of the Slurm controller node and find its VM
-      instance on GCP console. Check its related *Serial port* for system log. 
-    - If needed, SSH into the controller from the GCP console to check Slurm
-      logs under `/var/log/slurm/`.
+  - Locate the IP address of the Slurm controller node and find its VM
+    instance on GCP console. Check its related *Serial port* for system log.
+  - If needed, SSH into the controller from the GCP console to check Slurm
+    logs under `/var/log/slurm/`.
 
 ### General clean-up tips
 
 - If a cluster is stuck in 'i' state, it is normally OK to find the *Destroy*
-button from its *Actions* menu to destroy it.
+  button from its *Actions* menu to destroy it.
 - For failed network/filesystem/cluster creations, one may need to SSH into the
-service machine, locate the run-time data directory, and manually run
-`terraform destroy` there for clean up cloud resources.
-- Certain database records might get corrupted and need to be removed for failed
-clusters or network/filesystem components. This can be done from the Django
-Admin site, although adminstrators need to exercise caution while modifying the
-raw data in Django database.
+  service machine, locate the run-time data directory, and manually run
+  `terraform destroy` there for clean up cloud resources.
+- Certain database records might get corrupted and need to be removed for
+  failed clusters or network/filesystem components. This can be done from the
+  Django Admin site, although adminstrators need to exercise caution while
+  modifying the raw data in Django database.

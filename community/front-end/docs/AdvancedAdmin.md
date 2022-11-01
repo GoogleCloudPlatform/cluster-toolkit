@@ -17,11 +17,11 @@ TKFE.
 
 By default, TKFE will deploy using the specified project and creates a service
 account and a corresponding credential, which when registered in the portal,
-allows that project to administer HPC clusters and associated resources. 
+allows that project to administer HPC clusters and associated resources.
 Usually, the single project for both deploying and then administering GCP
 resources via TKFE is sufficient.
 
-It is possible though to separate concerns, such that one project deploys TKFE 
+It is possible though to separate concerns, such that one project deploys TKFE
 and other projects administer GCP resources via the TKFE portal, to allow finer
 user access management.  Separation of projects is a fairly straightforward
 matter of registering different service account credentials, for the different
@@ -43,7 +43,6 @@ required.
 Service accounts can be created in a number of ways, as outlined below. In each
 case, the generated credential (in json format) is registered within the TKFE
 portal in the same way (as outlined in the [Admin Guide](admin_guide.md).
-
 
 ### Creating a service account via the helper script
 
@@ -72,7 +71,6 @@ TKFE service account changes, due to changes within GCP, the script
 must be modified (and docs including the list of roles below,
 updated).
 
-
 ### Creating a service account via the GCP Console
 
 A user with project privileges can also create service accounts via the GCP
@@ -80,34 +78,33 @@ Console.
 
 1. Log in to the [GCP console](https://console.cloud.google.com/) and select
    the GCP project that hosts the TKFE.
-   
+
 1. From the Navigation menu, select *IAM & Admin*, then *Service Accounts*.
-    - Click the *CREATE SERVICE ACCOUNT* button.
-    - Name the service account, optionally provide a description, and then 
-      click the *CREATE* button.
-      
+   - Click the *CREATE SERVICE ACCOUNT* button.
+   - Name the service account, optionally provide a description, and then
+     click the *CREATE* button.
+
 1. Grant the service account the following roles (these are the same basic
    roles the helper script would apply - for finer control see later section):
-    - Cloud Filestore Editor
-    - Compute Admin
-    - Create Service Accounts
-    - Delete Service Accounts
-    - Project IAM Admin
-    - Notebooks Admin
-    - Vertex AI administrator
+   - Cloud Filestore Editor
+   - Compute Admin
+   - Create Service Accounts
+   - Delete Service Accounts
+   - Project IAM Admin
+   - Notebooks Admin
+   - Vertex AI administrator
 
 1. Click *Done* button.
 
 1. Locate the new service account from the list, click *Manage Keys* from the
    *Actions* menu.
-    - Click *ADD KEY*, then *Create new key*.
-        - Select JSON as key type, and click the *CREATE* button.
-        - A JSON key file will then be downloaded.
-        - Copy the generated JSON content which should then be pasted into the
-          credential creation form within the TKFE.
+   - Click *ADD KEY*, then *Create new key*.
+     - Select JSON as key type, and click the *CREATE* button.
+     - A JSON key file will then be downloaded.
+     - Copy the generated JSON content which should then be pasted into the
+       credential creation form within the TKFE.
 
-1.  Click *Validate and Save* to register the new credential to TKFE.
-
+1. Click *Validate and Save* to register the new credential to TKFE.
 
 ### Creating a service account using `gcloud`
 
@@ -145,7 +142,7 @@ The roles can be changed to give finer control as outlined in the next section.
 ### Custom roles/permissions and APIs
 
 The projects and user account used for deploying TKFE can be more tightly
-controlled with respect to the enabled APIs and roles/permissions. 
+controlled with respect to the enabled APIs and roles/permissions.
 
 **User Account**
 
@@ -153,6 +150,7 @@ Rather than using *Owner* role, or the high-level roles stated in the Admin
 Guide, the user account deploying TKFE can use a custom set of least-privilege
 roles.  The complete list of required permissions is as follows:
 <!-- TODO: this list needs regularly checking and maintaining -->
+
 ```Text
  compute.acceleratorTypes.list
  compute.addresses.use
@@ -228,11 +226,12 @@ roles.  The complete list of required permissions is as follows:
 
 **Project APIs**
 
-In a multi-project configuration, the enabled project APIs can also be 
+In a multi-project configuration, the enabled project APIs can also be
 reduced to a subset of those APIs only needed for the functions required.
 
 If a project is only deploying TKFE, and not administering GCP resources via
 the TKFE portal, only the following APIs need to be enabled:
+
 ```Text
  Compute Engine API
  Cloud Monitoring API
@@ -242,8 +241,9 @@ the TKFE portal, only the following APIs need to be enabled:
  Identity and Access Management (IAM) API
 ```
 
-A project that administers GCP resources via the TKFE portal (that has a 
+A project that administers GCP resources via the TKFE portal (that has a
 service account created within it, as covered above), needs the following APIs:
+
 ```Text
  Compute Engine API
  Cloud Monitoring API

@@ -15,9 +15,9 @@ echo "This is the startup script for the compute nodes on cluster ${CLUSTER_ID}"
 set -x
 set -e
 if [[ $(type -P yum) ]]; then
-    yum install -y ansible
+	yum install -y ansible
 else
-    apt install -y ansible
+	apt install -y ansible
 fi
 
 cd /tmp
