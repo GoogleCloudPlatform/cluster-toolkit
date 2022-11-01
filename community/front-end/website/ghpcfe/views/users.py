@@ -42,7 +42,7 @@ class UserDetailView(SuperUserRequiredMixin, generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["navtab"] = "user"
-        context['loggedin_user'] = self.request.user
+        context["loggedin_user"] = self.request.user
         return context
 
 
@@ -59,7 +59,7 @@ class UserAdminUpdateView(SuperUserRequiredMixin, generic.UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["navtab"] = "user"
-        context['loggedin_user'] = self.request.user
+        context["loggedin_user"] = self.request.user
         return context
 
 

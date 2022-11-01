@@ -483,17 +483,17 @@ deployment_groups:
         # controller & login until we start setting them.
 
         filters = {
-            "module": "module.slurm_controller.module.slurm_controller_instance.module.slurm_controller_instance",
+            "module": "module.slurm_controller.module.slurm_controller_instance.module.slurm_controller_instance",  #pylint:disable=line-too-long
             "name": "slurm_instance",
         }
-        tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]
+        tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]  #pylint:disable=line-too-long
         ctrl_sa = tf_node["attributes"]["service_account"][0]["email"]
 
         filters = {
-            "module": "module.slurm_login.module.slurm_login_instance.module.slurm_login_instance",
+            "module": "module.slurm_login.module.slurm_login_instance.module.slurm_login_instance",  #pylint:disable=line-too-long
             "name": "slurm_instance",
         }
-        tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]
+        tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]  #pylint:disable=line-too-long
         login_sa = tf_node["attributes"]["service_account"][0]["email"]
 
         return {"controller": ctrl_sa, "login": login_sa, "compute": login_sa}

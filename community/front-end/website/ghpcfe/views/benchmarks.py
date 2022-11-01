@@ -19,7 +19,6 @@ from django.views import generic
 from ..forms import BenchmarkForm
 from ..models import Benchmark
 from ..models import Job
-from ..forms import UserUpdateForm, UserAdminUpdateForm
 from ..permissions import SuperUserRequiredMixin
 
 # list views

@@ -65,7 +65,7 @@ class Command(BaseCommand):
                 user = User.objects.get(pk=1)
                 user.roles.set(roles, clear=True)
                 # set the super user with unlimited quota
-                user.quota_type = 'u'
+                user.quota_type = "u"
                 user.save()
                 # initialise database for Google social login
                 site = Site.objects.get(pk=1)
