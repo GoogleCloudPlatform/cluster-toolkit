@@ -191,6 +191,7 @@ func defaultAPIList(source string) []string {
 			"storage.googleapis.com",
 		},
 		"community/modules/scripts/pbspro-install": {},
+		"community/modules/scripts/pbspro-qmgr":    {},
 		"community/modules/scripts/spack-install":  {},
 		"community/modules/scripts/wait-for-startup": {
 			"compute.googleapis.com",

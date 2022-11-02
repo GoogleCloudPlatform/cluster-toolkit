@@ -46,3 +46,19 @@ deployment_groups:
       rpm_url: $(pbspro_setup.pbs_server_rpm_url)
     outputs:
     - runner
+
+  - id: pbspro_qmgr
+    source: community/modules/scripts/pbspro-qmgr
+    settings:
+      client_host_count: 1
+      client_hostname_prefix: pbs-client
+      execution_host_count: 10
+      execution_hostname_prefix: pbs-execution
+      server_conf: |
+        set queue workq queue_type = Execution
+        set queue workq enabled = True
+        set queue workq started = True
+        set server scheduling = True
+        set server default_queue = workq
+    outputs:
+    - runners
