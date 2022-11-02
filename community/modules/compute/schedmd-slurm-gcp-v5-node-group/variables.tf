@@ -42,7 +42,7 @@ variable "node_conf" {
 }
 
 variable "node_count_dynamic_max" {
-  description = "Maximum number of nodes allowed in this partition."
+  description = "Maximum number of dynamic nodes allowed in this partition."
   type        = number
   default     = 10
 }
