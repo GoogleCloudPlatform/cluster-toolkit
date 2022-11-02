@@ -25,12 +25,12 @@ require (
 	cloud.google.com/go/serviceusage v1.3.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/googleapis/gax-go/v2 v2.6.0
-	google.golang.org/api v0.101.0
+	google.golang.org/api v0.102.0
 )
 
 require (
 	cloud.google.com/go v0.104.0 // indirect
-	cloud.google.com/go/compute/metadata v0.1.0 // indirect
+	cloud.google.com/go/compute/metadata v0.2.1 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
 	github.com/Microsoft/go-winio v0.4.16 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20210428141323-04723f9f07d7 // indirect
