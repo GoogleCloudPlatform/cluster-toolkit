@@ -101,71 +101,26 @@ Be aware that Cloud Shell has [several limitations][cloud-shell-limitations],
 in particular an inactivity timeout that will close running shells after 20
 minutes. Please consider it only for blueprints that are quickly deployed.
 
-## Blueprint Warnings and Errors
+## VM Image Support
 
-By default, each blueprint is configured with a number of "validator" functions
-which perform basic tests of your deployment variables. If `project_id`,
-`region`, and `zone` are defined as deployment variables, then the following
-validators are enabled:
+The HPC Toolkit officially supports the following VM images:
 
-```yaml
-validators:
-- validator: test_project_exists
-  inputs:
-    project_id: $(vars.project_id)
-- validator: test_region_exists
-  inputs:
-    project_id: $(vars.project_id)
-    region: $(vars.region)
-- validator: test_zone_exists
-  inputs:
-    project_id: $(vars.project_id)
-    zone: $(vars.zone)
-- validator: test_zone_in_region
-  inputs:
-    project_id: $(vars.project_id)
-    zone: $(vars.zone)
-    region: $(vars.region)
-```
+* HPC CentOS 7
+* Ubuntu 20.04 LTS
 
-This configures validators that check the validity of the project ID, region,
-and zone. Additionally, it checks that the zone is in the region. Validators can
-be overwritten, however they are limited to the set of functions defined above.
+For more information on these and other images, see
+[docs/vm-images.md](docs/vm-images.md).
 
-Validators can be explicitly set to the empty list:
+## Blueprint Validation
 
-```yaml
-validators: []
-```
-
-They can also be set to 3 differing levels of behavior using the command-line
-`--validation-level` flag` for the `create` and `expand` commands:
-
-* `"ERROR"`: If any validator fails, the deployment directory will not be
-  written. Error messages will be printed to the screen that indicate which
-  validator(s) failed and how.
-* `"WARNING"` (default): The deployment directory will be written even if any
-  validators fail. Warning messages will be printed to the screen that indicate
-  which validator(s) failed and how.
-* `"IGNORE"`: Do not execute any validators, even if they are explicitly defined
-  in a `validators` block or the default set is implicitly added.
-
-For example, this command will set all validators to `WARNING` behavior:
-
-```shell
-./ghpc create --validation-level WARNING examples/hpc-cluster-small.yaml
-```
-
-The flag can be shortened to `-l` as shown below using `IGNORE` to disable all
-validators.
-
-```shell
-./ghpc create -l IGNORE examples/hpc-cluster-small.yaml
-```
+The Toolkit contains "validator" functions that perform basic tests of the
+blueprint to ensure that deployment variables are valid and that the HPC
+environment can be provisioned in your Google Cloud project. Further information
+can be found in [dedicated documentation](docs/blueprint-validation.md).
 
 ## Enable GCP APIs
 
-In a new GCP project there are several apis that must be enabled to deploy your
+In a new GCP project there are several APIs that must be enabled to deploy your
 HPC cluster. These will be caught when you perform `terraform apply` but you can
 save time by enabling them upfront.
 
@@ -204,133 +159,9 @@ In the right side, expand the Filters view and then filter by label, specifying 
 
 ## Troubleshooting
 
-### Failure to Create Auto Scale Nodes (Slurm)
+### Slurm Clusters
 
-If your deployment succeeds but your jobs fail with the following error:
-
-```shell
-$ srun -N 6 -p compute hostname
-srun: PrologSlurmctld failed, job killed
-srun: Force Terminated job 2
-srun: error: Job allocation 2 has been revoked
-```
-
-Possible causes could be [insufficient quota](#insufficient-quota) or
-[placement groups](#placement-groups). Also see the
-[Slurm user guide](https://docs.google.com/document/u/1/d/e/2PACX-1vS0I0IcgVvby98Rdo91nUjd7E9u83oIMCM4arne-9_IdBg6BdV1lBpUcSje_PyHcbAaErC1rY7p4u1g/pub).
-
-#### Insufficient Quota
-
-It may be that you have sufficient quota to deploy your cluster but insufficient
-quota to bring up the compute nodes.
-
-You can confirm this by SSHing into the `controller` VM and checking the
-`resume.log` file:
-
-```shell
-$ cat /var/log/slurm/resume.log
-...
-resume.py ERROR: ... "Quota 'C2_CPUS' exceeded. Limit: 300.0 in region europe-west4.". Details: "[{'message': "Quota 'C2_CPUS' exceeded. Limit: 300.0 in region europe-west4.", 'domain': 'usageLimits', 'reason': 'quotaExceeded'}]">
-```
-
-The solution here is to [request more of the specified quota](#gcp-quotas),
-`C2 CPUs` in the example above. Alternatively, you could switch the partition's
-[machine type][partition-machine-type], to one which has sufficient quota.
-
-[partition-machine-type]: community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md#input_machine_type
-
-#### Placement Groups
-
-By default, placement groups (also called affinity groups) are enabled on the
-compute partition. This places VMs close to each other to achieve lower network
-latency. If it is not possible to provide the requested number of VMs in the
-same placement group, the job may fail to run.
-
-Again, you can confirm this by SSHing into the `controller` VM and checking the
-`resume.log` file:
-
-```shell
-$ cat /var/log/slurm/resume.log
-...
-resume.py ERROR: group operation failed: Requested minimum count of 6 VMs could not be created.
-```
-
-One way to resolve this is to set [enable_placement][partition-enable-placement]
-to `false` on the partition in question.
-
-[partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
-
-#### Insufficient Service Account Permissions
-
-By default, the slurm controller, login and compute nodes use the
-[Google Compute Engine Service Account (GCE SA)][def-compute-sa]. If this
-service account or a custom SA used by the Slurm modules does not have
-sufficient permissions, configuring the controller or running a job in Slurm may
-fail.
-
-If configuration of the Slurm controller fails, the error can be
-seen by viewing the startup script on the controller:
-
-```shell
-sudo journalctl -u google-startup-scripts.service | less
-```
-
-An error similar to the following indicates missing permissions for the serivce
-account:
-
-```shell
-Required 'compute.machineTypes.get' permission for ...
-```
-
-To solve this error, ensure your service account has the
-`compute.instanceAdmin.v1` IAM role:
-
-```shell
-SA_ADDRESS=<SET SERVICE ACCOUNT ADDRESS HERE>
-
-gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member=serviceAccount:${SA_ADDRESS} --role=roles/compute.instanceAdmin.v1
-```
-
-If Slurm failed to run a job, view the resume log on the controller instance
-with the following command:
-
-```shell
-sudo cat /var/log/slurm/resume.log
-```
-
-An error in `resume.log` simlar to the following indicates a permissions issue
-as well:
-
-```shell
-The user does not have access to service account 'PROJECT_NUMBER-compute@developer.gserviceaccount.com'.  User: ''.  Ask a project owner to grant you the iam.serviceAccountUser role on the service account": ['slurm-hpc-small-compute-0-0']
-```
-
-As indicated, the service account must have the compute.serviceAccountUser IAM
-role. This can be set with the following command:
-
-```shell
-SA_ADDRESS=<SET SERVICE ACCOUNT ADDRESS HERE>
-
-gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member=serviceAccount:${SA_ADDRESS} --role=roles/iam.serviceAccountUser
-```
-
-If the GCE SA is being used and cannot be updated, a new service account can be
-created and used with the correct permissions. Instructions for how to do this
-can be found in the [Slurm on Google Cloud User Guide][slurm-on-gcp-ug],
-specifically the section titled "Create Service Accounts".
-
-After creating the service account, it can be set via the
-`compute_node_service_account` and `controller_service_account` settings on the
-[slurm-on-gcp controller module][slurm-on-gcp-con] and the
-"login_service_account" setting on the
-[slurm-on-gcp login module][slurm-on-gcp-login].
-
-[def-compute-sa]: https://cloud.google.com/compute/docs/access/service-accounts#default_service_account
-[slurm-on-gcp-ug]: https://goo.gle/slurm-gcp-user-guide
-[slurm-on-gcp-con]: community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
-[slurm-on-gcp-login]: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
+Please see the dedicated [troubleshooting guide for Slurm](docs/slurm-troubleshooting.md).
 
 ### Terraform Deployment
 
@@ -344,8 +175,8 @@ message. Here are some common reasons for the deployment to fail:
   [Enable GCP APIs](#enable-gcp-apis).
 * **Insufficient Quota:** The GCP project does not have enough quota to
   provision the requested resources. See [GCP Quotas](#gcp-quotas).
-* **Filestore resource limit:** When regularly deploying filestore instances
-  with a new vpc you may see an error during deployment such as:
+* **Filestore resource limit:** When regularly deploying Filestore instances
+  with a new VPC you may see an error during deployment such as:
   `System limit for internal resources has been reached`. See
   [this doc](https://cloud.google.com/filestore/docs/troubleshooting#system_limit_for_internal_resources_has_been_reached_error_when_creating_an_instance)
   for the solution.
@@ -376,7 +207,7 @@ network. These resources should be deleted manually. The first message indicates
 that a new VM has been added to a subnetwork within the VPC network. The second
 message indicates that a new firewall rule has been added to the VPC network.
 If your error message does not look like these, examine it carefully to identify
-the type of resouce to delete and its unique name. In the two messages above,
+the type of resource to delete and its unique name. In the two messages above,
 the resource names appear toward the end of the error message. The following
 links will take you directly to the areas within the Cloud Console for managing
 VMs and Firewall rules. Make certain that your project ID is selected in the
@@ -477,9 +308,11 @@ Follow these steps to install and setup pre-commit in your cloned repository:
 
    > **_NOTE:_** The version of TFLint must be compatible with the Google plugin
    > version identified in [tflint.hcl](.tflint.hcl). Versions of the plugin
-   > `>=0.16.0` should use `tflint>=0.35.0` and versions of the plugin
-   > `<=0.15.0` should preferably use `tflint==0.34.1`. These versions are
-   > readily available via GitHub or package managers.
+   > `>=0.20.0` should use `tflint>=0.40.0`. These versions are readily
+   > available via GitHub or package managers. Please review the [TFLint Ruleset
+   > for Google Release Notes][tflint-google] for up-to-date requirements.
+
+[tflint-google]: https://github.com/terraform-linters/tflint-ruleset-google/releases
 
 1. Install ShellCheck using the instructions from
    [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)
@@ -509,6 +342,6 @@ If developing on a mac, a workaround is to install GNU tooling by installing
 
 ### Contributing
 
-Please refer to the [contributing file](CONTRIBUTING.md) in our github repo, or
-to
+Please refer to the [contributing file](CONTRIBUTING.md) in our GitHub
+repository, or to
 [Google’s Open Source documentation](https://opensource.google/docs/releasing/template/CONTRIBUTING/#).

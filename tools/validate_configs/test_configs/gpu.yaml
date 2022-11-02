@@ -30,11 +30,9 @@ deployment_groups:
   # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: workstation
     source: ./modules/compute/vm-instance
-    kind: terraform
     use:
     - network1
     settings:

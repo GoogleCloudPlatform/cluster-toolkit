@@ -7,6 +7,12 @@ and configure a custom blueprint, see
 
 ## Community Examples
 
+### AMD
+
+Examples using AMD HPC technologies can be found in the
+[AMD folder](AMD). More information can be found in the
+[readme](AMD/README.md).
+
 ### Intel
 
 Examples using Intel HPC technologies can be found in the
@@ -29,6 +35,10 @@ Examples using Intel HPC technologies can be found in the
 
 [See description in core](../../examples/README.md#hpc-cluster-small-sharedvpcyaml--)
 
+### hpc-cluster-localssd.yaml
+
+[See description in core](../../examples/README.md#hpc-cluster-localssdyaml-community-badge-experimental-badge)
+
 ### slurm-gcp-v5-hpc-centos7.yaml
 
 [See description in core](../../examples/README.md#slurm-gcp-v5-hpc-centos7yaml-)
@@ -40,3 +50,11 @@ Examples using Intel HPC technologies can be found in the
 ### htcondor-pool.yaml
 
 [See description in core](../../examples/README.md#htcondor-poolyaml--)
+
+### quantum-circuit-simulator.yaml
+
+[See description in core](../../examples/README.md#quantum-circuit-simulatoryaml-)
+
+### starccm-tutorial.yaml
+
+[See description in core](../../examples/README.md#starccm-tutorialyaml--)

@@ -114,6 +114,8 @@ func writeOutputs(
 
 	// Write file
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes = escapeLiteralVariables(hclBytes)
+	hclBytes = escapeBlueprintVariables(hclBytes)
 	err := appendHCLToFile(outputsPath, hclBytes)
 	if err != nil {
 		return fmt.Errorf("error writing HCL to outputs.tf file: %v", err)
@@ -236,7 +238,7 @@ func writeMain(
 
 		// Add source attribute
 		var moduleSource cty.Value
-		if sourcereader.IsGitHubPath(mod.Source) {
+		if sourcereader.IsGitPath(mod.Source) {
 			moduleSource = cty.StringVal(mod.Source)
 		} else {
 			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", mod.ModuleName))
@@ -287,6 +289,8 @@ func writeMain(
 	}
 	// Write file
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes = escapeLiteralVariables(hclBytes)
+	hclBytes = escapeBlueprintVariables(hclBytes)
 	if err := appendHCLToFile(mainPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
 	}
@@ -341,6 +345,8 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 
 	// Write file
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes = escapeLiteralVariables(hclBytes)
+	hclBytes = escapeBlueprintVariables(hclBytes)
 	if err := appendHCLToFile(providersPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to providers.tf file: %v", err)
 	}

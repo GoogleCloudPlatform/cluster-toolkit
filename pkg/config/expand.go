@@ -24,15 +24,21 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
+
+	"golang.org/x/exp/slices"
 )
 
 const (
-	blueprintLabel    string = "ghpc_blueprint"
-	deploymentLabel   string = "ghpc_deployment"
-	roleLabel         string = "ghpc_role"
-	simpleVariableExp string = `^\$\((.*)\)$`
-	anyVariableExp    string = `\$\((.*)\)`
-	literalExp        string = `^\(\((.*)\)\)$`
+	blueprintLabel        string = "ghpc_blueprint"
+	deploymentLabel       string = "ghpc_deployment"
+	roleLabel             string = "ghpc_role"
+	simpleVariableExp     string = `^\$\((.*)\)$`
+	deploymentVariableExp string = `^\$\(vars\.(.*)\)$`
+	// Checks if a variable exists only as a substring, ex:
+	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
+	// Doesn't match: "\$(vars.example)", "no variable in this string"
+	anyVariableExp string = `(^|[^\\])\$\((.*)\)`
+	literalExp     string = `^\(\((.*)\)\)$`
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
@@ -44,6 +50,10 @@ const (
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() {
 	dc.addSettingsToModules()
+	if err := dc.addMetadataToModules(); err != nil {
+		log.Printf("could not determine required APIs: %v", err)
+	}
+
 	if err := dc.expandBackends(); err != nil {
 		log.Fatalf("failed to apply default backend to deployment groups: %v", err)
 	}
@@ -80,6 +90,31 @@ func (dc *DeploymentConfig) addSettingsToModules() {
 			}
 		}
 	}
+}
+
+func (dc *DeploymentConfig) addMetadataToModules() error {
+	for iGrp, grp := range dc.Config.DeploymentGroups {
+		for iMod, mod := range grp.Modules {
+			if mod.RequiredApis == nil {
+				_, projectIDExists := dc.Config.Vars["project_id"].(string)
+				if !projectIDExists {
+					return fmt.Errorf("global variable project_id must be defined")
+				}
+
+				// handle possibility that ModulesInfo does not have this module in it
+				// this occurs in unit testing because they do not run dc.ExpandConfig()
+				// and dc.setModulesInfo()
+				requiredAPIs := dc.ModulesInfo[grp.Name][mod.Source].RequiredApis
+				if requiredAPIs == nil {
+					requiredAPIs = []string{}
+				}
+				dc.Config.DeploymentGroups[iGrp].Modules[iMod].RequiredApis = map[string][]string{
+					"$(vars.project_id)": requiredAPIs,
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (dc *DeploymentConfig) expandBackends() error {
@@ -453,6 +488,15 @@ func expandVariable(
 	return "", fmt.Errorf("%s: expandVariable", errorMessages["notImplemented"])
 }
 
+// isDeploymentVariable checks if the entire string is just a single deployment variable
+func isDeploymentVariable(str string) bool {
+	matched, err := regexp.MatchString(deploymentVariableExp, str)
+	if err != nil {
+		log.Fatalf("isDeploymentVariable(%s): %v", str, err)
+	}
+	return matched
+}
+
 // isSimpleVariable checks if the entire string is just a single variable
 func isSimpleVariable(str string) bool {
 	matched, err := regexp.MatchString(simpleVariableExp, str)
@@ -556,7 +600,7 @@ func (dc *DeploymentConfig) expandVariables() {
 	}
 
 	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod := range grp.Modules {
+		for iMod, mod := range grp.Modules {
 			context := varContext{
 				groupIndex: iGrp,
 				modIndex:   iMod,
@@ -564,10 +608,22 @@ func (dc *DeploymentConfig) expandVariables() {
 			}
 			err := updateVariables(
 				context,
-				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings,
+				mod.Settings,
 				dc.ModuleToGroup)
 			if err != nil {
 				log.Fatalf("expandVariables: %v", err)
+			}
+
+			// ensure that variable references to projects in required APIs are expanded
+			for projectID, requiredAPIs := range mod.RequiredApis {
+				if isDeploymentVariable(projectID) {
+					s, err := handleVariable(projectID, varContext{blueprint: dc.Config}, make(map[string]int))
+					if err != nil {
+						log.Fatalf("expandVariables: %v", err)
+					}
+					mod.RequiredApis[s.(string)] = slices.Clone(requiredAPIs)
+					delete(mod.RequiredApis, projectID)
+				}
 			}
 		}
 	}
@@ -585,6 +641,8 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	_, regionExists := dc.Config.Vars["region"]
 	_, zoneExists := dc.Config.Vars["zone"]
 
+	// always add the project ID validator first; remaining validators can only
+	// succeed if credentials can access the project
 	if projectIDExists {
 		v := validatorConfig{
 			Validator: testProjectExistsName.String(),
@@ -594,6 +652,13 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 		}
 		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
+
+	// it is safe to run this validator even if vars.project_id is undefined;
+	// it will likely fail but will do so helpfully to the user
+	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+		Validator: "test_apis_enabled",
+		Inputs:    map[string]interface{}{},
+	})
 
 	if projectIDExists && regionExists {
 		v := validatorConfig{

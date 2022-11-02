@@ -72,7 +72,9 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
 		log.Fatal(err)
 	}
-	deploymentConfig.ExpandConfig()
+	if err := deploymentConfig.ExpandConfig(); err != nil {
+		log.Fatal(err)
+	}
 	deploymentConfig.ExportBlueprint(outputFilename)
 	fmt.Printf(
 		"Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)

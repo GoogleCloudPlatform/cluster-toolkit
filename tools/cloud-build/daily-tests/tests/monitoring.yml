@@ -14,11 +14,11 @@
 
 ---
 
+test_name: monitoring
 deployment_name: monitoring-{{ build }}
 zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/monitoring.yaml"
-blueprint_dir: blueprint-monitoring
 network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-0"
 post_deploy_tests:

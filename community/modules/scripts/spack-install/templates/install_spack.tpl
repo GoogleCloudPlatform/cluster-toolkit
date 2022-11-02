@@ -24,7 +24,7 @@ if [ ! -d ${INSTALL_DIR} ]; then
   chmod a+rwx ${INSTALL_DIR};
   chmod a+s ${INSTALL_DIR};
   cd ${INSTALL_DIR};
-  git clone ${SPACK_URL} .
+  git clone --no-checkout ${SPACK_URL} .
   } &>> ${LOG_FILE}
   echo "$PREFIX Checking out ${SPACK_REF}..."
   git checkout ${SPACK_REF} >> ${LOG_FILE} 2>&1
@@ -99,6 +99,7 @@ echo "$PREFIX Installing root spack specs..."
 echo "$PREFIX Configuring spack environments"
 %{if ENVIRONMENTS != null ~}
 %{for e in ENVIRONMENTS ~}
+if [ ! -d ${INSTALL_DIR}/var/spack/environments/${e.name} ]; then
   %{if e.content != null}
     {
       cat << 'EOF' > ${INSTALL_DIR}/spack_env.yaml
@@ -129,6 +130,7 @@ EOF
 
   spack env deactivate >> ${LOG_FILE} 2>&1
   spack clean -s >> ${LOG_FILE} 2>&1
+fi
 %{endfor ~}
 %{endif ~}
 
@@ -152,7 +154,9 @@ echo "$PREFIX Populating defined buildcaches"
   %{endif ~}
 %{endfor ~}
 
-echo "source ${INSTALL_DIR}/share/spack/setup-env.sh" >> /etc/profile.d/spack.sh
-chmod a+rx /etc/profile.d/spack.sh
+if [ ! -f /etc/profile.d/spack.sh ]; then
+        echo "source ${INSTALL_DIR}/share/spack/setup-env.sh" > /etc/profile.d/spack.sh
+        chmod a+rx /etc/profile.d/spack.sh
+fi
 
 echo "$PREFIX Setup complete..."

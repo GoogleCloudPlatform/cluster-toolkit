@@ -231,7 +231,7 @@ variable "can_ip_forward" {
 variable "disable_smt" {
   type        = bool
   description = "Disables Simultaneous Multi-Threading (SMT) on instance."
-  default     = false
+  default     = true
 }
 
 variable "labels" {
@@ -292,15 +292,11 @@ variable "service_account" {
     scopes = set(string)
   })
   description = <<-EOD
-    Service account to attach to the instances. See
-    'main.tf:local.service_account' for the default.
+    Service account to attach to the compute instances. If not set, the
+    default compute service account for the given project will be used with the
+    "https://www.googleapis.com/auth/cloud-platform" scope.
     EOD
-  default = {
-    email = "default"
-    scopes = [
-      "https://www.googleapis.com/auth/cloud-platform",
-    ]
-  }
+  default     = null
 }
 
 variable "shielded_instance_config" {
@@ -377,4 +373,67 @@ variable "bandwidth_tier" {
     condition     = contains(["platform_default", "virtio_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
     error_message = "Allowed values for bandwidth_tier are 'platform_default', 'virtio_enabled', 'gvnic_enabled', or 'tier_1_enabled'."
   }
+}
+
+variable "node_groups" {
+  description = <<-EOT
+    **Preview: This variable is still in development** A list of node groups
+    associated with this partition.
+    The default node group will be prepended to this list based on other input
+    variables to this module.
+    EOT
+  type = list(object({
+    node_count_static      = number
+    node_count_dynamic_max = number
+    group_name             = string
+    node_conf              = map(string)
+    additional_disks = list(object({
+      disk_name    = string
+      device_name  = string
+      disk_size_gb = number
+      disk_type    = string
+      disk_labels  = map(string)
+      auto_delete  = bool
+      boot         = bool
+    }))
+    bandwidth_tier         = string
+    can_ip_forward         = bool
+    disable_smt            = bool
+    disk_auto_delete       = bool
+    disk_labels            = map(string)
+    disk_size_gb           = number
+    disk_type              = string
+    enable_confidential_vm = bool
+    enable_oslogin         = bool
+    enable_shielded_vm     = bool
+    enable_spot_vm         = bool
+    gpu = object({
+      count = number
+      type  = string
+    })
+    instance_template   = string
+    labels              = map(string)
+    machine_type        = string
+    metadata            = map(string)
+    min_cpu_platform    = string
+    on_host_maintenance = string
+    preemptible         = bool
+    service_account = object({
+      email  = string
+      scopes = list(string)
+    })
+    shielded_instance_config = object({
+      enable_integrity_monitoring = bool
+      enable_secure_boot          = bool
+      enable_vtpm                 = bool
+    })
+    spot_instance_config = object({
+      termination_action = string
+    })
+    source_image_family  = string
+    source_image_project = string
+    source_image         = string
+    tags                 = list(string)
+  }))
+  default = []
 }

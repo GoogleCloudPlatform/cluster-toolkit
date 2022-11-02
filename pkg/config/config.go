@@ -75,6 +75,12 @@ var errorMessages = map[string]string{
 	"labelReqs":          "value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long.",
 }
 
+// map[moved module path]replacing module path
+var movedModules = map[string]string{
+	"community/modules/scheduler/cloud-batch-job":        "modules/scheduler/batch-job-template",
+	"community/modules/scheduler/cloud-batch-login-node": "modules/scheduler/batch-login-node",
+}
+
 // DeploymentGroup defines a group of Modules that are all executed together
 type DeploymentGroup struct {
 	Name             string           `yaml:"group"`
@@ -108,6 +114,7 @@ const (
 	testRegionExistsName
 	testZoneExistsName
 	testZoneInRegionName
+	testApisEnabledName
 )
 
 // this enum will be used to control how fatal validator failures will be
@@ -148,6 +155,8 @@ func (v validatorName) String() string {
 		return "test_zone_exists"
 	case testZoneInRegionName:
 		return "test_zone_in_region"
+	case testApisEnabledName:
+		return "test_apis_enabled"
 	default:
 		return "unknown_validator"
 	}
@@ -180,6 +189,7 @@ type Module struct {
 	WrapSettingsWith map[string][]string
 	Outputs          []string `yaml:"outputs,omitempty"`
 	Settings         map[string]interface{}
+	RequiredApis     map[string][]string `yaml:"required_apis"`
 }
 
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
@@ -215,12 +225,32 @@ type DeploymentConfig struct {
 }
 
 // ExpandConfig expands the yaml config in place
-func (dc *DeploymentConfig) ExpandConfig() {
+func (dc *DeploymentConfig) ExpandConfig() error {
+	if err := dc.checkMovedModules(); err != nil {
+		return err
+	}
+	dc.addKindToModules()
 	dc.setModulesInfo()
 	dc.validateConfig()
 	dc.expand()
 	dc.validate()
 	dc.expanded = true
+	return nil
+}
+
+func (dc *DeploymentConfig) checkMovedModules() error {
+	var err error
+	for _, grp := range dc.Config.DeploymentGroups {
+		for _, mod := range grp.Modules {
+			if replacingMod, ok := movedModules[strings.Trim(mod.Source, "./")]; ok {
+				err = fmt.Errorf("the blueprint references modules that have moved")
+				fmt.Printf(
+					"A module you are using has moved. %s has been replaced with %s. Please update the source in your blueprint and try again.\n",
+					mod.Source, replacingMod)
+			}
+		}
+	}
+	return err
 }
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
@@ -329,6 +359,18 @@ func createModuleInfo(
 	return modInfo
 }
 
+// addKindToModules sets the kind to 'terraform' when empty.
+func (dc *DeploymentConfig) addKindToModules() {
+	for iGrp, grp := range dc.Config.DeploymentGroups {
+		for iMod, mod := range grp.Modules {
+			if mod.Kind == "" {
+				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Kind =
+					"terraform"
+			}
+		}
+	}
+}
+
 // setModulesInfo populates needed information from modules
 func (dc *DeploymentConfig) setModulesInfo() {
 	dc.ModulesInfo = make(map[string]map[string]modulereader.ModuleInfo)
@@ -433,7 +475,14 @@ func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
 		}
 
-		key, value := arr[0], arr[1]
+		// Convert the variable's string litteral to its equivalent default type.
+		var out interface{}
+		err := yaml.Unmarshal([]byte(arr[1]), &out)
+		if err != nil {
+			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", arr[0], arr[1])
+		}
+
+		key, value := arr[0], out
 		dc.Config.Vars[key] = value
 	}
 

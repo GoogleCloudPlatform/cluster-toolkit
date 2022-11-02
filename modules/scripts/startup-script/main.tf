@@ -15,12 +15,22 @@
  */
 
 locals {
+  ansible_installer = {
+    type        = "shell"
+    source      = "${path.module}/examples/install_ansible.sh"
+    destination = "install_ansible_automatic.sh"
+  }
+
+  ansible_local_runners     = [for r in var.runners : r if r.type == "ansible-local"]
+  prepend_ansible_installer = length(local.ansible_local_runners) > 0 && var.prepend_ansible_installer
+  runners                   = local.prepend_ansible_installer ? concat([local.ansible_installer], var.runners) : var.runners
+
   load_runners = templatefile(
     "${path.module}/templates/startup-script-custom.tpl",
     {
       bucket = google_storage_bucket.configs_bucket.name,
       runners = [
-        for runner in var.runners : {
+        for runner in local.runners : {
           object      = google_storage_bucket_object.scripts[basename(runner["destination"])].output_name
           type        = runner["type"]
           destination = runner["destination"]
@@ -45,7 +55,7 @@ locals {
   # Final content output to the user
   stdlib = join("", local.stdlib_list)
 
-  runners_map = { for runner in var.runners :
+  runners_map = { for runner in local.runners :
     basename(runner["destination"])
     => {
       content = lookup(runner, "content", null)

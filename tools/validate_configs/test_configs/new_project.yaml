@@ -24,7 +24,6 @@ deployment_groups:
   modules:
   - id: project
     source: ./community/modules/project/new-project
-    kind: terraform
     settings:
       project_id: test_project
       folder_id: 334688113020  # random number

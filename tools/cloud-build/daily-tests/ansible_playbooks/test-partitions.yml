@@ -26,7 +26,7 @@
   retries: 10
   delay: 12
   until: partition_output.rc == 0
-- name: Clount Slurm nodes
+- name: Count Slurm nodes
   ansible.builtin.shell:
     sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
   args:

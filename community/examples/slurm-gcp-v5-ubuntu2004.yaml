@@ -21,7 +21,7 @@ vars:
   deployment_name: slurm-gcp-v5
   region: us-central1
   zone: us-central1-c
-  source_image_family: "schedmd-v5-slurm-22-05-2-ubuntu-2004-lts"
+  source_image_family: "schedmd-v5-slurm-22-05-3-ubuntu-2004-lts"
   source_image_project: "projects/schedmd-slurm-public/global/images/family"
 
 
@@ -33,18 +33,15 @@ deployment_groups:
   # Example - ./resources/network/vpc
   - id: network1
     source: modules/network/vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -57,7 +54,6 @@ deployment_groups:
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    kind: terraform
     use:
     - network1
     - homefs
@@ -67,18 +63,19 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    kind: terraform
     use:
     - network1
     - debug_partition
     - compute_partition
     - homefs
+    settings:
+      disable_controller_public_ips: false
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    kind: terraform
     use:
     - network1
     - slurm_controller
     settings:
       machine_type: n2-standard-4
+      disable_login_public_ips: false

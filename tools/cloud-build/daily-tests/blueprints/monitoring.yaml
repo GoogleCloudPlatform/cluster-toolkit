@@ -27,13 +27,11 @@ deployment_groups:
   modules:
   - id: network
     source: modules/network/vpc
-    kind: terraform
     settings:
       network_name: monitoring-net
 
   - id: homefs
     source: community/modules/file-system/nfs-server
-    kind: terraform
     use: [network]
     settings:
       local_mounts: [/home]
@@ -41,21 +39,14 @@ deployment_groups:
 
   - id: startup
     source: ./modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
         source: modules/startup-script/examples/install_cloud_ops_agent.sh
         destination: install_cloud_ops_agent.sh
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
-      - $(homefs.install_nfs_client_runner)
-      - $(homefs.mount_runner)
 
   - id: workstation
     source: ./modules/compute/vm-instance
-    kind: terraform
     use:
     - network
     - homefs
@@ -67,6 +58,5 @@ deployment_groups:
 
   - id: hpc-dash
     source: ./modules/monitoring/dashboard
-    kind: terraform
     settings:
       title: $(vars.deployment_name)

@@ -19,13 +19,18 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
   * [daos-cluster.yaml](#daos-clusteryaml-)
   * [daos-slurm.yaml](#daos-slurmyaml-)
+  * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-)
   * [cloud-batch.yaml](#cloud-batchyaml--)
   * [spack-gromacs.yaml](#spack-gromacsyaml--)
   * [omnia-cluster.yaml](#omnia-clusteryaml--)
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
+  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--)
   * [htcondor-pool.yaml](#htcondor-poolyaml--)
+  * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-)
+  * [starccm-tutorial.yaml](#starccm-tutorialyaml--)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
+  * [Blueprint Boilerplate](#blueprint-boilerplate)
   * [Top Level Parameters](#top-level-parameters)
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
@@ -419,19 +424,31 @@ examples][intel-examples-readme].
 
 [daos-slurm.yaml]: ../community/examples/intel/daos-slurm.yaml
 
+### [hpc-cluster-amd-slurmv5.yaml] ![community-badge]
+
+This example provisions a Slurm cluster using AMD VM machine types. It
+automates the initial setup of Spack, including a script that can be used to
+install the AMD Optimizing C/C++ Compiler ([AOCC]) and compile OpenMPI with
+AOCC. It is more extensively discussed in a dedicated [README for AMD
+examples][amd-examples-readme].
+
+[hpc-cluster-amd-slurmv5.yaml]: ../community/examples/AMD/hpc-cluster-amd-slurmv5.yaml
+[AOCC]: https://developer.amd.com/amd-aocc/
+[amd-examples-readme]: ../community/examples/AMD/README.md
+
 ### [cloud-batch.yaml] ![community-badge] ![experimental-badge]
 
 This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
 that mounts a Filestore instance and runs startup scripts.
 
 The blueprint creates a Filestore and uses the `startup-script` module to mount
-and load _"data"_ onto the shared storage. The `cloud-batch-job` module creates
+and load _"data"_ onto the shared storage. The `batch-job-template` module creates
 an instance template to be used for the Google Cloud Batch compute VMs and
 renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
-[cloud-batch.yaml]: ../community/examples/cloud-batch.yaml
+[cloud-batch.yaml]: ../examples/cloud-batch.yaml
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
@@ -508,6 +525,17 @@ a Shared VPC service project][fs-shared-vpc].
 [hpc-cluster-small-sharedvpc.yaml]: ../community/examples/hpc-cluster-small-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
+### [hpc-cluster-localssd.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates the use of Slurm and Filestore, with the definition
+of a partition which deploys compute nodes that have local ssd drives deployed.
+Before deploying this blueprint, one must first ensure to have an existing VPC
+properly configured (allowing Internet access and allowing inter virtual
+machine communications, for NFS and also for communications between the Slurm
+nodes)
+
+[hpc-cluster-localssd.yaml]: ../community/examples/hpc-cluster-localssd.yaml
+
 ### [htcondor-pool.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
@@ -516,6 +544,36 @@ the [HPC VM Image][hpcvmimage].
 [htcondor]: https://htcondor.org/
 [htcondor-pool.yaml]: ../community/examples/htcondor-pool.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+
+### [quantum-circuit-simulator.yaml] ![community-badge]
+
+This blueprint provisions an [A2 series VM with NVIDIA A100 GPU accelerator][a2]
+and compiles [qsim], a [Google Quantum AI][gqai]-developed tool that simulates
+quantum circuits using CPUs and GPUs. The installation of qsim, the [CUDA
+Toolkit][cudatk], and the [cuQuantum SDK][cqsdk] is fully automated but takes a
+significant time (approx. 20 minutes). Once complete, a qsim example can be run
+by connecting to the VM by SSH and running
+
+```shell
+conda activate qsim
+python /var/tmp/qsim-example.py
+```
+
+[gqai]: https://quantumai.google/
+[quantum-circuit-simulator.yaml]: ../community/examples/quantum-circuit-simulator.yaml
+[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[qsim]: https://quantumai.google/qsim
+[cqsdk]: https://developer.nvidia.com/cuquantum-sdk
+[cudatk]: https://developer.nvidia.com/cuda-toolkit
+
+### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
+tutorial.
+
+> **_NOTE:_** The tutorial has not yet been published.
+
+[starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
 
 ## Blueprint Schema
 
@@ -553,7 +611,7 @@ deployment_groups:
   # Local source, prefixed with ./ (/ and ../ also accepted)
   - id: <a unique id> # Required: Name of this module used to uniquely identify it.
     source: ./modules/role/module-name # Required: Points to the module directory.
-    kind: < terraform | packer > # Required: Type of module, currently choose from terraform or packer.
+    kind: < terraform | packer > # Optional: Type of module, currently choose from terraform or packer. If not specified, `kind` will default to `terraform`
     # Optional: All configured settings for the module. For terraform, each
     # variable listed in variables.tf can be set here, and are mandatory if no
     # default was provided and are not defined elsewhere (like the top-level vars)
@@ -581,6 +639,28 @@ deployment_groups:
 The blueprint file is composed of 3 primary parts, top-level parameters,
 deployment variables and deployment groups. These are described in more detail
 below.
+
+### Blueprint Boilerplate
+
+The following is a template that can be used to start writing a blueprint from
+scratch.
+
+```yaml
+---
+blueprint_name: # boilerplate-blueprint
+
+vars:
+  project_id: # my-project-id
+  deployment_name: # boilerplate-001
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: # network1
+    source: # modules/network/vpc
+```
 
 ### Top Level Parameters
 
@@ -760,3 +840,28 @@ everything inside will be provided as is to the module.
 Whenever possible, blueprint variables are preferred over literal variables.
 `ghpc` will perform basic validation making sure all blueprint variables are
 defined before creating a deployment, making debugging quicker and easier.
+
+### Escape Variables
+
+Under circumstances where the variable notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:
+
+* `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
+* `\((not.literal_var))` evaluates to `((not.literal_var))`.
+
+```yaml
+deployment_groups:
+  - group: primary
+     modules:
+       - id: resource1
+         source: path/to/module/1
+         settings:
+            key1: \((not.literal_var))   ## Evaluates to "((not.literal_var))".
+         ...
+       - id: resource2
+         source: path/to/module/2
+         ...
+         settings:
+            key1: |
+              #!/bin/bash
+              echo \$(cat /tmp/file1)    ## Evaluates to "echo $(cat /tmp/file1)"
+```

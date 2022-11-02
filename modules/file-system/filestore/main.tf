@@ -19,16 +19,22 @@ resource "random_id" "resource_name_suffix" {
 }
 
 locals {
-  timeouts = var.filestore_tier == "HIGH_SCALE_SSD" ? [1] : []
+  timeouts      = var.filestore_tier == "HIGH_SCALE_SSD" ? [1] : []
+  server_ip     = google_filestore_instance.filestore_instance.networks[0].ip_addresses[0]
+  remote_mount  = format("/%s", google_filestore_instance.filestore_instance.file_shares[0].name)
+  fs_type       = "nfs"
+  mount_options = "defaults,_netdev"
+
   install_nfs_client_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/install-nfs-client.sh"
-    "destination" = "install-nfs.sh"
+    "destination" = "install-nfs${replace(var.local_mount, "/", "_")}.sh"
   }
   mount_runner = {
-    "type"        = "ansible-local"
-    "source"      = "${path.module}/scripts/mount.yaml"
-    "destination" = "mount.yaml"
+    "type"        = "shell"
+    "source"      = "${path.module}/scripts/mount.sh"
+    "args"        = "\"${local.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
+    "destination" = "mount${replace(var.local_mount, "/", "_")}.sh"
   }
 }
 

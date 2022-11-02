@@ -127,7 +127,7 @@ variable "disable_default_mounts" {
 variable "disable_smt" {
   type        = bool
   description = "Disables Simultaneous Multi-Threading (SMT) on instance."
-  default     = false
+  default     = true
 }
 
 variable "disk_type" {
@@ -183,6 +183,19 @@ variable "enable_cleanup_subscriptions" {
     https://github.com/SchedMD/slurm-gcp/blob/3979e81fc5e4f021b5533a23baa474490f4f3614/scripts/requirements.txt
 
     *WARNING*: Toggling this may temporarily impact var.enable_reconfigure behavior.
+    EOD
+  type        = bool
+  default     = false
+}
+
+variable "enable_reconfigure" {
+  description = <<-EOD
+    Enables automatic Slurm reconfiguration when Slurm configuration changes (e.g.
+    slurm.conf.tpl, partition details). Compute instances and resource policies
+    (e.g. placement groups) will be destroyed to align with new configuration.
+    NOTE: Requires Python and Google Pub/Sub API.
+    *WARNING*: Toggling this will impact the running workload. Deployed compute nodes
+    will be destroyed and their jobs will be requeued.
     EOD
   type        = bool
   default     = false
@@ -335,6 +348,13 @@ variable "partition" {
     })
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for x in var.partition[*].partition : can(regex("(^[a-z][a-z0-9]*$)", x.partition_name))
+    ])
+    error_message = "Item 'partition_name' must be alphanumeric and begin with a letter. regex: '(^[a-z][a-z0-9]*$)'."
+  }
 }
 
 variable "preemptible" {
@@ -372,10 +392,11 @@ variable "service_account" {
     email  = string
     scopes = set(string)
   })
-  description = <<EOD
-Service account to attach to the instances. See
-'main.tf:local.service_account' for the default.
-EOD
+  description = <<-EOD
+    Service account to attach to the controller instance. If not set, the
+    default compute service account for the given project will be used with the
+    "https://www.googleapis.com/auth/cloud-platform" scope.
+    EOD
   default     = null
 }
 

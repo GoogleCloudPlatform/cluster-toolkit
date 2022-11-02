@@ -16,7 +16,6 @@ node is used in conjunction with the
 ```yaml
 - id: slurm_login
   source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-  kind: terraform
   use:
   - network1
   - homefs

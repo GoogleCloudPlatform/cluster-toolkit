@@ -38,14 +38,16 @@ until [ $tries -ge "${RETRIES}" ]; do
 	((tries++))
 done
 
+# This specific text is monitored for in tests, do not change.
+INSPECT_OUTPUT_TEXT="to inspect the startup script output, please run:"
 if [ "${STATUS}" == 0 ]; then
 	echo "startup-script finished successfully"
 elif [ "${STATUS}" == 1 ]; then
-	echo "startup-script finished with errors, to inspect the startup script output, please run:"
+	echo "startup-script finished with errors, ${INSPECT_OUTPUT_TEXT}"
 	echo "${GCLOUD}"
 else
 	echo "invalid return status '${STATUS}'"
-	echo "to inspect the startup script output, please run:"
+	echo "${INSPECT_OUTPUT_TEXT}"
 	echo "${GCLOUD}"
 	exit 1
 fi

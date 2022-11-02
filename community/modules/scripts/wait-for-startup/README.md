@@ -17,7 +17,6 @@ up a node.
 ```yaml
 - id: wait
   source: community/modules/scripts/wait-for-startup
-  kind: terraform
   settings:
     instance_name: ((module.workstation.name[0]))
 ```

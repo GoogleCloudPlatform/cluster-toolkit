@@ -33,6 +33,10 @@ locals {
 
 }
 
+data "google_compute_default_service_account" "default" {
+  project = var.project_id
+}
+
 module "slurm_controller_instance" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=v5.1.0"
 
@@ -54,6 +58,7 @@ module "slurm_controller_instance" {
   enable_devel                 = var.enable_devel
   enable_cleanup_compute       = var.enable_cleanup_compute
   enable_cleanup_subscriptions = var.enable_cleanup_subscriptions
+  enable_reconfigure           = var.enable_reconfigure
   enable_bigquery_load         = var.enable_bigquery_load
   epilog_scripts               = var.epilog_scripts
   disable_default_mounts       = var.disable_default_mounts
@@ -89,7 +94,6 @@ module "slurm_controller_template" {
   preemptible              = var.preemptible
   project_id               = var.project_id
   region                   = var.region
-  service_account          = var.service_account
   shielded_instance_config = var.shielded_instance_config
   slurm_instance_role      = "controller"
   source_image_family      = var.source_image_family
@@ -99,5 +103,8 @@ module "slurm_controller_template" {
   subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   tags                     = concat([local.slurm_cluster_name], var.tags)
+  service_account = var.service_account != null ? var.service_account : {
+    email  = data.google_compute_default_service_account.default.email
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+  }
 }
-

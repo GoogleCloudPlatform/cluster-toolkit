@@ -27,13 +27,11 @@ deployment_groups:
   modules:
   - id: instance
     source: modules/compute/vm-instance
-    kind: terraform
     outputs:
     - name
 
   - id: sql
     source: community/modules/database/slurm-cloudsql-federation
-    kind: terraform
     outputs:
     - cloudsql
     settings:
@@ -44,7 +42,6 @@ deployment_groups:
 
   - id: filestore
     source: modules/file-system/filestore
-    kind: terraform
     use: [vpc]
     outputs:
     - network_storage
@@ -52,14 +49,12 @@ deployment_groups:
 
   - id: nfs
     source: ./community/modules/file-system/nfs-server
-    kind: terraform
     outputs:
     - network_storage
     - install_nfs_client
 
   - id: pre-existing-storage
     source: modules/file-system/pre-existing-network-storage
-    kind: terraform
     outputs:
     - network_storage
     settings:
@@ -70,7 +65,6 @@ deployment_groups:
 
   - id: pre-existing-vpc
     source: modules/network/pre-existing-vpc
-    kind: terraform
     outputs:
     - network_name
     - network_self_link
@@ -81,7 +75,6 @@ deployment_groups:
 
   - id: vpc
     source: modules/network/vpc
-    kind: terraform
     outputs:
     - network_name
     - network_self_link
@@ -93,7 +86,6 @@ deployment_groups:
 
   - id: new-project
     source: community/modules/project/new-project
-    kind: terraform
     outputs:
     - project_name
     - project_id
@@ -119,7 +111,6 @@ deployment_groups:
 
   - id: sa
     source: community/modules/project/service-account
-    kind: terraform
     outputs:
     - email
     - emails
@@ -140,20 +131,17 @@ deployment_groups:
 
   - id: spack
     source: community/modules/scripts/spack-install
-    kind: terraform
     outputs:
     - startup_script
     - controller_startup_script
 
   - id: startup
     source: modules/scripts/startup-script
-    kind: terraform
     outputs:
     - startup_script
 
   - id: partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use: [vpc]
     outputs:
     - partition
@@ -162,7 +150,6 @@ deployment_groups:
 
   - id: lustre
     source: ./community/modules/file-system/DDN-EXAScaler
-    kind: terraform
     outputs:
     - private_addresses
     - ssh_console
@@ -172,7 +159,6 @@ deployment_groups:
 
   - id: controller
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use:
     - partition
     - vpc

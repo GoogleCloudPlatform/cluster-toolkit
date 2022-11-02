@@ -13,23 +13,23 @@
 # limitations under the License.
 
 ---
-- name: ensure HTCondor is installed
+- name: Ensure HTCondor is installed
   hosts: all
   vars:
     block_metadata_server: true
     enable_docker: true
   become: true
   tasks:
-  - name: setup HTCondor yum repository
+  - name: Setup HTCondor yum repository
     ansible.builtin.yum:
       name:
       - epel-release
       - https://research.cs.wisc.edu/htcondor/repo/9.x/htcondor-release-current.el7.noarch.rpm
-  - name: install HTCondor
+  - name: Install HTCondor
     ansible.builtin.yum:
       name: condor
       state: present
-  - name: ensure token directory
+  - name: Ensure token directory
     ansible.builtin.file:
       path: /etc/condor/tokens.d
       mode: 0700

@@ -35,6 +35,8 @@ Modules that are still in development and less stable are labeled with the
   to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
 * **[schedmd-slurm-gcp-v5-partition]** ![community-badge] ![experimental-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
+* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] ![experimental-badge] :
+  Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-configure].
@@ -42,6 +44,7 @@ Modules that are still in development and less stable are labeled with the
 [vm-instance]: compute/vm-instance/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
+[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 
 ### Database
@@ -114,26 +117,29 @@ Modules that are still in development and less stable are labeled with the
 
 ### Scheduler
 
+* **[batch-job-template]** ![core-badge] : Creates a Google Cloud Batch job
+  template that works with other Toolkit modules.
+* **[batch-login-node]** ![core-badge] : Creates a VM that can be used for
+  submission of Google Cloud Batch jobs.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![experimental-badge] :
   Creates a Slurm login node using [slurm-gcp-version-5].
+* **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
+  Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
 * **[SchedMD-slurm-on-gcp-controller]** ![community-badge] : Creates a Slurm
   controller node using [slurm-gcp].
 * **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
   login node using [slurm-gcp].
-* **[cloud-batch-job]** ![community-badge] ![experimental-badge] : Creates a
-  Google Cloud Batch job template that works with other Toolkit modules.
-* **[cloud-batch-login-node]** ![community-badge] ![experimental-badge] :
-  Creates a VM that can be used for submission of Google Cloud Batch jobs.
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor pool.
 
-[cloud-batch-job]: ../community/modules/scheduler/cloud-batch-job/README.md
-[cloud-batch-login-node]: ../community/modules/scheduler/cloud-batch-login-node/README.md
+[batch-job-template]: ../modules/scheduler/batch-job-template/README.md
+[batch-login-node]: ../modules/scheduler/batch-login-node/README.md
 [htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
+[schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 [schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5
@@ -148,6 +154,14 @@ Modules that are still in development and less stable are labeled with the
 * **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
   via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of VMs
   instances.
+* **[pbspro-preinstall]** ![community-badge] ![experimental-badge] : Creates a
+  Cloud Storage bucket in which to save PBS Professional RPM packages for use
+  by PBS clusters.
+* **[pbspro-install]** ![community-badge] ![experimental-badge] : Creates a
+  Toolkit runner to install [PBS Professional][pbspro] from RPM packages.
+* **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a
+  Toolkit runner to run common `qmgr` commands when configuring a PBS
+  Professional cluster.
 * **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install [Spack](https://github.com/spack/spack) on an
   instance or a slurm login or controller.
@@ -159,13 +173,28 @@ Modules that are still in development and less stable are labeled with the
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
 [spack-install]: ../community/modules/scripts/spack-install/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
+[pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
+[pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
+[pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
+[pbspro]: https://www.altair.com/pbs-professional
 
 ## Module Fields
+
+### ID (Required)
+
+The `id` field is used to uniquely identify and reference a defined module.
+ID's are used in [variables](../examples/README.md#variables) and become the
+name of each module when writing the terraform `main.tf` file. They are also
+used in the [use](#use-optional) and [outputs](#outputs-optional) lists
+described below.
+
+For terraform modules, the ID will be rendered into the terraform module label
+at the top level main.tf file.
 
 ### Source (Required)
 
 The source is a path or URL that points to the source files for a module. The
-actual content of those files is determined by the [kind](#kind-required) of the
+actual content of those files is determined by the [kind](#kind-may-be-required) of the
 module.
 
 A source can be a path which may refer to a module embedded in the `ghpc`
@@ -186,7 +215,6 @@ example, the following code is using the embedded pre-existing-vpc module:
 ```yaml
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 ```
 
 #### Local Modules
@@ -199,7 +227,6 @@ following module definition refers the local pre-existing-vpc modules.
 ```yaml
   - id: network1
     source: ./modules/network/pre-existing-vpc
-    kind: terraform
 ```
 
 > **_NOTE:_** This example would have to be run from the HPC Toolkit repository
@@ -218,7 +245,6 @@ Get module from GitHub over SSH:
 ```yaml
   - id: network1
     source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc
-    kind: terraform
 ```
 
 Get module from GitHub over HTTPS:
@@ -226,7 +252,6 @@ Get module from GitHub over HTTPS:
 ```yaml
   - id: network1
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc
-    kind: terraform
 ```
 
 Both examples above use the [double-slash notation][tfsubdir] (`//`) to indicate
@@ -242,7 +267,6 @@ Toolkit vpc module, use:
 ```yaml
   - id: network1
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
-    kind: terraform
 ```
 
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
@@ -250,21 +274,19 @@ Toolkit vpc module, use:
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
 [daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
 
-### Kind (Required)
+#### Generic Git Modules
+To use a Terraform module available in a non-GitHub git repository such as
+gitlab, set the source to a path starting `git::`. Two Standard git protocols
+are supported, `git::https://` for HTTPS or `git::git@github.com` for SSH.
+
+Additional formatting and features after `git::` are identical to that of the
+[GitHub Modules](#github-modules) described above.
+
+### Kind (May be Required)
 
 `kind` refers to the way in which a module is deployed. Currently, `kind` can be
-either `terraform` or `packer`.
-
-### ID (Required)
-
-The `id` field is used to uniquely identify and reference a defined module.
-ID's are used in [variables](../examples/README.md#variables) and become the
-name of each module when writing the terraform `main.tf` file. They are also
-used in the [use](#use-optional) and [outputs](#outputs-optional) lists
-described below.
-
-For terraform modules, the ID will be rendered into the terraform module label
-at the top level main.tf file.
+either `terraform` or `packer`. It must be specified for modules of type
+`packer`. If omitted, it will default to `terraform`.
 
 ### Settings (May Be Required)
 
@@ -291,11 +313,9 @@ the used module's output. For example, see the following blueprint snippet:
 modules:
 - id: network1
   source: modules/network/vpc
-  kind: terraform
 
 - id: workstation
   source: modules/compute/vm-instance
-  kind: terraform
   use: [network1]
   settings:
   ...
@@ -326,6 +346,41 @@ terraform-based deployment groups. This can useful for displaying the IP of a
 login node or simply displaying instructions on how to use a module, as we
 have in the
 [monitoring dashboard module](monitoring/dashboard/README.md#Outputs).
+
+### Required Services (APIs) (optional)
+
+Each Toolkit module depends upon Google Cloud services ("APIs") being enabled
+in the project used by the HPC environment. For example, the [creation of
+VMs](compute/vm-instance/) requires the Compute Engine API
+(compute.googleapis.com). The [startup-script](scripts/startup-script/) module
+requires the Cloud Storage API (storage.googleapis.com) for storage of the
+scripts themselves. Each module includes in the Toolkit source code describes
+its required APIs internally. The Toolkit will merge the requiements from all
+modules and [automatically validate](../README.md#blueprint-validation) that all
+APIs are enabled in the project specified by `$(vars.project_id)`.
+
+For advanced multi-project use cases and for modules not included with the
+Toolkit, you may manually add required APIs to each module with the following
+format:
+
+```yaml
+deployment_groups:
+- group: primary
+  modules:
+  ...
+  - id: examplevm
+    source: modules/example/module
+    required_apis:
+      $(vars.project_id):
+      - compute.googleapis.com
+      - storage.googleapis.com
+      $(vars.other_project_id):
+      - storage.googleapis.com
+      explicit-project-id:
+      - file.googleapis.com
+    settings:
+    ...
+```
 
 ## Common Settings
 

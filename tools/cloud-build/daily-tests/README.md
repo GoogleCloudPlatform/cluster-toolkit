@@ -33,3 +33,77 @@ This example consists of 3 files:
   - The post deploy test (tasks) that is called by the playbook
 - tools/cloud-build/daily-tests/tests/hello-world-vars.yml
   - The variables passed into the playbook
+
+## Nightly Test Groups
+
+Each test group can be run concurrently, and some tests within test groups run
+currently with each other as well. Each group begins with 2 steps for
+initializing the environment:
+
+- `build_ghpc`: Build `ghpc` in a golang builder container, verifying that no
+  additional dependencies are required for a simple build.
+- `fetch_builder`: Simply pulls the `hpc-toolkit-builder` image to the local
+  environment to decrease the overhead in subsequent steps.
+
+The tests in each group are listed below:
+
+### Group 1
+
+Config: [integration-group-1.yaml](./integration-group-1.yaml)
+
+Contents:
+
+- `hpc-high-io`: Tests the [hpc-cluster-high-io.yaml] example blueprint.
+
+[hpc-cluster-high-io.yaml]: ../../../examples/hpc-cluster-high-io.yaml
+
+### Group 2
+
+Config: [integration-group-2.yaml](./integration-group-2.yaml)
+
+Contents:
+
+- `spack-gromacs`: Tests the [spack-gromacs.yaml] example blueprint.
+- `slurm-gcp-v5-hpc-centos7`: Tests the [slurm-gcp-v5-hpc-centos7.yaml] example
+  blueprint.
+
+Notes:
+
+- This test pulls a secret from the hpc-toolkit-dev project which contains the
+  path to the internal Spack build cache.
+
+[spack-gromacs.yaml]: ../../../community/examples/spack-gromacs.yaml
+[slurm-gcp-v5-hpc-centos7.yaml]: ../../../community/examples/slurm-gcp-v5-hpc-centos7.yaml
+
+### Group 3
+
+Config: [integration-group-3.yaml](./integration-group-3.yaml)
+
+Contents:
+
+- `monitoring`: Tests a blueprint with a monitoring dashboard.
+- `omnia`: Tests the [omnia-cluster.yaml] example blueprint.
+- `lustre-new-vpc`: Tests the `lustre-with-new-vpc.yaml` blueprint, which
+  includes testing DDN lustre with a newly created VPC network as well as other
+  unique configurations not tested elsewhere.
+- `packer`: Tests the [image-builder.yaml] example blueprint.
+- `quantum-circuit`: Tests the [quantum-circuit-simulator.yaml] example
+  blueprint.
+
+[omnia-cluster.yaml]: ../../../community/examples/omnia-cluster.yaml
+[image-builder.yaml]: ../../../examples/image-builder.yaml
+[quantum-circuit-simulator.yaml]: ../../../community/examples/quantum-circuit-simulator.yaml
+
+### Group 4
+
+Config: [integration-group-4.yaml](./integration-group-4.yaml)
+
+Contents:
+
+- `htcondor`: Tests the [htcondor-pool.yaml] example blueprint.
+- `cloud-batch`: Tests the [cloud-batch.yaml] example blueprint.
+- `slurm-gcp-v5-ubuntu`: Tests the [slurm-gcp-v5-ubuntu2004.yaml] example blueprint.
+
+[htcondor-pool.yaml]: ../../../community/examples/htcondor-pool.yaml
+[cloud-batch.yaml]: ../../../examples/cloud-batch.yaml
+[slurm-gcp-v5-ubuntu2004.yaml]: ../../../community/examples/slurm-gcp-v5-ubuntu2004.yaml

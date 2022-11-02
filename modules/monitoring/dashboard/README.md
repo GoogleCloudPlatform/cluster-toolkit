@@ -12,7 +12,6 @@ needed.
 ```yaml
 - id: hpc_dash
   source: modules/monitoring/dashboard
-  kind: terraform
   settings:
     widgets:
     - |

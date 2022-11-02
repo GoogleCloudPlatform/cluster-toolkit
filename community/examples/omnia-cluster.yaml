@@ -34,13 +34,11 @@ deployment_groups:
 
   ## Network
   - id: network
-    source: modules/network/vpc
-    kind: terraform
+    source: modules/network/pre-existing-vpc
 
   ## File Systems
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network]
     settings:
       local_mount: "/home"
@@ -48,7 +46,6 @@ deployment_groups:
   ## Installation Scripts
   - id: omnia
     source: community/modules/scripts/omnia-install
-    kind: terraform
     outputs: [inventory_file, omnia_user_warning]
     settings:
       manager_ips: [localhost]
@@ -56,34 +53,21 @@ deployment_groups:
 
   - id: startup-manager
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
-      - type: shell
-        source: "modules/startup-script/examples/install_ansible.sh"
-        destination: "install_ansible.sh"
-      - $(homefs.install_nfs_client_runner)
-      - $(homefs.mount_runner)
       - $(omnia.setup_omnia_node_runner)
       - $(omnia.copy_inventory_runner)
       - $(omnia.install_omnia_runner)
 
   - id: startup-compute
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
-      - type: shell
-        source: "modules/startup-script/examples/install_ansible.sh"
-        destination: "install_ansible.sh"
-      - $(homefs.install_nfs_client_runner)
-      - $(homefs.mount_runner)
       - $(omnia.setup_omnia_node_runner)
 
   ## Compute
   - id: manager
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network
     - homefs
@@ -94,7 +78,6 @@ deployment_groups:
 
   - id: compute
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network
     - homefs
@@ -106,8 +89,5 @@ deployment_groups:
   # This module simply makes terraform wait until the startup script is complete
   - id: wait
     source: community/modules/scripts/wait-for-startup
-    kind: terraform
-    use:
-    - network
     settings:
       instance_name: ((module.manager.name[0]))

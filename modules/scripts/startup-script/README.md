@@ -55,16 +55,15 @@ Each runner receives the following attributes:
 
 ### Runner dependencies
 
-The `ansible-local` runner requires ansible to be installed in the VM before
-running. To support other playbook runners in the HPC Toolkit, we require
-version 2.11 of ansible-core or higher. Note that this is distinct from the
-package version used to install ansible with pip. The minimum pip package
-of ansible is 4.10.0.
+`ansible-local` runners requires Ansible to be installed in the VM before
+running. To support other playbook runners in the HPC Toolkit, we install
+version 2.11 of `ansible-core` as well as the larger package of collections
+found in `ansible` version 4.10.0.
 
-To install ansible, a runner supplied by this module can be added as a prior
-runner. An example of this can be found in the [Example](#example) section below
-as the first runner in the list of runners. This script will do the following in
-your VM instance:
+If an `ansible-local` runner is found in the list supplied to this module,
+a script to install Ansible will be prepended to the list of runners. This
+behavior can be disabled by setting `var.prepend_ansible_installer` to `false`.
+This script will do the following at VM startup:
 
 - Install system-wide python3 if not already installed using system package
   managers (yum, apt-get, etc)
@@ -141,12 +140,8 @@ sudo journalctl -u google-startup-scripts.service
 ```yaml
 - id: startup
   source: ./modules/scripts/startup-script
-  kind: terraform
   settings:
     runners:
-      - type: shell
-        source: "modules/startup-script/examples/install_ansible.sh"
-        destination: "install_ansible.sh"
       # Some modules such as filestore have runners as outputs for convenience:
       - $(homefs.install_nfs_client_runner)
       # These runners can still be created manually:
@@ -169,7 +164,6 @@ sudo journalctl -u google-startup-scripts.service
 
 - id: compute-cluster
   source: ./modules/compute/vm-instance
-  kind: terraform
   use: [homefs, startup]
 ```
 
@@ -227,6 +221,7 @@ No modules.
 | <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script'. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. List key, value pairs. | `any` | n/a | yes |
+| <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | Prepend Ansible installation script if any of the specified runners are of type ansible-local | `bool` | `true` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
 | <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM.<br>    Runners can be of type ansible-local, shell or data.<br>    A runner must specify one of 'source' or 'content'.<br>    All runners must specify 'destination'. If 'destination' does not include a<br>    path, it will be copied in a temporary folder and deleted after running.<br>    Runners may also pass 'args', which will be passed as argument to shell runners only. | `list(map(string))` | `[]` | no |

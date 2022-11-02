@@ -15,20 +15,20 @@
 package config
 
 import (
-	"bytes"
 	"fmt"
-	"log"
-	"os"
 	"path/filepath"
-	"strings"
+	"sort"
 
 	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/pkg/errors"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	. "gopkg.in/check.v1"
 )
 
 const (
+	tooManyInputRegex            = "only [0-9]+ inputs \\[.*\\] should be provided to .*"
 	missingRequiredInputRegex    = "at least one required input was not provided to .*"
 	passedWrongValidatorRegex    = "passed wrong validator to .*"
 	undefinedGlobalVariableRegex = ".* was not defined$"
@@ -49,16 +49,6 @@ func (s *MySuite) TestValidateVars(c *C) {
 	dc.Config.Vars["project_id"] = nil
 	err = dc.validateVars()
 	c.Assert(err, ErrorMatches, "deployment variable project_id was not set")
-
-	// Success: project_id not set
-	delete(dc.Config.Vars, "project_id")
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	err = dc.validateVars()
-	log.SetOutput(os.Stderr)
-	c.Assert(err, IsNil)
-	hasWarning := strings.Contains(buf.String(), "WARNING: No project_id")
-	c.Assert(hasWarning, Equals, true)
 
 	// Fail: labels not a map
 	dc.Config.Vars["labels"] = "a_string"
@@ -151,7 +141,7 @@ func (s *MySuite) TestValidateModule(c *C) {
 
 	// Catch invalid kind
 	testModule.Source = "testSource"
-	testModule.Kind = ""
+	testModule.Kind = "invalidKind"
 	err = validateModule(testModule)
 	expectedErrorStr = fmt.Sprintf(
 		"%s\n%s", errorMessages["wrongKind"], module2String(testModule))
@@ -194,22 +184,17 @@ func (s *MySuite) TestValidateOutputs(c *C) {
 func (s *MySuite) TestAddDefaultValidators(c *C) {
 	dc := getDeploymentConfigForTest()
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 0)
-
-	dc.Config.Validators = nil
-	dc.Config.Vars["project_id"] = "not-a-project"
-	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 1)
+	c.Assert(dc.Config.Validators, HasLen, 2)
 
 	dc.Config.Validators = nil
 	dc.Config.Vars["region"] = "us-central1"
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 2)
+	c.Assert(dc.Config.Validators, HasLen, 3)
 
 	dc.Config.Validators = nil
 	dc.Config.Vars["zone"] = "us-central1-c"
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 4)
+	c.Assert(dc.Config.Validators, HasLen, 5)
 }
 
 func (s *MySuite) TestTestInputList(c *C) {
@@ -281,6 +266,53 @@ func (s *MySuite) TestGetStringValue(c *C) {
 	c.Assert(err, Not(IsNil))
 }
 
+func (s *MySuite) TestMergeBlueprintRequirements(c *C) {
+	map1 := make(map[string][]string)
+	map2 := make(map[string][]string)
+
+	// each expected value should individually be sorted and have no duplicate
+	// elements, although different values may share elements
+	expectedValues1 := []string{"bar", "bat"}
+	expectedValues2 := []string{"value2", "value3"}
+
+	reversedValues1 := slices.Clone(expectedValues1)
+	sort.Sort(sort.Reverse(sort.StringSlice(reversedValues1)))
+
+	// TEST: merge with identical keys and duplicate elements in values
+	map1["key1"] = slices.Clone(reversedValues1)
+	map2["key1"] = []string{expectedValues1[0], expectedValues1[0]}
+	map3 := mergeBlueprintRequirements(map1, map2)
+
+	// expected value (duplicates removed and sorted)
+	expectedMap := map[string][]string{
+		"key1": expectedValues1,
+	}
+	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
+
+	// unexpected value (duplicates removed and reverse sorted)
+	unexpectedMap := map[string][]string{
+		"key1": reversedValues1,
+	}
+	c.Assert(maps.EqualFunc(map3, unexpectedMap, slices.Equal[string]), Equals, false)
+
+	// TEST: merge with additional key in 1st map
+	map1["key2"] = []string{expectedValues2[1], expectedValues2[0]}
+	map3 = mergeBlueprintRequirements(map1, map2)
+
+	// test the expected value (duplicates removed and sorted)
+	expectedMap = map[string][]string{
+		"key1": slices.Clone(expectedValues1),
+		"key2": slices.Clone(expectedValues2),
+	}
+	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
+
+	// TEST: merge with additional key in 2nd map (expected value unchanged!)
+	delete(map1, "key2")
+	map2["key2"] = slices.Clone(expectedValues2)
+	map3 = mergeBlueprintRequirements(map1, map2)
+	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
+}
+
 func (s *MySuite) TestExecuteValidators(c *C) {
 	dc := getDeploymentConfigForTest()
 	dc.Config.Validators = []validatorConfig{
@@ -302,6 +334,33 @@ func (s *MySuite) TestExecuteValidators(c *C) {
 
 	err = dc.executeValidators()
 	c.Assert(err, ErrorMatches, validationErrorMsg)
+}
+
+func (s *MySuite) TestApisEnabledValidator(c *C) {
+	var err error
+	dc := getDeploymentConfigForTest()
+	emptyValidator := validatorConfig{}
+
+	// test validator fails for config without validator id
+	err = dc.testApisEnabled(emptyValidator)
+	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
+
+	apisEnabledValidator := validatorConfig{
+		Validator: testApisEnabledName.String(),
+		Inputs:    map[string]interface{}{},
+	}
+
+	// this test succeeds because the list of required APIs for the test
+	// Deployment Config is empty; no actual API calls get made in this case.
+	// When full automation of required API detection is implemented, we may
+	// need to modify this test
+	err = dc.testApisEnabled(apisEnabledValidator)
+	c.Assert(err, IsNil)
+
+	// this validator reads blueprint directly so 1 inputs should fail
+	apisEnabledValidator.Inputs["foo"] = "bar"
+	err = dc.testApisEnabled(apisEnabledValidator)
+	c.Assert(err, ErrorMatches, tooManyInputRegex)
 }
 
 // this function tests that the "gateway" functions in this package for our
@@ -326,7 +385,7 @@ func (s *MySuite) TestProjectExistsValidator(c *C) {
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
-	projectValidator.Inputs["project_id"] = "((var.project_id))"
+	projectValidator.Inputs["project_id"] = "((var.undefined))"
 	err = dc.testProjectExists(projectValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 

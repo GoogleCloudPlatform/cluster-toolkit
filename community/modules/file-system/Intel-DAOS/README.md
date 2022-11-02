@@ -23,7 +23,6 @@ For example, in the following snippet taken from the [community/example/intel/da
 ```yaml
   - id: daos-server
     source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
-    kind: terraform
     use: [network1]
     settings:
       number_of_instances: 2
@@ -44,7 +43,6 @@ The following settings will configure this [system for TCO](https://github.com/d
 ```yaml
   - id: daos-server
     source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
-    kind: terraform
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}
@@ -60,7 +58,6 @@ The following settings will configure this system for [best performance](https:/
 ```yaml
   - id: daos-server
     source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
-    kind: terraform
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}

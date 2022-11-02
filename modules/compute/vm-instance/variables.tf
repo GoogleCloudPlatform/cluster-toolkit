@@ -49,6 +49,24 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "auto_delete_boot_disk" {
+  description = "Controls if boot disk should be auto-deleted when instance is deleted."
+  type        = bool
+  default     = true
+}
+
+variable "local_ssd_count" {
+  description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
+  type        = number
+  default     = 0
+}
+
+variable "local_ssd_interface" {
+  description = "Interface to be used with local SSDs. Can be either 'NVME' or 'SCSI'. No effect unless `local_ssd_count` is also set."
+  type        = string
+  default     = "NVME"
+}
+
 variable "name_prefix" {
   description = "Name Prefix"
   type        = string
@@ -70,11 +88,13 @@ variable "machine_type" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string)
+    mount_runner          = map(string)
   }))
   default = []
 }
@@ -97,7 +117,7 @@ variable "service_account" {
   })
   default = {
     email = null
-    scopes = ["https://www.googleapis.com/auth/devstorage.read_only",
+    scopes = ["https://www.googleapis.com/auth/devstorage.read_write",
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring.write",
       "https://www.googleapis.com/auth/servicecontrol",
@@ -116,6 +136,78 @@ variable "subnetwork_self_link" {
   description = "The self link of the subnetwork to attach the VM."
   type        = string
   default     = null
+}
+
+variable "network_interfaces" {
+  description = <<-EOT
+    A list of network interfaces. The options match that of the terraform
+    network_interface block of google_compute_instance. For descriptions of the
+    subfields or more information see the documentation:
+    https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_network_interface
+
+    **_NOTE:_** If `network_interfaces` are set, `network_self_link` and
+    `subnetwork_self_link` will be ignored, even if they are provided through
+    the `use` field. `bandwidth_tier` and `disable_public_ips` also do not apply
+    to network interfaces defined in this variable.
+
+    Subfields:
+    network            (string, required if subnetwork is not supplied)
+    subnetwork         (string, required if network is not supplied)
+    subnetwork_project (string, optional)
+    network_ip         (string, optional)
+    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET"])
+    stack_type         (string, optional, choose from ["IPV4_ONLY", "IPV4_IPV6"])
+    queue_count        (number, optional)
+    access_config      (object, optional)
+    ipv6_access_config (object, optional)
+    alias_ip_range     (list(object), optional)
+    EOT
+  type = list(object({
+    network            = string,
+    subnetwork         = string,
+    subnetwork_project = string,
+    network_ip         = string,
+    nic_type           = string,
+    stack_type         = string,
+    queue_count        = number,
+    access_config = list(object({
+      nat_ip                 = string,
+      public_ptr_domain_name = string,
+      network_tier           = string
+    })),
+    ipv6_access_config = list(object({
+      public_ptr_domain_name = string,
+      network_tier           = string
+    })),
+    alias_ip_range = list(object({
+      ip_cidr_range         = string,
+      subnetwork_range_name = string
+    }))
+  }))
+  default = []
+  validation {
+    condition = alltrue([
+      for ni in var.network_interfaces : (ni.network == null) != (ni.subnetwork == null)
+    ])
+    error_message = "All additional network interfaces must define exactly one of \"network\" or \"subnetwork\"."
+  }
+  validation {
+    condition = alltrue([
+      for ni in var.network_interfaces : ni.nic_type == "GVNIC" || ni.nic_type == "VIRTIO_NET" || ni.nic_type == null
+    ])
+    error_message = "In the variable network_interfaces, field \"nic_type\" must be either \"GVNIC\", \"VIRTIO_NET\" or null."
+  }
+  validation {
+    condition = alltrue([
+      for ni in var.network_interfaces : ni.stack_type == "IPV4_ONLY" || ni.stack_type == "IPV4_IPV6" || ni.stack_type == null
+    ])
+    error_message = "In the variable network_interfaces, field \"stack_type\" must be either \"IPV4_ONLY\", \"IPV4_IPV6\" or null."
+  }
+}
+
+variable "region" {
+  description = "The region to deploy to"
+  type        = string
 }
 
 variable "zone" {
@@ -141,7 +233,7 @@ variable "guest_accelerator" {
     type  = string,
     count = number
   }))
-  default = []
+  default = null
 }
 
 variable "on_host_maintenance" {
@@ -201,8 +293,8 @@ variable "threads_per_core" {
   to 1 (SMT turned off), only the 30 physical cores will be available on the VM.
 
   The default value of \"0\" will turn off SMT for supported machine types, and
-  will fall back to GCE defaults for unsupported machine types (t2d, shared-core 
-  instances, or instances with less than 2 vCPU). 
+  will fall back to GCE defaults for unsupported machine types (t2d, shared-core
+  instances, or instances with less than 2 vCPU).
 
   Disabling SMT can be more performant in many HPC workloads, therefore it is
   disabled by default where compatible.

@@ -17,11 +17,13 @@
 output "network_storage" {
   description = "Describes a filestore instance."
   value = {
-    server_ip     = google_filestore_instance.filestore_instance.networks[0].ip_addresses[0]
-    remote_mount  = format("/%s", google_filestore_instance.filestore_instance.file_shares[0].name)
-    local_mount   = var.local_mount
-    fs_type       = "nfs"
-    mount_options = "defaults,_netdev"
+    server_ip             = local.server_ip
+    remote_mount          = local.remote_mount
+    local_mount           = var.local_mount
+    fs_type               = local.fs_type
+    mount_options         = local.mount_options
+    client_install_runner = local.install_nfs_client_runner
+    mount_runner          = local.mount_runner
   }
 }
 
@@ -37,14 +39,13 @@ output "install_nfs_client_runner" {
 
 output "mount_runner" {
   description = <<-EOT
-  Runner to mount the file-system using the startup-script module.
-  This runner requires ansible to be installed. This can be achieved using the
-  install_ansible.sh script as a prior runner in the startup-script module:
-  runners:
-  - type: shell
-    source: modules/startup-script/examples/install_ansible.sh
-    destination: install_ansible.sh
-  - $(your-fs-id.mount_runner)
+  Runner to mount the file-system using an ansible playbook. The startup-script
+  module will automatically handle installation of ansible.
+  - id: example-startup-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(your-fs-id.mount_runner)
   ...
   EOT
   value       = local.mount_runner

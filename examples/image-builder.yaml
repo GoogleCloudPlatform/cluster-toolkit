@@ -32,10 +32,8 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    kind: terraform
   - id: scripts_for_image
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -60,10 +58,8 @@ deployment_groups:
   modules:
   - id: cluster-network
     source: modules/network/pre-existing-vpc
-    kind: terraform
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    kind: terraform
     use: [cluster-network]
     settings:
       partition_name: compute
@@ -73,7 +69,6 @@ deployment_groups:
         project: $(vars.project_id)
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    kind: terraform
     use: [cluster-network, compute_partition]
     settings:
       login_node_count: 1
@@ -82,7 +77,6 @@ deployment_groups:
         project: $(vars.project_id)
   - id: slurm_login
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    kind: terraform
     use: [cluster-network, slurm_controller]
     settings:
       instance_image:

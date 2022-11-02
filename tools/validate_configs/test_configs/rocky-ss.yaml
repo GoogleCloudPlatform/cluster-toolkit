@@ -27,11 +27,9 @@ deployment_groups:
   modules:
   - id: network1
     source: ./modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: appsfs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       name: appsfs
@@ -39,7 +37,6 @@ deployment_groups:
 
   - id: nfs
     source: community/modules/file-system/nfs-server
-    kind: terraform
     use: [network1]
     settings:
       image: rocky-linux-cloud/rocky-linux-8
@@ -47,7 +44,6 @@ deployment_groups:
 
   - id: spack
     source: ./community//modules/scripts/spack-install
-    kind: terraform
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
@@ -60,7 +56,6 @@ deployment_groups:
 
   - id: startup
     source: ./modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
       - type: shell
@@ -76,17 +71,9 @@ deployment_groups:
           echo $2
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - type: "ansible-local"
         source: modules/startup-script/examples/hello.yaml
         destination: hello.yaml
-      - type: shell
-        content: $(nfs.install_nfs_client)
-        destination: "install-nfs-client.sh"
-      - $(appsfs.install_nfs_client_runner)
-      - $(nfs.mount_runner)
       - $(spack.install_spack_deps_runner)
       - type: shell
         content: $(spack.startup_script)
@@ -94,7 +81,6 @@ deployment_groups:
 
   - id: instance
     source: ./modules/compute/vm-instance
-    kind: terraform
     use: [network1, startup, nfs, appsfs]
     settings:
       machine_type: e2-standard-4

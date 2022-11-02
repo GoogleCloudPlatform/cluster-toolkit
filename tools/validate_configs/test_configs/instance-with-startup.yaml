@@ -27,23 +27,17 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/pre-existing-vpc
-    kind: terraform
 
   - id: homefs
     source: modules/file-system/filestore
-    kind: terraform
     use: [network1]
     settings:
       local_mount: /home
 
   - id: startup
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
-      - type: shell
-        source: "modules/startup-script/examples/install_ansible.sh"
-        destination: "tmp.sh"
       - type: shell
         content: $(homefs.install_nfs_client)
         destination: "tmp.sh"
@@ -53,7 +47,6 @@ deployment_groups:
 
   - id: workstation
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network1
     - homefs
@@ -64,6 +57,5 @@ deployment_groups:
 
   - id: wait
     source: ./community/modules/scripts/wait-for-startup
-    kind: terraform
     settings:
       instance_name: ((module.workstation.name[0]))

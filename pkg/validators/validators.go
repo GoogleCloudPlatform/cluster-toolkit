@@ -16,22 +16,104 @@ package validators
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"strings"
 
 	compute "cloud.google.com/go/compute/apiv1"
+	serviceusage "cloud.google.com/go/serviceusage/apiv1"
+	"github.com/googleapis/gax-go/v2/apierror"
+	"google.golang.org/api/option"
+	serviceusagepb "google.golang.org/genproto/googleapis/api/serviceusage/v1"
 	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 )
 
+const enableAPImsg = "%[1]s: can be enabled at https://console.cloud.google.com/apis/library/%[1]s?project=%[2]s"
 const projectError = "project ID %s does not exist or your credentials do not have permission to access it"
 const regionError = "region %s is not available in project ID %s or your credentials do not have permission to access it"
 const zoneError = "zone %s is not available in project ID %s or your credentials do not have permission to access it"
 const zoneInRegionError = "zone %s is not in region %s in project ID %s or your credentials do not have permissions to access it"
+const computeDisabledError = "Compute Engine API has not been used in project"
+const computeDisabledMsg = "the Compute Engine API must be enabled in project %s to validate blueprint global variables"
+const serviceDisabledMsg = "the Service Usage API must be enabled in project %s to validate that all APIs needed by the blueprint are enabled"
+
+func handleClientError(e error) error {
+	if strings.Contains(e.Error(), "could not find default credentials") {
+		log.Println("load application default credentials following instructions at https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/README.md#supplying-cloud-credentials-to-terraform")
+		return fmt.Errorf("could not find application default credentials")
+
+	}
+	return e
+}
+
+// TestApisEnabled tests whether APIs are enabled in given project
+func TestApisEnabled(projectID string, requiredAPIs []string) error {
+	// can return immediately if there are 0 APIs to test
+	if len(requiredAPIs) == 0 {
+		return nil
+	}
+
+	ctx := context.Background()
+
+	c, err := serviceusage.NewClient(ctx, option.WithQuotaProject(projectID))
+	if err != nil {
+		err = handleClientError(err)
+		return err
+	}
+	defer c.Close()
+
+	prefix := "projects/" + projectID
+	var serviceNames []string
+	for _, api := range requiredAPIs {
+		serviceNames = append(serviceNames, prefix+"/services/"+api)
+	}
+
+	req := &serviceusagepb.BatchGetServicesRequest{
+		Parent: prefix,
+		Names:  serviceNames,
+	}
+	resp, err := c.BatchGetServices(ctx, req)
+	if err != nil {
+		var ae *apierror.APIError
+		if errors.As(err, &ae) {
+			switch reason := ae.Reason(); reason {
+			case "SERVICE_DISABLED":
+				log.Printf(enableAPImsg, "serviceusage.googleapis.com", projectID)
+				return fmt.Errorf(serviceDisabledMsg, projectID)
+			case "SERVICE_CONFIG_NOT_FOUND_OR_PERMISSION_DENIED":
+				return fmt.Errorf("service %s does not exist in project %s", ae.Metadata()["services"], projectID)
+			case "USER_PROJECT_DENIED":
+				return fmt.Errorf(projectError, projectID)
+			case "SU_MISSING_NAMES":
+				// occurs if API list is empty and 0 APIs to validate
+				return nil
+			default:
+				return fmt.Errorf("unhandled error: %s", err)
+			}
+		}
+	}
+
+	var errored bool
+	for _, service := range resp.Services {
+		if service.State.String() == "DISABLED" {
+			errored = true
+			log.Printf("%s: service is disabled in project %s", service.Config.Name, projectID)
+			log.Printf(enableAPImsg, service.Config.Name, projectID)
+		}
+	}
+	if errored {
+		return fmt.Errorf("one or more required APIs are disabled in project %s, please enable them as instructed above", projectID)
+	}
+	return nil
+}
 
 // TestProjectExists whether projectID exists / is accessible with credentials
 func TestProjectExists(projectID string) error {
 	ctx := context.Background()
 	c, err := compute.NewProjectsRESTClient(ctx)
 	if err != nil {
+		err = handleClientError(err)
 		return err
 	}
 	defer c.Close()
@@ -42,6 +124,12 @@ func TestProjectExists(projectID string) error {
 
 	_, err = c.Get(ctx, req)
 	if err != nil {
+		if strings.Contains(err.Error(), computeDisabledError) {
+			log.Printf(computeDisabledMsg, projectID)
+			log.Printf(serviceDisabledMsg, projectID)
+			log.Printf(enableAPImsg, "serviceusage.googleapis.com", projectID)
+			return fmt.Errorf(enableAPImsg, "compute.googleapis.com", projectID)
+		}
 		return fmt.Errorf(projectError, projectID)
 	}
 
@@ -52,6 +140,7 @@ func getRegion(projectID string, region string) (*computepb.Region, error) {
 	ctx := context.Background()
 	c, err := compute.NewRegionsRESTClient(ctx)
 	if err != nil {
+		err = handleClientError(err)
 		return nil, err
 	}
 	defer c.Close()
@@ -81,6 +170,7 @@ func getZone(projectID string, zone string) (*computepb.Zone, error) {
 	ctx := context.Background()
 	c, err := compute.NewZonesRESTClient(ctx)
 	if err != nil {
+		err = handleClientError(err)
 		return nil, err
 	}
 	defer c.Close()

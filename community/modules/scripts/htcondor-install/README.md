@@ -23,27 +23,18 @@ install the HTCondor software and adds custom configurations using
 ```yaml
 - id: htcondor_install
   source: community/modules/scripts/htcondor-install
-  kind: terraform
 
 - id: htcondor_configure_central_manager
   source: modules/scripts/startup-script
-  kind: terraform
   settings:
     runners:
-    - type: shell
-      source: modules/startup-script/examples/install_ansible.sh
-      destination: install_ansible.sh
     - $(htcondor_install.install_htcondor_runner)
     - $(htcondor_configure.central_manager_runner)
 
 - id: htcondor_configure_access_point
   source: modules/scripts/startup-script
-  kind: terraform
   settings:
     runners:
-    - type: shell
-      source: modules/startup-script/examples/install_ansible.sh
-      destination: install_ansible.sh
     - $(htcondor_install.install_htcondor_runner)
     - $(htcondor_install.install_autoscaler_deps_runner)
     - $(htcondor_install.install_autoscaler_runner)

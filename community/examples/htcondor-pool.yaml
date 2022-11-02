@@ -29,7 +29,6 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    kind: terraform
     settings:
       network_name: htcondor-pool
       subnetwork_name: htcondor-pool-usc1
@@ -38,32 +37,24 @@ deployment_groups:
 
   - id: htcondor_install
     source: community/modules/scripts/htcondor-install
-    kind: terraform
 
   - id: htcondor_services
     source: community/modules/project/service-enablement
-    kind: terraform
     use:
     - htcondor_install
 
   - id: htcondor_configure
     source: community/modules/scheduler/htcondor-configure
-    kind: terraform
 
   - id: htcondor_configure_central_manager
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.central_manager_runner)
 
   - id: htcondor_cm
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network1
     - htcondor_configure_central_manager
@@ -80,18 +71,13 @@ deployment_groups:
 
   - id: htcondor_configure_execute_point
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.execute_point_runner)
 
   - id: htcondor_execute_point
     source: community/modules/compute/htcondor-execute-point
-    kind: terraform
     use:
     - network1
     - htcondor_configure_execute_point
@@ -106,12 +92,8 @@ deployment_groups:
 
   - id: htcondor_configure_access_point
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_install.install_autoscaler_deps_runner)
       - $(htcondor_install.install_autoscaler_runner)
@@ -130,14 +112,12 @@ deployment_groups:
           queue
   - id: htcondor_access
     source: modules/compute/vm-instance
-    kind: terraform
     use:
     - network1
     - htcondor_configure_access_point
     settings:
       name_prefix: access-point
       machine_type: c2-standard-4
-      disable_public_ips: true
       metadata:
         central-manager: ((module.htcondor_cm.internal_ip[0]))
       service_account:
@@ -146,3 +126,4 @@ deployment_groups:
         - cloud-platform
     outputs:
     - internal_ip
+    - external_ip
