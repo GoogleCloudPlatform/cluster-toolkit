@@ -35,12 +35,10 @@ deployment_groups:
     use: [network1]
     settings: {local_mount: /sw}
 
-  - id: hello-startup-script
+  - id: load-data-startup
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(appfs.install_nfs_client_runner)
-      - $(appfs.mount_runner)
       - type: shell
         destination: generate_hello.sh
         content: |
@@ -48,8 +46,8 @@ deployment_groups:
           echo "Hello World" > /sw/hello.txt
 
   - id: batch-job
-    source: community/modules/scheduler/cloud-batch-job
-    use: [network1, appfs, hello-startup-script]
+    source: modules/scheduler/batch-job-template
+    use: [network1, appfs]
     settings:
       runnable: "cat /sw/hello.txt"
       machine_type: n2-standard-4
@@ -58,6 +56,7 @@ deployment_groups:
         project: rocky-linux-cloud
 
   - id: batch-login
-    source: community/modules/scheduler/cloud-batch-login-node
+    source: modules/scheduler/batch-login-node
     use: [batch-job]
+    settings: {startup_script: $(load-data-startup.startup_script)}
     outputs: [instructions]

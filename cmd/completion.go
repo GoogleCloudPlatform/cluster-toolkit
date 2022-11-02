@@ -68,7 +68,7 @@ PowerShell:
 `, rootCmd.Name()),
 	DisableFlagsInUseLine: true,
 	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
-	Args:                  cobra.ExactValidArgs(1),
+	Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 	Run:                   runCompletionCmd,
 }
 

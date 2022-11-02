@@ -32,6 +32,49 @@ The following code snippet creates a partition module with:
 For a complete example using this module, see
 [slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
 
+### Compute VM Zone Policies
+
+> **_WARNING:_** Lenient zone policies can lead to additional egress costs when
+> moving data between Google Cloud resources in different zones in the same
+> region, such as between filestore and other VM instances. For more information
+> on egress fees, see the [Network Pricing][networkpricing] Google Cloud
+> documentation.
+>
+> To avoid egress charges, ensure your compute nodes are created in the same
+> zone as the other resources that share data with them by setting
+> `zone_policy_deny` to all other zones in the region.
+
+The Slurm on GCP partition modules provide the option to set policies regarding
+which zone the compute VM instances will be created in through the
+`zone_policy_allow` and `zone_policy_deny` variables.
+
+As an example, see the the following module:
+
+```yaml
+- id: partition-with-zone-policy
+  source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+  settings:
+    zone_policy_allow:
+    - us-central1-a
+    - us-central1-b
+    zone_policy_deny: [us-central1-f]
+```
+
+In this module, the following is defined:
+
+* `us-central1-a` and `us-central1-b` zones have been explicitly allowed.
+* `us-central1-f` has been explicitly denied, therefore no nodes in this
+  partition will be created in that zone.
+* Since `us-central1-c` was not included in the zone policy, it will default to
+  "Allow", which means the partition has the same likelihood of creating a node in
+  that zone as the zones explicitly listed under `zone_policy_allow`.
+
+> **_NOTE:_** `zone_policy_allow` does not guarantee the use of specified zones
+> because zones are allowed by default. Configure `zone_policy_deny` to ensure
+> that zones outside the allowed list are not used.
+
+[networkpricing]: https://cloud.google.com/vpc/network-pricing
+
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
@@ -109,6 +152,7 @@ limitations under the License.
 | <a name="input_node_conf"></a> [node\_conf](#input\_node\_conf) | Map of Slurm node line configuration. | `map(any)` | `{}` | no |
 | <a name="input_node_count_dynamic_max"></a> [node\_count\_dynamic\_max](#input\_node\_count\_dynamic\_max) | Maximum number of nodes allowed in this partition. | `number` | `10` | no |
 | <a name="input_node_count_static"></a> [node\_count\_static](#input\_node\_count\_static) | Number of nodes to be statically created. | `number` | `0` | no |
+| <a name="input_node_groups"></a> [node\_groups](#input\_node\_groups) | **Preview: This variable is still in development** A list of node groups<br>associated with this partition.<br>The default node group will be prepended to this list based on other input<br>variables to this module. | <pre>list(object({<br>    node_count_static      = number<br>    node_count_dynamic_max = number<br>    group_name             = string<br>    node_conf              = map(string)<br>    additional_disks = list(object({<br>      disk_name    = string<br>      device_name  = string<br>      disk_size_gb = number<br>      disk_type    = string<br>      disk_labels  = map(string)<br>      auto_delete  = bool<br>      boot         = bool<br>    }))<br>    bandwidth_tier         = string<br>    can_ip_forward         = bool<br>    disable_smt            = bool<br>    disk_auto_delete       = bool<br>    disk_labels            = map(string)<br>    disk_size_gb           = number<br>    disk_type              = string<br>    enable_confidential_vm = bool<br>    enable_oslogin         = bool<br>    enable_shielded_vm     = bool<br>    enable_spot_vm         = bool<br>    gpu = object({<br>      count = number<br>      type  = string<br>    })<br>    instance_template   = string<br>    labels              = map(string)<br>    machine_type        = string<br>    metadata            = map(string)<br>    min_cpu_platform    = string<br>    on_host_maintenance = string<br>    preemptible         = bool<br>    service_account = object({<br>      email  = string<br>      scopes = list(string)<br>    })<br>    shielded_instance_config = object({<br>      enable_integrity_monitoring = bool<br>      enable_secure_boot          = bool<br>      enable_vtpm                 = bool<br>    })<br>    spot_instance_config = object({<br>      termination_action = string<br>    })<br>    source_image_family  = string<br>    source_image_project = string<br>    source_image         = string<br>    tags                 = list(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy.<br><br>Note: Placement groups are not supported when on\_host\_maintenance is set to<br>"MIGRATE" and will be deactivated regardless of the value of<br>enable\_placement. To support enable\_placement, ensure on\_host\_maintenance is<br>set to "TERMINATE". | `string` | `"TERMINATE"` | no |
 | <a name="input_partition_conf"></a> [partition\_conf](#input\_partition\_conf) | Slurm partition configuration as a map.<br>See https://slurm.schedmd.com/slurm.conf.html#SECTION_PARTITION-CONFIGURATION | `map(string)` | `{}` | no |
 | <a name="input_partition_name"></a> [partition\_name](#input\_partition\_name) | The name of the slurm partition. | `string` | n/a | yes |

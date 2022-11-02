@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 ---
 blueprint_name: cloud-batch
 
@@ -19,6 +20,9 @@ vars:
   deployment_name: hello-workload
   region: us-central1
   zone: us-central1-c
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
 deployment_groups:
 - group: primary
@@ -31,37 +35,54 @@ deployment_groups:
     use: [network1]
     settings: {local_mount: /sw}
 
-  - id: batch-startup-script
+  - id: mntfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings: {local_mount: /mnt}
+
+  - id: hello-startup-script
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(appfs.install_nfs_client_runner)
-      - $(appfs.mount_runner)
       - type: shell
         destination: generate_hello.sh
         content: |
           #!/bin/sh
           echo "Hello World" > /sw/hello.txt
 
-  - id: batch-compute-template
-    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
-    use: [batch-startup-script]
+  - id: hello-startup-script-2
+    source: modules/scripts/startup-script
     settings:
-      # Boiler plate to work with Cloud Foundation Toolkit
-      network: $(network1.network_self_link)
-      service_account: {email: null, scopes: ["https://www.googleapis.com/auth/cloud-platform"]}
-      access_config: [{nat_ip: null, network_tier: null}]
-      # Google Cloud Batch customization
-      machine_type: n2-standard-4
-      metadata:
-        network_storage: ((jsonencode([module.appfs.network_storage])))
-      source_image_family: hpc-centos-7
-      source_image_project: cloud-hpc-image-public
+      runners:
+      - type: shell
+        destination: generate_hello.sh
+        content: |
+          #!/bin/sh
+          echo "Hello Second World" > /sw/hello2.txt
 
   - id: batch-job
-    source: ./modules/scheduler/batch-job-template
-    use: [network1, appfs, batch-startup-script]
+    source: modules/scheduler/batch-job-template
+    use: [network1, appfs, hello-startup-script]
     settings:
       runnable: "cat /sw/hello.txt"
       machine_type: n2-standard-4
+      image:
+        family: rocky-linux-8-optimized-gcp
+        project: rocky-linux-cloud
+
+  - id: batch-job-2
+    source: modules/scheduler/batch-job-template
+    use: [network1, appfs, mntfs, hello-startup-script-2]
+    settings:
+      runnable: "lscpu"
+      machine_type: n2-standard-8
+      job_id: job-2
+      job_filename: batch-job-2.json
+      image:
+        family: rocky-linux-8-optimized-gcp
+        project: rocky-linux-cloud
+
+  - id: batch-login
+    source: modules/scheduler/batch-login-node
+    use: [batch-job, batch-job-2]
     outputs: [instructions]

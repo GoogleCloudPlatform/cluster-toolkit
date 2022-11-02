@@ -88,11 +88,13 @@ variable "machine_type" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string)
+    mount_runner          = map(string)
   }))
   default = []
 }
@@ -203,6 +205,11 @@ variable "network_interfaces" {
   }
 }
 
+variable "region" {
+  description = "The region to deploy to"
+  type        = string
+}
+
 variable "zone" {
   description = "Compute Platform zone"
   type        = string
@@ -286,8 +293,8 @@ variable "threads_per_core" {
   to 1 (SMT turned off), only the 30 physical cores will be available on the VM.
 
   The default value of \"0\" will turn off SMT for supported machine types, and
-  will fall back to GCE defaults for unsupported machine types (t2d, shared-core 
-  instances, or instances with less than 2 vCPU). 
+  will fall back to GCE defaults for unsupported machine types (t2d, shared-core
+  instances, or instances with less than 2 vCPU).
 
   Disabling SMT can be more performant in many HPC workloads, therefore it is
   disabled by default where compatible.

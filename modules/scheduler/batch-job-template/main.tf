@@ -15,7 +15,7 @@
  */
 
 locals {
-  instance_template = var.instance_template != null ? var.instance_template : module.instance_template[0].self_link
+  instance_template = var.instance_template != null ? var.instance_template : one(module.instance_template[*].self_link)
 
   tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
 
@@ -30,6 +30,7 @@ locals {
       permissive_ssh     = var.mpi_mode
       log_policy         = var.log_policy
       instance_template  = local.instance_template
+      nfs_volumes        = local.native_batch_network_storage
     }
   )
 
@@ -39,6 +40,14 @@ locals {
 
   subnetwork_name    = var.subnetwork != null ? var.subnetwork.name : "default"
   subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
+
+  # Filter network_storage for native Batch support
+  native_fstype = var.native_batch_mounting ? ["nfs"] : []
+  native_batch_network_storage = [
+    for ns in var.network_storage :
+    ns if contains(local.native_fstype, ns.fs_type)
+  ]
+  # other processing happens in startup_from_network_storage.tf
 }
 
 module "instance_template" {
@@ -55,7 +64,7 @@ module "instance_template" {
   labels             = var.labels
 
   machine_type         = var.machine_type
-  startup_script       = var.startup_script
+  startup_script       = local.startup_from_network_storage
   metadata             = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
   source_image_family  = var.image.family
   source_image_project = var.image.project
