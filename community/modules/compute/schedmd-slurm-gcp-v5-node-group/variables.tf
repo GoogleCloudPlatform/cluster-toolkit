@@ -73,37 +73,35 @@ variable "metadata" {
   default     = {}
 }
 
-variable "source_image_project" {
-  type        = string
+variable "instance_image" {
   description = <<-EOD
-    Project path where the source image comes from. If not provided, this value
-    will default to the project hosting the slurm-gcp public images. More
-    information can be found in the slurm-gcp docs:
+    Defines the image that will be used in the node group VM instances. If not
+    provided, the Slurm on GCP default published images will be used.
+
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+
+    Custom images must comply with Slurm on GCP requirements; it is highly
+    advised to use the packer templates provided by Slurm on GCP when
+    constructing custom slurm images.
+    
+    More information can be found in the slurm-gcp docs:
     https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/docs/images.md#public-image.
     EOD
-  default     = null
-}
+  type        = map(string)
+  default     = {}
 
-variable "source_image_family" {
-  type        = string
-  description = <<-EOD
-    Source image family. If not provided, the default image family name for the
-    hpc-centos-7 version of the slurm-gcp public images will be used. More
-    information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/docs/images.md#public-image
-    EOD
-  default     = null
-}
-
-variable "source_image" {
-  type        = string
-  description = <<-EOD
-    Source disk image. By default, the image used will be the hpc-centos7
-    version of the slurm-gcp public images. More information can be found in the
-    slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/docs/images.md#public-image
-    EOD
-  default     = null
+  validation {
+    condition = length(var.instance_image) == 0 || (
+    can(var.instance_image["family"]) || can(var.instance_image["name"])) == can(var.instance_image["project"])
+    error_message = "The project is required if family or name are provided in var.instance_image."
+  }
+  validation {
+    condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
+    error_message = "Only one of family and name can be provided in var.instance_image."
+  }
 }
 
 variable "tags" {
@@ -182,10 +180,10 @@ variable "can_ip_forward" {
   default     = false
 }
 
-variable "disable_smt" {
+variable "enable_smt" {
   type        = bool
-  description = "Disables Simultaneous Multi-Threading (SMT) on instance."
-  default     = true
+  description = "Enables Simultaneous Multi-Threading (SMT) on instance."
+  default     = false
 }
 
 variable "labels" {
