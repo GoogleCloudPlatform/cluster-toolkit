@@ -51,6 +51,17 @@ module documentation](../../modules/README.md).
 * [**omnia-install**](scripts/omnia-install/README.md): Installs SLURM via omnia
   onto a cluster of compute VMs
 
+* [**pbspro-preinstall**](scripts/pbspro-preinstall/README.md): Creates a
+  Cloud Storage bucket in which to save PBS Professional RPM packages for use
+  by PBS clusters.
+
+* [**pbspro-install**](scripts/pbspro-install/README.md): Creates a
+  Toolkit runner to install [PBS Professional][pbspro] from RPM packages.
+
+* [**pbspro-qmgr**](scripts/pbspro-qmgr/README.md): Creates a
+  Toolkit runner to run common `qmgr` commands when configuring a PBS
+  Professional cluster.
+
 * [**spack-install**](scripts/spack-install/README.md): Creates a startup script
   to install spack on an instance or the slurm controller
 
