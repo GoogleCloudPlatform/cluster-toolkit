@@ -55,15 +55,15 @@ covered below).
 To create a service account and credential file (in json format):
 
 ```bash
-$ script/service_account.sh create <PROJECT_ID> <SERVICE_ACCOUNT_NAME>
-$ script/service_account.sh credential <PROJECT_ID> <ACCOUNT_NAME> <PATH_TO_KEY_FILE>
+script/service_account.sh create <PROJECT_ID> <SERVICE_ACCOUNT_NAME>
+script/service_account.sh credential <PROJECT_ID> <ACCOUNT_NAME> <PATH_TO_KEY_FILE>
 ```
 
 The script also has options to *list*, *check* and *delete* - see the
 built-in help for instructions:
 
 ```bash
-$ script/service_account.sh help
+script/service_account.sh help
 ```
 
 **Note to administrators/developers:** if the roles required for a
@@ -113,8 +113,8 @@ service account (this is what the helper script does with additional checks).
 To create a service account with the basic required roles:
 
 ```bash
-$ gcloud iam service-accounts create <SERVICE_ACCOUNT_NAME>
-$ for roleid in file.editor \
+gcloud iam service-accounts create <SERVICE_ACCOUNT_NAME>
+for roleid in file.editor \
               compute.admin \
               iam.serviceAccountCreator \
               iam.serviceAccountDelete \
@@ -123,9 +123,9 @@ $ for roleid in file.editor \
      gcloud projects add-iam-policy-binding <PROJECT_ID> \
       --member="serviceAccount:<SERVICE_ACCOUNT_NAME>@<PROJECT_ID>.iam.gserviceaccount.com" \
       --role="roles/$roleid"; \
-  done
+done
 
-$ gcloud iam service-accounts keys create <PATH_TO_KEY_FILE> \
+gcloud iam service-accounts keys create <PATH_TO_KEY_FILE> \
     --iam-account=<SERVICE_ACCOUNT_NAME>@<PROJECT_ID>.iam.gserviceaccount.com
 ```
 
@@ -144,7 +144,7 @@ The roles can be changed to give finer control as outlined in the next section.
 The projects and user account used for deploying TKFE can be more tightly
 controlled with respect to the enabled APIs and roles/permissions.
 
-**User Account**
+#### User Account
 
 Rather than using *Owner* role, or the high-level roles stated in the Admin
 Guide, the user account deploying TKFE can use a custom set of least-privilege
@@ -224,7 +224,7 @@ roles.  The complete list of required permissions is as follows:
 
 <!--TODO: For a TKFE Service Account (the one registered with a credential to administer resources via the portal) is... -->
 
-**Project APIs**
+#### Project APIs
 
 In a multi-project configuration, the enabled project APIs can also be
 reduced to a subset of those APIs only needed for the functions required.

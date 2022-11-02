@@ -21,17 +21,17 @@ if [ ! -x "$wrf_home/main/wrf.exe" ]; then
 	exit 1
 fi
 
-pushd "${bench_dir}"
-ln -s "$wrf_home/main/wrf.exe"
-ln -s "$wrf_home/run/RRTM_DATA"
-ln -s "$wrf_home/run/VEGPARM.TBL"
-ln -s "$wrf_home/run/SOILPARM.TBL"
-ln -s "$wrf_home/run/GENPARM.TBL"
+pushd "${bench_dir}" || exit
+ln -s "$wrf_home/main/wrf.exe" .
+ln -s "$wrf_home/run/RRTM_DATA" .
+ln -s "$wrf_home/run/VEGPARM.TBL" .
+ln -s "$wrf_home/run/SOILPARM.TBL" .
+ln -s "$wrf_home/run/GENPARM.TBL" .
 
 mpirun ./wrf.exe
 res=$?
 
-popd
+popd || exit
 cp ${bench_dir}/namelist.* .
 cp ${bench_dir}/rsl.* .
 rm -rf "${bench_dir}"

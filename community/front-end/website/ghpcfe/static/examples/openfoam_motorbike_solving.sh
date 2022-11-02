@@ -2,7 +2,7 @@
 
 # Mesh was previously generated and saved. Refer to the separate meshing script.
 tar xvf motorBike.tar.bz2
-pushd motorBike
+pushd motorBike || exit
 NODES=${SLURM_JOB_NUM_NODES}
 PPN=${SLURM_CPUS_ON_NODE} # or underpopulate if needed
 NTASKS=$((NODES * PPN))
@@ -42,6 +42,6 @@ mpirun potentialFoam -parallel 2>&1 | tee log.potentialFoam
 mpirun simpleFoam -parallel 2>&1 | tee log.simpleFoam
 
 # Extract the total execution time as KPI
-popd
+popd || exit
 kpi=$(tail -n 5 motorBike/log.simpleFoam | head -n1 | awk '{print $3}')
 echo "{\"result_unit\": \"seconds\", \"result_value\": $kpi}" >kpi.json

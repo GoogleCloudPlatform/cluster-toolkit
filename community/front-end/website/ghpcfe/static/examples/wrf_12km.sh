@@ -21,14 +21,14 @@ if [ ! -x "$wrf_home/main/wrf.exe" ]; then
 	exit 1
 fi
 
-pushd "${bench_dir}"
-ln -s "$wrf_home/main/wrf.exe"
-ln -s "$wrf_home/run/RRTM_DATA"
+pushd "${bench_dir}" || exit
+ln -s "$wrf_home/main/wrf.exe" .
+ln -s "$wrf_home/run/RRTM_DATA" .
 
 mpirun ./wrf.exe
 res=$?
 
-popd
+popd || exit
 
 cp ${bench_dir}/namelist.* .
 cp ${bench_dir}/rsl.* .

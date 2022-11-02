@@ -7,7 +7,7 @@ DECOMPOSE="8 2 2" # mesh decomposition
 
 # Copy case from OpenFOAM tutorial
 cp -r "$FOAM_TUTORIALS/incompressible/simpleFoam/motorBike" .
-pushd motorBike
+pushd motorBike || exit
 
 # Customise settings
 foamDictionary -entry castellatedMeshControls.maxGlobalCells -set 200000000 system/snappyHexMeshDict
@@ -33,7 +33,7 @@ renumberMesh -constant -overwrite 2>&1 | tee log.renumberMesh
 
 # Clean up
 rm -rf ./processor*
-popd
+popd || exit
 tar cvf motorBike.tar motorBike
 bzip2 motorBike.tar
 rm -rf motorBike

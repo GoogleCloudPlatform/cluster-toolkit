@@ -67,17 +67,17 @@ the `frontend` directory as follows:
 -->
 <!-- TODO: switch to public repo
 ```bash
-$ git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
-$ cd hpc-toolkit
-$ cd community/frontend
+git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
+cd hpc-toolkit
+cd community/frontend
 ```
 -->
 
 ```bash
-$ git clone https://github.com/ghpcfe/hpc-toolkit-private.git
-$ cd hpc-toolkit
-$ git checkout new_frontend
-$ cd community/front-end
+git clone https://github.com/ghpcfe/hpc-toolkit-private.git
+cd hpc-toolkit
+git checkout new_frontend
+cd community/front-end
 ```
 
 All further deployment actions must be performed from this directory.
@@ -90,7 +90,7 @@ enabled APIs and roles/permissions need to be created. The user account must
 also be authenticated on the client machine to allow it to provision GCP
 resources.
 
-**GCP project**
+##### GCP project
 
 A GCP project is required with the following APIs enabled:
 
@@ -111,7 +111,7 @@ If these are not enabled, the deployment script will ask to enable them for
 you. It's not possible to complete a deployment without these APIs, so the
 script will abort if not selected.
 
-**GCP user**
+##### GCP user
 
 A GCP user that is a member of the project will be able to deploy TKFE, but
 must have appropriate privileges.  A user that is an *Owner* of the project
@@ -139,7 +139,7 @@ The user account must also be [authenticated to deploy GCP resources](https://cl
 This can be done with the following command:
 
 ```bash
-$ gcloud auth application-default login --project=<PROJECT_ID>
+gcloud auth application-default login --project=<PROJECT_ID>
 ```
 
 You will be prompted to open your web browser to authenticate.
