@@ -35,6 +35,8 @@ Modules that are still in development and less stable are labeled with the
   to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
 * **[schedmd-slurm-gcp-v5-partition]** ![community-badge] ![experimental-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
+* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] ![experimental-badge] :
+  Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-configure].
@@ -42,6 +44,7 @@ Modules that are still in development and less stable are labeled with the
 [vm-instance]: compute/vm-instance/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
+[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 
 ### Database

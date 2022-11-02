@@ -6,8 +6,17 @@ module documentation](../../modules/README.md).
 ## Compute
 
 * [**SchedMD-slurm-on-gcp-partition**](compute/SchedMD-slurm-on-gcp-partition/README.md):
-  Creates a SLURM partition that can be used by the
+  Creates a Slurm partition that can be used by the
   SchedMD-slurm_on_gcp_controller.
+* [**schedmd-slurm-gcp-v5-partition**](compute/schedmd-slurm-gcp-v5-partition/README.md):
+  Creates a Slurm partition that can be used by the
+  [schedmd-slurm-gcp-v5-controller] module.
+* [**schedmd-slurm-gcp-v5-node-group**](compute/schedmd-slurm-gcp-v5-node-group/README.md):
+  Defines a node group that can be used as input to the
+  [schedmd-slurm-gcp-v5-partition] module.
+
+[schedmd-slurm-gcp-v5-controller]: scheduler/schedmd-slurm-gcp-v5-controller/README.md
+[schedmd-slurm-gcp-v5-partition]: compute/schedmd-slurm-gcp-v5-partition/README.md
 
 ## Database
 
@@ -51,15 +60,23 @@ module documentation](../../modules/README.md).
 ## Scheduler
 
 * [**SchedMD-slurm-on-gcp-controller**](scheduler/SchedMD-slurm-on-gcp-controller/README.md):
-  Creates a SLURM controller node using
+  Creates a Slurm controller node using
   [slurm-gcp](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/controller)
 
 * [**SchedMD-slurm-on-gcp-login-node**](scheduler/SchedMD-slurm-on-gcp-login-node/README.md):
-  Creates a SLURM login node using
+  Creates a Slurm login node using
   [slurm-gcp](https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login)
+
+* [**schedmd-slurm-gcp-v5-login**](scheduler/schedmd-slurm-gcp-v5-login/README.md):
+  Creates a Slurm login node using [slurm-gcp] version 5.
+
+* [**schedmd-slurm-gcp-v5-controller**](scheduler/schedmd-slurm-gcp-v5-controller/README.md):
+  Creates a Slurm controller using [slurm-gcp] version 5.
 
 * [**schedmd-slurm-gcp-v5-hybrid**](scheduler/schedmd-slurm-gcp-v5-hybrid/README.md):
   Creates configurations for hybrid partitions that can be used with an
   on-premise Slurm cluster. This module uses the
   [slurm-controller-hybrid](https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster/modules/slurm_controller_hybrid)
   from the slurm-gcp project.
+
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
