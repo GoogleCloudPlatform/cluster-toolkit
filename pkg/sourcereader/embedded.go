@@ -186,7 +186,11 @@ func defaultAPIList(source string) []string {
 		},
 		"community/modules/scripts/htcondor-install": {},
 		"community/modules/scripts/omnia-install":    {},
-		"community/modules/scripts/spack-install":    {},
+		"community/modules/scripts/pbspro-preinstall": {
+			"iam.googleapis.com",
+			"storage.googleapis.com",
+		},
+		"community/modules/scripts/spack-install": {},
 		"community/modules/scripts/wait-for-startup": {
 			"compute.googleapis.com",
 		},
