@@ -151,6 +151,14 @@ Modules that are still in development and less stable are labeled with the
 * **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
   via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of VMs
   instances.
+* **[pbspro-preinstall]** ![community-badge] ![experimental-badge] : Creates a
+  Cloud Storage bucket in which to save PBS Professional RPM packages for use
+  by PBS clusters.
+* **[pbspro-install]** ![community-badge] ![experimental-badge] : Creates a
+  Toolkit runner to install [PBS Professional][pbspro] from RPM packages.
+* **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a
+  Toolkit runner to run common `qmgr` commands when configuring a PBS
+  Professional cluster.
 * **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install [Spack](https://github.com/spack/spack) on an
   instance or a slurm login or controller.
@@ -162,6 +170,10 @@ Modules that are still in development and less stable are labeled with the
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
 [spack-install]: ../community/modules/scripts/spack-install/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
+[pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
+[pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
+[pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
+[pbspro]: https://www.altair.com/pbs-professional
 
 ## Module Fields
 
