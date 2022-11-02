@@ -12,17 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 3.83"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v5-partition/v1.8.0"
-  }
-  required_version = ">= 0.13.0"
+output "node_groups" {
+  description = "Details of the node group. Typically used as input to `schedmd-slurm-gcp-v5-partition`."
+  value       = local.node_group
 }
