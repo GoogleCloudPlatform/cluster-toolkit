@@ -6,7 +6,11 @@ download and install PBS at boot or during the building of an image.
 
 ### Example
 
-The following code snippet uses this module to
+The following code snippet uses this module to upload RPM packages to Cloud
+Storage and make them available as outputs for subsequent modules. It also
+demonstrates how to give read-only access to service accounts that will be used
+with PBS clusters. Explicit listing of service accounts is typically necessary
+if the bucket is provisioned in one project and clusters in other projects.
 
 ```yaml
   - id: pbspro_setup
