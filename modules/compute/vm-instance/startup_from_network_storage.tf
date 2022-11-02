@@ -55,7 +55,7 @@ locals {
 }
 
 module "netstorage_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=961ffdd"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=64bc890"
 
   labels          = var.labels
   project_id      = var.project_id
