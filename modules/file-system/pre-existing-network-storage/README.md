@@ -24,6 +24,19 @@ This creates a pre-existing-network-storage module in terraform at the
 provided IP in `server_ip` of type nfs that will be mounted at `/home`. Note
 that the `server_ip` must be known before deployment.
 
+The following is an example of using `pre-existing-network-storage` with a GCS
+bucket:
+
+```yaml
+- id: data-bucket
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    remote_mount: my-bucket-name
+    local_mount: /data
+    fs_type: gcsfuse
+    mount_options: defaults,_netdev,implicit_dirs
+```
+
 ### Mounting
 
 For the `fs_type` listed below, this module will provide `client_install_runner`
