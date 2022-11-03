@@ -90,4 +90,7 @@ module documentation](../../modules/README.md).
   [slurm-controller-hybrid](https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster/modules/slurm_controller_hybrid)
   from the slurm-gcp project.
 
+* [**pbspro-server**](scheduler/pbspro-server/README.md):
+  Creates a server host for operating a PBS Professional cluster.
+
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
