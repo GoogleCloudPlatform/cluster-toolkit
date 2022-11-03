@@ -40,12 +40,15 @@ Modules that are still in development and less stable are labeled with the
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-configure].
+* **[pbspro-execution]** ![community-badge] ![experimental-badge] :
+  Creates execution hosts for use in a PBS Professional cluster.
 
 [vm-instance]: compute/vm-instance/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
+[pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 
 ### Database
 
