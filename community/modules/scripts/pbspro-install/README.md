@@ -79,10 +79,10 @@ No resources.
 | <a name="input_pbs_data_service_user"></a> [pbs\_data\_service\_user](#input\_pbs\_data\_service\_user) | PBS Data Service POSIX user | `string` | `"pbsdata"` | no |
 | <a name="input_pbs_exec"></a> [pbs\_exec](#input\_pbs\_exec) | Root path in which to install PBS | `string` | `"/opt/pbs"` | no |
 | <a name="input_pbs_home"></a> [pbs\_home](#input\_pbs\_home) | PBS working directory | `string` | `"/var/spool/pbs"` | no |
-| <a name="input_pbs_license_server"></a> [pbs\_license\_server](#input\_pbs\_license\_server) | IP address or DNS name of PBS license server | `string` | `"CHANGE_THIS_TO_PBS_PRO_LICENSE_SERVER_HOSTNAME"` | no |
+| <a name="input_pbs_license_server"></a> [pbs\_license\_server](#input\_pbs\_license\_server) | IP address or DNS name of PBS license server (required only for PBS server hosts) | `string` | `"CHANGE_THIS_TO_PBS_PRO_LICENSE_SERVER_HOSTNAME"` | no |
 | <a name="input_pbs_license_server_port"></a> [pbs\_license\_server\_port](#input\_pbs\_license\_server\_port) | Networking port of PBS license server | `number` | `6200` | no |
 | <a name="input_pbs_role"></a> [pbs\_role](#input\_pbs\_role) | Type of PBS host to provision: server, client, execution | `string` | n/a | yes |
-| <a name="input_pbs_server"></a> [pbs\_server](#input\_pbs\_server) | IP address or DNS name of PBS server host | `string` | `"CHANGE_THIS_TO_PBS_PRO_SERVER_HOSTNAME"` | no |
+| <a name="input_pbs_server"></a> [pbs\_server](#input\_pbs\_server) | IP address or DNS name of PBS server host (required only for PBS client and execution hosts) | `string` | `"CHANGE_THIS_TO_PBS_PRO_SERVER_HOSTNAME"` | no |
 | <a name="input_rpm_url"></a> [rpm\_url](#input\_rpm\_url) | Path to PBS Pro RPM file for select PBS host type (server, client, execution) | `string` | n/a | yes |
 
 ## Outputs
