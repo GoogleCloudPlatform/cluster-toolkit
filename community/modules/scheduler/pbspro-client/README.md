@@ -3,10 +3,10 @@
 This module provisions 1 or more PBS Client hosts to submit jobs to a PBS
 Professional cluster. The following extra services are required:
 
-- an existing licensed PBS Professional Server; if provisioned in the cloud, we
+- An existing licensed PBS Professional Server; if provisioned in the cloud, we
   recommend using the [pbspro-server module][pbspro-server].
-- a shared filesystem mounted across all PBS hosts to faciliate file transfers
-  for jobs and their stdin/stdout logs
+- A shared filesystem mounted across all PBS hosts to faciliate file transfers
+  for jobs and their stdin/stdout logs.
 
 [pbspro-server]: ../pbspro-server/README.md
 
@@ -106,7 +106,7 @@ No resources.
 | <a name="input_pbs_home"></a> [pbs\_home](#input\_pbs\_home) | PBS working directory | `string` | `"/var/spool/pbs"` | no |
 | <a name="input_pbs_server"></a> [pbs\_server](#input\_pbs\_server) | IP address or DNS name of PBS server host | `string` | n/a | yes |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Control where your VM instances are physically located relative to each other within a zone. | <pre>object({<br>    vm_count                  = number,<br>    availability_domain_count = number,<br>    collocation               = string,<br>  })</pre> | `null` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which Google Cloud Storage bucket will be created | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which Google Cloud resources will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Default region for creating resources | `string` | n/a | yes |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the instance. See https://www.terraform.io/docs/providers/google/r/compute_instance_template.html#service_account. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/devstorage.read_write",<br>    "https://www.googleapis.com/auth/logging.write",<br>    "https://www.googleapis.com/auth/monitoring.write",<br>    "https://www.googleapis.com/auth/servicecontrol",<br>    "https://www.googleapis.com/auth/service.management.readonly",<br>    "https://www.googleapis.com/auth/trace.append"<br>  ]<br>}</pre> | no |
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |

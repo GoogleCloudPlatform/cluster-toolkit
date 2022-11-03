@@ -15,7 +15,7 @@
  */
 
 variable "project_id" {
-  description = "Project in which Google Cloud Storage bucket will be created"
+  description = "Project in which Google Cloud resources will be created"
   type        = string
 }
 
@@ -149,12 +149,14 @@ variable "service_account" {
   })
   default = {
     email = null
-    scopes = ["https://www.googleapis.com/auth/devstorage.read_write",
+    scopes = [
+      "https://www.googleapis.com/auth/devstorage.read_write",
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring.write",
       "https://www.googleapis.com/auth/servicecontrol",
       "https://www.googleapis.com/auth/service.management.readonly",
-    "https://www.googleapis.com/auth/trace.append"]
+      "https://www.googleapis.com/auth/trace.append",
+    ]
   }
 }
 
