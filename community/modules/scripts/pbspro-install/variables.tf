@@ -60,6 +60,6 @@ variable "pbs_role" {
   type        = string
   validation {
     condition     = contains(["server", "client", "execution"], var.pbs_role)
-    error_message = "var.pbs_role must be one of \"server\", \"client\", or \"execution\""
+    error_message = "Value for var.pbs_role must be one of \"server\", \"client\", or \"execution\"."
   }
 }

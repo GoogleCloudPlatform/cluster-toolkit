@@ -42,6 +42,6 @@ variable "server_conf" {
 
   validation {
     condition     = var.server_conf != null && var.server_conf != ""
-    error_message = "server_conf must be set to a non-empty string"
+    error_message = "The value for var.server_conf must be set to a non-empty string."
   }
 }
