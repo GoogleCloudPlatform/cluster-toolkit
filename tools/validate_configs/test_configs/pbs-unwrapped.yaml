@@ -54,4 +54,16 @@ deployment_groups:
     - homefs
     - pbspro_setup
     settings:
+      machine_type: c2-standard-8
       pbs_license_server: 127.0.0.1
+
+  - id: pbspro_client
+    source: community/modules/scheduler/pbspro-client
+    use:
+    - homefs
+    - pbspro_server
+    - pbspro_setup
+    settings:
+      instance_count: $(vars.client_host_count)
+      machine_type: c2-standard-8
+      name_prefix: $(vars.client_hostname_prefix)
