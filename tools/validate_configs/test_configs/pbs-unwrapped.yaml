@@ -20,6 +20,10 @@ vars:
   deployment_name: setup
   region: us-central1
   zone: us-central1-c
+  client_host_count: 1
+  client_hostname_prefix: pbs-client
+  execution_host_count: 10
+  execution_hostname_prefix: pbs-execution
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -30,6 +34,13 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
+  - id: homefs
+    source: modules/file-system/filestore
+    use:
+    - network1
+    settings:
+      local_mount: /home
+
   - id: pbspro_setup
     source: community/modules/scripts/pbspro-preinstall
     settings:
@@ -37,28 +48,10 @@ deployment_groups:
       execution_rpm: /path/to/pbspro-execution.el7.x86_64.rpm
       server_rpm: /path/to/pbspro-server.el7.x86_64.rpm
 
-  - id: pbspro_install_server
-    source: community/modules/scripts/pbspro-install
+  - id: pbspro_server
+    source: community/modules/scheduler/pbspro-server
     use:
+    - homefs
     - pbspro_setup
     settings:
-      pbs_role: server
-      rpm_url: $(pbspro_setup.pbs_server_rpm_url)
-    outputs:
-    - runner
-
-  - id: pbspro_qmgr
-    source: community/modules/scripts/pbspro-qmgr
-    settings:
-      client_host_count: 1
-      client_hostname_prefix: pbs-client
-      execution_host_count: 10
-      execution_hostname_prefix: pbs-execution
-      server_conf: |
-        set queue workq queue_type = Execution
-        set queue workq enabled = True
-        set queue workq started = True
-        set server scheduling = True
-        set server default_queue = workq
-    outputs:
-    - runners
+      pbs_license_server: 127.0.0.1
