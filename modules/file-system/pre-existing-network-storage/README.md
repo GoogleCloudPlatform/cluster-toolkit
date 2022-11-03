@@ -37,6 +37,11 @@ bucket:
     mount_options: defaults,_netdev,implicit_dirs
 ```
 
+The `implicit_dirs` mount option allows object paths to be treated as if they
+were directories. This is important when working with files that were created by
+another source, but there may have performance impacts. The `_netdev` mount option
+denotes that the storage device requires network access.
+
 ### Mounting
 
 For the `fs_type` listed below, this module will provide `client_install_runner`
