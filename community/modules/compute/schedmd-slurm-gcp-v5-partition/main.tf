@@ -19,6 +19,11 @@ locals {
   # Default to value in partition_conf if both set "Default"
   partition_conf = merge(var.is_default == true ? { "Default" : "YES" } : {}, var.partition_conf)
 
+  ghpc_startup_script = [{
+    filename = "ghpc_startup.sh"
+    content  = var.startup_script
+  }]
+
   default_node_group = {
     # Group Definition
     group_name             = "ghpc"
@@ -88,16 +93,19 @@ data "google_compute_default_service_account" "default" {
 module "slurm_partition" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=v5.1.0"
 
-  slurm_cluster_name      = local.slurm_cluster_name
-  partition_nodes         = local.partition_nodes
-  enable_job_exclusive    = var.exclusive
-  enable_placement_groups = var.enable_placement
-  network_storage         = var.network_storage
-  partition_name          = var.partition_name
-  project_id              = var.project_id
-  region                  = var.region
-  zone_policy_allow       = local.zone_policy_allow
-  zone_policy_deny        = local.zone_policy_deny
-  subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
-  partition_conf          = local.partition_conf
+  slurm_cluster_name        = local.slurm_cluster_name
+  partition_nodes           = local.partition_nodes
+  enable_job_exclusive      = var.exclusive
+  enable_placement_groups   = var.enable_placement
+  enable_reconfigure        = var.enable_reconfigure
+  network_storage           = var.network_storage
+  partition_name            = var.partition_name
+  project_id                = var.project_id
+  region                    = var.region
+  zone_policy_allow         = local.zone_policy_allow
+  zone_policy_deny          = local.zone_policy_deny
+  subnetwork                = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
+  subnetwork_project        = var.subnetwork_project
+  partition_conf            = local.partition_conf
+  partition_startup_scripts = local.ghpc_startup_script
 }

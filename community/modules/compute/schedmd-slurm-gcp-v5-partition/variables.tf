@@ -22,6 +22,12 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "startup_script" {
+  description = "A custom startup script to be run on nodes in this partition."
+  type        = string
+  default     = ""
+}
+
 variable "slurm_cluster_name" {
   type        = string
   description = "Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters)."
@@ -336,6 +342,12 @@ variable "subnetwork_self_link" {
   default     = null
 }
 
+variable "subnetwork_project" {
+  description = "The project the subnetwork belongs to."
+  type        = string
+  default     = ""
+}
+
 variable "exclusive" {
   description = "Exclusive job access to nodes."
   type        = bool
@@ -346,6 +358,21 @@ variable "enable_placement" {
   description = "Enable placement groups."
   type        = bool
   default     = true
+}
+
+variable "enable_reconfigure" {
+  description = <<-EOD
+    Enables automatic Slurm reconfigure on when Slurm configuration changes (e.g.
+    slurm.conf.tpl, partition details). Compute instances and resource policies
+    (e.g. placement groups) will be destroyed to align with new configuration.
+
+    NOTE: Requires Python and Google Pub/Sub API.
+
+    *WARNING*: Toggling this will impact the running workload. Deployed compute nodes
+    will be destroyed and their jobs will be requeued.
+    EOD
+  type        = bool
+  default     = false
 }
 
 variable "enable_spot_vm" {
