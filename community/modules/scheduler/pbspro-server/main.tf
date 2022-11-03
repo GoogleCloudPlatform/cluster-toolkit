@@ -90,7 +90,7 @@ module "pbs_server" {
   local_ssd_count       = var.local_ssd_count
   local_ssd_interface   = var.local_ssd_interface
 
-  disable_public_ips   = var.disable_public_ips
+  disable_public_ips   = !var.enable_public_ips
   network_self_link    = var.network_self_link
   subnetwork_self_link = var.subnetwork_self_link
   network_interfaces   = var.network_interfaces

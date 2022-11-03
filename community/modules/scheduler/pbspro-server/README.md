@@ -1,11 +1,12 @@
 ## Description
 
 This module provisions a PBS Server Host to operate and administer a PBS
-Professional cluster. The following extra services are required:
+Professional cluster. The following requirements must be observed:
 
-- an existing Altair license server with sufficient licenses to run PBS Pro
-- a shared filesystem mounted across all PBS hosts to faciliate file transfers
-  for jobs and their stdin/stdout logs
+- one must have an existing Altair license server with sufficient licenses to
+  run PBS Pro
+- jobs should be submitted from a network filesystem mounted on all hosts to
+  faciliate file transfers for jobs and their logs
 
 ### Example
 
@@ -81,10 +82,10 @@ No resources.
 | <a name="input_client_host_count"></a> [client\_host\_count](#input\_client\_host\_count) | Number of client hosts to configure | `number` | `0` | no |
 | <a name="input_client_hostname_prefix"></a> [client\_hostname\_prefix](#input\_client\_hostname\_prefix) | Name prefix for client hosts | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. Cloud resource names will include this value. | `string` | n/a | yes |
-| <a name="input_disable_public_ips"></a> [disable\_public\_ips](#input\_disable\_public\_ips) | If set to true, instances will not have public IPs | `bool` | `false` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for instances. | `number` | `200` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for instances. | `string` | `"pd-standard"` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
+| <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | If set to true, instances will have public IPs on the internet. | `bool` | `true` | no |
 | <a name="input_execution_host_count"></a> [execution\_host\_count](#input\_execution\_host\_count) | Number of execution hosts to configure | `number` | n/a | yes |
 | <a name="input_execution_hostname_prefix"></a> [execution\_hostname\_prefix](#input\_execution\_hostname\_prefix) | Name prefix for execution hosts | `string` | n/a | yes |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `null` | no |
