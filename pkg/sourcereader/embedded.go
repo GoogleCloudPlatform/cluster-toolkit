@@ -171,6 +171,10 @@ func defaultAPIList(source string) []string {
 			"iam.googleapis.com",
 			"secretmanager.googleapis.com",
 		},
+		"community/modules/scripts/pbspro-client": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
 		"community/modules/scripts/pbspro-server": {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
