@@ -38,7 +38,7 @@ variable "pbs_home" {
 }
 
 variable "pbs_license_server" {
-  description = "IP address or DNS name of PBS license server"
+  description = "IP address or DNS name of PBS license server (required only for PBS server hosts)"
   type        = string
   default     = "CHANGE_THIS_TO_PBS_PRO_LICENSE_SERVER_HOSTNAME"
 }
@@ -50,7 +50,7 @@ variable "pbs_license_server_port" {
 }
 
 variable "pbs_server" {
-  description = "IP address or DNS name of PBS server host"
+  description = "IP address or DNS name of PBS server host (required only for PBS client and execution hosts)"
   type        = string
   default     = "CHANGE_THIS_TO_PBS_PRO_SERVER_HOSTNAME"
 }
