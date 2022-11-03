@@ -22,12 +22,6 @@ variable "deployment_name" {
   type        = string
 }
 
-variable "startup_script" {
-  description = "A custom startup script to be run on nodes in this partition."
-  type        = string
-  default     = ""
-}
-
 variable "slurm_cluster_name" {
   type        = string
   description = "Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters)."
@@ -107,235 +101,6 @@ variable "is_default" {
   default     = false
 }
 
-variable "machine_type" {
-  description = "Compute Platform machine type to use for this partition compute nodes."
-  type        = string
-  default     = "c2-standard-60"
-}
-
-variable "metadata" {
-  type        = map(string)
-  description = "Metadata, provided as a map."
-  default     = {}
-}
-
-variable "node_count_static" {
-  description = "Number of nodes to be statically created."
-  type        = number
-  default     = 0
-}
-
-variable "node_conf" {
-  description = "Map of Slurm node line configuration."
-  type        = map(any)
-  default     = {}
-}
-
-variable "node_count_dynamic_max" {
-  description = "Maximum number of nodes allowed in this partition."
-  type        = number
-  default     = 10
-}
-
-variable "source_image_project" {
-  type        = string
-  description = <<-EOD
-    Project path where the source image comes from. If not provided, this value
-    will default to the project hosting the slurm-gcp public images. More
-    information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image.
-    EOD
-  default     = null
-}
-
-variable "source_image_family" {
-  type        = string
-  description = <<-EOD
-    Source image family. If not provided, the default image family name for the
-    hpc-centos-7 version of the slurm-gcp public images will be used. More
-    information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
-    EOD
-  default     = null
-}
-
-variable "source_image" {
-  type        = string
-  description = <<-EOD
-    Source disk image. By default, the image used will be the hpc-centos7
-    version of the slurm-gcp public images. More information can be found in the
-    slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
-    EOD
-  default     = null
-}
-
-variable "tags" {
-  type        = list(string)
-  description = "Network tag list."
-  default     = []
-}
-
-variable "disk_type" {
-  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
-  type        = string
-  default     = "pd-standard"
-
-  validation {
-    condition     = contains(["pd-ssd", "local-ssd", "pd-standard"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, local-ssd, or pd-standard."
-  }
-}
-
-variable "disk_size_gb" {
-  description = "Size of boot disk to create for the partition compute nodes."
-  type        = number
-  default     = 50
-}
-
-variable "disk_auto_delete" {
-  type        = bool
-  description = "Whether or not the boot disk should be auto-deleted."
-  default     = true
-}
-
-variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes."
-  type = list(object({
-    disk_name    = string
-    device_name  = string
-    disk_size_gb = number
-    disk_type    = string
-    disk_labels  = map(string)
-    auto_delete  = bool
-    boot         = bool
-  }))
-  default = []
-}
-
-variable "enable_confidential_vm" {
-  type        = bool
-  description = "Enable the Confidential VM configuration. Note: the instance image must support option."
-  default     = false
-}
-
-variable "enable_shielded_vm" {
-  type        = bool
-  description = "Enable the Shielded VM configuration. Note: the instance image must support option."
-  default     = false
-}
-
-variable "enable_oslogin" {
-  type        = bool
-  description = <<-EOD
-    Enables Google Cloud os-login for user login and authentication for VMs.
-    See https://cloud.google.com/compute/docs/oslogin
-    EOD
-  default     = true
-}
-
-variable "can_ip_forward" {
-  description = "Enable IP forwarding, for NAT instances for example."
-  type        = bool
-  default     = false
-}
-
-variable "disable_smt" {
-  type        = bool
-  description = "Disables Simultaneous Multi-Threading (SMT) on instance."
-  default     = true
-}
-
-variable "labels" {
-  description = "Labels to add to partition compute instances. List of key key, value pairs."
-  type        = any
-  default     = {}
-}
-
-variable "min_cpu_platform" {
-  description = "The name of the minimum CPU platform that you want the instance to use."
-  type        = string
-  default     = null
-}
-
-variable "on_host_maintenance" {
-  type        = string
-  description = <<-EOD
-    Instance availability Policy.
-
-    Note: Placement groups are not supported when on_host_maintenance is set to
-    "MIGRATE" and will be deactivated regardless of the value of
-    enable_placement. To support enable_placement, ensure on_host_maintenance is
-    set to "TERMINATE".
-    EOD
-  default     = "TERMINATE"
-}
-
-variable "gpu" {
-  description = "Definition of requested GPU resources."
-  type = object({
-    count = number,
-    type  = string
-  })
-  default = null
-}
-
-variable "network_storage" {
-  description = "An array of network attached storage mounts to be configured on the partition compute nodes."
-  type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string
-  }))
-  default = []
-}
-
-variable "preemptible" {
-  description = "Should use preemptibles to burst."
-  type        = string
-  default     = false
-}
-
-variable "service_account" {
-  type = object({
-    email  = string
-    scopes = set(string)
-  })
-  description = <<-EOD
-    Service account to attach to the compute instances. If not set, the
-    default compute service account for the given project will be used with the
-    "https://www.googleapis.com/auth/cloud-platform" scope.
-    EOD
-  default     = null
-}
-
-variable "shielded_instance_config" {
-  type = object({
-    enable_integrity_monitoring = bool
-    enable_secure_boot          = bool
-    enable_vtpm                 = bool
-  })
-  description = <<-EOD
-    Shielded VM configuration for the instance. Note: not used unless
-    enable_shielded_vm is 'true'.
-    * enable_integrity_monitoring : Compare the most recent boot measurements to the
-      integrity policy baseline and return a pair of pass/fail results depending on
-      whether they match or not.
-    * enable_secure_boot : Verify the digital signature of all boot components, and
-      halt the boot process if signature verification fails.
-    * enable_vtpm : Use a virtualized trusted platform module, which is a
-      specialized computer chip you can use to encrypt objects like keys and
-      certificates.
-    EOD
-  default = {
-    enable_integrity_monitoring = true
-    enable_secure_boot          = true
-    enable_vtpm                 = true
-  }
-}
-
 variable "subnetwork_self_link" {
   type        = string
   description = "Subnet to deploy to."
@@ -375,37 +140,16 @@ variable "enable_reconfigure" {
   default     = false
 }
 
-variable "enable_spot_vm" {
-  description = "Enable the partition to use spot VMs (https://cloud.google.com/spot-vms)."
-  type        = bool
-  default     = false
-}
-
-variable "spot_instance_config" {
-  description = "Configuration for spot VMs."
-  type = object({
-    termination_action = string
-  })
-  default = null
-}
-
-variable "bandwidth_tier" {
-  description = <<EOT
-  Configures the network interface card and the maximum egress bandwidth for VMs.
-  - Setting `platform_default` respects the Google Cloud Platform API default values for networking.
-  - Setting `virtio_enabled` explicitly selects the VirtioNet network adapter.
-  - Setting `gvnic_enabled` selects the gVNIC network adapter (without Tier 1 high bandwidth).
-  - Setting `tier_1_enabled` selects both the gVNIC adapter and Tier 1 high bandwidth networking.
-  - Note: both gVNIC and Tier 1 networking require a VM image with gVNIC support as well as specific VM families and shapes.
-  - See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details.
-  EOT
-  type        = string
-  default     = "platform_default"
-
-  validation {
-    condition     = contains(["platform_default", "virtio_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
-    error_message = "Allowed values for bandwidth_tier are 'platform_default', 'virtio_enabled', 'gvnic_enabled', or 'tier_1_enabled'."
-  }
+variable "network_storage" {
+  description = "An array of network attached storage mounts to be configured on the partition compute nodes."
+  type = list(object({
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string
+  }))
+  default = []
 }
 
 variable "node_groups" {
@@ -469,4 +213,334 @@ variable "node_groups" {
     tags                 = list(string)
   }))
   default = []
+}
+
+## Default node group variables have been deprecated from the partition module.
+## Use the schedmd-slurm-gcp-v5-node-group module and node_groups variable for
+## defining any of the following values moving forward.
+
+variable "machine_type" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.machine_type == null
+    error_message = "The variable var.machine_type in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "metadata" {
+  type        = map(string)
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.metadata == null
+    error_message = "The variable var.metadata in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "node_count_static" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.node_count_static == null
+    error_message = "The variable var.node_count_static in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "node_conf" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = map(any)
+  default     = null
+
+  validation {
+    condition     = var.node_conf == null
+    error_message = "The variable var.node_conf in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "node_count_dynamic_max" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.node_count_dynamic_max == null
+    error_message = "The variable var.node_count_dynamic_max in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "source_image_project" {
+  type        = string
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.source_image_project == null
+    error_message = "The variable var.source_image_project in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "source_image_family" {
+  type        = string
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.source_image_family == null
+    error_message = "The variable var.source_image_family in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "source_image" {
+  type        = string
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.source_image == null
+    error_message = "The variable var.source_image in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "tags" {
+  type        = list(string)
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.tags == null
+    error_message = "The variable var.tags in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "disk_type" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.disk_type == null
+    error_message = "The variable var.disk_type in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "disk_size_gb" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.disk_size_gb == null
+    error_message = "The variable var.disk_size_gb in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "disk_auto_delete" {
+  type        = bool
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.disk_auto_delete == null
+    error_message = "The variable var.disk_auto_delete in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "additional_disks" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type = list(object({
+    disk_name    = string
+    device_name  = string
+    disk_size_gb = number
+    disk_type    = string
+    disk_labels  = map(string)
+    auto_delete  = bool
+    boot         = bool
+  }))
+  default = null
+
+  validation {
+    condition     = var.additional_disks == null
+    error_message = "The variable var.additional_disks in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "enable_confidential_vm" {
+  type        = bool
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.enable_confidential_vm == null
+    error_message = "The variable var.enable_confidential_vm in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "enable_shielded_vm" {
+  type        = bool
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.enable_shielded_vm == null
+    error_message = "The variable var.enable_shielded_vm in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "enable_oslogin" {
+  type        = bool
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.enable_oslogin == null
+    error_message = "The variable var.enable_oslogin in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "can_ip_forward" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = bool
+  default     = null
+
+  validation {
+    condition     = var.can_ip_forward == null
+    error_message = "The variable var.can_ip_forward in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "disable_smt" {
+  type        = bool
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.disable_smt == null
+    error_message = "The variable var.disable_smt in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+# Not validating, as it's going to be set automatically by ghpc.
+# tflint-ignore: terraform_unused_declarations
+variable "labels" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = any
+  default     = null
+}
+
+variable "min_cpu_platform" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.min_cpu_platform == null
+    error_message = "The variable var.min_cpu_platform in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "on_host_maintenance" {
+  type        = string
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.on_host_maintenance == null
+    error_message = "The variable var.on_host_maintenance in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "gpu" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type = object({
+    count = number,
+    type  = string
+  })
+  default = null
+
+  validation {
+    condition     = var.gpu == null
+    error_message = "The variable var.gpu in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "preemptible" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.preemptible == null
+    error_message = "The variable var.preemptible in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "service_account" {
+  type = object({
+    email  = string
+    scopes = set(string)
+  })
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.service_account == null
+    error_message = "The variable var.service_account in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "shielded_instance_config" {
+  type = object({
+    enable_integrity_monitoring = bool
+    enable_secure_boot          = bool
+    enable_vtpm                 = bool
+  })
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  default     = null
+
+  validation {
+    condition     = var.shielded_instance_config == null
+    error_message = "The variable var.shielded_instance_config in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+
+variable "enable_spot_vm" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = bool
+  default     = null
+
+  validation {
+    condition     = var.enable_spot_vm == null
+    error_message = "The variable var.enable_spot_vm in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "spot_instance_config" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type = object({
+    termination_action = string
+  })
+  default = null
+
+  validation {
+    condition     = var.spot_instance_config == null
+    error_message = "The variable var.spot_instance_config in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
+}
+
+variable "bandwidth_tier" {
+  description = "Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.bandwidth_tier == null
+    error_message = "The variable var.bandwidth_tier in schedmd-slurm-gcp-v5-partition is deprecated. Please use the schedmd-slurm-gcp-v5-node-group module instead."
+  }
 }

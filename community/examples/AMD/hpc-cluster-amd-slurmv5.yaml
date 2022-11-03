@@ -172,15 +172,26 @@ deployment_groups:
         family: schedmd-v5-slurm-22-05-3-hpc-centos-7
         project: schedmd-slurm-public
 
+  - id: low_cost_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      machine_type: c2d-standard-4
+      node_count_dynamic_max: 10
+
   - id: low_cost_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
+    - low_cost_node_group
     settings:
       partition_name: lowcost
-      machine_type: c2d-standard-4
-      node_count_dynamic_max: 10
       enable_placement: false
+
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      machine_type: c2d-standard-112
+      node_count_dynamic_max: 50
 
   # because is_default is set to true, jobs will run on this partition unless an
   # alternative partition is specified using, for example, "srun -p lowcost"
@@ -188,10 +199,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
+    - compute_node_group
     settings:
       partition_name: compute
-      machine_type: c2d-standard-112
-      node_count_dynamic_max: 50
       enable_placement: true
       is_default: true
 

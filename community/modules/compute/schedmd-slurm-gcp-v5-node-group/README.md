@@ -36,50 +36,6 @@ module as input with:
     partition_name: compute
 ```
 
-### Compute VM Zone Policies
-
-> **_WARNING:_** Lenient zone policies can lead to additional egress costs when
-> moving data between Google Cloud resources in different zones in the same
-> region, such as between filestore and other VM instances. For more information
-> on egress fees, see the [Network Pricing][networkpricing] Google Cloud
-> documentation.
->
-> To avoid egress charges, ensure your compute nodes are created in the same
-> zone as the other resources that share data with them by setting
-> `zone_policy_deny` to all other zones in the region.
-
-The node group module and the underlying modules provided by Slurm on GCP
-provide the option to set policies regarding
-which zone the compute VM instances will be created in through the
-`zone_policy_allow` and `zone_policy_deny` variables.
-
-As an example, see the the following module:
-
-```yaml
-- id: node-group-with-zone-policy
-  source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-  settings:
-    zone_policy_allow:
-    - us-central1-a
-    - us-central1-b
-    zone_policy_deny: [us-central1-f]
-```
-
-In this module, the following is defined:
-
-* `us-central1-a` and `us-central1-b` zones have been explicitly allowed.
-* `us-central1-f` has been explicitly denied, therefore no nodes in this
-  node group will be created in that zone.
-* Since `us-central1-c` was not included in the zone policy, it will default to
-  "Allow", which means the node group has the same likelihood of creating a node in
-  that zone as the zones explicitly listed under `zone_policy_allow`.
-
-> **_NOTE:_** `zone_policy_allow` does not guarantee the use of specified zones
-> because zones are allowed by default. Configure `zone_policy_deny` to ensure
-> that zones outside the allowed list are not used.
-
-[networkpricing]: https://cloud.google.com/vpc/network-pricing
-
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
