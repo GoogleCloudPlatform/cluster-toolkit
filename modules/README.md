@@ -133,6 +133,8 @@ Modules that are still in development and less stable are labeled with the
   login node using [slurm-gcp].
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor pool.
+* **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
+  a server host for operating a PBS Professional cluster.
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
@@ -144,6 +146,7 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5
 [slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
+[pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
 ### Scripts
 
