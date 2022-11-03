@@ -58,6 +58,10 @@ variable "manager" {
   type = string
 }
 
+variable "budget_notifications_topic" {
+  description = "Pub/Sub topic for budget status updates"
+}
+
 # ----------------------------------------------------------------------------------------------------------------------
 # MODULE CONFIGURATION PARAMETERS
 # These variables are used to configure the module.
