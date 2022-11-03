@@ -33,8 +33,8 @@ variable "server_rpm" {
   description = "Absolute path to PBS Pro Server Host RPM file"
   type        = string
   validation {
-    condition     = startswith(var.server_rpm, "/")
-    error_message = "Path to RPM must be an absolute path beginning with \"/\""
+    condition     = can(regex("^/", var.server_rpm))
+    error_message = "Path to RPM must be an absolute path beginning with \"/\"."
   }
 }
 
@@ -42,8 +42,8 @@ variable "client_rpm" {
   description = "Absolute path to PBS Pro Client Host RPM file"
   type        = string
   validation {
-    condition     = startswith(var.client_rpm, "/")
-    error_message = "Path to RPM must be an absolute path beginning with \"/\""
+    condition     = can(regex("^/", var.client_rpm))
+    error_message = "Path to RPM must be an absolute path beginning with \"/\"."
   }
 }
 
@@ -51,8 +51,8 @@ variable "execution_rpm" {
   description = "Absolute path to PBS Pro Execution Host RPM file"
   type        = string
   validation {
-    condition     = startswith(var.execution_rpm, "/")
-    error_message = "Path to RPM must be an absolute path beginning with \"/\""
+    condition     = can(regex("^/", var.execution_rpm))
+    error_message = "Path to RPM must be an absolute path beginning with \"/\"."
   }
 }
 
@@ -132,10 +132,10 @@ variable "bucket_viewers" {
   default     = []
 
   validation {
-    error_message = "All bucket viewers must be in IAM style: user:user@example.com, serviceAccount:sa@example.com, or group:group@example.com"
+    error_message = "All bucket viewers must be in IAM style: user:user@example.com, serviceAccount:sa@example.com, or group:group@example.com."
     condition = alltrue([
-      for viewer in var.bucket_viewers : startswith(viewer, "user:") ||
-      startswith(viewer, "serviceAccount:") || startswith(viewer, "group:")
+      for viewer in var.bucket_viewers : regex("^user:", viewer) ||
+      regex("^serviceAccount:", viewer) || regex("^group:", viewer)
     ])
   }
 }
