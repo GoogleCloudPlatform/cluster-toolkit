@@ -106,4 +106,3 @@ class BackendAsyncView(generic.View):
         task = asyncio.create_task(self._cmd(record.pk, token, *args, **kwargs))
         task.add_done_callback(functools.partial(_consume_task, record))
         return record
-

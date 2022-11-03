@@ -93,4 +93,3 @@ variable "extra_labels" {
   default     = {}
   description = "Extra labels to apply to created GCP resources."
 }
-

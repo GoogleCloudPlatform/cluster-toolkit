@@ -153,4 +153,3 @@ class CredentialValidateAPIView(APIView):
         result = validate_credential.validate_credential("GCP", credential)
         res = {"validated": result}
         return JsonResponse(res)
-

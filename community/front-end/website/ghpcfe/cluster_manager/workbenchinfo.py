@@ -452,6 +452,3 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
         logger.info("Got workbench_uri: %s", wb_uri)
         self.workbench.proxy_uri = wb_uri
         self.workbench.save()
-
-
-

@@ -170,4 +170,3 @@ resource "google_compute_instance" "server_vm" {
   }
 
 }
-

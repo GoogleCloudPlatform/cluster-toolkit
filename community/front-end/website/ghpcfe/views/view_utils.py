@@ -121,4 +121,3 @@ class StreamingFileView(generic.base.View):
         except Exception as err: # pylint: disable=broad-except
             logger.warning("Exception trying to stream file", exc_info=err)
             return HttpResponseNotFound("Log file not found")
-
