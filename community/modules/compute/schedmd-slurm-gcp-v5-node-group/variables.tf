@@ -96,11 +96,11 @@ variable "instance_image" {
   validation {
     condition = length(var.instance_image) == 0 || (
     can(var.instance_image["family"]) || can(var.instance_image["name"])) == can(var.instance_image["project"])
-    error_message = "The project is required if family or name are provided in var.instance_image."
+    error_message = "The \"project\" is required if \"family\" or \"name\" are provided in var.instance_image."
   }
   validation {
     condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
-    error_message = "Only one of family and name can be provided in var.instance_image."
+    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
   }
 }
 
