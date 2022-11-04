@@ -179,6 +179,10 @@ func defaultAPIList(source string) []string {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
 		},
+		"community/modules/scheduler/pbspro-cluster": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
 		"community/modules/scheduler/pbspro-server": {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
