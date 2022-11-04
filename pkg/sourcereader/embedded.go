@@ -119,6 +119,10 @@ func defaultAPIList(source string) []string {
 		"community/modules/compute/htcondor-execute-point": {
 			"compute.googleapis.com",
 		},
+		"community/modules/compute/pbspro-execution": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
 		"community/modules/compute/schedmd-slurm-gcp-v5-partition": {
 			"compute.googleapis.com",
 		},

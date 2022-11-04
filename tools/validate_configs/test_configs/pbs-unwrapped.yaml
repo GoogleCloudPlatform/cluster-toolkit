@@ -67,3 +67,14 @@ deployment_groups:
       instance_count: $(vars.client_host_count)
       machine_type: c2-standard-8
       name_prefix: $(vars.client_hostname_prefix)
+
+  - id: pbspro_execution
+    source: community/modules/compute/pbspro-execution
+    use:
+    - homefs
+    - pbspro_server
+    - pbspro_setup
+    settings:
+      instance_count: $(vars.execution_host_count)
+      machine_type: c2-standard-8
+      name_prefix: $(vars.execution_hostname_prefix)

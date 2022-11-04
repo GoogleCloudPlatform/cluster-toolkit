@@ -14,6 +14,8 @@ module documentation](../../modules/README.md).
 * [**schedmd-slurm-gcp-v5-node-group**](compute/schedmd-slurm-gcp-v5-node-group/README.md):
   Defines a node group that can be used as input to the
   [schedmd-slurm-gcp-v5-partition] module.
+* [**pbspro-execution**](compute/pbspro-execution/README.md):
+  Creates execution hosts for use in a PBS Professional cluster.
 
 [schedmd-slurm-gcp-v5-controller]: scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-partition]: compute/schedmd-slurm-gcp-v5-partition/README.md
