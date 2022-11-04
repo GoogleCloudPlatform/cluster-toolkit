@@ -15,6 +15,9 @@
 ---
 
 steps:
+- id: git-fetch-unshallow
+  name: gcr.io/cloud-builders/git
+  args: ['fetch', '--unshallow']
 - id: pre-commits-setup
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
