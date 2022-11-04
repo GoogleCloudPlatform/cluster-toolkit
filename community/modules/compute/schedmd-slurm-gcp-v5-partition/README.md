@@ -73,6 +73,25 @@ In this module, the following is defined:
 > because zones are allowed by default. Configure `zone_policy_deny` to ensure
 > that zones outside the allowed list are not used.
 
+#### Setting a Single Zone
+
+The `zone` variable is another option for setting the zone policy. If `zone` is
+set and neither `zone_policy_deny` nor `zone_policy_allow` are set, the
+policy will be configured as follows:
+
+* All _currently active_ zones in the region **at deploy time** will be set in the
+ `zone_policy_deny` list, with the exception of the provided `zone`.
+* The provided `zone` will be set as the only value in the `zone_policy_allow`
+  list.
+
+`zone_policy_allow` and `zone_policy_deny` take precedence over `zone` if both
+are set.
+
+> **_NOTE:_** If a new zone is added to the region while the cluster is active,
+> nodes in the partition may be created in that zone as well. In this case, the
+> partition may need to be redeployed (possible via `enable_reconfigure` if set)
+> to ensure the newly added zone is set to "Deny".
+
 [networkpricing]: https://cloud.google.com/vpc/network-pricing
 
 ## Support
@@ -123,6 +142,7 @@ limitations under the License.
 | Name | Type |
 |------|------|
 | [google_compute_default_service_account.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
+| [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 
 ## Inputs
 
@@ -168,6 +188,7 @@ limitations under the License.
 | <a name="input_spot_instance_config"></a> [spot\_instance\_config](#input\_spot\_instance\_config) | Configuration for spot VMs. | <pre>object({<br>    termination_action = string<br>  })</pre> | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Network tag list. | `list(string)` | `[]` | no |
+| <a name="input_zone"></a> [zone](#input\_zone) | Zone in which to create all compute VMs. If `zone_policy_deny` or `zone_policy_allow` are set, the `zone` variable will be ignored. | `string` | `null` | no |
 | <a name="input_zone_policy_allow"></a> [zone\_policy\_allow](#input\_zone\_policy\_allow) | Partition nodes will prefer to be created in the listed zones. If a zone appears<br>in both zone\_policy\_allow and zone\_policy\_deny, then zone\_policy\_deny will take<br>priority for that zone. | `set(string)` | `[]` | no |
 | <a name="input_zone_policy_deny"></a> [zone\_policy\_deny](#input\_zone\_policy\_deny) | Partition nodes will not be created in the listed zones. If a zone appears in<br>both zone\_policy\_allow and zone\_policy\_deny, then zone\_policy\_deny will take<br>priority for that zone. | `set(string)` | `[]` | no |
 
