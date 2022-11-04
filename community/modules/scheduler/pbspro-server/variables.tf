@@ -207,7 +207,7 @@ variable "network_interfaces" {
 
     **_NOTE:_** If `network_interfaces` are set, `network_self_link` and
     `subnetwork_self_link` will be ignored, even if they are provided through
-    the `use` field. `bandwidth_tier` and `disable_public_ips` also do not apply
+    the `use` field. `bandwidth_tier` and `enable_public_ips` also do not apply
     to network interfaces defined in this variable.
 
     Subfields:
