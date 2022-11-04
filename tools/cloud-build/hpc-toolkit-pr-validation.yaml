@@ -40,6 +40,7 @@ steps:
 - id: make-tests
   waitFor:
   - pre-commits-setup
+  - git-fetch-unshallow
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
