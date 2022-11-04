@@ -16,13 +16,17 @@
 use strict;
 use warnings;
 
+# TODO: raise ./cmd min coverage to 80% after tests are written
 my $min = 80;
+my $cmdmin = 40;
 my $failed_coverage = 0;
 my $failed_tests = 0;
 
 while (<>){
   print $_;
-  if ( $_ =~ /coverage: (\d+\.\d)%/ ) {
+  if ( $_ =~ /hpc-toolkit\/cmd.*coverage: (\d+\.\d)%/) {
+    $failed_coverage++ if ($1 < $cmdmin);
+  } elsif ( $_ =~ /coverage: (\d+\.\d)%/ ) {
     $failed_coverage++ if ($1 < $min);
   }
   if ($_ =~ /\d+ passed, (\d+) FAILED/){
@@ -34,6 +38,6 @@ if ($failed_tests > 0) {
    exit 1
 }
 if ($failed_coverage > 0) {
-   print STDERR "Coverage must be above $min%, $failed_coverage packages were below that.\n";
+   print STDERR "Coverage must be above $cmdmin% for ./cmd and $min% for other packages, $failed_coverage packages were below that.\n";
    exit 1
 }
