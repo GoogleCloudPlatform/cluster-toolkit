@@ -16,8 +16,9 @@
 
 locals {
   resource_prefix = var.name_prefix != null ? var.name_prefix : "${var.deployment_name}-exec"
-  # gather local (inside VM) mountpoints with trailing slashes
-  mountpoints = [for ns in var.network_storage : endswith(ns.local_mount, "/") ? ns.local_mount : "${ns.local_mount}/"]
+  # PBS Pro Big Book 2021.3 Sec. 15.6.2.1 says that mountpoints in $usecp
+  # configuration need trailing slashes
+  mountpoints = [for ns in var.network_storage : can(regex("/$", ns.local_mount)) ? ns.local_mount : "${ns.local_mount}/"]
 
   user_startup_script_runners = var.startup_script == null ? [] : [
     {
