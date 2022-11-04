@@ -1,4 +1,4 @@
-# Google HPC Frontend
+# Google HPC Toolkit Frontend
 
 This is a web front-end for HPC applications on GCP. It delegates to the Google
 HPC Toolkit to create cloud resources for HPC clusters. Through the convenience
