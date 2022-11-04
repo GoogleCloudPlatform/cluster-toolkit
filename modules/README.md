@@ -136,10 +136,14 @@ Modules that are still in development and less stable are labeled with the
   login node using [slurm-gcp].
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor pool.
-* **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
-  a client host for submitting jobs to a PBS Professional cluster.
+* **[pbspro-cluster]** ![community-badge] ![experimental-badge] : A simple
+  module to provision an entire PBS Professional cluster.
 * **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
-  a server host for operating a PBS Professional cluster.
+  a server host for operating a PBS Professional cluster. Useful for advanced
+  use cases not supported by [pbspro-cluster].
+* **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
+  a client host for submitting jobs to a PBS Professional cluster. Useful for
+  advanced use cases not supported by [pbspro-cluster].
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
