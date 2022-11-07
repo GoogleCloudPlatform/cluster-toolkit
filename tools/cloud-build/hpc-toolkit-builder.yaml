@@ -40,8 +40,13 @@ steps:
     pre-commit install --install-hooks
     time tflint --init
     SKIP=go-unit-tests pre-commit run --all-files
+# Make tests requires full history. Perform deep fetch.
+- id: git-fetch-unshallow
+  waitFor: ["-"]
+  name: gcr.io/cloud-builders/git
+  args: ['fetch', '--unshallow']
 - id: make-tests
-  waitFor: [builder]
+  waitFor: [builder, git-fetch-unshallow]
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
