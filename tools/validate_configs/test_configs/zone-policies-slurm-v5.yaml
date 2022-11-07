@@ -40,43 +40,56 @@ deployment_groups:
     settings:
       local_mount: /home
 
+  - id: debug_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
+    - debug_node_group
     settings:
       partition_name: debug
-      node_count_dynamic_max: 4
       enable_placement: false
-      machine_type: n2-standard-2
       is_default: true
 
   # Partition which permits a specific zone
+  - id: allow_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
   - id: allow
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
+    - allow_node_group
     settings:
       partition_name: allow
-      node_count_dynamic_max: 4
       enable_placement: false
-      machine_type: n2-standard-2
       zone_policy_allow:
       - $(vars.zone)
 
   # Partition which denies deployment in 3 zones
+  - id: deny_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
   - id: deny
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
+    - deny_node_group
     settings:
       partition_name: deny
-      node_count_dynamic_max: 4
       enable_placement: false
-      machine_type: n2-standard-2
       zone_policy_deny:
       - us-central1-a
       - us-central1-b
@@ -84,16 +97,20 @@ deployment_groups:
 
   # Partition which explicitly permits deployment in 1 zone and denies deployment
   # in 3 zones.
+  - id: both_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
   - id: both
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
+    - both_node_group
     settings:
       partition_name: both
-      node_count_dynamic_max: 4
       enable_placement: false
-      machine_type: n2-standard-2
       zone_policy_deny:
       - us-central1-a
       - us-central1-b
@@ -101,14 +118,19 @@ deployment_groups:
       zone_policy_allow:
       - $(vars.zone)
 
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 20
+
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
+    - compute_node_group
     settings:
       partition_name: compute
-      node_count_dynamic_max: 20
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller

@@ -37,16 +37,21 @@ deployment_groups:
     settings:
       local_mount: /scratch
 
+  - id: debug_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_static: 4
+      node_count_dynamic_max: 0
+      machine_type: n2-standard-2
+
   - id: static_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
+    - debug_node_group
     settings:
       partition_name: static
-      node_count_static: 4
-      node_count_dynamic_max: 0
       enable_placement: false
-      machine_type: n2-standard-2
       is_default: true
 
   - id: slurm_controller
