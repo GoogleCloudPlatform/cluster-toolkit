@@ -75,9 +75,7 @@ first project ID in the list first, and fall back to the next in the list,
 until it finds the source image.
 EOD
   type        = list(string)
-  default = [
-    "cloud-hpc-image-public"
-  ]
+  default     = null
 }
 
 variable "source_image" {
