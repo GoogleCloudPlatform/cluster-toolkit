@@ -21,8 +21,9 @@ vars:
   deployment_name: slurm-gcp-v5
   region: us-central1
   zone: us-central1-c
-  source_image_family: "schedmd-v5-slurm-22-05-3-ubuntu-2004-lts"
-  source_image_project: "projects/schedmd-slurm-public/global/images/family"
+  instance_image:
+    family: schedmd-v5-slurm-22-05-3-ubuntu-2004-lts
+    project: projects/schedmd-slurm-public/global/images/family
 
 
 deployment_groups:
