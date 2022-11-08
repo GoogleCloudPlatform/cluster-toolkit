@@ -16,6 +16,10 @@
 
 timeout: 3600s
 steps:
+# Make tests requires full history. Perform deep fetch.
+- id: git-fetch-unshallow
+  name: gcr.io/cloud-builders/git
+  args: ['fetch', '--unshallow']
 - name: golang:bullseye
   entrypoint: /bin/bash
   args:
