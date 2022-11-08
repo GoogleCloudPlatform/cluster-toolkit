@@ -5,10 +5,10 @@ storage.
 
 The Toolkit contains modules that will **provision**:
 
-- [Filestore (GCP managed nfs)][filestore]
+- [Filestore (GCP managed NFS)][filestore]
 - [DDN EXAScaler lustre][ddn-exascaler]
 - [Intel DAOS][intel-daos]
-- [Nfs server (non-GCP managed)][nfs-server]
+- [NFS server (non-GCP managed)][nfs-server]
 
 The Toolkit also provides a **[pre-existing-network-storage]** module to work
 with a network storage device that is already set up. The
@@ -22,7 +22,8 @@ with a network storage device that is already set up. The
 
 In addition to provisioning a network storage device, most file system modules
 contain scripts that will install any required software needed to utilize the
-device and mount the file system automatically.
+device and mount the file system automatically on
+[supported and tested VM images](./vm-images.md).
 
 ### Mounting Via Use
 
@@ -45,7 +46,7 @@ as shown below:
 ```
 
 The example above is creating a filestore and automatically mounting it to a VM.
-Take note of the line with the comment saying `# Note this line`. By adding
+Take note of the line with the comment saying `# Note this line`. By adding the
 `homefs` id to the `use` field of `workstation` several things automatically
 happen:
 
@@ -57,8 +58,9 @@ happen:
   boot (if not already installed).
 - The VM will add `homefs` to fstab and mount the file system.
 
-This same pattern works across most modules in the toolkit. The compatibility
-matrix below shows for which modules this will work.
+This same pattern works across most modules in the toolkit. The
+[compatibility matrix](#compatibility-matrix) below shows modules that can use
+this method.
 
 ### Mounting Via Startup
 
@@ -96,18 +98,18 @@ The following is an example setting up a filestore using startup script:
 The following matrix shows the best method by which each type of network storage
 device should be mounted to each mount capable module.
 
-. | Slurm V4 | Slurm V5 | Batch | vm-instance | Packer (client install) | HTCondor\*\* | PBS Pro**
+&nbsp; | Slurm V4 | Slurm V5 | Batch | vm-instance | Packer (client install) | HTCondor\* | PBS Pro\*
 -- | -- | -- | -- | -- | -- | -- | --
 filestore | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
 nfs-server | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
 DDN EXAScaler lustre | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Intel DAOS*** | via STARTUP | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing
+Intel DAOS** | via STARTUP | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing
   |   |   |   |   |   |   |  
 filestore (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
 nfs-server (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
 DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Intel DAOS (pre-existing) | Under Development | Under Development | Under Development | Under Development | Under Development | Under Development | Under Development
-GCS FUSE (pre-existing) | via USE | via USE | via USE\* | via USE\* | via STARTUP | via USE | Needs Testing
+Intel DAOS (pre-existing) | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development
+GCS FUSE (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
 
 - **via USE:** Client installation and mounting occur automatically when
   connected with the use field. See
@@ -115,12 +117,11 @@ GCS FUSE (pre-existing) | via USE | via USE | via USE\* | via USE\* | via STARTU
 - **via STARTUP:** Startup scripts are provided that can be used with the
   `startup-script` module to install clients and mount. See
   [mounting via startup section](#mounting-via-startup).
-- **Needs Testing:** Has not yet been fully tested.
-- **Under Development:** Development to support this feature has been planned.
+- **Needs Testing:** May currently work but has not yet been fully tested.
+- **Planned Development:** Development to support this feature has been planned.
 
-\* not yet supported on Ubuntu 22 (20 works)\
-** only supported on CentOS 7\
-*** DAOS has additional pre-req steps and does not yet support automatic mounting
+\* only supported on CentOS 7\
+** DAOS has additional pre-req steps and does not yet support automatic mounting
 
 [filestore]: ../modules/file-system/filestore/README.md
 [pre-existing-network-storage]: ../modules/file-system/pre-existing-network-storage/README.md
