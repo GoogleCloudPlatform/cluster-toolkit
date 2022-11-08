@@ -347,6 +347,10 @@ value is in the following priority order:
 1. Deployment variable (`vars`) of the same name
 1. Default value for the setting
 
+> **_NOTE:_** See the
+> [network storage documentation](./../docs/network_storage.md) for more
+> information about mounting network storage file systems via the `use` field.
+
 ### Outputs (Optional)
 
 The `outputs` field allows a module-level output to be made available at the
