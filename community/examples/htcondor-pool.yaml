@@ -20,7 +20,10 @@ vars:
   deployment_name: htcondor-001
   region: us-central1
   zone: us-central1-c
-  enable_oslogin: "DISABLE"
+  # if using OS Login with "external users" (outside of the Google Cloud
+  # organization), then Docker universe jobs will fail as of 2022-11-09
+  # consider setting DISABLE if this atypical situation applies
+  enable_oslogin: ENABLE
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
