@@ -1,0 +1,151 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+blueprint_name: batch-wrf-mpi
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: batch-wrf
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  ### Software & Script Installation ###
+  - id: sharefs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      local_mount: /share
+
+  - id: spack
+    source: community/modules/scripts/spack-install
+    settings:
+      install_dir: /share/spack
+      configs:
+      - type: file
+        scope: defaults
+        content: |
+          config:
+            build_stage:
+              - /share/spack/spack-stage
+      - type: file
+        scope: defaults
+        content: |
+          modules:
+            default:
+              tcl:
+                hash_length: 0
+                all:
+                  conflict:
+                    - '{name}'
+                projections:
+                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
+      compilers:
+      - gcc@8.2.0 target=x86_64
+      environments:
+      - name: wrfv3
+        type: file
+        content: |
+          spack:
+            definitions:
+            - compilers:
+              - gcc@8.2.0
+            - mpis:
+              - intel-mpi@2018.4.274
+            - mpi_packages:
+              - wrf@3.9.1.1 build_type=dm+sm compile_type=em_real nesting=basic ~pnetcdf
+            specs:
+            - matrix:
+              - - $mpis
+              - - $%compilers
+            - matrix:
+              - - $mpi_packages
+              - - $%compilers
+              - - $^mpis
+      # Un-comment and update mirror_url to install from spack cache
+      # spack_cache_url:
+      # - mirror_name: gcs_cache
+      #   mirror_url: gs://optionally_set_spack_cache_bucket
+
+  - id: spack-build-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
+      - type: shell
+        destination: wrfv3_setup.sh
+        content: |
+          #!/bin/bash
+          source /share/spack/share/spack/setup-env.sh
+          spack env activate wrfv3
+          chmod -R a+rwX /share/spack/var/spack/environments/wrfv3
+          mkdir -p /share/wrfv3
+          chmod a+rwx /share/wrfv3
+          cd /share/wrfv3
+          wget --no-verbose https://www2.mmm.ucar.edu/wrf/bench/conus12km_v3911/bench_12km.tar.bz2
+          tar xjf bench_12km.tar.bz2
+      - type: data
+        destination: /share/wrfv3/submit_wrfv3.sh
+        content: |
+          #!/bin/bash
+          source /share/spack/share/spack/setup-env.sh
+          spack env activate wrfv3
+          if [ $BATCH_TASK_INDEX = 0 ]
+          then
+            mkdir --parents /share/jobs/${BATCH_JOB_ID}
+            cd /share/jobs/${BATCH_JOB_ID}
+            cp /share/wrfv3/bench_12km/* .
+            WRF=`spack location -i wrf`
+            ln -s $WRF/run/* .
+            mpirun -hostfile $BATCH_HOSTS_FILE -np 60 -ppn 30 /share/jobs/${BATCH_JOB_ID}/wrf.exe
+          fi
+      - type: shell
+        content: "shutdown -h +1"
+        destination: shutdown.sh
+
+  # must restart vm to re-initiate subsequent installs
+  - id: spack-builder
+    source: modules/compute/vm-instance
+    use: [network1, sharefs, spack-build-startup]
+    settings:
+      name_prefix: spack-builder
+      machine_type: c2-standard-30
+
+  ### Batch Modules ###
+  - id: batch-job
+    source: modules/scheduler/batch-job-template
+    use: [network1, sharefs]
+    settings:
+      runnable: . /share/wrfv3/submit_wrfv3.sh;
+      machine_type: c2-standard-60
+      task_count: 2
+      mpi_mode: true
+
+  - id: login-spack-setup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack.setup_spack_runner)
+
+  - id: batch-login
+    source: modules/scheduler/batch-login-node
+    use: [login-spack-setup, batch-job]
+    outputs: [instructions]
