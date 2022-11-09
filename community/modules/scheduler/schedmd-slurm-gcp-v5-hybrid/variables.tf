@@ -86,21 +86,6 @@ variable "enable_bigquery_load" {
   default     = false
 }
 
-variable "disable_default_mounts" {
-  description = <<-EOD
-    Disable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
-    - /home
-    - /apps
-    If these are disabled, the slurm etc and munge dirs must be added manually,
-    or some other mechanism must be used to synchronize the slurm conf files
-    and the munge key across the cluster.
-    EOD
-  type        = bool
-  default     = false
-}
-
 variable "slurm_control_host" {
   type        = string
   description = <<-EOD
@@ -115,6 +100,18 @@ variable "compute_startup_script" {
   description = "Startup script used by the compute VMs."
   type        = string
   default     = ""
+}
+
+variable "compute_startup_scripts_timeout" {
+  description = <<-EOD
+    The timeout (seconds) applied to the compute_startup_script. If
+    any script exceeds this timeout, then the instance setup process is considered
+    failed and handled accordingly.
+    
+    NOTE: When set to 0, the timeout is considered infinite and thus disabled.
+    EOD
+  type        = number
+  default     = 300
 }
 
 variable "prolog_scripts" {
@@ -186,13 +183,17 @@ variable "partition" {
         group_name             = string
         instance_template      = string
         node_conf              = map(string)
+        access_config = list(object({
+          network_tier = string
+        }))
         spot_instance_config = object({
           termination_action = string
         })
       }))
-      subnetwork        = string
-      zone_policy_allow = list(string)
-      zone_policy_deny  = list(string)
+      partition_startup_scripts_timeout = number
+      subnetwork                        = string
+      zone_policy_allow                 = list(string)
+      zone_policy_deny                  = list(string)
     })
   }))
   default = []
@@ -264,14 +265,4 @@ variable "install_dir" {
     EOD
   type        = string
   default     = null
-}
-
-variable "slurm_depends_on" {
-  description = <<-EOD
-    Custom terraform dependencies without replacement on delta. This is useful to
-    ensure order of resource creation.
-    NOTE: Also see terraform meta-argument 'depends_on'.
-    EOD
-  type        = list(string)
-  default     = []
 }
