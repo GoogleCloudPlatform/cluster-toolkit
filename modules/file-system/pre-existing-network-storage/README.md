@@ -52,6 +52,7 @@ Supported `fs_type`:
 
 - nfs
 - lustre (DDN)
+- gcsfuse
 
 [scripts/mount.sh](./scripts/mount.sh) is used as the contents of
 `mount_runner`. This script will update `/etc/fstab` and mount the network
