@@ -46,6 +46,7 @@ func printPackerInstructions(modPath string) {
 	fmt.Println("  packer init .")
 	fmt.Println("  packer validate .")
 	fmt.Println("  packer build .")
+	fmt.Println("  cd -")
 }
 
 func writePackerAutovars(vars map[string]cty.Value, dst string) error {
