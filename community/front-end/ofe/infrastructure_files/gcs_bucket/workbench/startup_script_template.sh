@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 if [ ! -d /tmp/jupyterhome/home ]; then ln -s /home /tmp/jupyterhome/; fi
 
 echo "modifying jupyter config" | tee -a /tmp/startup.log

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 BLOCKMESH_DIMENSIONS="100 40 40" # 22 million case
 #BLOCKMESH_DIMENSIONS="130 52 52"   # 42 million case
 NTASKS=32         # number of processes for meshing

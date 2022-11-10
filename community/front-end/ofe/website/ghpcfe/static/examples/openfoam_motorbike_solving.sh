@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # Mesh was previously generated and saved. Refer to the separate meshing script.
 tar xvf motorBike.tar.bz2
 pushd motorBike || exit

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # Spack doesn't place much into the environment for WRF
 # But it does add to CMAKE_PREFIX_PATH
 # Extract the package info from that
