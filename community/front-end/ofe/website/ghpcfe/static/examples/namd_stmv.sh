@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # CHANGES REQUIRED TO SPACK PACKAGE FOR CHARMPP
 #     https://github.com/spack/spack/issues/18535
 # then...
