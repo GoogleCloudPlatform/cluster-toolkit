@@ -7,7 +7,7 @@
         },%{ endif }
         {
           "script": {
-            "text": "${runnable}"
+            "text": ${jsonencode(runnable)}
           }
         }%{ if synchronized },
         {

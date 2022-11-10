@@ -63,6 +63,7 @@
     ansible.builtin.lineinfile:
       create: true
       path: /etc/hosts.equiv
+      mode: 0644
       line: "{{ client_hostname_prefix }}-{{ idx }}"
     loop: "{{ range(0, client_host_count | int) | list }}"
     loop_control:

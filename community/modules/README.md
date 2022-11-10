@@ -14,6 +14,8 @@ module documentation](../../modules/README.md).
 * [**schedmd-slurm-gcp-v5-node-group**](compute/schedmd-slurm-gcp-v5-node-group/README.md):
   Defines a node group that can be used as input to the
   [schedmd-slurm-gcp-v5-partition] module.
+* [**pbspro-execution**](compute/pbspro-execution/README.md):
+  Creates execution hosts for use in a PBS Professional cluster.
 
 [schedmd-slurm-gcp-v5-controller]: scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-partition]: compute/schedmd-slurm-gcp-v5-partition/README.md
@@ -89,5 +91,11 @@ module documentation](../../modules/README.md).
   on-premise Slurm cluster. This module uses the
   [slurm-controller-hybrid](https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/terraform/slurm_cluster/modules/slurm_controller_hybrid)
   from the slurm-gcp project.
+
+* [**pbspro-client**](scheduler/pbspro-client/README.md):
+  Creates a client host for submitting jobs to a PBS Professional cluster.
+
+* [**pbspro-server**](scheduler/pbspro-server/README.md):
+  Creates a server host for operating a PBS Professional cluster.
 
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0

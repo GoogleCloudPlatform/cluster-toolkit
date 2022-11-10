@@ -27,7 +27,7 @@ locals {
     additional_disks         = var.additional_disks
     bandwidth_tier           = var.bandwidth_tier
     can_ip_forward           = var.can_ip_forward
-    disable_smt              = var.disable_smt
+    disable_smt              = !var.enable_smt
     disk_auto_delete         = var.disk_auto_delete
     disk_labels              = merge(var.labels, var.disk_labels)
     disk_size_gb             = var.disk_size_gb
@@ -43,9 +43,9 @@ locals {
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible
     shielded_instance_config = var.shielded_instance_config
-    source_image_family      = var.source_image_family == null ? "" : var.source_image_family
-    source_image_project     = var.source_image_project == null ? "" : var.source_image_project
-    source_image             = var.source_image == null ? "" : var.source_image
+    source_image_family      = lookup(var.instance_image, "family", "")
+    source_image_project     = lookup(var.instance_image, "project", "")
+    source_image             = lookup(var.instance_image, "name", "")
     tags                     = var.tags
     service_account = var.service_account != null ? var.service_account : {
       email  = data.google_compute_default_service_account.default.email

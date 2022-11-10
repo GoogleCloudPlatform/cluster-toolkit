@@ -20,6 +20,17 @@ locals {
   communicator         = local.no_provisioners ? "none" : "ssh"
   use_iap              = local.no_provisioners ? false : var.use_iap
   image_family         = var.image_family != null ? var.image_family : var.deployment_name
+
+  machine_vals                = split("-", var.machine_type)
+  machine_family              = local.machine_vals[0]
+  gpu_attached                = contains(["a2"], local.machine_family) || var.accelerator_type != null
+  on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
+
+  on_host_maintenance = (
+    var.on_host_maintenance != null
+    ? var.on_host_maintenance
+    : local.on_host_maintenance_default
+  )
 }
 
 source "googlecompute" "toolkit_image" {
@@ -28,6 +39,9 @@ source "googlecompute" "toolkit_image" {
   image_name              = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
   image_family            = local.image_family
   machine_type            = var.machine_type
+  accelerator_type        = var.accelerator_type
+  accelerator_count       = var.accelerator_count
+  on_host_maintenance     = local.on_host_maintenance
   disk_size               = var.disk_size
   omit_external_ip        = var.omit_external_ip
   use_internal_ip         = var.omit_external_ip

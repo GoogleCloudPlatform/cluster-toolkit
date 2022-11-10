@@ -48,6 +48,20 @@ locals {
     ns if contains(local.native_fstype, ns.fs_type)
   ]
   # other processing happens in startup_from_network_storage.tf
+
+  # this code is similar to code in Packer and vm-instance modules
+  # it differs in that this module does not (yet) expose var.guest_acclerator
+  # for attaching GPUs to N1 VMs. For now, identify only A2 types.
+  machine_vals                = split("-", var.machine_type)
+  machine_family              = local.machine_vals[0]
+  gpu_attached                = contains(["a2"], local.machine_family)
+  on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
+
+  on_host_maintenance = (
+    var.on_host_maintenance != null
+    ? var.on_host_maintenance
+    : local.on_host_maintenance_default
+  )
 }
 
 module "instance_template" {
@@ -68,6 +82,7 @@ module "instance_template" {
   metadata             = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
   source_image_family  = var.image.family
   source_image_project = var.image.project
+  on_host_maintenance  = local.on_host_maintenance
 }
 
 resource "local_file" "job_template" {

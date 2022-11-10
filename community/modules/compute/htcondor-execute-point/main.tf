@@ -17,8 +17,14 @@
 
 locals {
   network_storage_metadata = var.network_storage == null ? {} : { network_storage = jsonencode(var.network_storage) }
-  metadata                 = merge(var.metadata, local.network_storage_metadata)
 
+  oslogin_api_values = {
+    "DISABLE" = "FALSE"
+    "ENABLE"  = "TRUE"
+  }
+  enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
+
+  metadata = merge(var.metadata, local.network_storage_metadata, local.enable_oslogin)
 
   configure_autoscaler_role = {
     "type"        = "ansible-local"

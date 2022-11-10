@@ -40,12 +40,15 @@ Modules that are still in development and less stable are labeled with the
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-configure].
+* **[pbspro-execution]** ![community-badge] ![experimental-badge] :
+  Creates execution hosts for use in a PBS Professional cluster.
 
 [vm-instance]: compute/vm-instance/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
+[pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 
 ### Database
 
@@ -133,6 +136,10 @@ Modules that are still in development and less stable are labeled with the
   login node using [slurm-gcp].
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor pool.
+* **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
+  a client host for submitting jobs to a PBS Professional cluster.
+* **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
+  a server host for operating a PBS Professional cluster.
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
@@ -144,6 +151,8 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5
 [slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
+[pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
+[pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
 ### Scripts
 
@@ -337,6 +346,10 @@ value is in the following priority order:
 1. Output from a used module, taken in the order provided in the `use` list
 1. Deployment variable (`vars`) of the same name
 1. Default value for the setting
+
+> **_NOTE:_** See the
+> [network storage documentation](./../docs/network_storage.md) for more
+> information about mounting network storage file systems via the `use` field.
 
 ### Outputs (Optional)
 

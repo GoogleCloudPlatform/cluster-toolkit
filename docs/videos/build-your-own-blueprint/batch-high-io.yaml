@@ -1,0 +1,54 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: batch-high-io
+
+vars:
+  project_id:  # my-project-id
+  deployment_name: high-io-01
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+
+  - id: appfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      local_mount: /apps
+
+  - id: lustrefs
+    source: community/modules/file-system/DDN-EXAScaler
+    use: [network1]
+    settings: {local_mount: /scratch}
+
+  - id: batch-job
+    source: modules/scheduler/batch-job-template
+    use: [network1, appfs, lustrefs]
+    settings:
+      runnable: "echo 'hello world'"
+      machine_type: n2-standard-4
+      image:
+        family: rocky-linux-8-optimized-gcp
+        project: rocky-linux-cloud
+
+  - id: batch-login
+    source: modules/scheduler/batch-login-node
+    use: [batch-job]
+    outputs: [instructions]

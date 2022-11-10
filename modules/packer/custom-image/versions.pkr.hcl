@@ -15,9 +15,10 @@
 packer {
   required_version = ">= 1.7.9, < 2.0.0"
 
+  # packer plugin 1.0.16 and above includes HPC VM Image
   required_plugins {
     googlecompute = {
-      version = "~> 1.0"
+      version = "~> 1.0.16"
       source  = "github.com/hashicorp/googlecompute"
     }
   }
