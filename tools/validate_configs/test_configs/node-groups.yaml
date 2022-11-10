@@ -46,6 +46,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       name: simple
+      machine_type: c2-standard-30
 
   - id: one_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -62,18 +63,28 @@ deployment_groups:
     settings:
       name: c30
       machine_type: c2-standard-30
+      instance_image:
+        family: schedmd-v5-slurm-22-05-3-debian-10
+        project: projects/schedmd-slurm-public/global/images/family
 
   - id: node_group2
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       name: c60
       machine_type: c2-standard-60
+      instance_image:
+        name: schedmd-v5-slurm-22-05-3-hpc-centos-7-1660577416
+        project: projects/schedmd-slurm-public/global/images
 
   - id: node_group3
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       name: cd112
       machine_type: c2d-standard-112
+      instance_image:
+        family: schedmd-v5-slurm-22-05-3-hpc-centos-7
+        project: projects/schedmd-slurm-public/global/images/family
+      enable_smt: true
 
   - id: node_group4
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
@@ -92,15 +103,7 @@ deployment_groups:
     - node_group4
     settings:
       partition_name: multng
-
-  ## Simple partition, using the default node group only.
-  - id: default_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
-    settings:
-      partition_name: defng
+      enable_reconfigure: true
 
   ## Explicitly set node partition with one node group
   - id: one_node_group_explicit
@@ -110,9 +113,7 @@ deployment_groups:
     - homefs
     settings:
       partition_name: explng
-      node_count_dynamic_max: 4
       enable_placement: false
-      machine_type: n2-standard-2
       is_default: true
       node_groups:
       - node_count_static: 0
@@ -153,11 +154,11 @@ deployment_groups:
     - network1
     - one_node_group
     - multiple_node_groups
-    - default_partition
     - one_node_group_explicit
     - homefs
     settings:
       disable_controller_public_ips: false
+      enable_reconfigure: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login

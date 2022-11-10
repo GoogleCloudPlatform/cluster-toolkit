@@ -211,22 +211,28 @@ are listed below:
 * [`munge_user`]: Ansible role variable for the munge user and group IDs.
 * [`slurm_user`]: Ansible role variable for the slurm user and group IDs.
 
-Remember to update your blueprint to include the `source_image_project` and
-`source_image_family` in the settings under your partitions. As an example, the
-partition definition below sets the `source_image_project` to the `project_id`
-in deployment variables and is using the default `source_image_family` for an
+Remember to update your blueprint to include the `instance_image` in the
+settings under your node groups. As an example, the
+partition definition below sets the `project` to the `project_id`
+in deployment variables and is using the default `family` for an
 image created with slurm 21.08.8:
 
 ```yaml
+- id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 20
+      instance_image:
+        project: $(vars.project_id)
+        family: schedmd-v5-slurm-21-08-8-hpc-centos-7
+
 - id: compute-partition
   source: community/modules/compute/schedmd-slurm-gcp-v5-partition
   use:
   - network1
+  - compute_node_group
   settings:
     partition_name: compute
-    node_count_dynamic_max: 20
-    source_image_project: $(vars.project_id)
-    source_image_family: schedmd-v5-slurm-21-08-8-hpc-centos-7
 ```
 
 [slurmgcppacker]: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0/packer

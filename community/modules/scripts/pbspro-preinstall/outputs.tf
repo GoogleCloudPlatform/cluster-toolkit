@@ -22,16 +22,25 @@ output "bucket_name" {
 output "pbs_client_rpm_url" {
   description = "gsutil URL of PBS client RPM package"
   value       = "gs://${module.pbspro_bucket.bucket.name}/${google_storage_bucket_object.client_rpm.name}"
+  depends_on = [
+    google_storage_bucket_object.client_rpm,
+  ]
 }
 
 output "pbs_execution_rpm_url" {
   description = "gsutil URL of PBS execution host RPM package"
   value       = "gs://${module.pbspro_bucket.bucket.name}/${google_storage_bucket_object.execution_rpm.name}"
+  depends_on = [
+    google_storage_bucket_object.execution_rpm,
+  ]
 }
 
 output "pbs_server_rpm_url" {
   description = "gsutil URL of PBS server host RPM package"
   value       = "gs://${module.pbspro_bucket.bucket.name}/${google_storage_bucket_object.server_rpm.name}"
+  depends_on = [
+    google_storage_bucket_object.server_rpm,
+  ]
 }
 
 output "pbs_license_file_url" {

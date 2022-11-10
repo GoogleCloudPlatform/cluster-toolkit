@@ -177,3 +177,13 @@ variable "image" {
     project = "cloud-hpc-image-public"
   }
 }
+
+variable "on_host_maintenance" {
+  description = "Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except the use of GPUs requires it to be `TERMINATE`"
+  type        = string
+  default     = null
+  validation {
+    condition     = var.on_host_maintenance == null ? true : contains(["MIGRATE", "TERMINATE"], var.on_host_maintenance)
+    error_message = "When set, the on_host_maintenance must be set to MIGRATE or TERMINATE."
+  }
+}

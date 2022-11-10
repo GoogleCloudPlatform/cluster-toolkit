@@ -29,7 +29,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
 
   - id: gcs
     source: ./modules/file-system/pre-existing-network-storage
@@ -114,3 +114,33 @@ deployment_groups:
       instance_image:
         family: rocky-linux-8
         project: rocky-linux-cloud
+
+  - id: compute-partition
+    source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+    use:
+    - gcs
+    - gcs2
+    - network1
+    settings:
+      partition_name: compute
+      machine_type: n2-standard-4
+
+  - id: slurm-controller
+    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    use:
+    - gcs
+    - gcs2
+    - compute-partition
+    - network1
+    settings:
+      login_node_count: 1
+      compute_node_scopes:
+      - https://www.googleapis.com/auth/cloud-platform
+      - https://www.googleapis.com/auth/devstorage.read_only
+      disable_compute_public_ips: false
+
+  - id: slurm-login
+    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    use:
+    - slurm-controller
+    - network1

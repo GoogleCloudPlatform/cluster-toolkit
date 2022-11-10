@@ -38,11 +38,8 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       additional_disks:
       - device_name: test-disk-1
@@ -60,10 +57,18 @@ deployment_groups:
         auto_delete: true
         boot: false
       bandwidth_tier: gvnic_enabled
-      is_default: true
       machine_type: n1-standard-16
       node_count_dynamic_max: 5
       node_count_static: 0
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    - compute_node_group
+    settings:
+      is_default: true
       partition_name: ssdcomp
       region: us-central1
 

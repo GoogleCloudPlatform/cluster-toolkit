@@ -10,9 +10,7 @@ MIN_GOLANG_VERSION=1.18 # for building ghpc
         terraform-format packer-format \
         check-tflint check-pre-commit
 
-# TODO: push cmd test coverage above 80% and re-enable.
-# ENG = ./cmd/... ./pkg/...
-ENG = ./pkg/...
+ENG = ./cmd/... ./pkg/...
 TERRAFORM_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.tf" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
 PACKER_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
 

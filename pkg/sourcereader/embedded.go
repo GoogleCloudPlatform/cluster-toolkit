@@ -119,6 +119,10 @@ func defaultAPIList(source string) []string {
 		"community/modules/compute/htcondor-execute-point": {
 			"compute.googleapis.com",
 		},
+		"community/modules/compute/pbspro-execution": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
 		"community/modules/compute/schedmd-slurm-gcp-v5-partition": {
 			"compute.googleapis.com",
 		},
@@ -170,6 +174,14 @@ func defaultAPIList(source string) []string {
 		"community/modules/scheduler/htcondor-configure": {
 			"iam.googleapis.com",
 			"secretmanager.googleapis.com",
+		},
+		"community/modules/scheduler/pbspro-client": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
+		"community/modules/scheduler/pbspro-server": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
 		},
 		"community/modules/scheduler/schedmd-slurm-gcp-v5-controller": {
 			"compute.googleapis.com",
