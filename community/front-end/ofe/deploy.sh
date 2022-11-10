@@ -461,7 +461,7 @@ deploy() {
     sdir=${SCRIPT_DIR#${basedir}}
     tdir=/tmp/hpc-toolkit
     
-    cp --recursive ${basedir} ${tdir}/
+    cp --recursive "${basedir}" ${tdir}/
     (
       cd ${tdir}
       #
@@ -469,7 +469,7 @@ deploy() {
       # TODO: remove hardwired paths in TKFE source code
       #
       mkdir -p community/front-end
-      mv ${tdir}${sdir}/* community/front-end/
+      mv ${tdir}"${sdir}"/* community/front-end/
       
       tar -zcf "${SCRIPT_DIR}"/tf/deployment.tar.gz \
 	  --exclude=.terraform \
