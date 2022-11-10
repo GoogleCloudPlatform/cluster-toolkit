@@ -86,10 +86,46 @@ variable "compute_startup_script" {
   default     = ""
 }
 
+variable "compute_startup_scripts_timeout" {
+  description = <<-EOD
+    The timeout (seconds) applied to the compute_startup_script. If
+    any script exceeds this timeout, then the instance setup process is considered
+    failed and handled accordingly.
+    
+    NOTE: When set to 0, the timeout is considered infinite and thus disabled.
+    EOD
+  type        = number
+  default     = 300
+}
+
 variable "controller_startup_script" {
   description = "Startup script used by the controller VM."
   type        = string
   default     = ""
+}
+
+variable "controller_startup_scripts_timeout" {
+  description = <<-EOD
+    The timeout (seconds) applied to the controller_startup_script. If
+    any script exceeds this timeout, then the instance setup process is considered
+    failed and handled accordingly.
+
+    NOTE: When set to 0, the timeout is considered infinite and thus disabled.
+    EOD
+  type        = number
+  default     = 300
+}
+
+variable "login_startup_scripts_timeout" {
+  description = <<-EOD
+    The timeout (seconds) applied to the login startup script. If
+    any script exceeds this timeout, then the instance setup process is considered
+    failed and handled accordingly.
+    
+    NOTE: When set to 0, the timeout is considered infinite and thus disabled.
+    EOD
+  type        = number
+  default     = 300
 }
 
 variable "cgroup_conf_tpl" {
@@ -331,6 +367,9 @@ variable "partition" {
       partition_conf = map(string)
       partition_name = string
       partition_nodes = map(object({
+        access_config = list(object({
+          network_tier = string
+        }))
         bandwidth_tier         = string
         node_count_dynamic_max = number
         node_count_static      = number
@@ -342,9 +381,10 @@ variable "partition" {
           termination_action = string
         })
       }))
-      subnetwork        = string
-      zone_policy_allow = list(string)
-      zone_policy_deny  = list(string)
+      partition_startup_scripts_timeout = number
+      subnetwork                        = string
+      zone_policy_allow                 = list(string)
+      zone_policy_deny                  = list(string)
     })
   }))
   default = []

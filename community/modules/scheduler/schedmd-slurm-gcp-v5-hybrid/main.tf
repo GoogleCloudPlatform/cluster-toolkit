@@ -15,7 +15,7 @@
 */
 
 locals {
-  ghpc_startup_script_compute = [{
+  ghpc_startup_script_compute = var.compute_startup_script == "" ? [] : [{
     filename = "ghpc_startup.sh"
     content  = var.compute_startup_script
   }]
@@ -41,29 +41,28 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=v5.1.0"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=5.2.0"
 
-  project_id                   = var.project_id
-  slurm_cluster_name           = local.slurm_cluster_name
-  enable_devel                 = var.enable_devel
-  enable_cleanup_compute       = var.enable_cleanup_compute
-  enable_cleanup_subscriptions = var.enable_cleanup_subscriptions
-  enable_reconfigure           = var.enable_reconfigure
-  enable_bigquery_load         = var.enable_bigquery_load
-  compute_startup_scripts      = local.ghpc_startup_script_compute
-  prolog_scripts               = var.prolog_scripts
-  epilog_scripts               = var.epilog_scripts
-  network_storage              = var.network_storage
-  login_network_storage        = var.network_storage
-  partitions                   = var.partition
-  google_app_cred_path         = var.google_app_cred_path
-  slurm_bin_dir                = var.slurm_bin_dir
-  slurm_log_dir                = var.slurm_log_dir
-  cloud_parameters             = var.cloud_parameters
-  output_dir                   = var.output_dir
-  slurm_depends_on             = var.slurm_depends_on
-  slurm_control_host           = var.slurm_control_host
-  disable_default_mounts       = var.disable_default_mounts
+  project_id                      = var.project_id
+  slurm_cluster_name              = local.slurm_cluster_name
+  enable_devel                    = var.enable_devel
+  enable_cleanup_compute          = var.enable_cleanup_compute
+  enable_cleanup_subscriptions    = var.enable_cleanup_subscriptions
+  enable_reconfigure              = var.enable_reconfigure
+  enable_bigquery_load            = var.enable_bigquery_load
+  compute_startup_scripts         = local.ghpc_startup_script_compute
+  compute_startup_scripts_timeout = var.compute_startup_scripts_timeout
+  prolog_scripts                  = var.prolog_scripts
+  epilog_scripts                  = var.epilog_scripts
+  network_storage                 = var.network_storage
+  login_network_storage           = var.network_storage
+  partitions                      = var.partition
+  google_app_cred_path            = var.google_app_cred_path
+  slurm_bin_dir                   = var.slurm_bin_dir
+  slurm_log_dir                   = var.slurm_log_dir
+  cloud_parameters                = var.cloud_parameters
+  output_dir                      = var.output_dir
+  slurm_control_host              = var.slurm_control_host
 }
 
 # Null resource that injects the installation path before the resume/suspend

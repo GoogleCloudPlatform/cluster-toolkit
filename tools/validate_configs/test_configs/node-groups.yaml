@@ -64,7 +64,7 @@ deployment_groups:
       name: c30
       machine_type: c2-standard-30
       instance_image:
-        family: schedmd-v5-slurm-22-05-3-debian-10
+        family: schedmd-v5-slurm-22-05-4-debian-10
         project: projects/schedmd-slurm-public/global/images/family
 
   - id: node_group2
@@ -73,7 +73,7 @@ deployment_groups:
       name: c60
       machine_type: c2-standard-60
       instance_image:
-        name: schedmd-v5-slurm-22-05-3-hpc-centos-7-1660577416
+        name: schedmd-v5-slurm-22-05-4-hpc-centos-7-1665675565
         project: projects/schedmd-slurm-public/global/images
 
   - id: node_group3
@@ -82,7 +82,7 @@ deployment_groups:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: schedmd-v5-slurm-22-05-3-hpc-centos-7
+        family: schedmd-v5-slurm-22-05-4-hpc-centos-7
         project: projects/schedmd-slurm-public/global/images/family
       enable_smt: true
 
@@ -147,6 +147,7 @@ deployment_groups:
         source_image_project: null
         source_image: null
         tags: []
+        access_config: []
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller

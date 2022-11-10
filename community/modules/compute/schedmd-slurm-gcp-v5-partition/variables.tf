@@ -160,6 +160,9 @@ variable "node_groups" {
     variables to this module.
     EOT
   type = list(object({
+    access_config = list(object({
+      network_tier = string
+    }))
     node_count_static      = number
     node_count_dynamic_max = number
     group_name             = string

@@ -248,12 +248,12 @@ variable "shielded_instance_config" {
   description = <<-EOD
     Shielded VM configuration for the instance. Note: not used unless
     enable_shielded_vm is 'true'.
-    * enable_integrity_monitoring : Compare the most recent boot measurements to the
+    - enable_integrity_monitoring : Compare the most recent boot measurements to the
       integrity policy baseline and return a pair of pass/fail results depending on
       whether they match or not.
-    * enable_secure_boot : Verify the digital signature of all boot components, and
+    - enable_secure_boot : Verify the digital signature of all boot components, and
       halt the boot process if signature verification fails.
-    * enable_vtpm : Use a virtualized trusted platform module, which is a
+    - enable_vtpm : Use a virtualized trusted platform module, which is a
       specialized computer chip you can use to encrypt objects like keys and
       certificates.
     EOD
@@ -329,4 +329,12 @@ variable "zone_policy_deny" {
     ])
     error_message = "A provided zone in zone_policy_deny is not a valid zone (Regexp '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
   }
+}
+
+variable "access_config" {
+  description = "Access configurations, i.e. IPs via which the node group instances can be accessed via the internet."
+  type = list(object({
+    network_tier = string
+  }))
+  default = []
 }
