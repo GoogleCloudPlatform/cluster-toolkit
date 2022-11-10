@@ -583,11 +583,11 @@ This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
 The blueprint contains the following:
 
 * A shared `filestore` filesystem.
-* A `spack-install` module that builts a script to install Spack and the WRF
+* A `spack-install` module that builds a script to install Spack and the WRF
   application onto the shared `filestore`.
 * A `startup-script` module which uses the above script and stages job data.  
 * A builder `vm-instance` which performs the Spack install and then shuts down.
-* A `batch-job-template` that builds a batch job to execute the WRF job.
+* A `batch-job-template` that builds a Batch job to execute the WRF job.
 * A `batch-login` VM that can be used to test and submit the Batch job.
 
 **Usage instructions:**
@@ -615,12 +615,13 @@ The blueprint contains the following:
 
     Once on the login node you should be able to inspect the Batch job template
     found in the `/home/batch-jobs` directory. This Batch job will call a script
-    found at `/share/wrfv3/submit_wrfv3.sh`. Note that the `/share` directory is shared between the login node and the Batch job.
+    found at `/share/wrfv3/submit_wrfv3.sh`. Note that the `/share` directory is
+    shared between the login node and the Batch job.
 
 3. Submit the Batch job
 
     Use the command provided in the terraform output instructions to submit your
-    batch job and check its status. The Batch job may take several minutes to
+    Batch job and check its status. The Batch job may take several minutes to
     start and once running should complete within 5 minutes.
 
 4. Inspect results

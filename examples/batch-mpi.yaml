@@ -118,8 +118,13 @@ deployment_groups:
             mpirun -hostfile $BATCH_HOSTS_FILE -np 60 -ppn 30 /share/jobs/${BATCH_JOB_ID}/wrf.exe
           fi
       - type: shell
-        content: "shutdown -h +1"
         destination: shutdown.sh
+        content: |
+          #!/bin/bash
+          if [ ! -f /etc/block_auto_shutdown ]; then
+                  touch /etc/block_auto_shutdown
+                  shutdown -h +1
+          fi
 
   # must restart vm to re-initiate subsequent installs
   - id: spack-builder
