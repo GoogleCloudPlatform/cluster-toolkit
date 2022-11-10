@@ -198,8 +198,6 @@ limitations under the License.
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead. | `string` | `null` | no |
 | <a name="input_partition_conf"></a> [partition\_conf](#input\_partition\_conf) | Slurm partition configuration as a map.<br>See https://slurm.schedmd.com/slurm.conf.html#SECTION_PARTITION-CONFIGURATION | `map(string)` | `{}` | no |
 | <a name="input_partition_name"></a> [partition\_name](#input\_partition\_name) | The name of the slurm partition. | `string` | n/a | yes |
-| <a name="input_partition_startup_script"></a> [partition\_startup\_script](#input\_partition\_startup\_script) | Startup script used by the compute VMs on this partition. | `string` | `""` | no |
-| <a name="input_partition_startup_scripts_timeout"></a> [partition\_startup\_scripts\_timeout](#input\_partition\_startup\_scripts\_timeout) | The timeout (seconds) applied to the partition\_startup\_script. If<br>any script exceeds this timeout, then the instance setup process is considered<br>failed and handled accordingly.<br><br>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources. | `string` | n/a | yes |

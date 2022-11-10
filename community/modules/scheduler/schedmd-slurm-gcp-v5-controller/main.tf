@@ -15,11 +15,11 @@
 */
 
 locals {
-  ghpc_startup_script_controller = [{
+  ghpc_startup_script_controller = var.controller_startup_script == "" ? [] : [{
     filename = "ghpc_startup.sh"
     content  = var.controller_startup_script
   }]
-  ghpc_startup_script_compute = [{
+  ghpc_startup_script_compute = var.compute_startup_script == "" ? [] : [{
     filename = "ghpc_startup.sh"
     content  = var.compute_startup_script
   }]

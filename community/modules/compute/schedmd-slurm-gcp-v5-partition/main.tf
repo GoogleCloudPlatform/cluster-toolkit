@@ -16,11 +16,6 @@
 
 locals {
 
-  ghpc_startup_script = [{
-    filename = "ghpc_startup_${var.partition_name}.sh"
-    content  = var.partition_startup_script
-  }]
-
   # Default to value in partition_conf if both set "Default"
   partition_conf = merge(var.is_default == true ? { "Default" : "YES" } : {}, var.partition_conf)
 
@@ -43,20 +38,18 @@ data "google_compute_zones" "available" {
 module "slurm_partition" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=5.2.0"
 
-  slurm_cluster_name                = local.slurm_cluster_name
-  partition_nodes                   = var.node_groups
-  enable_job_exclusive              = var.exclusive
-  enable_placement_groups           = var.enable_placement
-  enable_reconfigure                = var.enable_reconfigure
-  network_storage                   = var.network_storage
-  partition_name                    = var.partition_name
-  project_id                        = var.project_id
-  region                            = var.region
-  zone_policy_allow                 = local.zone_policy_allow
-  zone_policy_deny                  = local.zone_policy_deny
-  subnetwork                        = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
-  subnetwork_project                = var.subnetwork_project
-  partition_conf                    = local.partition_conf
-  partition_startup_scripts         = local.ghpc_startup_script
-  partition_startup_scripts_timeout = var.partition_startup_scripts_timeout
+  slurm_cluster_name      = local.slurm_cluster_name
+  partition_nodes         = var.node_groups
+  enable_job_exclusive    = var.exclusive
+  enable_placement_groups = var.enable_placement
+  enable_reconfigure      = var.enable_reconfigure
+  network_storage         = var.network_storage
+  partition_name          = var.partition_name
+  project_id              = var.project_id
+  region                  = var.region
+  zone_policy_allow       = local.zone_policy_allow
+  zone_policy_deny        = local.zone_policy_deny
+  subnetwork              = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
+  subnetwork_project      = var.subnetwork_project
+  partition_conf          = local.partition_conf
 }

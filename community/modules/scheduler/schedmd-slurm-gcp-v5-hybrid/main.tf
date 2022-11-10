@@ -15,7 +15,7 @@
 */
 
 locals {
-  ghpc_startup_script_compute = [{
+  ghpc_startup_script_compute = var.compute_startup_script == "" ? [] : [{
     filename = "ghpc_startup.sh"
     content  = var.compute_startup_script
   }]

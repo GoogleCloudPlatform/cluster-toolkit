@@ -73,7 +73,7 @@ deployment_groups:
       name: c60
       machine_type: c2-standard-60
       instance_image:
-        name: schedmd-v5-slurm-22-05-4-hpc-centos-7-1660577416
+        name: schedmd-v5-slurm-22-05-4-hpc-centos-7-1665675565
         project: projects/schedmd-slurm-public/global/images
 
   - id: node_group3
@@ -147,6 +147,7 @@ deployment_groups:
         source_image_project: null
         source_image: null
         tags: []
+        access_config: []
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller

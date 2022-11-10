@@ -125,24 +125,6 @@ variable "enable_placement" {
   default     = true
 }
 
-variable "partition_startup_script" {
-  description = "Startup script used by the compute VMs on this partition."
-  type        = string
-  default     = ""
-}
-
-variable "partition_startup_scripts_timeout" {
-  description = <<-EOD
-    The timeout (seconds) applied to the partition_startup_script. If
-    any script exceeds this timeout, then the instance setup process is considered
-    failed and handled accordingly.
-    
-    NOTE: When set to 0, the timeout is considered infinite and thus disabled.
-    EOD
-  type        = number
-  default     = 300
-}
-
 variable "enable_reconfigure" {
   description = <<-EOD
     Enables automatic Slurm reconfigure on when Slurm configuration changes (e.g.

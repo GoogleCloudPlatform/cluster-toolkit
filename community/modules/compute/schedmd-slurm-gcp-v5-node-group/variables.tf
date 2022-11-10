@@ -330,3 +330,11 @@ variable "zone_policy_deny" {
     error_message = "A provided zone in zone_policy_deny is not a valid zone (Regexp '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
   }
 }
+
+variable "access_config" {
+  description = "Access configurations, i.e. IPs via which the node group instances can be accessed via the internet."
+  type = list(object({
+    network_tier = string
+  }))
+  default = []
+}

@@ -47,6 +47,7 @@ locals {
     source_image_project     = lookup(var.instance_image, "project", "")
     source_image             = lookup(var.instance_image, "name", "")
     tags                     = var.tags
+    access_config            = var.access_config
     service_account = var.service_account != null ? var.service_account : {
       email  = data.google_compute_default_service_account.default.email
       scopes = ["https://www.googleapis.com/auth/cloud-platform"]
