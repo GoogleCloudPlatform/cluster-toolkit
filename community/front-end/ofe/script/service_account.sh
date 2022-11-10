@@ -160,7 +160,7 @@ create_service_account() {
 	# - can assume we can do this if account creation above worke
 	#
 	sa_fullname=$(sa_expand "${project}" "${account}")
-	for role in ${SA_ROLES[*]}; do
+	for role in "${SA_ROLES[@]}"; do
 		gcloud projects add-iam-policy-binding "${project}" \
 			--member="serviceAccount:${sa_fullname}" \
 			--role="roles/${role}" &>${devnull}

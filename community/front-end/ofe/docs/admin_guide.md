@@ -62,6 +62,7 @@ machine.
 
 Clone the repository, checkout the corresponding branch, and switch to
 the `frontend` directory as follows:
+
 ```bash
 git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
 cd hpc-toolkit
