@@ -45,6 +45,7 @@ deployment_groups:
     source: community/modules/scripts/pbspro-preinstall
     settings:
       client_rpm: /path/to/pbspro-client.el7.x86_64.rpm
+      devel_rpm: /path/to/pbspro-devel.el7.x86_64.rpm
       execution_rpm: /path/to/pbspro-execution.el7.x86_64.rpm
       server_rpm: /path/to/pbspro-server.el7.x86_64.rpm
 
