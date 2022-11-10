@@ -27,6 +27,14 @@ output "pbs_client_rpm_url" {
   ]
 }
 
+output "pbs_devel_rpm_url" {
+  description = "gsutil URL of PBS development RPM package"
+  value       = "gs://${module.pbspro_bucket.bucket.name}/${google_storage_bucket_object.devel_rpm.name}"
+  depends_on = [
+    google_storage_bucket_object.devel_rpm,
+  ]
+}
+
 output "pbs_execution_rpm_url" {
   description = "gsutil URL of PBS execution host RPM package"
   value       = "gs://${module.pbspro_bucket.bucket.name}/${google_storage_bucket_object.execution_rpm.name}"
