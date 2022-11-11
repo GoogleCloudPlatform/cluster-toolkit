@@ -35,7 +35,7 @@ see this module used in a full blueprint, see the [spack-gromacs.yaml] example.
     settings:
       install_dir: /sw/spack
       spack_url: https://github.com/spack/spack
-      spack_ref: v0.18.0
+      spack_ref: v0.19.0
       spack_cache_url:
       - mirror_name: 'gcs_cache'
         mirror_url: gs://example-buildcache/linux-centos7
@@ -203,7 +203,7 @@ No resources.
 | <a name="input_packages"></a> [packages](#input\_packages) | Defines root packages for spack to install (in order). | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | List of buildcaches for spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
-| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.18.0"` | no |
+| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.19.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | The GCP zone where the instance is running. | `string` | n/a | yes |
 
