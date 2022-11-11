@@ -91,3 +91,4 @@ deployment_groups:
     source: community/modules/scripts/wait-for-startup
     settings:
       instance_name: ((module.manager.name[0]))
+      timeout: 1800
