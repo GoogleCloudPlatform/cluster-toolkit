@@ -23,7 +23,7 @@ administrators, additional Django superusers can be created from the Admin site
 within TKFE, once it is deployed and running.
 
 The TFKE web application server uses the
-[Google HPC Toolkit](https://github.com/GoogleCloudPlatform/hpc-toolkit) to
+[Cloud HPC Toolkit](https://github.com/GoogleCloudPlatform/hpc-toolkit) to
 provision resources for networks, filesystems and clusters, using a service
 account that has its credentials registered to TKFE. The service account is
 used for access management and billing.
