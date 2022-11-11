@@ -177,14 +177,22 @@ class ClusterInfo:
   - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     kind: terraform
     id: {part_id}
+    use:
+    - {part_id}-group
+{uses_str}
     settings:
       partition_name: {part.name}
       subnetwork_self_link: {self.cluster.subnet.cloud_id}
-      node_count_dynamic_max: {part.max_node_count}
-      machine_type: {part.machine_type}
       enable_placement: {part.enable_placement}
-      disable_smt: {not part.enable_hyperthreads}
       exclusive: {part.enable_placement or not part.enable_node_reuse}
+  - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    id: {part_id}-group
+    use:
+{uses_str}
+    settings:
+      enable_smt: {part.enable_hyperthreads}
+      machine_type: {part.machine_type}
+      node_count_dynamic_max: {part.max_node_count}
 """
             )
 
@@ -203,13 +211,6 @@ class ClusterInfo:
       gpu.type: {part.GPU_type}
 """
                 )
-            yaml[-1] += (
-                f"""\
-    use:
-{uses_str}
-"""
-            )
-
             refs.append(part_id)
 
         return ("\n\n".join(yaml), refs)
