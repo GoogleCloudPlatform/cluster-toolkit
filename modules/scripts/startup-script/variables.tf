@@ -69,13 +69,23 @@ EOT
     ])
     error_message = "The 'type' must be 'ansible-local', 'shell' or 'data'."
   }
+  # this validation tests that exactly 1 or other of source/content have been
+  # set to anything (including null)
   validation {
     condition = alltrue([
       for r in var.runners :
-      (contains(keys(r), "content") && !contains(keys(r), "source")) ||
-      (!contains(keys(r), "content") && contains(keys(r), "source"))
+      can(r["content"]) != can(r["source"])
     ])
-    error_message = "A runner must specify one of 'content' or 'source file', but not both."
+    error_message = "A runner must specify either 'content' or 'source', but never both."
+  }
+  # this validation tests that at least 1 of source/content are non-null
+  # can fail either by not having been set all or by being set to null
+  validation {
+    condition = alltrue([
+      for r in var.runners :
+      lookup(r, "content", lookup(r, "source", null)) != null
+    ])
+    error_message = "A runner must specify a non-null 'content' or 'source'."
   }
   default = []
 }

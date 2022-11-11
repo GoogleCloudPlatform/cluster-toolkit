@@ -16,7 +16,7 @@ test_name: cloud-batch
 deployment_name: cloud-batch-{{ build }}
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/cloud-batch.yaml"
+blueprint_yaml: "{{ workspace }}/examples/cloud-batch.yaml"
 network: "default"
 remote_node: "{{ deployment_name }}-batch-login"
 post_deploy_tests:

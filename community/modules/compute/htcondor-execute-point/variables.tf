@@ -118,3 +118,13 @@ variable "metadata" {
   type        = map(string)
   default     = {}
 }
+
+# this default is deliberately the opposite of vm-instance because of observed
+# issues running HTCondor docker universe jobs with OS Login enabled and running
+# jobs as a user with uid>2^31; these uids occur when users outside the GCP
+# organization login to a VM and OS Login is enabled.
+variable "enable_oslogin" {
+  description = "Enable or Disable OS Login with \"ENABLE\" or \"DISABLE\". Set to \"INHERIT\" to inherit project OS Login setting."
+  type        = string
+  default     = "DISABLE"
+}

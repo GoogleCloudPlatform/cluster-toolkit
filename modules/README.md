@@ -35,14 +35,20 @@ Modules that are still in development and less stable are labeled with the
   to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
 * **[schedmd-slurm-gcp-v5-partition]** ![community-badge] ![experimental-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
+* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] ![experimental-badge] :
+  Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-configure].
+* **[pbspro-execution]** ![community-badge] ![experimental-badge] :
+  Creates execution hosts for use in a PBS Professional cluster.
 
 [vm-instance]: compute/vm-instance/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
+[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
+[pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 
 ### Database
 
@@ -114,6 +120,10 @@ Modules that are still in development and less stable are labeled with the
 
 ### Scheduler
 
+* **[batch-job-template]** ![core-badge] : Creates a Google Cloud Batch job
+  template that works with other Toolkit modules.
+* **[batch-login-node]** ![core-badge] : Creates a VM that can be used for
+  submission of Google Cloud Batch jobs.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![experimental-badge] :
@@ -124,15 +134,15 @@ Modules that are still in development and less stable are labeled with the
   controller node using [slurm-gcp].
 * **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
   login node using [slurm-gcp].
-* **[cloud-batch-job]** ![community-badge] ![experimental-badge] : Creates a
-  Google Cloud Batch job template that works with other Toolkit modules.
-* **[cloud-batch-login-node]** ![community-badge] ![experimental-badge] :
-  Creates a VM that can be used for submission of Google Cloud Batch jobs.
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor pool.
+* **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
+  a client host for submitting jobs to a PBS Professional cluster.
+* **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
+  a server host for operating a PBS Professional cluster.
 
-[cloud-batch-job]: ../community/modules/scheduler/cloud-batch-job/README.md
-[cloud-batch-login-node]: ../community/modules/scheduler/cloud-batch-login-node/README.md
+[batch-job-template]: ../modules/scheduler/batch-job-template/README.md
+[batch-login-node]: ../modules/scheduler/batch-login-node/README.md
 [htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
@@ -141,6 +151,8 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5
 [slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
+[pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
+[pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
 ### Scripts
 
@@ -151,6 +163,14 @@ Modules that are still in development and less stable are labeled with the
 * **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
   via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of VMs
   instances.
+* **[pbspro-preinstall]** ![community-badge] ![experimental-badge] : Creates a
+  Cloud Storage bucket in which to save PBS Professional RPM packages for use
+  by PBS clusters.
+* **[pbspro-install]** ![community-badge] ![experimental-badge] : Creates a
+  Toolkit runner to install [PBS Professional][pbspro] from RPM packages.
+* **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a
+  Toolkit runner to run common `qmgr` commands when configuring a PBS
+  Professional cluster.
 * **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install [Spack](https://github.com/spack/spack) on an
   instance or a slurm login or controller.
@@ -162,6 +182,10 @@ Modules that are still in development and less stable are labeled with the
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
 [spack-install]: ../community/modules/scripts/spack-install/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
+[pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
+[pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
+[pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
+[pbspro]: https://www.altair.com/pbs-professional
 
 ## Module Fields
 
@@ -322,6 +346,10 @@ value is in the following priority order:
 1. Output from a used module, taken in the order provided in the `use` list
 1. Deployment variable (`vars`) of the same name
 1. Default value for the setting
+
+> **_NOTE:_** See the
+> [network storage documentation](./../docs/network_storage.md) for more
+> information about mounting network storage file systems via the `use` field.
 
 ### Outputs (Optional)
 

@@ -20,6 +20,10 @@ vars:
   deployment_name: htcondor-001
   region: us-central1
   zone: us-central1-c
+  # if using OS Login with "external users" (outside of the Google Cloud
+  # organization), then Docker universe jobs will fail as of 2022-11-09
+  # consider setting DISABLE if this atypical situation applies
+  enable_oslogin: ENABLE
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -37,11 +41,6 @@ deployment_groups:
 
   - id: htcondor_install
     source: community/modules/scripts/htcondor-install
-
-  - id: htcondor_services
-    source: community/modules/project/service-enablement
-    use:
-    - htcondor_install
 
   - id: htcondor_configure
     source: community/modules/scheduler/htcondor-configure
@@ -110,6 +109,7 @@ deployment_groups:
           request_cpus   = 1
           request_memory = 100MB
           queue
+
   - id: htcondor_access
     source: modules/compute/vm-instance
     use:

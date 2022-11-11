@@ -21,6 +21,8 @@ ifneq (,$(wildcard .git))
 GIT_TAG_VERSION=$(shell git tag --points-at HEAD)
 GIT_BRANCH=$(shell git branch --show-current)
 GIT_COMMIT_INFO=$(shell git describe --tags --dirty --long)
+GIT_COMMIT_HASH=$(shell git rev-parse HEAD)
+GIT_INITIAL_HASH=$(shell git rev-list --max-parents=0 HEAD)
 endif
 endif
 
@@ -28,7 +30,7 @@ endif
 
 ghpc: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg ghpc.go -type f)
 	$(info **************** building ghpc ************************)
-	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)'" ghpc.go
+	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)'" ghpc.go
 
 install-user:
 	$(info ******** installing ghpc in ~/bin *********************)

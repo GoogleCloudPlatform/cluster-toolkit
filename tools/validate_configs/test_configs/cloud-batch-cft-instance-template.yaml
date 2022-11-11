@@ -59,7 +59,7 @@ deployment_groups:
       source_image_project: cloud-hpc-image-public
 
   - id: batch-job
-    source: ./community/modules/scheduler/cloud-batch-job
+    source: ./modules/scheduler/batch-job-template
     use: [network1, appfs, batch-startup-script]
     settings:
       runnable: "cat /sw/hello.txt"

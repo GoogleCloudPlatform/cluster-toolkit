@@ -39,28 +39,44 @@ locals {
     }
   )
   nfs_client_install_script = file("${path.module}/scripts/install-nfs-client.sh")
+  gcs_fuse_install_script   = file("${path.module}/scripts/install-gcs-fuse.sh")
 
   install_scripts = {
-    "lustre" = local.ddn_lustre_client_install_script
-    "nfs"    = local.nfs_client_install_script
+    "lustre"  = local.ddn_lustre_client_install_script
+    "nfs"     = local.nfs_client_install_script
+    "gcsfuse" = local.gcs_fuse_install_script
   }
+
   client_install_runner = {
     "type"        = "shell"
     "content"     = lookup(local.install_scripts, var.fs_type, "echo 'skipping: client_install_runner not yet supported for ${var.fs_type}'")
     "destination" = "install_filesystem_client${replace(var.local_mount, "/", "_")}.sh"
   }
 
-  mount_supported_fstype = ["lustre", "nfs"]
-  mount_runner = {
+  mount_vanilla_supported_fstype = ["lustre", "nfs"]
+  mount_runner_vanilla = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
     "args"        = "\"${var.server_ip}\" \"${local.remote_mount_with_slash}\" \"${var.local_mount}\" \"${var.fs_type}\" \"${var.mount_options}\""
     "content" = (
-      contains(local.mount_supported_fstype, var.fs_type) ?
+      contains(local.mount_vanilla_supported_fstype, var.fs_type) ?
       file("${path.module}/scripts/mount.sh") :
       "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'"
     )
   }
+  gcsbucket = trimprefix(var.remote_mount, "gs://")
+  mount_runner_gcsfuse = {
+    "type"        = "shell"
+    "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
+    "args"        = "\"not-used\" \"${local.gcsbucket}\" \"${var.local_mount}\" \"${var.fs_type}\" \"${var.mount_options}\""
+    "content"     = file("${path.module}/scripts/mount.sh")
+  }
+  mount_scripts = {
+    "lustre"  = local.mount_runner_vanilla
+    "nfs"     = local.mount_runner_vanilla
+    "gcsfuse" = local.mount_runner_gcsfuse
+  }
+  mount_runner = lookup(local.mount_scripts, var.fs_type, local.mount_runner_vanilla)
 }
 
 output "client_install_runner" {

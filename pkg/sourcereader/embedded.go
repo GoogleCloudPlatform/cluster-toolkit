@@ -119,6 +119,10 @@ func defaultAPIList(source string) []string {
 		"community/modules/compute/htcondor-execute-point": {
 			"compute.googleapis.com",
 		},
+		"community/modules/compute/pbspro-execution": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
 		"community/modules/compute/schedmd-slurm-gcp-v5-partition": {
 			"compute.googleapis.com",
 		},
@@ -158,11 +162,11 @@ func defaultAPIList(source string) []string {
 		"community/modules/scheduler/SchedMD-slurm-on-gcp-login-node": {
 			"compute.googleapis.com",
 		},
-		"community/modules/scheduler/cloud-batch-job": {
+		"modules/scheduler/batch-job-template": {
 			"batch.googleapis.com",
 			"compute.googleapis.com",
 		},
-		"community/modules/scheduler/cloud-batch-login-node": {
+		"modules/scheduler/batch-login-node": {
 			"batch.googleapis.com",
 			"compute.googleapis.com",
 			"storage.googleapis.com",
@@ -170,6 +174,14 @@ func defaultAPIList(source string) []string {
 		"community/modules/scheduler/htcondor-configure": {
 			"iam.googleapis.com",
 			"secretmanager.googleapis.com",
+		},
+		"community/modules/scheduler/pbspro-client": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
+		"community/modules/scheduler/pbspro-server": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
 		},
 		"community/modules/scheduler/schedmd-slurm-gcp-v5-controller": {
 			"compute.googleapis.com",
@@ -186,7 +198,13 @@ func defaultAPIList(source string) []string {
 		},
 		"community/modules/scripts/htcondor-install": {},
 		"community/modules/scripts/omnia-install":    {},
-		"community/modules/scripts/spack-install":    {},
+		"community/modules/scripts/pbspro-preinstall": {
+			"iam.googleapis.com",
+			"storage.googleapis.com",
+		},
+		"community/modules/scripts/pbspro-install": {},
+		"community/modules/scripts/pbspro-qmgr":    {},
+		"community/modules/scripts/spack-install":  {},
 		"community/modules/scripts/wait-for-startup": {
 			"compute.googleapis.com",
 		},

@@ -24,6 +24,24 @@ This creates a pre-existing-network-storage module in terraform at the
 provided IP in `server_ip` of type nfs that will be mounted at `/home`. Note
 that the `server_ip` must be known before deployment.
 
+The following is an example of using `pre-existing-network-storage` with a GCS
+bucket:
+
+```yaml
+- id: data-bucket
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    remote_mount: my-bucket-name
+    local_mount: /data
+    fs_type: gcsfuse
+    mount_options: defaults,_netdev,implicit_dirs
+```
+
+The `implicit_dirs` mount option allows object paths to be treated as if they
+were directories. This is important when working with files that were created by
+another source, but there may have performance impacts. The `_netdev` mount option
+denotes that the storage device requires network access.
+
 ### Mounting
 
 For the `fs_type` listed below, this module will provide `client_install_runner`
@@ -34,6 +52,7 @@ Supported `fs_type`:
 
 - nfs
 - lustre (DDN)
+- gcsfuse
 
 [scripts/mount.sh](./scripts/mount.sh) is used as the contents of
 `mount_runner`. This script will update `/etc/fstab` and mount the network
@@ -67,9 +86,9 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_fs_type"></a> [fs\_type](#input\_fs\_type) | Type of file system to be mounted (e.g., nfs, lustre) | `string` | `"nfs"` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
-| <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the file system. | `string` | `""` | no |
-| <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote FS name or export (exported directory for nfs, fs name for lustre) | `string` | n/a | yes |
-| <a name="input_server_ip"></a> [server\_ip](#input\_server\_ip) | The device name as supplied to fs-tab, excluding remote fs-name(for nfs, that is the server IP, for lustre <MGS NID>[:<MGS NID>]). | `string` | n/a | yes |
+| <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the file system. Consider adding setting to 'defaults,\_netdev,implicit\_dirs' when using gcsfuse. | `string` | `"defaults,_netdev"` | no |
+| <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote FS name or export. This is the exported directory for nfs, fs name for lustre, and bucket name (without gs://) for gcsfuse. | `string` | n/a | yes |
+| <a name="input_server_ip"></a> [server\_ip](#input\_server\_ip) | The device name as supplied to fs-tab, excluding remote fs-name(for nfs, that is the server IP, for lustre <MGS NID>[:<MGS NID>]). This can be omitted for gcsfuse. | `string` | `""` | no |
 
 ## Outputs
 

@@ -1,0 +1,80 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: pbs
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: setup
+  region: us-central1
+  zone: us-central1-c
+  client_host_count: 1
+  client_hostname_prefix: pbs-client
+  execution_host_count: 10
+  execution_hostname_prefix: pbs-execution
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use:
+    - network1
+    settings:
+      local_mount: /home
+
+  - id: pbspro_setup
+    source: community/modules/scripts/pbspro-preinstall
+    settings:
+      client_rpm: /path/to/pbspro-client.el7.x86_64.rpm
+      execution_rpm: /path/to/pbspro-execution.el7.x86_64.rpm
+      server_rpm: /path/to/pbspro-server.el7.x86_64.rpm
+
+  - id: pbspro_server
+    source: community/modules/scheduler/pbspro-server
+    use:
+    - homefs
+    - pbspro_setup
+    settings:
+      machine_type: c2-standard-8
+      pbs_license_server: 127.0.0.1
+
+  - id: pbspro_client
+    source: community/modules/scheduler/pbspro-client
+    use:
+    - homefs
+    - pbspro_server
+    - pbspro_setup
+    settings:
+      instance_count: $(vars.client_host_count)
+      machine_type: c2-standard-8
+      name_prefix: $(vars.client_hostname_prefix)
+
+  - id: pbspro_execution
+    source: community/modules/compute/pbspro-execution
+    use:
+    - homefs
+    - pbspro_server
+    - pbspro_setup
+    settings:
+      instance_count: $(vars.execution_host_count)
+      machine_type: c2-standard-8
+      name_prefix: $(vars.execution_hostname_prefix)

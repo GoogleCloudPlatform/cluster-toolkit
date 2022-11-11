@@ -15,12 +15,13 @@
  */
 
 variable "server_ip" {
-  description = "The device name as supplied to fs-tab, excluding remote fs-name(for nfs, that is the server IP, for lustre <MGS NID>[:<MGS NID>])."
+  description = "The device name as supplied to fs-tab, excluding remote fs-name(for nfs, that is the server IP, for lustre <MGS NID>[:<MGS NID>]). This can be omitted for gcsfuse."
   type        = string
+  default     = ""
 }
 
 variable "remote_mount" {
-  description = "Remote FS name or export (exported directory for nfs, fs name for lustre)"
+  description = "Remote FS name or export. This is the exported directory for nfs, fs name for lustre, and bucket name (without gs://) for gcsfuse."
   type        = string
 }
 
@@ -37,7 +38,7 @@ variable "fs_type" {
 }
 
 variable "mount_options" {
-  description = "Options describing various aspects of the file system."
+  description = "Options describing various aspects of the file system. Consider adding setting to 'defaults,_netdev,implicit_dirs' when using gcsfuse."
   type        = string
-  default     = ""
+  default     = "defaults,_netdev"
 }

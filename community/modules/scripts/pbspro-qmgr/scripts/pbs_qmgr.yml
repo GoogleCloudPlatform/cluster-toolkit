@@ -1,0 +1,78 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Configure qmgr
+  become: true
+  hosts: localhost
+  vars:
+    client_host_count: 0
+    pbs_qmgr_conf: /etc/pbs_qmgr_conf
+  tasks:
+  - name: User must supply required variables
+    ansible.builtin.assert:
+      that:
+      - execution_hostname_prefix is defined
+      - execution_host_count is defined
+      - server_conf_file is defined
+  - name: User must supply client hostname prefix if provisioning clients
+    when: client_host_count | int > 0
+    ansible.builtin.assert:
+      that:
+      - client_hostname_prefix is defined
+  - name: Copy file
+    ansible.builtin.copy:
+      src: "{{ server_conf_file }}"
+      dest: "{{ pbs_qmgr_conf }}"
+      mode: 0400
+    notify:
+    - Load qmgr configuration
+  # use stat and handler to load qmgr
+  - name: Add execution hosts
+    register: addx
+    changed_when: addx.rc == 99
+    failed_when: addx.rc != 99 and addx.rc != 0
+    loop: "{{ range(0, execution_host_count | int) | list }}"
+    loop_control:
+      index_var: idx
+    ansible.builtin.shell: |
+      . /etc/profile.d/pbs.sh
+      set -e -o pipefail
+      exechost="{{ execution_hostname_prefix }}-{{ idx }}"
+      if ! qmgr -c "list node ${exechost}"; then
+          qmgr -c "create node ${exechost}"
+          exit 99
+      fi
+    args:
+      executable: /bin/bash
+  - name: Treat all PBS Clients as trusted hosts
+    ansible.builtin.lineinfile:
+      create: true
+      path: /etc/hosts.equiv
+      mode: 0644
+      line: "{{ client_hostname_prefix }}-{{ idx }}"
+    loop: "{{ range(0, client_host_count | int) | list }}"
+    loop_control:
+      index_var: idx
+  handlers:
+  - name: Load qmgr configuration
+    ansible.builtin.shell:
+      . /etc/profile.d/pbs.sh
+      set -e -o pipefail
+      qmgr < {{ pbs_qmgr_conf }}
+    args:
+      executable: /bin/bash
