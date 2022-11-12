@@ -1,0 +1,13 @@
+[Unit]
+Description=GHPCFE Command and Control Daemon
+After=network.target
+
+[Service]
+Type=simple
+PIDFile=/run/ghpcefe.pid
+ExecStart=/usr/local/sbin/ghpcfe_c2daemon.py
+ExecStop=/bin/kill -s INT $MAINPID
+RestartForceExitStatus=123
+
+[Install]
+WantedBy=multi-user.target

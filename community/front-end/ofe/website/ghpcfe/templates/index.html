@@ -1,0 +1,85 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block content %}
+
+<div class="container-fluid">
+
+  <div class="mt-4">
+    <p style="font-size:x-large; text-align:center;">
+      <span style="font-weight:600;">HPC Toolkit FrontEnd</span>
+    </p>
+    <hr style="width:40px; text-align:middle; border:5px solid #5084ef; border-radius: 5px;">
+  </div>
+
+  <div class="container mt-5">
+    <div class="row">
+      <div class="col-sm-1"></div>
+      <div class="col-sm-5">
+        <div class="card border-secondary">
+	  <div class="card-block m-3">
+	    <img src="/static/img/main-credential.png" width="64">
+	    <h5 class="card-title">Credentials</h5>
+            <p class="card-text">Provide cloud credentials for this system to 
+communicate with the cloud platform.</p>
+            <a href="{% url 'credentials' %}" class="btn btn-outline-primary btn-sm">View Credentials</a>
+	  </div>  
+        </div>
+      </div>
+      <div class="col-sm-5">
+        <div class="card border-secondary">
+	  <div class="card-block m-3">
+	    <img src="/static/img/main-cluster.png" width="64">
+	    <h5 class="card-title">Clusters</h5>
+            <p class="card-text">Create and maintain HPC clusters on the cloud to
+run HPC applications.</p>
+            <a href="{% url 'clusters' %}" class="btn btn-outline-primary btn-sm">View Clusters</a>
+	  </div>  
+        </div>
+      </div>
+      <div class="col-sm-1"></div>
+    </div>
+    <div class="row mt-4">
+      <div class="col-sm-1"></div>
+      <div class="col-sm-5">
+        <div class="card border-secondary">
+	  <div class="card-block m-3">
+	    <img src="/static/img/main-application.png" width="64">
+	    <h5 class="card-title">Applications</h5>
+            <p class="card-text">Define, customize and install HPC applications on the clusters.</p>
+            <a href="{% url 'applications' %}" class="btn btn-outline-primary btn-sm">View Applications</a>
+	  </div>  
+        </div>
+      </div>
+      <div class="col-sm-5">
+        <div class="card border-secondary">
+	  <div class="card-block m-3">
+	    <img src="/static/img/main-job.png" width="64">
+	    <h5 class="card-title">Jobs</h5>
+            <p class="card-text">Submit jobs to HPC clusters and keep track of 
+results from all previous runs.</p>
+            <a href="{% url 'jobs' %}" class="btn btn-outline-primary btn-sm">View Jobs</a>
+	  </div>  
+        </div>
+       </div>
+      <div class="col-sm-1"></div>
+    </div> 
+  </div>
+
+</div>
+{% endblock %}

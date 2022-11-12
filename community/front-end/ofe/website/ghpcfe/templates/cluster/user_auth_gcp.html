@@ -1,0 +1,133 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+{% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
+<script>
+
+function startAuth() {
+    var status_text=document.getElementById('status-text')
+    var start_button=document.getElementById('startButton')
+    start_button.disabled=true;
+    $.get("{% url 'backend-user-gcp-auth' cluster.id %}", function(data, status) {
+        taskId = data["taskid"];
+        var taskURL = "{% url 'api-tasks-list' %}"+taskId+"/";
+        var commId = "";
+        var count = 0;
+        function pollForURL() {
+            $.getJSON(taskURL,
+                function(data) {
+                    count += 1;
+                    console.log("Poll Count: " + count);
+                    console.log(data["data"]);
+                    data = data["data"];
+                    status_text.innerText=data["status"];
+                    commId = data["comm_id"];
+                    if (data.hasOwnProperty("verify_url")) {
+                        var link = document.createElement('a');
+                        status_text.insertAdjacentHTML('afterend', "<a href=\""+data["verify_url"]+"\" target=\"_blank\" class=\"card-link\" id=\"verify-link\">Click Here to Verify</a>");
+                        document.getElementById('verify-link').onclick = pollForKey;
+                        return;
+                    }
+                    if (count < 120) {
+                        setTimeout(pollForURL, 1000);
+                    }
+                })
+                .fail(function() {
+                    status_text.innerText="Timed Out.  Please Try again.";
+                    start_button.disabled=false;
+                });
+        }
+        function pollForKey() {
+            var verify_link = document.getElementById("verify-link");
+            verify_link.remove();
+            status_text.insertAdjacentHTML('afterend',
+                '{% csrf_token %}' +
+                '<input type=\"text\" id=\"verify_key\" placeholder=\"Enter verification code\" /><br>' +
+                '<input type=\"submit\" value=\"Submit\" class=\"btn btn-primary\" id=\"sendVerify\">'
+                );
+            document.getElementById('sendVerify').onclick = sendVerify;
+        }
+        function sendVerify() {
+            var key = document.getElementById("verify_key").value;
+            document.getElementById('verify_key').disabled = true;
+            document.getElementById('sendVerify').disabled = true;
+            document.getElementById('sendVerify').value = "Submitting...";
+
+            status_text.innerText = "Sending Verification Code";
+            newData = {
+                'task_id': taskId,
+                'comm_id': commId,
+                'verify_key': key
+            };
+            $.ajax({
+                type: "POST",
+                url: "{% url 'backend-user-gcp-auth' cluster.id %}",
+                data: newData,
+                dataType: "json",
+                headers: {'X-CSRFToken': $.cookie("csrftoken")},
+                success: function(data, status, xhr) {
+                    status_text.innerText = "Sent Verification Code";
+                    pollForComplete();
+                }
+            });
+        }
+        function pollForComplete() {
+            $.getJSON(taskURL,
+                function(data) {
+                    console.log("Poll Count: " + count);
+                    console.log(data["data"]);
+                    data = data["data"]
+                    status_text.innerText=data["status"];
+                    setTimeout(pollForComplete, 1000);
+                })
+                .fail(function() {
+                    status_text.innerText="Complete.";
+                    document.getElementById('sendVerify').remove();
+                    document.getElementById('verify_key').remove();
+                });
+        }
+        pollForURL();
+    });
+}
+
+</script>
+{% endblock %}
+
+{% block content %}
+
+<p>You can add your Google Cloud Storage credentials to cluster {{ cluster.name }}.</p>
+<p>This will enable the cluster to automatically upload and download job data files that your Google account has access to.</p>
+
+<p>When you click the button below, we will connect to the cluster, and request credentials.</p>
+<p>This will then ask you to visit a Google Website to confirm that you are requesting this access.</p>
+<p>That website will give you a code which you then need to enter here to confirm.</p>
+
+<div id="controlBlock" >
+<button id="startButton" onClick="startAuth()" class="btn btn-primary">Authorize {{ user.get_username }} for {{ cluster.name }} for GCS</a>
+</div>
+
+
+<div class="card" style="width: 33%;">
+<div class="card-body">
+  <h5 class="card-title">Authorization Status</h5>
+  <p id="status-text" class="card-text">Not yet started</p>
+</div>
+</div>
+
+{% endblock %}

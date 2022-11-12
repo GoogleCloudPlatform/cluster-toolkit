@@ -1,0 +1,59 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Add Enviornment Modules
+  ansible.builtin.yum:
+    name:
+    - environment-modules
+  when: ansible_distribution == 'CentOS'
+
+- name: Create Modules directory
+  ansible.builtin.file:
+    path: /opt/cluster/modulefiles
+    state: directory
+    mode: '0755'
+
+- name: Use Modules
+  ansible.builtin.copy:
+    dest: /etc/profile.d/zz-modules.sh
+    content: |
+      module use /opt/cluster/modulefiles
+    owner: root
+    mode: 0755
+    force: False
+  when: ansible_distribution == 'CentOS'
+
+- name: Enable su to OS Login
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/su
+    line: session    [success=ok default=ignore] pam_mkhomedir.so
+    state: present
+    insertafter: EOF
+
+- name: Download OpsAgent installer
+  ansible.builtin.get_url:
+    url: https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+    dest: /root/add-google-cloud-ops-agent-repo.sh
+    mode: '0755'
+  register: install_ops
+
+- name: Install OpsAgent
+  ansible.builtin.command:
+    argv:
+    - /root/add-google-cloud-ops-agent-repo.sh
+    - --also-install
+    - --uninstall-standalone-logging-agent
+    - --uninstall-standalone-monitoring-agent
+  when: install_ops.changed # noqa no-handler

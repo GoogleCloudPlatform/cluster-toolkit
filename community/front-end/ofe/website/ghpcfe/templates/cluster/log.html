@@ -1,0 +1,80 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+<script>
+window.onload=function(event) {
+    {% for logfile in log_files %}
+	{
+		var xhr_{{logfile.id}} = new XMLHttpRequest();
+		xhr_{{logfile.id}}.open("GET", "{% url 'cluster-log-file' cluster.id logfile.id %}", true);
+		xhr_{{logfile.id}}.onprogress = function() {
+            $('#id_log_{{ logfile.id }}').append(xhr_{{logfile.id}}.responseText);
+            $('#id_log_{{logfile.id }}').scrollTop($('#id_log_{{ logfile.id }}')[0].scrollHeight);
+        }
+		xhr_{{logfile.id}}.onload = function() {
+            $('#id_log_{{ logfile.id }}').val(xhr_{{logfile.id}}.responseText);
+            $('#id_log_{{logfile.id }}').scrollTop($('#id_log_{{ logfile.id }}')[0].scrollHeight);
+        }
+		xhr_{{logfile.id}}.send()
+	}
+    {% endfor %}
+}
+</script>
+<style>
+.log-file {
+    white-space: pre;
+    font-family: monospace;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+  <h2>Cluster Log</h2>
+  <p><b>Cluster ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Cloud Name:</b> {{ object.internal_name }}</p>
+  <p><b>Region:</b> {{ object.cloud_region }}</p>
+  <p><b>Zone:</b> {{ object.cloud_zone }}</p>
+  <p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
+  <p><b>Status:</b>
+    {% if cluster.status == "c" or cluster.status == "i" or cluster.status  == "t" %}
+        <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+    {% endif %}
+    {{ object.get_status_display }}
+  </p>
+
+  <p>
+    <a href="{% url 'backend-sync-cluster' object.id %}">Sync Cluster</a> to get most recent logs.
+  </p>
+
+  <hr>
+    {% for logfile in log_files %}
+    <div>
+      <h5>{{ logfile.title }}</h5>
+      <textarea class="log-file form-control" id="id_log_{{ logfile.id }}" rows=10 disabled readonly></textarea>
+    </div>
+    {% endfor %}
+
+  <br/>
+  <a href="{% url 'cluster-detail' cluster.id %}" class="btn btn-primary">Cluster Detail</a>
+  <br/><br/>
+{% endblock %}
