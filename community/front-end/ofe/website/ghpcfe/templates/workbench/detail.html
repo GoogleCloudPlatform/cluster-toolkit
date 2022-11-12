@@ -1,0 +1,72 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if workbench.status == "c" or workbench.status == "i" or workbench.status == "t" %}
+  <meta http-equiv="refresh" content="60" />
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <h2>Workbench Detail</h2>
+    <p><b>Workbench ID:</b> {{ object.id }}</p>
+    <p><b>Name:</b> {{ object.name }}</p>
+    <p><b>Cloud Name:</b> {{ object.internal_name }}</p>
+    <p><b>Region:</b> {{ object.cloud_region }}</p>
+    <p><b>Zone:</b> {{ object.cloud_zone }}</p>
+    <p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
+    <p><b>Machine Type:</b> {{ object.machine_type }}</p>
+    <p><b>Boot Disk Type:</b> {{ object.boot_disk_type }}</p>
+    <p><b>Boot Disk Capacity:</b> {{ object.boot_disk_capacity }} GB</p>
+    <p>
+      <b>Status:</b>
+      {% if workbench.status == "c" or workbench.status == "i" or workbench.status  == "t"  %}
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+      {% endif %}
+      {{ object.get_status_display }}
+    </p>
+
+    {% if object.status == "d" %}
+    <div class="alert alert-info">This workbench is destroyed and its settings archived. No further change is possible.</div>
+    {% endif %}
+    {% with admin=request.user.has_admin_role %}
+      {% if object.status == "n" %}
+        {% if workbench.trusted_user == request.user or admin %} 
+          <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Create</a>
+        {% endif %}
+      {% endif %}
+      {% if object.status == "r" %}
+        <a href="https://{{ object.proxy_uri }}" class="btn btn-primary" target="_blank">Open JupyterLab</a>
+        {% if workbench.trusted_user == request.user or admin %} 
+          <a href="{% url 'workbench-destroy' object.id %}" class="btn btn-primary">Destroy</a>
+        {% endif %}
+      {% endif %}
+      {% if object.cloud_state == "nm" or  object.cloud_state == "xm" %}
+        {% if workbench.trusted_user == request.user or admin %} 
+          <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
+        {% endif %}
+      {% endif %}
+      {% if object.status == "d" %}
+        {% if workbench.trusted_user == request.user or admin %} 
+          <a href="{% url 'backend-start-workbench' object.id %}" class="btn btn-primary">Recreate</a>
+        {% endif %}
+      {% endif %}
+    {% endwith %}
+
+
+{% endblock %}

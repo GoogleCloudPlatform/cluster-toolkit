@@ -1,0 +1,157 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if loading == 1 %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+  <h2>Workbench List</h2>
+  {% with viewer=request.user.has_viewer_role normaluser=request.user.has_normaluser_role admin=request.user.has_admin_role %}
+  {% if workbench_list %}
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_workbench_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Cloud Name</th>
+        <th scope="col">Zone</th>
+        <th scope="col">Status</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody> 
+    {% for workbench in workbench_list %}
+      {% if workbench.trusted_user == request.user or admin %}
+        <tr>
+          <th>{{ workbench.id }}</th>
+          <td><a href="{% url 'workbench-detail' workbench.id %}">{{ workbench.name }}</a></td>
+          <td><a href="{% url 'workbench-detail' workbench.id %}">{{ workbench.internal_name }}</a></td>
+          <td>{{ workbench.cloud_zone }}</td>
+          <td>
+            {% if workbench.status == "c" or workbench.status == "i" or workbench.status == "t" %}
+            <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+            {% endif %}
+            {% if workbench.status == "r" %}
+            <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+            {% endif %}
+            {% if workbench.status == "n" %}
+            <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+            {% endif %}
+            {% if workbench.status == "d" %}
+            <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+            {% endif %}
+            {% if workbench.status == "s" %}
+            <img src="/static/img/status-paused.png" style="width:32px;height:32px;">
+            {% endif %}
+            {{ workbench.get_status_display }}
+          </td>
+          <td>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                Actions
+              </button>
+              <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                {% if viewer or normaluser or admin %}
+                  <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-detail' workbench.id  %}">Detail</a>
+                {% endif %}
+                {% if workbench.status == "d" or workbench.status == "n" %}
+                  {% if normaluser or admin %}
+                    <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-delete' workbench.id  %}">Delete</a>
+                  {% endif %}
+                {% endif %}
+                {% if workbench.status == "n" %}
+                  {% if normaluser or admin %}
+                    {% if not workbench.status == "d" %}
+                      <div class="dropdown-divider"></div>
+                    {% endif %}
+                    <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-start-workbench' workbench.id %}">Start Workbench</a>
+                  {% endif %}
+                {% endif %}
+                {% if normaluser or admin %}
+                  {% if workbench.status == "r" or workbench.status == "i" or workbench.status == "s"  %}
+                    <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'workbench-destroy' workbench.id %}">Destroy</a>
+                  {% endif %}
+                {% endif %}
+                {% if workbench.status == "r" %}
+                  {% if viewer or normaluser or admin %}
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item btn btn-sm btn-secondary" href="https://{{ workbench.proxy_uri }}" target="_blank">Open JupyterLab </a>
+                  {% endif %}
+                {% endif %}
+              </div>
+            </div>
+          </td>
+        </tr>
+      {% endif %}
+  
+    {% endfor %}
+    </tbody>
+  </table>
+  <input type="checkbox" id="id_show_destroyed"/> Show Destroyed workbenches
+  </div>
+  {% else %}
+    {% if normaluser or admin %}
+    <p>This is no record of any workbench in this system. Create one!</p>
+    {% endif %}
+  {% endif %}
+    {% if normaluser or admin %}
+    <a href="{% url 'workbench-create' %}" class="btn btn-primary">Add workbench</a>
+    {% endif %}
+  {% endwith %}
+{% endblock %}
+
+{% block tailscript %}
+<script language="javascript">
+function filterTable() {
+    var toggle = document.getElementById("id_show_destroyed").checked;
+    console.log(toggle);
+    $.cookie("workbench_list_show_destroyed", toggle, {path: "{% url 'workbench' %};SameSite=Strict", expires: 10});
+    var table = document.getElementById("id_workbench_table");
+    var tr = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
+
+    for ( i = 0 ; i < tr.length; i++ ) {
+        var td = tr[i].getElementsByTagName("td")[3];
+        var tdText = td.textContent || td.innerText;
+        if ( toggle || tdText.indexOf("has been destroyed") == -1 ) {
+            tr[i].style.display = "";
+        } else {
+            tr[i].style.display = "none";
+        }
+    }
+}
+function setupFilter() {
+    var toggle = document.getElementById("id_show_destroyed");
+    toggle_cookie = ($.cookie("workbench_list_show_destroyed") != "false");
+    if ( toggle_cookie ) {
+        toggle.checked = true;
+    }
+    toggle.onchange = filterTable;
+    filterTable();
+}
+$(document).ready(setupFilter);
+</script>
+{% endblock %}

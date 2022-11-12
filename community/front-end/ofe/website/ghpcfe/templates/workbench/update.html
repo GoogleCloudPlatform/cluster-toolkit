@@ -1,0 +1,143 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+{% load static %}
+{% endblock %}
+
+{% block content %}
+  <h2>Workbench Detail</h2>
+
+      <b>Status:</b>
+      {% if workbench.status == "c" or workbench.status == "i" or workbench.status  == "t"  %}
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+      {% endif %}
+      {{ object.get_status_display }}
+    </p>
+
+    <form action="" method="post" id="clusterForm">
+      {% csrf_token %}
+      <input type="hidden" name="cloud_credential" class="form-control" id="id_cloud_credential" value="{{ form.cloud_credential.value }}">
+      <div class="form-group">
+        {{ form.name.errors }}
+        {{ form.name.label_tag }}
+        {{ form.name }}
+          <small class="form-text text-muted">{{ form.name.help_text }}</small>
+      </div>
+      <div class="form-group">
+        {{ form.subnet.errors }}
+        {{ form.subnet.label_tag }}
+        {{ form.subnet }}
+          <small class="form-text text-muted">{{ form.subnet.help_text }} - Please note user-managed workbenches are not available in all regions, see <a href="https://cloud.google.com/vertex-ai/docs/general/locations#vertex-ai-workbench-locations" target="_blank"> Workbench Documentation</a> for more detail on currently available regions</small>
+      </div>
+      <div class="form-group">
+        {{ form.trusted_user.errors }}
+        {{ form.trusted_user.label_tag }}
+        {{ form.trusted_user }}
+          <small class="form-text text-muted">{{ form.trusted_user.help_text }}</small>
+      </div>
+      <div class="form-group">
+        {{ form.machine_type.errors }}
+        {{ form.machine_type.label_tag }}
+        {{ form.machine_type }}
+          <small class="form-text text-muted">{{ form.machine_type.help_text }}</small>
+      </div>
+      <div class="form-group">
+        {{ form.boot_disk_type.errors }}
+        {{ form.boot_disk_type.label_tag }}
+        {{ form.boot_disk_type }}
+          <small class="form-text text-muted">{{ form.boot_disk_type.help_text }}</small>
+      </div>
+      <div class="form-group">
+        {{ form.boot_disk_capacity.errors }}
+        {{ form.boot_disk_capacity.label_tag }}
+        {{ form.boot_disk_capacity }}
+          <small class="form-text text-muted">{{ form.boot_disk_capacity.help_text }}</small>
+      </div>
+      <div class="form-group">
+        {{ form.image_family.errors }}
+        {{ form.image_family.label_tag }}
+        {{ form.image_family }}
+          <small class="form-text text-muted">{{ form.image_family.help_text }}</small>
+      </div>
+      <div class="form-group">
+        {{ form.attached_cluster.errors }}
+        {{ form.attached_cluster.label_tag }}
+        {{ form.attached_cluster }}
+          <small class="form-text text-muted">{{ form.attached_cluster.help_text }}</small>
+      </div>
+  
+      <br/>
+
+      <hr>
+      <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
+      <div class="table-responsive">
+          <table class="table align-middle">
+          {{ mountpoints_formset.management_form }}
+          {% for form in mountpoints_formset.forms %}
+            {% if forloop.first %}
+              <thead>
+              <tr>
+                {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
+              </tr>
+              </thead>
+            {% endif %}
+            <tr class="mp_formset_row">
+              {% for field in form.visible_fields %}
+                <td>
+                {% if forloop.first %}
+                  {% for hidden in form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                {% endif %}
+                  {{ field.errors.as_ul }}
+                  {{ field }}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}    
+          </table>
+      </div>
+
+      {% if object.status == "d" %}
+      <div class="alert alert-info">This workbench is destroyed and its settings archived. No further change is possible.</div>
+      {% endif %}
+      {% if object.status == "n" %}
+      <a href="{% url 'workbench-delete' object.id %}" class="btn btn-primary">Delete</a>
+      <input type="submit" value="Save" class="btn btn-primary"/>
+      {% else %}
+      <button class="btn btn-primary" onclick="javascript:history.back();"/>Back</button>
+      {% endif %}
+    </form>
+
+{% endblock %}
+
+{% block tailscript %}
+<script src="{% static 'js/jquery.formset.js' %}"></script>
+<script type="text/javascript">
+    $('.mp_formset_row').formset({
+        addText: 'add mount point',
+        /*addCssClass: 'add-row btn btn-info',*/
+        deleteText: 'remove',
+        /*deleteCssClass: 'delete-row btn btn-danger',*/
+        prefix: 'mount_points',
+        formCssClass: 'dynamic-mp',
+        hideLastAddForm: 'true'
+    });
+</script>
+{% endblock %}

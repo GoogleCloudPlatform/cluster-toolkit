@@ -1,0 +1,12 @@
+
+resource "google_compute_subnetwork" "subnet_{SUBNET_ID}" {
+    name = "${local.vpc_key}-subnet-{SUBNET_ID}"
+    region = var.region
+    project = var.project
+    ip_cidr_range = "{CIDR_TEXT}"
+    network = google_compute_network.network.name
+}
+
+output "subnet-{SUBNET_ID}" {
+    value = google_compute_subnetwork.subnet_{SUBNET_ID}.name
+}

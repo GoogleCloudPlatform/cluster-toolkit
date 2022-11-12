@@ -1,0 +1,63 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if object.status == "p" or object.status == "q" or object.status == "d" or object.status == "r" or object.status == "u"%}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+<script>
+window.onload=function(event) {
+    {% for logfile in log_files %}
+	{
+		var xhr_{{logfile.id}} = new XMLHttpRequest();
+		xhr_{{logfile.id}}.open("GET", "{% url 'job-log-file' object.id logfile.id %}", true);
+		xhr_{{logfile.id}}.onprogress = function() { $('#id_log_{{ logfile.id }}').append(xhr_{{logfile.id}}.responseText); }
+		xhr_{{logfile.id}}.send()
+	}
+    {% endfor %}
+}
+</script>
+<style>
+.log-file {
+    white-space: pre;
+    font-family: monospace;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+  <h2>Job Logs</h2>
+  <p><b>Job ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Application:</b> <a href="{% url 'application-detail' object.application.id %}">{{ object.application.name }}</a></p>
+  <p><b>Cluster:</b> {{ object.application.cluster.name }}
+    <img src="/static/img/GCP_logo.png" style="width:32px;height:32px;">
+     </p>
+  <p><b>Partition:</b> {{ object.partition.name }}</p> 
+  <hr>
+    {% for logfile in log_files %}
+    <div>
+      <h5>{{ logfile.title }}</h5>
+      <textarea class="log-file form-control" id="id_log_{{ logfile.id }}" rows=10 disabled readonly></textarea>
+    </div>
+    {% endfor %}
+
+  <br/>
+  <a href="{% url 'job-detail' job.id %}" class="btn btn-primary">Job Detail</a>
+  <br/><br/>
+{% endblock %}

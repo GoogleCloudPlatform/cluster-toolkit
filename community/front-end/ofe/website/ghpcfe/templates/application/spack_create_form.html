@@ -1,0 +1,130 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/jquery-ui.css' %}" type="text/css">
+<script src="{% static 'js/jquery-ui.js' %}"></script>
+<script>
+$( function() {
+    $.getJSON("{% url 'api-spack-list' %}", function(data) {
+        $( "#id_spack_name" ).autocomplete({
+            source: data,
+            minLength: 2,
+            select: function( event, ui ) {
+                $.getJSON("{% url 'api-spack-list' %}"+ui.item.value,
+                    function(data) {
+                        /*console.log(data[0]);*/
+                        document.getElementById("id_description").innerHTML = data[0].description;
+                        vers_select = document.getElementById("id_version");
+                        $("#id_version").find('option').remove().end();
+                        data[0].versions.forEach(ver =>
+                            vers_select.options.add(
+                                new Option(ver, ver)
+                            )
+                        );
+                        vers_select.value = data[0].latest_version;
+                        document.getElementById("id_name").value = data[0].name;
+
+
+                    });
+                }
+            });
+    }); 
+
+
+});
+</script>
+{% endblock %}
+
+{% block content %}
+  <h2>Create a new Spack application</h2>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+{% if form.errors %}
+{% for field in form %}
+{% for error in field.errors %}
+<div class="alert alert-danger">
+<strong>{{field.name}} {{ error|escape }}</strong>
+</div>
+{% endfor %}
+{% endfor %}
+{% for error in form.non_field_errors %}
+<div class="alert alert-danger">
+<strong>{{ error|escape }}</strong>
+</div>
+{% endfor %}
+{% endif %}
+
+  <form action="" method="post">
+    {% csrf_token %}
+
+    <div class="form-group">
+      {{ form.cluster.errors }}
+      {{ form.cluster.label_tag }}
+      {{ form.cluster }}
+      {# We're explicit here, because 'select' can't be 'readonly', only    #}
+      {# 'disabled'                                                         #}
+      {# And 'disabled' HTML elements aren't sent with form data.  We we    #}
+      {#   augment with a hidden field                                      #}
+      <input type="hidden" name="cluster" class="form-control" id="id_cluster" value="{{ cluster.id }}">
+    </div>
+    <div class="form-group">
+      {{ form.spack_name.errors }}
+      {{ form.spack_name.label_tag }}
+      {{ form.spack_name }}
+        <small class="form-text text-muted">{{ form.spack_name.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.name.errors }}
+      {{ form.name.label_tag }}
+      {{ form.name }}
+        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.version.errors }}
+      {{ form.version.label_tag }}
+      {{ form.version }}
+        <small class="form-text text-muted">{{ form.version.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.spack_spec.errors }}
+      {{ form.spack_spec.label_tag }}
+      {{ form.spack_spec }}
+        <small class="form-text text-muted">{{ form.spack_spec.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.description.errors }}
+      {{ form.description.label_tag }}
+      {{ form.description }}
+        <small class="form-text text-muted">{{ form.description.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.install_partition.errors }}
+      {{ form.install_partition.label_tag }}
+      {{ form.install_partition }}
+      <small class="form-text text-muted">{{ form.install_partition.help_text }}</small>
+    </div>
+
+
+    <input type="submit" value="Save" class="btn btn-primary"/>
+  </form>
+
+{% endblock %}

@@ -1,0 +1,155 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if loading == 1 %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+  <h2>Cluster List</h2>
+  {% if cluster_list %}
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_cluster_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Zone</th>
+        <th scope="col">Controller Node IP</th>
+        <th scope="col">Login Nodes IP</th>
+        <th scope="col">Status</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for cluster in cluster_list %}
+      <tr>
+        <th>{{ cluster.id }}</th>
+        <td><a href="{% url 'cluster-detail' cluster.id %}">{{ cluster.name }}</a></td>
+        <td>{{ cluster.cloud_zone }}</td>
+        <td>{% if cluster.controller_node %}{{ cluster.controller_node.public_ip }}{% endif %}</td>
+        <td>{% if cluster.login_nodes.count %}{% for login in cluster.login_nodes.all %}{{ login.public_ip }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</td>
+        <td>
+          {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" %}
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          {% endif %}
+          {% if cluster.status == "r" %}
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+          {% endif %}
+          {% if cluster.status == "n" %}
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+          {% endif %}
+          {% if cluster.status == "d" %}
+          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+          {% endif %}
+          {% if cluster.status == "s" %}
+          <img src="/static/img/status-paused.png" style="width:32px;height:32px;">
+          {% endif %}
+          {{ cluster.get_status_display }}
+        </td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-detail' cluster.id  %}">Detail</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-cost' cluster.id  %}">Cost Detail</a>
+           {% if admin_view == 1 %}
+              {% if cluster.status == "n" %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-update' cluster.id  %}">Edit</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-delete' cluster.id  %}">Delete</a>
+              {% endif %}
+              {% if not cluster.status == "d" %}
+              <div class="dropdown-divider"></div>
+              {% endif %}
+              {% if cluster.status == "n" %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-start-cluster' cluster.id %}">Create</a>
+              {% endif %}
+              {% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s" or cluster.status == "e" %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'cluster-destroy' cluster.id %}">Destroy</a>
+              {% endif %}
+              {% if cluster.status == "r" %}
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'backend-sync-cluster' cluster.id %}">Sync Cluster</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create-spack-cluster' cluster.id %}">Install Spack Application</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create-install' cluster.id %}">Install Custom Application</a>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-create' cluster.id %}">Add Manually-configured Application</a>
+              {% endif %}
+           {% endif %}
+              {% if user.is_authenticated and cluster.status == "r" %}
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-gcp-auth' cluster.id %}">Authenticate to Google Cloud Storage</a>
+              {% endif %}
+
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if admin_view == 1 %}
+  <input type="checkbox" id="id_show_destroyed"/> Show Destroyed Clusters
+  {% endif %}
+  </div>
+  {% else %}
+    <p>This is no record of any cluster in this system. Create one!</p>
+  {% endif %}
+
+  <br/>
+  <a href="{% url 'cluster-create' %}" class="btn btn-primary">Add cluster</a>
+{% endblock %}
+
+{% block tailscript %}
+<script language="javascript">
+function filterTable() {
+    var toggle = document.getElementById("id_show_destroyed").checked;
+    $.cookie("cluster_list_show_destroyed", toggle, {path: "{% url 'clusters' %};SameSite=Strict", expires: 10});
+    var table = document.getElementById("id_cluster_table");
+    var tr = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
+
+    for ( i = 0 ; i < tr.length; i++ ) {
+        var td = tr[i].getElementsByTagName("td")[4];
+        var tdText = td.textContent || td.innerText;
+        if ( toggle || tdText.indexOf("has been deleted") == -1 ) {
+            tr[i].style.display = "";
+        } else {
+            tr[i].style.display = "none";
+        }
+    }
+}
+function setupFilter() {
+    var toggle = document.getElementById("id_show_destroyed");
+    toggle_cookie = ($.cookie("cluster_list_show_destroyed") != "false");
+    if ( toggle_cookie ) {
+        toggle.checked = true;
+    }
+    toggle.onchange = filterTable;
+    filterTable();
+}
+$(document).ready(setupFilter);
+</script>
+{% endblock %}

@@ -1,0 +1,77 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Destroy cluster</h2>
+
+  <form method="get" action="{% url 'backend-destroy-cluster' cluster.id %}">
+
+    <br/>
+
+    <div class="alert alert-danger">You are going to destroy cluster <strong>{{ cluster.name }}</strong>.
+      Please note that this action cannot 
+      be undone. Actively ongoing application installations and jobs on this cluster will be terminated and cannot 
+      be restarted.
+    </div>
+    
+    <hr>
+    <p style="text-decoration: underline; font-size: large;">Active application installations</p>
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <tr>
+        <th>Application Name</th>
+        <th>Status</th>
+      </tr>
+    {% for application in applications %}
+      {% if application.status == "p" or application.status == "q" or application.status == "i" %}
+      <tr>
+        <td>{{ application.name }} {% if application.version %} {{ application.version }} {% endif %}</td>
+        <td>{{ application.get_status_display }}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </table>
+    </div>
+
+    <p style="text-decoration: underline; font-size: large;">Active jobs</p>
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <tr>
+        <th>Application Name</th>
+        <th>Job Name</th>
+        <th>Status</th>
+      </tr>    
+      {% for job in jobs %}
+      {% if job.status == "p" or job.status == "q" or job.status == "d" or job.status == "r" or job.status == "u" %}
+      <tr>
+        <td>{{ job.application.name }}</td>
+        <td>{{ job.name }}</td>
+        <td>{{ job.get_status_display }}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </table>
+    </div>
+
+    <hr>
+    <p>Are you sure you want to continue?</p>
+    <input type="submit" value="Confirm" class="btn btn-danger">
+    <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>    
+  </form>
+
+{% endblock %}

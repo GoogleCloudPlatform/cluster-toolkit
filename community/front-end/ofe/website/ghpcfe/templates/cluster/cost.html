@@ -1,0 +1,104 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Cluster Cost Detail</h2>
+
+  <p><b>Cluster ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Total Jobs:</b> {{ object.total_jobs }}</p>
+  <p><b>Total Cost:</b> ${{ object.total_cost|floatformat:2 }}</p>
+
+  <a href="{% url 'cluster-detail' object.id %}" class="btn btn-primary">Cluster Detail</a>
+  <hr />
+  <h2>Top Users</h2>
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_topuser_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Jobs To Date</th>
+        <th scope="col">Spend To Date</th>
+        <th scope="col">Quota</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for spend,jobs,user in users_by_spend %}
+      <tr>
+        <td>{{ user.id }}</td>
+        <td><a href="{% url 'user-detail' user.id %}">{{ user.username }}</a></td>
+	<td>{{ jobs }} </td>
+        <td>${{ spend|floatformat:2 }}</td>
+	<td>{% if user.quota_type == "u" %}Unlimited{% elif user.quota_type == "d" %}Disabled{% else %}${{ user.quota_amount|floatformat:2 }}{% endif %}</td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-detail' user.id  %}">Detail</a>
+	      <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-admin' user.id  %}">Admin</a>
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>  <hr />
+  <h2>Top Applications</h2>
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_topapp_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Jobs To Date</th>
+        <th scope="col">Spend To Date</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for spend, app in apps_by_spend %}
+      <tr>
+        <td>{{ app.id }}</td>
+        <td><a href="{% url 'application-detail' app.id %}">{{ app.name }}</a></td>
+        <td>{{ app.total_jobs }}</td>
+        <td>{{ app.total_spend }}</td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'application-detail' app.id %}">Detail</a>
+              {% if app.status == 'r' and app.cluster.status == 'r' %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-create' app.id %}">New Job</a>
+              {% endif %}
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <a href="{% url 'cluster-cost-export' object.id %}" class="btn btn-primary">Export Job Cost Information (CSV format)</a>
+
+{% endblock %}

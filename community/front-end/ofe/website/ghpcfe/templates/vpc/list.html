@@ -1,0 +1,136 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if loading == 1 %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+  <h2>Virtual Network List</h2>
+  {% if virtualnetwork_list %}
+  <div class="table-responsive" style="min-height:20em;">
+  <table class="table align-middle" id="id_vpc_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Cloud ID</th>
+        <th scope="col">Status</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for vpc in virtualnetwork_list %}
+      <tr>
+        <th>{{ vpc.id }}</th>
+        <td><a href="{% url 'vpc-detail' vpc.id %}">{{ vpc.name }}</a></td>
+        <td>{{ vpc.cloud_id }}</td>
+        <td>
+          {% if "c" in vpc.cloud_state == "c" %}
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          {% endif %}
+          {% if "i" in vpc.cloud_state or vpc.cloud_state == "m" %}
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+          {% endif %}
+          {% if "n" in vpc.cloud_state %}
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+          {% endif %}
+          {% if "d" in vpc.cloud_state %}
+          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+          {% endif %}
+          {{ vpc.get_cloud_state_display }}
+        </td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item" href="{% url 'vpc-detail' vpc.id  %}" class="btn btn-sm btn-secondary">Detail</a>
+              {% if "x" in vpc.cloud_state or "n" in vpc.cloud_state %}
+              <a class="dropdown-item" href="{% url 'vpc-delete' vpc.id  %}" class="btn btn-sm btn-secondary">Delete</a>
+              {% endif %}
+              {% if "d" not in vpc.cloud_state and "x" not in vpc.cloud_state %}
+              {% if "n" in vpc.cloud_state %}
+              <a class="dropdown-item" href="{% url 'backend-start-vpc' vpc.id %}" class="btn btn-sm btn-secondary">Start</a>
+              {% endif %}
+              
+              {% if "c" not in vpc.cloud_state %}
+              <a class="dropdown-item" href="{% url 'vpc-update' vpc.id  %}" class="btn btn-sm btn-secondary">Edit</a>  
+              {% endif %}
+              <a class="dropdown-item" href="{% url 'vpc-subnets' vpc.id %}" class="btn btn-sm btn-secondary">Edit Subnets</a>
+
+              {% if "m" in vpc.cloud_state and "n" not in vpc.cloud_state and "x" not in vpc.cloud_state %}
+              <a class="dropdown-item" href="{% url 'vpc-destroy' vpc.id %}" class="btn btn-sm btn-secondary">Destroy</a>
+              {% endif %}
+              {% endif %}
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <input type="checkbox" id="id_show_destroyed"/> Show Destroyed VPCs
+  </div>
+  {% else %}
+    <p>This is no record of any VPC in this system. Create one!</p>
+  {% endif %} 
+
+  <br/>
+  <a href="{% url 'vpc-create' %}" class="btn btn-primary">Add VPC</a>
+  <a href="{% url 'vpc-import' %}" class="btn btn-primary">Import External VPC</a>
+{% endblock %}
+
+{% block tailscript %}
+<script language="javascript">
+function filterTable() {
+    var toggle = document.getElementById("id_show_destroyed").checked;
+    $.cookie("vpc_list_show_destroyed", toggle, {path: "{% url 'vpcs' %};SameSite=Strict", expires: 10});
+    var table = document.getElementById("id_vpc_table");
+    var tr = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
+
+    for ( i = 0 ; i < tr.length; i++ ) {
+        var td = tr[i].getElementsByTagName("td")[2];
+        var tdText = td.textContent || td.innerText;
+        if ( toggle || tdText.indexOf("Destroyed") == -1 ) {
+            tr[i].style.display = "";
+        } else {
+            tr[i].style.display = "none";
+        }
+    }
+}
+function setupFilter() {
+    var toggle = document.getElementById("id_show_destroyed");
+    toggle_cookie = ($.cookie("vpc_list_show_destroyed") != "false");
+    if ( toggle_cookie ) {
+        toggle.checked = true;
+    }
+    toggle.onchange = filterTable;
+    filterTable();
+}
+$(document).ready(setupFilter);
+</script>
+{% endblock %}
