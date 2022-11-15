@@ -45,8 +45,6 @@ deployment_groups:
     source: ./community//modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
-      spack_url: https://github.com/spack/spack
-      spack_ref: v0.18.0
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
