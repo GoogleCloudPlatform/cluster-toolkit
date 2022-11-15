@@ -23,6 +23,7 @@ vars:
   owner: ## set owner email
   manager: ## set manager email
   budget_alert_spent_percents: []
+  budget_notifications_topic: ## set budget_notifications_topic
 
 deployment_groups:
   - group: primary

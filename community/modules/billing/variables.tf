@@ -17,22 +17,27 @@ variable "budget_start_date_year" {
   description = "Year of the date to start budget with. Must be from 1 to 9999"
   type = number
 }
+
 variable "budget_start_date_month" {
   description = "Month of a year to start budget with. Must be from 1 to 12"
   type = number
 }
+
 variable "budget_start_date_day" {
   description = "Day of a month to start budget with. Must be from 1 to 31 and valid for the year and month"
   type = number
 }
+
 variable "budget_end_date_year" {
   description = "Year of the date to end budget with. Must be from 1 to 9999"
   type = number
 }
+
 variable "budget_end_date_month" {
   description = "Month of a year to end budget with. Must be from 1 to 12"
   type = number
 }
+
 variable "budget_end_date_day" {
   description = "Day of a month to end budget with. Must be from 1 to 31 and valid for the year and month"
   type = number

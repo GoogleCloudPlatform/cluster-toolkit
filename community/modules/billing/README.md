@@ -41,6 +41,7 @@ No modules.
 | <a name="input_budget_start_date_day"></a> [budget\_start\_date\_day](#input\_budget\_start\_date\_day) | Day of a month to start budget with. Must be from 1 to 31 and valid for the year and month | `number` | n/a | yes |
 | <a name="input_budget_start_date_month"></a> [budget\_start\_date\_month](#input\_budget\_start\_date\_month) | Month of a year to start budget with. Must be from 1 to 12 | `number` | n/a | yes |
 | <a name="input_budget_start_date_year"></a> [budget\_start\_date\_year](#input\_budget\_start\_date\_year) | Year of the date to start budget with. Must be from 1 to 9999 | `number` | n/a | yes |
+| <a name="input_budget_notifications_topic"></a> [budget\_notifications\_topic](#input\_budget\_start\_date\_year) | Pub/Sub topic for budget status updates | `string` | n/a | yes |
 | <a name="input_currency_code"></a> [currency\_code](#input\_currency\_code) | The 3-letter currency code defined in ISO 4217. If specified, it must match the currency of the billing account. For a list of currency codes, please see https://en.wikipedia.org/wiki/ISO_4217 | `string` | n/a | yes |
 | <a name="input_manager"></a> [manager](#input\_manager) | Manager who approved the project | `string` | n/a | yes |
 | <a name="input_module_depends_on"></a> [module\_depends\_on](#input\_module\_depends\_on) | (Optional) A list of external resources the module depends on. | `any` | `[]` | no |
