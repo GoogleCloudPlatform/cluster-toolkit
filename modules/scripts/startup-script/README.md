@@ -21,11 +21,6 @@ Each runner receives the following attributes:
       --limit localhost <<DESTINATION>>
     ```
 
-    > **_NOTE:_** Ansible must already be installed in this VM. This can be
-    > done using another runner executed prior to this one. A pre-built ansible
-    > installation shell runner is available as part of the
-    > [startup-script module](./examples/install_ansible.sh).
-
   - `data`: The data or file specified will be copied to `<<DESTINATION>>`. No
     action will be performed after the data is staged. This data can be used by
     subsequent runners or simply made available on the VM for later use.
@@ -55,7 +50,7 @@ Each runner receives the following attributes:
 
 ### Runner dependencies
 
-`ansible-local` runners requires Ansible to be installed in the VM before
+`ansible-local` runners require Ansible to be installed in the VM before
 running. To support other playbook runners in the HPC Toolkit, we install
 version 2.11 of `ansible-core` as well as the larger package of collections
 found in `ansible` version 4.10.0.
