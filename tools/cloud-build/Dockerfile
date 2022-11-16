@@ -31,8 +31,6 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get -y update && apt-get -y install google-cloud-sdk && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pip install pre-commit ansible && rm -rf ~/.cache/pip/*
-
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
 RUN go install github.com/terraform-docs/terraform-docs@latest      && \
@@ -46,6 +44,10 @@ RUN go install github.com/terraform-docs/terraform-docs@latest      && \
 # Setting GHPC dependencies
 WORKDIR /ghpc-tmp
 COPY ./ ./
+
+RUN pip install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.2.0/scripts/requirements.txt && \
+    pip install -r tools/cloud-build/requirements.txt && \
+    rm -rf ~/.cache/pip/*
 
 RUN make ghpc
 
