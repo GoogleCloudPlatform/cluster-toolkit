@@ -4,6 +4,9 @@ This module creates a [filestore](https://cloud.google.com/filestore)
 instance. Filestore is a high performance network file system that can be
 mounted to one or more compute VMs.
 
+For more information on this and other network storage options in the Cloud HPC
+Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
+
 ### Filestore tiers
 
 At the time of writing, Filestore supports 4 [tiers of service][tiers] that are
