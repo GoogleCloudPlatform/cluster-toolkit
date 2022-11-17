@@ -23,19 +23,21 @@ locals {
   server_ip     = google_compute_instance.compute_instance.network_interface[0].network_ip
   fs_type       = "nfs"
   mount_options = "defaults,hard,intr"
-  install_nfs_client_runner = {
-    "type"        = "shell"
-    "source"      = "${path.module}/scripts/install-nfs-client.sh"
-    "destination" = "install-nfs.sh"
-  }
-  mount_runners = { for mount in var.local_mounts :
-    mount => {
+  install_nfs_client_runners = [for mount in var.local_mounts :
+    {
+      "type"        = "shell"
+      "source"      = "${path.module}/scripts/install-nfs-client.sh"
+      "destination" = "install-nfs${replace(mount, "/", "_")}.sh"
+    }
+  ]
+  mount_runners = [for mount in var.local_mounts :
+    {
       "type"        = "shell"
       "source"      = "${path.module}/scripts/mount.sh"
       "args"        = "\"${local.server_ip}\" \"/exports${mount}\" \"${mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
       "destination" = "mount${replace(mount, "/", "_")}.sh"
     }
-  }
+  ]
   ansible_mount_runner = {
     "type"        = "ansible-local"
     "source"      = "${path.module}/scripts/mount.yaml"
