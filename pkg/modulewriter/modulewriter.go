@@ -170,8 +170,8 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 	return nil
 }
 
-func printInstructionsPreamble(kind string, path string, moduleName string) {
-	fmt.Printf("%s group '%s' was successfully created in directory %s\n", kind, moduleName, path)
+func printInstructionsPreamble(kind string, path string, name string) {
+	fmt.Printf("%s group '%s' was successfully created in directory %s\n", kind, name, path)
 	fmt.Println("To deploy, run the following commands:")
 }
 
