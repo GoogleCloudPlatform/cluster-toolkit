@@ -8,6 +8,9 @@ group.
 The pre-existing network storage can be referenced in the same way as any HPC
 Toolkit supported file-system such as [filestore](../filestore/README.md).
 
+For more information on network storage options in the Cloud HPC Toolkit, see
+the extended [Network Storage documentation](../../../../docs/network_storage.md).
+
 ### Example
 
 ```yaml

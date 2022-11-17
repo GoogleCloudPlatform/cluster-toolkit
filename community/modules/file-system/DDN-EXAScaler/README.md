@@ -6,6 +6,9 @@ This module creates a DDN EXAScaler Cloud Lustre file system using
 More information about the architecture can be found at
 [Architecture: Lustre file system in Google Cloud using DDN EXAScaler][architecture].
 
+For more information on this and other network storage options in the Cloud HPC
+Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
+
 > **_NOTE:_** By default security.public_key is set to `null`, therefore the
 > admin user is not created. To ensure the admin user is created, provide a
 > public key via the security setting.

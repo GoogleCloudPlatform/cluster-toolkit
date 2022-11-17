@@ -6,6 +6,9 @@ files with other clients over a network. `nfs-server` can be used by
 [vm-instance](../../../../modules/compute/vm-instance/README.md) and SchedMD
 community modules that create compute VMs.
 
+For more information on this and other network storage options in the Cloud HPC
+Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
+
 > **_WARNING:_** This module has only been tested against the HPC centos7 OS
 > disk image (the default). Using other images may work, but have not been
 > verified.
