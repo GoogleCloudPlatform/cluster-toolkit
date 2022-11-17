@@ -76,6 +76,35 @@ The Filestore instance defined below will have the following attributes:
     local_mount: /projects
 ```
 
+## Mounting
+
+To mount the Filestore instance you must first ensure that the NFS client has
+been installed and then call the proper `mount` command.
+
+When mounting to a Slurm resource, a `vm_instance`, or a `batch-job-template`,
+both of these steps are automatically handled with the use of the `use` command.
+See the [hpc-cluster-high-io](../../../examples/hpc-cluster-high-io.yaml) for
+an example of using this module with Slurm.
+
+If mounting is not automatically handled as described above, the `filestore`
+module outputs runners that can be used with the startup-script module to
+install the client and mount the file system. See the following example:
+
+```yaml
+  - id: filestore
+    source: modules/file-system/filestore
+    use: [network1]
+    settings: {local_mount: /scratch}
+
+  - id: mount-at-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(filestore.install_nfs_client_runner)
+      - $(filestore.mount_runner)
+
+```
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
