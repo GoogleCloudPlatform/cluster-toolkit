@@ -12,7 +12,7 @@ require (
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20210625153042-09f34846faab
 	github.com/otiai10/copy v1.9.0
 	github.com/pkg/errors v0.9.1
-	github.com/spf13/afero v1.9.2
+	github.com/spf13/afero v1.9.3
 	github.com/spf13/cobra v1.6.1
 	github.com/zclconf/go-cty v1.12.1
 	golang.org/x/exp v0.0.0-20220907003533-145caa8ea1d0
