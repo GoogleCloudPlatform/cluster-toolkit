@@ -86,8 +86,6 @@ module "slurm_login_instance" {
   subnetwork            = var.subnetwork_self_link
   zone                  = var.zone
   login_startup_scripts = local.ghpc_startup_script
-
-  metadata = merge({
-    slurm_depends_on_controller = sha256(var.controller_instance_id)
-  }, var.metadata)
+  metadata              = var.metadata
+  slurm_depends_on      = flatten([var.controller_instance_ids])
 }

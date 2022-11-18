@@ -194,5 +194,5 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_controller_instance_id"></a> [controller\_instance\_id](#output\_controller\_instance\_id) | The server-assigned unique identifier of the controller compute instance. |
+| <a name="output_controller_instance_ids"></a> [controller\_instance\_ids](#output\_controller\_instance\_ids) | The server-assigned unique identifier of the controller compute instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
