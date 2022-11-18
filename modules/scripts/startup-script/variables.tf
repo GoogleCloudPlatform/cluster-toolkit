@@ -64,6 +64,10 @@ EOT
     error_message = "All runners must declare a destination name (even without a path)."
   }
   validation {
+    condition     = length(distinct([for r in var.runners : r["destination"]])) == length(var.runners)
+    error_message = "All startup-script runners must have a unique destination."
+  }
+  validation {
     condition = alltrue([
       for r in var.runners : r["type"] == "ansible-local" || r["type"] == "shell" || r["type"] == "data"
     ])
