@@ -103,7 +103,7 @@ variable "scopes" {
 variable "local_mounts" {
   description = "Mountpoint for this NFS compute instance"
   type        = list(string)
-  default     = ["/tools", "/data"]
+  default     = ["/data"]
 
   validation {
     condition = alltrue([
