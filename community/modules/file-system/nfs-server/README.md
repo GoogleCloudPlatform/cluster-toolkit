@@ -42,8 +42,9 @@ volume as an external file system.
 To mount the NFS Server you must first ensure that the NFS client has been
 installed the and then call the proper `mount` command.
 
-When mounting to a Slurm resource, a `vm_instance`, or a `batch-job-template`,
-both of these steps are automatically handled with the use of the `use` field.
+Both of these steps are automatically handled with the use of the `use` command
+in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+the network storage doc for a complete list of supported modules.
 See the [hpc-centos-ss.yaml] test config for an example of using this module
 with a `vm-instance` module.
 
@@ -67,6 +68,7 @@ install the client and mount the file system. See the following example:
 ```
 
 [hpc-centos-ss.yaml]: ../../../../tools/validate_configs/test_configs/hpc-centos-ss.yaml
+[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 

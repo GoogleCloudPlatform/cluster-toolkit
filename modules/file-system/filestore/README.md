@@ -81,8 +81,9 @@ The Filestore instance defined below will have the following attributes:
 To mount the Filestore instance you must first ensure that the NFS client has
 been installed and then call the proper `mount` command.
 
-When mounting to a Slurm resource, a `vm_instance`, or a `batch-job-template`,
-both of these steps are automatically handled with the use of the `use` command.
+Both of these steps are automatically handled with the use of the `use` command
+in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+the network storage doc for a complete list of supported modules.
 See the [hpc-cluster-high-io](../../../examples/hpc-cluster-high-io.yaml) for
 an example of using this module with Slurm.
 
@@ -104,6 +105,8 @@ install the client and mount the file system. See the following example:
       - $(filestore.mount_runner)
 
 ```
+
+[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 
