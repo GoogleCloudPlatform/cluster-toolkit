@@ -40,10 +40,10 @@ deployment_groups:
       runners:
       - type: shell
         content: $(homefs.install_nfs_client)
-        destination: "tmp.sh"
+        destination: "install_nfs.sh"
       - type: "ansible-local"
         source: "modules/startup-script/examples/mount.yaml"
-        destination: "tmp.sh"
+        destination: "mount.sh"
 
   - id: workstation
     source: modules/compute/vm-instance
