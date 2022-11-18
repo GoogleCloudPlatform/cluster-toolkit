@@ -87,5 +87,5 @@ module "slurm_login_instance" {
   zone                  = var.zone
   login_startup_scripts = local.ghpc_startup_script
   metadata              = var.metadata
-  slurm_depends_on      = flatten([var.controller_instance_ids])
+  slurm_depends_on      = var.controller_instance_id == null ? [] : [var.controller_instance_id]
 }
