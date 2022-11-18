@@ -51,12 +51,12 @@ variable "slurm_cluster_name" {
   default     = null
 }
 
-variable "controller_instance_ids" {
+variable "controller_instance_id" {
   description = <<-EOD
-    The server-assigned unique identifier of the controller instance, typically
-    supplied as an output of the controller module.
+    The server-assigned unique identifier of the controller instance. This value
+    must be supplied as an output of the controller module, typically via `use`.
     EOD
-  type        = list(string)
+  type        = string
 }
 
 variable "can_ip_forward" {
