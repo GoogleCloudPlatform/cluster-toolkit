@@ -29,8 +29,9 @@ Toolkit, see the extended [Network Storage documentation](../../../../docs/netwo
 To mount the DDN EXAScaler Lustre file system you must first install the DDN
 Luster client and then call the proper `mount` command.
 
-When mounting to a Slurm resource, a `vm_instance`, or a `batch-job-template`, both
-of these steps are automatically handled with the use of the `use` command. See
+Both of these steps are automatically handled with the use of the `use` command
+in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+the network storage doc for a complete list of supported modules.
 the [hpc-cluster-high-io](../../../../examples/hpc-cluster-high-io.yaml) for an
 example of using this module with Slurm.
 
@@ -56,6 +57,7 @@ install the client and mount the file system. See the following example:
 See [additional documentation][ddn-install-docs] from DDN EXAScaler.
 
 [ddn-install-docs]: https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp#install-new-exascaler-cloud-clients
+[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## Support
 

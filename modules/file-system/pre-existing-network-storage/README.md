@@ -62,8 +62,11 @@ Supported `fs_type`:
 storage. This script will fail if the specified `local_mount` is already being
 used by another entry in `/etc/fstab`.
 
-When mounting to a Slurm resource, a `vm_instance`, or a `batch-job-template`,
-both of these steps are automatically handled with the use of the `use` field.
+Both of these steps are automatically handled with the use of the `use` command
+in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+the network storage doc for a complete list of supported modules.
+
+[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 
