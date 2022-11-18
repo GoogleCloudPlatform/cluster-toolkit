@@ -16,14 +16,14 @@
 # render the content for each folder
 output "network_storage" {
   description = "export of all desired folder directories"
-  value = [for mount, mount_runner in local.mount_runners : {
+  value = [for i, mount in var.local_mounts : {
     remote_mount          = "/exports${mount}"
     local_mount           = mount
     fs_type               = local.fs_type
     mount_options         = local.mount_options
     server_ip             = local.server_ip
-    client_install_runner = local.install_nfs_client_runner
-    mount_runner          = mount_runner
+    client_install_runner = local.install_nfs_client_runners[i]
+    mount_runner          = local.mount_runners[i]
     }
   ]
 }
@@ -35,7 +35,7 @@ output "install_nfs_client" {
 
 output "install_nfs_client_runner" {
   description = "Runner to install NFS client using the startup-script module"
-  value       = local.install_nfs_client_runner
+  value       = local.install_nfs_client_runners[0]
 }
 
 output "mount_runner" {
