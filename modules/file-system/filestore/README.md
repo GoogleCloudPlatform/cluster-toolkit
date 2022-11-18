@@ -4,6 +4,9 @@ This module creates a [filestore](https://cloud.google.com/filestore)
 instance. Filestore is a high performance network file system that can be
 mounted to one or more compute VMs.
 
+For more information on this and other network storage options in the Cloud HPC
+Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
+
 ### Filestore tiers
 
 At the time of writing, Filestore supports 4 [tiers of service][tiers] that are
@@ -72,6 +75,38 @@ The Filestore instance defined below will have the following attributes:
     size_gb: 10240
     local_mount: /projects
 ```
+
+## Mounting
+
+To mount the Filestore instance you must first ensure that the NFS client has
+been installed and then call the proper `mount` command.
+
+Both of these steps are automatically handled with the use of the `use` command
+in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+the network storage doc for a complete list of supported modules.
+See the [hpc-cluster-high-io](../../../examples/hpc-cluster-high-io.yaml) for
+an example of using this module with Slurm.
+
+If mounting is not automatically handled as described above, the `filestore`
+module outputs runners that can be used with the startup-script module to
+install the client and mount the file system. See the following example:
+
+```yaml
+  - id: filestore
+    source: modules/file-system/filestore
+    use: [network1]
+    settings: {local_mount: /scratch}
+
+  - id: mount-at-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(filestore.install_nfs_client_runner)
+      - $(filestore.mount_runner)
+
+```
+
+[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 
