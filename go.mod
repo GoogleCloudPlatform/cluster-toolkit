@@ -25,7 +25,7 @@ require (
 	cloud.google.com/go/serviceusage v1.4.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/googleapis/gax-go/v2 v2.7.0
-	google.golang.org/api v0.102.0
+	google.golang.org/api v0.103.0
 )
 
 require (
@@ -65,7 +65,7 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/ulikunitz/xz v0.5.8 // indirect
 	github.com/xanzy/ssh-agent v0.3.0 // indirect
-	go.opencensus.io v0.23.0 // indirect
+	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/crypto v0.0.0-20220517005047-85d78b3ac167 // indirect
 	golang.org/x/net v0.0.0-20221014081412-f15817d10f9b // indirect
 	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783 // indirect
