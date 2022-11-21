@@ -7,6 +7,28 @@
 This module creates a node group data structure intended to be input to the
 [schedmd-slurm-gcp-v5-partition](../schedmd-slurm-gcp-v5-partition/) module.
 
+Node groups are a great way to add heterogeneity of node types to a partition,
+for example, when deploying a job with a special "manager" node with a different
+shape from the "worker" nodes. An example of multiple node groups being used can
+be found in the [slurm-gcp-v5-high-io.yaml] example blueprint.
+
+To specify nodes from a specific node group in a partition, the [`--nodelist`]
+(or `-w`) flag can be used, for example:
+
+```bash
+srun -N 3 -p compute --nodelist cluster-compute-group-[0-99] hostname
+```
+
+Where the 3 nodes will be selected from the nodes `cluster-compute-group-[0-99]`
+in the compute partition.
+
+Additionally, depending on how the nodes differ, a contraint can be added via
+the [`--constraint`] (or `-C`) flag.
+
+[slurm-gcp-v5-high-io.yaml]: ../../../examples/slurm-gcp-v5-high-io.yaml
+[`--nodelist`]: https://slurm.schedmd.com/srun.html#OPT_nodelist
+[`--constraint`]: https://slurm.schedmd.com/srun.html#OPT_constraint
+
 ### Example
 
 The following code snippet creates a partition module using the `node-group`
