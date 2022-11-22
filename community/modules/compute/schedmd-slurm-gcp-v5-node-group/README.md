@@ -16,13 +16,13 @@ To specify nodes from a specific node group in a partition, the [`--nodelist`]
 (or `-w`) flag can be used, for example:
 
 ```bash
-srun -N 3 -p compute --nodelist cluster-compute-group-[0-99] hostname
+srun -N 3 -p compute --nodelist cluster-compute-group-[0-2] hostname
 ```
 
-Where the 3 nodes will be selected from the nodes `cluster-compute-group-[0-99]`
+Where the 3 nodes will be selected from the nodes `cluster-compute-group-[0-2]`
 in the compute partition.
 
-Additionally, depending on how the nodes differ, a contraint can be added via
+Additionally, depending on how the nodes differ, a constraint can be added via
 the [`--constraint`] (or `-C`) flag.
 
 [slurm-gcp-v5-high-io.yaml]: ../../../examples/slurm-gcp-v5-high-io.yaml

@@ -56,7 +56,9 @@ deployment_groups:
       local_mount: /scratch
 
   # The lowcost partition is designed to run at a lower cost and without additional quota
-  # Use: `srun -N 4 <<Command>>`
+  # Use:
+  # `srun -N 4 <<Command>>` for any node in the partition.
+  # `srun -N 4 --mincpus 2` for node group n2s4.
   - id: low_cost_node_group_n2s2
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
@@ -87,7 +89,10 @@ deployment_groups:
       exclusive: false
 
   # The compute partition is designed for performance.
-  # Use: `srun -N 4 -p compute <<Command>>`
+  # Use:
+  # `srun -N 4 -p compute <<Command>>` for any node in the partition.
+  # `srun -N 4 -p compute --mincpus 30 <<Command>>` for node group c2s60.
+
   - id: compute_node_group_c2s60
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
