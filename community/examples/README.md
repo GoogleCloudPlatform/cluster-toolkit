@@ -47,6 +47,10 @@ Examples using Intel HPC technologies can be found in the
 
 [See description in core](../../examples/README.md#slurm-gcp-v5-ubuntu2004yaml-)
 
+### slurm-gcp-v5-high-io.yaml
+
+[See description in core](../../examples/README.md#slurm-gcp-v5-high-ioyaml-)
+
 ### htcondor-pool.yaml
 
 [See description in core](../../examples/README.md#htcondor-poolyaml--)
