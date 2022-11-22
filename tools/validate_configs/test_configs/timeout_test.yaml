@@ -1,0 +1,52 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: timeout-test
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: timeout-test1
+  region: us-central1
+  zone: us-central1-c
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+
+  - id: gcs
+    source: ./modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: hpc-toolkit-service-catalog-solutions
+      local_mount: /catalog
+      fs_type: gcsfuse
+
+  - id: compute-hpc-image
+    source: ./modules/compute/vm-instance
+    use: [network1, gcs]
+    settings:
+      machine_type: n2-standard-2
+      name_prefix: hpc-image
+
+  - id: wait
+    source: ./community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.compute-hpc-image.name[0]))
+      timeout: 25

@@ -45,6 +45,11 @@ if [ "${STATUS}" == 0 ]; then
 elif [ "${STATUS}" == 1 ]; then
 	echo "startup-script finished with errors, ${INSPECT_OUTPUT_TEXT}"
 	echo "${GCLOUD}"
+elif [ "$tries" -ge "${RETRIES}" ]; then
+	echo "startup-script timed out after ${TIMEOUT} seconds"
+	echo "${INSPECT_OUTPUT_TEXT}"
+	echo "${GCLOUD}"
+	exit 1
 else
 	echo "invalid return status '${STATUS}'"
 	echo "${INSPECT_OUTPUT_TEXT}"
