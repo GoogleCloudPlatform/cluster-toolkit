@@ -13,16 +13,16 @@
 # limitations under the License.
 
 ---
-# Test Packer image building and monitoring dashboard in parallel
+# Current parallel execution tree, built to minimize total execution time and faster tests first.
 # ├── build_ghpc
 # └── fetch_builder
-#    └── monitoring  (group 3)
-#        └── omnia
-#            └── lustre-new-vpc
-#                └── packer
-
+#    ├── high-io-slurm-gcp-v5 (group 5)
 
 timeout: 14400s  # 4hr
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/spack_cache_url_wrf/versions/1
+    env: SPACK_CACHE_WRF
 steps:
 ## Test simple golang build
 - id: build_ghpc
@@ -43,8 +43,8 @@ steps:
   - -c
   - echo "done fetching builder"
 
-## Test monitoring dashboard and install script
-- id: monitoring
+## Test Batch MPI
+- id: batch-mpi
   waitFor:
   - fetch_builder
   - build_ghpc
@@ -54,6 +54,40 @@ steps:
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  secretEnv: ['SPACK_CACHE_WRF']
+  args:
+  - -c
+  - |
+    set -x -e
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    SG_EXAMPLE=examples/batch-mpi.yaml
+
+    sed -i "s/# spack_cache_url:/spack_cache_url:/" $${SG_EXAMPLE}
+    sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" $${SG_EXAMPLE}
+    sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
+
+    echo '  - id: wait'                                           >> $${SG_EXAMPLE}
+    echo '    source: community/modules/scripts/wait-for-startup' >> $${SG_EXAMPLE}
+    echo '    settings:'                                          >> $${SG_EXAMPLE}
+    echo '      instance_name: ((module.spack-builder.name[0]))'  >> $${SG_EXAMPLE}
+    echo '      timeout: 2400'                                    >> $${SG_EXAMPLE}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/batch-mpi.yml"
+
+# test quantum circuit simulator example (startup-script runs example code after
+# compiling libraries)
+- id: quantum-circuit
+  waitFor:
+  - batch-mpi
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   args:
   - -c
   - |
@@ -63,67 +97,4 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/monitoring.yml"
-
-## Test Omnia Example
-- id: omnia
-  waitFor:
-  - monitoring
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  env:
-  - "ANSIBLE_HOST_KEY_CHECKING=false"
-  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  args:
-  - -c
-  - |
-    set -x -e
-    BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/omnia.yml"
-
-## Test DDN Lustre with new VPC
-- id: lustre-new-vpc
-  waitFor:
-  - omnia
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  env:
-  - "ANSIBLE_HOST_KEY_CHECKING=false"
-  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  args:
-  - -c
-  - |
-    set -x -e
-    BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/lustre-new-vpc.yml"
-
-# test image creation by provisioning a new VPC and using Packer to build an
-# image in it
-- id: packer
-  waitFor:
-  - lustre-new-vpc
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  env:
-  - "ANSIBLE_HOST_KEY_CHECKING=false"
-  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  args:
-  - -c
-  - |
-    set -x -e
-    BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/packer-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/packer.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/qsim.yml"
