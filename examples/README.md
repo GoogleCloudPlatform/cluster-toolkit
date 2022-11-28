@@ -640,6 +640,9 @@ nodes)
 This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
 the [HPC VM Image][hpcvmimage].
 
+Also see the [tutorial](../docs/tutorials/README.md#htcondor-tutorial), which
+walks through the use of this blueprint.
+
 [htcondor]: https://htcondor.org/
 [htcondor-pool.yaml]: ../community/examples/htcondor-pool.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
