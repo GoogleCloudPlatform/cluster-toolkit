@@ -22,6 +22,29 @@ import (
 	. "gopkg.in/check.v1"
 )
 
+const (
+	testMainTf = `
+module "test_module" {
+	source = "testSource"
+}
+data "test_data" "test_data_name" {
+	name = "test_data_name"
+}
+`
+	testVariablesTf = `
+variable "test_variable" {
+	description = "This is just a test"
+	type        = string
+}
+`
+	testOutputsTf = `
+output "test_output" {
+	description = "This is just a test"
+	value       = "test_value"
+}
+`
+)
+
 // Util Functions
 func createTmpModule() {
 	var err error
