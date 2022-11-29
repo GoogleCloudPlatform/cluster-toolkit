@@ -63,5 +63,6 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 		outs = append(outs, vInfo)
 	}
 	ret.Outputs = outs
+	ret.UsedModules = make(map[string]bool)
 	return ret, nil
 }

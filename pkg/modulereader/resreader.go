@@ -34,6 +34,7 @@ type VarInfo struct {
 type ModuleInfo struct {
 	Inputs       []VarInfo
 	Outputs      []VarInfo
+	UsedModules  map[string]bool
 	RequiredApis []string
 }
 

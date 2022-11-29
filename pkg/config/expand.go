@@ -167,7 +167,8 @@ func useModule(
 	modInputs map[string]string,
 	useOutputs []modulereader.VarInfo,
 	changedSettings map[string]bool,
-) {
+) bool {
+	isModuleUsed := false
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
 		_, isAlreadySet := mod.Settings[settingName]
@@ -193,13 +194,19 @@ func useModule(
 				// Append value list to the outer list
 				mod.Settings[settingName] = append(
 					mod.Settings[settingName].([]interface{}), modVarName)
+				isModuleUsed = true
 			} else if !isAlreadySet {
 				// If input is not a list, set value if not already set and continue
 				mod.Settings[settingName] = modVarName
 				changedSettings[settingName] = true
+				isModuleUsed = true
 			}
 		}
 	}
+	if !isModuleUsed {
+		fmt.Printf(errorMessages["moduleNotUsed"], useMod.ID, mod.ID)
+	}
+	return isModuleUsed
 }
 
 // applyUseModules applies variables from modules listed in the "use" field
@@ -207,9 +214,10 @@ func useModule(
 func (dc *DeploymentConfig) applyUseModules() error {
 	for iGrp := range dc.Config.DeploymentGroups {
 		group := &dc.Config.DeploymentGroups[iGrp]
+		grpModsInfo := dc.ModulesInfo[group.Name]
 		for iMod := range group.Modules {
 			mod := &group.Modules[iMod]
-			modInfo := dc.ModulesInfo[group.Name][mod.Source]
+			modInfo := grpModsInfo[mod.Source]
 			modInputs := getModuleInputMap(modInfo.Inputs)
 			changedSettings := make(map[string]bool)
 			for _, useModID := range mod.Use {
@@ -219,10 +227,12 @@ func (dc *DeploymentConfig) applyUseModules() error {
 					return fmt.Errorf("could not find module %s used by %s in group %s",
 						useModID, mod.ID, group.Name)
 				}
-				useModule(mod, useMod, modInputs, useInfo.Outputs, changedSettings)
+				isUsed :=useModule(mod, useMod, modInputs, useInfo.Outputs, changedSettings)
+				modInfo.UsedModules[useModID] = isUsed
 			}
 		}
 	}
+	fmt.Println(dc.ModulesInfo["primary"]["modules/file-system/filestore"].UsedModules)
 	return nil
 }
 

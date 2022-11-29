@@ -56,6 +56,11 @@ var errorMessages = map[string]string{
 	"varNotFound":       "Could not find source of variable",
 	"varInAnotherGroup": "References to other groups are not yet supported",
 	"noOutput":          "Output not found for a variable",
+	"moduleNotUsed": `Warning: A module (%[2]s) is using an incompatible module (%[1]s).
+         These modules will not be linked unless explicitly defined elsewhere.
+         Please verify the output and setting names of the two modules for consistency or remove module %[1]s from the "use" list of module %[2]s and connect the modules explicitly.
+         It's also possible the setting has been set by a previous module in the "use" list or explicitly, and therefore is not set by module %[1]s.
+`,
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -343,9 +348,9 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error
 
 func createModuleInfo(
 	deploymentGroup DeploymentGroup) map[string]modulereader.ModuleInfo {
-	modInfo := make(map[string]modulereader.ModuleInfo)
+	modsInfo := make(map[string]modulereader.ModuleInfo)
 	for _, mod := range deploymentGroup.Modules {
-		if _, exists := modInfo[mod.Source]; !exists {
+		if _, exists := modsInfo[mod.Source]; !exists {
 			reader := sourcereader.Factory(mod.Source)
 			ri, err := reader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
@@ -353,10 +358,10 @@ func createModuleInfo(
 					"failed to get info for module at %s while setting dc.ModulesInfo: %e",
 					mod.Source, err)
 			}
-			modInfo[mod.Source] = ri
+			modsInfo[mod.Source] = ri
 		}
 	}
-	return modInfo
+	return modsInfo
 }
 
 // addKindToModules sets the kind to 'terraform' when empty.
