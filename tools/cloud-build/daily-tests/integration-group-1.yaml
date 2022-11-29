@@ -18,7 +18,6 @@
 # └── fetch_builder
 #    └── hpc-high-io-v4
 #        └── hpc-high-io-v5
-#           └── batch-mpi
 
 timeout: 14400s  # 4hr
 steps:

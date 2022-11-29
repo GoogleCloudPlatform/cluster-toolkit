@@ -21,6 +21,8 @@ vars:
   deployment_name: high-io-slurm-gcp-v5
   region: us-central1
   zone: us-central1-c
+  # By default, public IPs are set in the login and controller to allow easier
+  # SSH access. To turn this behavior off, set this to true.
   disable_public_ips: false
   # Set to true for active cluster reconfiguration. Note that setting this
   # option requires additional dependencies to be installed locally.
