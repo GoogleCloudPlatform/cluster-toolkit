@@ -246,7 +246,7 @@ class AuthorisedUser(models.Model):
 
 
 class Credential(models.Model):
-    """Model reprenseting a credential on a cloud platform"""
+    """Model representing a credential on a cloud platform"""
 
     name = models.CharField(
         max_length=30,
@@ -617,7 +617,7 @@ class Cluster(CloudResource):
     )
     controller_disk_type = models.CharField(
         max_length=30,
-        help_text="GCP Persistend Disk type",
+        help_text="GCP Persistent Disk type",
         default="pd-standard",
     )
     controller_disk_size = models.PositiveIntegerField(
@@ -638,7 +638,7 @@ class Cluster(CloudResource):
     )
     login_node_disk_type = models.CharField(
         max_length=30,
-        help_text="GCP Persistend Disk type",
+        help_text="GCP Persistent Disk type",
         default="pd-standard",
     )
     login_node_disk_size = models.PositiveIntegerField(
@@ -749,7 +749,7 @@ class ClusterPartition(models.Model):
         ),
     )
     enable_hyperthreads = models.BooleanField(
-        default=False, help_text="Enable Hyprethreads (SMT)"
+        default=False, help_text="Enable Hyperthreads (SMT)"
     )
     enable_node_reuse = models.BooleanField(
         default=True,
@@ -1031,7 +1031,7 @@ class Job(models.Model):
             "containing run.sh). Or the raw script"
         ),
     )
-    # adpated from Django's URL validation regex
+    # adapted from Django's URL validation regex
     ul = "\u00a1-\uffff"
     hostname_re = (
         r"[a-z" + ul + r"0-9](?:[a-z" + ul + r"0-9-]{0,61}[a-z" + ul + r"0-9])?"
@@ -1184,7 +1184,7 @@ class CallbackField(models.TextField):
     empty_strings_allowed = False
     description = "Serializable Python Callback"
 
-    # N.B the following picling operations should realistically only fail either
+    # N.B the following pickling operations should realistically only fail either
     # during development or as the result of package upgrades.  In any case
     # there is nothing that can be done at runtime to fix the issue so no sense
     # in trying to carefully pick through exception types
@@ -1229,7 +1229,6 @@ class GCPFilestoreFilesystem(Filesystem):
     """Managed GCP filestore-based filesystem"""
 
     FILESTORE_TIER = (
-        ("u", "TIER_UNSPECIFIED"),
         ("bh", "BASIC_HDD"),
         ("bs", "BASIC_SSD"),
         ("hs", "HIGH_SCALE_SSD"),
