@@ -1230,11 +1230,10 @@ class GCPFilestoreFilesystem(Filesystem):
 
     FILESTORE_TIER = (
         ("u", "TIER_UNSPECIFIED"),
-        ("s", "STANDARD"),
-        ("p", "PREMIUM"),
         ("bh", "BASIC_HDD"),
         ("bs", "BASIC_SSD"),
         ("hs", "HIGH_SCALE_SSD"),
+        ("en", "ENTERPRISE"),
     )
     capacity = models.PositiveIntegerField(
         validators=[MinValueValidator(1024)],
