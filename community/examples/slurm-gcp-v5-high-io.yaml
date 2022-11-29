@@ -21,7 +21,12 @@ vars:
   deployment_name: high-io-slurm-gcp-v5
   region: us-central1
   zone: us-central1-c
-  enable_reconfigure: true
+  # By default, public IPs are set in the login and controller to allow easier
+  # SSH access. To turn this behavior off, set this to true.
+  disable_public_ips: false
+  # Set to true for active cluster reconfiguration. Note that setting this
+  # option requires additional dependencies to be installed locally.
+  enable_reconfigure: false
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -129,6 +134,7 @@ deployment_groups:
     - compute_partition
     settings:
       machine_type: c2-standard-8
+      disable_controller_public_ips: $(vars.disable_public_ips)
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
@@ -137,6 +143,7 @@ deployment_groups:
     - slurm_controller
     settings:
       machine_type: n2-standard-4
+      disable_login_public_ips: $(vars.disable_public_ips)
 
   - id: hpc_dashboard
     source: modules/monitoring/dashboard

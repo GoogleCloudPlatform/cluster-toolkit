@@ -16,10 +16,13 @@
 # Current parallel execution tree, built to minimize total execution time and faster tests first.
 # ├── build_ghpc
 # └── fetch_builder
-#    └── hpc-high-io-v4
-#        └── hpc-high-io-v5
+#    ├── high-io-slurm-gcp-v5 (group 5)
 
 timeout: 14400s  # 4hr
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/spack_cache_url_wrf/versions/1
+    env: SPACK_CACHE_WRF
 steps:
 ## Test simple golang build
 - id: build_ghpc
@@ -40,8 +43,8 @@ steps:
   - -c
   - echo "done fetching builder"
 
-## Test Slurm High IO Example (Slurm on GCP v4)
-- id: hpc-high-io-v4
+## Test Batch MPI
+- id: batch-mpi
   waitFor:
   - fetch_builder
   - build_ghpc
@@ -51,21 +54,34 @@ steps:
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  secretEnv: ['SPACK_CACHE_WRF']
   args:
   - -c
   - |
     set -x -e
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    SG_EXAMPLE=examples/batch-mpi.yaml
 
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+    sed -i "s/# spack_cache_url:/spack_cache_url:/" $${SG_EXAMPLE}
+    sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" $${SG_EXAMPLE}
+    sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
+
+    echo '  - id: wait'                                           >> $${SG_EXAMPLE}
+    echo '    source: community/modules/scripts/wait-for-startup' >> $${SG_EXAMPLE}
+    echo '    settings:'                                          >> $${SG_EXAMPLE}
+    echo '      instance_name: ((module.spack-builder.name[0]))'  >> $${SG_EXAMPLE}
+    echo '      timeout: 2400'                                    >> $${SG_EXAMPLE}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-high-io.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/batch-mpi.yml"
 
-## Test Slurm High IO v5 Example (Slurm on GCP v5)
-- id: hpc-high-io-v5
+# test quantum circuit simulator example (startup-script runs example code after
+# compiling libraries)
+- id: quantum-circuit
   waitFor:
-  - hpc-high-io-v4
+  - batch-mpi
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
@@ -79,6 +95,6 @@ steps:
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/high-io-slurm-gcp-v5.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/qsim.yml"
