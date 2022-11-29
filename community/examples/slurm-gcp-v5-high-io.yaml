@@ -26,7 +26,7 @@ vars:
   disable_public_ips: false
   # Set to true for active cluster reconfiguration. Note that setting this
   # option requires additional dependencies to be installed locally.
-  enable_reconfigure: false
+  enable_reconfigure: true
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
