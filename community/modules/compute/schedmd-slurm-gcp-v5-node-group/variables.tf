@@ -88,7 +88,7 @@ variable "instance_image" {
     constructing custom slurm images.
     
     More information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/docs/images.md#public-image.
+    https://github.com/SchedMD/slurm-gcp/blob/5.2.0/docs/images.md#public-image.
     EOD
   type        = map(string)
   default     = {}

@@ -282,7 +282,7 @@ variable "source_image" {
 
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the node group VM instances. If not
+    Defines the image that will be used in the login node VM instances. If not
     provided, the Slurm on GCP default published images will be used.
 
     Expected Fields:
@@ -295,7 +295,7 @@ variable "instance_image" {
     constructing custom slurm images.
 
     More information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/docs/images.md#public-image.
+    https://github.com/SchedMD/slurm-gcp/blob/5.2.0/docs/images.md#public-image.
     EOD
   type        = map(string)
   default     = {}
