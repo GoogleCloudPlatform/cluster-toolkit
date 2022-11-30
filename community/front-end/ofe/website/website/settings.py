@@ -27,7 +27,7 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 # At this level all errors are fatal and long lines are a fact of life
 # pylint: disable=line-too-long,broad-except
 
-
+from django.core.management.utils import get_random_secret_key
 from pathlib import Path
 import os
 import requests
@@ -85,7 +85,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "qn$u0rvaae-$k=c-@^$828f(wygoh85-qdz5jc)xg&6y7imqag"
+# Here we generate a secret key only on the webserver.  It is re-used if the
+# FrontEnd is stopped and restarted, to ensure existing cookies still work, etc.
+if os.path.isfile(".secret_key"):
+    with open(".secret_key", "r") as f:
+        SECRET_KEY = f.read().strip()
+else:
+    SECRET_KEY = get_random_secret_key()
+    with open(".secret_key", "w") as f:
+        f.write(SECRET_KEY)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
