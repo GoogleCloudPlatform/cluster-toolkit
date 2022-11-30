@@ -485,35 +485,66 @@ variable "slurm_conf_tpl" {
 
 variable "source_image_project" {
   type        = string
-  description = <<-EOD
-    Project path where the source image comes from. If not provided, this value
-    will default to the project hosting the slurm-gcp public images. More
-    information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image.
-    EOD
+  description = "Deprecated: See instance_image."
   default     = null
+
+  validation {
+    condition     = var.source_image_project == null
+    error_message = "The variable var.source_image_project in schedmd-slurm-gcp-v5-controller is deprecated. Please use instance_image instead."
+  }
 }
 
 variable "source_image_family" {
   type        = string
-  description = <<-EOD
-    Source image family. If not provided, the default image family name for the
-    hpc-centos-7 version of the slurm-gcp public images will be used. More
-    information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
-    EOD
+  description = "Deprecated: See instance_image."
   default     = null
+
+  validation {
+    condition     = var.source_image_family == null
+    error_message = "The variable var.source_image_family in schedmd-slurm-gcp-v5-controller is deprecated. Please use instance_image instead."
+  }
 }
 
 variable "source_image" {
   type        = string
-  description = <<-EOD
-    Source disk image. By default, the image used will be the hpc-centos7
-    version of the slurm-gcp public images. More information can be found in the
-    slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
-    EOD
+  description = "Deprecated: See instance_image."
   default     = null
+
+  validation {
+    condition     = var.source_image == null
+    error_message = "The variable var.source_image in schedmd-slurm-gcp-v5-controller is deprecated. Please use instance_image instead."
+  }
+}
+
+variable "instance_image" {
+  description = <<-EOD
+    Defines the image that will be used in the node group VM instances. If not
+    provided, the Slurm on GCP default published images will be used.
+
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+
+    Custom images must comply with Slurm on GCP requirements; it is highly
+    advised to use the packer templates provided by Slurm on GCP when
+    constructing custom slurm images.
+
+    More information can be found in the slurm-gcp docs:
+    https://github.com/SchedMD/slurm-gcp/blob/v5.1.0/docs/images.md#public-image.
+    EOD
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition = length(var.instance_image) == 0 || (
+    can(var.instance_image["family"]) || can(var.instance_image["name"])) == can(var.instance_image["project"])
+    error_message = "The \"project\" is required if \"family\" or \"name\" are provided in var.instance_image."
+  }
+  validation {
+    condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
+    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
+  }
 }
 
 variable "static_ips" {

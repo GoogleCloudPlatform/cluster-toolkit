@@ -58,9 +58,9 @@ module "slurm_login_template" {
   region                   = var.region
   shielded_instance_config = var.shielded_instance_config
   slurm_instance_role      = "login"
-  source_image_family      = var.source_image_family
-  source_image_project     = var.source_image_project
-  source_image             = var.source_image
+  source_image_family      = lookup(var.instance_image, "family", "")
+  source_image_project     = lookup(var.instance_image, "project", "")
+  source_image             = lookup(var.instance_image, "name", "")
   network                  = var.network_self_link == null ? "" : var.network_self_link
   subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
