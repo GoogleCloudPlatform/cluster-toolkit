@@ -75,8 +75,9 @@ variable "metadata" {
 
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the node group VM instances. If not
-    provided, the Slurm on GCP default published images will be used.
+    Defines the image that will be used in the node group VM instances. This
+    value is overridden if any of `source_image`, `source_image_family` or
+    `source_image_project` are set.
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -91,7 +92,10 @@ variable "instance_image" {
     https://github.com/SchedMD/slurm-gcp/blob/5.2.0/docs/images.md#public-image.
     EOD
   type        = map(string)
-  default     = {}
+  default = {
+    family  = "schedmd-v5-slurm-22-05-4-hpc-centos-7"
+    project = "projects/schedmd-slurm-public/global/images/family"
+  }
 
   validation {
     condition = length(var.instance_image) == 0 || (
@@ -102,6 +106,24 @@ variable "instance_image" {
     condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
     error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
   }
+}
+
+variable "source_image_project" {
+  type        = string
+  description = "Alternate method to instance_image for specifying a project hosting the custom VM image."
+  default     = ""
+}
+
+variable "source_image_family" {
+  type        = string
+  description = "Alternate method to instance_image for specifying a custom VM image family."
+  default     = ""
+}
+
+variable "source_image" {
+  type        = string
+  description = "Alternate method to instance_image for specifying a custom VM image."
+  default     = ""
 }
 
 variable "tags" {

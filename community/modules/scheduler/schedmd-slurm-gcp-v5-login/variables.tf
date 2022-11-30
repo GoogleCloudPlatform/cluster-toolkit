@@ -247,43 +247,11 @@ variable "startup_script" {
   default     = ""
 }
 
-variable "source_image_project" {
-  type        = string
-  description = "Deprecated: See instance_image."
-  default     = null
-
-  validation {
-    condition     = var.source_image_project == null
-    error_message = "The variable var.source_image_project in schedmd-slurm-gcp-v5-login is deprecated. Please use instance_image instead."
-  }
-}
-
-variable "source_image_family" {
-  type        = string
-  description = "Deprecated: See instance_image."
-  default     = null
-
-  validation {
-    condition     = var.source_image_family == null
-    error_message = "The variable var.source_image_family in schedmd-slurm-gcp-v5-login is deprecated. Please use instance_image instead."
-  }
-}
-
-variable "source_image" {
-  type        = string
-  description = "Deprecated: See instance_image."
-  default     = null
-
-  validation {
-    condition     = var.source_image == null
-    error_message = "The variable var.source_image in schedmd-slurm-gcp-v5-login is deprecated. Please use instance_image instead."
-  }
-}
-
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the login node VM instances. If not
-    provided, the Slurm on GCP default published images will be used.
+    Defines the image that will be used in the Slurm login node VM instances. This
+    value is overridden if any of `source_image`, `source_image_family` or
+    `source_image_project` are set.
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -293,12 +261,15 @@ variable "instance_image" {
     Custom images must comply with Slurm on GCP requirements; it is highly
     advised to use the packer templates provided by Slurm on GCP when
     constructing custom slurm images.
-
+    
     More information can be found in the slurm-gcp docs:
     https://github.com/SchedMD/slurm-gcp/blob/5.2.0/docs/images.md#public-image.
     EOD
   type        = map(string)
-  default     = {}
+  default = {
+    family  = "schedmd-v5-slurm-22-05-4-hpc-centos-7"
+    project = "projects/schedmd-slurm-public/global/images/family"
+  }
 
   validation {
     condition = length(var.instance_image) == 0 || (
@@ -309,6 +280,24 @@ variable "instance_image" {
     condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
     error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
   }
+}
+
+variable "source_image_project" {
+  type        = string
+  description = "Alternate method to instance_image for specifying a project hosting the custom VM image."
+  default     = ""
+}
+
+variable "source_image_family" {
+  type        = string
+  description = "Alternate method to instance_image for specifying a custom VM image family."
+  default     = ""
+}
+
+variable "source_image" {
+  type        = string
+  description = "Alternate method to instance_image for specifying a custom VM image."
+  default     = ""
 }
 
 variable "disk_type" {

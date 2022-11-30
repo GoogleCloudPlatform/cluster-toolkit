@@ -26,6 +26,13 @@ locals {
 
   enable_public_ip_access_config = var.disable_login_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
   access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
+
+  # Handle VM image format from 2 sources, prioritize source_image* variables
+  # over instance_image
+  source_image_input_used = var.source_image != "" || var.source_image_family != "" || var.source_image_project != ""
+  source_image            = local.source_image_input_used ? var.source_image : lookup(var.instance_image, "name", "")
+  source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
+  source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
 }
 
 data "google_compute_default_service_account" "default" {
@@ -58,9 +65,9 @@ module "slurm_login_template" {
   region                   = var.region
   shielded_instance_config = var.shielded_instance_config
   slurm_instance_role      = "login"
-  source_image_family      = lookup(var.instance_image, "family", "")
-  source_image_project     = lookup(var.instance_image, "project", "")
-  source_image             = lookup(var.instance_image, "name", "")
+  source_image_family      = local.source_image_family
+  source_image_project     = local.source_image_project
+  source_image             = local.source_image
   network                  = var.network_self_link == null ? "" : var.network_self_link
   subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
