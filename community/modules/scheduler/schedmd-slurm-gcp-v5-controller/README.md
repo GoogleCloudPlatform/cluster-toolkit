@@ -182,9 +182,9 @@ limitations under the License.
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters). | `string` | `null` | no |
 | <a name="input_slurm_conf_tpl"></a> [slurm\_conf\_tpl](#input\_slurm\_conf\_tpl) | Slurm slurm.conf template file path. | `string` | `null` | no |
 | <a name="input_slurmdbd_conf_tpl"></a> [slurmdbd\_conf\_tpl](#input\_slurmdbd\_conf\_tpl) | Slurm slurmdbd.conf template file path. | `string` | `null` | no |
-| <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Alternate method to instance\_image for specifying a custom VM image. | `string` | `""` | no |
-| <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternate method to instance\_image for specifying a custom VM image family. | `string` | `""` | no |
-| <a name="input_source_image_project"></a> [source\_image\_project](#input\_source\_image\_project) | Alternate method to instance\_image for specifying a project hosting the custom VM image. | `string` | `""` | no |
+| <a name="input_source_image"></a> [source\_image](#input\_source\_image) | The custom VM image. It is recommended to use `instance_image` instead. | `string` | `""` | no |
+| <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | The custom VM image family. It is recommended to use `instance_image` instead. | `string` | `""` | no |
+| <a name="input_source_image_project"></a> [source\_image\_project](#input\_source\_image\_project) | The hosting the custom VM image. It is recommended to use `instance_image` instead. | `string` | `""` | no |
 | <a name="input_static_ips"></a> [static\_ips](#input\_static\_ips) | List of static IPs for VM instances. | `list(string)` | `[]` | no |
 | <a name="input_subnetwork_project"></a> [subnetwork\_project](#input\_subnetwork\_project) | The project that subnetwork belongs to. | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. Either network\_self\_link or subnetwork\_self\_link must be specified. | `string` | `null` | no |

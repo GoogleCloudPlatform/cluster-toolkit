@@ -520,19 +520,19 @@ variable "instance_image" {
 
 variable "source_image_project" {
   type        = string
-  description = "Alternate method to instance_image for specifying a project hosting the custom VM image."
+  description = "The hosting the custom VM image. It is recommended to use `instance_image` instead."
   default     = ""
 }
 
 variable "source_image_family" {
   type        = string
-  description = "Alternate method to instance_image for specifying a custom VM image family."
+  description = "The custom VM image family. It is recommended to use `instance_image` instead."
   default     = ""
 }
 
 variable "source_image" {
   type        = string
-  description = "Alternate method to instance_image for specifying a custom VM image."
+  description = "The custom VM image. It is recommended to use `instance_image` instead."
   default     = ""
 }
 
