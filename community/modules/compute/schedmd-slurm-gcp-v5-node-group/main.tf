@@ -16,6 +16,13 @@
 
 locals {
 
+  # Handle VM image format from 2 sources, prioritize source_image* variables
+  # over instance_image
+  source_image_input_used = var.source_image != "" || var.source_image_family != "" || var.source_image_project != ""
+  source_image            = local.source_image_input_used ? var.source_image : lookup(var.instance_image, "name", "")
+  source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
+  source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
+
   node_group = {
     # Group Definition
     group_name             = var.name
@@ -43,9 +50,9 @@ locals {
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible
     shielded_instance_config = var.shielded_instance_config
-    source_image_family      = lookup(var.instance_image, "family", "")
-    source_image_project     = lookup(var.instance_image, "project", "")
-    source_image             = lookup(var.instance_image, "name", "")
+    source_image_family      = local.source_image_family
+    source_image_project     = local.source_image_project
+    source_image             = local.source_image
     tags                     = var.tags
     access_config            = var.access_config
     service_account = var.service_account != null ? var.service_account : {
