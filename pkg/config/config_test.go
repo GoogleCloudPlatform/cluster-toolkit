@@ -250,7 +250,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	}
 }
 
-func getDeploymentConfigWithTestModuleEmtpyKind() DeploymentConfig {
+func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 	testModuleSource := filepath.Join(tmpTestDir, "module")
 	testDeploymentGroup := DeploymentGroup{
 		Name: "primary",
@@ -284,6 +284,42 @@ func (s *MySuite) TestExpandConfig(c *C) {
 	dc.ExpandConfig()
 }
 
+func (s *MySuite) TestListUnusedModules(c *C) {
+	dc := getDeploymentConfigForTest()
+
+	// No modules in "use"
+	got := dc.listUnusedModules()
+	c.Assert(got, HasLen, 0)
+
+	// All "use" modules actually used
+	usedConn := ModConnection{
+		toID:   "usedModule",
+		unused: false,
+	}
+	dc.moduleConnections["usingModule"] = []ModConnection{usedConn}
+	got = dc.listUnusedModules()
+	c.Assert(got["usingModule"], HasLen, 0)
+
+	// One fully unused module
+	unusedConn := ModConnection{
+		toID:   "usedModule",
+		unused: true,
+	}
+	dc.moduleConnections["usingModule"] = append(dc.moduleConnections["usingModule"], unusedConn)
+	got = dc.listUnusedModules()
+	c.Assert(got["usingModule"], HasLen, 1)
+
+	// Two fully unused modules
+	secondUnusedConn := ModConnection{
+		toID:   "secondUnusedModule",
+		unused: true,
+	}
+	dc.moduleConnections["usingModule"] = append(dc.moduleConnections["usingModule"], secondUnusedConn)
+	got = dc.listUnusedModules()
+	c.Assert(got["usingModule"], HasLen, 2)
+
+}
+
 func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() works when nothing to do */
 	dc := getBasicDeploymentConfigWithTestModule()
@@ -293,14 +329,14 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	c.Assert(got, Equals, expected)
 
 	/* Test addKindToModules() works when kind is absent*/
-	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = "terraform"
 	dc.addKindToModules()
 	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
 	c.Assert(got, Equals, expected)
 
 	/* Test addKindToModules() works when kind is empty*/
-	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = "terraform"
 	dc.addKindToModules()
 	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule2").Kind
@@ -309,7 +345,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() does nothing to packer types*/
 	moduleID := "packerModule"
 	expected = "packer"
-	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
 	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
@@ -318,7 +354,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() does nothing to invalid types*/
 	moduleID = "funnyModule"
 	expected = "funnyType"
-	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
 	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
