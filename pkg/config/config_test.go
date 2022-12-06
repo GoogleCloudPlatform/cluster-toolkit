@@ -220,6 +220,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 				testModuleSourceWithLabels: testModuleInfo,
 			},
 		},
+		moduleConnections: make(map[string][]ModConnection),
 	}
 	// the next two steps simulate relevant steps in ghpc expand
 	dc.addMetadataToModules()
