@@ -56,11 +56,6 @@ var errorMessages = map[string]string{
 	"varNotFound":       "Could not find source of variable",
 	"varInAnotherGroup": "References to other groups are not yet supported",
 	"noOutput":          "Output not found for a variable",
-	"moduleNotUsed": `Warning: A module (%[2]s) is using an incompatible module (%[1]s).
-         These modules will not be linked unless explicitly defined elsewhere.
-         Please verify the output and setting names of the two modules for consistency or remove module %[1]s from the "use" list of module %[2]s and connect the modules explicitly.
-         It's also possible the setting has been set by a previous module in the "use" list or explicitly, and therefore is not set by module %[1]s.
-`,
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -118,6 +113,7 @@ const (
 	testProjectExistsName
 	testRegionExistsName
 	testZoneExistsName
+	testModuleNotUsedName
 	testZoneInRegionName
 	testApisEnabledName
 )
@@ -162,6 +158,8 @@ func (v validatorName) String() string {
 		return "test_zone_in_region"
 	case testApisEnabledName:
 		return "test_apis_enabled"
+	case testModuleNotUsedName:
+		return "test_module_not_used"
 	default:
 		return "unknown_validator"
 	}
@@ -218,6 +216,13 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
+// ModConnection defines details about connections between modules. Currently,
+// only modules connected with "use" are tracked.
+type ModConnection struct {
+	toID   string
+	unused bool
+}
+
 // DeploymentConfig is a container for the imported YAML data and supporting data for
 // creating the blueprint from it
 type DeploymentConfig struct {
@@ -225,8 +230,9 @@ type DeploymentConfig struct {
 	// Indexed by Resource Group name and Module Source
 	ModulesInfo map[string]map[string]modulereader.ModuleInfo
 	// Maps module ID to group index
-	ModuleToGroup map[string]int
-	expanded      bool
+	ModuleToGroup     map[string]int
+	expanded          bool
+	moduleConnections map[string][]ModConnection
 }
 
 // ExpandConfig expands the yaml config in place
@@ -241,6 +247,24 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	dc.validate()
 	dc.expanded = true
 	return nil
+}
+
+// listUnusedModules provides a mapping of modules to modules that are in the
+// "use" field, but not actually used.
+func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
+	unusedModules := make(map[string][]string)
+	for mod, connections := range dc.moduleConnections {
+		for _, conn := range connections {
+			if conn.unused {
+				if _, exists := unusedModules[mod]; exists {
+					unusedModules[mod] = append(unusedModules[mod], conn.toID)
+				} else {
+					unusedModules[mod] = []string{conn.toID}
+				}
+			}
+		}
+	}
+	return unusedModules
 }
 
 func (dc *DeploymentConfig) checkMovedModules() error {
@@ -267,7 +291,8 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 	}
 
 	newDeploymentConfig = DeploymentConfig{
-		Config: blueprint,
+		Config:            blueprint,
+		moduleConnections: make(map[string][]ModConnection),
 	}
 	return newDeploymentConfig, nil
 }

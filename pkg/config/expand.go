@@ -203,9 +203,6 @@ func useModule(
 			}
 		}
 	}
-	if !isModuleUsed {
-		fmt.Printf(errorMessages["moduleNotUsed"], useMod.ID, mod.ID)
-	}
 	return isModuleUsed
 }
 
@@ -227,12 +224,21 @@ func (dc *DeploymentConfig) applyUseModules() error {
 					return fmt.Errorf("could not find module %s used by %s in group %s",
 						useModID, mod.ID, group.Name)
 				}
-				isUsed :=useModule(mod, useMod, modInputs, useInfo.Outputs, changedSettings)
-				modInfo.UsedModules[useModID] = isUsed
+				isUsed := useModule(mod, useMod, modInputs, useInfo.Outputs, changedSettings)
+				connection := ModConnection{
+					unused: !isUsed,
+					toID:   useModID,
+				}
+				if _, exists := dc.moduleConnections[mod.ID]; exists {
+					dc.moduleConnections[mod.ID] = append(
+						dc.moduleConnections[mod.ID], connection,
+					)
+				} else {
+					dc.moduleConnections[mod.ID] = []ModConnection{connection}
+				}
 			}
 		}
 	}
-	fmt.Println(dc.ModulesInfo["primary"]["modules/file-system/filestore"].UsedModules)
 	return nil
 }
 
@@ -704,5 +710,11 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 		}
 		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
+
+	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+		Validator: testModuleNotUsedName.String(),
+		Inputs:    map[string]interface{}{},
+	})
+
 	return nil
 }
