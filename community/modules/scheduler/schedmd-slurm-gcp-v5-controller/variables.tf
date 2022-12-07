@@ -49,12 +49,14 @@ variable "can_ip_forward" {
 variable "cloud_parameters" {
   description = "cloud.conf options."
   type = object({
+    no_comma_params = bool
     resume_rate     = number
     resume_timeout  = number
     suspend_rate    = number
     suspend_timeout = number
   })
   default = {
+    no_comma_params = false
     resume_rate     = 0
     resume_timeout  = 300
     suspend_rate    = 0
