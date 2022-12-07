@@ -323,6 +323,12 @@ variable "disk_auto_delete" {
   default     = true
 }
 
+variable "disk_labels" {
+  description = "Labels specific to the boot disk. These will be merged with var.labels."
+  type        = map(string)
+  default     = {}
+}
+
 variable "additional_disks" {
   type = list(object({
     disk_name    = string
