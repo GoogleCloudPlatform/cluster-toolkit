@@ -84,6 +84,7 @@ deployment_groups:
         resume_timeout: 300
         suspend_rate: 0
         suspend_timeout: 300
+        no_comma_params: false
       compute_startup_script: |
         #!/bin/bash
         export LOG_FILE=/tmp/custom_startup.log
