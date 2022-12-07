@@ -10,7 +10,7 @@ click==7.1.2
 cryptography==36.0.1
 defusedxml==0.7.1
 dill==0.3.4
-Django==3.2.12
+Django==3.2.16
 django-allauth==0.48.0
 django-extensions==3.1.5
 # Need version 0.11.0 to be released with fixes for Django 3.2
