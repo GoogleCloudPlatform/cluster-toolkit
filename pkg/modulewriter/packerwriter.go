@@ -40,13 +40,13 @@ func (w *PackerWriter) addNumModules(value int) {
 	w.numModules += value
 }
 
-func printPackerInstructions(modPath string) {
-	printInstructionsPreamble("Packer", modPath)
+func printPackerInstructions(modPath string, moduleName string) {
+	printInstructionsPreamble("Packer", modPath, moduleName)
 	fmt.Printf("  cd %s\n", modPath)
 	fmt.Println("  packer init .")
 	fmt.Println("  packer validate .")
 	fmt.Println("  packer build .")
-	fmt.Println("  cd -")
+	fmt.Printf("  cd -\n\n")
 }
 
 func writePackerAutovars(vars map[string]cty.Value, dst string) error {
@@ -85,7 +85,7 @@ func (w PackerWriter) writeDeploymentGroup(
 		if err != nil {
 			return err
 		}
-		printPackerInstructions(modPath)
+		printPackerInstructions(modPath, mod.ID)
 	}
 	return nil
 }

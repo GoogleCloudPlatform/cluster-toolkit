@@ -31,6 +31,7 @@ resource "null_resource" "wait_for_startup" {
       ZONE          = var.zone
       PROJECT_ID    = var.project_id
       RETRIES       = local.retries
+      TIMEOUT       = var.timeout
     }
   }
 

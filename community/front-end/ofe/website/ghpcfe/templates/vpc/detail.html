@@ -1,0 +1,137 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if "c" in object.cloud_state or "t" in object.cloud_state or "d" in object.cloud_state %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <h2>Virtual Network Detail</h2>
+  {% if "x" in object.cloud_state %}
+  <div class="alert alert-info">This VPC is destroyed and its settings archived. No further change is possible.</div>
+  {% endif %}
+    <p><b>ID:</b> {{ object.id }}</p>
+    <p><b>Name:</b> {{ object.name }}</p>
+    <p><b>Cloud ID:</b> {{ object.cloud_id }}</p>
+    <p><b>Default Region:</b> {{ object.cloud_region }}</p>
+    <p>
+      <b>Status:</b>
+      {% if "c" in object.cloud_state or "d" in object.cloud_state %}
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+      {% endif %}
+      {% if object.cloud_state == "m" %}
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+      {% endif %}
+      {{ object.get_cloud_state_display }}
+    </p>
+
+    <hr>
+    <p style="text-decoration: underline; font-size: large;">Subnets</p>
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <tr>
+        <th>Subnet Name</th>
+        <th>Region</th>
+        <th>CIDR</th>
+      </tr>
+      {% if subnets %}
+        {% for subnet in subnets %}
+      <tr>
+        <td>{{ subnet.name }}</td>
+        <td>{{ subnet.cloud_region }}</td>
+        <td>{{ subnet.cidr }}</td>
+      </tr>
+        {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="3">
+          {% if "c" not in object.cloud_state %}
+          Click the <b>Edit Subnets</b> button below to configure subnets.</td> 
+          {% endif %}
+      </tr>
+      {% endif %}
+    </table>
+    </div>
+
+
+    <hr>
+    <p style="text-decoration: underline; font-size: large;">References</p>
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <tr>
+        <th>Resource Type</th>
+        <th>Resource ID</th>
+        <th>Resource Name</th>
+      </tr>
+      {% if used_in_clusters or used_in_filesystems or used_in_workbenches %}
+        {% for cluster in used_in_clusters %}
+      <tr>
+        <td style="width:20%">Cluster</td>
+        <td style="width:15%"><a href="{% url 'cluster-detail' cluster.id %}">{{ cluster.id }}</a></td>
+        <td><a href="{% url 'cluster-detail' cluster.id %}">{{ cluster.name }}</a></td>
+      </tr>
+        {% endfor %}
+        {% for fs in used_in_filesystems %}
+        {% if fs.impl_type == 1 %}
+        <tr>
+          <td style="width:20%">Filesystem</td>
+          <td style="width:15%"><a href="{% url 'filestore-detail' fs.id %}">{{ fs.id }}</a></td>
+          <td><a href="{% url 'filestore-detail' fs.id %}">{{ fs.name }}</a></td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        {% for wb in used_in_workbenches %}
+        <tr>
+          <td style="width:20%">Workbench</td>
+          <td style="width:15%"><a href="{% url 'workbench-detail' wb.id %}">{{ wb.id }}</a></td>
+          <td><a href="{% url 'workbench-detail' wb.id %}">{{ wb.name }}</a></td>
+        </tr>
+        {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="3">
+          {% if "nm" == object.cloud_state %}
+          Click the <b>Edit Subnets</b> button below to configure subnets.</td> 
+          {% endif %}
+      </tr>
+      {% endif %}
+    </table>
+    </div>
+
+    {% if "x" in object.cloud_state %}
+    <a href="{% url 'vpc-delete' object.id %}" class="btn btn-primary">Delete</a>
+    {% endif %}
+    
+    {% if "d" not in object.cloud_state and "x" not in object.cloud_state %}
+    {% if "c" not in object.cloud_state %}
+    <a href="{% url 'vpc-update' object.id %}" class="btn btn-primary">Edit</a>
+    {% endif %}
+    {% if "nm" == object.cloud_state %}
+    <a href="{% url 'vpc-subnets' object.id %}" class="btn btn-primary">Edit Subnets</a>
+    {% endif %}
+    {% if "m" in object.cloud_state and "c" not in object.cloud_state %}
+    <a href="{% url 'backend-start-vpc' object.id %}" class="btn btn-primary {% if not subnets %}disabled{% endif %}">Apply Cloud Changes</a>
+    {% endif %}
+    {% if "m" in object.cloud_state %}
+    <a href="{% url 'vpc-destroy' object.id %}" class="btn btn-primary"">Destroy</a>
+    {% endif %}
+    {% endif %}
+
+{% endblock %}

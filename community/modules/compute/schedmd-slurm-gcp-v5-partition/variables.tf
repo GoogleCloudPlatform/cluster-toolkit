@@ -81,6 +81,11 @@ variable "zone_policy_deny" {
 variable "partition_name" {
   description = "The name of the slurm partition."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z](?:[a-z0-9]{0,6})$", var.partition_name))
+    error_message = "Variable 'partition_name' must be composed of only alphanumeric characters, start with a letter and be 7 characters or less. Regexp: '^[a-z](?:[a-z0-9]{0,6})$'."
+  }
 }
 
 variable "partition_conf" {

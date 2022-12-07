@@ -53,8 +53,8 @@ variable "slurm_cluster_name" {
 
 variable "controller_instance_id" {
   description = <<-EOD
-    The server-assigned unique identifier of the controller instance, typically
-    supplied as an output of the controler module.
+    The server-assigned unique identifier of the controller instance. This value
+    must be supplied as an output of the controller module, typically via `use`.
     EOD
   type        = string
 }

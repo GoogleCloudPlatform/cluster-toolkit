@@ -1,0 +1,37 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Destroy workbench</h2>
+
+  <form method="get" action="{% url 'backend-destroy-workbench' workbench.id %}">
+
+    <br/>
+
+    <div class="alert alert-danger">You are going to destroy workbench <strong>{{ workbench.name }}</strong>
+      on <strong>{{ workbench.cloud_provider }}</strong>. Please note that this action cannot 
+      be undone. This workbench will be terminated and cannot be restarted.
+    </div>
+    
+    <hr>
+    <p>Are you sure you want to continue?</p>
+    <input type="submit" value="Confirm" class="btn btn-danger">
+    <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>    
+  </form>
+
+{% endblock %}

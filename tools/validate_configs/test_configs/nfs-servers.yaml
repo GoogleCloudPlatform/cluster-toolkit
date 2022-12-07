@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: 2-nfs-servers
+blueprint_name: nfs-servers
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: two-nfs-servers
+  deployment_name: nfs-servers
   region: us-central1
   zone: us-central1-a
 
@@ -42,4 +42,15 @@ deployment_groups:
     outputs: [network_storage]
     settings:
       local_mounts: ["/apps"]
+      auto_delete_disk: true
+
+  - id: multiple-local-mounts
+    source: ./community/modules/file-system/nfs-server
+    use: [network1]
+    outputs: [network_storage]
+    settings:
+      local_mounts:
+      - /mnt1
+      - /mnt2
+      - /mnt3
       auto_delete_disk: true

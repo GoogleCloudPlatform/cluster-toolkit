@@ -8,6 +8,9 @@ group.
 The pre-existing network storage can be referenced in the same way as any HPC
 Toolkit supported file-system such as [filestore](../filestore/README.md).
 
+For more information on network storage options in the Cloud HPC Toolkit, see
+the extended [Network Storage documentation](../../../../docs/network_storage.md).
+
 ### Example
 
 ```yaml
@@ -58,6 +61,12 @@ Supported `fs_type`:
 `mount_runner`. This script will update `/etc/fstab` and mount the network
 storage. This script will fail if the specified `local_mount` is already being
 used by another entry in `/etc/fstab`.
+
+Both of these steps are automatically handled with the use of the `use` command
+in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+the network storage doc for a complete list of supported modules.
+
+[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 

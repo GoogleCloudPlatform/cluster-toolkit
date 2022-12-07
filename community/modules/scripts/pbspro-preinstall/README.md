@@ -110,6 +110,7 @@ limitations under the License.
 | Name | Type |
 |------|------|
 | [google_storage_bucket_object.client_rpm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [google_storage_bucket_object.devel_rpm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.execution_rpm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.license_file](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.server_rpm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
@@ -122,6 +123,7 @@ limitations under the License.
 | <a name="input_bucket_viewers"></a> [bucket\_viewers](#input\_bucket\_viewers) | A list of additional accounts that can read packages from this bucket | `list(string)` | `[]` | no |
 | <a name="input_client_rpm"></a> [client\_rpm](#input\_client\_rpm) | Absolute path to PBS Pro Client Host RPM file | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. Cloud resource names will include this value. | `string` | n/a | yes |
+| <a name="input_devel_rpm"></a> [devel\_rpm](#input\_devel\_rpm) | Absolute path to PBS Pro Development RPM file | `string` | n/a | yes |
 | <a name="input_execution_rpm"></a> [execution\_rpm](#input\_execution\_rpm) | Absolute path to PBS Pro Execution Host RPM file | `string` | n/a | yes |
 | <a name="input_force_destroy"></a> [force\_destroy](#input\_force\_destroy) | Set to true if object versioning is enabled and you are certain that you want to destroy the bucket. | `bool` | `false` | no |
 | <a name="input_license_file"></a> [license\_file](#input\_license\_file) | Path to PBS Pro license file | `string` | `null` | no |
@@ -139,6 +141,7 @@ limitations under the License.
 |------|-------------|
 | <a name="output_bucket_name"></a> [bucket\_name](#output\_bucket\_name) | Bucket for PBS RPM packages |
 | <a name="output_pbs_client_rpm_url"></a> [pbs\_client\_rpm\_url](#output\_pbs\_client\_rpm\_url) | gsutil URL of PBS client RPM package |
+| <a name="output_pbs_devel_rpm_url"></a> [pbs\_devel\_rpm\_url](#output\_pbs\_devel\_rpm\_url) | gsutil URL of PBS development RPM package |
 | <a name="output_pbs_execution_rpm_url"></a> [pbs\_execution\_rpm\_url](#output\_pbs\_execution\_rpm\_url) | gsutil URL of PBS execution host RPM package |
 | <a name="output_pbs_license_file_url"></a> [pbs\_license\_file\_url](#output\_pbs\_license\_file\_url) | gsutil URL of PBS license file |
 | <a name="output_pbs_server_rpm_url"></a> [pbs\_server\_rpm\_url](#output\_pbs\_server\_rpm\_url) | gsutil URL of PBS server host RPM package |

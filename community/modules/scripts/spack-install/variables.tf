@@ -39,7 +39,7 @@ variable "spack_url" {
 variable "spack_ref" {
   description = "Git ref to checkout for spack."
   type        = string
-  default     = "v0.18.0"
+  default     = "v0.19.0"
 }
 
 variable "spack_cache_url" {

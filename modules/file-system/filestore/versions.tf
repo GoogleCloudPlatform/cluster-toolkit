@@ -16,9 +16,9 @@
 
 terraform {
   required_providers {
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.4"
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 4.19"
     }
     random = {
       source  = "hashicorp/random"
@@ -26,10 +26,10 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.9.0"
+    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.10.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.9.0"
+    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.10.0"
   }
 
   required_version = ">= 0.14.0"

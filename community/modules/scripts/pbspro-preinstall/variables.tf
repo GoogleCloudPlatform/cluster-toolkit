@@ -29,6 +29,15 @@ variable "region" {
   type        = string
 }
 
+variable "devel_rpm" {
+  description = "Absolute path to PBS Pro Development RPM file"
+  type        = string
+  validation {
+    condition     = can(regex("^/", var.devel_rpm))
+    error_message = "Path to RPM must be an absolute path beginning with \"/\"."
+  }
+}
+
 variable "server_rpm" {
   description = "Absolute path to PBS Pro Server Host RPM file"
   type        = string

@@ -1,0 +1,155 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/jquery-ui.css' %}" type="text/css">
+<script src="{% static 'js/jquery-ui.js' %}"></script>
+<script>
+function updateRunScriptSelection(val) {
+        if ( val == 'url') {
+            document.getElementById("id_install_script").disabled = false;
+            document.getElementById("id_install_script_raw").disabled = true;
+            document.getElementById("install_script_url").style.display = 'block';
+            document.getElementById("install_script_raw").style.display = 'none';
+        } else {
+            document.getElementById("id_install_script").disabled = true;
+            document.getElementById("id_install_script_raw").disabled = false;
+            document.getElementById("install_script_url").style.display = 'none';
+            document.getElementById("install_script_raw").style.display = 'block';
+        }
+}
+
+$(function() {
+    $('input:radio[name="script_type"]').change(function() {
+        updateRunScriptSelection($(this).val());
+    });
+});
+function initPage() {
+    updateRunScriptSelection('url');
+}
+
+window.onload=initPage;
+</script>
+{% endblock %}
+
+{% block content %}
+  <h2>Create a new custom application</h2>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+{% if form.errors %}
+{% for field in form %}
+{% for error in field.errors %}
+<div class="alert alert-danger">
+<strong>{{field.name}} {{ error|escape }}</strong>
+</div>
+{% endfor %}
+{% endfor %}
+{% for error in form.non_field_errors %}
+<div class="alert alert-danger">
+<strong>{{ error|escape }}</strong>
+</div>
+{% endfor %}
+{% endif %}
+
+  <form action="" method="post">
+    {% csrf_token %}
+
+    <div class="form-group">
+      {{ form.cluster.errors }}
+      {{ form.cluster.label_tag }}
+      {{ form.cluster }}
+      {# We're explicit here, because 'select' can't be 'readonly', only    #}
+      {# 'disabled'                                                         #}
+      {# And 'disabled' HTML elements aren't sent with form data.  We we    #}
+      {#   augment with a hidden field                                      #}
+      <input type="hidden" name="cluster" class="form-control" id="id_cluster" value="{{ cluster.id }}">
+    </div>
+    <div class="form-group">
+      {{ form.name.errors }}
+      {{ form.name.label_tag }}
+      {{ form.name }}
+        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.version.errors }}
+      {{ form.version.label_tag }}
+      {{ form.version }}
+        <small class="form-text text-muted">{{ form.version.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.description.errors }}
+      {{ form.description.label_tag }}
+      {{ form.description }}
+        <small class="form-text text-muted">{{ form.description.help_text }}</small>
+    </div>
+
+    <hr />
+    <div class="form-group">
+      {{ form.install_partition.errors }}
+      {{ form.install_partition.label_tag }}
+      {{ form.install_partition }}
+      <small class="form-text text-muted">{{ form.install_partition.help_text }}</small>
+    </div>
+
+    <div class="form-group">
+      {{ form.install_loc.errors }}
+      {{ form.install_loc.label_tag }}
+      {{ form.install_loc }}
+      <small class="form-text text-muted">{{ form.install_loc.help_text }}</small>
+    </div>
+
+    <div class="form-group">
+      {{ form.install_script.errors }}
+      {{ form.install_script.label_tag }}
+      <div>
+      <input type="radio" name="script_type" id="url" value="url" checked="checked" /><label for="url">URL to script</label>
+      <input type="radio" name="script_type" id="raw" value="raw"><label for="raw" />Inline Script</label>
+      </div>
+
+      <div id="install_script_url">
+      <input type="url" name="install_script" class="form-control" maxlength="200" required id="id_install_script" {% if form.install_script.value %}value="{{form.install_script.value}}"{%endif%}>
+      <small class="form-text text-muted">The URL to the installation script</small>
+      </div>
+      <div id="install_script_raw">
+      <textarea name="install_script" cols="40" rows="10" class="form-control" maxlength="8190" id="id_install_script_raw">{%if form.install_script.value %}{{form.install_script.value}}{%else%}#!/bin/bash
+
+{%endif%}</textarea>
+      <small class="form-text text-muted">Inline shell script, beginning with #!</small>
+      </div>
+    </div>
+
+    <div class="form-group">
+      {{ form.module_name.errors }}
+      {{ form.module_name.label_tag }}
+      {{ form.module_name }}
+      <small class="form-text text-muted">{{ form.module_name.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.module_script.errors }}
+      {{ form.module_script.label_tag }}
+      {{ form.module_script }}
+      <small class="form-text text-muted">{{ form.module_script.help_text }}</small>
+    </div>
+
+    <input type="submit" value="Save" class="btn btn-primary"/>
+  </form>
+
+{% endblock %}

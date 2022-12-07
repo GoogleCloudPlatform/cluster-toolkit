@@ -1,0 +1,64 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if object.status == "p" or object.status == "q" or object.status == "i" %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <h2>Application Detail</h2>
+  <p><b>Application ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Version:</b> {{ object.version }}</p>
+  <p><b>Cluster Name:</b> {{ object.cluster.name }}</p>
+  <p><b>Status:</b>
+    {% if object.status == "p" or object.status == "q" or object.status  == "i" %}
+       <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+    {% endif %}
+    {% if object.status == "r" %}
+       <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+    {% endif %}
+    {{ object.get_status_display }}
+  </p>
+  <p><b>Load Command:</b> {{ object.load_command }}</p>
+  <p><b>Installed CPU Architecture:</b> {{ object.installed_architecture }}</p>
+  <hr>
+  <p><b>Compiler:</b> {{ object.compiler }}</p>
+  <p><b>MPI Library:</b> {{ object.mpi }}</p>
+
+  {% if object.status == "x" %}
+  <div class="alert alert-info">The cluster hosting this application has been destroyed. So this application is no longer available for new jobs.</div> 
+  {% endif %}
+
+  {% if object.status == "n" %} 
+  <a href="{% url 'application-update' application.id %}" class="btn btn-primary">Edit</a>
+  <a href="{% url 'application-delete' application.id %}" class="btn btn-primary">Delete</a>  
+  <a href="{% url 'backend-custom-app-install' application.id %}" class="btn btn-primary">Install</a>
+  {% endif %}
+  {% if object.status == "r" %}
+  <a href="{% url 'job-create' application.id %}" class="btn btn-primary">New Job</a>
+  {% endif %}
+  {% if admin_view == 1 %}
+    {% if object.status == "r" or object.status == "e"%}
+  <a href="{% url 'application-log' application.id %}" class="btn btn-primary">View Logs</a>
+    {% endif %}
+  {% endif %}
+
+{% endblock %}

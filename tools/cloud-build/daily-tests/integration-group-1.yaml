@@ -16,8 +16,8 @@
 # Current parallel execution tree, built to minimize total execution time and faster tests first.
 # ├── build_ghpc
 # └── fetch_builder
-#    ├── hpc-high-io (group 1)
-
+#    └── hpc-high-io-v4
+#        └── hpc-high-io-v5
 
 timeout: 14400s  # 4hr
 steps:
@@ -40,8 +40,8 @@ steps:
   - -c
   - echo "done fetching builder"
 
-## Test Slurm High IO Example
-- id: hpc-high-io
+## Test Slurm High IO Example (Slurm on GCP v4)
+- id: hpc-high-io-v4
   waitFor:
   - fetch_builder
   - build_ghpc
@@ -59,4 +59,26 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-high-io.yml"
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-high-io.yml"
+
+## Test Slurm High IO v5 Example (Slurm on GCP v5)
+- id: hpc-high-io-v5
+  waitFor:
+  - hpc-high-io-v4
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/high-io-slurm-gcp-v5.yml"

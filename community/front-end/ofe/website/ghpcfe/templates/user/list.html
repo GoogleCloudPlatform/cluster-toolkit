@@ -1,0 +1,60 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>User List</h2>
+  {% if user_list %}
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_user_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Email</th>
+        <th scope="col">Spend To Date</th>
+        <th scope="col">Quota</th>
+        <th scope="col">Role</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for user in user_list %}
+      <tr>
+        <th>{{ user.id }}</th>
+        <td><a href="{% url 'user-detail' user.id %}">{{ user.username }}</a></td>
+        <td>{{ user.email }}</td>
+	<td>{{ user.total_spend }}</td>
+	<td>{{ user.get_quota_type_display }}{% if user.quota_type == "l" %} (${{ user.quota_amount }}){% endif %}</td>
+        <td>{% if user.has_admin_role %}Admin{% elif user.has_normaluser_role %}Cluster User{% elif user.has_viewer_role %}Viewer{% else %}Unknown{% endif %}</td>
+        <td>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Actions
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-detail' user.id  %}">Detail</a>
+	      <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'user-admin' user.id  %}">Admin</a>
+            </div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+{% endblock %}

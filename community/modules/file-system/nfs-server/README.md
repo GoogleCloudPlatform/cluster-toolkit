@@ -6,6 +6,9 @@ files with other clients over a network. `nfs-server` can be used by
 [vm-instance](../../../../modules/compute/vm-instance/README.md) and SchedMD
 community modules that create compute VMs.
 
+For more information on this and other network storage options in the Cloud HPC
+Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
+
 > **_WARNING:_** This module has only been tested against the HPC centos7 OS
 > disk image (the default). Using other images may work, but have not been
 > verified.
@@ -33,6 +36,39 @@ volume as an external file system.
 > settings so it defaults to false. Note that with `auto_delete_disk: false`,
 > you will need to manually delete the disk after destroying a deployment group
 > with `nfs-server`.
+
+## Mounting
+
+To mount the NFS Server you must first ensure that the NFS client has been
+installed the and then call the proper `mount` command.
+
+Both of these steps are automatically handled with the use of the `use` command
+in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+the network storage doc for a complete list of supported modules.
+See the [hpc-centos-ss.yaml] test config for an example of using this module
+with a `vm-instance` module.
+
+If mounting is not automatically handled as described above, the `nfs-server`
+module outputs runners that can be used with the startup-script module to
+install the client and mount the file system. See the following example:
+
+```yaml
+  - id: nfs
+    source: community/modules/file-system/nfs-server
+    use: [network1]
+    settings: {local_mount: /mnt1}
+
+  - id: mount-at-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(nfs.install_nfs_client_runner)
+      - $(nfs.mount_runner)
+
+```
+
+[hpc-centos-ss.yaml]: ../../../../tools/validate_configs/test_configs/hpc-centos-ss.yaml
+[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 
@@ -88,7 +124,7 @@ No modules.
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size gb | `number` | `"100"` | no |
 | <a name="input_image"></a> [image](#input\_image) | the VM image used by the nfs server | `string` | `"cloud-hpc-image-public/hpc-centos-7"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NFS instance. List key, value pairs. | `any` | n/a | yes |
-| <a name="input_local_mounts"></a> [local\_mounts](#input\_local\_mounts) | Mountpoint for this NFS compute instance | `list(string)` | <pre>[<br>  "/tools",<br>  "/data"<br>]</pre> | no |
+| <a name="input_local_mounts"></a> [local\_mounts](#input\_local\_mounts) | Mountpoint for this NFS compute instance | `list(string)` | <pre>[<br>  "/data"<br>]</pre> | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Type of the VM instance to use | `string` | `"n2d-standard-2"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |

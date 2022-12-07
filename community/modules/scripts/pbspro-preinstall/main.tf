@@ -68,6 +68,12 @@ resource "google_storage_bucket_object" "client_rpm" {
   bucket = module.pbspro_bucket.bucket.name
 }
 
+resource "google_storage_bucket_object" "devel_rpm" {
+  name   = basename(var.devel_rpm)
+  source = var.devel_rpm
+  bucket = module.pbspro_bucket.bucket.name
+}
+
 resource "google_storage_bucket_object" "execution_rpm" {
   name   = basename(var.execution_rpm)
   source = var.execution_rpm

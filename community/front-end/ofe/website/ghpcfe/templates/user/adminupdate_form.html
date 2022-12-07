@@ -1,0 +1,91 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+{% load static %}
+<script>
+function updateQuotaType(val){
+    if ( val == "l" ) {
+        document.getElementById("id_quota_amount_container").style.display = 'block';
+    } else {
+        document.getElementById("id_quota_amount_container").style.display = 'none';
+    }
+}
+
+$(function() {
+    $('select[name="quota_type"]').change(function() {
+        updateQuotaType($(this).val());
+    });
+});
+
+function initPage() {
+    updateQuotaType(document.getElementById("id_quota_type").value);
+}
+
+window.onload=initPage
+
+</script>
+
+{% endblock %}
+
+{% block content %}
+  <h2>Update user</h2>  
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+
+
+  <form action="" method="post" id="clusterForm">
+    {% csrf_token %}
+
+    <div class="form-group">
+      {{ form.username.errors }}
+      {{ form.username.label_tag }}
+      {{ form.username }}
+        <small class="form-text text-muted">{{ form.username.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.email.errors }}
+      {{ form.email.label_tag }}
+      {{ form.email }}
+        <small class="form-text text-muted">{{ form.email.help_text }}</small>
+    <div class="form-group">
+      {{ form.roles.errors }}
+      {{ form.roles.label_tag }}
+      {{ form.roles }}
+        <small class="form-text text-muted">{{ form.roles.help_text }}</small>
+    </div>
+    <div class="form-group">
+      {{ form.quota_type.errors }}
+      {{ form.quota_type.label_tag }}
+      {{ form.quota_type }}
+        <small class="form-text text-muted">{{ form.quota_type.help_text }}</small>
+    </div>
+    <div class="form-group" id="id_quota_amount_container">
+      {{ form.quota_amount.errors }}
+      {{ form.quota_amount.label_tag }}
+      {{ form.quota_amount }}
+        <small class="form-text text-muted">{{ form.quota_amount.help_text }}</small>
+    </div>
+    <br/>  
+    <input type="submit" value="Save" class="btn btn-primary"/>
+    <button class="btn btn-primary" onclick="javascript:history.back();"/>Cancel</button>
+  </form>
+
+{% endblock %}

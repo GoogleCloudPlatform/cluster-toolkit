@@ -7,6 +7,11 @@ ghpc
 # workspace level vscode settings
 .vscode/
 
+####
+community/front-end/ofe/credential.json
+**/.tkfe.lock
+**/deployment.tar.gz
+
 #### TERRAFORM
 
 # Local .terraform directories
@@ -25,6 +30,7 @@ crash.log
 # to change depending on the environment.
 #
 *.tfvars
+**/tf*.log
 
 # Ignore override files as they are usually used to override modules locally and so
 # are not checked in
