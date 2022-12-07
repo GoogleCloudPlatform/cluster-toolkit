@@ -80,10 +80,17 @@ Use the following settings for compact placement:
     instance_count: 4
     machine_type: c2-standard-60
     placement_policy:
-      vm_count: 4  # Note: should match instance count
+      vm_count: null
       collocation: "COLLOCATED"
       availability_domain_count: null
 ```
+
+When `vm_count` is not set, as shown in the example above, then the VMs will be
+added to the placement policy incrementally. This is the **recommended way** to
+use placement policies.
+
+If `vm_count` is specified then VMs will stay in pending state until the
+specified number of VMs are created. See the warning below if using this field.
 
 > **Warning** When creating a compact placement with more than 10 VMs, you must
 > add `-parallelism=<n>` argument on apply. For example if you have 15 VMs in a
@@ -132,14 +139,14 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.42 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.12 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.42 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.12 |
 
 ## Modules
