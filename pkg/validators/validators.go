@@ -38,7 +38,7 @@ const computeDisabledError = "Compute Engine API has not been used in project"
 const computeDisabledMsg = "the Compute Engine API must be enabled in project %s to validate blueprint global variables"
 const serviceDisabledMsg = "the Service Usage API must be enabled in project %s to validate that all APIs needed by the blueprint are enabled"
 const unusedModuleMsg = "module %s uses module %s, but matching setting and outputs were not found. This may be because the value is set explicitly or set by a prior used module"
-const unusedModuleError = "One or more used variables could not have their settings and outputs linked."
+const unusedModuleError = "One or more used modules could not have their settings and outputs linked."
 
 func handleClientError(e error) error {
 	if strings.Contains(e.Error(), "could not find default credentials") {
@@ -62,7 +62,7 @@ func TestModuleNotUsed(unusedModules map[string][]string) error {
 	}
 
 	if foundUnused {
-		return fmt.Errorf("one or more used variables could not have their settings and outputs linked")
+		return fmt.Errorf(unusedModuleError)
 	}
 
 	return nil
