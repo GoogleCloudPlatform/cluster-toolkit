@@ -3,35 +3,34 @@
 <!-- TOC generated with: md_toc github community/examples/intel/README.md | sed -e "s/\s-\s/ * /"-->
 <!-- TOC -->
 
-- [Intel Solutions for the HPC Toolkit](#intel-solutions-for-the-hpc-toolkit)
-  - [Intel-Optimized Slurm Cluster](#intel-optimized-slurm-cluster)
-    - [Initial Setup for the Intel-Optimized Slurm Cluster](#initial-setup-for-the-intel-optimized-slurm-cluster)
-    - [Deploy the Slurm Cluster](#deploy-the-slurm-cluster)
-    - [Connect to the login node](#connect-to-the-login-node)
-    - [Access the cluster and provision an example job](#access-the-cluster-and-provision-an-example-job)
-    - [Delete the infrastructure when not in use](#delete-the-infrastructure-when-not-in-use)
-  - [DAOS Cluster](#daos-cluster)
-    - [Initial Setup for DAOS Cluster](#initial-setup-for-daos-cluster)
-    - [Deploy the DAOS Cluster](#deploy-the-daos-cluster)
-    - [Connect to a client node](#connect-to-a-client-node)
-    - [Verify the DAOS storage system](#verify-the-daos-storage-system)
-    - [Create a DAOS Pool and Container](#create-a-daos-pool-and-container)
-      - [About the DAOS Command Line Tools](#about-the-daos-command-line-tools)
-      - [Determine Free Space](#determine-free-space)
-      - [Create a Pool](#create-a-pool)
-      - [Create a Container](#create-a-container)
-      - [Mount the DAOS Container](#mount-the-daos-container)
-    - [Use DAOS Storage](#use-daos-storage)
-    - [Unmount the DAOS Container](#unmount-the-daos-container)
-    - [Delete the DAOS infrastructure when not in use](#delete-the-daos-infrastructure-when-not-in-use)
-  - [DAOS Server with Slurm cluster](#daos-server-with-slurm-cluster)
-    - [Initial Setup for the DAOS/Slurm cluster](#initial-setup-for-the-daosslurm-cluster)
-    - [Deploy the DAOS/Slurm Cluster](#deploy-the-daosslurm-cluster)
-    - [Connect to the DAOS/Slurm Cluster login node](#connect-to-the-daosslurm-cluster-login-node)
-    - [Create and Mount a DAOS Container](#create-and-mount-a-daos-container)
-    - [Run a Job that uses the DAOS Container](#run-a-job-that-uses-the-daos-container)
-    - [Unmount the Container](#unmount-the-container)
-    - [Delete the DAOS/Slurm Cluster infrastructure when not in use](#delete-the-daosslurm-cluster-infrastructure-when-not-in-use)
+- [Intel-Optimized Slurm Cluster](#intel-optimized-slurm-cluster)
+  - [Initial Setup for the Intel-Optimized Slurm Cluster](#initial-setup-for-the-intel-optimized-slurm-cluster)
+  - [Deploy the Slurm Cluster](#deploy-the-slurm-cluster)
+  - [Connect to the login node](#connect-to-the-login-node)
+  - [Access the cluster and provision an example job](#access-the-cluster-and-provision-an-example-job)
+  - [Delete the infrastructure when not in use](#delete-the-infrastructure-when-not-in-use)
+- [DAOS Cluster](#daos-cluster)
+  - [Initial Setup for DAOS Cluster](#initial-setup-for-daos-cluster)
+  - [Deploy the DAOS Cluster](#deploy-the-daos-cluster)
+  - [Connect to a client node](#connect-to-a-client-node)
+  - [Verify the DAOS storage system](#verify-the-daos-storage-system)
+  - [Create a DAOS Pool and Container](#create-a-daos-pool-and-container)
+    - [About the DAOS Command Line Tools](#about-the-daos-command-line-tools)
+    - [Determine Free Space](#determine-free-space)
+    - [Create a Pool](#create-a-pool)
+    - [Create a Container](#create-a-container)
+    - [Mount the DAOS Container](#mount-the-daos-container)
+  - [Use DAOS Storage](#use-daos-storage)
+  - [Unmount the DAOS Container](#unmount-the-daos-container)
+  - [Delete the DAOS infrastructure when not in use](#delete-the-daos-infrastructure-when-not-in-use)
+- [DAOS Server with Slurm cluster](#daos-server-with-slurm-cluster)
+  - [Initial Setup for the DAOS/Slurm cluster](#initial-setup-for-the-daosslurm-cluster)
+  - [Deploy the DAOS/Slurm Cluster](#deploy-the-daosslurm-cluster)
+  - [Connect to the DAOS/Slurm Cluster login node](#connect-to-the-daosslurm-cluster-login-node)
+  - [Create and Mount a DAOS Container](#create-and-mount-a-daos-container)
+  - [Run a Job that uses the DAOS Container](#run-a-job-that-uses-the-daos-container)
+  - [Unmount the Container](#unmount-the-container)
+  - [Delete the DAOS/Slurm Cluster infrastructure when not in use](#delete-the-daosslurm-cluster-infrastructure-when-not-in-use)
 
 ## Intel-Optimized Slurm Cluster
 
@@ -336,7 +335,7 @@ For the purpose of this demo create the container without specifying ACLs. The c
 daos cont create pool1 \
   --label cont1 \
   --type POSIX \
-  --properties rf:1
+  --properties rf:0
 ```
 
 See the [Container Management](https://docs.daos.io/v2.0/user/container) section of the of the DAOS User Guide for more information about creating containers.
@@ -378,6 +377,7 @@ See the [File System](https://docs.daos.io/v2.0/user/filesystem/) section of the
 The container will need to by unmounted before you log out.  If this is not done it can leave open file handles and prevent the container from being mounted when you log in again.
 
 ```bash
+popd
 fusermount3 -u ${HOME}/daos/cont1
 ```
 
