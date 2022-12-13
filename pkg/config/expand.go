@@ -167,8 +167,8 @@ func useModule(
 	modInputs map[string]string,
 	useOutputs []modulereader.VarInfo,
 	changedSettings map[string]bool,
-) bool {
-	isModuleUsed := false
+) (usedVars []string) {
+	usedVars = []string{}
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
 		_, isAlreadySet := mod.Settings[settingName]
@@ -194,16 +194,16 @@ func useModule(
 				// Append value list to the outer list
 				mod.Settings[settingName] = append(
 					mod.Settings[settingName].([]interface{}), modVarName)
-				isModuleUsed = true
+				usedVars = append(usedVars, settingName)
 			} else if !isAlreadySet {
 				// If input is not a list, set value if not already set and continue
 				mod.Settings[settingName] = modVarName
 				changedSettings[settingName] = true
-				isModuleUsed = true
+				usedVars = append(usedVars, settingName)
 			}
 		}
 	}
-	return isModuleUsed
+	return
 }
 
 // applyUseModules applies variables from modules listed in the "use" field
@@ -213,29 +213,25 @@ func (dc *DeploymentConfig) applyUseModules() error {
 		group := &dc.Config.DeploymentGroups[iGrp]
 		grpModsInfo := dc.ModulesInfo[group.Name]
 		for iMod := range group.Modules {
-			mod := &group.Modules[iMod]
-			modInfo := grpModsInfo[mod.Source]
+			fromMod := &group.Modules[iMod]
+			modInfo := grpModsInfo[fromMod.Source]
 			modInputs := getModuleInputMap(modInfo.Inputs)
 			changedSettings := make(map[string]bool)
-			for _, useModID := range mod.Use {
-				useMod := group.getModuleByID(useModID)
-				useInfo := dc.ModulesInfo[group.Name][useMod.Source]
-				if useMod.ID == "" {
+			for _, toModID := range fromMod.Use {
+				toMod := group.getModuleByID(toModID)
+				useInfo := dc.ModulesInfo[group.Name][toMod.Source]
+				if toMod.ID == "" {
 					return fmt.Errorf("could not find module %s used by %s in group %s",
-						useModID, mod.ID, group.Name)
+						toModID, fromMod.ID, group.Name)
 				}
-				isUsed := useModule(mod, useMod, modInputs, useInfo.Outputs, changedSettings)
+				usedVars := useModule(fromMod, toMod, modInputs, useInfo.Outputs, changedSettings)
 				connection := ModConnection{
-					unused: !isUsed,
-					toID:   useModID,
+					toID:            toModID,
+					fromID:          fromMod.ID,
+					kind:            useConnection,
+					sharedVariables: usedVars,
 				}
-				if _, exists := dc.moduleConnections[mod.ID]; exists {
-					dc.moduleConnections[mod.ID] = append(
-						dc.moduleConnections[mod.ID], connection,
-					)
-				} else {
-					dc.moduleConnections[mod.ID] = []ModConnection{connection}
-				}
+				dc.moduleConnections = append(dc.moduleConnections, connection)
 			}
 		}
 	}
