@@ -17,13 +17,17 @@ blueprint_name: pbs
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: setup
+  deployment_name: pbs
   region: us-central1
   zone: us-central1-c
   client_host_count: 1
   client_hostname_prefix: pbs-client
   execution_host_count: 10
   execution_hostname_prefix: pbs-execution
+  pbs_client_rpm_url: gs://replace-pbspro-rpm-bucket/pbspro-client-2021.1.3.20220217134230-0.el7.x86_64.rpm
+  pbs_devel_rpm_url: gs://replace-pbspro-rpm-bucket/pbspro-devel-2021.1.3.20220217134230-0.el7.x86_64.rpm
+  pbs_execution_rpm_url: gs://replace-pbspro-rpm-bucket/pbspro-execution-2021.1.3.20220217134230-0.el7.x86_64.rpm
+  pbs_server_rpm_url: gs://replace-pbspro-rpm-bucket/pbspro-server-2021.1.3.20220217134230-0.el7.x86_64.rpm
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -41,19 +45,10 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  - id: pbspro_setup
-    source: community/modules/scripts/pbspro-preinstall
-    settings:
-      client_rpm: /path/to/pbspro-client.el7.x86_64.rpm
-      devel_rpm: /path/to/pbspro-devel.el7.x86_64.rpm
-      execution_rpm: /path/to/pbspro-execution.el7.x86_64.rpm
-      server_rpm: /path/to/pbspro-server.el7.x86_64.rpm
-
   - id: pbspro_server
     source: community/modules/scheduler/pbspro-server
     use:
     - homefs
-    - pbspro_setup
     settings:
       machine_type: c2-standard-8
       pbs_license_server: 127.0.0.1
@@ -63,7 +58,6 @@ deployment_groups:
     use:
     - homefs
     - pbspro_server
-    - pbspro_setup
     settings:
       instance_count: $(vars.client_host_count)
       machine_type: c2-standard-8
@@ -74,7 +68,6 @@ deployment_groups:
     use:
     - homefs
     - pbspro_server
-    - pbspro_setup
     settings:
       instance_count: $(vars.execution_host_count)
       machine_type: c2-standard-8
