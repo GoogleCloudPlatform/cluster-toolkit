@@ -33,6 +33,18 @@ locals {
   source_image            = local.source_image_input_used ? var.source_image : lookup(var.instance_image, "name", "")
   source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
   source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
+
+  additional_disks = [
+    for ad in var.additional_disks : {
+      disk_name    = ad.disk_name
+      device_name  = ad.device_name
+      disk_type    = ad.disk_type
+      disk_size_gb = ad.disk_size_gb
+      disk_labels  = merge(ad.disk_labels, var.labels)
+      auto_delete  = ad.auto_delete
+      boot         = ad.boot
+    }
+  ]
 }
 
 data "google_compute_default_service_account" "default" {
@@ -42,12 +54,12 @@ data "google_compute_default_service_account" "default" {
 module "slurm_login_template" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.2.0"
 
-  additional_disks         = var.additional_disks
+  additional_disks         = local.additional_disks
   can_ip_forward           = var.can_ip_forward
   slurm_cluster_name       = local.slurm_cluster_name
   disable_smt              = var.disable_smt
   disk_auto_delete         = var.disk_auto_delete
-  disk_labels              = var.labels
+  disk_labels              = merge(var.disk_labels, var.labels)
   disk_size_gb             = var.disk_size_gb
   disk_type                = var.disk_type
   enable_confidential_vm   = var.enable_confidential_vm

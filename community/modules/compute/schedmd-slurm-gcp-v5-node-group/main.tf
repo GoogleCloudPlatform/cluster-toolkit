@@ -23,6 +23,18 @@ locals {
   source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
   source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
 
+  additional_disks = [
+    for ad in var.additional_disks : {
+      disk_name    = ad.disk_name
+      device_name  = ad.device_name
+      disk_type    = ad.disk_type
+      disk_size_gb = ad.disk_size_gb
+      disk_labels  = merge(ad.disk_labels, var.labels)
+      auto_delete  = ad.auto_delete
+      boot         = ad.boot
+    }
+  ]
+
   node_group = {
     # Group Definition
     group_name             = var.name
@@ -31,7 +43,7 @@ locals {
     node_conf              = var.node_conf
 
     # Template By Definition
-    additional_disks         = var.additional_disks
+    additional_disks         = local.additional_disks
     bandwidth_tier           = var.bandwidth_tier
     can_ip_forward           = var.can_ip_forward
     disable_smt              = !var.enable_smt

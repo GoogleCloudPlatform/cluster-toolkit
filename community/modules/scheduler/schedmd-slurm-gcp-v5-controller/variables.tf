@@ -189,6 +189,12 @@ variable "disk_auto_delete" {
   default     = true
 }
 
+variable "disk_labels" {
+  description = "Labels specific to the boot disk. These will be merged with var.labels."
+  type        = map(string)
+  default     = {}
+}
+
 variable "enable_devel" {
   type        = bool
   description = "Enables development mode. Not for production use."
