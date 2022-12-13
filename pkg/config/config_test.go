@@ -220,7 +220,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 				testModuleSourceWithLabels: testModuleInfo,
 			},
 		},
-		moduleConnections: make(map[string][]ModConnection),
+		moduleConnections: []ModConnection{},
 	}
 	// the next two steps simulate relevant steps in ghpc expand
 	dc.addMetadataToModules()
@@ -284,6 +284,32 @@ func (s *MySuite) TestExpandConfig(c *C) {
 	dc.ExpandConfig()
 }
 
+func (s *MySuite) TestIsEmpty(c *C) {
+	// Use connection is not empty
+	conn := ModConnection{
+		kind:            useConnection,
+		sharedVariables: []string{"var1"},
+	}
+	got := conn.isEmpty()
+	exp := false
+	c.Assert(got, Equals, exp)
+
+	// Use connection is empty
+	conn = ModConnection{
+		kind:            useConnection,
+		sharedVariables: []string{},
+	}
+	got = conn.isEmpty()
+	exp = true
+	c.Assert(got, Equals, exp)
+
+	// Undefined connection kind
+	conn = ModConnection{}
+	got = conn.isEmpty()
+	exp = false
+	c.Assert(got, Equals, exp)
+}
+
 func (s *MySuite) TestListUnusedModules(c *C) {
 	dc := getDeploymentConfigForTest()
 
@@ -293,28 +319,34 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 
 	// All "use" modules actually used
 	usedConn := ModConnection{
-		toID:   "usedModule",
-		unused: false,
+		toID:            "usedModule",
+		fromID:          "usingModule",
+		kind:            useConnection,
+		sharedVariables: []string{"var1"},
 	}
-	dc.moduleConnections["usingModule"] = []ModConnection{usedConn}
+	dc.moduleConnections = []ModConnection{usedConn}
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 0)
 
 	// One fully unused module
 	unusedConn := ModConnection{
-		toID:   "usedModule",
-		unused: true,
+		toID:            "usedModule",
+		fromID:          "usingModule",
+		kind:            useConnection,
+		sharedVariables: []string{},
 	}
-	dc.moduleConnections["usingModule"] = append(dc.moduleConnections["usingModule"], unusedConn)
+	dc.moduleConnections = append(dc.moduleConnections, unusedConn)
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 1)
 
 	// Two fully unused modules
 	secondUnusedConn := ModConnection{
-		toID:   "secondUnusedModule",
-		unused: true,
+		toID:            "secondUnusedModule",
+		fromID:          "usingModule",
+		kind:            useConnection,
+		sharedVariables: []string{},
 	}
-	dc.moduleConnections["usingModule"] = append(dc.moduleConnections["usingModule"], secondUnusedConn)
+	dc.moduleConnections = append(dc.moduleConnections, secondUnusedConn)
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 2)
 

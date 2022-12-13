@@ -216,11 +216,39 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
+// ConnectionKind defines the kind of module connection, defined by the source
+// of the connection. Currently, only Use is supported.
+type ConnectionKind int
+
+const (
+	undefinedConnection ConnectionKind = iota
+	useConnection
+	// explicitConnection
+	// globalConnection
+)
+
 // ModConnection defines details about connections between modules. Currently,
 // only modules connected with "use" are tracked.
 type ModConnection struct {
 	toID   string
-	unused bool
+	fromID string
+	// Currently only supports useConnection
+	kind ConnectionKind
+	// List of variables shared from module `fromID` to module `toID`
+	sharedVariables []string
+}
+
+// Returns true if a connection does not functionally link the outputs and
+// inputs of the modules. This can happen when a module is connected with "use"
+// but none of the outputs of fromID match the inputs of toID.
+func (mc *ModConnection) isEmpty() (isEmpty bool) {
+	isEmpty = false
+	if mc.kind == useConnection {
+		if len(mc.sharedVariables) == 0 {
+			isEmpty = true
+		}
+	}
+	return
 }
 
 // DeploymentConfig is a container for the imported YAML data and supporting data for
@@ -232,7 +260,7 @@ type DeploymentConfig struct {
 	// Maps module ID to group index
 	ModuleToGroup     map[string]int
 	expanded          bool
-	moduleConnections map[string][]ModConnection
+	moduleConnections []ModConnection
 }
 
 // ExpandConfig expands the yaml config in place
@@ -253,14 +281,12 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 // "use" field, but not actually used.
 func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 	unusedModules := make(map[string][]string)
-	for mod, connections := range dc.moduleConnections {
-		for _, conn := range connections {
-			if conn.unused {
-				if _, exists := unusedModules[mod]; exists {
-					unusedModules[mod] = append(unusedModules[mod], conn.toID)
-				} else {
-					unusedModules[mod] = []string{conn.toID}
-				}
+	for _, conn := range dc.moduleConnections {
+		if conn.isEmpty() {
+			if _, exists := unusedModules[conn.fromID]; exists {
+				unusedModules[conn.fromID] = append(unusedModules[conn.fromID], conn.toID)
+			} else {
+				unusedModules[conn.fromID] = []string{conn.toID}
 			}
 		}
 	}
@@ -292,7 +318,7 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 
 	newDeploymentConfig = DeploymentConfig{
 		Config:            blueprint,
-		moduleConnections: make(map[string][]ModConnection),
+		moduleConnections: []ModConnection{},
 	}
 	return newDeploymentConfig, nil
 }
