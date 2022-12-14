@@ -60,7 +60,7 @@ module "slurm_controller_instance" {
 
   access_config                      = local.access_config
   slurm_cluster_name                 = local.slurm_cluster_name
-  instance_template                  = module.slurm_controller_template.self_link
+  instance_template                  = var.instance_template != null ? var.instance_template : module.slurm_controller_template.self_link
   project_id                         = var.project_id
   region                             = var.region
   network                            = var.network_self_link == null ? "" : var.network_self_link
