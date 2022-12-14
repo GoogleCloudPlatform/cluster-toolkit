@@ -247,6 +247,16 @@ variable "startup_script" {
   default     = ""
 }
 
+variable "instance_template" {
+  description = <<-EOD
+    Self link to a custom instance template. If set, other VM definition
+    variables such as machine_type and instance_image will be ignored in favor
+    of the provided instance template.
+    EOD
+  type        = string
+  default     = null
+}
+
 variable "instance_image" {
   description = <<-EOD
     Defines the image that will be used in the Slurm login node VM instances. This
