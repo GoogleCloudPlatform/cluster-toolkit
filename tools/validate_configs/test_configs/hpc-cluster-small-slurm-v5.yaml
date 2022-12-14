@@ -68,6 +68,10 @@ deployment_groups:
     - compute_node_group
     settings:
       partition_name: compute
+      startup_script: |
+        #!/bin/bash
+        set -ex
+        echo "hello compute_partition"
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
