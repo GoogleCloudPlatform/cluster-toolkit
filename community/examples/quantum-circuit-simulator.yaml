@@ -60,7 +60,7 @@ deployment_groups:
           conda config --system --add channels nvidia/label/cuquantum-22.07.1
           conda update -n base conda --yes
           conda create -n qsim python=3.9 --yes
-          conda install -n qsim cuda cuquantum make cmake cxx-compiler --yes
+          conda install -n qsim cuda cuquantum make cmake cxx-compiler=1.5.1 --yes
           echo "cuda ==11.5.*" > /opt/conda/envs/qsim/conda-meta/pinned
           conda clean -p -t --yes
           conda activate qsim
