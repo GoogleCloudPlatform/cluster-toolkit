@@ -220,6 +220,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 				testModuleSourceWithLabels: testModuleInfo,
 			},
 		},
+		moduleConnections: []ModConnection{},
 	}
 	// the next two steps simulate relevant steps in ghpc expand
 	dc.addMetadataToModules()
@@ -249,7 +250,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	}
 }
 
-func getDeploymentConfigWithTestModuleEmtpyKind() DeploymentConfig {
+func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 	testModuleSource := filepath.Join(tmpTestDir, "module")
 	testDeploymentGroup := DeploymentGroup{
 		Name: "primary",
@@ -283,6 +284,74 @@ func (s *MySuite) TestExpandConfig(c *C) {
 	dc.ExpandConfig()
 }
 
+func (s *MySuite) TestIsEmpty(c *C) {
+	// Use connection is not empty
+	conn := ModConnection{
+		kind:            useConnection,
+		sharedVariables: []string{"var1"},
+	}
+	got := conn.isEmpty()
+	exp := false
+	c.Assert(got, Equals, exp)
+
+	// Use connection is empty
+	conn = ModConnection{
+		kind:            useConnection,
+		sharedVariables: []string{},
+	}
+	got = conn.isEmpty()
+	exp = true
+	c.Assert(got, Equals, exp)
+
+	// Undefined connection kind
+	conn = ModConnection{}
+	got = conn.isEmpty()
+	exp = false
+	c.Assert(got, Equals, exp)
+}
+
+func (s *MySuite) TestListUnusedModules(c *C) {
+	dc := getDeploymentConfigForTest()
+
+	// No modules in "use"
+	got := dc.listUnusedModules()
+	c.Assert(got, HasLen, 0)
+
+	// All "use" modules actually used
+	usedConn := ModConnection{
+		toID:            "usedModule",
+		fromID:          "usingModule",
+		kind:            useConnection,
+		sharedVariables: []string{"var1"},
+	}
+	dc.moduleConnections = []ModConnection{usedConn}
+	got = dc.listUnusedModules()
+	c.Assert(got["usingModule"], HasLen, 0)
+
+	// One fully unused module
+	unusedConn := ModConnection{
+		toID:            "usedModule",
+		fromID:          "usingModule",
+		kind:            useConnection,
+		sharedVariables: []string{},
+	}
+	dc.moduleConnections = append(dc.moduleConnections, unusedConn)
+	got = dc.listUnusedModules()
+	c.Assert(got["usingModule"], HasLen, 1)
+
+	// Two fully unused modules
+	secondUnusedConn := ModConnection{
+		toID:            "secondUnusedModule",
+		fromID:          "usingModule",
+		kind:            useConnection,
+		sharedVariables: []string{},
+	}
+	dc.moduleConnections = append(dc.moduleConnections, secondUnusedConn)
+	got = dc.listUnusedModules()
+	c.Assert(got["usingModule"], HasLen, 2)
+
+}
+
 func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() works when nothing to do */
 	dc := getBasicDeploymentConfigWithTestModule()
@@ -292,14 +361,14 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	c.Assert(got, Equals, expected)
 
 	/* Test addKindToModules() works when kind is absent*/
-	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = "terraform"
 	dc.addKindToModules()
 	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
 	c.Assert(got, Equals, expected)
 
 	/* Test addKindToModules() works when kind is empty*/
-	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = "terraform"
 	dc.addKindToModules()
 	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule2").Kind
@@ -308,7 +377,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() does nothing to packer types*/
 	moduleID := "packerModule"
 	expected = "packer"
-	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
 	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
@@ -317,7 +386,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() does nothing to invalid types*/
 	moduleID = "funnyModule"
 	expected = "funnyType"
-	dc = getDeploymentConfigWithTestModuleEmtpyKind()
+	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
 	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind

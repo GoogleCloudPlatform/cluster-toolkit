@@ -285,6 +285,7 @@ func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) err
 		testRegionExistsName.String():  dc.testRegionExists,
 		testZoneExistsName.String():    dc.testZoneExists,
 		testZoneInRegionName.String():  dc.testZoneInRegion,
+		testModuleNotUsedName.String(): dc.testModuleNotUsed,
 	}
 	return allValidators
 }
@@ -509,6 +510,29 @@ func (dc *DeploymentConfig) testZoneInRegion(validator validatorConfig) error {
 
 	// err is nil or an error
 	err = validators.TestZoneInRegion(projectID, zone, region)
+	if err != nil {
+		log.Print(err)
+		return fmt.Errorf(funcErrorMsg)
+	}
+	return nil
+}
+
+func (dc *DeploymentConfig) testModuleNotUsed(validator validatorConfig) error {
+	requiredInputs := []string{}
+	funcName := testModuleNotUsedName.String()
+	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
+
+	if validator.Validator != funcName {
+		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
+	}
+
+	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
+	if err != nil {
+		return err
+	}
+
+	// err is nil or an error
+	err = validators.TestModuleNotUsed(dc.listUnusedModules())
 	if err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
