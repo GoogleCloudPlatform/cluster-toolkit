@@ -25,7 +25,7 @@ require (
 	cloud.google.com/go/serviceusage v1.4.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/googleapis/gax-go/v2 v2.7.0
-	google.golang.org/api v0.104.0
+	google.golang.org/api v0.105.0
 )
 
 require (
