@@ -97,6 +97,24 @@ variable "partition_conf" {
   default     = {}
 }
 
+variable "startup_script" {
+  description = "Startup script that will be used by the partition VMs."
+  type        = string
+  default     = ""
+}
+
+variable "partition_startup_scripts_timeout" {
+  description = <<-EOD
+    The timeout (seconds) applied to the partition startup script. If
+    any script exceeds this timeout, then the instance setup process is considered
+    failed and handled accordingly.
+
+    NOTE: When set to 0, the timeout is considered infinite and thus disabled.
+    EOD
+  type        = number
+  default     = 300
+}
+
 variable "is_default" {
   description = <<-EOD
     Sets this partition as the default partition by updating the partition_conf.

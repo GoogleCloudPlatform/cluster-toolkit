@@ -38,6 +38,18 @@ deployment_groups:
     settings:
       local_mount: /home
 
+  # Used by the partitions, this tests startup scripts that are partition specific
+  - id: startup-partition
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: startup-test-partition.sh
+        content: |
+          #!/bin/bash
+          set -ex
+          echo "Hello partition! Hostname: \$(hostname)"
+
   - id: debug_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
@@ -50,6 +62,7 @@ deployment_groups:
     - network1
     - homefs
     - debug_node_group
+    - startup-partition
     settings:
       partition_name: debug
       enable_placement: false
@@ -66,8 +79,21 @@ deployment_groups:
     - network1
     - homefs
     - compute_node_group
+    - startup-partition
     settings:
       partition_name: compute
+
+  # Used by the login and controller, the controller applies it to all partitions as well.
+  - id: startup-all
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: startup-test-all.sh
+        content: |
+          #!/bin/bash
+          set -ex
+          echo "Hello world! Hostname: \$(hostname)"
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
@@ -76,9 +102,11 @@ deployment_groups:
     - debug_partition
     - compute_partition
     - homefs
+    - startup-all
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use:
     - network1
     - slurm_controller
+    - startup-all
