@@ -75,5 +75,5 @@ tar -czf "${DEPLOYMENT_NAME}.tgz" "${DEPLOYMENT_NAME}" ||
 		exit 1
 	}
 
-echo "Copying ${DEPLOYMENT_NAME}.tgz to gs://${GHPC_DEV_BUCKET}/${TEST_NAME}/"
+echo "Uploading deployment to gs://${GHPC_DEV_BUCKET}/${TEST_NAME}/${DEPLOYMENT_NAME}.tgz"
 gsutil cp "${DEPLOYMENT_NAME}.tgz" "gs://${GHPC_DEV_BUCKET}/${TEST_NAME}/"
