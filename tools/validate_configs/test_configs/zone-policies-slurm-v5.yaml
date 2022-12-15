@@ -63,6 +63,7 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
+      disable_public_ips: false
   - id: allow
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
