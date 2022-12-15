@@ -23,6 +23,9 @@ locals {
   source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
   source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
 
+  enable_public_ip_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
+  access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
+
   additional_disks = [
     for ad in var.additional_disks : {
       disk_name    = ad.disk_name
@@ -66,7 +69,7 @@ locals {
     source_image_project     = local.source_image_project
     source_image             = local.source_image
     tags                     = var.tags
-    access_config            = var.access_config
+    access_config            = local.access_config
     service_account = var.service_account != null ? var.service_account : {
       email  = data.google_compute_default_service_account.default.email
       scopes = ["https://www.googleapis.com/auth/cloud-platform"]
