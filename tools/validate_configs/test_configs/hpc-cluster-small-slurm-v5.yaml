@@ -82,10 +82,6 @@ deployment_groups:
     - startup-partition
     settings:
       partition_name: compute
-      startup_script: |
-        #!/bin/bash
-        set -ex
-        echo "hello compute_partition"
 
   # Used by the login and controller, the controller applies it to all partitions as well.
   - id: startup-all
@@ -93,7 +89,7 @@ deployment_groups:
     settings:
       runners:
       - type: shell
-        destination: startup-test-partition.sh
+        destination: startup-test-all.sh
         content: |
           #!/bin/bash
           set -ex
