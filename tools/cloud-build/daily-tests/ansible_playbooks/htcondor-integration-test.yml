@@ -155,7 +155,7 @@
       ansible.builtin.wait_for:
         port: 9618
         delay: 10
-        timeout: 300
+        timeout: 480
     - name: Run Integration tests for HPC toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       run_once: true
