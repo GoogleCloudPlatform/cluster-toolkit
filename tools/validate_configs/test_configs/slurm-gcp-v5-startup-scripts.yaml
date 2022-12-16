@@ -32,10 +32,11 @@ deployment_groups:
     source: modules/network/vpc
 
   - id: homefs
-    source: modules/file-system/filestore
+    source: community/modules/file-system/nfs-server
     use: [network1]
     settings:
-      local_mount: /home
+      local_mounts: [/home]
+      auto_delete_disk: true
 
   # Used by the partitions, this tests startup scripts that are partition specific
   - id: startup-partition
@@ -61,7 +62,6 @@ deployment_groups:
     - network1
     - homefs
     - debug_node_group
-    - startup-partition
     settings:
       partition_name: debug
       enable_placement: false

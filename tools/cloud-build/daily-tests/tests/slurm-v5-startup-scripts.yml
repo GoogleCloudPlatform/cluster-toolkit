@@ -21,7 +21,7 @@ deployment_name: "ss-v5-{{ build }}"
 slurm_cluster_name: "ssv5{{ build[0:6] }}"
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/hpc-cluster-small-slurm-v5.yaml"
+blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/slurm-gcp-v5-startup-scripts.yaml"
 network: "{{ deployment_name }}-net"
 max_nodes: 5
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
