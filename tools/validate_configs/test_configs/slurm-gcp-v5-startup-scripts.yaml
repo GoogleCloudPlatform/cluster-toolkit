@@ -21,7 +21,6 @@ vars:
   deployment_name: hpc-small-v5
   region: us-central1
   zone: us-central1-c
-  slurm_cluster_name: ghpc
 
 deployment_groups:
 - group: primary
@@ -33,10 +32,11 @@ deployment_groups:
     source: modules/network/vpc
 
   - id: homefs
-    source: modules/file-system/filestore
+    source: community/modules/file-system/nfs-server
     use: [network1]
     settings:
-      local_mount: /home
+      local_mounts: [/home]
+      auto_delete_disk: true
 
   # Used by the partitions, this tests startup scripts that are partition specific
   - id: startup-partition
@@ -62,7 +62,6 @@ deployment_groups:
     - network1
     - homefs
     - debug_node_group
-    - startup-partition
     settings:
       partition_name: debug
       enable_placement: false
@@ -103,6 +102,8 @@ deployment_groups:
     - compute_partition
     - homefs
     - startup-all
+    settings:
+      disable_controller_public_ips: false
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
@@ -110,3 +111,5 @@ deployment_groups:
     - network1
     - slurm_controller
     - startup-all
+    settings:
+      disable_login_public_ips: false
