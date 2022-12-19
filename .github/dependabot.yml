@@ -19,5 +19,8 @@ updates:
 - package-ecosystem: gomod
   directory: /
   schedule:
-    interval: daily
+    interval: weekly
+    day: monday
+    time: 03:00
+    timezone: America/Los_Angeles
   target-branch: develop
