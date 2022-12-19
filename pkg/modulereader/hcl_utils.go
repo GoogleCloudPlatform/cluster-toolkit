@@ -15,7 +15,6 @@
 package modulereader
 
 import (
-	"embed"
 	"fmt"
 	"os"
 	"strings"
@@ -23,11 +22,8 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
 
-// ModuleFS contains embedded modules (./modules) for use in building
-var ModuleFS embed.FS
-
-// IsEmbeddedPath checks if a source path points to an embedded modules
-func IsEmbeddedPath(source string) bool {
+// isEmbeddedPath checks if a source path points to an embedded module
+func isEmbeddedPath(source string) bool {
 	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
 }
 
@@ -52,7 +48,7 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 		return ret, fmt.Errorf("Source is not a terraform or packer module: %s", source)
 	}
 
-	if IsEmbeddedPath(source) {
+	if isEmbeddedPath(source) {
 		module, _ = tfconfig.LoadModuleFromFilesystem(tfconfig.WrapFS(ModuleFS), source)
 	} else {
 		module, _ = tfconfig.LoadModule(source)

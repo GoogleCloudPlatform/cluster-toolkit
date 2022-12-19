@@ -43,7 +43,7 @@ const (
 type MySuite struct{}
 
 //go:embed modules
-var moduleFS embed.FS
+var testModuleFS embed.FS
 var _ = Suite(&MySuite{})
 
 func Test(t *testing.T) {
