@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	expectedVarFormat string = "$(vars.var_name) or $(module_id.var_name)"
+	expectedVarFormat string = "$(vars.var_name) or $(module_id.output_name)"
 	matchLabelExp     string = `^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`
 )
 
