@@ -54,18 +54,26 @@ will be set based on your configuration via the command line:
 * **_static\_controller\_hostname:_** The hostname of the controller machine.
   Depending on the network setup, the simple hostname may work, but it's
   possible the fully qualified hostname will be required.
+* **_static\_controller\_addr:_** Optional variable for setting either the IP
+  address or fully qualified hostname of the controller if it's needed for full
+  connectivity from the compute nodes.
   
 > If you are working from a static cluster deployed in another project, the
 > fully qualified internal hostname of the static cluster's controller in
 > project A will have the following format:
-> `cluster-controller.c.<<Project_A_ID>>.internal`.
+> `cluster-controller.c.<<Project_A_ID>>.internal`. In addition, the
+> `static_control_addr` should be set to the IP address of the static
+> controller.
 
 To create the deployment directory with deployment variables passed through the
 command line, run the following command with the updated values for
 `<<Controller_Hostname>>` and `<<Project_ID>>`:
 
 ```shell
-ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml --vars project_id="<<Project_ID>>",static_controller_hostname="<<Controller_Hostname>>"
+ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml \
+  --vars project_id="<<Project_ID>>"
+  --vars static_controller_hostname="<<Controller_Hostname>>"
+  [--vars static_controller_addr="<<Controller_Address>>"]
 ```
 
 If successful, this command will provide a set of terraform operations that can be
@@ -86,11 +94,11 @@ To deploy, run the following commands:
 ```
 
 If a VPC network still needs to be created in the cloud bursting project, then
-follow the first set of terraform commands targetting the group created in
+follow the first set of terraform commands targeting the group created in
 `hybrid-config/create_network`.
 
 Next, execute the second set of terraform commands to create the hybrid
-configuration. After, a directory in `hybrid-configuration/primary` named `hyrid/`
+configuration. After, a directory in `hybrid-configuration/primary` named `hybrid/`
 should be created which contains a `cloud.conf` file, `cloud_gres.conf` file and
 a set of support scripts.
 
@@ -149,8 +157,7 @@ it:
 
 ```shell
 sudo chown -R slurm: $SLURM_CONF_DIR/hybrid
-sudo chmod 644 $SLURM_CONF_DIR/hybrid/cloud.conf
-sudo chmod 755 $SLURM_CONF_DIR/hybrid
+sudo chmod -R 755 $SLURM_CONF_DIR/hybrid
 ```
 
 > The following instructions only apply if the static Slurm cluster was created
@@ -174,25 +181,28 @@ sudo chmod 755 $SLURM_CONF_DIR/hybrid
 > may not be included.
 >
 > These lines can be copied to the bottom of the `slurm.conf` file.
->
-> Finally, remove the `include cloud.conf` line.
 
-Make the following changes to the `$SLURM_CONF_DIR/slurm.conf` file:
+Next copy the hybrid `cloud.conf` file to the slurm directory so that it is
+visible to the `slurm.conf` file both on the controller and on the compute VMs:
 
-* Add the following line: `include hybrid/cloud.conf`
-* Add the fully qualified hostname in parentheses after the controller hostname
-  in the parameter `SlurmctldHost` if not already provided.
+```shell
+sudo cp $SLURM_CONF_DIR/hybrid/cloud.conf $SLURM_CONF_DIR
+sudo chown -R slurm: $SLURM_CONF_DIR/cloud.conf
+sudo chmod 644 $SLURM_CONF_DIR/cloud.conf
+```
+
+In the `$SLURM_CONF_DIR/slurm.conf` file, add the fully qualified hostname in
+parentheses after the controller hostname in the parameter `SlurmctldHost` if
+not already provided.
 
 ```text
 # slurm.conf
 ...
 SlurmctldHost=cluster-controller(<<Fully_Qualified_Hostname>>)
 ...
-include hybrid/cloud.conf
-...
 ```
 
-Make the following changes to the `$SLURM_CONF_DIR/hybrid/cloud.conf` file:
+Make the following changes to the `$SLURM_CONF_DIR/cloud.conf` file:
 
 * `SlurmctldParameters`
   * Remove `cloud_dns`
