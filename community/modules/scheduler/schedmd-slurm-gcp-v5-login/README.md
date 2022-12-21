@@ -33,6 +33,14 @@ This creates a Slurm login node which is:
 For a complete example using this module, see
 [slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
 
+## Custom Images
+
+For more information on creating valid custom images for the login node VM
+instances or for custom instance templates, see our [vm-images.md] documentation
+page.
+
+[vm-images.md]: ../../../../docs/vm-images.md
+
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
