@@ -9,7 +9,7 @@ require (
 	github.com/hashicorp/go-getter v1.6.2
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.15.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20210625153042-09f34846faab
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20221020162138-81db043ad408
 	github.com/otiai10/copy v1.9.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/afero v1.9.3

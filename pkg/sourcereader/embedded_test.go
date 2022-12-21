@@ -15,6 +15,7 @@
 package sourcereader
 
 import (
+	"hpc-toolkit/pkg/modulereader"
 	"log"
 	"os"
 	"path/filepath"
@@ -119,11 +120,11 @@ func (s *MySuite) TestCopyFSToTempDir(c *C) {
 }
 
 func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
-	ModuleFS = getTestFS()
+	modulereader.ModuleFS = testModuleFS
 	reader := EmbeddedSourceReader{}
 
 	// Success
-	moduleInfo, err := reader.GetModuleInfo("modules/network/vpc", tfKindString)
+	moduleInfo, err := reader.GetModuleInfo("modules/test_role/test_module", tfKindString)
 	c.Assert(err, IsNil)
 	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
 	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
@@ -131,7 +132,7 @@ func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
 	// Invalid: No embedded modules
 	badEmbeddedMod := "modules/does/not/exist"
 	moduleInfo, err = reader.GetModuleInfo(badEmbeddedMod, tfKindString)
-	expectedErr := "failed to copy embedded module at .*"
+	expectedErr := "failed to get info using tfconfig for terraform module at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Module Source

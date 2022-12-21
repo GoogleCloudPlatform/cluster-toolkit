@@ -17,14 +17,21 @@ package modulereader
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
+
+// isEmbeddedPath checks if a source path points to an embedded module
+func isEmbeddedPath(source string) bool {
+	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
+}
 
 // getHCLInfo is wrapped by SourceReader interface which supports multiple
 // sources and stores remote modules locally, so the given source parameter to
 // getHCLInfo is only a local path.
 func getHCLInfo(source string) (ModuleInfo, error) {
+	var module *tfconfig.Module
 	ret := ModuleInfo{}
 
 	fileInfo, err := os.Stat(source)
@@ -41,7 +48,12 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 		return ret, fmt.Errorf("Source is not a terraform or packer module: %s", source)
 	}
 
-	module, _ := tfconfig.LoadModule(source)
+	if isEmbeddedPath(source) {
+		module, _ = tfconfig.LoadModuleFromFilesystem(tfconfig.WrapFS(ModuleFS), source)
+	} else {
+		module, _ = tfconfig.LoadModule(source)
+	}
+
 	var vars []VarInfo
 	var outs []VarInfo
 	for _, v := range module.Variables {

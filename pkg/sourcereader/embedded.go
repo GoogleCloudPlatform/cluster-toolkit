@@ -94,16 +94,8 @@ func (r EmbeddedSourceReader) GetModuleInfo(modPath string, kind string) (module
 		return modulereader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
 	}
 
-	modDir, err := copyFSToTempDir(ModuleFS, modPath)
-	defer os.RemoveAll(modDir)
-	if err != nil {
-		err = fmt.Errorf("failed to copy embedded module at %s to tmp dir %s: %v",
-			modPath, modDir, err)
-		return modulereader.ModuleInfo{}, err
-	}
-
 	reader := modulereader.Factory(kind)
-	mi, err := reader.GetInfo(modDir)
+	mi, err := reader.GetInfo(modPath)
 	mi.RequiredApis = defaultAPIList(modPath)
 	return mi, err
 }

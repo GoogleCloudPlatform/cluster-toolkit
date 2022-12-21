@@ -15,6 +15,7 @@
 package sourcereader
 
 import (
+	"embed"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -41,6 +42,8 @@ const (
 // Setup GoCheck
 type MySuite struct{}
 
+//go:embed modules
+var testModuleFS embed.FS
 var _ = Suite(&MySuite{})
 
 func Test(t *testing.T) {

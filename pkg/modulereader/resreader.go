@@ -18,8 +18,12 @@
 package modulereader
 
 import (
+	"embed"
 	"log"
 )
+
+// ModuleFS contains embedded modules (./modules) for use in building
+var ModuleFS embed.FS
 
 // VarInfo stores information about a module's input or output variables
 type VarInfo struct {
