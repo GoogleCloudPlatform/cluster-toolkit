@@ -41,7 +41,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=5.2.0"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=5.3.0"
 
   project_id                      = var.project_id
   slurm_cluster_name              = local.slurm_cluster_name
@@ -55,6 +55,7 @@ module "slurm_controller_instance" {
   prolog_scripts                  = var.prolog_scripts
   epilog_scripts                  = var.epilog_scripts
   network_storage                 = var.network_storage
+  disable_default_mounts          = var.disable_default_mounts
   login_network_storage           = var.network_storage
   partitions                      = var.partition
   google_app_cred_path            = var.google_app_cred_path
@@ -63,10 +64,11 @@ module "slurm_controller_instance" {
   cloud_parameters                = var.cloud_parameters
   output_dir                      = var.output_dir
   slurm_control_host              = var.slurm_control_host
+  slurm_control_addr              = var.slurm_control_addr
 }
 
 # Null resource that injects the installation path before the resume/suspend
-# scripts in the hybrid configuration files. 
+# scripts in the hybrid configuration files.
 resource "null_resource" "set_prefix_cloud_conf" {
   depends_on = [
     module.slurm_controller_instance

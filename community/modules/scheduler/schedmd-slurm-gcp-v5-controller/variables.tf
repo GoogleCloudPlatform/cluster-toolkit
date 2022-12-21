@@ -91,7 +91,7 @@ variable "compute_startup_scripts_timeout" {
     The timeout (seconds) applied to the compute_startup_script. If
     any script exceeds this timeout, then the instance setup process is considered
     failed and handled accordingly.
-    
+
     NOTE: When set to 0, the timeout is considered infinite and thus disabled.
     EOD
   type        = number
@@ -121,7 +121,7 @@ variable "login_startup_scripts_timeout" {
     The timeout (seconds) applied to the login startup script. If
     any script exceeds this timeout, then the instance setup process is considered
     failed and handled accordingly.
-    
+
     NOTE: When set to 0, the timeout is considered infinite and thus disabled.
     EOD
   type        = number
@@ -497,13 +497,13 @@ variable "instance_image" {
     Custom images must comply with Slurm on GCP requirements; it is highly
     advised to use the packer templates provided by Slurm on GCP when
     constructing custom slurm images.
-    
+
     More information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/5.2.0/docs/images.md#public-image.
+    https://github.com/SchedMD/slurm-gcp/blob/5.3.0/docs/images.md#public-image.
     EOD
   type        = map(string)
   default = {
-    family  = "schedmd-v5-slurm-22-05-4-hpc-centos-7"
+    family  = "schedmd-v5-slurm-22-05-6-hpc-centos-7"
     project = "projects/schedmd-slurm-public/global/images/family"
   }
 

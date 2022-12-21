@@ -45,7 +45,7 @@ RUN go install github.com/terraform-docs/terraform-docs@latest      && \
 WORKDIR /ghpc-tmp
 COPY ./ ./
 
-RUN pip install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.2.0/scripts/requirements.txt && \
+RUN pip install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.3.0/scripts/requirements.txt && \
     pip install -r tools/cloud-build/requirements.txt && \
     rm -rf ~/.cache/pip/*
 
