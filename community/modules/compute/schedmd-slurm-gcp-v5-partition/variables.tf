@@ -159,10 +159,9 @@ variable "network_storage" {
 
 variable "node_groups" {
   description = <<-EOT
-    **Preview: This variable is still in development** A list of node groups
-    associated with this partition.
-    The default node group will be prepended to this list based on other input
-    variables to this module.
+    A list of node groups associated with this partition. See
+    schedmd-slurm-gcp-v5-node-group for more information on defining a node
+    group in a blueprint.
     EOT
   type = list(object({
     access_config = list(object({
