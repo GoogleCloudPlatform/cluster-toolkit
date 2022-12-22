@@ -15,7 +15,7 @@
  */
 
 locals {
-  ghpc_startup_script = var.startup_script == "" ? [] : [{
+  ghpc_startup_script = [{
     filename = "ghpc_startup.sh"
     content  = var.startup_script
   }]
@@ -26,6 +26,13 @@ locals {
 
   enable_public_ip_access_config = var.disable_login_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
   access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
+
+  # Handle VM image format from 2 sources, prioritize source_image* variables
+  # over instance_image
+  source_image_input_used = var.source_image != "" || var.source_image_family != "" || var.source_image_project != ""
+  source_image            = local.source_image_input_used ? var.source_image : lookup(var.instance_image, "name", "")
+  source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
+  source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
 }
 
 data "google_compute_default_service_account" "default" {
@@ -33,7 +40,7 @@ data "google_compute_default_service_account" "default" {
 }
 
 module "slurm_login_template" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.2.0"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.3.0"
 
   additional_disks         = var.additional_disks
   can_ip_forward           = var.can_ip_forward
@@ -58,9 +65,9 @@ module "slurm_login_template" {
   region                   = var.region
   shielded_instance_config = var.shielded_instance_config
   slurm_instance_role      = "login"
-  source_image_family      = var.source_image_family
-  source_image_project     = var.source_image_project
-  source_image             = var.source_image
+  source_image_family      = local.source_image_family
+  source_image_project     = local.source_image_project
+  source_image             = local.source_image
   network                  = var.network_self_link == null ? "" : var.network_self_link
   subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
@@ -72,7 +79,7 @@ module "slurm_login_template" {
 }
 
 module "slurm_login_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=5.2.0"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=5.3.0"
 
   access_config         = local.access_config
   slurm_cluster_name    = local.slurm_cluster_name

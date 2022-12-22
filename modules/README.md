@@ -149,8 +149,8 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 [schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.1.5
-[slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.2.1
+[slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 

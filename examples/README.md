@@ -11,25 +11,25 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-)
-  * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-)
-  * [slurm-gcp-v5-hpc-centos7.yaml](#slurm-gcp-v5-hpc-centos7yaml-)
-  * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-)
-  * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-)
-  * [image-builder.yaml](#image-builderyaml-)
-  * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-)
-  * [daos-cluster.yaml](#daos-clusteryaml-)
-  * [daos-slurm.yaml](#daos-slurmyaml-)
-  * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-)
-  * [cloud-batch.yaml](#cloud-batchyaml--)
-  * [batch-mpi.yaml](#batch-mpiyaml-)
-  * [spack-gromacs.yaml](#spack-gromacsyaml--)
-  * [omnia-cluster.yaml](#omnia-clusteryaml--)
-  * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--)
-  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--)
-  * [htcondor-pool.yaml](#htcondor-poolyaml--)
-  * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-)
-  * [starccm-tutorial.yaml](#starccm-tutorialyaml--)
+  * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-) ![core-badge]
+  * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-) ![core-badge]
+  * [slurm-gcp-v5-hpc-centos7.yaml](#slurm-gcp-v5-hpc-centos7yaml-) ![community-badge]
+  * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
+  * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
+  * [image-builder.yaml](#image-builderyaml-) ![core-badge]
+  * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-) ![community-badge]
+  * [daos-cluster.yaml](#daos-clusteryaml-) ![community-badge]
+  * [daos-slurm.yaml](#daos-slurmyaml-) ![community-badge]
+  * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-) ![community-badge]
+  * [cloud-batch.yaml](#cloud-batchyaml-) ![core-badge]
+  * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
+  * [spack-gromacs.yaml](#spack-gromacsyaml--) ![community-badge] ![experimental-badge]
+  * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
+  * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--) ![community-badge] ![experimental-badge]
+  * [htcondor-pool.yaml](#htcondor-poolyaml--) ![community-badge] ![experimental-badge]
+  * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
+  * [starccm-tutorial.yaml](#starccm-tutorialyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -535,7 +535,7 @@ examples][amd-examples-readme].
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
-### [cloud-batch.yaml] ![community-badge] ![experimental-badge]
+### [cloud-batch.yaml] ![core-badge]
 
 This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
 that mounts a Filestore instance and runs startup scripts.
@@ -548,6 +548,62 @@ instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
 [cloud-batch.yaml]: ../examples/cloud-batch.yaml
+
+### [batch-mpi.yaml] ![core-badge]
+
+This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
+
+The blueprint contains the following:
+
+* A shared `filestore` filesystem.
+* A `spack-install` module that builds a script to install Spack and the WRF
+  application onto the shared `filestore`.
+* A `startup-script` module which uses the above script and stages job data.
+* A builder `vm-instance` which performs the Spack install and then shuts down.
+* A `batch-job-template` that builds a Batch job to execute the WRF job.
+* A `batch-login` VM that can be used to test and submit the Batch job.
+
+**Usage instructions:**
+
+1. Spack install
+
+    After `terraform apply` completes, you must wait for Spack installation to
+    finish before running the Batch job. You will observe that a VM named
+    `spack-builder-0` has been created. This VM will automatically shut down
+    once Spack installation has completed. When using a Spack cache this takes
+    about 25 minutes. Without a Spack cache this will take 2 hours. To view
+    build progress or debug you can inspect `/var/logs/messages` and
+    `/var/log/spack.log` on the builder VM.
+
+2. Access login node
+
+    After the builder shuts down, you can ssh to the Batch login node named
+    `batch-wrf-batch-login`. Instructions on how to ssh to the login node are
+    printed to the terminal after a successful `terraform apply`. You can
+    reprint these instructions by calling the following:
+
+    ```sh
+    terraform -chdir=batch-wrf/primary output instructions_batch-login
+    ```
+
+    Once on the login node you should be able to inspect the Batch job template
+    found in the `/home/batch-jobs` directory. This Batch job will call a script
+    found at `/share/wrfv3/submit_wrfv3.sh`. Note that the `/share` directory is
+    shared between the login node and the Batch job.
+
+3. Submit the Batch job
+
+    Use the command provided in the terraform output instructions to submit your
+    Batch job and check its status. The Batch job may take several minutes to
+    start and once running should complete within 5 minutes.
+
+4. Inspect results
+
+    The Batch job will create a folder named `/share/jobs/<unique id>`. Once the
+    job has finished this folder will contain the results of the job. You can
+    inspect the `rsl.out.0000` file for a summary of the job.
+
+[batch-mpi.yaml]: ../examples/batch-mpi.yaml
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
@@ -676,62 +732,6 @@ tutorial.
 > **_NOTE:_** The tutorial has not yet been published.
 
 [starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
-
-### [batch-mpi.yaml] ![core-badge]
-
-This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
-
-The blueprint contains the following:
-
-* A shared `filestore` filesystem.
-* A `spack-install` module that builds a script to install Spack and the WRF
-  application onto the shared `filestore`.
-* A `startup-script` module which uses the above script and stages job data.  
-* A builder `vm-instance` which performs the Spack install and then shuts down.
-* A `batch-job-template` that builds a Batch job to execute the WRF job.
-* A `batch-login` VM that can be used to test and submit the Batch job.
-
-**Usage instructions:**
-
-1. Spack install
-
-    After `terraform apply` completes, you must wait for Spack installation to
-    finish before running the Batch job. You will observe that a VM named
-    `spack-builder-0` has been created. This VM will automatically shut down
-    once Spack installation has completed. When using a Spack cache this takes
-    about 25 minutes. Without a Spack cache this will take 2 hours. To view
-    build progress or debug you can inspect `/var/logs/messages` and
-    `/var/log/spack.log` on the builder VM.
-
-2. Access login node
-
-    After the builder shuts down, you can ssh to the Batch login node named
-    `batch-wrf-batch-login`. Instructions on how to ssh to the login node are
-    printed to the terminal after a successful `terraform apply`. You can
-    reprint these instructions by calling the following:
-
-    ```sh
-    terraform -chdir=batch-wrf/primary output instructions_batch-login
-    ```
-
-    Once on the login node you should be able to inspect the Batch job template
-    found in the `/home/batch-jobs` directory. This Batch job will call a script
-    found at `/share/wrfv3/submit_wrfv3.sh`. Note that the `/share` directory is
-    shared between the login node and the Batch job.
-
-3. Submit the Batch job
-
-    Use the command provided in the terraform output instructions to submit your
-    Batch job and check its status. The Batch job may take several minutes to
-    start and once running should complete within 5 minutes.
-
-4. Inspect results
-
-    The Batch job will create a folder named `/share/jobs/<unique id>`. Once the
-    job has finished this folder will contain the results of the job. You can
-    inspect the `rsl.out.0000` file for a summary of the job.
-
-[batch-mpi.yaml]: ../examples/batch-mpi.yaml
 
 ## Blueprint Schema
 

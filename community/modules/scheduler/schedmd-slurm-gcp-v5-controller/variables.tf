@@ -91,7 +91,7 @@ variable "compute_startup_scripts_timeout" {
     The timeout (seconds) applied to the compute_startup_script. If
     any script exceeds this timeout, then the instance setup process is considered
     failed and handled accordingly.
-    
+
     NOTE: When set to 0, the timeout is considered infinite and thus disabled.
     EOD
   type        = number
@@ -121,7 +121,7 @@ variable "login_startup_scripts_timeout" {
     The timeout (seconds) applied to the login startup script. If
     any script exceeds this timeout, then the instance setup process is considered
     failed and handled accordingly.
-    
+
     NOTE: When set to 0, the timeout is considered infinite and thus disabled.
     EOD
   type        = number
@@ -483,37 +483,57 @@ variable "slurm_conf_tpl" {
   default     = null
 }
 
+variable "instance_image" {
+  description = <<-EOD
+    Defines the image that will be used in the Slurm controller VM instance. This
+    value is overridden if any of `source_image`, `source_image_family` or
+    `source_image_project` are set.
+
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+
+    Custom images must comply with Slurm on GCP requirements; it is highly
+    advised to use the packer templates provided by Slurm on GCP when
+    constructing custom slurm images.
+
+    More information can be found in the slurm-gcp docs:
+    https://github.com/SchedMD/slurm-gcp/blob/5.3.0/docs/images.md#public-image.
+    EOD
+  type        = map(string)
+  default = {
+    family  = "schedmd-v5-slurm-22-05-6-hpc-centos-7"
+    project = "projects/schedmd-slurm-public/global/images/family"
+  }
+
+  validation {
+    condition = length(var.instance_image) == 0 || (
+    can(var.instance_image["family"]) || can(var.instance_image["name"])) == can(var.instance_image["project"])
+    error_message = "The \"project\" is required if \"family\" or \"name\" are provided in var.instance_image."
+  }
+  validation {
+    condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
+    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
+  }
+}
+
 variable "source_image_project" {
   type        = string
-  description = <<-EOD
-    Project path where the source image comes from. If not provided, this value
-    will default to the project hosting the slurm-gcp public images. More
-    information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image.
-    EOD
-  default     = null
+  description = "The hosting the custom VM image. It is recommended to use `instance_image` instead."
+  default     = ""
 }
 
 variable "source_image_family" {
   type        = string
-  description = <<-EOD
-    Source image family. If not provided, the default image family name for the
-    hpc-centos-7 version of the slurm-gcp public images will be used. More
-    information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
-    EOD
-  default     = null
+  description = "The custom VM image family. It is recommended to use `instance_image` instead."
+  default     = ""
 }
 
 variable "source_image" {
   type        = string
-  description = <<-EOD
-    Source disk image. By default, the image used will be the hpc-centos7
-    version of the slurm-gcp public images. More information can be found in the
-    slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/v5.0.2/docs/images.md#public-image
-    EOD
-  default     = null
+  description = "The custom VM image. It is recommended to use `instance_image` instead."
+  default     = ""
 }
 
 variable "static_ips" {

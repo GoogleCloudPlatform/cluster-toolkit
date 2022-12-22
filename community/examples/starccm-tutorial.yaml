@@ -66,7 +66,7 @@ deployment_groups:
       machine_type: c2-standard-60
       instance_count: 4
       placement_policy:
-        vm_count: 4  # Note: should match instance count
+        vm_count: null
         collocation: "COLLOCATED"
         availability_domain_count: null
 
