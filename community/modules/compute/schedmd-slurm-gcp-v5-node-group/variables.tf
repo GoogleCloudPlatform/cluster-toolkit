@@ -56,7 +56,15 @@ variable "node_count_static" {
 ## VM Definition
 
 variable "instance_template" {
-  description = "Self link to a custom instance template, used in place of other VM instance definition variables."
+  description = <<-EOD
+    Self link to a custom instance template. If set, other VM definition
+    variables such as machine_type and instance_image will be ignored in favor
+    of the provided instance template.
+
+    For more information on creating custom images for the instance template
+    that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section
+    in docs/vm-instances.md.
+    EOD
   type        = string
   default     = null
 }
@@ -84,12 +92,8 @@ variable "instance_image" {
     family: The image family to use. Mutually exclusive with name.
     project: The project where the image is hosted.
 
-    Custom images must comply with Slurm on GCP requirements; it is highly
-    advised to use the packer templates provided by Slurm on GCP when
-    constructing custom slurm images.
-
-    More information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/5.3.0/docs/images.md#public-image.
+    For more information on creating custom images that comply with Slurm on GCP
+    see the "Slurm on GCP Custom Images" section in docs/vm-instances.md.
     EOD
   type        = map(string)
   default = {
