@@ -64,7 +64,7 @@ deployment_groups:
       name: c30
       machine_type: c2-standard-30
       instance_image:
-        family: schedmd-v5-slurm-22-05-4-debian-10
+        family: schedmd-v5-slurm-22-05-6-debian-10
         project: projects/schedmd-slurm-public/global/images/family
 
   - id: node_group2
@@ -82,7 +82,7 @@ deployment_groups:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: schedmd-v5-slurm-22-05-4-hpc-centos-7
+        family: schedmd-v5-slurm-22-05-6-hpc-centos-7
         project: projects/schedmd-slurm-public/global/images/family
       enable_smt: true
 
