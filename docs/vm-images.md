@@ -95,8 +95,8 @@ These instructions apply to the following modules:
 
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp
 [slurm-gcp-packer]: https://github.com/SchedMD/slurm-gcp/tree/master/packer
-[slurm-gcp-iamges]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md
-[hpc-toolkit-packer]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/packer/custom-image
-[schedmd-slurm-gcp-v5-controller]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-[schedmd-slurm-gcp-v5-login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-login
-[schedmd-slurm-gcp-v5-node-group]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v5-node-group
+[slurm-gcp-images]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md
+[hpc-toolkit-packer]: ../modules/packer/custom-image
+[schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+[schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login
+[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group
