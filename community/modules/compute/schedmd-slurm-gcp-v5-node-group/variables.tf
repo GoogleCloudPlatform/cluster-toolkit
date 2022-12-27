@@ -63,7 +63,7 @@ variable "instance_template" {
 
     For more information on creating custom images for the instance template
     that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section
-    in docs/vm-instances.md.
+    in docs/vm-images.md.
     EOD
   type        = string
   default     = null
@@ -93,7 +93,7 @@ variable "instance_image" {
     project: The project where the image is hosted.
 
     For more information on creating custom images that comply with Slurm on GCP
-    see the "Slurm on GCP Custom Images" section in docs/vm-instances.md.
+    see the "Slurm on GCP Custom Images" section in docs/vm-images.md.
     EOD
   type        = map(string)
   default = {
