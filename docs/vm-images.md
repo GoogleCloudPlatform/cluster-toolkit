@@ -64,3 +64,39 @@ to set a VM image in many HPC Toolkit modules. While we do not officially
 support images not listed here, other public and custom images should work with
 the majority of modules with or without further customization, such as custom
 startup-scripts.
+
+## Slurm on GCP Custom Images
+
+HPC Toolkit modules based on terraform modules in [Slurm on GCP][slurm-gcp]
+allow custom images via custom instance templates and directly through the
+`instance_image` variable, but they have explicit requirements to function
+correctly with the Slurm cluster. We recommend one of two options for creating a
+custom image for these modules:
+
+1. Use the [packer templates][slurm-gcp-packer] hosted in the
+   [Slurm on GCP][slurm-gcp] github repository directly. The
+   `example.pkrvars.hcl` file can be customized to your needs, by supplying a
+   different base image or through the `extra_ansible_provisioners` variable.
+1. Create a custom image with a HPC Toolkit [packer module][hpc-toolkit-packer]
+   using one of the Slurm on GCP images as the base image. The image can be
+   customized via `shell_scripts`, `ansible_playbooks` or a provided
+   `startup_script`.
+
+For more information on the Slurm on GCP public images, see their
+[documentation][slurm-gcp-images]. From there, you can see which public images
+are available, which software is installed on them and more information on how
+to customize them using option 1 listed above.
+
+These instructions apply to the following modules:
+
+* [schedmd-slurm-gcp-v5-controller]
+* [schedmd-slurm-gcp-v5-login]
+* [schedmd-slurm-gcp-v5-node-group]
+
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp
+[slurm-gcp-packer]: https://github.com/SchedMD/slurm-gcp/tree/master/packer
+[slurm-gcp-images]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md
+[hpc-toolkit-packer]: ../modules/packer/custom-image
+[schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+[schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login
+[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group
