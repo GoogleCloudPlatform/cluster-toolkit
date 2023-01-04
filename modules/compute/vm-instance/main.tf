@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -100,6 +100,7 @@ resource "google_compute_disk" "boot_disk" {
   type   = var.disk_type
   size   = var.disk_size_gb
   labels = var.labels
+  zone   = var.zone
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
@@ -192,7 +193,7 @@ resource "google_compute_instance" "compute_vm" {
     }
   }
 
-  guest_accelerator = var.guest_accelerator
+  guest_accelerator = local.guest_accelerator
   scheduling {
     on_host_maintenance = local.on_host_maintenance
     automatic_restart   = local.automatic_restart
