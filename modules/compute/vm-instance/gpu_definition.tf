@@ -15,10 +15,10 @@
 */
 
 locals {
-  #
   # if a machine type is a2-*-?g it will automatically fill in the guest_accelerator structure.
-  #
   is_a2_vm = length(regexall("a2-[a-z]+-\\d+g", var.machine_type)) > 0
+
+  # If the machine type indicates a GPU is used, gather the count and type information
   accelerator_types = {
     "highgpu"  = "nvidia-tesla-a100"
     "megagpu"  = "nvidia-tesla-a100"
@@ -28,6 +28,9 @@ locals {
     type  = lookup(local.accelerator_types, regex("a2-([A-Za-z]+)-", var.machine_type)[0], ""),
     count = one(regex("a2-[A-Za-z]+-(\\d+)", var.machine_type)),
   }], [])
+
+  # Set the guest_accelerator to the user defined value if supplied, otherwise
+  # use the locally generated accelerator list.
   guest_accelerator = local.is_a2_vm ? coalescelist(
     var.guest_accelerator,
     local.generated_guest_accelerator,
