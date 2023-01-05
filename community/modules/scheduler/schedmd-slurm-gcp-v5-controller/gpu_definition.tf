@@ -20,7 +20,7 @@
 
 locals {
 
-  # Ensure guest_accelerator is set
+  # Ensure guest_accelerator is a list if not set
   input_guest_accelerator = var.guest_accelerator == null ? [] : var.guest_accelerator
 
   # If the machine type indicates a GPU is used, gather the count and type information
