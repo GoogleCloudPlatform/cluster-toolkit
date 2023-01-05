@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -238,11 +238,32 @@ variable "on_host_maintenance" {
 }
 
 variable "gpu" {
-  description = "Definition of requested GPU resources."
+  description = <<-EOD
+    GPU information. Type and count of GPU to attach to the instance template. See
+    https://cloud.google.com/compute/docs/gpus more details.
+    - type : the GPU type, e.g. nvidia-tesla-t4, nvidia-a100-80gb, nvidia-tesla-a100, etc
+    - count : number of GPUs
+
+    If both 'var.gpu' and 'var.guest_accelerator' are set, 'var.gpu' will be used.
+    EOD
   type = object({
     count = number,
     type  = string
   })
+  default = null
+}
+
+variable "guest_accelerator" {
+  description = <<-EOD
+    Alternative method of providing 'var.gpu' with a consistent naming scheme to
+    other HPC Toolkit modules.
+
+    If both 'var.gpu' and 'var.guest_accelerator' are set, 'var.gpu' will be used.
+    EOD
+  type = list(object({
+    type  = string,
+    count = number
+  }))
   default = null
 }
 
