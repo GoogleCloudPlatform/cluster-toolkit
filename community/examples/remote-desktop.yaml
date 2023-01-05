@@ -1,0 +1,63 @@
+---
+
+blueprint_name: remote-desktop
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: remote-desktop
+  region: us-east4
+  zone: us-east4-c
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: startup
+    kind: terraform
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell 
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+
+      - type: ansible-local
+        source: /usr/local/google/home/ikwak/Code/hpc-toolkit/community/modules/remotedesktop/install_grid_drivers.yaml
+        destination: install_grid_drivers.yaml
+
+      - type: ansible-local
+        source: /usr/local/google/home/ikwak/Code/hpc-toolkit/community/modules/remotedesktop/install_desktop.yaml
+        destination: install_desktop.yaml
+
+      - type: ansible-local
+        source: /usr/local/google/home/ikwak/Code/hpc-toolkit/community/modules/remotedesktop/install_chromeremotedesktop.yaml
+        destination: install_chromeremotedesktop.yaml
+
+  - id: network1
+    source: modules/network/vpc
+    kind: terraform
+
+  - id: compute_1
+    source: modules/compute/vm-instance
+    kind: terraform
+    use:
+    - network1
+    - startup
+    settings:
+      instance_image:
+        family: ubuntu-2204-lts
+        project: ubuntu-os-cloud
+      threads_per_core: 2
+      machine_type: n1-standard-8
+      instance_count: 1
+      on_host_maintenance: TERMINATE
+      guest_accelerator:
+      - type: nvidia-tesla-t4-vws
+        count: 1
+
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
+    kind: terraform
+    settings:
+      timeout: 3600
+      instance_name: ((module.compute_1.name[0]))
+
