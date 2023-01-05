@@ -30,6 +30,12 @@ duplicates = [
         "modules/scheduler/batch-job-template/startup_from_network_storage.tf",
         "modules/compute/vm-instance/startup_from_network_storage.tf",
     ],
+    [
+        "modules/compute/vm-instance/gpu_definition.tf",
+        "community/modules/compute/schedmd-slurm-gcp-v5-node-group/gpu_definition.tf",
+        "community/modules/scheduler/schedmd-slurm-gcp-v5-login/gpu_definition.tf",
+        "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/gpu_definition.tf",
+    ],
 ]
 
 for group in duplicates:

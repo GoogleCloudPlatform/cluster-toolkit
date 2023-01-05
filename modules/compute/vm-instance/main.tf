@@ -32,7 +32,7 @@ locals {
   # compact_placement : true when placement policy is provided and collocation set; false if unset
   compact_placement = try(var.placement_policy.collocation, null) != null
 
-  gpu_attached = contains(["a2"], local.machine_family) || local.guest_accelerator != null
+  gpu_attached = contains(["a2"], local.machine_family) || length(local.guest_accelerator) > 0
 
   # both of these must be false if either compact placement or preemptible/spot instances are used
   # automatic restart is tolerant of GPUs while on host maintenance is not
