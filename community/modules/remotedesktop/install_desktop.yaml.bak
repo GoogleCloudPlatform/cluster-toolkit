@@ -16,7 +16,7 @@
 - name: Ensure desktop is installed
   hosts: localhost
   become: true
-  tasks:
+  tasks:  
   - name: Install desktop packages
     ansible.builtin.apt:
       name:
@@ -25,9 +25,23 @@
       state: present
       update_cache: true
 
-  - name: Fix headless Nvidia issue
+  - name: Fix headless Nvidia issue 
     ansible.builtin.shell:
       sudo nvidia-xconfig --query-gpu-info > /tmp/gpu-info.txt
+
       PCI_ID=$(cat /tmp/gpu-info.txt | grep "PCI BusID " | head -n 1 | cut -d':' -f2-99 | xargs)
+
       sudo nvidia-xconfig -a --allow-empty-initial-configuration --enable-all-gpus --virtual=1920x1200 --busid=$PCI_ID
+
       sudo sed -i '/Section "Device"/a \ \ \ \ Option\t"HardDPMS" "false"' /etc/X11/xorg.conf
+
+  - name: Fix color profile auth window
+    ansible.builtin.shell:
+      sudo bash -c 'cat <<EOF >> /etc/polkit-1/localauthority/50-local.d/color.pkla
+      [Allow colord for all users]
+      Identity=unix-user:*
+      Action=org.freedesktop.color-manager.create-device;org.freedesktop.color-manager.create-profile;org.freedesktop.color-manager.delete-device;org.freedesktop.color-manager.delete-profile;org.freedesktop.color-manager.modify-device;org.freedesktop.color-manager.modify-profile;org.freedesktop.packagekit.system-sources-refresh
+      ResultAny=yes
+      ResultInactive=yes
+      ResultActive=yes
+      EOF'
