@@ -13,11 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-data "google_compute_image" "compute_image" {
-  family  = var.instance_image.family
-  project = var.instance_image.project
-}
-
 output "partition" {
   description = "The partition structure containing all the set variables"
   value = {
@@ -26,7 +21,7 @@ output "partition" {
     static_node_count : var.static_node_count
     max_node_count : var.max_node_count
     zone : var.zone
-    image : data.google_compute_image.compute_image.self_link
+    image : "projects/${var.instance_image.project}/global/images/family/${var.instance_image.family}"
     image_hyperthreads : var.image_hyperthreads
     compute_disk_type : var.compute_disk_type
     compute_disk_size_gb : var.compute_disk_size_gb
