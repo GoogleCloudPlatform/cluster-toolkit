@@ -29,8 +29,8 @@ deployment_groups:
         destination: install_desktop.yaml
 
       - type: ansible-local
-        source: /usr/local/google/home/ikwak/Code/hpc-toolkit/community/modules/remotedesktop/install_chromeremotedesktop.yaml
-        destination: install_chromeremotedesktop.yaml
+        source: /usr/local/google/home/ikwak/Code/hpc-toolkit/community/modules/remotedesktop/install_crd.yaml
+        destination: install_crd.yaml
 
   - id: network1
     source: modules/network/vpc
