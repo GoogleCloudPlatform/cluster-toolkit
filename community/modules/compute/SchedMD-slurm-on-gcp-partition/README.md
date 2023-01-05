@@ -1,4 +1,4 @@
-## Description
+git ## Description
 
 This module creates a compute partition that be can used as input to
 [SchedMD-slurm-on-gcp-controller](../../scheduler/SchedMD-slurm-on-gcp-controller/README.md).
@@ -41,13 +41,10 @@ modules. For support with the underlying modules, see the instructions in the
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 
 ## Providers
 
-| Name | Version |
-|------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+No providers.
 
 ## Modules
 
@@ -55,9 +52,7 @@ No modules.
 
 ## Resources
 
-| Name | Type |
-|------|------|
-| [google_compute_image.compute_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
+No resources.
 
 ## Inputs
 
