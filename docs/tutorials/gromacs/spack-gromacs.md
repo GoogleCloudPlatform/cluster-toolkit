@@ -88,7 +88,7 @@ This file describes the cluster you will deploy. It defines:
   * a Slurm controller
   * An auto-scaling Slurm partition
 
-[This diagram](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/application_demo/docs/tutorials/application_demo.md#blueprint-diagram)
+[This diagram](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/docs/tutorials#blueprint-diagram-for-application-tutorials)
 shows how the different modules relate to each other.
 
 After you have inspected the file, use the ghpc binary to create a deployment
