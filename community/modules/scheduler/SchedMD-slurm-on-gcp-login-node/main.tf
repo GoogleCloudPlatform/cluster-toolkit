@@ -15,18 +15,21 @@
  */
 locals {
   login_startup_script = var.login_startup_script != null ? var.login_startup_script : var.startup_script
-}
 
-data "google_compute_image" "compute_image" {
-  family  = var.instance_image.family
-  project = var.instance_image.project
+  instance_name   = lookup(var.instance_image, "name", null)
+  instance_family = lookup(var.instance_image, "family", null)
+  instance_image = (
+    local.instance_name != null ?
+    "projects/${var.instance_image["project"]}/global/images/${local.instance_name}" :
+    "projects/${var.instance_image["project"]}/global/images/family/${local.instance_family}"
+  )
 }
 
 module "slurm_cluster_login_node" {
   source            = "github.com/SchedMD/slurm-gcp//tf/modules/login/?ref=v4.2.1"
   boot_disk_size    = var.boot_disk_size
   boot_disk_type    = var.boot_disk_type
-  image             = data.google_compute_image.compute_image.self_link
+  image             = local.instance_image
   instance_template = var.login_instance_template
   cluster_name = (
     var.cluster_name != null

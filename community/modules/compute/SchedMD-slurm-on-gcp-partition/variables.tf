@@ -42,14 +42,28 @@ variable "zone" {
 }
 
 variable "instance_image" {
-  description = "Image to be used for the compute VMs in this partition"
-  type = object({
-    family  = string,
-    project = string
-  })
+  description = <<-EOD
+    Defines the image that will be used by the compute VMs in this partition.
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+    Custom images must comply with Slurm on GCP requirements.
+    EOD
+  type        = map(string)
   default = {
     family  = "schedmd-slurm-21-08-8-hpc-centos-7"
     project = "schedmd-slurm-public"
+  }
+
+  validation {
+    condition = length(var.instance_image) == 0 || (
+    can(var.instance_image["family"]) || can(var.instance_image["name"])) == can(var.instance_image["project"])
+    error_message = "The \"project\" is required if \"family\" or \"name\" are provided in var.instance_image."
+  }
+  validation {
+    condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
+    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
   }
 }
 
