@@ -13,6 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+locals {
+  instance_name   = lookup(var.instance_image, "name", null)
+  instance_family = lookup(var.instance_image, "family", null)
+  instance_image = (
+    local.instance_name != null ?
+    "projects/${var.instance_image["project"]}/global/images/${local.instance_name}" :
+    "projects/${var.instance_image["project"]}/global/images/family/${local.instance_family}"
+  )
+}
+
+
 output "partition" {
   description = "The partition structure containing all the set variables"
   value = {
@@ -21,7 +32,7 @@ output "partition" {
     static_node_count : var.static_node_count
     max_node_count : var.max_node_count
     zone : var.zone
-    image : "projects/${var.instance_image.project}/global/images/family/${var.instance_image.family}"
+    image : local.instance_image
     image_hyperthreads : var.image_hyperthreads
     compute_disk_type : var.compute_disk_type
     compute_disk_size_gb : var.compute_disk_size_gb
