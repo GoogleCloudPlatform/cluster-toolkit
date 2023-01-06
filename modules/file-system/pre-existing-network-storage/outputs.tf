@@ -18,7 +18,7 @@ output "network_storage" {
   description = "Describes a remote network storage to be mounted by fs-tab."
   value = {
     server_ip             = var.server_ip
-    remote_mount          = var.remote_mount
+    remote_mount          = local.remote_mount
     local_mount           = var.local_mount
     fs_type               = var.fs_type
     mount_options         = var.mount_options
@@ -28,13 +28,19 @@ output "network_storage" {
 }
 
 locals {
-  remote_mount_with_slash = length(regexall("^/.*", var.remote_mount)) > 0 ? var.remote_mount : format("/%s", var.remote_mount)
+  # Update remote mount to include a slash if the fs_type requires one to exist
+  remote_mount_with_slash = length(regexall("^/.*", var.remote_mount)) > 0 ? (
+    var.remote_mount
+  ) : format("/%s", var.remote_mount)
+  remote_mount = contains(local.mount_vanilla_supported_fstype, var.fs_type) ? (
+    local.remote_mount_with_slash
+  ) : var.remote_mount
   # Client Install
   ddn_lustre_client_install_script = templatefile(
     "${path.module}/templates/ddn_exascaler_luster_client_install.tftpl",
     {
       server_ip    = split("@", var.server_ip)[0]
-      remote_mount = local.remote_mount_with_slash
+      remote_mount = local.remote_mount
       local_mount  = var.local_mount
     }
   )
@@ -57,7 +63,7 @@ locals {
   mount_runner_vanilla = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = "\"${var.server_ip}\" \"${local.remote_mount_with_slash}\" \"${var.local_mount}\" \"${var.fs_type}\" \"${var.mount_options}\""
+    "args"        = "\"${var.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${var.fs_type}\" \"${var.mount_options}\""
     "content" = (
       contains(local.mount_vanilla_supported_fstype, var.fs_type) ?
       file("${path.module}/scripts/mount.sh") :
