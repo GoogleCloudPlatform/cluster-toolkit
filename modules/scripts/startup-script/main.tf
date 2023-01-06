@@ -25,10 +25,25 @@ locals {
   prepend_ansible_installer = length(local.ansible_local_runners) > 0 && var.prepend_ansible_installer
   runners                   = local.prepend_ansible_installer ? concat([local.ansible_installer], var.runners) : var.runners
 
+  storage_bucket = (
+    var.gcs_bucket_full_path == null
+    ? try(module.config_storage_bucket[0], null)
+    : try(data.google_storage_bucket.existing_bucket[0], null)
+  )
+
+  storage_bucket_name = (
+    var.gcs_bucket_full_path == null
+    ? "${var.deployment_name}-startup-scripts-${random_id.resource_name_suffix.hex}"
+    : regex("^gs://([^/]*)/*(.*)", var.gcs_bucket_full_path)[0]
+  )
+
+  storage_folder_path = var.gcs_bucket_full_path == null ? null : regex("^gs://([^/]*)/*(.*)", var.gcs_bucket_full_path)[1]
+  storage_folder_path_prefix = local.storage_folder_path == null ? "" : "${local.storage_folder_path}/"
+
   load_runners = templatefile(
     "${path.module}/templates/startup-script-custom.tpl",
     {
-      bucket = google_storage_bucket.configs_bucket.name,
+      bucket = local.storage_bucket.name,
       runners = [
         for runner in local.runners : {
           object      = google_storage_bucket_object.scripts[basename(runner["destination"])].output_name
@@ -68,22 +83,30 @@ resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
 
-resource "google_storage_bucket" "configs_bucket" {
-  project                     = var.project_id
-  name                        = "${var.deployment_name}-startup-scripts-${random_id.resource_name_suffix.hex}"
-  uniform_bucket_level_access = true
+module "config_storage_bucket" {
+  count                       = var.gcs_bucket_full_path == null ? 1 : 0
+  source                      = "terraform-google-modules/cloud-storage/google//modules/simple_bucket"
+  version                     = "~> 3.4"
+
+  project_id                  = var.project_id
+  name                        = local.storage_bucket_name
   location                    = var.region
   storage_class               = "REGIONAL"
   labels                      = var.labels
 }
 
+data "google_storage_bucket" "existing_bucket" {
+  count                       = var.gcs_bucket_full_path != null ? 1 : 0
+  name                        = local.storage_bucket_name
+}
+
 resource "google_storage_bucket_object" "scripts" {
   # this writes all scripts exactly once into GCS
   for_each = local.runners_map
-  name     = each.key
+  name     = "${local.storage_folder_path_prefix}${each.key}"
   content  = each.value["content"]
   source   = each.value["source"]
-  bucket   = google_storage_bucket.configs_bucket.name
+  bucket   = local.storage_bucket.name
   timeouts {
     create = "10m"
     update = "10m"

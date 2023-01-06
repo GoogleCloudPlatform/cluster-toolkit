@@ -30,6 +30,12 @@ variable "region" {
 }
 
 
+variable "gcs_bucket_full_path" {
+  description = "The GCS full path for storage bucket and the object."
+  type        = string
+  default     = null
+}
+
 variable "debug_file" {
   description = "Path to an optional local to be written with 'startup_script'."
   type        = string
