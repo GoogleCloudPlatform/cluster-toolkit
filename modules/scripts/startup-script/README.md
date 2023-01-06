@@ -162,6 +162,24 @@ sudo journalctl -u google-startup-scripts.service
   use: [homefs, startup]
 ```
 
+```yaml
+- id: startup
+  source: ./modules/scripts/startup-script
+  settings:
+    gcs_bucket_full_path: gs://user-test-bucket/folder1/folder2
+    runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - type: shell
+        source: modules/startup-script/examples/install_cloud_ops_agent.sh
+        destination: install_cloud_ops_agent.sh
+
+- id: compute-cluster
+  source: ./modules/compute/vm-instance
+  use: [startup]
+```
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -219,6 +237,7 @@ No modules.
 | <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | Prepend Ansible installation script if any of the specified runners are of type ansible-local | `bool` | `true` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
+| <a name="input_gcs_bucket_full_path"></a> [gcs_bucket_full_path](#input\_gcs_bucket_full_path) | The GCS full path for storage bucket and the object. | `string` | n/a | yes |
 | <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM.<br>    Runners can be of type ansible-local, shell or data.<br>    A runner must specify one of 'source' or 'content'.<br>    All runners must specify 'destination'. If 'destination' does not include a<br>    path, it will be copied in a temporary folder and deleted after running.<br>    Runners may also pass 'args', which will be passed as argument to shell runners only. | `list(map(string))` | `[]` | no |
 
 ## Outputs
