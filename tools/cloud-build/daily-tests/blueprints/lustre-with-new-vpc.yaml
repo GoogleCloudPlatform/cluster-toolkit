@@ -70,7 +70,7 @@ deployment_groups:
     settings:
       instance_name: ((module.workstation.name[0]))
 
-  # test installing luster from pre-existing-network-storage
+  # test installing lustre from pre-existing-network-storage
   - id: pre-fs
     source: modules/file-system/pre-existing-network-storage
     settings:
