@@ -17,18 +17,21 @@ locals {
   controller_startup_script = var.controller_startup_script != null ? var.controller_startup_script : var.startup_script
   compute_startup_script    = var.compute_startup_script != null ? var.compute_startup_script : var.startup_script
   cluster_name              = var.cluster_name != null ? var.cluster_name : "slurm-${var.deployment_name}"
-}
 
-data "google_compute_image" "compute_image" {
-  family  = var.instance_image.family
-  project = var.instance_image.project
+  instance_name   = lookup(var.instance_image, "name", null)
+  instance_family = lookup(var.instance_image, "family", null)
+  instance_image = (
+    local.instance_name != null ?
+    "projects/${var.instance_image["project"]}/global/images/${local.instance_name}" :
+    "projects/${var.instance_image["project"]}/global/images/family/${local.instance_family}"
+  )
 }
 
 module "slurm_cluster_controller" {
   source                        = "github.com/SchedMD/slurm-gcp//tf/modules/controller/?ref=v4.2.1"
   boot_disk_size                = var.boot_disk_size
   boot_disk_type                = var.boot_disk_type
-  image                         = data.google_compute_image.compute_image.self_link
+  image                         = local.instance_image
   instance_template             = var.controller_instance_template
   cluster_name                  = local.cluster_name
   compute_node_scopes           = var.compute_node_scopes
