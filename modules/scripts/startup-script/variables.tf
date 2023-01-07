@@ -30,8 +30,8 @@ variable "region" {
 }
 
 
-variable "gcs_bucket_full_path" {
-  description = "The GCS full path for storage bucket and the object."
+variable "gcs_bucket_path" {
+  description = "The GCS path for storage bucket and the object."
   type        = string
   default     = null
 }

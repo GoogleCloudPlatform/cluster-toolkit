@@ -25,20 +25,11 @@ locals {
   prepend_ansible_installer = length(local.ansible_local_runners) > 0 && var.prepend_ansible_installer
   runners                   = local.prepend_ansible_installer ? concat([local.ansible_installer], var.runners) : var.runners
 
-  storage_bucket = (
-    var.gcs_bucket_full_path == null
-    ? try(module.config_storage_bucket[0], null)
-    : try(data.google_storage_bucket.existing_bucket[0], null)
-  )
+  storage_bucket = coalesce(one(module.config_storage_bucket), one(data.google_storage_bucket.existing_bucket))
 
-  storage_bucket_name = (
-    var.gcs_bucket_full_path == null
-    ? "${var.deployment_name}-startup-scripts-${random_id.resource_name_suffix.hex}"
-    : regex("^gs://([^/]*)/*(.*)", var.gcs_bucket_full_path)[0]
-  )
-
-  storage_folder_path = var.gcs_bucket_full_path == null ? null : regex("^gs://([^/]*)/*(.*)", var.gcs_bucket_full_path)[1]
-  storage_folder_path_prefix = local.storage_folder_path == null ? "" : "${local.storage_folder_path}/"
+  gcs_bucket_path_trimmed = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")
+  storage_folder_path = local.gcs_bucket_path_trimmed == null ? null : regex("^gs://([^/]*)/*(.*)", local.gcs_bucket_path_trimmed)[1]
+  storage_folder_path_prefix = local.storage_folder_path == null || local.storage_folder_path == "" ? "" : "${local.storage_folder_path}/"
 
   load_runners = templatefile(
     "${path.module}/templates/startup-script-custom.tpl",
@@ -84,20 +75,20 @@ resource "random_id" "resource_name_suffix" {
 }
 
 module "config_storage_bucket" {
-  count                       = var.gcs_bucket_full_path == null ? 1 : 0
+  count                       = var.gcs_bucket_path == null ? 1 : 0
   source                      = "terraform-google-modules/cloud-storage/google//modules/simple_bucket"
   version                     = "~> 3.4"
 
   project_id                  = var.project_id
-  name                        = local.storage_bucket_name
+  name                        = "${var.deployment_name}-startup-scripts-${random_id.resource_name_suffix.hex}"
   location                    = var.region
   storage_class               = "REGIONAL"
   labels                      = var.labels
 }
 
 data "google_storage_bucket" "existing_bucket" {
-  count                       = var.gcs_bucket_full_path != null ? 1 : 0
-  name                        = local.storage_bucket_name
+  count                       = var.gcs_bucket_path != null ? 1 : 0
+  name                        = regex("^gs://([^/]*)/*(.*)", local.gcs_bucket_path_trimmed)[0]
 }
 
 resource "google_storage_bucket_object" "scripts" {
