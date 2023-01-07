@@ -56,3 +56,8 @@ output "setup_spack_runner" {
       EOT
   }
 }
+
+output "spack_path" {
+  description = "Path to the installation directory for spack."
+  value       = var.install_dir
+}
