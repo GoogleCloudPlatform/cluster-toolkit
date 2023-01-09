@@ -34,23 +34,25 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	var module *tfconfig.Module
 	ret := ModuleInfo{}
 
-	fileInfo, err := os.Stat(source)
-	if os.IsNotExist(err) {
-		return ret, fmt.Errorf("Source to module does not exist: %s", source)
-	}
-	if err != nil {
-		return ret, fmt.Errorf("Failed to read source of module: %s", source)
-	}
-	if !fileInfo.IsDir() {
-		return ret, fmt.Errorf("Source of module must be a directory: %s", source)
-	}
-	if !tfconfig.IsModuleDir(source) {
-		return ret, fmt.Errorf("Source is not a terraform or packer module: %s", source)
-	}
-
 	if isEmbeddedPath(source) {
+		if !tfconfig.IsModuleDirOnFilesystem(tfconfig.WrapFS(ModuleFS), source) {
+			return ret, fmt.Errorf("Source is not a terraform or packer module: %s", source)
+		}
 		module, _ = tfconfig.LoadModuleFromFilesystem(tfconfig.WrapFS(ModuleFS), source)
 	} else {
+		fileInfo, err := os.Stat(source)
+		if os.IsNotExist(err) {
+			return ret, fmt.Errorf("Source to module does not exist: %s", source)
+		}
+		if err != nil {
+			return ret, fmt.Errorf("Failed to read source of module: %s", source)
+		}
+		if !fileInfo.IsDir() {
+			return ret, fmt.Errorf("Source of module must be a directory: %s", source)
+		}
+		if !tfconfig.IsModuleDir(source) {
+			return ret, fmt.Errorf("Source is not a terraform or packer module: %s", source)
+		}
 		module, _ = tfconfig.LoadModule(source)
 	}
 
