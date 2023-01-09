@@ -25,10 +25,11 @@ locals {
   prepend_ansible_installer = length(local.ansible_local_runners) > 0 && var.prepend_ansible_installer
   runners                   = local.prepend_ansible_installer ? concat([local.ansible_installer], var.runners) : var.runners
 
-  storage_bucket = coalesce(one(module.config_storage_bucket), one(data.google_storage_bucket.existing_bucket))
+  storage_bucket = coalesce(one(google_storage_bucket.configs_bucket), one(data.google_storage_bucket.existing_bucket))
 
-  gcs_bucket_path_trimmed = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")
-  storage_folder_path = local.gcs_bucket_path_trimmed == null ? null : regex("^gs://([^/]*)/*(.*)", local.gcs_bucket_path_trimmed)[1]
+  bucket_regex               = "^gs://([^/]*)/*(.*)"
+  gcs_bucket_path_trimmed    = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")
+  storage_folder_path        = local.gcs_bucket_path_trimmed == null ? null : regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[1]
   storage_folder_path_prefix = local.storage_folder_path == null || local.storage_folder_path == "" ? "" : "${local.storage_folder_path}/"
 
   load_runners = templatefile(
@@ -74,13 +75,11 @@ resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
 
-module "config_storage_bucket" {
+resource "google_storage_bucket" "configs_bucket" {
   count                       = var.gcs_bucket_path == null ? 1 : 0
-  source                      = "terraform-google-modules/cloud-storage/google//modules/simple_bucket"
-  version                     = "~> 3.4"
-
-  project_id                  = var.project_id
+  project                     = var.project_id
   name                        = "${var.deployment_name}-startup-scripts-${random_id.resource_name_suffix.hex}"
+  uniform_bucket_level_access = true
   location                    = var.region
   storage_class               = "REGIONAL"
   labels                      = var.labels
@@ -88,7 +87,7 @@ module "config_storage_bucket" {
 
 data "google_storage_bucket" "existing_bucket" {
   count                       = var.gcs_bucket_path != null ? 1 : 0
-  name                        = regex("^gs://([^/]*)/*(.*)", local.gcs_bucket_path_trimmed)[0]
+  name                        = regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[0]
 }
 
 resource "google_storage_bucket_object" "scripts" {
