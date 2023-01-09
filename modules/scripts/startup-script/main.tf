@@ -86,8 +86,8 @@ resource "google_storage_bucket" "configs_bucket" {
 }
 
 data "google_storage_bucket" "existing_bucket" {
-  count                       = var.gcs_bucket_path != null ? 1 : 0
-  name                        = regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[0]
+  count = var.gcs_bucket_path != null ? 1 : 0
+  name  = regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[0]
 }
 
 resource "google_storage_bucket_object" "scripts" {
