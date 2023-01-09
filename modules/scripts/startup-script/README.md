@@ -162,8 +162,8 @@ sudo journalctl -u google-startup-scripts.service
   use: [homefs, startup]
 ```
 
-In the above example, a new GCS bucket is created to upload the startup-scripts. 
-But in the case where the user wants to reuse existing GCS bucket or folder, 
+In the above example, a new GCS bucket is created to upload the startup-scripts.
+But in the case where the user wants to reuse existing GCS bucket or folder,
 they are able to do so by using the `gcs_bucket_path` as shown in the below example
 
 ```yaml
