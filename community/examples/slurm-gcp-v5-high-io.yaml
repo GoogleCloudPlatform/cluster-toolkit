@@ -24,9 +24,12 @@ vars:
   # By default, public IPs are set in the login and controller to allow easier
   # SSH access. To turn this behavior off, set this to true.
   disable_public_ips: false
-  # Set to true for active cluster reconfiguration. Note that setting this
-  # option requires additional dependencies to be installed locally.
+  # Set to true for active cluster reconfiguration.
+  # Note that setting this option requires additional dependencies to be installed locally.
   enable_reconfigure: true
+  # When set, active compute nodes will be cleaned up on destroy.
+  # Note that setting this option requires additional dependencies to be installed locally.
+  enable_cleanup_compute: true
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
