@@ -50,22 +50,6 @@ func (s *MySuite) TestCopyGitModules(c *C) {
 	c.Assert(fInfo.IsDir(), Equals, false)
 }
 
-func (s *MySuite) TestGetModuleInfo_Git(c *C) {
-	reader := GitSourceReader{}
-
-	// Invalid git repository - path does not exists
-	badGitRepo := "github.com:not/exist.git"
-	_, err := reader.GetModuleInfo(badGitRepo, tfKindString)
-	expectedErr := "failed to clone git module at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: Unsupported Module Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
-	_, err = reader.GetModuleInfo(badSource, tfKindString)
-	expectedErr = "Source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-}
-
 func (s *MySuite) TestGetModule_Git(c *C) {
 	reader := GitSourceReader{}
 

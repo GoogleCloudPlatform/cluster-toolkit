@@ -32,7 +32,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
-	"hpc-toolkit/pkg/sourcereader"
 )
 
 const (
@@ -402,8 +401,7 @@ func createModuleInfo(
 	modsInfo := make(map[string]modulereader.ModuleInfo)
 	for _, mod := range deploymentGroup.Modules {
 		if _, exists := modsInfo[mod.Source]; !exists {
-			reader := sourcereader.Factory(mod.Source)
-			ri, err := reader.GetModuleInfo(mod.Source, mod.Kind)
+			ri, err := modulereader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
 				log.Fatalf(
 					"failed to get info for module at %s while setting dc.ModulesInfo: %e",
