@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
+	"path"
 	"strings"
 )
 
@@ -62,10 +63,11 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	var modPath string
 	switch {
 	case sourcereader.IsGitPath(source):
-		modPath, err := ioutil.TempDir("", "module-*")
+		tmpDir, err := ioutil.TempDir("", "module-*")
 		if err != nil {
 			return ModuleInfo{}, err
 		}
+		modPath = path.Join(tmpDir, "module")
 		sourceReader := sourcereader.Factory(source)
 		if err = sourceReader.GetModule(source, modPath); err != nil {
 			return ModuleInfo{}, fmt.Errorf("failed to clone git module at %s: %v", source, err)
@@ -79,7 +81,6 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	}
 
 	reader := Factory(kind)
-	fmt.Printf("reader: %v, kind: %s\n", reader, kind)
 	mi, err := reader.GetInfo(modPath)
 
 	// Add API list if source is known

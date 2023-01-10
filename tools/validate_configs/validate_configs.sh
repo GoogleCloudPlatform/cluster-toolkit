@@ -27,15 +27,15 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
-	local LOCAL_MOD_COUNT=$(grep 'source: ./' "${example}" | wc -l)
-	echo "LOCAL_MOD_COUNT=${LOCAL_MOD_COUNT}"
+	local LOCAL_MOD_COUNT
+	LOCAL_MOD_COUNT=$(grep -c 'source: ./' "${example}")
 
 	echo "testing ${example} in ${tmpdir}"
 	cp "${example}" "${tmpdir}/"
 
 	# Only run from the repo directory if there are local modules, otherwise
 	# run the test from the test directory using the installed ghpc binary.
-	if [ ${LOCAL_MOD_COUNT} -gt "0" ]; then
+	if [ "${LOCAL_MOD_COUNT}" -gt "0" ]; then
 		cd "${cwd}"
 	else
 		cd "${tmpdir}"
@@ -45,7 +45,7 @@ run_test() {
 			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
 			exit 1
 		}
-	if [ ${LOCAL_MOD_COUNT} -gt "0" ]; then
+	if [ "${LOCAL_MOD_COUNT}" -gt "0" ]; then
 		mv "${DEPLOYMENT}" "${tmpdir}"
 	fi
 	cd "${tmpdir}"/"${DEPLOYMENT}" || {
@@ -117,7 +117,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find  tools/validate_configs/test_configs/ -name "*.yaml" -type f) #examples/ community/examples/
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ -name "*.yaml" -type f)
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
