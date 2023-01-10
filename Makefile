@@ -47,7 +47,7 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_configs packer-check
+tests: ghpc install warn-terraform-version warn-packer-version test-engine validate_configs packer-check
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)

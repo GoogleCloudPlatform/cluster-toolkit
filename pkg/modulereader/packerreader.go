@@ -45,17 +45,22 @@ func addTfExtension(filename string) {
 }
 
 func getHCLFiles(dir string) []string {
-	allFiles, err := ioutil.ReadDir(dir)
-	if err != nil {
-		log.Fatalf("Failed to read packer source directory %s", dir)
-	}
 	var hclFiles []string
-	for _, f := range allFiles {
-		if f.IsDir() {
-			continue
+	if isEmbeddedPath(dir) {
+		
+	} else {
+		allFiles, err := ioutil.ReadDir(dir)
+		if err != nil {
+			log.Fatalf("Failed to read packer source directory at %s: %v", dir, err)
 		}
-		if filepath.Ext(f.Name()) == ".hcl" {
-			hclFiles = append(hclFiles, filepath.Join(dir, f.Name()))
+		
+		for _, f := range allFiles {
+			if f.IsDir() {
+				continue
+			}
+			if filepath.Ext(f.Name()) == ".hcl" {
+				hclFiles = append(hclFiles, filepath.Join(dir, f.Name()))
+			}
 		}
 	}
 	return hclFiles
