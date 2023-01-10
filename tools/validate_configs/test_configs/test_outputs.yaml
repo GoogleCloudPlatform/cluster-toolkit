@@ -132,8 +132,14 @@ deployment_groups:
   - id: spack
     source: community/modules/scripts/spack-install
     outputs:
-    - startup_script
-    - controller_startup_script
+    - spack_install_runner
+    - spack_commands_runner
+    - spack_packages_runner
+    - spack_compilers_runner
+    - setup_spack_runner
+    - install_spack_runner
+    - spack_path
+    - install_spack_deps_runner
 
   - id: startup
     source: modules/scripts/startup-script

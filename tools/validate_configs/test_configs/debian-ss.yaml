@@ -71,9 +71,7 @@ deployment_groups:
         source: modules/startup-script/examples/hello.yaml
         destination: hello.yaml
       - $(spack.install_spack_deps_runner)
-      - type: shell
-        content: $(spack.startup_script)
-        destination: "/apps/spack-install.sh"
+      - $(spack.install_spack_runner)
 
   - id: instance
     source: ./modules/compute/vm-instance

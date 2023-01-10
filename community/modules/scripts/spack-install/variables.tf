@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,76 +14,52 @@
  * limitations under the License.
  */
 
-variable "zone" {
-  description = "The GCP zone where the instance is running."
-  type        = string
-}
-
-variable "project_id" {
-  description = "Project in which the HPC deployment will be created."
-  type        = string
-}
-
 variable "install_dir" {
-  description = "Directory to install spack into."
+  description = "Destination directory of installation of Spack"
+  default     = "/apps/ramble"
   type        = string
-  default     = "/sw/spack"
 }
 
 variable "spack_url" {
-  description = "URL to clone the spack repo from."
-  type        = string
+  description = "URL for Spack repository to clone"
   default     = "https://github.com/spack/spack"
+  type        = string
 }
 
 variable "spack_ref" {
-  description = "Git ref to checkout for spack."
-  type        = string
+  description = "Git ref to checkout for Spack"
   default     = "v0.19.0"
+  type        = string
 }
 
-variable "spack_cache_url" {
-  description = "List of buildcaches for spack."
-  type = list(object({
-    mirror_name = string
-    mirror_url  = string
-  }))
-  default = null
+variable "log_file" {
+  description = "Log file to write output from spack steps into"
+  default     = "/var/log/spack.log"
+  type        = string
 }
 
-variable "configs" {
-  description = <<EOT
-    List of configuration options to set within spack.
-    Configs can be of type 'single-config' or 'file'.
-    All configs must specify content, and a
-    a scope.
-EOT
+variable "chown_owner" {
+  description = "Owner to chown the Spack clone to"
+  default     = "root"
+  type        = string
+}
+
+variable "chgrp_group" {
+  description = "Group to chgrp the Spack clone to"
+  default     = "root"
+  type        = string
+}
+
+variable "chmod_mode" {
+  description = "Mode to chmod the Spack clone to."
+  default     = ""
+  type        = string
+}
+
+variable "commands" {
+  description = "Commands to execute within spack"
   default     = []
-  type        = list(map(any))
-  validation {
-    condition = alltrue([
-      for c in var.configs : contains(keys(c), "type")
-    ])
-    error_message = "All configs must declare a type."
-  }
-  validation {
-    condition = alltrue([
-      for c in var.configs : contains(keys(c), "scope")
-    ])
-    error_message = "All configs must declare a scope."
-  }
-  validation {
-    condition = alltrue([
-      for c in var.configs : contains(keys(c), "content")
-    ])
-    error_message = "All configs must declare a content."
-  }
-  validation {
-    condition = alltrue([
-      for c in var.configs : (c["type"] == "single-config" || c["type"] == "file")
-    ])
-    error_message = "The 'type' must be 'single-config' or 'file'."
-  }
+  type        = list(string)
 }
 
 variable "compilers" {
@@ -92,14 +68,6 @@ variable "compilers" {
   type        = list(string)
 }
 
-variable "licenses" {
-  description = "List of software licenses to install within spack."
-  default     = null
-  type = list(object({
-    source = string
-    dest   = string
-  }))
-}
 
 variable "packages" {
   description = "Defines root packages for spack to install (in order)."
@@ -107,123 +75,119 @@ variable "packages" {
   type        = list(string)
 }
 
+/* Deprecated Functionality */
+
+variable "spack_cache_url" {
+  description = "DEPRECATED"
+  type        = any
+  default     = null
+  nullable    = true
+  validation {
+    condition     = var.spack_cache_url == null
+    error_message = <<EOT
+    The spack_cache_url setting is deprecated.
+    Please add the cache using the `spack mirror add` and `spack buildcache keys` commands directly.
+    For more information, see: https://spack.readthedocs.io/en/latest/binary_caches.html
+EOT
+  }
+}
+
+variable "configs" {
+  description = "DEPRECATED"
+  default     = null
+  type        = any
+  validation {
+    condition     = var.configs == null
+    error_message = <<EOT
+      The configs setting is deprecated.
+      You can replicate its functionality by writing files with data runners,
+      and using a command to `config add -f <file>` instead.
+EOT
+  }
+}
+
+variable "licenses" {
+  description = "DEPRECATED"
+  default     = null
+  type        = any
+  validation {
+    condition     = var.licenses == null
+    error_message = <<EOT
+      The licenses setting is deprecated.
+      Please use a data runner to copy your license.
+      For more information on configuring spack to use license files,
+      see: https://spack.readthedocs.io/en/latest/config_yaml.html#spack-settings-config-yaml
+      and for an intel specific example: https://spack.readthedocs.io/en/latest/build_systems/intelpackage.html#configuring-spack-to-use-intel-licenses
+EOT
+  }
+}
+
 variable "install_flags" {
-  description = "Defines the flags to pass into `spack install`"
-  default     = ""
-  type        = string
+  description = "DEPRECATED"
+  default     = null
+  type        = any
+  validation {
+    condition     = var.install_flags == null
+    error_message = <<EOT
+      The install_flags setting is deprecated.
+      Instead, set flags on `install` commands directly.
+EOT
+  }
 }
 
 variable "concretize_flags" {
-  description = "Defines the flags to pass into `spack concretize`"
-  default     = ""
-  type        = string
+  description = "DEPRECATED"
+  default     = null
+  type        = any
+  validation {
+    condition     = var.concretize_flags == null
+    error_message = <<EOT
+      The concretize_flags setting is deprecated.
+      Instead, set flags on `concretize` commands directly.
+EOT
+  }
 }
 
 variable "gpg_keys" {
-  description = <<EOT
-  GPG Keys to trust within spack.
-  Each key must define a type. Valid types are 'file' and 'new'.
-  Keys of type 'file' must define a path to the key that
-  should be trusted.
-  Keys of type 'new' must define a 'name' and 'email' to create
-  the key with.
+  description = "DEPRECATED"
+  default     = null
+  type        = any
+  validation {
+    condition     = var.gpg_keys == null
+    error_message = <<EOT
+      The gpg_keys setting is deprecated.
+      Instead, please use a data runner to transfer your key.
+      Then, `gpg` commands can be used to add your key directly.
+      For example: `spack gpg init && spack gpg trust <path_to_key>`
 EOT
-  default     = []
-  type        = list(map(any))
-  validation {
-    condition = alltrue([
-      for k in var.gpg_keys : contains(keys(k), "type")
-    ])
-    error_message = "Each gpg_key must define a type."
-  }
-  validation {
-    condition = alltrue([
-      for k in var.gpg_keys : (k["type"] == "file" || k["type"] == "new")
-    ])
-    error_message = "Valid types for gpg_keys are 'file' and 'new'."
-  }
-  validation {
-    condition = alltrue([
-      for k in var.gpg_keys : ((k["type"] == "file" && contains(keys(k), "path")) || (k["type"] == "new"))
-    ])
-    error_message = "Each gpg_key of type file must define a path."
-  }
-  validation {
-    condition = alltrue([
-      for k in var.gpg_keys : (k["type"] == "file" || ((k["type"] == "new") && contains(keys(k), "name") && contains(keys(k), "email")))
-    ])
-    error_message = "Each gpg_key of type new must define a name and email."
   }
 }
 
 variable "caches_to_populate" {
-  description = <<EOT
-  Defines caches which will be populated with the installed packages.
-  Each cache must specify a type (either directory, or mirror).
-  Each cache must also specify a path. For directory caches, this path
-  must be on a local file system (i.e. file:///path/to/cache). For
-  mirror paths, this can be any valid URL that spack accepts.
-
-  NOTE: GPG Keys should be installed before trying to populate a cache
-  with packages.
-
-  NOTE: The gpg_keys variable can be used to install existing GPG keys
-  and create new GPG keys, both of which are acceptable for populating a
-  cache.
+  description = "DEPRECATED"
+  default     = null
+  type        = any
+  validation {
+    condition     = var.caches_to_populate == null
+    error_message = <<EOT
+      The caches_to_populate setting is deprecated.
+      Please add cache creation commands directly to the commands setting.
 EOT
-  default     = []
-  type        = list(map(any))
-  validation {
-    condition = alltrue([
-      for c in var.caches_to_populate : (contains(keys(c), "type") && contains(keys(c), "path"))
-    ])
-    error_message = "Each cache_to_populate must have define both 'type' and 'path'."
-  }
-  validation {
-    condition = alltrue([
-      for c in var.caches_to_populate : (c["type"] == "directory" || c["type"] == "mirror")
-    ])
-
-    error_message = "Cache_to_populate type must be either 'directory' or 'mirror'."
   }
 }
 
 variable "environments" {
-  description = <<EOT
-  Defines spack environments to configure, given as a list.
-  Each environment must define a name.
-  Additional optional attributes are 'content' and 'packages'.
-  'content' must be a string, defining the content of the Spack Environment YAML file.
-  'packages' must be a list of strings, defining the spack specs to install.
-  If both 'content' and 'packages' are defined, 'content' is processed first.
-
-EOT
-  default     = []
+  description = "DEPRECATED"
+  default     = null
   type        = any
+  nullable    = true
   validation {
-    condition = alltrue([
-      for e in var.environments : (contains(keys(e), "name"))
-    ])
-    error_message = "All environments must have a name."
+    condition     = var.environments == null
+    error_message = <<EOT
+      The environments setting is deprecated.
+      Please use a data runner to transfer an environment file,
+      and use spack commands to create an environment from it directly.
+      For more information, see: https://spack.readthedocs.io/en/latest/environments.html
+EOT
   }
-
-  validation {
-    condition = alltrue([
-      for e in var.environments : (contains(keys(e), "packages") ? alltrue(([for p in e["packages"] : alltrue([tostring(p) == p])])) : true)
-    ])
-    error_message = "The packages attribute within environments is required to be a list of strings."
-  }
-
-  validation {
-    condition = alltrue([
-      for e in var.environments : (contains(keys(e), "content") ? tostring(e["content"]) == e["content"] : true)
-    ])
-    error_message = "The content attribute within environments is required to be a string."
-  }
-}
-
-variable "log_file" {
-  description = "Defines the logfile that script output will be written to"
-  default     = "/var/log/spack.log"
-  type        = string
 }

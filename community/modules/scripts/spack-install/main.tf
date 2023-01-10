@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,42 +15,102 @@
  */
 
 locals {
-  env = [
-    for e in var.environments : {
-      name     = e.name
-      packages = contains(keys(e), "packages") ? e.packages : null
-      content  = contains(keys(e), "content") ? e.content : null
-    }
-  ]
-  script_content = templatefile(
-    "${path.module}/templates/install_spack.tpl",
+
+  install_file = templatefile(
+    "${path.module}/templates/spack_install.tpl",
     {
-      ZONE               = var.zone
-      PROJECT_ID         = var.project_id
-      INSTALL_DIR        = var.install_dir
-      SPACK_URL          = var.spack_url
-      SPACK_REF          = var.spack_ref
-      COMPILERS          = var.compilers == null ? [] : var.compilers
-      CONFIGS            = var.configs == null ? [] : var.configs
-      LICENSES           = var.licenses == null ? [] : var.licenses
-      PACKAGES           = var.packages == null ? [] : var.packages
-      INSTALL_FLAGS      = var.install_flags == null ? "" : var.install_flags
-      CONCRETIZE_FLAGS   = var.concretize_flags == null ? "" : var.concretize_flags
-      ENVIRONMENTS       = local.env
-      MIRRORS            = var.spack_cache_url == null ? [] : var.spack_cache_url
-      GPG_KEYS           = var.gpg_keys == null ? [] : var.gpg_keys
-      CACHES_TO_POPULATE = var.caches_to_populate == null ? [] : var.caches_to_populate
-      LOG_FILE           = var.log_file == null ? "/dev/null" : var.log_file
+      install_dir = var.install_dir
+      spack_url   = var.spack_url
+      spack_ref   = var.spack_ref
+      chown_owner = var.chown_owner
+      chgrp_group = var.chgrp_group
+      chmod_mode  = var.chmod_mode
+      log_file    = var.log_file
     }
   )
+
+  spack_install_runner = {
+    "type"        = "ansible-local"
+    "content"     = <<EOD
+---
+${local.install_file}
+EOD
+    "destination" = "spack_install.yml"
+  }
+
+  command_file = templatefile(
+    "${path.module}/templates/spack_commands.tpl",
+    {
+      install_dir = var.install_dir
+      log_file    = var.log_file
+      COMMANDS    = var.commands
+    }
+  )
+
+  spack_commands_runner = {
+    "type"        = "ansible-local"
+    "content"     = <<EOD
+---
+${local.command_file}
+EOD
+    "destination" = "spack_commands.yml"
+  }
+
+  package_commands = [for pkg_spec in var.packages : "install ${pkg_spec}"]
+
+  packages_file = templatefile(
+    "${path.module}/templates/spack_commands.tpl",
+    {
+      install_dir = var.install_dir
+      log_file    = var.log_file
+      COMMANDS    = local.package_commands
+    }
+  )
+
+  spack_packages_runner = {
+    "type"        = "ansible-local"
+    "content"     = <<EOD
+---
+${local.packages_file}
+EOD
+    "destination" = "spack_packages.yml"
+  }
+
+  compiler_commands = flatten([for comp_spec in var.compilers : ["install ${comp_spec}", "load ${comp_spec}", "compiler find --scope=site", "unload ${comp_spec}"]])
+
+  compiler_file = templatefile(
+    "${path.module}/templates/spack_commands.tpl",
+    {
+      install_dir = var.install_dir
+      log_file    = var.log_file
+      COMMANDS    = local.compiler_commands
+    }
+  )
+
+  spack_compilers_runner = {
+    "type"        = "ansible-local"
+    "content"     = <<EOD
+---
+${local.compiler_file}
+EOD
+    "destination" = "spack_compilers.yml"
+  }
+
+  install_spack_runner = {
+    "type"        = "ansible-local"
+    "content"     = <<EOD
+---
+${local.install_file}
+${local.command_file}
+${local.compiler_file}
+${local.packages_file}
+EOD
+    "destination" = "complete_spack_install.yml"
+  }
+
   install_spack_deps_runner = {
     "type"        = "ansible-local"
     "source"      = "${path.module}/scripts/install_spack_deps.yml"
     "destination" = "install_spack_deps.yml"
-  }
-  install_spack_runner = {
-    "type"        = "shell"
-    "content"     = local.script_content
-    "destination" = "install_spack.sh"
   }
 }

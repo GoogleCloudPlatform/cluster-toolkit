@@ -37,15 +37,34 @@ deployment_groups:
     settings:
       install_dir: /apps/spack
       log_file: /var/log/spack.log
-      configs:
-      - type: file
-        scope: defaults
-        content: |
-          config:
-            build_stage:
-              - /apps/spack/spack-stage
-      - type: file
-        scope: defaults
+      commands:
+      - "config --scope=defaults add -f /apps/spack_modules.yaml"
+      - "config --scope=defaults add -f /apps/spack_packages.yaml"
+      # Un-comment and update mirror_url to install from spack cache
+      # - "mirror add gcs_cache gs://optionally_set_spack_cache_bucket
+      # - "buildcache keys --install --trust"
+      #
+      compilers:
+      - gcc@9.3.0 target=x86_64
+
+  - id: spack-env
+    source: community/modules/scripts/spack-install
+    settings:
+      install_dir: /apps/spack
+      log_file: /var/log/spack.log
+      commands:
+      - "env create wrfv3 -f /apps/wrfv3_env.yaml"
+      - "env activate wrfv3"
+      - "concretize -f"
+      - "install"
+      - "env deactivate"
+
+  - id: controller-setup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: data
+        destination: /apps/spack_modules.yaml
         content: |
           modules:
             default:
@@ -56,8 +75,8 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      - type: 'file'
-        scope: 'site'
+      - type: data
+        destination: /apps/spack_packages.yaml
         content: |
           packages:
             slurm:
@@ -65,11 +84,8 @@ deployment_groups:
                 - spec: slurm@21-08-8-2
                   prefix: /usr/local
               buildable: False
-      compilers:
-      - gcc@8.2.0 target=x86_64
-      environments:
-      - name: wrfv3
-        type: file
+      - type: data
+        destination: /apps/wrfv3_env.yaml
         content: |
           spack:
             definitions:
@@ -87,15 +103,6 @@ deployment_groups:
               - - $mpi_packages
               - - $%compilers
               - - $^mpis
-      # Un-comment and update mirror_url to install from spack cache
-      # spack_cache_url:
-      # - mirror_name: gcs_cache
-      #   mirror_url: gs://optionally_set_spack_cache_bucket
-
-  - id: controller-setup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
       - type: shell

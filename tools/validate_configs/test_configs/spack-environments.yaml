@@ -35,14 +35,30 @@ deployment_groups:
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
-      configs:
-      - type: 'single-config'
-        scope: 'site'
-        content: 'config:install_tree:padded_length:128'
+      commands:
+      - 'config --site=scope add "config:install_tree:padded_length:128"'
       compilers:
       - gcc@10.3.0 target=x86_64
-      environments:
-      - name: 'file-test'
+      packages:
+      - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+
+  - id: spack-env
+    source: ./community/modules/scripts/spack-install
+    settings:
+      install_dir: /apps/spack
+      commands:
+      - env create file-test /apps/spack_environments/file_test.yaml
+      - env activate file-test
+      - concretize
+      - install
+      - env deactivate
+
+  - id: spack-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: data
+        destination: /apps/spack_environments/file_test.yaml
         content: |
           spack:
             definitions:
@@ -60,32 +76,6 @@ deployment_groups:
               - - $mpi_packages
               - - $%compilers
               - - $^mpis
-      - name: 'pkg-test'
-        packages:
-        - intel-mpi@2018.4.274 %gcc@10.3.0
-        - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
-      - name: 'mixed-test'
-        content: |
-          spack:
-            specs:
-              intel-mpi@20184.274 %gcc@10.3.0
-        packages:
-        - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
-      - name: 'empty-test'
-      gpg_keys:
-      - type: 'file'
-        path: '/tmp/spack_key.gpg'
-      caches_to_populate:
-      - type: 'mirror'
-        path:   ##  Add GCS bucket to populate here ##
-
-  - id: spack-startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - type: data
-        source: /local/path/to/spack/key.gpg
-        destination: /tmp/spack_key.gpg
       - type: shell
         content: |
           #!/bin/bash
@@ -95,9 +85,8 @@ deployment_groups:
       - type: ansible-local
         source: modules/spack-install/scripts/install_spack_deps.yml
         destination: install_spack_deps.yml
-      - type: shell
-        content: $(spack.startup_script)
-        destination: install_spack.sh
+      - $(spack.install_spack_runner)
+      - $(spack-env.spack_commands_runner)
       - type: shell
         destination: shutdown.sh
         content: shutdown -h

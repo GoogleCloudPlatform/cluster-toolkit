@@ -33,21 +33,13 @@ deployment_groups:
     settings:
       install_dir: /apps/spack
       log_file: /var/log/spack.log
-      configs:
-      - type: 'single-config'
-        scope: 'site'
-        content: 'config:install_tree:padded_length:128'
+      commands:
+      - 'config --scope=site add "config:install_tree:padded_length:128"'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
       - intel-mpi@2018.4.274%gcc@10.3.0
       - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
-      gpg_keys:
-      - type: 'file'
-        path: '/tmp/spack_key.gpg'
-      caches_to_populate:
-      - type: 'mirror'
-        path:  ##  Add GCS bucket to populate here ##
 
   - id: spack-startup
     source: modules/scripts/startup-script
@@ -65,9 +57,7 @@ deployment_groups:
       - type: ansible-local
         source: modules/spack-install/scripts/install_spack_deps.yml
         destination: install_spack_deps.yml
-      - type: shell
-        content: $(spack.startup_script)
-        destination: install_spack.sh
+      - $(spack.install_spack_runner)
       - type: shell
         destination: shutdown.sh
         content: shutdown -h

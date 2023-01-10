@@ -45,15 +45,49 @@ deployment_groups:
       install_dir: /sw/spack
       spack_ref: v0.18.1
       log_file: /var/log/spack.log
-      configs:
-      - type: file
-        scope: defaults
+      commands:
+      - 'config --scope=defaults add "config:build_stage:[/opt/spack_build_stage]"'
+      - 'config --scope=site add -f /sw/spack/modules.yaml'
+      - 'config --scope=site add -f /sw/spack/packages.yaml'
+      - 'config --scope=site add "concretizer:targets:host_compatible:false"'
+      compilers:
+      # gcc 12.1.0 is known to have runtime failures with OpenFOAM 8
+      # gcc 10.3.0 is the earliest copy of gcc with Zen 3 support
+      - gcc@10.3.0 %gcc@4.8.5 target=x86_64
+
+  - id: spack-env
+    source: community/modules/scripts/spack-install
+    settings:
+      install_dir: /sw/spack
+      log_file: /var/log/spack.log
+      commands:
+      - 'env create openfoam /sw/spack/openfoam_env.yaml'
+      - 'env activate openfoam'
+      - 'concretize -f'
+      - 'install'
+      - 'env deactivate'
+
+  - id: spack-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
+      - type: shell
+        destination: shutdown.sh
         content: |
-          config:
-            build_stage:
-              - /opt/spack_build_stage
-      - type: file
-        scope: defaults
+          #!/bin/bash
+          if [ ! -f /etc/block_auto_shutdown ]; then
+                  touch /etc/block_auto_shutdown
+                  shutdown -h +1
+          fi
+
+  - id: slurm_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: data
+        destination: /sw/spack/modules.yaml
         content: |
           modules:
             default:
@@ -64,8 +98,8 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      - type: file
-        scope: site
+      - type: data
+        destination: /sw/spack/packages.yaml
         content: |
           packages:
             slurm:
@@ -73,19 +107,8 @@ deployment_groups:
                 - spec: slurm@22-05-3
                   prefix: /usr/local
               buildable: False
-      - type: file
-        scope: site
-        content: |
-          concretizer:
-            targets:
-              host_compatible: false
-      compilers:
-      # gcc 12.1.0 is known to have runtime failures with OpenFOAM 8
-      # gcc 10.3.0 is the earliest copy of gcc with Zen 3 support
-      - gcc@10.3.0 %gcc@4.8.5 target=x86_64
-      environments:
-      - name: openfoam
-        type: file
+      - type: data
+        destination: /sw/spack/openfoam_env.yaml
         content: |
           spack:
             definitions:
@@ -111,26 +134,8 @@ deployment_groups:
             concretizer:
               unify: when_possible
 
-  - id: spack-startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
-      - type: shell
-        destination: shutdown.sh
-        content: |
-          #!/bin/bash
-          if [ ! -f /etc/block_auto_shutdown ]; then
-                  touch /etc/block_auto_shutdown
-                  shutdown -h +1
-          fi
-
-  - id: slurm_startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
       - $(spack.setup_spack_runner)
+      - $(spack-env.spack_commands_runner)
       # the following installation of AOCC may be automated in the future
       # with a clear direction to the user to read the EULA at
       # https://developer.amd.com/aocc-compiler-eula/

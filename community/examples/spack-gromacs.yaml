@@ -50,12 +50,26 @@ deployment_groups:
     settings:
       install_dir: /sw/spack
       log_file: /var/log/spack.log
-      configs:
-      - type: single-config
-        scope: defaults
-        content: "config:build_stage:/sw/spack/spack-stage"
-      - type: file
-        scope: defaults
+      commands:
+      - 'config --scope=defaults add "config:build_stage:[/sw/spack/spack-stage]"'
+      - 'config --scope=defaults add -f /sw/spack_modules.yaml'
+
+      # Uncomment and update the name and path to add a shared or personal Spack
+      # cache location to speed up future deployments.
+      # - 'mirror add gcs_cache gs://bucket-name...
+      # - 'buildcache keys --install --trust'
+      compilers:
+      - gcc@10.3.0 target=x86_64
+      packages:
+      - intel-mpi@2018.4.274%gcc@10.3.0
+      - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+
+  - id: spack-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: 'data'
+        destination: '/sw/spack_modules.yaml'
         content: |
           modules:
             default:
@@ -66,21 +80,6 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      compilers:
-      - gcc@10.3.0 target=x86_64
-      packages:
-      - intel-mpi@2018.4.274%gcc@10.3.0
-      - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
-      # Uncomment and update the name and path to add a shared or personal Spack
-      # cache location to speed up future deployments.
-      # spack_cache_url:
-      # - mirror_name: gcs_cache
-      #   mirror_url: gs://bucket-name/...
-
-  - id: spack-startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
 

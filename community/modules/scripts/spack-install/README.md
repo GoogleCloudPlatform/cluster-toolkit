@@ -1,160 +1,12 @@
 ## Description
 
-This module can be used to install spack on a VM. This includes:
-
-1. Cloning spack into a predefined directory
-1. Checking out a specific version of spack
-1. Configuring compilers within spack
-1. Installing application licenses that spack packages might depend on
-1. Installing various spack specs.
-
-The output of this module is a startup script that is intended to be attached
-to either the login or controller node of a scheduler, or a
-[vm-instance](../../../../modules/compute/vm-instance/README.md). The
-resulting installation of spack can then be mounted across many other VMs to
-share a software stack.
-
-> **_NOTE:_** This module currently is capable of re-running to install
-> additional packages, but cannot be used to uninstall packages from the VM.
->
-> **_NOTE:_** Currently, license installation is performed by copying a
-> license file from a GCS bucket to a specific directory on the target VM.
->
-> **_NOTE:_** When populating a buildcache with packages, the VM this
-> spack module is running on requires the following scope:
-> https://www.googleapis.com/auth/devstorage.read_write
-
-## Example
-
-As an example, the below is a possible definition of a spack installation. To
-see this module used in a full blueprint, see the [spack-gromacs.yaml] example.
-
-```yaml
-  - id: spack
-    source: community/modules/scripts/spack-install
-    settings:
-      install_dir: /sw/spack
-      spack_url: https://github.com/spack/spack
-      spack_ref: v0.19.0
-      spack_cache_url:
-      - mirror_name: 'gcs_cache'
-        mirror_url: gs://example-buildcache/linux-centos7
-      configs:
-      - type: single-config
-        scope: defaults
-        value: "config:build_stage:/sw/spack/spack-stage"
-      - type: file
-        scope: defaults
-        value: |
-          modules:
-            default:
-              tcl:
-                hash_length: 0
-                all:
-                  conflict:
-                    - '{name}'
-                projections:
-                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      compilers:
-      - gcc@10.3.0 target=x86_64
-      packages:
-      - cmake%gcc@10.3.0 target=x86_64
-      environments:
-      - name: main-env
-        packages:
-        - intel-mkl%gcc@10.3.0 target=skylake
-        - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
-        - fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5 target=x86_64
-      - name: explicit-env
-        content: |
-          spack:
-            definitions:
-            - compilers:
-              - gcc@10.3.0
-            - mpis:
-              - intel-mpi@2018.4.274
-            - packages:
-              - intel-mkl
-            - mpi_packages:
-              - fftw
-            specs:
-            - matrix:
-              - - $packages
-              - - $%compilers
-            - matrix:
-              - - $mpis
-              - - $%compilers
-            - matrix:
-              - - $mpi_packages
-              - - $%compilers
-              - - $^mpis
-```
-
-Following the above description of this module, it can be added to a Slurm
-deployment via the following:
-
-```yaml
-- id: slurm_controller
-  source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-  use: [spack]
-  settings:
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
-    login_node_count: 1
-    partitions:
-    - $(compute_partition.partition)
-```
-
-Alternatively, it can be added as a startup script via:
-
-```yaml
-  - id: startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
-```
-
-[spack-gromacs.yaml]: ../../../examples/spack-gromacs.yaml
-
-## Environment Setup
-
-[Spack installation] produces a setup script that adds `spack` to your `PATH` as
-well as some other command-line integration tools. This script can be found at
-`<install path>/share/spack/setup-env.sh`. This script will be automatically
-added to bash startup by the `install_spack_runner`. In the case that you are
-using Spack on a different machine than the one where Spack was installed, you
-can use the `setup_spack_runner` to make sure Spack is also available on that
-machine.
-
-[Spack installation]: https://spack-tutorial.readthedocs.io/en/latest/tutorial_basics.html#installing-spack
-
-### Example using `setup_spack_runner`
-
-The following examples assumes that a different machine is running
-`$(spack.install_spack_runner)` and the Slurm login node has access to the Spack
-instal through a shared file system.
-
-```yaml
-  - id: spack
-    source: community/modules/scripts/spack-install
-    ...
-
-  - id: spack-setup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(spack.setup_spack_runner)
-
-  - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    use: [spack-setup, ...]
-```
+This module will create a set of startup-script runners that will install Spack,
+and execute an arbitrary number of Spack commands.
 
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2022 Google LLC
+Copyright 2023 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -190,30 +42,35 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_caches_to_populate"></a> [caches\_to\_populate](#input\_caches\_to\_populate) | Defines caches which will be populated with the installed packages.<br>  Each cache must specify a type (either directory, or mirror).<br>  Each cache must also specify a path. For directory caches, this path<br>  must be on a local file system (i.e. file:///path/to/cache). For<br>  mirror paths, this can be any valid URL that spack accepts.<br><br>  NOTE: GPG Keys should be installed before trying to populate a cache<br>  with packages.<br><br>  NOTE: The gpg\_keys variable can be used to install existing GPG keys<br>  and create new GPG keys, both of which are acceptable for populating a<br>  cache. | `list(map(any))` | `[]` | no |
+| <a name="input_caches_to_populate"></a> [caches\_to\_populate](#input\_caches\_to\_populate) | DEPRECATED | `any` | `null` | no |
+| <a name="input_chgrp_group"></a> [chgrp\_group](#input\_chgrp\_group) | Group to chgrp the Spack clone to | `string` | `"root"` | no |
+| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | Mode to chmod the Spack clone to. | `string` | `""` | no |
+| <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Owner to chown the Spack clone to | `string` | `"root"` | no |
+| <a name="input_commands"></a> [commands](#input\_commands) | Commands to execute within spack | `list(string)` | `[]` | no |
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | Defines compilers for spack to install before installing packages. | `list(string)` | `[]` | no |
-| <a name="input_concretize_flags"></a> [concretize\_flags](#input\_concretize\_flags) | Defines the flags to pass into `spack concretize` | `string` | `""` | no |
-| <a name="input_configs"></a> [configs](#input\_configs) | List of configuration options to set within spack.<br>    Configs can be of type 'single-config' or 'file'.<br>    All configs must specify content, and a<br>    a scope. | `list(map(any))` | `[]` | no |
-| <a name="input_environments"></a> [environments](#input\_environments) | Defines spack environments to configure, given as a list.<br>  Each environment must define a name.<br>  Additional optional attributes are 'content' and 'packages'.<br>  'content' must be a string, defining the content of the Spack Environment YAML file.<br>  'packages' must be a list of strings, defining the spack specs to install.<br>  If both 'content' and 'packages' are defined, 'content' is processed first. | `any` | `[]` | no |
-| <a name="input_gpg_keys"></a> [gpg\_keys](#input\_gpg\_keys) | GPG Keys to trust within spack.<br>  Each key must define a type. Valid types are 'file' and 'new'.<br>  Keys of type 'file' must define a path to the key that<br>  should be trusted.<br>  Keys of type 'new' must define a 'name' and 'email' to create<br>  the key with. | `list(map(any))` | `[]` | no |
-| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory to install spack into. | `string` | `"/sw/spack"` | no |
-| <a name="input_install_flags"></a> [install\_flags](#input\_install\_flags) | Defines the flags to pass into `spack install` | `string` | `""` | no |
-| <a name="input_licenses"></a> [licenses](#input\_licenses) | List of software licenses to install within spack. | <pre>list(object({<br>    source = string<br>    dest   = string<br>  }))</pre> | `null` | no |
-| <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Defines the logfile that script output will be written to | `string` | `"/var/log/spack.log"` | no |
+| <a name="input_concretize_flags"></a> [concretize\_flags](#input\_concretize\_flags) | DEPRECATED | `any` | `null` | no |
+| <a name="input_configs"></a> [configs](#input\_configs) | DEPRECATED | `any` | `null` | no |
+| <a name="input_environments"></a> [environments](#input\_environments) | DEPRECATED | `any` | `null` | no |
+| <a name="input_gpg_keys"></a> [gpg\_keys](#input\_gpg\_keys) | DEPRECATED | `any` | `null` | no |
+| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Destination directory of installation of Spack | `string` | `"/apps/ramble"` | no |
+| <a name="input_install_flags"></a> [install\_flags](#input\_install\_flags) | DEPRECATED | `any` | `null` | no |
+| <a name="input_licenses"></a> [licenses](#input\_licenses) | DEPRECATED | `any` | `null` | no |
+| <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Log file to write output from spack steps into | `string` | `"/var/log/spack.log"` | no |
 | <a name="input_packages"></a> [packages](#input\_packages) | Defines root packages for spack to install (in order). | `list(string)` | `[]` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
-| <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | List of buildcaches for spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
-| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.19.0"` | no |
-| <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
-| <a name="input_zone"></a> [zone](#input\_zone) | The GCP zone where the instance is running. | `string` | n/a | yes |
+| <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | DEPRECATED | `any` | `null` | no |
+| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for Spack | `string` | `"v0.19.0"` | no |
+| <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL for Spack repository to clone | `string` | `"https://github.com/spack/spack"` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Path to the Spack installation script, duplicate for SLURM controller. |
 | <a name="output_install_spack_deps_runner"></a> [install\_spack\_deps\_runner](#output\_install\_spack\_deps\_runner) | Runner to install dependencies for spack using an ansible playbook. The<br>startup-script module will automatically handle installation of ansible.<br>- id: example-startup-script<br>  source: modules/scripts/startup-script<br>  settings:<br>    runners:<br>    - $(your-spack-id.install\_spack\_deps\_runner)<br>... |
-| <a name="output_install_spack_runner"></a> [install\_spack\_runner](#output\_install\_spack\_runner) | Runner to install Spack using the startup-script module |
+| <a name="output_install_spack_runner"></a> [install\_spack\_runner](#output\_install\_spack\_runner) | Runner to both install Spack and execute arbitrary Spack commands.<br>Provided to maintain compatibility with older spack modules. The<br>startup-script modules will automatically handle installation of ansible.<br>- id: example-startup-script<br>  source: modules/scripts/startup-script<br>  settings:<br>    runners:<br>    - $(your-spack-id.install\_spack\_runner)<br>... |
 | <a name="output_setup_spack_runner"></a> [setup\_spack\_runner](#output\_setup\_spack\_runner) | Adds Spack setup-env.sh script to /etc/profile.d so that it is called at shell startup. Among other things this adds Spack binary to user PATH. |
-| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Path to the Spack installation script. |
+| <a name="output_spack_commands_runner"></a> [spack\_commands\_runner](#output\_spack\_commands\_runner) | Runner to run Spack commands using an ansible playbook. The startup-script module<br>will automatically handle installation of ansible.<br>- id: example-startup-script<br>  source: modules/scripts/startup-script<br>  settings:<br>    runners:<br>    - $(your-spack-id.spack\_commands\_runner)<br>... |
+| <a name="output_spack_compilers_runner"></a> [spack\_compilers\_runner](#output\_spack\_compilers\_runner) | Runner to install and configure compilers using Spack using an ansible playbook. The startup-script module<br>will automatically handle installation of ansible.<br>- id: example-startup-script<br>  source: modules/scripts/startup-script<br>  settings:<br>    runners:<br>    - $(your-spack-id.spack\_compilers\_runner)<br>... |
+| <a name="output_spack_install_runner"></a> [spack\_install\_runner](#output\_spack\_install\_runner) | Runner to install Spack using an ansible playbook. The startup-script module<br>will automatically handle installation of ansible.<br>- id: example-startup-script<br>  source: modules/scripts/startup-script<br>  settings:<br>    runners:<br>    - $(your-spack-id.spack\_install\_runner)<br>... |
+| <a name="output_spack_packages_runner"></a> [spack\_packages\_runner](#output\_spack\_packages\_runner) | Runner to install Spack packages using an ansible playbook. The startup-script module<br>will automatically handle installation of ansible.<br>- id: example-startup-script<br>  source: modules/scripts/startup-script<br>  settings:<br>    runners:<br>    - $(your-spack-id.spack\_packages\_runner)<br>... |
+| <a name="output_spack_path"></a> [spack\_path](#output\_spack\_path) | Location spack is installed into. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
