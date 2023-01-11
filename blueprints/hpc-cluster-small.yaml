@@ -70,7 +70,7 @@ deployment_groups:
           partition_name: debug
           node_count_dynamic_max: 2
           enable_placement: false
-          machine_type: n2-standard-2
+          machine_type: e2-standard-2
           is_default: true
           enable_shielded_vm: true
 
@@ -84,7 +84,7 @@ deployment_groups:
         settings:
           partition_name: compute
           node_count_dynamic_max: 20
-          machine_type: c2-standard-4
+          machine_type: e2-standard-4
           enable_shielded_vm: true
 
       - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
@@ -107,5 +107,5 @@ deployment_groups:
           - network1
           - slurm_controller
         settings:
-          machine_type: n2-standard-2
+          machine_type: e2-standard-2
           enable_shielded_vm: true
