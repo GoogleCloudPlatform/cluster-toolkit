@@ -283,11 +283,7 @@ func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 	unusedModules := make(map[string][]string)
 	for _, conn := range dc.moduleConnections {
 		if conn.isEmpty() {
-			if _, exists := unusedModules[conn.fromID]; exists {
-				unusedModules[conn.fromID] = append(unusedModules[conn.fromID], conn.toID)
-			} else {
-				unusedModules[conn.fromID] = []string{conn.toID}
-			}
+			unusedModules[conn.fromID] = append(unusedModules[conn.fromID], conn.toID)
 		}
 	}
 	return unusedModules
