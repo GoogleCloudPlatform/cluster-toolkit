@@ -3,7 +3,7 @@
 # Ensure desktop is installed
 PACKAGES="xfce4 xfce4-goodies"
 
-sudo apt-get install --assume-yes "$PACKAGES"
+sudo apt-get install --assume-yes $PACKAGES
 
 # Fix headless Nvidia issue
 sudo nvidia-xconfig --query-gpu-info | sudo tee /tmp/gpu-info.txt >/dev/null
