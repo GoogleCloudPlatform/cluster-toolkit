@@ -21,15 +21,14 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
-	local LOCAL_MOD_COUNT
-	LOCAL_MOD_COUNT=$(grep -c 'source: ./' "${example}")
+	LOCAL_SOURCE_PATTERN='source: ./'
 
 	echo "testing ${example} in ${tmpdir}"
 	cp "${example}" "${tmpdir}/"
 
 	# Only run from the repo directory if there are local modules, otherwise
 	# run the test from the test directory using the installed ghpc binary.
-	if [ "${LOCAL_MOD_COUNT}" -gt "0" ]; then
+	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${example}"; then
 		cd "${cwd}"
 	else
 		cd "${tmpdir}"
@@ -39,7 +38,7 @@ run_test() {
 			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
 			exit 1
 		}
-	if [ "${LOCAL_MOD_COUNT}" -gt "0" ]; then
+	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${example}"; then
 		mv "${DEPLOYMENT}" "${tmpdir}"
 	fi
 	cd "${tmpdir}"/"${DEPLOYMENT}" || {
