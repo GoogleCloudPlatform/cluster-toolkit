@@ -15,12 +15,6 @@
 
 set -e
 
-# has_local_mods() {
-# 	example=$1
-# 	grep 'source: ./' "${example}"
-# 	return "$?"
-# }
-
 run_test() {
 	example=$1
 	tmpdir="$(mktemp -d)"
