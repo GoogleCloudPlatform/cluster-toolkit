@@ -407,6 +407,38 @@ func (s *MySuite) TestHasVariable(c *C) {
 	c.Assert(got, Equals, false)
 }
 
+func (s *MySuite) TestIdentifySimpleVariable(c *C) {
+	var ref varReference
+	var err error
+
+	ref, err = identifySimpleVariable("group_id.module_id.output_name")
+	c.Assert(err, IsNil)
+	c.Assert(ref.Group, Equals, "group_id")
+	c.Assert(ref.Source, Equals, "module_id")
+	c.Assert(ref.Name, Equals, "output_name")
+
+	ref, err = identifySimpleVariable("module_id.output_name")
+	c.Assert(err, IsNil)
+	c.Assert(ref.Group, Equals, "")
+	c.Assert(ref.Source, Equals, "module_id")
+	c.Assert(ref.Name, Equals, "output_name")
+
+	ref, err = identifySimpleVariable("foo")
+	c.Assert(err, NotNil)
+
+	ref, err = identifySimpleVariable("foo.bar.baz.qux")
+	c.Assert(err, NotNil)
+
+	ref, err = identifySimpleVariable("foo..bar")
+	c.Assert(err, NotNil)
+
+	ref, err = identifySimpleVariable("foo.bar.")
+	c.Assert(err, NotNil)
+
+	ref, err = identifySimpleVariable("foo..")
+	c.Assert(err, NotNil)
+}
+
 func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Setup
 	testModID := "existingModule"
