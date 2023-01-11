@@ -3,7 +3,7 @@ module hpc-toolkit
 go 1.18
 
 require (
-	cloud.google.com/go/compute v1.15.0
+	cloud.google.com/go/compute v1.15.1
 	cloud.google.com/go/storage v1.27.0 // indirect
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/hashicorp/go-getter v1.6.2
