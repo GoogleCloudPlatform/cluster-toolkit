@@ -1,63 +1,40 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 ---
 
 blueprint_name: remote-desktop
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: remote-desktop
   region: us-east4
   zone: us-east4-c
+  install_nvidia_driver: ## user must pass true to accept Nvidia ToS to install drivers
 
 deployment_groups:
 - group: primary
   modules:
-  - id: startup
-    kind: terraform
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - type: shell 
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
-
-      - type: ansible-local
-        source: /usr/local/google/home/ikwak/Code/hpc-toolkit/community/modules/remotedesktop/install_grid_drivers.yaml
-        destination: install_grid_drivers.yaml
-
-      - type: ansible-local
-        source: /usr/local/google/home/ikwak/Code/hpc-toolkit/community/modules/remotedesktop/install_desktop.yaml
-        destination: install_desktop.yaml
-
-      - type: ansible-local
-        source: /usr/local/google/home/ikwak/Code/hpc-toolkit/community/modules/remotedesktop/install_crd.yaml
-        destination: install_crd.yaml
-
   - id: network1
     source: modules/network/vpc
     kind: terraform
 
-  - id: compute_1
-    source: modules/compute/vm-instance
-    kind: terraform
-    use:
-    - network1
-    - startup
+  - id: remote-desktop
+    source: community/modules/remote-desktop-linux
+    use: [network1]
     settings:
-      instance_image:
-        family: ubuntu-2204-lts
-        project: ubuntu-os-cloud
-      threads_per_core: 2
-      machine_type: n1-standard-8
       instance_count: 1
-      on_host_maintenance: TERMINATE
-      guest_accelerator:
-      - type: nvidia-tesla-t4-vws
-        count: 1
-
-  - id: wait
-    source: community/modules/scripts/wait-for-startup
-    kind: terraform
-    settings:
-      timeout: 3600
-      instance_name: ((module.compute_1.name[0]))
-
+      enable_google_monitoring: false
+      enable_google_logging: false
+      configure_chrome_remote_desktop: true
