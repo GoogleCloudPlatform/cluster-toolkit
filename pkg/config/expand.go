@@ -413,6 +413,26 @@ type varContext struct {
 	blueprint  Blueprint
 }
 
+func identifySimpleVariable(str string) (string, string, error) {
+	varComponents := strings.Split(str, ".")
+
+	// initialize these variables to empty string
+	var varSource, varValue string
+	// support only intra-group references of length 2
+	if len(varComponents) == 2 {
+		varSource = varComponents[0]
+		varValue = varComponents[1]
+	}
+
+	// should do some more sophisticated definition of valid values here
+	// for now check that source and value are not empty strings
+	if varSource == "" || varValue == "" {
+		return "", "", fmt.Errorf("%s %s, expected format: %s",
+			errorMessages["invalidVar"], str, expectedVarFormat)
+	}
+	return varSource, varValue, nil
+}
+
 // Needs DeploymentGroups, variable string, current group,
 func expandSimpleVariable(
 	context varContext,
@@ -428,13 +448,10 @@ func expandSimpleVariable(
 	}
 
 	// Break up variable into source and value
-	varComponents := strings.SplitN(contents[1], ".", 2)
-	if len(varComponents) != 2 {
-		return "", fmt.Errorf("%s %s, expected format: %s",
-			errorMessages["invalidVar"], context.varString, expectedVarFormat)
+	varSource, varValue, err := identifySimpleVariable(contents[1])
+	if err != nil {
+		return "", err
 	}
-	varSource := varComponents[0]
-	varValue := varComponents[1]
 
 	if varSource == "vars" { // Global variable
 		// Verify global variable exists
@@ -459,13 +476,7 @@ func expandSimpleVariable(
 
 	// Get the module info
 	refGrp := context.blueprint.DeploymentGroups[refGrpIndex]
-	refModIndex := -1
-	for i := range refGrp.Modules {
-		if refGrp.Modules[i].ID == varSource {
-			refModIndex = i
-			break
-		}
-	}
+	refModIndex := slices.IndexFunc(refGrp.Modules, func(m Module) bool { return m.ID == varSource })
 	if refModIndex == -1 {
 		log.Fatalf("Could not find module referenced by variable %s",
 			context.varString)
@@ -480,13 +491,7 @@ func expandSimpleVariable(
 	}
 
 	// Verify output exists in module
-	found := false
-	for _, output := range modInfo.Outputs {
-		if output.Name == varValue {
-			found = true
-			break
-		}
-	}
+	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.VarInfo) bool { return o.Name == varValue })
 	if !found {
 		return "", fmt.Errorf("%s: module %s did not have output %s",
 			errorMessages["noOutput"], refMod.ID, varValue)
