@@ -14,11 +14,11 @@ sudo sed -i '/Section "Device"/a \ \ \ \ Option\t"HardDPMS" "false"' /etc/X11/xo
 
 # Download and Install Chrome Remote Desktop
 CRD_URL="https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb"
-FILE_PATH="/tmp/chrome-remote-desktop_current_amd64.deb"
+CRD_PATH="/tmp/chrome-remote-desktop_current_amd64.deb"
 
-wget "$CRD_URL" -O "$FILE_PATH"
-
-sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes "$FILE_PATH"
+wget "$CRD_URL" -O "$CRD_PATH"
+sudo chmod 755 "$CRD_PATH"
+sudo DEBIAN_FRONTEND="noninteractive" DEBCONF_NONINTERACTIVE_SEEN="true" apt-get install --assume-yes $CRD_PATH
 
 sudo bash -c 'echo "exec /etc/X11/Xsession /usr/bin/xfce4-session" > /etc/chrome-remote-desktop-session'
 
