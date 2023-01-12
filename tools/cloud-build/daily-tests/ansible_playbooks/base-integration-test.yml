@@ -81,10 +81,6 @@
         gcloud compute instances describe --zone={{ zone }} {{ remote_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
       when: '"*" not in remote_node'
-    - name: Set remote_ip variable - Exact name provided
-      ansible.builtin.set_fact:
-        remote_ip: "{{ get_remote_ip.stdout }}"
-      when: '"*" not in remote_node'
     - name: Get IP of the remote node - Name pattern provided
       changed_when: false
       register: get_remote_ip
@@ -93,13 +89,9 @@
           --format='get(networkInterfaces[0].accessConfigs[0].natIP)' --limit=1 \
           --filter=NAME:{{ remote_node }}
       when: '"*" in remote_node'
-    - name: Set remote_ip variable - Name pattern provided
-      ansible.builtin.set_fact:
-        remote_ip: "{{ get_remote_ip.stdout }}"
-      when: '"*" in remote_node'
     - name: Print remote node's public IP
       ansible.builtin.debug:
-        var: remote_node
+        var: get_remote_ip.stdout
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
@@ -140,7 +132,7 @@
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
     - name: Add Remote node as host
       ansible.builtin.add_host:
-        hostname: "{{ remote_ip }}"
+        hostname: "{{ get_remote_ip.stdout }}"
         groups: [remote_host]
     - name: Wait for cluster
       ansible.builtin.wait_for_connection:
