@@ -21,7 +21,8 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
-	LOCAL_SOURCE_PATTERN='source: ./'
+	# Cover the three possible starting sequences for local sources: ./ ../ /
+	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
 
 	echo "testing ${example} in ${tmpdir}"
 	cp "${example}" "${tmpdir}/"
