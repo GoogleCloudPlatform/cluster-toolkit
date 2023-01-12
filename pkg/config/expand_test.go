@@ -423,19 +423,25 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
 
+	ref, err = identifySimpleVariable("vars.variable_name")
+	c.Assert(err, IsNil)
+	c.Assert(ref.GroupID, Equals, "deployment")
+	c.Assert(ref.ID, Equals, "vars")
+	c.Assert(ref.Name, Equals, "variable_name")
+
 	ref, err = identifySimpleVariable("foo")
 	c.Assert(err, NotNil)
-
 	ref, err = identifySimpleVariable("foo.bar.baz.qux")
 	c.Assert(err, NotNil)
-
 	ref, err = identifySimpleVariable("foo..bar")
 	c.Assert(err, NotNil)
-
 	ref, err = identifySimpleVariable("foo.bar.")
 	c.Assert(err, NotNil)
-
 	ref, err = identifySimpleVariable("foo..")
+	c.Assert(err, NotNil)
+	ref, err = identifySimpleVariable(".foo")
+	c.Assert(err, NotNil)
+	ref, err = identifySimpleVariable("..foo")
 	c.Assert(err, NotNil)
 }
 
