@@ -413,14 +413,14 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 
 	ref, err = identifySimpleVariable("group_id.module_id.output_name")
 	c.Assert(err, IsNil)
-	c.Assert(ref.Group, Equals, "group_id")
-	c.Assert(ref.Source, Equals, "module_id")
+	c.Assert(ref.GroupID, Equals, "group_id")
+	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
 
 	ref, err = identifySimpleVariable("module_id.output_name")
 	c.Assert(err, IsNil)
-	c.Assert(ref.Group, Equals, "")
-	c.Assert(ref.Source, Equals, "module_id")
+	c.Assert(ref.GroupID, Equals, "")
+	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
 
 	ref, err = identifySimpleVariable("foo")

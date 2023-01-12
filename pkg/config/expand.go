@@ -413,26 +413,26 @@ type varContext struct {
 	blueprint  Blueprint
 }
 
+/*
+A variable reference has the following fields
+  - ID: a module ID or "vars" if referring to a deployment variable
+  - Name: the name of the module output or Deployment Variable
+  - GroupID: if ID is a module ID, GroupID must be the deployment group in
+    which the module is found. Allowed to be the string zero value (empty) when
+    referring to a deployment variable or a module in the same deployment group
+*/
 type varReference struct {
-	Group  string
-	Source string
-	Name   string
+	GroupID string
+	ID      string
+	Name    string
 }
 
 /*
 This function performs only the most rudimentary conversion of an input
-string into a proper "variable reference". A variable reference has
-2 or 3 fields as described below:
-
-  - Source: a module ID or "vars" if referring to a Deployment Variable
-  - Group (optional): if the Source is a module ID, this must be the deployment
-    group in which the module is found. Optional when referring to a module
-    the same deployment group.
-  - Name: the name of the module output or Deployment Variable
-
-An input string consists of these 2 or 3 fields separated by periods. An error
-will be returned if there are not 3 or 3 fields, or if the required fields are
-the empty string.
+string into a varReference struct as defined above. An input string consists of
+2 or 3 fields separated by periods. An error will be returned if there are not
+2 or 3 fields, or if any field other than GroupID is the empty string. This
+function does not ensure the existence of the reference!
 */
 func identifySimpleVariable(str string) (varReference, error) {
 	varComponents := strings.Split(str, ".")
@@ -441,12 +441,16 @@ func identifySimpleVariable(str string) (varReference, error) {
 	// intra-group references length 2 and inter-group references length 3
 	switch len(varComponents) {
 	case 2:
-		ref.Group = ""
-		ref.Source = varComponents[0]
+		ref.ID = varComponents[0]
 		ref.Name = varComponents[1]
+
+		// ref.GroupID is empty string otherwise
+		if ref.ID == "vars" {
+			ref.GroupID = "deployment"
+		}
 	case 3:
-		ref.Group = varComponents[0]
-		ref.Source = varComponents[1]
+		ref.GroupID = varComponents[0]
+		ref.ID = varComponents[1]
 		ref.Name = varComponents[2]
 	}
 
@@ -454,7 +458,7 @@ func identifySimpleVariable(str string) (varReference, error) {
 	// for now check that source and name are not empty strings; due to the
 	// default zero values for strings in the "ref" struct, this will also
 	// cover the case that varComponents has wrong # of fields
-	if ref.Source == "" || ref.Name == "" {
+	if ref.ID == "" || ref.Name == "" {
 		return varReference{}, fmt.Errorf("%s %s, expected format: %s",
 			errorMessages["invalidVar"], str, expectedVarFormat)
 	}
@@ -481,7 +485,7 @@ func expandSimpleVariable(
 		return "", err
 	}
 
-	if ref.Group == "" && ref.Source == "vars" { // Global variable
+	if ref.GroupID == "deployment" && ref.ID == "vars" { // Global variable
 		// Verify global variable exists
 		if _, ok := context.blueprint.Vars[ref.Name]; !ok {
 			return "", fmt.Errorf("%s: %s is not a deployment variable",
@@ -492,20 +496,20 @@ func expandSimpleVariable(
 
 	// Module variable
 	// Verify module exists
-	refGrpIndex, ok := modToGrp[ref.Source]
+	refGrpIndex, ok := modToGrp[ref.ID]
 	if !ok {
 		return "", fmt.Errorf("%s: module %s was not found",
-			errorMessages["varNotFound"], ref.Source)
+			errorMessages["varNotFound"], ref.ID)
 	}
 
 	if refGrpIndex != context.groupIndex {
 		return "", fmt.Errorf("%s: module %s was defined in group %d and called from group %d",
-			errorMessages["varInAnotherGroup"], ref.Source, refGrpIndex, context.groupIndex)
+			errorMessages["varInAnotherGroup"], ref.ID, refGrpIndex, context.groupIndex)
 	}
 
 	// Get the module info
 	refGrp := context.blueprint.DeploymentGroups[refGrpIndex]
-	refModIndex := slices.IndexFunc(refGrp.Modules, func(m Module) bool { return m.ID == ref.Source })
+	refModIndex := slices.IndexFunc(refGrp.Modules, func(m Module) bool { return m.ID == ref.ID })
 	if refModIndex == -1 {
 		log.Fatalf("Could not find module referenced by variable %s",
 			context.varString)
@@ -525,7 +529,7 @@ func expandSimpleVariable(
 		return "", fmt.Errorf("%s: module %s did not have output %s",
 			errorMessages["noOutput"], refMod.ID, ref.Name)
 	}
-	return fmt.Sprintf("((module.%s.%s))", ref.Source, ref.Name), nil
+	return fmt.Sprintf("((module.%s.%s))", ref.ID, ref.Name), nil
 }
 
 func expandVariable(
