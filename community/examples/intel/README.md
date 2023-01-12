@@ -261,7 +261,7 @@ Follow `ghpc` instructions to deploy the environment
 
 The `community/examples/intel/daos-cluster.yaml` blueprint does not contain configuration for DAOS pools and containers. Therefore, pools and containers will need to be created manually.
 
-Before pools and containers can be created the storage system must be formatted. Formatting the storage is done automatically by the startup script that runs on the *daos-server-0001* instance. The startup script will run the [dmg storage format](https://docs.daos.io/v2.0/admin/deployment/?h=dmg+storage#storage-formatting) command. It may take a few minutes for all daos server instances to join.
+Before pools and containers can be created the storage system must be formatted. Formatting the storage is done automatically by the startup script that runs on the *daos-server-0001* instance. The startup script will run the [dmg storage format](https://docs.daos.io/v2.2/admin/deployment/?h=dmg+storage#storage-formatting) command. It may take a few minutes for all daos server instances to join.
 
 Verify that the storage system has been formatted and that the daos-server instances have joined.
 
@@ -286,9 +286,9 @@ Both daos-server instances should show a state of *Joined*.
 
 #### About the DAOS Command Line Tools
 
-The DAOS Management tool `dmg` is used by System Administrators to manange the DAOS storage [system](https://docs.daos.io/v2.0/overview/architecture/#daos-system) and DAOS [pools](https://docs.daos.io/v2.0/overview/storage/#daos-pool). Therefore, `sudo` must be used when running `dmg`.
+The DAOS Management tool `dmg` is used by System Administrators to manange the DAOS storage [system](https://docs.daos.io/v2.2/overview/architecture/#daos-system) and DAOS [pools](https://docs.daos.io/v2.2/overview/storage/#daos-pool). Therefore, `sudo` must be used when running `dmg`.
 
-The DAOS CLI `daos` is used by both users and System Administrators to create and manage [containers](https://docs.daos.io/v2.0/overview/storage/#daos-container). It is not necessary to use `sudo` with the `daos` command.
+The DAOS CLI `daos` is used by both users and System Administrators to create and manage [containers](https://docs.daos.io/v2.2/overview/storage/#daos-container). It is not necessary to use `sudo` with the `daos` command.
 
 #### Determine Free Space
 
@@ -323,7 +323,7 @@ Set ACLs to allow any user to create a container in *pool1*.
 sudo dmg pool update-acl -e A::EVERYONE@:rcta pool1
 ```
 
-See the [Pool Operations](https://docs.daos.io/v2.0/admin/pool_operations) section of the of the DAOS Administration Guide for more information about creating pools.
+See the [Pool Operations](https://docs.daos.io/v2.2/admin/pool_operations) section of the of the DAOS Administration Guide for more information about creating pools.
 
 #### Create a Container
 
@@ -336,10 +336,10 @@ For the purpose of this demo create the container without specifying ACLs. The c
 daos cont create pool1 \
   --label cont1 \
   --type POSIX \
-  --properties rf:1
+  --properties rf:0
 ```
 
-See the [Container Management](https://docs.daos.io/v2.0/user/container) section of the of the DAOS User Guide for more information about creating containers.
+See the [Container Management](https://docs.daos.io/v2.2/user/container) section of the of the DAOS User Guide for more information about creating containers.
 
 #### Mount the DAOS Container
 
@@ -371,7 +371,7 @@ time LD_PRELOAD=/usr/lib64/libioil.so \
 dd if=/dev/zero of=./test20GiB.img iflag=fullblock bs=1G count=20
 ```
 
-See the [File System](https://docs.daos.io/v2.0/user/filesystem/) section of the DAOS User Guide for more information about DFuse.
+See the [File System](https://docs.daos.io/v2.2/user/filesystem/) section of the DAOS User Guide for more information about DFuse.
 
 ### Unmount the DAOS Container
 
@@ -387,7 +387,7 @@ Verify that the container is unmounted
 df -h -t fuse.daos
 ```
 
-See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.0/user/filesystem/?h=dfuse#dfuse-daos-fuse) section of the DAOS User Guide for more information about mounting POSIX containers.
+See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.2/user/filesystem/?h=dfuse#dfuse-daos-fuse) section of the DAOS User Guide for more information about mounting POSIX containers.
 
 ### Delete the DAOS infrastructure when not in use
 
@@ -596,7 +596,7 @@ Verify that the container is unmounted
 df -h -t fuse.daos
 ```
 
-See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.0/user/filesystem/?h=dfuse#dfuse-daos-fuse) section of the DAOS User Guide for more information about mounting POSIX containers.
+See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.2/user/filesystem/?h=dfuse#dfuse-daos-fuse) section of the DAOS User Guide for more information about mounting POSIX containers.
 
 ### Delete the DAOS/Slurm Cluster infrastructure when not in use
 
