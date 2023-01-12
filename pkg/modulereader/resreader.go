@@ -83,7 +83,7 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	reader := Factory(kind)
 	mi, err := reader.GetInfo(modPath)
 
-	// Add API list if source is known
+	// add APIs required by the module, if known
 	if sourcereader.IsEmbeddedPath(source) {
 		mi.RequiredApis = defaultAPIList(modPath)
 	} else if sourcereader.IsLocalPath(source) {
