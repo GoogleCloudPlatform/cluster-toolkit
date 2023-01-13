@@ -51,3 +51,14 @@ output "mount_runner" {
   description = "Runner that mounts the cloud storage bucket with gcs fuse."
   value       = local.mount_runner
 }
+
+output "gcs_bucket_path" {
+  description = "value"
+  # cannot use resource attribute, will cause lookup failure in startup-script
+  value = "gs://${local.name}"
+
+  # needed to make sure bucket contents are deleted before bucket
+  depends_on = [
+    google_storage_bucket.bucket
+  ]
+}
