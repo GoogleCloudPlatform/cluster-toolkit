@@ -411,37 +411,37 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 	var ref varReference
 	var err error
 
-	ref, err = identifySimpleVariable("group_id.module_id.output_name")
+	ref, err = identifySimpleVariable("group_id.module_id.output_name", "other_group_id")
 	c.Assert(err, IsNil)
 	c.Assert(ref.GroupID, Equals, "group_id")
 	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
 
-	ref, err = identifySimpleVariable("module_id.output_name")
+	ref, err = identifySimpleVariable("module_id.output_name", "group_id")
 	c.Assert(err, IsNil)
-	c.Assert(ref.GroupID, Equals, "")
+	c.Assert(ref.GroupID, Equals, "group_id")
 	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
 
-	ref, err = identifySimpleVariable("vars.variable_name")
+	ref, err = identifySimpleVariable("vars.variable_name", "group_id")
 	c.Assert(err, IsNil)
 	c.Assert(ref.GroupID, Equals, "deployment")
 	c.Assert(ref.ID, Equals, "vars")
 	c.Assert(ref.Name, Equals, "variable_name")
 
-	ref, err = identifySimpleVariable("foo")
+	ref, err = identifySimpleVariable("foo", "group_id")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.baz.qux")
+	ref, err = identifySimpleVariable("foo.bar.baz.qux", "group_id")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..bar")
+	ref, err = identifySimpleVariable("foo..bar", "group_id")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.")
+	ref, err = identifySimpleVariable("foo.bar.", "group_id")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..")
+	ref, err = identifySimpleVariable("foo..", "group_id")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable(".foo")
+	ref, err = identifySimpleVariable(".foo", "group_id")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("..foo")
+	ref, err = identifySimpleVariable("..foo", "group_id")
 	c.Assert(err, NotNil)
 }
 

@@ -416,15 +416,18 @@ type varContext struct {
 /*
 A variable reference has the following fields
   - ID: a module ID or "vars" if referring to a deployment variable
-  - Name: the name of the module output or Deployment Variable
   - GroupID: if ID is a module ID, GroupID must be the deployment group in
-    which the module is found. Allowed to be the string zero value (empty) when
-    referring to a deployment variable or a module in the same deployment group
+    which the module is *expected* to be found.
+  - Name: the name of the module output or deployment variable
+  - Explicit: a boolean value indicating whether the user made an explicit
+    reference to GroupID or whether it was automatically assigned the GroupID
+    from which the reference was made.
 */
 type varReference struct {
-	GroupID string
-	ID      string
-	Name    string
+	ID       string
+	GroupID  string
+	Name     string
+	Explicit bool
 }
 
 /*
@@ -434,9 +437,10 @@ string into a varReference struct as defined above. An input string consists of
 2 or 3 fields, or if any field other than GroupID is the empty string. This
 function does not ensure the existence of the reference!
 */
-func identifySimpleVariable(str string) (varReference, error) {
-	varComponents := strings.Split(str, ".")
+func identifySimpleVariable(yamlReference string, callingGroupID string) (varReference, error) {
+	varComponents := strings.Split(yamlReference, ".")
 
+	// struct defaults: empty strings and false booleans
 	var ref varReference
 	// intra-group references length 2 and inter-group references length 3
 	switch len(varComponents) {
@@ -444,14 +448,17 @@ func identifySimpleVariable(str string) (varReference, error) {
 		ref.ID = varComponents[0]
 		ref.Name = varComponents[1]
 
-		// ref.GroupID is empty string otherwise
 		if ref.ID == "vars" {
 			ref.GroupID = "deployment"
+			ref.Explicit = true
+		} else {
+			ref.GroupID = callingGroupID
 		}
 	case 3:
 		ref.GroupID = varComponents[0]
 		ref.ID = varComponents[1]
 		ref.Name = varComponents[2]
+		ref.Explicit = true
 	}
 
 	// should consider more sophisticated definition of valid values here.
@@ -460,7 +467,7 @@ func identifySimpleVariable(str string) (varReference, error) {
 	// cover the case that varComponents has wrong # of fields
 	if ref.ID == "" || ref.Name == "" {
 		return varReference{}, fmt.Errorf("%s %s, expected format: %s",
-			errorMessages["invalidVar"], str, expectedVarFormat)
+			errorMessages["invalidVar"], yamlReference, expectedVarFormat)
 	}
 	return ref, nil
 }
@@ -479,8 +486,10 @@ func expandSimpleVariable(
 		return "", err
 	}
 
+	callingGroupID := context.blueprint.DeploymentGroups[context.groupIndex].Name
+
 	// Break up variable into source and value
-	ref, err := identifySimpleVariable(contents[1])
+	ref, err := identifySimpleVariable(contents[1], callingGroupID)
 	if err != nil {
 		return "", err
 	}
