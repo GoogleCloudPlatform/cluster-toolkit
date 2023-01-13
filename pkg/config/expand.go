@@ -417,7 +417,9 @@ type varContext struct {
 A variable reference has the following fields
   - ID: a module ID or "vars" if referring to a deployment variable
   - GroupID: if ID is a module ID, GroupID must be the deployment group in
-    which the module is *expected* to be found.
+    which the module is *expected* to be found. If ID is "vars", then it
+    should be set to "deployment" to indicate that the reference belongs
+    to the entire blueprint, rather than a deployment group.
   - Name: the name of the module output or deployment variable
   - Explicit: a boolean value indicating whether the user made an explicit
     reference to GroupID or whether it was automatically assigned the GroupID
