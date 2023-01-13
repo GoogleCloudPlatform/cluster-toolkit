@@ -21,16 +21,28 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
+	GHPC_PATH="${cwd}/ghpc"
+	# Cover the three possible starting sequences for local sources: ./ ../ /
+	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
 
 	echo "testing ${example} in ${tmpdir}"
 	cp "${example}" "${tmpdir}/"
-	cd "${cwd}"
-	./ghpc create -l IGNORE --vars "project_id=${PROJECT},deployment_name=${DEPLOYMENT}" "${tmpdir}"/"${exampleFile}" >/dev/null ||
+
+	# Only run from the repo directory if there are local modules, otherwise
+	# run the test from the test directory using the installed ghpc binary.
+	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${example}"; then
+		cd "${cwd}"
+	else
+		cd "${tmpdir}"
+	fi
+	${GHPC_PATH} create -l IGNORE --vars "project_id=${PROJECT},deployment_name=${DEPLOYMENT}" "${tmpdir}"/"${exampleFile}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
 			exit 1
 		}
-	mv "${DEPLOYMENT}" "${tmpdir}"
+	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${example}"; then
+		mv "${DEPLOYMENT}" "${tmpdir}"
+	fi
 	cd "${tmpdir}"/"${DEPLOYMENT}" || {
 		echo "*** ERROR: can't cd into the deployment folder ${DEPLOYMENT}"
 		exit 1

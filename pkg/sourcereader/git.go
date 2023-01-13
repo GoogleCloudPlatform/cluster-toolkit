@@ -17,7 +17,6 @@ package sourcereader
 import (
 	"context"
 	"fmt"
-	"hpc-toolkit/pkg/modulereader"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -55,28 +54,6 @@ func copyGitModules(srcPath string, destPath string) error {
 	}
 	err := client.Get()
 	return err
-}
-
-// GetModuleInfo gets modulereader.ModuleInfo for the given kind from the git source
-func (r GitSourceReader) GetModuleInfo(modPath string, kind string) (modulereader.ModuleInfo, error) {
-	if !IsGitPath(modPath) {
-		return modulereader.ModuleInfo{}, fmt.Errorf("Source is not valid: %s", modPath)
-	}
-
-	modDir, err := ioutil.TempDir("", "git-module-*")
-	defer os.RemoveAll(modDir)
-	writeDir := filepath.Join(modDir, "mod")
-	if err != nil {
-		return modulereader.ModuleInfo{}, err
-	}
-
-	if err := copyGitModules(modPath, writeDir); err != nil {
-		return modulereader.ModuleInfo{}, fmt.Errorf("failed to clone git module at %s to tmp dir %s: %v",
-			modPath, writeDir, err)
-	}
-
-	reader := modulereader.Factory(kind)
-	return reader.GetInfo(writeDir)
 }
 
 // GetModule copies the git source to a provided destination (the deployment directory)

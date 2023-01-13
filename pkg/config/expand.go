@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 
 	"hpc-toolkit/pkg/modulereader"
-	"hpc-toolkit/pkg/sourcereader"
 
 	"golang.org/x/exp/slices"
 )
@@ -526,8 +525,7 @@ func expandSimpleVariable(
 			context.varString)
 	}
 	refMod := refGrp.Modules[refModIndex]
-	reader := sourcereader.Factory(refMod.Source)
-	modInfo, err := reader.GetModuleInfo(refMod.Source, refMod.Kind)
+	modInfo, err := modulereader.GetModuleInfo(refMod.Source, refMod.Kind)
 	if err != nil {
 		log.Fatalf(
 			"failed to get info for module at %s while expanding variables: %e",
