@@ -413,24 +413,65 @@ type varContext struct {
 	blueprint  Blueprint
 }
 
-func identifySimpleVariable(str string) (string, string, error) {
-	varComponents := strings.Split(str, ".")
+/*
+A variable reference has the following fields
+  - ID: a module ID or "vars" if referring to a deployment variable
+  - GroupID: if ID is a module ID, GroupID must be the deployment group in
+    which the module is *expected* to be found. If ID is "vars", then it
+    should be set to "deployment" to indicate that the reference belongs
+    to the entire blueprint, rather than a deployment group.
+  - Name: the name of the module output or deployment variable
+  - Explicit: a boolean value indicating whether the user made an explicit
+    reference to GroupID or whether it was automatically assigned the GroupID
+    from which the reference was made.
+*/
+type varReference struct {
+	ID       string
+	GroupID  string
+	Name     string
+	Explicit bool
+}
 
-	// initialize these variables to empty string
-	var varSource, varValue string
-	// support only intra-group references of length 2
-	if len(varComponents) == 2 {
-		varSource = varComponents[0]
-		varValue = varComponents[1]
+/*
+This function performs only the most rudimentary conversion of an input
+string into a varReference struct as defined above. An input string consists of
+2 or 3 fields separated by periods. An error will be returned if there are not
+2 or 3 fields, or if any field other than GroupID is the empty string. This
+function does not ensure the existence of the reference!
+*/
+func identifySimpleVariable(yamlReference string, callingGroupID string) (varReference, error) {
+	varComponents := strings.Split(yamlReference, ".")
+
+	// struct defaults: empty strings and false booleans
+	var ref varReference
+	// intra-group references length 2 and inter-group references length 3
+	switch len(varComponents) {
+	case 2:
+		ref.ID = varComponents[0]
+		ref.Name = varComponents[1]
+
+		if ref.ID == "vars" {
+			ref.GroupID = "deployment"
+			ref.Explicit = true
+		} else {
+			ref.GroupID = callingGroupID
+		}
+	case 3:
+		ref.GroupID = varComponents[0]
+		ref.ID = varComponents[1]
+		ref.Name = varComponents[2]
+		ref.Explicit = true
 	}
 
-	// should do some more sophisticated definition of valid values here
-	// for now check that source and value are not empty strings
-	if varSource == "" || varValue == "" {
-		return "", "", fmt.Errorf("%s %s, expected format: %s",
-			errorMessages["invalidVar"], str, expectedVarFormat)
+	// should consider more sophisticated definition of valid values here.
+	// for now check that source and name are not empty strings; due to the
+	// default zero values for strings in the "ref" struct, this will also
+	// cover the case that varComponents has wrong # of fields
+	if ref.ID == "" || ref.Name == "" {
+		return varReference{}, fmt.Errorf("%s %s, expected format: %s",
+			errorMessages["invalidVar"], yamlReference, expectedVarFormat)
 	}
-	return varSource, varValue, nil
+	return ref, nil
 }
 
 // Needs DeploymentGroups, variable string, current group,
@@ -447,36 +488,39 @@ func expandSimpleVariable(
 		return "", err
 	}
 
+	callingGroupID := context.blueprint.DeploymentGroups[context.groupIndex].Name
+
 	// Break up variable into source and value
-	varSource, varValue, err := identifySimpleVariable(contents[1])
+	ref, err := identifySimpleVariable(contents[1], callingGroupID)
 	if err != nil {
 		return "", err
 	}
 
-	if varSource == "vars" { // Global variable
+	if ref.GroupID == "deployment" && ref.ID == "vars" { // Global variable
 		// Verify global variable exists
-		if _, ok := context.blueprint.Vars[varValue]; !ok {
+		if _, ok := context.blueprint.Vars[ref.Name]; !ok {
 			return "", fmt.Errorf("%s: %s is not a deployment variable",
 				errorMessages["varNotFound"], context.varString)
 		}
-		return fmt.Sprintf("((var.%s))", varValue), nil
+		return fmt.Sprintf("((var.%s))", ref.Name), nil
 	}
 
 	// Module variable
 	// Verify module exists
-	refGrpIndex, ok := modToGrp[varSource]
+	refGrpIndex, ok := modToGrp[ref.ID]
 	if !ok {
 		return "", fmt.Errorf("%s: module %s was not found",
-			errorMessages["varNotFound"], varSource)
+			errorMessages["varNotFound"], ref.ID)
 	}
+
 	if refGrpIndex != context.groupIndex {
 		return "", fmt.Errorf("%s: module %s was defined in group %d and called from group %d",
-			errorMessages["varInAnotherGroup"], varSource, refGrpIndex, context.groupIndex)
+			errorMessages["varInAnotherGroup"], ref.ID, refGrpIndex, context.groupIndex)
 	}
 
 	// Get the module info
 	refGrp := context.blueprint.DeploymentGroups[refGrpIndex]
-	refModIndex := slices.IndexFunc(refGrp.Modules, func(m Module) bool { return m.ID == varSource })
+	refModIndex := slices.IndexFunc(refGrp.Modules, func(m Module) bool { return m.ID == ref.ID })
 	if refModIndex == -1 {
 		log.Fatalf("Could not find module referenced by variable %s",
 			context.varString)
@@ -491,12 +535,12 @@ func expandSimpleVariable(
 	}
 
 	// Verify output exists in module
-	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.VarInfo) bool { return o.Name == varValue })
+	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.VarInfo) bool { return o.Name == ref.Name })
 	if !found {
 		return "", fmt.Errorf("%s: module %s did not have output %s",
-			errorMessages["noOutput"], refMod.ID, varValue)
+			errorMessages["noOutput"], refMod.ID, ref.Name)
 	}
-	return fmt.Sprintf("((module.%s.%s))", varSource, varValue), nil
+	return fmt.Sprintf("((module.%s.%s))", ref.ID, ref.Name), nil
 }
 
 func expandVariable(
