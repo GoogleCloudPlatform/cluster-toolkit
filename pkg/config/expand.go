@@ -36,7 +36,7 @@ const (
 	// Checks if a variable exists only as a substring, ex:
 	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
 	// Doesn't match: "\$(vars.example)", "no variable in this string"
-	anyVariableExp string = `(^|[^\\])\$\((.*)\)`
+	anyVariableExp string = `(^|[^\\])\$\((.*?)\)`
 	literalExp     string = `^\(\((.*)\)\)$`
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
@@ -593,7 +593,21 @@ func expandSimpleVariable(
 func expandVariable(
 	context varContext,
 	modToGrp map[string]int) (string, error) {
-	return "", fmt.Errorf("%s: expandVariable", errorMessages["notImplemented"])
+	re := regexp.MustCompile(anyVariableExp)
+	matchall := re.FindAllString(context.varString, -1)
+	errHint := ""
+	for _, element := range matchall {
+		// the regex match will include the first matching character
+		// this might be (1) "^" or (2) any character EXCEPT "\"
+		// if (2), we have to remove the first character from the match
+		firstChars := element[0:2]
+		if firstChars != "$(" {
+			element = strings.Replace(element, element[0:1], "", 1)
+		}
+		errHint += "\\" + element + " will be rendered as " + element + "\n"
+	}
+	return "", fmt.Errorf("%s \n%s",
+		errorMessages["varWithinStrings"], errHint)
 }
 
 // isDeploymentVariable checks if the entire string is just a single deployment variable
