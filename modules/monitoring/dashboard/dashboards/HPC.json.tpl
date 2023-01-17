@@ -1,5 +1,4 @@
 {
-  "category": "CUSTOM",
   "displayName": "${title}: ${deployment_name}",
   "gridLayout": {
     "columns": 2,
