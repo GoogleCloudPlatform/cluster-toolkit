@@ -2,17 +2,17 @@
 
 ## Supported modules
 
-* vm-instance
-* Slurm on GCP modules, both version 4 and version 5
+* [vm-instance]
+* Slurm on GCP modules where applicable, both version 4 and version 5
   * `schedmd-slurm-gcp-v5-*`
   * `SchedMD-slurm-on-gcp-*`
 * PBS Pro modules (`pbspro-*`)
 
 ## Accelerator definition automation
 
-The [vm-instance] and [schedmd-slurm-gcp-v5] modules support automation
-for defining the `guest_accelerator` config. If the user supplies any value for
-this setting, the automation will be bypassed.
+The [vm-instance] and schedmd-slurm-gcp-v5 [node-group], [controller] and
+[login] modules support automation for defining the `guest_accelerator` config.
+If the user supplies any value for this setting, the automation will be bypassed.
 
 The automation is handled primary in the `gpu_definition.tf` files in these
 modules. This file assumes the existence of two input variables in the module:
@@ -29,6 +29,11 @@ the `guest_accelerator` can be defined manually instead.
 This automation also only supports machine type `a2`. Machine type `n1` can also
 have guest accelerators attached, however the type and count
 cannot be determined automatically like with `a2`.
+
+[vm-instance]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/compute/vm-instance
+[node-group]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v5-node-group
+[controller]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+[login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-login
 
 ## Troubleshooting and tips
 
