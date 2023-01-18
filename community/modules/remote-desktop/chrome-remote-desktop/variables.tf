@@ -22,7 +22,7 @@ variable "project_id" {
 variable "deployment_name" {
   description = "HPC Toolkit deployment name. Cloud resource names will include this value."
   type        = string
-  default     = "remote-desktop-linux"
+  default     = "chrome-remote-desktop"
 }
 
 variable "region" {
