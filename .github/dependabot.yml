@@ -21,6 +21,6 @@ updates:
   schedule:
     interval: weekly
     day: monday
-    time: 03:00
+    time: "03:00"
     timezone: America/Los_Angeles
   target-branch: develop
