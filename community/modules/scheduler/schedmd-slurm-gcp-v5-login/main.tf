@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,18 @@ locals {
   source_image            = local.source_image_input_used ? var.source_image : lookup(var.instance_image, "name", "")
   source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
   source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
+
+  additional_disks = [
+    for ad in var.additional_disks : {
+      disk_name    = ad.disk_name
+      device_name  = ad.device_name
+      disk_type    = ad.disk_type
+      disk_size_gb = ad.disk_size_gb
+      disk_labels  = merge(ad.disk_labels, var.labels)
+      auto_delete  = ad.auto_delete
+      boot         = ad.boot
+    }
+  ]
 }
 
 data "google_compute_default_service_account" "default" {
@@ -42,18 +54,18 @@ data "google_compute_default_service_account" "default" {
 module "slurm_login_template" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.3.0"
 
-  additional_disks         = var.additional_disks
+  additional_disks         = local.additional_disks
   can_ip_forward           = var.can_ip_forward
   slurm_cluster_name       = local.slurm_cluster_name
   disable_smt              = var.disable_smt
   disk_auto_delete         = var.disk_auto_delete
-  disk_labels              = var.labels
+  disk_labels              = merge(var.disk_labels, var.labels)
   disk_size_gb             = var.disk_size_gb
   disk_type                = var.disk_type
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
   enable_shielded_vm       = var.enable_shielded_vm
-  gpu                      = var.gpu
+  gpu                      = var.gpu != null ? var.gpu : one(local.guest_accelerator)
   labels                   = var.labels
   machine_type             = var.machine_type
   metadata                 = var.metadata
@@ -83,7 +95,7 @@ module "slurm_login_instance" {
 
   access_config         = local.access_config
   slurm_cluster_name    = local.slurm_cluster_name
-  instance_template     = module.slurm_login_template.self_link
+  instance_template     = var.instance_template != null ? var.instance_template : module.slurm_login_template.self_link
   network               = var.network_self_link
   num_instances         = var.num_instances
   project_id            = var.project_id

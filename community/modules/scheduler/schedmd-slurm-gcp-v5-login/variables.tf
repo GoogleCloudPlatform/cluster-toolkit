@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -158,10 +158,26 @@ variable "gpu" {
   description = <<-EOD
     GPU information. Type and count of GPU to attach to the instance template. See
     https://cloud.google.com/compute/docs/gpus more details.
-    * type : the GPU type
-    * count : number of GPUs
+    - type : the GPU type, e.g. nvidia-tesla-t4, nvidia-a100-80gb, nvidia-tesla-a100, etc
+    - count : number of GPUs
+
+    If both 'var.gpu' and 'var.guest_accelerator' are set, 'var.gpu' will be used.
     EOD
   default     = null
+}
+
+variable "guest_accelerator" {
+  description = <<-EOD
+    Alternative method of providing 'var.gpu' with a consistent naming scheme to
+    other HPC Toolkit modules.
+
+    If both 'var.gpu' and 'var.guest_accelerator' are set, 'var.gpu' will be used.
+    EOD
+  type = list(object({
+    type  = string,
+    count = number
+  }))
+  default = null
 }
 
 variable "service_account" {
@@ -247,6 +263,20 @@ variable "startup_script" {
   default     = ""
 }
 
+variable "instance_template" {
+  description = <<-EOD
+    Self link to a custom instance template. If set, other VM definition
+    variables such as machine_type and instance_image will be ignored in favor
+    of the provided instance template.
+
+    For more information on creating custom images for the instance template
+    that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section
+    in docs/vm-images.md.
+    EOD
+  type        = string
+  default     = null
+}
+
 variable "instance_image" {
   description = <<-EOD
     Defines the image that will be used in the Slurm login node VM instances. This
@@ -258,12 +288,8 @@ variable "instance_image" {
     family: The image family to use. Mutually exclusive with name.
     project: The project where the image is hosted.
 
-    Custom images must comply with Slurm on GCP requirements; it is highly
-    advised to use the packer templates provided by Slurm on GCP when
-    constructing custom slurm images.
-
-    More information can be found in the slurm-gcp docs:
-    https://github.com/SchedMD/slurm-gcp/blob/5.3.0/docs/images.md#public-image.
+    For more information on creating custom images that comply with Slurm on GCP
+    see the "Slurm on GCP Custom Images" section in docs/vm-images.md.
     EOD
   type        = map(string)
   default = {
@@ -321,6 +347,12 @@ variable "disk_auto_delete" {
   type        = bool
   description = "Whether or not the boot disk should be auto-deleted."
   default     = true
+}
+
+variable "disk_labels" {
+  description = "Labels specific to the boot disk. These will be merged with var.labels."
+  type        = map(string)
+  default     = {}
 }
 
 variable "additional_disks" {

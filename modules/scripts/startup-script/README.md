@@ -162,6 +162,28 @@ sudo journalctl -u google-startup-scripts.service
   use: [homefs, startup]
 ```
 
+In the above example, a new GCS bucket is created to upload the startup-scripts.
+But in the case where the user wants to reuse existing GCS bucket or folder,
+they are able to do so by using the `gcs_bucket_path` as shown in the below example
+
+```yaml
+- id: startup
+  source: ./modules/scripts/startup-script
+  settings:
+    gcs_bucket_path: gs://user-test-bucket/folder1/folder2
+    runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - type: shell
+        source: modules/startup-script/examples/install_cloud_ops_agent.sh
+        destination: install_cloud_ops_agent.sh
+
+- id: compute-cluster
+  source: ./modules/compute/vm-instance
+  use: [startup]
+```
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -208,6 +230,7 @@ No modules.
 | [google_storage_bucket_object.scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [local_file.debug_file](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| [google_storage_bucket.existing_bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/storage_bucket) | data source |
 
 ## Inputs
 
@@ -215,6 +238,7 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script'. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
+| <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. List key, value pairs. | `any` | n/a | yes |
 | <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | Prepend Ansible installation script if any of the specified runners are of type ansible-local | `bool` | `true` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |

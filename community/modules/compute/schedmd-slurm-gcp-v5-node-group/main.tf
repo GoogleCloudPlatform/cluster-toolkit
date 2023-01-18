@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,21 @@ locals {
   source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
   source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
 
+  enable_public_ip_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
+  access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
+
+  additional_disks = [
+    for ad in var.additional_disks : {
+      disk_name    = ad.disk_name
+      device_name  = ad.device_name
+      disk_type    = ad.disk_type
+      disk_size_gb = ad.disk_size_gb
+      disk_labels  = merge(ad.disk_labels, var.labels)
+      auto_delete  = ad.auto_delete
+      boot         = ad.boot
+    }
+  ]
+
   node_group = {
     # Group Definition
     group_name             = var.name
@@ -31,7 +46,7 @@ locals {
     node_conf              = var.node_conf
 
     # Template By Definition
-    additional_disks         = var.additional_disks
+    additional_disks         = local.additional_disks
     bandwidth_tier           = var.bandwidth_tier
     can_ip_forward           = var.can_ip_forward
     disable_smt              = !var.enable_smt
@@ -42,7 +57,7 @@ locals {
     enable_confidential_vm   = var.enable_confidential_vm
     enable_oslogin           = var.enable_oslogin
     enable_shielded_vm       = var.enable_shielded_vm
-    gpu                      = var.gpu
+    gpu                      = var.gpu != null ? var.gpu : one(local.guest_accelerator)
     labels                   = var.labels
     machine_type             = var.machine_type
     metadata                 = var.metadata
@@ -54,7 +69,7 @@ locals {
     source_image_project     = local.source_image_project
     source_image             = local.source_image
     tags                     = var.tags
-    access_config            = var.access_config
+    access_config            = local.access_config
     service_account = var.service_account != null ? var.service_account : {
       email  = data.google_compute_default_service_account.default.email
       scopes = ["https://www.googleapis.com/auth/cloud-platform"]

@@ -113,6 +113,7 @@ const (
 	testProjectExistsName
 	testRegionExistsName
 	testZoneExistsName
+	testModuleNotUsedName
 	testZoneInRegionName
 	testApisEnabledName
 )
@@ -157,6 +158,8 @@ func (v validatorName) String() string {
 		return "test_zone_in_region"
 	case testApisEnabledName:
 		return "test_apis_enabled"
+	case testModuleNotUsedName:
+		return "test_module_not_used"
 	default:
 		return "unknown_validator"
 	}
@@ -213,6 +216,41 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
+// ConnectionKind defines the kind of module connection, defined by the source
+// of the connection. Currently, only Use is supported.
+type ConnectionKind int
+
+const (
+	undefinedConnection ConnectionKind = iota
+	useConnection
+	// explicitConnection
+	// globalConnection
+)
+
+// ModConnection defines details about connections between modules. Currently,
+// only modules connected with "use" are tracked.
+type ModConnection struct {
+	toID   string
+	fromID string
+	// Currently only supports useConnection
+	kind ConnectionKind
+	// List of variables shared from module `fromID` to module `toID`
+	sharedVariables []string
+}
+
+// Returns true if a connection does not functionally link the outputs and
+// inputs of the modules. This can happen when a module is connected with "use"
+// but none of the outputs of fromID match the inputs of toID.
+func (mc *ModConnection) isEmpty() (isEmpty bool) {
+	isEmpty = false
+	if mc.kind == useConnection {
+		if len(mc.sharedVariables) == 0 {
+			isEmpty = true
+		}
+	}
+	return
+}
+
 // DeploymentConfig is a container for the imported YAML data and supporting data for
 // creating the blueprint from it
 type DeploymentConfig struct {
@@ -220,8 +258,9 @@ type DeploymentConfig struct {
 	// Indexed by Resource Group name and Module Source
 	ModulesInfo map[string]map[string]modulereader.ModuleInfo
 	// Maps module ID to group index
-	ModuleToGroup map[string]int
-	expanded      bool
+	ModuleToGroup     map[string]int
+	expanded          bool
+	moduleConnections []ModConnection
 }
 
 // ExpandConfig expands the yaml config in place
@@ -236,6 +275,22 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	dc.validate()
 	dc.expanded = true
 	return nil
+}
+
+// listUnusedModules provides a mapping of modules to modules that are in the
+// "use" field, but not actually used.
+func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
+	unusedModules := make(map[string][]string)
+	for _, conn := range dc.moduleConnections {
+		if conn.isEmpty() {
+			if _, exists := unusedModules[conn.fromID]; exists {
+				unusedModules[conn.fromID] = append(unusedModules[conn.fromID], conn.toID)
+			} else {
+				unusedModules[conn.fromID] = []string{conn.toID}
+			}
+		}
+	}
+	return unusedModules
 }
 
 func (dc *DeploymentConfig) checkMovedModules() error {
@@ -262,7 +317,8 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 	}
 
 	newDeploymentConfig = DeploymentConfig{
-		Config: blueprint,
+		Config:            blueprint,
+		moduleConnections: []ModConnection{},
 	}
 	return newDeploymentConfig, nil
 }
@@ -343,9 +399,9 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error
 
 func createModuleInfo(
 	deploymentGroup DeploymentGroup) map[string]modulereader.ModuleInfo {
-	modInfo := make(map[string]modulereader.ModuleInfo)
+	modsInfo := make(map[string]modulereader.ModuleInfo)
 	for _, mod := range deploymentGroup.Modules {
-		if _, exists := modInfo[mod.Source]; !exists {
+		if _, exists := modsInfo[mod.Source]; !exists {
 			reader := sourcereader.Factory(mod.Source)
 			ri, err := reader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
@@ -353,10 +409,10 @@ func createModuleInfo(
 					"failed to get info for module at %s while setting dc.ModulesInfo: %e",
 					mod.Source, err)
 			}
-			modInfo[mod.Source] = ri
+			modsInfo[mod.Source] = ri
 		}
 	}
-	return modInfo
+	return modsInfo
 }
 
 // addKindToModules sets the kind to 'terraform' when empty.

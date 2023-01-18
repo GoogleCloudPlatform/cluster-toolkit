@@ -198,6 +198,7 @@ limitations under the License.
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead. | `string` | `null` | no |
 | <a name="input_partition_conf"></a> [partition\_conf](#input\_partition\_conf) | Slurm partition configuration as a map.<br>See https://slurm.schedmd.com/slurm.conf.html#SECTION_PARTITION-CONFIGURATION | `map(string)` | `{}` | no |
 | <a name="input_partition_name"></a> [partition\_name](#input\_partition\_name) | The name of the slurm partition. | `string` | n/a | yes |
+| <a name="input_partition_startup_scripts_timeout"></a> [partition\_startup\_scripts\_timeout](#input\_partition\_startup\_scripts\_timeout) | The timeout (seconds) applied to the partition startup script. If<br>any script exceeds this timeout, then the instance setup process is considered<br>failed and handled accordingly.<br><br>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources. | `string` | n/a | yes |
@@ -208,6 +209,7 @@ limitations under the License.
 | <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead. | `string` | `null` | no |
 | <a name="input_source_image_project"></a> [source\_image\_project](#input\_source\_image\_project) | Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead. | `string` | `null` | no |
 | <a name="input_spot_instance_config"></a> [spot\_instance\_config](#input\_spot\_instance\_config) | Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead. | <pre>object({<br>    termination_action = string<br>  })</pre> | `null` | no |
+| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script that will be used by the partition VMs. | `string` | `""` | no |
 | <a name="input_subnetwork_project"></a> [subnetwork\_project](#input\_subnetwork\_project) | The project the subnetwork belongs to. | `string` | `""` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Deprecated: Use the schedmd-slurm-gcp-v5-node-group module for defining node groups instead. | `list(string)` | `null` | no |

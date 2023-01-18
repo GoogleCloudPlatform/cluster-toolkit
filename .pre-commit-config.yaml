@@ -29,7 +29,7 @@ repos:
     entry: tools/autodoc/terraform_docs.sh
     language: script
     types: [terraform]
-    exclude: \.terraform\/.*$
+    exclude: \.terraform|pkg\/.*$
     pass_filenames: true
     require_serial: true
   - id: packer-readme
@@ -44,7 +44,7 @@ repos:
     entry: python3 tools/duplicate-diff.py
     language: python
     language_version: python3
-    types: [shell]
+    files: '.*(\.sh|\.tf)$'
     pass_filenames: true
     require_serial: true
 - repo: https://github.com/dnephin/pre-commit-golang

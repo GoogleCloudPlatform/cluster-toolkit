@@ -78,6 +78,14 @@
       path: "{{ omnia_dir }}/roles/slurm_common/vars/main.yml"
       regexp: '^slurm_uid: ".*"'
       line: 'slurm_uid: "{{ slurm_uid }}"'
+  # Temporary workaround for singularity (3.8) being removed from epel-release in
+  # favor of singularity-ce (3.10) which causes downstream failures. An upgrade
+  # to version 1.4 may fix this.
+  - name: Remove installation of the "singularity" package in centos
+    ansible.builtin.lineinfile:
+      path: "{{ omnia_dir }}/roles/common/vars/main.yml"
+      regexp: '\s*\- singularity?'
+      state: absent
 
 - name: Run the Omnia installation once all nodes are ready
   hosts: localhost

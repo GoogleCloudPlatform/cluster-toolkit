@@ -13,6 +13,10 @@ but otherwise the same variables. This test exists to ensure there will be no
 naming collisions when more than one NFS server is created in a projects with
 the same deployment name.
 
+**gpu.yaml**: Deploys a set of VM instances (`vm-instance`) with different GPU
+configurations attached. Both automatic (via `gpu_definition.yaml`) and manually
+supplied guest accelerators are adding to the VM instances.
+
 **hpc-cluster-simple.yaml**: Creates a simple cluster with a single compute VM,
 filestore as a /home directory and a network. This has been used as a demo
 blueprint when presenting the toolkit.

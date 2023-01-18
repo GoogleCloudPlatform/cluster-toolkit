@@ -184,17 +184,17 @@ func (s *MySuite) TestValidateOutputs(c *C) {
 func (s *MySuite) TestAddDefaultValidators(c *C) {
 	dc := getDeploymentConfigForTest()
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 2)
+	c.Assert(dc.Config.Validators, HasLen, 3)
 
 	dc.Config.Validators = nil
 	dc.Config.Vars["region"] = "us-central1"
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 3)
+	c.Assert(dc.Config.Validators, HasLen, 4)
 
 	dc.Config.Validators = nil
 	dc.Config.Vars["zone"] = "us-central1-c"
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 5)
+	c.Assert(dc.Config.Validators, HasLen, 6)
 }
 
 func (s *MySuite) TestTestInputList(c *C) {
