@@ -128,7 +128,7 @@ EOD
 
   validation {
     condition     = var.slurm_control_addr != ""
-    error_message = "Variable 'slurm_control_host' cannot be empty (\"\")."
+    error_message = "Variable 'slurm_control_addr' cannot be empty (\"\")."
   }
 }
 
