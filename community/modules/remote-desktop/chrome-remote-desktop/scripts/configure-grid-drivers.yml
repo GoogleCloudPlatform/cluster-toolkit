@@ -1,0 +1,73 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Ensure nvidia grid drivers and other binaries are installed
+  hosts: localhost
+  become: true
+  tasks:
+  - name: Install binaries for GRID drivers
+    ansible.builtin.apt:
+      name:
+      - build-essential
+      - gdebi-core
+      - mesa-utils
+      - gdm3
+      state: present
+      update_cache: true
+
+  - name: Download GPU driver
+    ansible.builtin.get_url:
+      url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
+      dest: /tmp/
+      mode: "0755"
+
+  - name: Install GPU driver
+    ansible.builtin.shell:
+      sudo systemctl stop gdm
+
+      sudo bash -c '/tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run -silent'
+
+  - name: Download VirtualGL driver
+    ansible.builtin.get_url:
+      url: https://sourceforge.net/projects/virtualgl/files/3.0.2/virtualgl_3.0.2_amd64.deb/download
+      dest: /tmp/virtualgl_3.0.2_amd64.deb
+      mode: "0755"
+
+  - name: Install VirtualGL
+    ansible.builtin.shell: sudo gdebi /tmp/virtualgl_3.0.2_amd64.deb --non-interactive
+
+  - name: Fix headless Nvidia issue
+    ansible.builtin.shell:
+      sudo nvidia-xconfig --query-gpu-info | sudo tee /tmp/gpu-info.txt >/dev/null
+
+      PCI_ID=$(grep </tmp/gpu-info.txt "PCI BusID " | head -n 1 | cut -d':' -f2-99 | xargs)
+
+      sudo nvidia-xconfig -a --allow-empty-initial-configuration --enable-all-gpus --virtual=1920x1200 --busid="$PCI_ID"
+
+      sudo sed -i '/Section "Device"/a \ \ \ \ Option\t"HardDPMS" "false"' /etc/X11/xorg.conf
+
+  - name: Configure VirtualGL for X
+    ansible.builtin.shell: sudo vglserver_config +glx +s +f -t
+
+  - name: Configure gdm for X
+    ansible.builtin.shell:
+      echo "/usr/sbin/gdm3" > /etc/X11/default-display-manager
+
+      sudo systemctl set-default graphical.target
+
+      sudo systemctl daemon-reload
+      
+      sudo systemctl start gdm
