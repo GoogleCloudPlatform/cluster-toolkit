@@ -15,12 +15,12 @@
  */
 
 variable "project_id" {
-  description = "ID of project in which Filestore instance will be created."
+  description = "ID of project in which GCS bucket will be created."
   type        = string
 }
 
 variable "deployment_name" {
-  description = "Name of the HPC deployment, used as name of the filestore instace if no name is specified."
+  description = "Name of the HPC deployment; used as part of name of the GCS bucket."
   type        = string
 }
 
@@ -30,7 +30,7 @@ variable "region" {
 }
 
 variable "labels" {
-  description = "Labels to add to the filestore instance. List key, value pairs."
+  description = "Labels to add to the GCS bucket. List key, value pairs."
   type        = any
 }
 
@@ -41,7 +41,7 @@ variable "local_mount" {
 }
 
 variable "mount_options" {
-  description = "Options describing various aspects of the file system. Consider adding setting to 'defaults,_netdev,implicit_dirs' when using gcsfuse."
+  description = "Mount options to be put in fstab. Note: `implicit_dirs` makes it easier to work with objects added by other tools, but there is a performance impact. See: [more information](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/semantics.md#implicit-directories)"
   type        = string
   default     = "defaults,_netdev,implicit_dirs"
 }

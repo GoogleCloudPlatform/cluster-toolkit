@@ -24,6 +24,9 @@ deployment_groups:
 - group: primary
   modules:
 
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
   - id: bucket-w-suffix
     source: community/modules/file-system/cloud-storage-bucket
     settings:
@@ -43,3 +46,14 @@ deployment_groups:
       - type: shell
         destination: my_script.sh
         content: echo 'hello world'
+
+  - id: workstation
+    source: modules/compute/vm-instance
+    use: [network1, startup, bucket-w-suffix]
+    settings:
+      machine_type: n2-standard-2
+
+  - source: community/modules/scripts/wait-for-startup
+    id: wait0
+    settings:
+      instance_name: ((module.workstation.name[0]))

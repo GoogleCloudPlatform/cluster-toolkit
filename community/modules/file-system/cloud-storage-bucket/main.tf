@@ -15,12 +15,13 @@
  */
 
 locals {
-  prefix      = var.name_prefix != null ? var.name_prefix : ""
-  deployment  = var.use_deployment_name_in_bucket_name ? var.deployment_name : ""
-  suffix      = var.random_suffix ? random_id.resource_name_suffix.hex : ""
-  first_dash  = (local.prefix != "" && (local.deployment != "" || local.suffix != "")) ? "-" : ""
-  second_dash = local.deployment != "" && local.suffix != "" ? "-" : ""
-  name        = "${local.prefix}${local.first_dash}${local.deployment}${local.second_dash}${local.suffix}"
+  prefix         = var.name_prefix != null ? var.name_prefix : ""
+  deployment     = var.use_deployment_name_in_bucket_name ? var.deployment_name : ""
+  suffix         = var.random_suffix ? random_id.resource_name_suffix.hex : ""
+  first_dash     = (local.prefix != "" && (local.deployment != "" || local.suffix != "")) ? "-" : ""
+  second_dash    = local.deployment != "" && local.suffix != "" ? "-" : ""
+  composite_name = "${local.prefix}${local.first_dash}${local.deployment}${local.second_dash}${local.suffix}"
+  name           = local.composite_name == "" ? "no-bucket-name-provided" : local.composite_name
 }
 
 resource "random_id" "resource_name_suffix" {

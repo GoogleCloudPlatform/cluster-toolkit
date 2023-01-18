@@ -25,12 +25,12 @@ locals {
   prepend_ansible_installer = length(local.ansible_local_runners) > 0 && var.prepend_ansible_installer
   runners                   = local.prepend_ansible_installer ? concat([local.ansible_installer], var.runners) : var.runners
 
-  storage_bucket_name = coalesce(one(google_storage_bucket.configs_bucket.*.name), regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[0])
-
   bucket_regex               = "^gs://([^/]*)/*(.*)"
   gcs_bucket_path_trimmed    = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")
   storage_folder_path        = local.gcs_bucket_path_trimmed == null ? null : regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[1]
   storage_folder_path_prefix = local.storage_folder_path == null || local.storage_folder_path == "" ? "" : "${local.storage_folder_path}/"
+
+  storage_bucket_name = coalesce(one(google_storage_bucket.configs_bucket.*.name), regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[0])
 
   load_runners = templatefile(
     "${path.module}/templates/startup-script-custom.tpl",

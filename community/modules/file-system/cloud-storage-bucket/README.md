@@ -3,7 +3,7 @@
 This module creates a [Google Cloud Storage (GCS) bucket](https://cloud.google.com/storage).
 
 For more information on this and other network storage options in the Cloud HPC
-Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
+Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
 ### Example
 
@@ -22,6 +22,9 @@ where `xxxxxxxx` is a randomly generated id.
 > with other modules:
 > `value depends on resource attributes that cannot be determined until apply`.
 > To resolve this set `random_suffix` to `false` (default).
+
+<!-- -->
+
 > **_NOTE:_** Bucket namespace is shared by all users of Google Cloud so it is
 > possible to have a bucket name clash with an existing bucket that is not in
 > your project. To resolve this try to use a more unique name, or set the
@@ -103,12 +106,12 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instace if no name is specified. | `string` | n/a | yes |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the filestore instance. List key, value pairs. | `any` | n/a | yes |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment; used as part of name of the GCS bucket. | `string` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the GCS bucket. List key, value pairs. | `any` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
-| <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the file system. Consider adding setting to 'defaults,\_netdev,implicit\_dirs' when using gcsfuse. | `string` | `"defaults,_netdev,implicit_dirs"` | no |
+| <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mount options to be put in fstab. Note: `implicit_dirs` makes it easier to work with objects added by other tools, but there is a performance impact. See: [more information](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/semantics.md#implicit-directories) | `string` | `"defaults,_netdev,implicit_dirs"` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name Prefix. | `string` | `null` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Filestore instance will be created. | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which GCS bucket will be created. | `string` | n/a | yes |
 | <a name="input_random_suffix"></a> [random\_suffix](#input\_random\_suffix) | If true, a random id will be appended to the suffix of the bucket name. | `bool` | `false` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
 | <a name="input_use_deployment_name_in_bucket_name"></a> [use\_deployment\_name\_in\_bucket\_name](#input\_use\_deployment\_name\_in\_bucket\_name) | If true, the deployment name will be included as part of the bucket name. This helps prevent naming clashes across multiple deployments. | `bool` | `true` | no |
