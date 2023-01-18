@@ -54,4 +54,5 @@ module "slurm_controller_instance" {
   slurm_control_host_port         = var.slurm_control_host_port
   slurm_control_addr              = var.slurm_control_addr
   install_dir                     = var.install_dir
+  munge_mount                     = var.munge_mount
 }

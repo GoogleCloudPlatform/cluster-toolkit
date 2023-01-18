@@ -314,3 +314,25 @@ variable "install_dir" {
   type        = string
   default     = null
 }
+
+variable "munge_mount" {
+  description = <<-EOD
+  Remote munge mount for compute and login nodes to acquire the munge.key.
+
+  By default, the munge mount server will be assumed to be the
+  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
+  `server_ip=null`.
+  EOD
+  type = object({
+    server_ip     = string
+    remote_mount  = string
+    fs_type       = string
+    mount_options = string
+  })
+  default = {
+    server_ip     = null
+    remote_mount  = "/etc/munge/"
+    fs_type       = "nfs"
+    mount_options = ""
+  }
+}
