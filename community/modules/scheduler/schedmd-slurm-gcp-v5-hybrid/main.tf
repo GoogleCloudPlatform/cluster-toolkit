@@ -64,6 +64,7 @@ module "slurm_controller_instance" {
   cloud_parameters                = var.cloud_parameters
   output_dir                      = var.output_dir
   slurm_control_host              = var.slurm_control_host
+  slurm_control_host_port         = var.slurm_control_host_port
   slurm_control_addr              = var.slurm_control_addr
 }
 

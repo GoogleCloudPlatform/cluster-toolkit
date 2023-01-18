@@ -102,6 +102,20 @@ EOD
   }
 }
 
+variable "slurm_control_host_port" {
+  type        = string
+  description = <<EOD
+The port number that the Slurm controller, slurmctld, listens to for work.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_SlurmctldPort
+EOD
+  default     = null
+
+  validation {
+    condition     = var.slurm_control_host_port != ""
+    error_message = "Variable 'slurm_control_host_port' cannot be empty (\"\")."
+  }
+}
+
 variable "slurm_control_addr" {
   type        = string
   description = <<EOD
