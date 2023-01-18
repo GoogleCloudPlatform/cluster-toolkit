@@ -413,6 +413,58 @@ type varContext struct {
 }
 
 /*
+A module reference is made by the use keyword and is subject to IGC constraints
+of references (ordering, explicitness). It has the following fields:
+  - ID: a module ID
+  - ToGroupID: the deployment group in which the module is *expected* to be found
+  - FromGroupID: the deployment group from which the reference is made
+  - Explicit: a boolean value indicating whether the user made a reference that
+    explicitly identified ToGroupID rather than inferring it using FromGroupID
+*/
+type modReference struct {
+	ID          string
+	ToGroupID   string
+	FromGroupID string
+	Explicit    bool
+}
+
+/*
+This function performs only the most rudimentary conversion of an input
+string into a modReference struct as defined above. An input string consists of
+1 or 2 fields separated by periods. An error will be returned if there are not
+1 or 2 fields or if either field is the empty string. This function does not
+ensure the existence of the module!
+*/
+func identifyModuleByReference(yamlReference string, dg DeploymentGroup) (modReference, error) {
+	// struct defaults: empty strings and false booleans
+	var ref modReference
+	// intra-group references length 1 and inter-group references length 2
+	modComponents := strings.Split(yamlReference, ".")
+	switch len(modComponents) {
+	case 1:
+		ref.ID = modComponents[0]
+		ref.ToGroupID = dg.Name
+		ref.FromGroupID = dg.Name
+	case 2:
+		ref.ToGroupID = modComponents[0]
+		ref.ID = modComponents[1]
+		ref.FromGroupID = dg.Name
+		ref.Explicit = true
+	}
+
+	// should consider more sophisticated definition of valid values here.
+	// for now check that no fields are the empty string; due to the default
+	// zero values for strings in the "ref" struct, this will also cover the
+	// case that modComponents has wrong # of fields
+	if ref.ID == "" || ref.ToGroupID == "" || ref.FromGroupID == "" {
+		return ref, fmt.Errorf("%s: %s, expected %s",
+			errorMessages["invalidMod"], yamlReference, expectedModFormat)
+	}
+
+	return ref, nil
+}
+
+/*
 A variable reference has the following fields
   - ID: a module ID or "vars" if referring to a deployment variable
   - GroupID: if ID is a module ID, GroupID must be the deployment group in
@@ -470,6 +522,47 @@ func (dg *DeploymentGroup) identifySimpleVariable(yamlReference string) (varRefe
 			errorMessages["invalidVar"], yamlReference, expectedVarFormat)
 	}
 	return ref, nil
+}
+
+func (ref *modReference) validate(depGroups []DeploymentGroup, modToGrp map[string]int) error {
+	callingModuleGroupIndex := slices.IndexFunc(depGroups, func(d DeploymentGroup) bool { return d.Name == ref.FromGroupID })
+	if callingModuleGroupIndex == -1 {
+		return fmt.Errorf("%s: %s", errorMessages["groupNotFound"], ref.FromGroupID)
+	}
+
+	targetModuleGroupIndex, ok := modToGrp[ref.ID]
+	if !ok {
+		return fmt.Errorf("%s: module %s was not found",
+			errorMessages["varNotFound"], ref.ID)
+	}
+	targetModuleGroupName := depGroups[targetModuleGroupIndex].Name
+
+	// Ensure module is from the correct group
+	isInterGroupReference := callingModuleGroupIndex != targetModuleGroupIndex
+	isRefToLaterGroup := targetModuleGroupIndex > callingModuleGroupIndex
+	isCorrectToGroup := ref.ToGroupID == targetModuleGroupName
+
+	if isInterGroupReference {
+		if isRefToLaterGroup {
+			return fmt.Errorf("%s: %s is in a later group",
+				errorMessages["intergroupOrder"], ref.ID)
+		}
+
+		if !ref.Explicit {
+			return fmt.Errorf("%s: %s must specify a group ID before the module ID",
+				errorMessages["intergroupImplicit"], ref.ID)
+		}
+	}
+
+	// at this point, the reference may be intergroup or intragroup. now we
+	// only care about correctness of target group ID. better to order this
+	// error after enforcing explicitness of intergroup references
+	if !isCorrectToGroup {
+		return fmt.Errorf("%s: %s.%s",
+			errorMessages["referenceWrongGroup"], ref.ToGroupID, ref.ID)
+	}
+
+	return nil
 }
 
 // this function validates every field within a varReference struct and that
