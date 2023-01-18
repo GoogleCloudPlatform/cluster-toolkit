@@ -38,3 +38,10 @@ deployment_groups:
       enable_google_logging: false
       configure_chrome_remote_desktop: true
       install_nvidia_driver: true      # Must be set to true accept Nvidia ToS to install drivers
+
+  # This module simply makes terraform wait until the startup script is complete
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: "remote-desktop-0"
+      timeout: 2100
