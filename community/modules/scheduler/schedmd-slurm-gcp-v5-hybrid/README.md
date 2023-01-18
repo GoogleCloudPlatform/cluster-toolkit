@@ -162,13 +162,10 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
-| Name | Version |
-|------|---------|
-| <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
+No providers.
 
 ## Modules
 
@@ -178,9 +175,7 @@ limitations under the License.
 
 ## Resources
 
-| Name | Type |
-|------|------|
-| [null_resource.set_prefix_cloud_conf](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+No resources.
 
 ## Inputs
 

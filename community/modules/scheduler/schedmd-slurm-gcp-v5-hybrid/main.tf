@@ -20,19 +20,6 @@ locals {
     content  = var.compute_startup_script
   }]
 
-  # Install Directory Variables
-  # In order to allow the hybrid module to run in a different environment than
-  # the controller, certain paths need to be updated to match the anticpated
-  # install directory on the controller. This is done with a sed command that
-  # find all matching variables with names ending in Program (SuspendProgram,
-  # etc) or logSlurmctld (EpilogSlurmctld, etc) and replaces the path before
-  # suspend.py or resume.py with the user provided install_dir.
-  install_dir         = var.install_dir != null ? var.install_dir : abspath(var.output_dir)
-  install_dir_pattern = replace(local.install_dir, ".", "\\.")
-  match_pattern       = "(Program\\|logSlurmctld)=/.*/(resume\\|suspend).py"
-  replace_pattern     = "\\1=${local.install_dir_pattern}/\\2\\.py"
-  install_path_cmd    = "sed -i -E 's|${local.match_pattern}|${local.replace_pattern}|g' cloud.conf"
-
   # Since deployment name may be used to create a cluster name, we remove any invalid character from the beginning
   # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
   tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 10)
@@ -66,20 +53,5 @@ module "slurm_controller_instance" {
   slurm_control_host              = var.slurm_control_host
   slurm_control_host_port         = var.slurm_control_host_port
   slurm_control_addr              = var.slurm_control_addr
-}
-
-# Null resource that injects the installation path before the resume/suspend
-# scripts in the hybrid configuration files.
-resource "null_resource" "set_prefix_cloud_conf" {
-  depends_on = [
-    module.slurm_controller_instance
-  ]
-  triggers = {
-    output_dir  = var.output_dir
-    install_dir = var.install_dir
-  }
-  provisioner "local-exec" {
-    working_dir = var.output_dir
-    command     = local.install_path_cmd
-  }
+  install_dir                     = var.install_dir
 }
