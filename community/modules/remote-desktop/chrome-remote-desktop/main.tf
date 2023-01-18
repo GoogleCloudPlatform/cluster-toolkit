@@ -16,7 +16,6 @@
 
 
 locals {
-  resource_prefix = var.name_prefix != null ? var.name_prefix : "${var.deployment_name}-client"
 
   user_startup_script_runners = var.startup_script == null ? [] : [
     {
@@ -68,7 +67,6 @@ module "instances" {
   spot           = var.spot
 
   deployment_name = var.deployment_name
-  name_prefix     = local.resource_prefix
   project_id      = var.project_id
   region          = var.region
   zone            = var.zone
