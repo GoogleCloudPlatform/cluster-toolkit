@@ -21,7 +21,6 @@ vars:
   deployment_name: remote-desktop
   region: us-east4
   zone: us-east4-c
-  install_nvidia_driver: ## user must pass true to accept Nvidia ToS to install drivers
 
 deployment_groups:
 - group: primary
@@ -31,10 +30,11 @@ deployment_groups:
     kind: terraform
 
   - id: remote-desktop
-    source: community/modules/remote-desktop-linux
+    source: community/modules/remote-desktop/chrome-remote-desktop
     use: [network1]
     settings:
       instance_count: 1
       enable_google_monitoring: false
       enable_google_logging: false
       configure_chrome_remote_desktop: true
+      install_nvidia_driver: true      # Must be set to true accept Nvidia ToS to install drivers
