@@ -21,5 +21,5 @@ output "startup_script" {
 
 output "name" {
   description = "Name of any instance created"
-  value      = "remote-desktop-0"
+  value       = var.instance_count > 0 ? module.instances.name[0] : null
 }
