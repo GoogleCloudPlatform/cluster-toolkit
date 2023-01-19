@@ -25,17 +25,18 @@ locals {
   prepend_ansible_installer = length(local.ansible_local_runners) > 0 && var.prepend_ansible_installer
   runners                   = local.prepend_ansible_installer ? concat([local.ansible_installer], var.runners) : var.runners
 
-  storage_bucket = coalesce(one(google_storage_bucket.configs_bucket), one(data.google_storage_bucket.existing_bucket))
-
   bucket_regex               = "^gs://([^/]*)/*(.*)"
   gcs_bucket_path_trimmed    = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")
   storage_folder_path        = local.gcs_bucket_path_trimmed == null ? null : regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[1]
   storage_folder_path_prefix = local.storage_folder_path == null || local.storage_folder_path == "" ? "" : "${local.storage_folder_path}/"
 
+  user_provided_bucket_name = try(regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[0], null)
+  storage_bucket_name       = coalesce(one(google_storage_bucket.configs_bucket.*.name), local.user_provided_bucket_name)
+
   load_runners = templatefile(
     "${path.module}/templates/startup-script-custom.tpl",
     {
-      bucket = local.storage_bucket.name,
+      bucket = local.storage_bucket_name,
       runners = [
         for runner in local.runners : {
           object      = google_storage_bucket_object.scripts[basename(runner["destination"])].output_name
@@ -85,18 +86,13 @@ resource "google_storage_bucket" "configs_bucket" {
   labels                      = var.labels
 }
 
-data "google_storage_bucket" "existing_bucket" {
-  count = var.gcs_bucket_path != null ? 1 : 0
-  name  = regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[0]
-}
-
 resource "google_storage_bucket_object" "scripts" {
   # this writes all scripts exactly once into GCS
   for_each = local.runners_map
   name     = "${local.storage_folder_path_prefix}${each.key}"
   content  = each.value["content"]
   source   = each.value["source"]
-  bucket   = local.storage_bucket.name
+  bucket   = local.storage_bucket_name
   timeouts {
     create = "10m"
     update = "10m"
