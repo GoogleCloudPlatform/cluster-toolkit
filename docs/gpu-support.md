@@ -10,11 +10,13 @@
   * `schedmd-slurm-gcp-v5-*`
   * `SchedMD-slurm-on-gcp-*`
 * PBS Pro modules (`pbspro-*`)
+* Cloud Batch modules through custom instance templates
 
 ## Accelerator definition automation
 
 The schedmd-slurm-gcp-v5 modules ([node-group], [controller] and [login]),
-the [vm-instance] module and any module relying on [vm-instance] support
+the [vm-instance] module and any module relying on [vm-instance] (HTCondor,
+Omnia, PBS Pro) support
 automation for defining the `guest_accelerator` config. If the user supplies any
 value for this setting, the automation will be bypassed.
 
@@ -53,7 +55,9 @@ cannot be determined automatically like with `a2`.
 * To list accelerator types and availability by region, run
   `gcloud compute accelerator-types list`. The information is also available in
   the Google Cloud documentation [here](https://cloud.google.com/compute/docs/gpus/gpu-regions-zones).
-* Deployment time of VMs with many guest accelerators can take longer.
+* Deployment time of VMs with many guest accelerators can take longer. See the
+  [Timeouts when deploying a compute VM](#timeouts-when-deploying-a-compute-vm)
+  section below if you experience timeouts because of this.
 
 ### Slurm on GCP
 
@@ -80,8 +84,8 @@ provides consistency with the underlying terraform modules from the
 
 As mentioned above, VMs with many guest accelerators can take longer to deploy.
 Slurm sets timeouts for creating VMs, and it's possible for high GPU
-configurations to push past the default timeout. The timeout in the Slurm on GCP
-v4 HPC Toolkit modules (`SchedMD-slurm-on-gcp-*`) due to a timeout that cannot
+configurations to push past the default timeout. The timeout in the
+Slurm on GCP v4 HPC Toolkit modules (`SchedMD-slurm-on-gcp-*`) cannot
 be increased, therefore we recommend using the Slurm on GCP v5 modules.
 
 The v5 Toolkit modules (`schedmd-slurm-gcp-v5-*`) allow Slurm configuration
@@ -103,14 +107,19 @@ See the example below which increases the `resume_timeout` from the default of
     ...
 ```
 
-#### Using GPUs with Slurm
+#### Launching Slurm jobs with GPUs
 
 In order to utilize the GPUs in the compute VMs deployed by Slurm, the GPU
-count must be specified when starting a job with `srun` or `sbatch`:
+count must be specified when submitting a job with `srun` or `sbatch`. For
+instance, the following `srun` command launches a job that runs nvidia-smi in a
+partition called `gpu_partition` (`-p gpu_partition`) on a full node (`-N 1`)
+with 8 GPUs (`--gpus 8`):
 
 ```shell
 srun -N 1 -p gpu_partition --gpus 8 nvidia-smi
 ```
+
+An equivalent `sbatch` script:
 
 ```bash
 #!/bin/bash
