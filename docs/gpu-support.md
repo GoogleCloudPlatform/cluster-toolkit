@@ -2,7 +2,7 @@
 
 ## Supported modules
 
-* [vm-instance] and therefore any module that relies on `vm-instance` including
+* [vm-instance] and therefore any module that relies on `vm-instance` including:
   * HTCondor modules including [htcondor-install], [htcondor-configure] and
     [htcondor-execute-point].
   * [omnia-install]
@@ -57,20 +57,37 @@ cannot be determined automatically like with `a2`.
 
 ### Slurm on GCP
 
-* When deploying a Slurm cluster with GPUs, we highly recommend using the
-  modules based on Slurm on GCP version 5 (`schedmd-slurm-gcp-v5-*`). The
-  interface is more consistent with HPC Toolkit standards and more functionality
-  is available to support, debug and workaround any issues related to GPU
-  resources.
-* `SchedMD-slurm-on-gcp-*` modules have a different interface for defining
-  attached accelerators, `gpu_type` and `gpu_count`. These must be set even if
-  the machine type implies GPUs.
-* Timeouts when launching compute nodes
-  * Some GPUs will fail in Slurm on GCP v4 HPC Toolkit modules
-    (`SchedMD-slurm-on-gcp-*`) due to a timeout that cannot be customized.
-  * Slurm on GCP v5 HPC Toolkit modules (`schedmd-slurm-gcp-v5-*`) allow the
-    Slurm configuration timeouts to customized to work around this via the
-    `cloud_parameters` variable on the [controller].
+When deploying a Slurm cluster with GPUs, we highly recommend using the
+modules based on Slurm on GCP version 5 (`schedmd-slurm-gcp-v5-*`). The
+interface is more consistent with HPC Toolkit standards and more functionality
+is available to support, debug and workaround any issues related to GPU
+resources.
+
+#### Interface Considerations
+
+The Slurm on GCP v4 modules (`SchedMD-slurm-on-gcp-*`) have a different
+interface for defining attached accelerators, `gpu_type` and `gpu_count`. These
+must be set even if the machine type implies GPUs.
+
+The Slurm on GCP v5 HPC Toolkit modules (`schedmd-slurm-gcp-v5-*`) have two
+variables that can be used to define attached GPUs. The variable
+`guest_accelerators` is the recommended option as it is consistent with other
+modules in the HPC Toolkit. The setting `gpus` can be set as well, which
+provides consistency with the underlying terraform modules from the
+[Slurm on GCP repo][slurm-gcp].
+
+#### Timeouts when deploying a compute VM
+
+As mentioned above, VMs with many guest accelerators can take longer to deploy.
+Slurm sets timeouts for creating VMs, and it's possible for high GPU
+configurations to push past the default timeout. The timeout in the Slurm on GCP
+v4 HPC Toolkit modules (`SchedMD-slurm-on-gcp-*`) due to a timeout that cannot
+be increased, therefore we recommend using the Slurm on GCP v5 modules.
+
+The v5 Toolkit modules (`schedmd-slurm-gcp-v5-*`) allow Slurm configuration
+timeouts to customized via the [cloud_parameters] variable on the [controller].
+See the example below which increases the `resume_timeout` from the default of
+300s to 600s:
 
 ```yaml
 - id: slurm_controller
@@ -86,28 +103,33 @@ cannot be determined automatically like with `a2`.
     ...
 ```
 
-* The Slurm on GCP v5 HPC Toolkit modules (`schedmd-slurm-gcp-v5-*`) have two
-  variables that can be used to define attached GPUs, `guest_accelerators` for
-  HPC Toolkit consistency and `gpus` for consistency with the underlying
-  terraform modules from the [Slurm on GCP repo][slurm-gcp].
-* In order to utilize the GPUs in the compute VMs deployed by Slurm, the GPU
-  count must be specified when starting a job with `srun` or `sbatch`:
-  
-  ```shell
-  srun -N 1 -p gpu_partition --gpus 8 nvidia-smi
-  ```
+#### Using GPUs with Slurm
 
-  ```bash
-  #!/bin/bash
+In order to utilize the GPUs in the compute VMs deployed by Slurm, the GPU
+count must be specified when starting a job with `srun` or `sbatch`:
 
-  #SBATCH --nodes=1
-  #SBATCH --partition=gpu_partition
-  #SBATCH --gpus=8
-  
-  nvidia-smi
-  ```
+```shell
+srun -N 1 -p gpu_partition --gpus 8 nvidia-smi
+```
+
+```bash
+#!/bin/bash
+
+#SBATCH --nodes=1
+#SBATCH --partition=gpu_partition
+#SBATCH --gpus=8
+
+nvidia-smi
+```
+
+Both commands support further customization of GPU resources. For more
+information, see the SchedMD documentation:
+* [Generic Resource Scheduling](https://slurm.schedmd.com/gres.html#Running_Jobs)
+* [srun Documentation](https://slurm.schedmd.com/srun.html)
+* [sbatch Documentation](https://slurm.schedmd.com/sbatch.html)
 
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp
+[cloud_parameters]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_cloud_parameters
 
 ## Further Reading
 
