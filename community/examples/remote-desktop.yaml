@@ -34,8 +34,6 @@ deployment_groups:
     use: [network1]
     settings:
       instance_count: 1
-      enable_google_monitoring: false
-      enable_google_logging: false
       configure_chrome_remote_desktop: true
       install_nvidia_driver: true      # Must be set to true accept Nvidia ToS to install drivers
 
@@ -43,5 +41,5 @@ deployment_groups:
   - id: wait
     source: community/modules/scripts/wait-for-startup
     settings:
-      instance_name: "remote-desktop-0"
+      instance_name: ((module.remote-desktop.name))
       timeout: 2100
