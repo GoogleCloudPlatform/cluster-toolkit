@@ -30,6 +30,33 @@ where `xxxxxxxx` is a randomly generated id.
 > your project. To resolve this try to use a more unique name, or set the
 > `random_suffix` variable to `true`.
 
+## Naming of Bucket
+
+There are potentially three parts to the bucket name. Each of these parts are
+configurable in the blueprint.
+
+1. A **custom prefix**, provided by the user in the blueprint \
+Provide the custom prefix using the `name_prefix` setting.
+
+1. The **deployment name**, included by default \
+The deployment name can be excluded by setting `use_deployment_name_in_bucket_name: false`.
+
+1. A **random id** suffix, excluded by default \
+The random id can be included by setting `random_suffix: true`.
+
+If none of these are provided (no `name_prefix`,
+`use_deployment_name_in_bucket_name: false`, & `random_suffix: false`), then the
+bucket name will default to `no-bucket-name-provided`.
+
+Since bucket namespace is shared by all users of Google Cloud, it is more likely
+to experience naming clashes than with other resources. In many cases, adding
+the `random_suffix` will resolve the naming clash issue.
+
+> **Warning**: If a bucket is created with a `random_suffix` and then used as
+> the bucket for a startup script in the same deployment group this will cause a
+> `not known at apply time` error in terraform. The solution is to either create
+> the bucket in a separate deployment group or to remove the random suffix.
+
 ## Mounting
 
 To mount the Cloud Storage bucket you must first ensure that the GCS Fuse client
