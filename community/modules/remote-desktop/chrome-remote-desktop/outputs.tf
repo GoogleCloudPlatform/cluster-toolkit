@@ -21,5 +21,5 @@ output "startup_script" {
 
 output "name" {
   description = "Name of any instance created"
-  value       = module.instances[*].name
+  value      = "remote-desktop-0"
 }
