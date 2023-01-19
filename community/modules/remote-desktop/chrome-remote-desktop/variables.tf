@@ -22,7 +22,6 @@ variable "project_id" {
 variable "deployment_name" {
   description = "HPC Toolkit deployment name. Cloud resource names will include this value."
   type        = string
-  default     = "chrome-remote-desktop"
 }
 
 variable "region" {
@@ -62,7 +61,7 @@ variable "network_storage" {
 }
 
 variable "instance_image" {
-  description = "Instance Image. An alternative could be family  = \"pytorch-1-10-gpu-debian-10\" and project = \"ml-images\""
+  description = "Instance Image. An alternative could be family  = \"ubuntu-2004-lts\" and project = \"ubuntu-os-cloud\""
   type = object({
     family  = string,
     project = string
@@ -180,18 +179,6 @@ variable "network_interfaces" {
     }))
   }))
   default = []
-}
-
-variable "enable_google_logging" {
-  description = "Enables Google Cloud Operations Logging in images that come preconfigured with the agent."
-  type        = bool
-  default     = false
-}
-
-variable "enable_google_monitoring" {
-  description = "Enables Google Cloud Operations Monitoring in images that come preconfigured with the agent."
-  type        = bool
-  default     = false
 }
 
 variable "metadata" {
