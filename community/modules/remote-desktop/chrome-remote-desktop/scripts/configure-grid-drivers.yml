@@ -64,7 +64,7 @@
 
   - name: Configure gdm for X
     ansible.builtin.shell:
-      echo "/usr/sbin/gdm3" > /etc/X11/default-display-manager
+      sudo bash -c 'echo "/usr/sbin/gdm3" > /etc/X11/default-display-manager'
 
       sudo systemctl set-default graphical.target
 
