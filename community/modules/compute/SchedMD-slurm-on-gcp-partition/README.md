@@ -27,6 +27,11 @@ The following code snippet creates a partition module with:
     machine_type: c2-standard-30
 ```
 
+## GPU Support
+
+More information on GPU support in Slurm on GCP and other HPC Toolkit modules
+can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
+
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
