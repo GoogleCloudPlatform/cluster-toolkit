@@ -41,10 +41,7 @@ locals {
     }
   ]
 
-  driver     = { install-nvidia-driver = var.install_nvidia_driver }
-  logging    = var.enable_google_logging ? { google-logging-enable = 1 } : { google-logging-enable = 0 }
-  monitoring = var.enable_google_monitoring ? { google-monitoring-enable = 1 } : { google-monitoring-enable = 0 }
-  metadata   = merge(local.driver, local.logging, local.monitoring, var.metadata)
+  metadata = merge(var.metadata)
 }
 
 module "client_startup_script" {
