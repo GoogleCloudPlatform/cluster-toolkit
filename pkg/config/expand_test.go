@@ -412,37 +412,44 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 	var ref varReference
 	var err error
 
-	ref, err = identifySimpleVariable("group_id.module_id.output_name", "other_group_id")
+	dg := DeploymentGroup{
+		Name: "calling_group_id",
+	}
+
+	ref, err = dg.identifySimpleVariable("group_id.module_id.output_name")
 	c.Assert(err, IsNil)
 	c.Assert(ref.GroupID, Equals, "group_id")
 	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
+	c.Assert(ref.ExplicitInterGroup, Equals, true)
 
-	ref, err = identifySimpleVariable("module_id.output_name", "group_id")
+	ref, err = dg.identifySimpleVariable("module_id.output_name")
 	c.Assert(err, IsNil)
-	c.Assert(ref.GroupID, Equals, "group_id")
+	c.Assert(ref.GroupID, Equals, "calling_group_id")
 	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
+	c.Assert(ref.ExplicitInterGroup, Equals, false)
 
-	ref, err = identifySimpleVariable("vars.variable_name", "group_id")
+	ref, err = dg.identifySimpleVariable("vars.variable_name")
 	c.Assert(err, IsNil)
 	c.Assert(ref.GroupID, Equals, "deployment")
 	c.Assert(ref.ID, Equals, "vars")
 	c.Assert(ref.Name, Equals, "variable_name")
+	c.Assert(ref.ExplicitInterGroup, Equals, false)
 
-	ref, err = identifySimpleVariable("foo", "group_id")
+	ref, err = dg.identifySimpleVariable("foo")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.baz.qux", "group_id")
+	ref, err = dg.identifySimpleVariable("foo.bar.baz.qux")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..bar", "group_id")
+	ref, err = dg.identifySimpleVariable("foo..bar")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.", "group_id")
+	ref, err = dg.identifySimpleVariable("foo.bar.")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..", "group_id")
+	ref, err = dg.identifySimpleVariable("foo..")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable(".foo", "group_id")
+	ref, err = dg.identifySimpleVariable(".foo")
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("..foo", "group_id")
+	ref, err = dg.identifySimpleVariable("..foo")
 	c.Assert(err, NotNil)
 }
 
@@ -513,8 +520,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	testVarContext1.varString = "$(vars.globalExists)"
 	got, err := expandSimpleVariable(testVarContext1, testModToGrp)
 	c.Assert(err, IsNil)
-	expectedErr = "((var.globalExists))"
-	c.Assert(got, Equals, expectedErr)
+	c.Assert(got, Equals, "((var.globalExists))")
 
 	// Module variable: Invalid -> Module not found
 	testVarContext1.varString = "$(notAMod.someVar)"
