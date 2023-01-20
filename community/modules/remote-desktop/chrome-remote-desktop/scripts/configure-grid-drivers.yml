@@ -13,14 +13,18 @@
 # limitations under the License.
 
 ---
-
 - name: Ensure nvidia grid drivers and other binaries are installed
   hosts: localhost
   become: true
   tasks:
+  - name: Get kernel release
+    ansible.builtin.shell: uname -r
+    register: uname_result
+
   - name: Install binaries for GRID drivers
     ansible.builtin.apt:
       name:
+      - linux-headers-{{ uname_result.stdout }}
       - build-essential
       - gdebi-core
       - mesa-utils
