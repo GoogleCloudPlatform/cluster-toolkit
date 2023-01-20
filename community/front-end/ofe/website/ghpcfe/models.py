@@ -643,10 +643,10 @@ class Cluster(CloudResource):
     )
     login_node_disk_size = models.PositiveIntegerField(
         # login node disk must be large enough to hold the SlurmGCP
-        # image: >=30GB
-        validators=[MinValueValidator(30)],
+        # image: >=50GB
+        validators=[MinValueValidator(50)],
         help_text="Boot disk size (in GB)",
-        default=30,
+        default=50,
         blank=True,
     )
     grafana_dashboard_url = models.CharField(
