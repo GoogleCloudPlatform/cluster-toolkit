@@ -22,6 +22,7 @@ variable "project_id" {
 variable "deployment_name" {
   description = "HPC Toolkit deployment name. Cloud resource names will include this value."
   type        = string
+  #default     = "chrome-remote-desktop"
 }
 
 variable "region" {
@@ -61,7 +62,7 @@ variable "network_storage" {
 }
 
 variable "instance_image" {
-  description = "Instance Image. An alternative could be family  = \"ubuntu-2004-lts\" and project = \"ubuntu-os-cloud\""
+  description = "Instance Image. An alternative could be family  = \"ubuntu-2004-lts\" and project = \"ubuntu-os-cloud\" or family  = \"debian-11\" and project = \"debian-cloud\""
   type = object({
     family  = string,
     project = string
