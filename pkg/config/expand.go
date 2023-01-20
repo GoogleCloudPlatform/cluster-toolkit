@@ -486,7 +486,7 @@ func validateReference(ref varReference, context varContext, modToGrp map[string
 		if ref.ID == "vars" {
 			if _, ok := context.blueprint.Vars[ref.Name]; !ok {
 				return fmt.Errorf("%s: %s is not a deployment variable",
-					errorMessages["varNotFound"], ref.ID)
+					errorMessages["varNotFound"], ref.Name)
 			}
 			return nil
 		}
