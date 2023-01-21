@@ -31,6 +31,11 @@ concert with the [pbspro-preinstall], [pbspro-server], and [filestore] modules.
 [pbspro-preinstall]: ../../scripts/pbspro-preinstall/README.md
 [filestore]: ../../../../modules/file-system/filestore/README.md
 
+## GPU Support
+
+More information on GPU support in PBS Pro and other HPC Toolkit modules
+can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
+
 ## Support
 
 PBS Professional is licensed and supported by [Altair][pbspro]. This module is

@@ -169,13 +169,13 @@ variable "labels" {
 }
 
 variable "accelerator_type" {
-  description = "Type of accelerator cards to attach to the VM; not necessary for familes that always include GPUs (A2)."
+  description = "Type of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2)."
   type        = string
   default     = null
 }
 
 variable "accelerator_count" {
-  description = "Number of accelerator cards to attach to the VM; not necessary for familes that always include GPUs (A2)."
+  description = "Number of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2)."
   type        = number
   default     = null
 }
