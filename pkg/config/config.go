@@ -59,6 +59,7 @@ var errorMessages = map[string]string{
 	"intergroupOrder":      "References to outputs from other groups must be to earlier groups",
 	"referenceWrongGroup":  "Reference specified the wrong group for the module",
 	"noOutput":             "Output not found for a variable",
+	"varWithinStrings":     "variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally.",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
