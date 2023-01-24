@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+*/
 
 terraform {
   required_providers {
@@ -22,12 +22,11 @@ terraform {
     }
     random = {
       source  = "hashicorp/random"
-      version = ">= 3.0"
+      version = "~> 3.0"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-configure/v1.11.0"
+    module_name = "blueprints/terraform/hpc-toolkit:cloud-storage-bucket/v1.10.1"
   }
-
-  required_version = ">= 0.13.0"
+  required_version = ">= 0.14.0"
 }

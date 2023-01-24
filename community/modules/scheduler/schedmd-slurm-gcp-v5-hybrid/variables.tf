@@ -102,6 +102,20 @@ EOD
   }
 }
 
+variable "slurm_control_host_port" {
+  type        = string
+  description = <<EOD
+The port number that the Slurm controller, slurmctld, listens to for work.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_SlurmctldPort
+EOD
+  default     = null
+
+  validation {
+    condition     = var.slurm_control_host_port != ""
+    error_message = "Variable 'slurm_control_host_port' cannot be empty (\"\")."
+  }
+}
+
 variable "slurm_control_addr" {
   type        = string
   description = <<EOD
@@ -114,7 +128,7 @@ EOD
 
   validation {
     condition     = var.slurm_control_addr != ""
-    error_message = "Variable 'slurm_control_host' cannot be empty (\"\")."
+    error_message = "Variable 'slurm_control_addr' cannot be empty (\"\")."
   }
 }
 
@@ -299,4 +313,26 @@ variable "install_dir" {
     EOD
   type        = string
   default     = null
+}
+
+variable "munge_mount" {
+  description = <<-EOD
+  Remote munge mount for compute and login nodes to acquire the munge.key.
+
+  By default, the munge mount server will be assumed to be the
+  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
+  `server_ip=null`.
+  EOD
+  type = object({
+    server_ip     = string
+    remote_mount  = string
+    fs_type       = string
+    mount_options = string
+  })
+  default = {
+    server_ip     = null
+    remote_mount  = "/etc/munge/"
+    fs_type       = "nfs"
+    mount_options = ""
+  }
 }

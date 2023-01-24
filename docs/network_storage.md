@@ -102,6 +102,7 @@ device should be mounted to each mount capable module.
 -- | -- | -- | -- | -- | -- | -- | --
 filestore | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
 nfs-server | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
+cloud-storage-bucket (GCS) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
 DDN EXAScaler lustre | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
 Intel DAOS** | via STARTUP | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing
   |   |   |   |   |   |   |  

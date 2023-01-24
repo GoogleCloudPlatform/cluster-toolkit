@@ -117,6 +117,11 @@ Use the following settings for spread placement:
 > it may be required to specify the `vm_count`. Once this issue is resolved,
 > `vm_count` will no longer be mandatory.
 
+### GPU Support
+
+More information on GPU support in `vm-instance` and other HPC Toolkit modules
+can be found at [docs/gpu-support.md](../../../docs/gpu-support.md)
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

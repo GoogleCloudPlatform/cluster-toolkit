@@ -17,14 +17,19 @@ import sys
 
 duplicates = [
     [
-        "community/modules/file-system/nfs-server/scripts/mount.sh",
-        "modules/file-system/filestore/scripts/mount.sh",
         "modules/file-system/pre-existing-network-storage/scripts/mount.sh",
+        "modules/file-system/filestore/scripts/mount.sh",
+        "community/modules/file-system/cloud-storage-bucket/scripts/mount.sh",
+        "community/modules/file-system/nfs-server/scripts/mount.sh",
     ],
     [
         "community/modules/file-system/nfs-server/scripts/install-nfs-client.sh",
         "modules/file-system/filestore/scripts/install-nfs-client.sh",
         "modules/file-system/pre-existing-network-storage/scripts/install-nfs-client.sh",
+    ],
+    [
+        "modules/file-system/pre-existing-network-storage/scripts/install-gcs-fuse.sh",
+        "community/modules/file-system/cloud-storage-bucket/scripts/install-gcs-fuse.sh",
     ],
     [
         "modules/scheduler/batch-job-template/startup_from_network_storage.tf",

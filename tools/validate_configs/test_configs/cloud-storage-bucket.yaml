@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,56 +11,49 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 ---
-
-blueprint_name: blueprint-monitoring
+blueprint_name: cloud-storage
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: monitoring
+  deployment_name: gcs-01
   region: us-central1
   zone: us-central1-c
 
 deployment_groups:
 - group: primary
   modules:
-  - id: network
-    source: modules/network/vpc
-    settings:
-      network_name: monitoring-net
 
-  - id: homefs
-    source: community/modules/file-system/nfs-server
-    use: [network]
-    settings:
-      local_mounts: [/home]
-      auto_delete_disk: true
+  - id: network1
+    source: modules/network/pre-existing-vpc
 
-  - id: bucket-for-startup-script
+  - id: bucket-w-suffix
     source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      random_suffix: true
+
+  - id: bucket-wo-suffix
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      name_prefix: simulation-results
+      use_deployment_name_in_bucket_name: false
 
   - id: startup
-    source: ./modules/scripts/startup-script
-    use: [bucket-for-startup-script]
+    source: modules/scripts/startup-script
+    use: [bucket-wo-suffix]
     settings:
       runners:
       - type: shell
-        source: modules/startup-script/examples/install_cloud_ops_agent.sh
-        destination: install_cloud_ops_agent.sh
+        destination: my_script.sh
+        content: echo 'hello world'
 
   - id: workstation
-    source: ./modules/compute/vm-instance
-    use:
-    - network
-    - homefs
-    - startup
+    source: modules/compute/vm-instance
+    use: [network1, startup, bucket-w-suffix]
     settings:
-      machine_type: c2-standard-4
-      metadata:
-        enable-oslogin: true
+      machine_type: n2-standard-2
 
-  - id: hpc-dash
-    source: ./modules/monitoring/dashboard
+  - source: community/modules/scripts/wait-for-startup
+    id: wait0
     settings:
-      title: $(vars.deployment_name)
+      instance_name: ((module.workstation.name[0]))

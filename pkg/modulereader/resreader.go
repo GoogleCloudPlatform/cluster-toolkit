@@ -234,6 +234,9 @@ func defaultAPIList(source string) []string {
 		"modules/file-system/filestore": {
 			"file.googleapis.com",
 		},
+		"modules/file-system/cloud-storage-bucket": {
+			"storage.googleapis.com",
+		},
 		"modules/file-system/pre-existing-network-storage": {},
 		"modules/monitoring/dashboard": {
 			"stackdriver.googleapis.com",
