@@ -30,6 +30,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [htcondor-pool.yaml](#htcondor-poolyaml--) ![community-badge] ![experimental-badge]
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
   * [starccm-tutorial.yaml](#starccm-tutorialyaml--) ![community-badge] ![experimental-badge]
+  * [fluent-tutorial.yaml](#fluent-tutorialyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -729,9 +730,19 @@ python /var/tmp/qsim-example.py
 This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
 tutorial.
 
-> **_NOTE:_** The tutorial has not yet been published.
+> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-star-ccm/run-workload).
 
 [starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
+
+
+### [fluent-tutorial.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions a simple cluster for use with an Ansys Fluent
+tutorial.
+
+> **_NOTE:_** The tutorial has not yet been published.
+
+[fluent-tutorial.yaml]: ../community/examples/fluent-tutorial.yaml
 
 ## Blueprint Schema
 
