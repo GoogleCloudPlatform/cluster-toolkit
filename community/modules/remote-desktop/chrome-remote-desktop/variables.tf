@@ -253,9 +253,3 @@ variable "install_nvidia_driver" {
   description = "Installs the nvidia driver (true/false). For details, see https://cloud.google.com/compute/docs/gpus/install-drivers-gpu"
   type        = bool
 }
-
-variable "configure_chrome_remote_desktop" {
-  description = "This will trigger the installation of chrome remote desktop (true/false). For details, see https://cloud.google.com/architecture/chrome-desktop-remote-on-compute-engine"
-  type        = bool
-  default     = true
-}
