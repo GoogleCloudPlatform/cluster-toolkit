@@ -24,7 +24,7 @@
     ansible.builtin.yum:
       name:
       - epel-release
-      - https://research.cs.wisc.edu/htcondor/repo/9.x/htcondor-release-current.el7.noarch.rpm
+      - https://research.cs.wisc.edu/htcondor/repo/10.x/htcondor-release-current.el7.noarch.rpm
   - name: Install HTCondor
     ansible.builtin.yum:
       name: condor
