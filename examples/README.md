@@ -740,7 +740,7 @@ tutorial.
 This blueprint provisions a simple cluster for use with an Ansys Fluent
 tutorial.
 
-> **_NOTE:_** The tutorial has not yet been published.
+> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/tutorials/ansys-fluent).
 
 [fluent-tutorial.yaml]: ../community/examples/fluent-tutorial.yaml
 
