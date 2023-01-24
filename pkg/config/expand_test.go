@@ -560,40 +560,43 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 		Name: "calling_group_id",
 	}
 
-	ref, err = dg.identifySimpleVariable("group_id.module_id.output_name")
+	ref, err = identifySimpleVariable("group_id.module_id.output_name", dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.GroupID, Equals, "group_id")
+	c.Assert(ref.ToGroupID, Equals, "group_id")
+	c.Assert(ref.FromGroupID, Equals, dg.Name)
 	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
-	c.Assert(ref.ExplicitInterGroup, Equals, true)
+	c.Assert(ref.Explicit, Equals, true)
 
-	ref, err = dg.identifySimpleVariable("module_id.output_name")
+	ref, err = identifySimpleVariable("module_id.output_name", dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.GroupID, Equals, "calling_group_id")
+	c.Assert(ref.ToGroupID, Equals, "calling_group_id")
+	c.Assert(ref.FromGroupID, Equals, "calling_group_id")
 	c.Assert(ref.ID, Equals, "module_id")
 	c.Assert(ref.Name, Equals, "output_name")
-	c.Assert(ref.ExplicitInterGroup, Equals, false)
+	c.Assert(ref.Explicit, Equals, false)
 
-	ref, err = dg.identifySimpleVariable("vars.variable_name")
+	ref, err = identifySimpleVariable("vars.variable_name", dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.GroupID, Equals, "deployment")
+	c.Assert(ref.ToGroupID, Equals, "deployment")
+	c.Assert(ref.FromGroupID, Equals, dg.Name)
 	c.Assert(ref.ID, Equals, "vars")
 	c.Assert(ref.Name, Equals, "variable_name")
-	c.Assert(ref.ExplicitInterGroup, Equals, false)
+	c.Assert(ref.Explicit, Equals, false)
 
-	ref, err = dg.identifySimpleVariable("foo")
+	ref, err = identifySimpleVariable("foo", dg)
 	c.Assert(err, NotNil)
-	ref, err = dg.identifySimpleVariable("foo.bar.baz.qux")
+	ref, err = identifySimpleVariable("foo.bar.baz.qux", dg)
 	c.Assert(err, NotNil)
-	ref, err = dg.identifySimpleVariable("foo..bar")
+	ref, err = identifySimpleVariable("foo..bar", dg)
 	c.Assert(err, NotNil)
-	ref, err = dg.identifySimpleVariable("foo.bar.")
+	ref, err = identifySimpleVariable("foo.bar.", dg)
 	c.Assert(err, NotNil)
-	ref, err = dg.identifySimpleVariable("foo..")
+	ref, err = identifySimpleVariable("foo..", dg)
 	c.Assert(err, NotNil)
-	ref, err = dg.identifySimpleVariable(".foo")
+	ref, err = identifySimpleVariable(".foo", dg)
 	c.Assert(err, NotNil)
-	ref, err = dg.identifySimpleVariable("..foo")
+	ref, err = identifySimpleVariable("..foo", dg)
 	c.Assert(err, NotNil)
 }
 
@@ -667,7 +670,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(got, Equals, "((var.globalExists))")
 
 	// Module variable: Invalid -> Module not found
-	testVarContext1.varString = "$(notAMod.someVar)"
+	testVarContext1.varString = "$(bad_mod.someVar)"
 	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -710,6 +713,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(got, Equals, fmt.Sprintf("((module.%s.%s))", testModule1.ID, existingOutput))
 
 	// Module variable: Failure when using incorrect explicit intragroup
+	// Correct group is at index 1, specify group at index 0
 	existingOutput = "outputExists"
 	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
 	testModInfo = modulereader.ModuleInfo{
@@ -720,8 +724,11 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule1.ID, existingOutput)
 	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	c.Assert(err, NotNil)
-	expectedErr = fmt.Sprintf("%s: %s",
-		errorMessages["referenceWrongGroup"], regexp.QuoteMeta(testVarContext1.varString))
+
+	expectedErr = fmt.Sprintf("%s: %s.%s should be %s.%s",
+		errorMessages["referenceWrongGroup"],
+		testBlueprint.DeploymentGroups[0].Name, testModule1.ID,
+		testBlueprint.DeploymentGroups[1].Name, testModule1.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Intergroup variable: failure because other group was implicit in reference
@@ -734,7 +741,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 		"$(%s.%s)", testModule0.ID, existingOutput)
 	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: %s .*",
-		errorMessages["intergroupImplicit"], regexp.QuoteMeta(testVarContext1.varString))
+		errorMessages["intergroupImplicit"], testModule0.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Intergroup variable: failure because explicit group and module does not exist
@@ -763,7 +770,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[1].Name, testModule1.ID, existingOutput)
 	got, err = expandSimpleVariable(testVarContext0, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: %s .*",
-		errorMessages["intergroupOrder"], regexp.QuoteMeta(testVarContext0.varString))
+		errorMessages["intergroupOrder"], testModule1.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Intergroup variable: proper explicit reference to earlier group
