@@ -25,7 +25,7 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: ./modules/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup_login
     settings:
@@ -63,29 +63,29 @@ deployment_groups:
           mkdir /tmp/intel
           cd /tmp/intel
           wget https://registrationcenter-download.intel.com/akdlm/irc_nas/tec/13741/l_mpi_2018.4.274.tgz
-          tar xvf l_mpi_2018.4.274.tgz 
+          tar xvf l_mpi_2018.4.274.tgz
           cd l_mpi_2018.4.274
           patch silent.cfg <<- "EOF1"
           16:07:46.199308305 +0000
           @@ -6,13 +6,13 @@
            # snpat       - the serial number pattern (ABCD-01234567)
-           
+
            # Accept EULA, valid values are: {accept, decline}
           -ACCEPT_EULA=decline
           +ACCEPT_EULA=accept
-           
+
            # Optional error behavior, valid values are: {yes, no}
            CONTINUE_WITH_OPTIONAL_ERROR=yes
-           
+
            # Install location, valid values are: {/opt/intel, filepat}
           -PSET_INSTALL_DIR=/opt/intel
           +PSET_INSTALL_DIR=/shared/apps/intel
-           
+
            # Continue with overwrite of existing installation directory, valid values are: {yes, no}
            CONTINUE_WITH_INSTALLDIR_OVERWRITE=yes
           EOF1
 
-          sudo ./install.sh -s silent.cfg 
+          sudo ./install.sh -s silent.cfg
 
         destination: /tmp/install-mpi.sh
 
@@ -133,7 +133,6 @@ deployment_groups:
     - homefs
     - sharefs
     - startup
-
     settings:
       threads_per_core: 1
       disable_public_ips: false
@@ -153,7 +152,6 @@ deployment_groups:
     - homefs
     - sharefs
     - startup_login
-
     settings:
       threads_per_core: 1
       disable_public_ips: false
