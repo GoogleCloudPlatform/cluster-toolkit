@@ -33,15 +33,13 @@ locals {
     }
   ]
 
-  configure_chrome_remote_desktop_runners = var.configure_chrome_remote_desktop == false ? [] : [
+  configure_chrome_remote_desktop_runners = [
     {
       type        = "ansible-local"
       content     = file("${path.module}/scripts/configure-chrome-desktop.yml")
       destination = "/usr/local/ghpc/configure-chrome-desktop.yml"
     }
   ]
-
-  metadata = merge(var.metadata)
 }
 
 module "client_startup_script" {
@@ -71,7 +69,7 @@ module "instances" {
 
   machine_type    = var.machine_type
   service_account = var.service_account
-  metadata        = local.metadata
+  metadata        = var.metadata
   startup_script  = module.client_startup_script.startup_script
   enable_oslogin  = var.enable_oslogin
 
