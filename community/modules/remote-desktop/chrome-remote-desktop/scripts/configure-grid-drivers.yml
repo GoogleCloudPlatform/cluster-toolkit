@@ -73,5 +73,5 @@
       sudo systemctl set-default graphical.target
 
       sudo systemctl daemon-reload
-      
+
       sudo systemctl start gdm
