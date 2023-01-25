@@ -634,3 +634,13 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s .*", errorMessages["varInAnotherGroup"], regexp.QuoteMeta(testVarContext1.varString)))
 }
+
+// expand variable is a stub that will eventually implement string interpolation
+// presently it returns only an error
+func (s *MySuite) TestExpandVariable(c *C) {
+	testVarContext0 := varContext{}
+	testModToGrp := make(map[string]int)
+	str, err := expandVariable(testVarContext0, testModToGrp)
+	c.Assert(str, Equals, "")
+	c.Assert(err, NotNil)
+}
