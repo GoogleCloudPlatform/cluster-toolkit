@@ -89,7 +89,7 @@ deployment_groups:
 
         destination: /tmp/install-mpi.sh
 
-  - source: ./modules/scripts/startup-script
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:

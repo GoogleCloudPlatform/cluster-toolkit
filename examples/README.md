@@ -734,7 +734,6 @@ tutorial.
 
 [starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
 
-
 ### [fluent-tutorial.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a simple cluster for use with an Ansys Fluent
