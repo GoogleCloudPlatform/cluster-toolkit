@@ -34,7 +34,6 @@ deployment_groups:
     use: [network1]
     settings:
       instance_count: 1
-      configure_chrome_remote_desktop: true
       install_nvidia_driver: true      # Must be set to true accept Nvidia ToS to install drivers
 
   # This module simply makes terraform wait until the startup script is complete
