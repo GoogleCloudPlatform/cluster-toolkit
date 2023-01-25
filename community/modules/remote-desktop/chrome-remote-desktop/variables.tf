@@ -35,12 +35,6 @@ variable "zone" {
   type        = string
 }
 
-variable "name_prefix" {
-  description = "Name prefix for remote desktop hostnames"
-  type        = string
-  default     = null
-}
-
 variable "instance_count" {
   description = "Number of instances"
   type        = number
