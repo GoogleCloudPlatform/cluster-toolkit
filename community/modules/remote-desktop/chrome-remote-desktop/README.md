@@ -1,5 +1,41 @@
-<!-- BEGIN_TF_DOCS -->
-Copyright 2022 Google LLC
+## Description
+
+This module creates a GPU accelerated remote desktop that can be accessed using
+Chrome Remote Desktop.
+
+> **Note**: This is an experimental module. This module has only been tested in
+> limited capacity with the HPC Toolkit. The module interface may have undergo
+> breaking changes in the future.
+
+### Example
+
+The following example will create a single GPU accelerated remote desktop.
+
+```yaml
+  - id: remote-desktop
+    source: community/modules/remote-desktop/chrome-remote-desktop
+    use: [network1]
+    settings:
+      install_nvidia_driver: true
+```
+
+### Setting up the Remote Desktop
+
+1. Once the remote desktop has been deployed, navigate to https://remotedesktop.google.com/headless.
+1. Click through `Begin`, `Next`, & `Authorize`.
+1. Copy the code snippet for `Debian Linux`.
+1. SSH into the remote desktop machine. It will be listed under
+   [VM Instances](https://console.cloud.google.com/compute/instances) in the
+   Google Cloud web console.
+1. Run the copied command and follow instructions to set up a PIN.
+1. You should now see your machine listed on the
+   [Chrome Remote Desktop page](https://remotedesktop.google.com/access) under `Remote devices`.
+1. Click on your machine and enter PIN if prompted.
+
+## License
+
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+Copyright 2023 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -73,4 +109,4 @@ No resources.
 |------|-------------|
 | <a name="output_name"></a> [name](#output\_name) | Name of any instance created |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | script to load and run all runners, as a string value. |
-<!-- END_TF_DOCS -->
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
