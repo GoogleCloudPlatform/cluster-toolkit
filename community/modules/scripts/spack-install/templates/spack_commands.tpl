@@ -33,7 +33,7 @@
     ansible.builtin.shell: |
       . {{ install_dir }}/share/spack/setup-env.sh
       echo "" >> {{ log_file }}
-      echo " === spack {{ item }} === " >> {{ log_file }}
+      echo " === Running command: spack {{ item }} === " >> {{ log_file }}
       spack {{ item }} >> {{ log_file }}
 
     loop: "{{ commands }}"

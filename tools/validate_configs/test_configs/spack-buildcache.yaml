@@ -35,6 +35,8 @@ deployment_groups:
       log_file: /var/log/spack.log
       commands:
       - 'config --scope=site add "config:install_tree:padded_length:128"'
+      - gpg init
+      - gpg trust /tmp/spack_key.gpg
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:

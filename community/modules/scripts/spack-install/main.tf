@@ -25,16 +25,14 @@ locals {
       chown_owner = var.chown_owner
       chgrp_group = var.chgrp_group
       chmod_mode  = var.chmod_mode
-      log_file    = var.log_file
     }
   )
 
   spack_install_runner = {
     "type"        = "ansible-local"
-    "content"     = <<EOD
----
-${local.install_file}
-EOD
+    "content"     = <<-EOD
+      ${local.install_file}
+      EOD
     "destination" = "spack_install.yml"
   }
 
@@ -49,10 +47,9 @@ EOD
 
   spack_commands_runner = {
     "type"        = "ansible-local"
-    "content"     = <<EOD
----
-${local.command_file}
-EOD
+    "content"     = <<-EOD
+      ${local.command_file}
+      EOD
     "destination" = "spack_commands.yml"
   }
 
@@ -69,10 +66,9 @@ EOD
 
   spack_packages_runner = {
     "type"        = "ansible-local"
-    "content"     = <<EOD
----
-${local.packages_file}
-EOD
+    "content"     = <<-EOD
+      ${local.packages_file}
+      EOD
     "destination" = "spack_packages.yml"
   }
 
@@ -89,22 +85,20 @@ EOD
 
   spack_compilers_runner = {
     "type"        = "ansible-local"
-    "content"     = <<EOD
----
-${local.compiler_file}
-EOD
+    "content"     = <<-EOD
+      ${local.compiler_file}
+      EOD
     "destination" = "spack_compilers.yml"
   }
 
   install_spack_runner = {
     "type"        = "ansible-local"
-    "content"     = <<EOD
----
-${local.install_file}
-${local.command_file}
-${local.compiler_file}
-${local.packages_file}
-EOD
+    "content"     = <<-EOD
+      ${local.install_file}
+      ${local.command_file}
+      ${local.compiler_file}
+      ${local.packages_file}
+      EOD
     "destination" = "complete_spack_install.yml"
   }
 

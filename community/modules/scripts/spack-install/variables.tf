@@ -81,14 +81,9 @@ variable "spack_cache_url" {
   description = "DEPRECATED"
   type        = any
   default     = null
-  nullable    = true
   validation {
     condition     = var.spack_cache_url == null
-    error_message = <<EOT
-    The spack_cache_url setting is deprecated.
-    Please add the cache using the `spack mirror add` and `spack buildcache keys` commands directly.
-    For more information, see: https://spack.readthedocs.io/en/latest/binary_caches.html
-EOT
+    error_message = "The spack_cache_url setting is deprecated. Please add the cache using the `spack mirror add` and `spack buildcache keys` commands directly. For more information, see: https://spack.readthedocs.io/en/latest/binary_caches.html."
   }
 }
 
@@ -98,11 +93,7 @@ variable "configs" {
   type        = any
   validation {
     condition     = var.configs == null
-    error_message = <<EOT
-      The configs setting is deprecated.
-      You can replicate its functionality by writing files with data runners,
-      and using a command to `config add -f <file>` instead.
-EOT
+    error_message = "The configs setting is deprecated. You can replicate its functionality by writing files with data runners, and using a command to `config add -f <file>` instead."
   }
 }
 
@@ -112,13 +103,7 @@ variable "licenses" {
   type        = any
   validation {
     condition     = var.licenses == null
-    error_message = <<EOT
-      The licenses setting is deprecated.
-      Please use a data runner to copy your license.
-      For more information on configuring spack to use license files,
-      see: https://spack.readthedocs.io/en/latest/config_yaml.html#spack-settings-config-yaml
-      and for an intel specific example: https://spack.readthedocs.io/en/latest/build_systems/intelpackage.html#configuring-spack-to-use-intel-licenses
-EOT
+    error_message = "The licenses setting is deprecated. Please use a data runner to copy your license. For more information on configuring spack to use license files, see: https://spack.readthedocs.io/en/latest/config_yaml.html#spack-settings-config-yaml."
   }
 }
 
@@ -128,10 +113,7 @@ variable "install_flags" {
   type        = any
   validation {
     condition     = var.install_flags == null
-    error_message = <<EOT
-      The install_flags setting is deprecated.
-      Instead, set flags on `install` commands directly.
-EOT
+    error_message = "The install_flags setting is deprecated. Instead, set flags on `install` commands directly."
   }
 }
 
@@ -141,10 +123,7 @@ variable "concretize_flags" {
   type        = any
   validation {
     condition     = var.concretize_flags == null
-    error_message = <<EOT
-      The concretize_flags setting is deprecated.
-      Instead, set flags on `concretize` commands directly.
-EOT
+    error_message = "The concretize_flags setting is deprecated. Instead, set flags on `concretize` commands directly."
   }
 }
 
@@ -154,12 +133,7 @@ variable "gpg_keys" {
   type        = any
   validation {
     condition     = var.gpg_keys == null
-    error_message = <<EOT
-      The gpg_keys setting is deprecated.
-      Instead, please use a data runner to transfer your key.
-      Then, `gpg` commands can be used to add your key directly.
-      For example: `spack gpg init && spack gpg trust <path_to_key>`
-EOT
+    error_message = "The gpg_keys setting is deprecated. Instead, please use a data runner to transfer your key. Then, `gpg` commands can be used to add your key directly."
   }
 }
 
@@ -169,10 +143,7 @@ variable "caches_to_populate" {
   type        = any
   validation {
     condition     = var.caches_to_populate == null
-    error_message = <<EOT
-      The caches_to_populate setting is deprecated.
-      Please add cache creation commands directly to the commands setting.
-EOT
+    error_message = "The caches_to_populate setting is deprecated. Please add cache creation commands directly to the commands setting."
   }
 }
 
@@ -180,14 +151,8 @@ variable "environments" {
   description = "DEPRECATED"
   default     = null
   type        = any
-  nullable    = true
   validation {
     condition     = var.environments == null
-    error_message = <<EOT
-      The environments setting is deprecated.
-      Please use a data runner to transfer an environment file,
-      and use spack commands to create an environment from it directly.
-      For more information, see: https://spack.readthedocs.io/en/latest/environments.html
-EOT
+    error_message = "The environments setting is deprecated. Please use a data runner to transfer an environment file, and use spack commands to create an environment from it directly. For more information, see: https://spack.readthedocs.io/en/latest/environments.html."
   }
 }

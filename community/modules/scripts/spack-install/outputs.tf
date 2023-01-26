@@ -88,9 +88,11 @@ output "setup_spack_runner" {
 
 output "install_spack_runner" {
   description = <<-EOT
-  Runner to both install Spack and execute arbitrary Spack commands.
-  Provided to maintain compatibility with older spack modules. The
-  startup-script modules will automatically handle installation of ansible.
+  Runner that incorporates the contents of the following other runners, executed
+  in this order: spack_install_runner, spack_commands_runner,
+  spack_compiler_runner, spack_packages_runner.
+
+  Usage:
   - id: example-startup-script
     source: modules/scripts/startup-script
     settings:

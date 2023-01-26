@@ -18,7 +18,7 @@
   become: yes
   hosts: localhost
   tasks:
-  - name: Install git
+  - name: Install dependencies through system package manager
     ansible.builtin.package:
       name:
       - python3-pip
