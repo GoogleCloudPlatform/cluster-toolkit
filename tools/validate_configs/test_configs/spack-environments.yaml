@@ -85,7 +85,7 @@ deployment_groups:
       - type: ansible-local
         source: modules/spack-install/scripts/install_spack_deps.yml
         destination: install_spack_deps.yml
-      - $(spack.install_spack_runner)
+      - $(spack.spack_full_install_runner)
       - $(spack-env.spack_commands_runner)
       - type: shell
         destination: shutdown.sh

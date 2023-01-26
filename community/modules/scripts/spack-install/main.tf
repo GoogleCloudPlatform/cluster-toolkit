@@ -28,7 +28,7 @@ locals {
     }
   )
 
-  spack_install_runner = {
+  spack_clone_runner = {
     "type"        = "ansible-local"
     "content"     = <<-EOD
       ${local.install_file}
@@ -91,7 +91,7 @@ locals {
     "destination" = "spack_compilers.yml"
   }
 
-  install_spack_runner = {
+  spack_full_install_runner = {
     "type"        = "ansible-local"
     "content"     = <<-EOD
       ${local.install_file}
@@ -102,7 +102,7 @@ locals {
     "destination" = "complete_spack_install.yml"
   }
 
-  install_spack_deps_runner = {
+  spack_deps_runner = {
     "type"        = "ansible-local"
     "source"      = "${path.module}/scripts/install_spack_deps.yml"
     "destination" = "install_spack_deps.yml"

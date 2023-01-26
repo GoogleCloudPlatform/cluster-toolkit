@@ -48,13 +48,13 @@ deployment_groups:
   - id: spack
     source: community/modules/scripts/spack-install
     outputs:
-    - spack_install_runner
+    - spack_clone_runner
     - spack_commands_runner
     - spack_packages_runner
     - spack_compilers_runner
-    - setup_spack_runner
-    - install_spack_runner
-    - install_spack_deps_runner
+    - spack_setup_runner
+    - spack_full_install_runner
+    - spack_deps_runner
     settings:
       install_dir: /sw/spack
       log_file: /var/log/spack.log
@@ -88,8 +88,8 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack.spack_deps_runner)
+      - $(spack.spack_full_install_runner)
 
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition

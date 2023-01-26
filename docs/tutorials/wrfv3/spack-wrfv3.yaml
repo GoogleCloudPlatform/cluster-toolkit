@@ -103,8 +103,8 @@ deployment_groups:
               - - $mpi_packages
               - - $%compilers
               - - $^mpis
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack.spack_deps_runner)
+      - $(spack.spack_full_install_runner)
       - type: shell
         destination: wrfv3_setup.sh
         content: |

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-output "spack_install_runner" {
+output "spack_clone_runner" {
   description = <<-EOT
   Runner to install Spack using an ansible playbook. The startup-script module
   will automatically handle installation of ansible.
@@ -22,10 +22,10 @@ output "spack_install_runner" {
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(your-spack-id.spack_install_runner)
+      - $(your-spack-id.spack_clone_runner)
   ...
   EOT
-  value       = local.spack_install_runner
+  value       = local.spack_clone_runner
 }
 
 output "spack_commands_runner" {
@@ -56,7 +56,6 @@ output "spack_packages_runner" {
   value       = local.spack_packages_runner
 }
 
-
 output "spack_compilers_runner" {
   description = <<-EOT
   Runner to install and configure compilers using Spack using an ansible playbook. The startup-script module
@@ -71,7 +70,7 @@ output "spack_compilers_runner" {
   value       = local.spack_compilers_runner
 }
 
-output "setup_spack_runner" {
+output "spack_setup_runner" {
   description = "Adds Spack setup-env.sh script to /etc/profile.d so that it is called at shell startup. Among other things this adds Spack binary to user PATH."
   value = {
     "type"        = "data"
@@ -86,10 +85,10 @@ output "setup_spack_runner" {
   }
 }
 
-output "install_spack_runner" {
+output "spack_full_install_runner" {
   description = <<-EOT
   Runner that incorporates the contents of the following other runners, executed
-  in this order: spack_install_runner, spack_commands_runner,
+  in this order: spack_clone_runner, spack_commands_runner,
   spack_compiler_runner, spack_packages_runner.
 
   Usage:
@@ -97,11 +96,10 @@ output "install_spack_runner" {
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(your-spack-id.install_spack_runner)
+      - $(your-spack-id.spack_full_install_runner)
   ...
-
   EOT
-  value       = local.install_spack_runner
+  value       = local.spack_full_install_runner
 }
 
 output "spack_path" {
@@ -109,7 +107,7 @@ output "spack_path" {
   value       = var.install_dir
 }
 
-output "install_spack_deps_runner" {
+output "spack_deps_runner" {
   description = <<-EOT
   Runner to install dependencies for spack using an ansible playbook. The
   startup-script module will automatically handle installation of ansible.
@@ -117,8 +115,8 @@ output "install_spack_deps_runner" {
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(your-spack-id.install_spack_deps_runner)
+      - $(your-spack-id.spack_deps_runner)
   ...
   EOT
-  value       = local.install_spack_deps_runner
+  value       = local.spack_deps_runner
 }

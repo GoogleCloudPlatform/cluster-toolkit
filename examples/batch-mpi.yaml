@@ -95,8 +95,8 @@ deployment_groups:
               - - $mpi_packages
               - - $%compilers
               - - $^mpis
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack.spack_deps_runner)
+      - $(spack.spack_full_install_runner)
       - $(spack-env.spack_commands_runner)
       - type: shell
         destination: wrfv3_setup.sh
@@ -156,7 +156,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.setup_spack_runner)
+      - $(spack.spack_setup_runner)
 
   - id: batch-login
     source: modules/scheduler/batch-login-node

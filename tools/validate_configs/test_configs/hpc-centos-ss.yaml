@@ -70,8 +70,8 @@ deployment_groups:
       - type: "ansible-local"
         source: modules/startup-script/examples/hello.yaml
         destination: hello.yaml
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack.spack_deps_runner)
+      - $(spack.spack_full_install_runner)
 
   - id: instance
     source: ./modules/compute/vm-instance

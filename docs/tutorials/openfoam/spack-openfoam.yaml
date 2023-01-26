@@ -110,8 +110,8 @@ deployment_groups:
               - - $^mpis
             concretizer:
               unify: when_possible
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack.spack_deps_runner)
+      - $(spack.spack_full_install_runner)
       - type: shell
         destination: setup_openfoam.sh
         content: |

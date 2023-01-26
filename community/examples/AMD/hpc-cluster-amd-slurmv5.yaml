@@ -71,8 +71,8 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack.spack_deps_runner)
+      - $(spack.spack_full_install_runner)
       - type: shell
         destination: shutdown.sh
         content: |
@@ -134,7 +134,7 @@ deployment_groups:
             concretizer:
               unify: when_possible
 
-      - $(spack.setup_spack_runner)
+      - $(spack.spack_setup_runner)
       - $(spack-env.spack_commands_runner)
       # the following installation of AOCC may be automated in the future
       # with a clear direction to the user to read the EULA at
