@@ -27,18 +27,14 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    kind: terraform
 
   - id: remote-desktop
     source: community/modules/remote-desktop/chrome-remote-desktop
     use: [network1]
     settings:
-      instance_count: 1
-      install_nvidia_driver: true      # Must be set to true accept Nvidia ToS to install drivers
+      install_nvidia_driver: true  # Must be set to true to accept Nvidia ToS for driver install
 
-  # This module simply makes terraform wait until the startup script is complete
+  # This module makes terraform wait until the remote-desktop setup is complete
   - id: wait
     source: community/modules/scripts/wait-for-startup
-    settings:
-      instance_name: ((module.remote-desktop.name))
-      timeout: 2100
+    use: [remote-desktop]
