@@ -19,7 +19,7 @@ output "startup_script" {
   value       = module.client_startup_script.startup_script
 }
 
-output "name" {
-  description = "Name of any instance created"
+output "instance_name" {
+  description = "Name of the first instance created, if any."
   value       = var.instance_count > 0 ? module.instances.name[0] : null
 }

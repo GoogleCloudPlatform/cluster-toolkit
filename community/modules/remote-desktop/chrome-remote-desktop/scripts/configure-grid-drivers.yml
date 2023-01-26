@@ -96,7 +96,7 @@
         dest: /etc/X11/default-display-manager
         content: "/usr/sbin/gdm3"
         mode: 0644
-    
+
     - name: Switch boot target to gui
       ansible.builtin.command: systemctl set-default graphical.target
       register: result
