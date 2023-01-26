@@ -118,6 +118,13 @@ Modules that are still in development and less stable are labeled with the
 [service-account]: ../community/modules/project/service-account/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
 
+### Remote Desktop
+
+* **[chrome-remote-desktop]** ![community-badge] ![experimental-badge] : Creates
+  a GPU accelerated Chrome Remote Desktop.
+
+[chrome-remote-desktop]: ../community/modules/remote-desktop/chrome-remote-desktop/README.md
+
 ### Scheduler
 
 * **[batch-job-template]** ![core-badge] : Creates a Google Cloud Batch job
