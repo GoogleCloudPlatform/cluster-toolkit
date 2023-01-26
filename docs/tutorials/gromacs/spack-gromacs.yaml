@@ -38,8 +38,8 @@ deployment_groups:
       install_dir: /apps/spack
       log_file: /var/log/spack.log
       commands:
-      - "config --scope=defaults add -f /apps/spack_modules.yaml"
-      - "config --scope=defaults add -f /apps/spack_packages.yaml"
+      - "spack config --scope=defaults add -f /apps/spack_modules.yaml"
+      - "spack config --scope=defaults add -f /apps/spack_packages.yaml"
       # Un-comment and update mirror_url to install from spack cache
       # - "mirror add gcs_cache gs://optionally_set_spack_cache_bucket
       # - "buildcache keys --install --trust"
@@ -53,11 +53,11 @@ deployment_groups:
       install_dir: /apps/spack
       log_file: /var/log/spack.log
       commands:
-      - "env create gromacs -f /apps/gromacs_env.yaml"
-      - "env activate gromacs"
-      - "concretize -f"
-      - "install"
-      - "env deactivate"
+      - "spack env create gromacs -f /apps/gromacs_env.yaml"
+      - "spack env activate gromacs"
+      - "spack concretize -f"
+      - "spack install"
+      - "spack env deactivate"
 
   - id: controller-setup
     source: modules/scripts/startup-script

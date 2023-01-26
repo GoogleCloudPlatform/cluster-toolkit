@@ -19,6 +19,7 @@
   vars:
     install_dir: ${install_dir}
     log_file: ${log_file}
+    prefix: ${command_prefix}
 %{if length(COMMANDS) > 0 ~}
     commands:
 %{for c in COMMANDS ~}
@@ -29,11 +30,11 @@
 %{endif ~}
 
   tasks:
-  - name: Run spack commands
+  - name: Run commands
     ansible.builtin.shell: |
       . {{ install_dir }}/share/spack/setup-env.sh
       echo "" >> {{ log_file }}
-      echo " === Running command: spack {{ item }} === " >> {{ log_file }}
-      spack {{ item }} >> {{ log_file }}
+      echo " === Running command: {{ command_prefix }} {{ item }} === " >> {{ log_file }}
+      {{ command_prefix }} {{ item }} >> {{ log_file }}
 
     loop: "{{ commands }}"

@@ -47,20 +47,12 @@ deployment_groups:
   ## Install Scripts
   - id: spack
     source: community/modules/scripts/spack-install
-    outputs:
-    - spack_clone_runner
-    - spack_commands_runner
-    - spack_packages_runner
-    - spack_compilers_runner
-    - spack_setup_runner
-    - spack_full_install_runner
-    - spack_deps_runner
     settings:
       install_dir: /sw/spack
       log_file: /var/log/spack.log
       commands:
-      - 'config --scope=defaults add "config:build_stage:[/sw/spack/spack-stage]"'
-      - 'config --scope=defaults add -f /sw/spack_modules.yaml'
+      - 'spack config --scope=defaults add "config:build_stage:[/sw/spack/spack-stage]"'
+      - 'spack config --scope=defaults add -f /sw/spack_modules.yaml'
 
       # Uncomment and update the name and path to add a shared or personal Spack
       # cache location to speed up future deployments.

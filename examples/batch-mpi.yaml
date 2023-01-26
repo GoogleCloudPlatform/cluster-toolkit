@@ -39,8 +39,8 @@ deployment_groups:
     settings:
       install_dir: /share/spack
       commands:
-      - "config --scope=defaults add 'config:build_stage[/share/spack/spack-stage]'"
-      - "config --scope=defaults add -f /apps/spack_modules_conf.yaml"
+      - "spack config --scope=defaults add 'config:build_stage[/share/spack/spack-stage]'"
+      - "spack config --scope=defaults add -f /apps/spack_modules_conf.yaml"
 
       # Un-comment and update mirror_url to install from spack cache
       # - "mirror add gcs_cache gs://optionally_set_spack_cache_bucket"
@@ -53,11 +53,11 @@ deployment_groups:
     settings:
       install_dir: /share/spack
       commands:
-      - "env create wrfv3 /apps/wrf_env.yaml"
-      - "env activate wrfv3"
-      - "concretize -f"
-      - "install"
-      - "env deactivate"
+      - "spack env create wrfv3 /apps/wrf_env.yaml"
+      - "spack env activate wrfv3"
+      - "spack concretize -f"
+      - "spack install"
+      - "spack env deactivate"
 
 
   - id: spack-build-startup

@@ -39,9 +39,10 @@ locals {
   command_file = templatefile(
     "${path.module}/templates/spack_commands.tpl",
     {
-      install_dir = var.install_dir
-      log_file    = var.log_file
-      COMMANDS    = var.commands
+      install_dir    = var.install_dir
+      log_file       = var.log_file
+      command_prefix = ""
+      COMMANDS       = var.commands
     }
   )
 
@@ -53,14 +54,13 @@ locals {
     "destination" = "spack_commands.yml"
   }
 
-  package_commands = [for pkg_spec in var.packages : "install ${pkg_spec}"]
-
   packages_file = templatefile(
     "${path.module}/templates/spack_commands.tpl",
     {
-      install_dir = var.install_dir
-      log_file    = var.log_file
-      COMMANDS    = local.package_commands
+      install_dir    = var.install_dir
+      log_file       = var.log_file
+      command_prefix = "spack install"
+      COMMANDS       = var.packages
     }
   )
 
@@ -77,9 +77,10 @@ locals {
   compiler_file = templatefile(
     "${path.module}/templates/spack_commands.tpl",
     {
-      install_dir = var.install_dir
-      log_file    = var.log_file
-      COMMANDS    = local.compiler_commands
+      install_dir    = var.install_dir
+      log_file       = var.log_file
+      command_prefix = "spack"
+      COMMANDS       = local.compiler_commands
     }
   )
 

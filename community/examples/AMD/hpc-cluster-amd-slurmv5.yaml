@@ -46,10 +46,10 @@ deployment_groups:
       spack_ref: v0.18.1
       log_file: /var/log/spack.log
       commands:
-      - 'config --scope=defaults add "config:build_stage:[/opt/spack_build_stage]"'
-      - 'config --scope=site add -f /sw/spack/modules.yaml'
-      - 'config --scope=site add -f /sw/spack/packages.yaml'
-      - 'config --scope=site add "concretizer:targets:host_compatible:false"'
+      - 'spack config --scope=defaults add "config:build_stage:[/opt/spack_build_stage]"'
+      - 'spack config --scope=site add -f /sw/spack/modules.yaml'
+      - 'spack config --scope=site add -f /sw/spack/packages.yaml'
+      - 'spack config --scope=site add "concretizer:targets:host_compatible:false"'
       compilers:
       # gcc 12.1.0 is known to have runtime failures with OpenFOAM 8
       # gcc 10.3.0 is the earliest copy of gcc with Zen 3 support
@@ -61,11 +61,11 @@ deployment_groups:
       install_dir: /sw/spack
       log_file: /var/log/spack.log
       commands:
-      - 'env create openfoam /sw/spack/openfoam_env.yaml'
-      - 'env activate openfoam'
-      - 'concretize -f'
-      - 'install'
-      - 'env deactivate'
+      - 'spack env create openfoam /sw/spack/openfoam_env.yaml'
+      - 'spack env activate openfoam'
+      - 'spack concretize -f'
+      - 'spack install'
+      - 'spack env deactivate'
 
   - id: spack-startup
     source: modules/scripts/startup-script

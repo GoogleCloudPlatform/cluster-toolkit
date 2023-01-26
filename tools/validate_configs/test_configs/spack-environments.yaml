@@ -36,7 +36,7 @@ deployment_groups:
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
       commands:
-      - 'config --site=scope add "config:install_tree:padded_length:128"'
+      - 'spack config --site=scope add "config:install_tree:padded_length:128"'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:
@@ -47,11 +47,11 @@ deployment_groups:
     settings:
       install_dir: /apps/spack
       commands:
-      - env create file-test /apps/spack_environments/file_test.yaml
-      - env activate file-test
-      - concretize
-      - install
-      - env deactivate
+      - spack env create file-test /apps/spack_environments/file_test.yaml
+      - spack env activate file-test
+      - spack concretize
+      - spack install
+      - spack env deactivate
 
   - id: spack-startup
     source: modules/scripts/startup-script
