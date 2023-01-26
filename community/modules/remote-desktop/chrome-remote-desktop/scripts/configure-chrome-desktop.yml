@@ -30,16 +30,20 @@
       url: https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
       dest: /tmp/chrome-remote-desktop_current_amd64.deb
       mode: "0755"
-
-  - name: Supress user dialog prompts for installations
-    ansible.builtin.shell: export DEBIAN_FRONTEND=noninteractive
   
   - name: Install CRD
     ansible.builtin.apt:
       deb: /tmp/chrome-remote-desktop_current_amd64.deb
+    environment:
+      DEBIAN_FRONTEND: noninteractive
 
   - name: Configure CRD to use Xfce by default
-    ansible.builtin.shell:
-      sudo bash -c 'echo "exec /etc/X11/Xsession /usr/bin/xfce4-session" > /etc/chrome-remote-desktop-session'
+    ansible.builtin.copy:
+      dest: /etc/chrome-remote-desktop-session
+      content: "exec /etc/X11/Xsession /usr/bin/xfce4-session"
+      mode: 0644
 
-      sudo /etc/init.d/chrome-remote-desktop start
+  - name: Start Chrome remote desktop
+    ansible.builtin.command: /etc/init.d/chrome-remote-desktop start
+    register: result
+    changed_when: result.rc == 0
