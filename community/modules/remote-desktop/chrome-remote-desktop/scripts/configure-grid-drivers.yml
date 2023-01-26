@@ -18,8 +18,9 @@
   become: true
   tasks:
   - name: Get kernel release
-    ansible.builtin.shell: uname -r
+    ansible.builtin.command: uname -r
     register: uname_result
+    changed_when: false
 
   - name: Install binaries for GRID drivers
     ansible.builtin.apt:
@@ -38,11 +39,15 @@
       dest: /tmp/
       mode: "0755"
 
-  - name: Install GPU driver
-    ansible.builtin.shell:
-      sudo systemctl stop gdm
+  - name: Stop gdm service
+    ansible.builtin.systemd:
+      name: gdm
+      state: stopped
 
-      sudo bash -c '/tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run -silent'
+  - name: Install GPU driver
+    ansible.builtin.command: /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run -silent
+    register: result
+    changed_when: result.rc == 0
 
   - name: Download VirtualGL driver
     ansible.builtin.get_url:
@@ -51,27 +56,54 @@
       mode: "0755"
 
   - name: Install VirtualGL
-    ansible.builtin.shell: sudo gdebi /tmp/virtualgl_3.0.2_amd64.deb --non-interactive
+    ansible.builtin.command: gdebi /tmp/virtualgl_3.0.2_amd64.deb --non-interactive
+    register: result
+    changed_when: result.rc == 0
 
   - name: Fix headless Nvidia issue
-    ansible.builtin.shell:
-      sudo nvidia-xconfig --query-gpu-info | sudo tee /tmp/gpu-info.txt >/dev/null
+    block:
+    - name: Lookup gpu info
+      ansible.builtin.command: nvidia-xconfig --query-gpu-info
+      register: gpu_info
+      failed_when: gpu_info.rc != 0
+      changed_when: false
 
-      PCI_ID=$(grep </tmp/gpu-info.txt "PCI BusID " | head -n 1 | cut -d':' -f2-99 | xargs)
+    - name: Extract PCI ID
+      ansible.builtin.shell: echo "{{ gpu_info.stdout }}" | grep "PCI BusID " | head -n 1 | cut -d':' -f2-99 | xargs
+      register: pci_id
+      changed_when: false
 
-      sudo nvidia-xconfig -a --allow-empty-initial-configuration --enable-all-gpus --virtual=1920x1200 --busid="$PCI_ID"
+    - name: Configure nvidia-xconfig
+      ansible.builtin.command: nvidia-xconfig -a --allow-empty-initial-configuration --enable-all-gpus --virtual=1920x1200 --busid={{ pci_id.stdout }}
+      register: result
+      changed_when: result.rc == 0
 
-      sudo sed -i '/Section "Device"/a \ \ \ \ Option\t"HardDPMS" "false"' /etc/X11/xorg.conf
+    - name: Set HardDPMS to false
+      ansible.builtin.replace:
+        path: /etc/X11/xorg.conf
+        regexp: "Section \"Device\""
+        replace: "Section \"Device\"\n    Option      \"HardDPMS\" \"false\""
 
   - name: Configure VirtualGL for X
-    ansible.builtin.shell: sudo vglserver_config +glx +s +f -t
+    ansible.builtin.command: vglserver_config +glx +s +f -t
+    register: result
+    changed_when: result.rc == 0
 
   - name: Configure gdm for X
-    ansible.builtin.shell:
-      sudo bash -c 'echo "/usr/sbin/gdm3" > /etc/X11/default-display-manager'
+    block:
+    - name: Configure default display manager
+      ansible.builtin.copy:
+        dest: /etc/X11/default-display-manager
+        content: "/usr/sbin/gdm3"
+        mode: 0644
+    
+    - name: Switch boot target to gui
+      ansible.builtin.command: systemctl set-default graphical.target
+      register: result
+      changed_when: result.rc == 0
 
-      sudo systemctl set-default graphical.target
-
-      sudo systemctl daemon-reload
-
-      sudo systemctl start gdm
+    - name: Start gdm service
+      ansible.builtin.systemd:
+        name: gdm
+        daemon_reload: true
+        state: started
