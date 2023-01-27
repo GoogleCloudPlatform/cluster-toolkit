@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
----
-
 - name: Install necessary dependencies
   hosts: localhost
   tasks:

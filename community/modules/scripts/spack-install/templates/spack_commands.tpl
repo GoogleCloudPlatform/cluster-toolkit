@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
----
-
 - name: Run Spack Commands
   hosts: localhost
   vars:
     install_dir: ${install_dir}
     log_file: ${log_file}
-    prefix: ${command_prefix}
+    command_prefix: ${command_prefix}
 %{if length(COMMANDS) > 0 ~}
     commands:
 %{for c in COMMANDS ~}
