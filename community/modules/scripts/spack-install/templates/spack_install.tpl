@@ -19,7 +19,7 @@
     ansible.builtin.package:
       name:
       - git
-      state: latest
+      state: present
 - name: Install Spack
   hosts: localhost
   vars:
