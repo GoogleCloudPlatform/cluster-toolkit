@@ -38,6 +38,10 @@ const (
 	expectedVarFormat string = "$(vars.var_name) or $(module_id.output_name)"
 	expectedModFormat string = "$(module_id) or $(group_id.module_id)"
 	matchLabelExp     string = `^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`
+	spackDeprecation  string = `DEPRECATION: The former 'spack-install' module has been deprecated and removed after version 1.11.0 of the HPC Toolkit.
+	If you still need to use the old 'spack-install' module, you can update the source to point at the prior version on github like so:
+	source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.11.0
+`
 )
 
 var errorMessages = map[string]string{
@@ -86,6 +90,7 @@ var errorMessages = map[string]string{
 var movedModules = map[string]string{
 	"community/modules/scheduler/cloud-batch-job":        "modules/scheduler/batch-job-template",
 	"community/modules/scheduler/cloud-batch-login-node": "modules/scheduler/batch-login-node",
+	"community/modules/scripts/spack-install":            "community/modules/scripts/spack",
 }
 
 // DeploymentGroup defines a group of Modules that are all executed together
@@ -305,6 +310,9 @@ func (dc *DeploymentConfig) checkMovedModules() error {
 				fmt.Printf(
 					"A module you are using has moved. %s has been replaced with %s. Please update the source in your blueprint and try again.\n",
 					mod.Source, replacingMod)
+				if strings.Contains(mod.Source, "spack-install") {
+					fmt.Printf(spackDeprecation)
+				}
 			}
 		}
 	}
