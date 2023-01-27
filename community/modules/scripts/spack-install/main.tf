@@ -72,14 +72,14 @@ locals {
     "destination" = "spack_packages.yml"
   }
 
-  compiler_commands = flatten([for comp_spec in var.compilers : ["install ${comp_spec}", "load ${comp_spec}", "compiler find --scope=site", "unload ${comp_spec}"]])
+  compiler_commands = flatten([for comp_spec in var.compilers : ["spack install ${comp_spec} && spack load ${comp_spec} && spack compiler find --scope=site"]])
 
   compiler_file = templatefile(
     "${path.module}/templates/spack_commands.tpl",
     {
       install_dir    = var.install_dir
       log_file       = var.log_file
-      command_prefix = "spack"
+      command_prefix = ""
       COMMANDS       = local.compiler_commands
     }
   )
