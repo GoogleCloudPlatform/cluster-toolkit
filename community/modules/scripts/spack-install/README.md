@@ -1,7 +1,138 @@
 ## Description
 
-This module will create a set of startup-script runners that will install Spack,
-and execute an arbitrary number of Spack commands.
+This module will create a set of startup-script runners that can be used to
+install and configure [spack] on a VM.
+
+## Examples
+
+### Simple Example
+The following snippet shows how a fairly simple spack installation runner can be
+created and used:
+
+```yaml
+- id: spack
+  source: community/modules/scripts/spack-install
+  settings:
+    compilers:
+    - gcc@10.3.0 target=x86_64
+    packages:
+    - intel-mpi@2018.4.274%gcc@10.3.0
+    - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+- id: startup
+  source: modules/scripts/startup-script
+  settings:
+    runners:
+    - $(spack.spack_deps_runner)
+    - $(spack.spack_full_install_runner)
+- id: workstation
+  source: modules/compute/vm-instance
+  use: [startup]
+```
+
+In this example, a set of compilers and spack packages have been defined in the
+`spack` module, in this case they are based on the [spack-gromacs.yaml] example.
+Through the `spack_full_install_runner`, spack will be cloned onto the VM and
+the compilers will be installed followed by the packages. In order to ensure
+some basic dependencies such as git and the `google-cloud-storage` pip package
+have been installed, the `spack_deps_runner` is included in the set of startup
+script runners.
+
+This set of two startup script runners will be executed at startup on the
+`workstation` VM instance as the `startup` module is supplied to it via `use`.
+
+### Fine Grained Example
+The following example expands on the simple example above in order to show the
+more flexible functionality of the spack-install module:
+
+```yaml
+- id: spack
+  source: community/modules/scripts/spack-install
+  settings:
+    install_dir: /sw/spack
+    log_file: /var/log/spack/install-runner.log
+    commands:
+    - spack config --scope=defaults add "config:build_stage:[/sw/spack/spack-stage]"
+    - spack config --scope=defaults add -f /sw/spack_modules.yaml
+    - spack mirror add gcs_cache gs://YOUR-CACHE-BUCKET-NAME
+    - spack buildcache keys --install --trust
+    compilers:
+    - gcc@10.3.0 target=x86_64
+    packages:
+    - intel-mpi@2018.4.274%gcc@10.3.0
+    - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+- id: startup
+  source: modules/scripts/startup-script
+  settings:
+    runners:
+    - type: 'data'
+     destination: '/sw/spack_modules.yaml'
+     content: |
+        modules:
+          default:
+            tcl:
+              hash_length: 0
+              all:
+                conflict:
+                - '{name}'
+              projections:
+                all: '{name}/{version}-{compiler.name}-{compiler.version}'
+    - $(spack.spack_deps_runner)
+    - $(spack.spack_clone_runner)
+    - $(spack.spack_commands_runner)
+    - $(spack.spack_compilers_runner)
+    - $(spack.spack_packages_runner)
+    - $(spack.spack_setup_runner)
+- id: workstation
+  source: modules/compute/vm-instance
+  use: [startup]
+```
+
+In this case, we are updating the default spack config and adding a build cache
+from a GCS bucket. In addition, rather than use the `spack_full_install_runner`,
+each of the individual runners are added independently which provides
+flexibility to execute additional startup scripts at different stages of the
+spack configuration or to run them in a different order. This may be useful if
+the commands provided assume compilers or packages have already been installed.
+
+More information about each of these runners will be provided in the next
+section.
+
+## Runners
+
+**`spack_deps_runner`:** This runner installs dependencies for the spack
+installation, which include git, pip3 and the `google-cloud-storage` pip package.
+
+**`spack_setup_runner`:** This runner updates the `profile.d` configuration to
+set the spack environment on login by default. If not used, the spack
+environment can be set manually by sourcing the `setup-env.sh` file stored at
+`share/spack/setup-env.sh` in the `install_dir` (defaults to `/apps/spack`).
+
+**`spack_full_install_runner`:** This runner will perform all of the actions
+in the following runners in the order listed here:
+
+1. `spack_clone_runner`
+1. `spack_commands_runner`
+1. `spack_compilers_runner`
+1. `spack_packages_runner`
+
+Unless your spack configuration requires significant customization, it's
+recommended to use this runner rather than the ones below, as it enforces a
+standard order of execution and is much less verbose.
+
+**`spack_clone_runner`:** This runner clones the spack repo based on the
+settings provided. In addition to this, it also sets permissions for the install
+directory.
+
+**`spack_commands_runner`:** This runner executes the commands provided in the
+`commands` setting in order. The runner will set the environment so that `spack`
+is available. It's intended to provide a mechanism for leveraging `spack` tools
+directly that are not directly supported by this module.
+
+**`spack_compilers_runner`:** This runner installs, loads and sets up the
+compilers in the spack environment in the order provided.
+
+**`spack_packages_runner`:** This runner installs the packages using spack in
+the order provided.
 
 ## License
 
@@ -52,7 +183,7 @@ No resources.
 | <a name="input_configs"></a> [configs](#input\_configs) | DEPRECATED | `any` | `null` | no |
 | <a name="input_environments"></a> [environments](#input\_environments) | DEPRECATED | `any` | `null` | no |
 | <a name="input_gpg_keys"></a> [gpg\_keys](#input\_gpg\_keys) | DEPRECATED | `any` | `null` | no |
-| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Destination directory of installation of Spack | `string` | `"/apps/ramble"` | no |
+| <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Destination directory of installation of Spack | `string` | `"/apps/spack"` | no |
 | <a name="input_install_flags"></a> [install\_flags](#input\_install\_flags) | DEPRECATED | `any` | `null` | no |
 | <a name="input_licenses"></a> [licenses](#input\_licenses) | DEPRECATED | `any` | `null` | no |
 | <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Log file to write output from spack steps into | `string` | `"/var/log/spack.log"` | no |

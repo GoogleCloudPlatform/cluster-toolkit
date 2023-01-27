@@ -56,8 +56,8 @@ deployment_groups:
 
       # Uncomment and update the name and path to add a shared or personal Spack
       # cache location to speed up future deployments.
-      # - 'mirror add gcs_cache gs://bucket-name...
-      # - 'buildcache keys --install --trust'
+      # - 'spack mirror add gcs_cache gs://bucket-name...
+      # - 'spack buildcache keys --install --trust'
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:

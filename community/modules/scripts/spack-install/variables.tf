@@ -16,7 +16,7 @@
 
 variable "install_dir" {
   description = "Destination directory of installation of Spack"
-  default     = "/apps/ramble"
+  default     = "/apps/spack"
   type        = string
 }
 
