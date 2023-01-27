@@ -1,6 +1,6 @@
 ## Description
 
-This module creates a GPU accelerated remote desktop that can be accessed using
+This module creates a GPU accelerated virtual machine that can be accessed using
 Chrome Remote Desktop.
 
 > **Note**: This is an experimental module. This module has only been tested in
