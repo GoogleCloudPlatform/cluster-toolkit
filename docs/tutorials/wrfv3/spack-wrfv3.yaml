@@ -33,7 +33,7 @@ deployment_groups:
 
   ## Install Scripts
   - id: spack
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack
     settings:
       install_dir: /apps/spack
       log_file: /var/log/spack.log
@@ -48,7 +48,7 @@ deployment_groups:
       - gcc@9.3.0 target=x86_64
 
   - id: spack-env
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack
     settings:
       install_dir: /apps/spack
       log_file: /var/log/spack.log

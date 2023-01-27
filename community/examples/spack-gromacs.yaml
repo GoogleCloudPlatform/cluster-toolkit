@@ -46,7 +46,7 @@ deployment_groups:
 
   ## Install Scripts
   - id: spack
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack
     settings:
       install_dir: /sw/spack
       log_file: /var/log/spack.log

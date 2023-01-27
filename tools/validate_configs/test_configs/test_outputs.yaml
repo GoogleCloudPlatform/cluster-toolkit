@@ -130,7 +130,7 @@ deployment_groups:
       - "compute.instanceAdmin.v1"
 
   - id: spack
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack
     outputs:
     - spack_clone_runner
     - spack_commands_runner

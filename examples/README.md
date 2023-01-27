@@ -556,7 +556,7 @@ This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
 The blueprint contains the following:
 
 * A shared `filestore` filesystem.
-* A `spack-install` module that builds a script to install Spack and the WRF
+* A `spack` module that builds a script to install Spack and the WRF
   application onto the shared `filestore`.
 * A `startup-script` module which uses the above script and stages job data.
 * A builder `vm-instance` which performs the Spack install and then shuts down.
@@ -609,12 +609,12 @@ The blueprint contains the following:
 
 Spack is an HPC software package manager. This example creates a small Slurm
 cluster with software installed using the
-[spack-install module](../community/modules/scripts/spack-install/README.md) The
+[spack module](../community/modules/scripts/spack/README.md) The
 controller will install and configure spack, and install
 [gromacs](https://www.gromacs.org/) using spack. Spack is installed in a shared
 location (/sw) via filestore. This build leverages the
 [startup-script module](../modules/scripts/startup-script/README.md) and can be
-applied in any cluster by using the output of spack-install or
+applied in any cluster by using the output of spack or
 startup-script modules.
 
 The installation will occur as part of the Slurm startup-script, a warning

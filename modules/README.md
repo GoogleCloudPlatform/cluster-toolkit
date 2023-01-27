@@ -180,7 +180,7 @@ Modules that are still in development and less stable are labeled with the
 * **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a
   Toolkit runner to run common `qmgr` commands when configuring a PBS
   Professional cluster.
-* **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
+* **[spack]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install [Spack](https://github.com/spack/spack) on an
   instance or a slurm login or controller.
 * **[wait-for-startup]** ![community-badge] ![experimental-badge] : Waits for
@@ -189,7 +189,7 @@ Modules that are still in development and less stable are labeled with the
 [startup-script]: scripts/startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
-[spack-install]: ../community/modules/scripts/spack-install/README.md
+[spack]: ../community/modules/scripts/spack/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 [pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
 [pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md

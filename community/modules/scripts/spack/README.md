@@ -11,7 +11,7 @@ created and used:
 
 ```yaml
 - id: spack
-  source: community/modules/scripts/spack-install
+  source: community/modules/scripts/spack
   settings:
     compilers:
     - gcc@10.3.0 target=x86_64
@@ -42,11 +42,11 @@ This set of two startup script runners will be executed at startup on the
 
 ### Fine Grained Example
 The following example expands on the simple example above in order to show the
-more flexible functionality of the spack-install module:
+more flexible functionality of the spack module:
 
 ```yaml
 - id: spack
-  source: community/modules/scripts/spack-install
+  source: community/modules/scripts/spack
   settings:
     install_dir: /sw/spack
     log_file: /var/log/spack/install-runner.log

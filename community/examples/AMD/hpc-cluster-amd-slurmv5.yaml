@@ -40,7 +40,7 @@ deployment_groups:
       local_mount: /sw
 
   - id: spack
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack
     settings:
       install_dir: /sw/spack
       spack_ref: v0.18.1
@@ -56,7 +56,7 @@ deployment_groups:
       - gcc@10.3.0 %gcc@4.8.5 target=x86_64
 
   - id: spack-env
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack
     settings:
       install_dir: /sw/spack
       log_file: /var/log/spack.log

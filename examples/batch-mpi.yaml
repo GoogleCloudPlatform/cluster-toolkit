@@ -35,7 +35,7 @@ deployment_groups:
       local_mount: /share
 
   - id: spack
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack
     settings:
       install_dir: /share/spack
       commands:
@@ -49,7 +49,7 @@ deployment_groups:
       - gcc@8.2.0 target=x86_64
 
   - id: spack-env
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack
     settings:
       install_dir: /share/spack
       commands:

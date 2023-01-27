@@ -29,7 +29,7 @@ deployment_groups:
     source: modules/network/pre-existing-vpc
 
   - id: spack
-    source: ./community/modules/scripts/spack-install
+    source: ./community/modules/scripts/spack
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
@@ -43,7 +43,7 @@ deployment_groups:
       - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
 
   - id: spack-env
-    source: ./community/modules/scripts/spack-install
+    source: ./community/modules/scripts/spack
     settings:
       install_dir: /apps/spack
       commands:
@@ -83,7 +83,7 @@ deployment_groups:
           chmod a+rwx /apps
         destination: apps_create.sh
       - type: ansible-local
-        source: modules/spack-install/scripts/install_spack_deps.yml
+        source: modules/spack/scripts/install_spack_deps.yml
         destination: install_spack_deps.yml
       - $(spack.spack_full_install_runner)
       - $(spack-env.spack_commands_runner)
