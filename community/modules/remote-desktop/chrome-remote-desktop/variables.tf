@@ -85,6 +85,12 @@ variable "auto_delete_boot_disk" {
   default     = true
 }
 
+variable "name_prefix" {
+  description = "Name Prefix"
+  type        = string
+  default     = null
+}
+
 variable "enable_public_ips" {
   description = "If set to true, instances will have public IPs on the internet."
   type        = bool

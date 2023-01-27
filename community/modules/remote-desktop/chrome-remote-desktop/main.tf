@@ -59,6 +59,7 @@ module "instances" {
   source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=264e99c"
 
   instance_count = var.instance_count
+  name_prefix    = var.name_prefix
   spot           = var.spot
 
   deployment_name = var.deployment_name
