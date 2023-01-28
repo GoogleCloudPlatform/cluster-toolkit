@@ -93,6 +93,13 @@ page.
 More information on GPU support in Slurm on GCP and other HPC Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
+## Hybrid Slurm Clusters
+For more information on how to configure an on premise slurm cluster with hybrid
+cloud partitions, see the [schedmd-slurm-gcp-v5-hybrid] module and our
+extended instructions in our [docs](../../../../docs/hybrid-slurm-cluster/).
+
+[schedmd-slurm-gcp-v5-hybrid]: ../schedmd-slurm-gcp-v5-hybrid/README.md
+
 ## Support
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
