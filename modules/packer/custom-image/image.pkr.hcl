@@ -102,5 +102,20 @@ build {
     }
   }
 
-  post-processor "manifest" {}
+  post-processor "manifest" {
+    output     = var.manifest_file
+    strip_path = true
+    custom_data = {
+      built-by = "cloud-hpc-toolkit"
+    }
+  }
+
+  # if the jq command is present, this will print the image name to stdout
+  # if jq is not present, this exits silently with code 0
+  post-processor "shell-local" {
+    inline = [
+      "command -v jq > /dev/null || exit 0",
+      "echo \"Image built: $(jq -r '.builds[-1].artifact_id' ${var.manifest_file} | cut -d ':' -f2)\"",
+    ]
+  }
 }

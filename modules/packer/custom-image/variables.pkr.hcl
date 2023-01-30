@@ -208,3 +208,9 @@ variable "metadata" {
   type        = map(string)
   default     = {}
 }
+
+variable "manifest_file" {
+  description = "File to which to write Packer build manifest"
+  type        = string
+  default     = "packer-manifest.json"
+}
