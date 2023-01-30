@@ -22,6 +22,8 @@ repos:
     args:
     - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
   - id: terraform_validate
+    args:
+    - --hook-config=--retry-once-with-cleanup=true
 - repo: local
   hooks:
   - id: terraform-readme
