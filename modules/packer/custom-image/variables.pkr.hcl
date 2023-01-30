@@ -189,3 +189,10 @@ variable "on_host_maintenance" {
     error_message = "When set, the on_host_maintenance must be set to MIGRATE or TERMINATE."
   }
 }
+
+# the plugin default is 5m; we have found it is sometimes hit
+variable "state_timeout" {
+  description = "The time to wait for instance state changes, including image creation"
+  type        = string
+  default     = "10m"
+}

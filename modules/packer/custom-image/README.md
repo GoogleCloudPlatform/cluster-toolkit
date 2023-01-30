@@ -243,6 +243,7 @@ No resources.
 | <a name="input_ssh_username"></a> [ssh\_username](#input\_ssh\_username) | Username to use for SSH access to VM | `string` | `"packer"` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script (as raw string) used to build the custom VM image (overridden by var.startup\_script\_file if both are supplied) | `string` | `null` | no |
 | <a name="input_startup_script_file"></a> [startup\_script\_file](#input\_startup\_script\_file) | Path to local shell script that will be uploaded as a startup script to customize the VM image | `string` | `null` | no |
+| <a name="input_state_timeout"></a> [state\_timeout](#input\_state\_timeout) | The time to wait for instance state changes, including image creation | `string` | `"10m"` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | Name of subnetwork in which to provision image building VM | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Assign network tags to apply firewall rules to VM instance | `list(string)` | `null` | no |
 | <a name="input_use_iap"></a> [use\_iap](#input\_use\_iap) | Use IAP proxy when connecting by SSH | `bool` | `true` | no |

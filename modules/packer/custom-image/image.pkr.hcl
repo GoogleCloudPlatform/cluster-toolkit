@@ -60,6 +60,7 @@ source "googlecompute" "toolkit_image" {
   metadata                = local.metadata
   startup_script_file     = var.startup_script_file
   wrap_startup_script     = var.wrap_startup_script
+  state_timeout           = var.state_timeout
 }
 
 build {
