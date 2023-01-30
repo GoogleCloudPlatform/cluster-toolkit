@@ -15,12 +15,6 @@
 */
 
 terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 3.83"
-    }
-  }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:SchedMD-slurm-on-gcp-controller/v1.11.0"
   }

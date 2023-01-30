@@ -31,7 +31,7 @@ locals {
   storage_folder_path_prefix = local.storage_folder_path == null || local.storage_folder_path == "" ? "" : "${local.storage_folder_path}/"
 
   user_provided_bucket_name = try(regex(local.bucket_regex, local.gcs_bucket_path_trimmed)[0], null)
-  storage_bucket_name       = coalesce(one(google_storage_bucket.configs_bucket.*.name), local.user_provided_bucket_name)
+  storage_bucket_name       = coalesce(one(google_storage_bucket.configs_bucket[*].name), local.user_provided_bucket_name)
 
   load_runners = templatefile(
     "${path.module}/templates/startup-script-custom.tpl",
