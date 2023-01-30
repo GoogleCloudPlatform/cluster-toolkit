@@ -57,15 +57,9 @@ it is recommended to choose one of the following approaches:
    [ansible\_playbooks][ansible] and do not specify [startup\_script][sss] or
    [startup\_script\_file][ssf].
 
-If any of the [shell\_scripts][shell] or [ansible\_playbooks][ansible] fail by
-returning a code other than 0, Packer will determine that the build has failed
-and refuse to save the resulting disk.
+If any of the startup script approaches fail by returning a code other than 0,
+Packer will determine that the build has failed and refuse to save the image.
 
-> **_NOTE:_** there is an [existing issue][startup-script-issue] that can cause
-> failures of the [startup\_script][sss] or [startup\_script\_file][ssf] not to
-> be detected as failures by Packer.
-
-[startup-script-issue]: https://github.com/hashicorp/packer-plugin-googlecompute/issues/45
 [metaorder]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux#order_of_execution_of_linux_startup_scripts
 
 ## External access with SSH
@@ -249,6 +243,7 @@ No resources.
 | <a name="input_ssh_username"></a> [ssh\_username](#input\_ssh\_username) | Username to use for SSH access to VM | `string` | `"packer"` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script (as raw string) used to build the custom VM image (overridden by var.startup\_script\_file if both are supplied) | `string` | `null` | no |
 | <a name="input_startup_script_file"></a> [startup\_script\_file](#input\_startup\_script\_file) | Path to local shell script that will be uploaded as a startup script to customize the VM image | `string` | `null` | no |
+| <a name="input_state_timeout"></a> [state\_timeout](#input\_state\_timeout) | The time to wait for instance state changes, including image creation | `string` | `"10m"` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | Name of subnetwork in which to provision image building VM | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Assign network tags to apply firewall rules to VM instance | `list(string)` | `null` | no |
 | <a name="input_use_iap"></a> [use\_iap](#input\_use\_iap) | Use IAP proxy when connecting by SSH | `bool` | `true` | no |
