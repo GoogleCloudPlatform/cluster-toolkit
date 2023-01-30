@@ -13,19 +13,24 @@
 # limitations under the License.
 
 locals {
-  metadata             = var.startup_script == null ? null : { startup-script = var.startup_script }
+  image_family = var.image_family != null ? var.image_family : var.deployment_name
+
+  # construct metadata from startup_script and metadata variables
+  linux_startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
+  metadata                      = merge(var.metadata, local.linux_startup_script_metadata)
+
+  # determine communicator to use and whether to enable Identity-Aware Proxy
   no_shell_scripts     = length(var.shell_scripts) == 0
   no_ansible_playbooks = length(var.ansible_playbooks) == 0
   no_provisioners      = local.no_shell_scripts && local.no_ansible_playbooks
   communicator         = local.no_provisioners ? "none" : "ssh"
   use_iap              = local.no_provisioners ? false : var.use_iap
-  image_family         = var.image_family != null ? var.image_family : var.deployment_name
 
+  # determine best value for on_host_maintenance if not supplied by user
   machine_vals                = split("-", var.machine_type)
   machine_family              = local.machine_vals[0]
   gpu_attached                = contains(["a2"], local.machine_family) || var.accelerator_type != null
   on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
-
   on_host_maintenance = (
     var.on_host_maintenance != null
     ? var.on_host_maintenance

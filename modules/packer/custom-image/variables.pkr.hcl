@@ -145,13 +145,13 @@ variable "shell_scripts" {
 }
 
 variable "startup_script" {
-  description = "Startup script (as raw string) used to build the custom VM image (overridden by var.startup_script_file if both are supplied)"
+  description = "Startup script (as raw string) used to build the custom Linux VM image (overridden by var.startup_script_file if both are set)"
   type        = string
   default     = null
 }
 
 variable "startup_script_file" {
-  description = "Path to local shell script that will be uploaded as a startup script to customize the VM image"
+  description = "File path to local shell script that will be used to customize the Linux VM image (overrides var.startup_script)"
   type        = string
   default     = null
 }
@@ -195,4 +195,10 @@ variable "state_timeout" {
   description = "The time to wait for instance state changes, including image creation"
   type        = string
   default     = "10m"
+}
+
+variable "metadata" {
+  description = "Instance metadata to attach to the build VM (startup-script key overridden by var.startup_script and var.startup_script_file if either is set)"
+  type        = map(string)
+  default     = {}
 }
