@@ -57,15 +57,9 @@ it is recommended to choose one of the following approaches:
    [ansible\_playbooks][ansible] and do not specify [startup\_script][sss] or
    [startup\_script\_file][ssf].
 
-If any of the [shell\_scripts][shell] or [ansible\_playbooks][ansible] fail by
-returning a code other than 0, Packer will determine that the build has failed
-and refuse to save the resulting disk.
+If any of the startup script approaches fail by returning a code other than 0,
+Packer will determine that the build has failed and refuse to save the image.
 
-> **_NOTE:_** there is an [existing issue][startup-script-issue] that can cause
-> failures of the [startup\_script][sss] or [startup\_script\_file][ssf] not to
-> be detected as failures by Packer.
-
-[startup-script-issue]: https://github.com/hashicorp/packer-plugin-googlecompute/issues/45
 [metaorder]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux#order_of_execution_of_linux_startup_scripts
 
 ## External access with SSH
