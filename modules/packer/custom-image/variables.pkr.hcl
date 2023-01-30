@@ -63,7 +63,13 @@ variable "tags" {
 }
 
 variable "image_family" {
-  description = "The family name of the image to be built. Image name will also be derived from this value. Defaults to `deployment_name`"
+  description = "The family name of the image to be built. Defaults to `deployment_name`"
+  type        = string
+  default     = null
+}
+
+variable "image_name" {
+  description = "The name of the image to be built. If not supplied, it will be set to image_family-$ISO_TIMESTAMP"
   type        = string
   default     = null
 }

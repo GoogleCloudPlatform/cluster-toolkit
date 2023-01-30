@@ -13,7 +13,10 @@
 # limitations under the License.
 
 locals {
-  image_family = var.image_family != null ? var.image_family : var.deployment_name
+  # construct a unique image name from the image family
+  image_family       = var.image_family != null ? var.image_family : var.deployment_name
+  image_name_default = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
+  image_name         = var.image_name != null ? var.image_name : local.image_name_default
 
   # construct metadata from startup_script and metadata variables
   linux_startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
@@ -41,7 +44,7 @@ locals {
 source "googlecompute" "toolkit_image" {
   communicator            = local.communicator
   project_id              = var.project_id
-  image_name              = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
+  image_name              = local.image_name
   image_family            = local.image_family
   machine_type            = var.machine_type
   accelerator_type        = var.accelerator_type
