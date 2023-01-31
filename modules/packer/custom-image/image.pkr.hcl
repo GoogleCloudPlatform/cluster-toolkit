@@ -13,19 +13,28 @@
 # limitations under the License.
 
 locals {
-  metadata             = var.startup_script == null ? null : { startup-script = var.startup_script }
+  # construct a unique image name from the image family
+  image_family       = var.image_family != null ? var.image_family : var.deployment_name
+  image_name_default = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
+  image_name         = var.image_name != null ? var.image_name : local.image_name_default
+
+  # construct metadata from startup_script and metadata variables
+  linux_startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
+  metadata                      = merge(var.metadata, local.linux_startup_script_metadata)
+
+  # determine communicator to use and whether to enable Identity-Aware Proxy
   no_shell_scripts     = length(var.shell_scripts) == 0
   no_ansible_playbooks = length(var.ansible_playbooks) == 0
   no_provisioners      = local.no_shell_scripts && local.no_ansible_playbooks
-  communicator         = local.no_provisioners ? "none" : "ssh"
-  use_iap              = local.no_provisioners ? false : var.use_iap
-  image_family         = var.image_family != null ? var.image_family : var.deployment_name
+  communicator_default = local.no_provisioners ? "none" : "ssh"
+  communicator         = var.communicator == null ? local.communicator_default : var.communicator
+  use_iap              = local.communicator == "none" ? false : var.use_iap
 
+  # determine best value for on_host_maintenance if not supplied by user
   machine_vals                = split("-", var.machine_type)
   machine_family              = local.machine_vals[0]
   gpu_attached                = contains(["a2"], local.machine_family) || var.accelerator_type != null
   on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
-
   on_host_maintenance = (
     var.on_host_maintenance != null
     ? var.on_host_maintenance
@@ -36,8 +45,9 @@ locals {
 source "googlecompute" "toolkit_image" {
   communicator            = local.communicator
   project_id              = var.project_id
-  image_name              = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
+  image_name              = local.image_name
   image_family            = local.image_family
+  image_labels            = var.labels
   machine_type            = var.machine_type
   accelerator_type        = var.accelerator_type
   accelerator_count       = var.accelerator_count
@@ -94,5 +104,20 @@ build {
     }
   }
 
-  post-processor "manifest" {}
+  post-processor "manifest" {
+    output     = var.manifest_file
+    strip_path = true
+    custom_data = {
+      built-by = "cloud-hpc-toolkit"
+    }
+  }
+
+  # if the jq command is present, this will print the image name to stdout
+  # if jq is not present, this exits silently with code 0
+  post-processor "shell-local" {
+    inline = [
+      "command -v jq > /dev/null || exit 0",
+      "echo \"Image built: $(jq -r '.builds[-1].artifact_id' ${var.manifest_file} | cut -d ':' -f2)\"",
+    ]
+  }
 }
