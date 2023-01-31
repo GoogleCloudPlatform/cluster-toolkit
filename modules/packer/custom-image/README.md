@@ -225,7 +225,7 @@ No resources.
 | <a name="input_accelerator_count"></a> [accelerator\_count](#input\_accelerator\_count) | Number of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2). | `number` | `null` | no |
 | <a name="input_accelerator_type"></a> [accelerator\_type](#input\_accelerator\_type) | Type of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2). | `string` | `null` | no |
 | <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | A list of Ansible playbook configurations that will be uploaded to customize the VM image | <pre>list(object({<br>    playbook_file   = string<br>    galaxy_file     = string<br>    extra_arguments = list(string)<br>  }))</pre> | `[]` | no |
-| <a name="input_communicator"></a> [communicator](#input\_communicator) | Communicator to use for provisioners that require access to VM (SSH, WinRM) | `string` | `null` | no |
+| <a name="input_communicator"></a> [communicator](#input\_communicator) | Communicator to use for provisioners that require access to VM ("ssh" or "winrm") | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | The family name of the image to be built. Defaults to `deployment_name` | `string` | `null` | no |
