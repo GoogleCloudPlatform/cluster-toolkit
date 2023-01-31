@@ -722,7 +722,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule1.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	c.Assert(err, NotNil)
 
 	expectedErr = fmt.Sprintf("%s: %s.%s should be %s.%s",
@@ -739,7 +739,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule0.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s)", testModule0.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: %s .*",
 		errorMessages["intergroupImplicit"], testModule0.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -747,7 +747,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Intergroup variable: failure because explicit group and module does not exist
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
 		testBlueprint.DeploymentGroups[0].Name, "bad_module", "bad_output")
-	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
@@ -755,7 +755,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	fakeOutput = "bad_output"
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
 		testBlueprint.DeploymentGroups[0].Name, testModule0.ID, fakeOutput)
-	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
 		errorMessages["noOutput"], testModule0.ID, fakeOutput)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -768,7 +768,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext0.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[1].Name, testModule1.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext0, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext0, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: %s .*",
 		errorMessages["intergroupOrder"], testModule1.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -782,7 +782,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule0.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule0.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s .*", errorMessages["varInAnotherGroup"], regexp.QuoteMeta(testVarContext1.varString)))
 }
 

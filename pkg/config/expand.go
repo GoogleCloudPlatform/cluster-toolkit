@@ -680,7 +680,7 @@ func expandSimpleVariable(
 		expandedVariable = fmt.Sprintf("((var.%s))", ref.Name)
 	} else {
 		if ref.FromGroupID != ref.ToGroupID {
-			expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
+			// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
 			return "", fmt.Errorf("%s: %s is an intergroup reference",
 				errorMessages["varInAnotherGroup"], context.varString)
 		}
