@@ -214,3 +214,13 @@ variable "manifest_file" {
   type        = string
   default     = "packer-manifest.json"
 }
+
+variable "communicator" {
+  description = "Communicator to use for provisioners that require access to VM (SSH, WinRM)"
+  type        = string
+  default     = null
+  validation {
+    condition     = var.communicator == null ? true : contains(["ssh", "winrm"], var.communicator)
+    error_message = "Set var.communicator to \"ssh\" or \"winrm\" or null."
+  }
+}

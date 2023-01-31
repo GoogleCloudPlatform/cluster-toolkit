@@ -26,8 +26,9 @@ locals {
   no_shell_scripts     = length(var.shell_scripts) == 0
   no_ansible_playbooks = length(var.ansible_playbooks) == 0
   no_provisioners      = local.no_shell_scripts && local.no_ansible_playbooks
-  communicator         = local.no_provisioners ? "none" : "ssh"
-  use_iap              = local.no_provisioners ? false : var.use_iap
+  communicator_default = local.no_provisioners ? "none" : "ssh"
+  communicator         = var.communicator == null ? local.communicator_default : var.communicator
+  use_iap              = local.communicator == "none" ? false : var.use_iap
 
   # determine best value for on_host_maintenance if not supplied by user
   machine_vals                = split("-", var.machine_type)
