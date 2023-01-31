@@ -46,6 +46,7 @@ source "googlecompute" "toolkit_image" {
   project_id              = var.project_id
   image_name              = local.image_name
   image_family            = local.image_family
+  image_labels            = var.labels
   machine_type            = var.machine_type
   accelerator_type        = var.accelerator_type
   accelerator_count       = var.accelerator_count
