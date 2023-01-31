@@ -8,7 +8,7 @@ used, in the same way as the [schedmd-slurm-gcp-v5-controller] module
 auto-scales VMs.
 
 Further documentation on how to use this module when deploying a hybrid Slurm
-cluster in our [docs](../../../../docs/hybrid-slurm-cluster/). There, you can
+cluster can be found in our [docs](../../../../docs/hybrid-slurm-cluster/). There, you can
 find two tutorials. The [first] tutorial walks you through deploying a test
 environment entirely in GCP that is designed to demonstrate the capabilities
 without needing to make any changes to your local slurm cluster. The [second]
