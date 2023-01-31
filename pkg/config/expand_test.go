@@ -17,6 +17,7 @@ package config
 import (
 	"fmt"
 	"hpc-toolkit/pkg/modulereader"
+	"regexp"
 
 	. "gopkg.in/check.v1"
 )
@@ -407,66 +408,134 @@ func (s *MySuite) TestHasVariable(c *C) {
 	c.Assert(got, Equals, false)
 }
 
+func (s *MySuite) TestIdentifySimpleVariable(c *C) {
+	var ref varReference
+	var err error
+
+	dg := DeploymentGroup{
+		Name: "calling_group_id",
+	}
+
+	ref, err = dg.identifySimpleVariable("group_id.module_id.output_name")
+	c.Assert(err, IsNil)
+	c.Assert(ref.GroupID, Equals, "group_id")
+	c.Assert(ref.ID, Equals, "module_id")
+	c.Assert(ref.Name, Equals, "output_name")
+	c.Assert(ref.ExplicitInterGroup, Equals, true)
+
+	ref, err = dg.identifySimpleVariable("module_id.output_name")
+	c.Assert(err, IsNil)
+	c.Assert(ref.GroupID, Equals, "calling_group_id")
+	c.Assert(ref.ID, Equals, "module_id")
+	c.Assert(ref.Name, Equals, "output_name")
+	c.Assert(ref.ExplicitInterGroup, Equals, false)
+
+	ref, err = dg.identifySimpleVariable("vars.variable_name")
+	c.Assert(err, IsNil)
+	c.Assert(ref.GroupID, Equals, "deployment")
+	c.Assert(ref.ID, Equals, "vars")
+	c.Assert(ref.Name, Equals, "variable_name")
+	c.Assert(ref.ExplicitInterGroup, Equals, false)
+
+	ref, err = dg.identifySimpleVariable("foo")
+	c.Assert(err, NotNil)
+	ref, err = dg.identifySimpleVariable("foo.bar.baz.qux")
+	c.Assert(err, NotNil)
+	ref, err = dg.identifySimpleVariable("foo..bar")
+	c.Assert(err, NotNil)
+	ref, err = dg.identifySimpleVariable("foo.bar.")
+	c.Assert(err, NotNil)
+	ref, err = dg.identifySimpleVariable("foo..")
+	c.Assert(err, NotNil)
+	ref, err = dg.identifySimpleVariable(".foo")
+	c.Assert(err, NotNil)
+	ref, err = dg.identifySimpleVariable("..foo")
+	c.Assert(err, NotNil)
+}
+
 func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Setup
-	testModID := "existingModule"
-	testModule := Module{
-		ID:     testModID,
+	testModule0 := Module{
+		ID:     "module0",
+		Kind:   "terraform",
+		Source: "./module/testpath",
+	}
+	testModule1 := Module{
+		ID:     "module1",
 		Kind:   "terraform",
 		Source: "./module/testpath",
 	}
 	testBlueprint := Blueprint{
-		BlueprintName: "",
+		BlueprintName: "test-blueprint",
 		Vars:          make(map[string]interface{}),
-		DeploymentGroups: []DeploymentGroup{{
-			Name:             "",
-			TerraformBackend: TerraformBackend{},
-			Modules:          []Module{testModule},
-		}},
+		DeploymentGroups: []DeploymentGroup{
+			{
+				Name:             "zero",
+				TerraformBackend: TerraformBackend{},
+				Modules:          []Module{testModule0},
+			},
+			{
+				Name:             "one",
+				TerraformBackend: TerraformBackend{},
+				Modules:          []Module{testModule1},
+			},
+		},
 		TerraformBackendDefaults: TerraformBackend{},
 	}
-	testVarContext := varContext{
+
+	testVarContext0 := varContext{
 		blueprint:  testBlueprint,
 		modIndex:   0,
 		groupIndex: 0,
 	}
-	testModToGrp := make(map[string]int)
+
+	testVarContext1 := varContext{
+		blueprint:  testBlueprint,
+		modIndex:   0,
+		groupIndex: 1,
+	}
+
+	// strictly speaking this unit test now also tests this function
+	// we should expand the blueprint used in config_test.go to include
+	// multiple deployment groups
+	testModToGrp, err := checkModuleAndGroupNames(testBlueprint.DeploymentGroups)
+	c.Assert(err, IsNil)
+	c.Assert(testModToGrp[testModule0.ID], Equals, 0)
+	c.Assert(testModToGrp[testModule1.ID], Equals, 1)
 
 	// Invalid variable -> no .
-	testVarContext.varString = "$(varsStringWithNoDot)"
-	_, err := expandSimpleVariable(testVarContext, testModToGrp)
+	testVarContext1.varString = "$(varsStringWithNoDot)"
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr := fmt.Sprintf("%s.*", errorMessages["invalidVar"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Invalid -> not found
-	testVarContext.varString = "$(vars.doesntExists)"
-	_, err = expandSimpleVariable(testVarContext, testModToGrp)
+	testVarContext1.varString = "$(vars.doesntExists)"
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Success
-	testVarContext.blueprint.Vars["globalExists"] = "existsValue"
-	testVarContext.varString = "$(vars.globalExists)"
-	got, err := expandSimpleVariable(testVarContext, testModToGrp)
+	testVarContext1.blueprint.Vars["globalExists"] = "existsValue"
+	testVarContext1.varString = "$(vars.globalExists)"
+	got, err := expandSimpleVariable(testVarContext1, testModToGrp)
 	c.Assert(err, IsNil)
-	expected := "((var.globalExists))"
-	c.Assert(got, Equals, expected)
+	c.Assert(got, Equals, "((var.globalExists))")
 
 	// Module variable: Invalid -> Module not found
-	testVarContext.varString = "$(notAMod.someVar)"
-	_, err = expandSimpleVariable(testVarContext, testModToGrp)
+	testVarContext1.varString = "$(notAMod.someVar)"
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Module variable: Invalid -> Output not found
 	reader := modulereader.Factory("terraform")
-	reader.SetInfo(testModule.Source, modulereader.ModuleInfo{})
-	testModToGrp[testModID] = 0
+	reader.SetInfo(testModule1.Source, modulereader.ModuleInfo{})
 	fakeOutput := "doesntExist"
-	testVarContext.varString = fmt.Sprintf("$(%s.%s)", testModule.ID, fakeOutput)
-	_, err = expandSimpleVariable(testVarContext, testModToGrp)
+	testVarContext1.varString = fmt.Sprintf("$(%s.%s)", testModule1.ID, fakeOutput)
+	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
-		errorMessages["noOutput"], testModID, fakeOutput)
+		errorMessages["noOutput"], testModule1.ID, fakeOutput)
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Module variable: Success
@@ -475,11 +544,93 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	testModInfo := modulereader.ModuleInfo{
 		Outputs: []modulereader.VarInfo{testVarInfoOutput},
 	}
-	reader.SetInfo(testModule.Source, testModInfo)
-	testVarContext.varString = fmt.Sprintf(
-		"$(%s.%s)", testModule.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext, testModToGrp)
+	reader.SetInfo(testModule1.Source, testModInfo)
+	testVarContext1.varString = fmt.Sprintf(
+		"$(%s.%s)", testModule1.ID, existingOutput)
+	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
 	c.Assert(err, IsNil)
-	expected = fmt.Sprintf("((module.%s.%s))", testModule.ID, existingOutput)
-	c.Assert(got, Equals, expected)
+	expectedErr = fmt.Sprintf("((module.%s.%s))", testModule1.ID, existingOutput)
+	c.Assert(got, Equals, expectedErr)
+
+	// Module variable: Success when using correct explicit intragroup
+	existingOutput = "outputExists"
+	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testModInfo = modulereader.ModuleInfo{
+		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+	}
+	reader.SetInfo(testModule1.Source, testModInfo)
+	testVarContext1.varString = fmt.Sprintf(
+		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[1].Name, testModule1.ID, existingOutput)
+	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	c.Assert(err, IsNil)
+	c.Assert(got, Equals, fmt.Sprintf("((module.%s.%s))", testModule1.ID, existingOutput))
+
+	// Module variable: Failure when using incorrect explicit intragroup
+	existingOutput = "outputExists"
+	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testModInfo = modulereader.ModuleInfo{
+		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+	}
+	reader.SetInfo(testModule1.Source, testModInfo)
+	testVarContext1.varString = fmt.Sprintf(
+		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule1.ID, existingOutput)
+	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	c.Assert(err, NotNil)
+	expectedErr = fmt.Sprintf("%s: %s",
+		errorMessages["referenceWrongGroup"], regexp.QuoteMeta(testVarContext1.varString))
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Intergroup variable: failure because other group was implicit in reference
+	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testModInfo = modulereader.ModuleInfo{
+		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+	}
+	reader.SetInfo(testModule0.Source, testModInfo)
+	testVarContext1.varString = fmt.Sprintf(
+		"$(%s.%s)", testModule0.ID, existingOutput)
+	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	expectedErr = fmt.Sprintf("%s: %s .*",
+		errorMessages["intergroupImplicit"], regexp.QuoteMeta(testVarContext1.varString))
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Intergroup variable: failure because explicit group and module does not exist
+	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
+		testBlueprint.DeploymentGroups[0].Name, "bad_module", "bad_output")
+	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Intergroup variable: failure because explicit group and output does not exist
+	fakeOutput = "bad_output"
+	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
+		testBlueprint.DeploymentGroups[0].Name, testModule0.ID, fakeOutput)
+	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
+		errorMessages["noOutput"], testModule0.ID, fakeOutput)
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Intergroup variable: failure due to later group
+	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testModInfo = modulereader.ModuleInfo{
+		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+	}
+	reader.SetInfo(testModule1.Source, testModInfo)
+	testVarContext0.varString = fmt.Sprintf(
+		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[1].Name, testModule1.ID, existingOutput)
+	got, err = expandSimpleVariable(testVarContext0, testModToGrp)
+	expectedErr = fmt.Sprintf("%s: %s .*",
+		errorMessages["intergroupOrder"], regexp.QuoteMeta(testVarContext0.varString))
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Intergroup variable: proper explicit reference to earlier group
+	// TODO: failure is temporary when support is added this should be a success!
+	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testModInfo = modulereader.ModuleInfo{
+		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+	}
+	reader.SetInfo(testModule0.Source, testModInfo)
+	testVarContext1.varString = fmt.Sprintf(
+		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule0.ID, existingOutput)
+	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s .*", errorMessages["varInAnotherGroup"], regexp.QuoteMeta(testVarContext1.varString)))
 }

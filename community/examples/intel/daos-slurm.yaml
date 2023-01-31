@@ -41,7 +41,7 @@ deployment_groups:
   # https://github.com/daos-stack/google-cloud-daos/tree/main/images
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
   - id: daos
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.3.0
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}

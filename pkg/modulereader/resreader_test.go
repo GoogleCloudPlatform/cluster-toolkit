@@ -15,6 +15,7 @@
 package modulereader
 
 import (
+	"embed"
 	"io/ioutil"
 	"log"
 	"os"
@@ -62,6 +63,9 @@ type MySuite struct{}
 
 var _ = Suite(&MySuite{})
 
+//go:embed modules
+var testModuleFS embed.FS
+
 func Test(t *testing.T) {
 	TestingT(t)
 }
@@ -96,6 +100,64 @@ func (s *MySuite) TestFactory(c *C) {
 	c.Assert(reflect.TypeOf(pkrReader), Equals, reflect.TypeOf(PackerReader{}))
 	tfReader := Factory(tfKindString)
 	c.Assert(reflect.TypeOf(tfReader), Equals, reflect.TypeOf(TFReader{}))
+}
+
+func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
+	ModuleFS = testModuleFS
+
+	// Success
+	moduleInfo, err := GetModuleInfo("modules/test_role/test_module", tfKindString)
+	c.Assert(err, IsNil)
+	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
+	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
+
+	// Invalid: No embedded modules
+	badEmbeddedMod := "modules/does/not/exist"
+	moduleInfo, err = GetModuleInfo(badEmbeddedMod, tfKindString)
+	expectedErr := "failed to get info using tfconfig for terraform module at .*"
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Invalid: Unsupported Module Source
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
+	moduleInfo, err = GetModuleInfo(badSource, tfKindString)
+	expectedErr = "Source is not valid: .*"
+	c.Assert(err, ErrorMatches, expectedErr)
+}
+
+func (s *MySuite) TestGetModuleInfo_Git(c *C) {
+
+	// Invalid git repository - path does not exists
+	badGitRepo := "github.com:not/exist.git"
+	_, err := GetModuleInfo(badGitRepo, tfKindString)
+	expectedErr := "failed to clone git module at .*"
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Invalid: Unsupported Module Source
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
+	_, err = GetModuleInfo(badSource, tfKindString)
+	expectedErr = "Source is not valid: .*"
+	c.Assert(err, ErrorMatches, expectedErr)
+}
+
+func (s *MySuite) TestGetModuleInfo_Local(c *C) {
+
+	// Success
+	moduleInfo, err := GetModuleInfo(terraformDir, tfKindString)
+	c.Assert(err, IsNil)
+	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
+	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
+
+	// Invalid source path - path does not exists
+	badLocalMod := "./not/a/real/path"
+	moduleInfo, err = GetModuleInfo(badLocalMod, tfKindString)
+	expectedErr := "failed to get info using tfconfig for terraform module at .*"
+	c.Assert(err, ErrorMatches, expectedErr)
+
+	// Invalid: Unsupported Module Source
+	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
+	moduleInfo, err = GetModuleInfo(badSource, tfKindString)
+	expectedErr = "Source is not valid: .*"
+	c.Assert(err, ErrorMatches, expectedErr)
 }
 
 // hcl_utils.go

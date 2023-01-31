@@ -18,10 +18,11 @@ package modulereader
 
 import (
 	"fmt"
-	"io"
+	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -39,7 +40,7 @@ func addTfExtension(filename string) {
 	newFilename := fmt.Sprintf("%s.tf", filename)
 	if err := os.Rename(filename, newFilename); err != nil {
 		log.Fatalf(
-			"failed to add .tf extension to %s needed to get info on packer module: %e",
+			"failed to add .tf extension to %s needed to get info on packer module: %v",
 			filename, err)
 	}
 }
@@ -47,7 +48,7 @@ func addTfExtension(filename string) {
 func getHCLFiles(dir string) []string {
 	allFiles, err := ioutil.ReadDir(dir)
 	if err != nil {
-		log.Fatalf("Failed to read packer source directory %s", dir)
+		log.Fatalf("Failed to read packer source directory at %s: %v", dir, err)
 	}
 	var hclFiles []string
 	for _, f := range allFiles {
@@ -61,60 +62,32 @@ func getHCLFiles(dir string) []string {
 	return hclFiles
 }
 
-func copyHCLFilesToTmp(dir string) (string, []string, error) {
-	tmpDir, err := ioutil.TempDir("", "pkwriter-*")
-	if err != nil {
-		return "", []string{}, fmt.Errorf(
-			"failed to create temp directory for packer reader")
-	}
-	hclFiles := getHCLFiles(dir)
-	var hclFilePaths []string
-
-	for _, hclFilename := range hclFiles {
-
-		// Open file for copying
-		hclFile, err := os.Open(hclFilename)
-		if err != nil {
-			return "", hclFiles, fmt.Errorf(
-				"failed to open packer HCL file %s: %v", hclFilename, err)
-		}
-		defer hclFile.Close()
-
-		// Create a file to copy to
-		destPath := filepath.Join(tmpDir, filepath.Base(hclFilename))
-		destination, err := os.Create(destPath)
-		if err != nil {
-			return "", hclFiles, fmt.Errorf(
-				"failed to create copy of packer HCL file %s: %v", hclFilename, err)
-		}
-		defer destination.Close()
-
-		// Copy
-		if _, err := io.Copy(destination, hclFile); err != nil {
-			return "", hclFiles, fmt.Errorf(
-				"failed to copy packer module at %s to temporary directory to inspect: %v",
-				dir, err)
-		}
-		hclFilePaths = append(hclFilePaths, destPath)
-	}
-	return tmpDir, hclFilePaths, nil
-}
-
 // GetInfo reads the ModuleInfo for a packer module
 func (r PackerReader) GetInfo(source string) (ModuleInfo, error) {
 	if modInfo, ok := r.allModInfo[source]; ok {
 		return modInfo, nil
 	}
-	tmpDir, packerFiles, err := copyHCLFilesToTmp(source)
+
+	tmpDir, err := ioutil.TempDir("", "pkwriter-*")
 	if err != nil {
-		return ModuleInfo{}, err
+		return ModuleInfo{}, fmt.Errorf(
+			"failed to create temp directory for packer reader")
 	}
 	defer os.RemoveAll(tmpDir)
+
+	modName := path.Base(source)
+	modPath := path.Join(tmpDir, modName)
+
+	sourceReader := sourcereader.Factory(source)
+	if err = sourceReader.GetModule(source, modPath); err != nil {
+		return ModuleInfo{}, err
+	}
+	packerFiles := getHCLFiles(modPath)
 
 	for _, packerFile := range packerFiles {
 		addTfExtension(packerFile)
 	}
-	modInfo, err := getHCLInfo(tmpDir)
+	modInfo, err := getHCLInfo(modPath)
 	if err != nil {
 		return modInfo, fmt.Errorf("PackerReader: %v", err)
 	}

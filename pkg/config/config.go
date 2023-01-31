@@ -32,11 +32,10 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
-	"hpc-toolkit/pkg/sourcereader"
 )
 
 const (
-	expectedVarFormat string = "$(vars.var_name) or $(module_id.var_name)"
+	expectedVarFormat string = "$(vars.var_name) or $(module_id.output_name)"
 	matchLabelExp     string = `^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`
 )
 
@@ -49,13 +48,17 @@ var errorMessages = map[string]string{
 	"yamlMarshalError":   "failed to marshal the yaml config",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
-	"missingSetting":    "a required setting is missing from a module",
-	"globalLabelType":   "deployment variable 'labels' are not a map",
-	"settingsLabelType": "labels in module settings are not a map",
-	"invalidVar":        "invalid variable definition in",
-	"varNotFound":       "Could not find source of variable",
-	"varInAnotherGroup": "References to other groups are not yet supported",
-	"noOutput":          "Output not found for a variable",
+	"missingSetting":       "a required setting is missing from a module",
+	"globalLabelType":      "deployment variable 'labels' are not a map",
+	"settingsLabelType":    "labels in module settings are not a map",
+	"invalidVar":           "invalid variable definition in",
+	"invalidDeploymentRef": "invalid deployment-wide reference (only \"vars\") is supported)",
+	"varNotFound":          "Could not find source of variable",
+	"varInAnotherGroup":    "References to other groups are not yet supported",
+	"intergroupImplicit":   "References to outputs from other groups must explicitly identify the group",
+	"intergroupOrder":      "References to outputs from other groups must be to earlier groups",
+	"referenceWrongGroup":  "Reference specified the wrong group for the module",
+	"noOutput":             "Output not found for a variable",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -283,11 +286,7 @@ func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 	unusedModules := make(map[string][]string)
 	for _, conn := range dc.moduleConnections {
 		if conn.isEmpty() {
-			if _, exists := unusedModules[conn.fromID]; exists {
-				unusedModules[conn.fromID] = append(unusedModules[conn.fromID], conn.toID)
-			} else {
-				unusedModules[conn.fromID] = []string{conn.toID}
-			}
+			unusedModules[conn.fromID] = append(unusedModules[conn.fromID], conn.toID)
 		}
 	}
 	return unusedModules
@@ -402,8 +401,7 @@ func createModuleInfo(
 	modsInfo := make(map[string]modulereader.ModuleInfo)
 	for _, mod := range deploymentGroup.Modules {
 		if _, exists := modsInfo[mod.Source]; !exists {
-			reader := sourcereader.Factory(mod.Source)
-			ri, err := reader.GetModuleInfo(mod.Source, mod.Kind)
+			ri, err := modulereader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
 				log.Fatalf(
 					"failed to get info for module at %s while setting dc.ModulesInfo: %e",

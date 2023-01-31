@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"hpc-toolkit/pkg/modulereader"
-	"hpc-toolkit/pkg/sourcereader"
 	"hpc-toolkit/pkg/validators"
 
 	"github.com/pkg/errors"
@@ -263,8 +262,7 @@ func validateSettings(
 func (dc DeploymentConfig) validateModuleSettings() error {
 	for _, grp := range dc.Config.DeploymentGroups {
 		for _, mod := range grp.Modules {
-			reader := sourcereader.Factory(mod.Source)
-			info, err := reader.GetModuleInfo(mod.Source, mod.Kind)
+			info, err := modulereader.GetModuleInfo(mod.Source, mod.Kind)
 			if err != nil {
 				errStr := "failed to get info for module at %s while validating module settings"
 				return errors.Wrapf(err, errStr, mod.Source)

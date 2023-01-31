@@ -93,28 +93,6 @@ func createTmpModule() {
 	}
 }
 
-func (s *MySuite) TestGetModuleInfo_Local(c *C) {
-	reader := LocalSourceReader{}
-
-	// Success
-	moduleInfo, err := reader.GetModuleInfo(terraformDir, tfKindString)
-	c.Assert(err, IsNil)
-	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
-	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
-
-	// Invalid source path - path does not exists
-	badLocalMod := "./not/a/real/path"
-	moduleInfo, err = reader.GetModuleInfo(badLocalMod, tfKindString)
-	expectedErr := "failed to get info using tfconfig for terraform module at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: Unsupported Module Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
-	moduleInfo, err = reader.GetModuleInfo(badSource, tfKindString)
-	expectedErr = "Source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-}
-
 func (s *MySuite) TestGetModule_Local(c *C) {
 	reader := LocalSourceReader{}
 

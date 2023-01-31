@@ -37,8 +37,12 @@ deployment_groups:
       local_mounts: [/home]
       auto_delete_disk: true
 
+  - id: bucket-for-startup-script
+    source: community/modules/file-system/cloud-storage-bucket
+
   - id: startup
     source: ./modules/scripts/startup-script
+    use: [bucket-for-startup-script]
     settings:
       runners:
       - type: shell

@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 
 	"hpc-toolkit/pkg/modulereader"
-	"hpc-toolkit/pkg/sourcereader"
 
 	"golang.org/x/exp/slices"
 )
@@ -413,6 +412,143 @@ type varContext struct {
 	blueprint  Blueprint
 }
 
+/*
+A variable reference has the following fields
+  - ID: a module ID or "vars" if referring to a deployment variable
+  - GroupID: if ID is a module ID, GroupID must be the deployment group in
+    which the module is *expected* to be found. If ID is "vars", then it
+    should be set to "deployment" to indicate that the reference belongs
+    to the entire blueprint, rather than a deployment group.
+  - Name: the name of the module output or deployment variable
+  - ExplicitInterGroup: a boolean value indicating whether the user made a
+    reference that superficially appears to be intergroup (i.e. they used
+    an explicit GroupID that differs from the context's GroupID)
+*/
+type varReference struct {
+	ID                 string
+	GroupID            string
+	Name               string
+	ExplicitInterGroup bool
+}
+
+/*
+This function performs only the most rudimentary conversion of an input
+string into a varReference struct as defined above. An input string consists of
+2 or 3 fields separated by periods. An error will be returned if there are not
+2 or 3 fields, or if any field is the empty string. This function does not
+ensure the existence of the reference!
+*/
+func (dg *DeploymentGroup) identifySimpleVariable(yamlReference string) (varReference, error) {
+	varComponents := strings.Split(yamlReference, ".")
+
+	// struct defaults: empty strings and false booleans
+	var ref varReference
+	// intra-group references length 2 and inter-group references length 3
+	switch len(varComponents) {
+	case 2:
+		ref.ID = varComponents[0]
+		ref.Name = varComponents[1]
+
+		if ref.ID == "vars" {
+			ref.GroupID = "deployment"
+		} else {
+			ref.GroupID = dg.Name
+		}
+	case 3:
+		ref.GroupID = varComponents[0]
+		ref.ID = varComponents[1]
+		ref.Name = varComponents[2]
+		ref.ExplicitInterGroup = ref.GroupID != dg.Name
+	}
+
+	// should consider more sophisticated definition of valid values here.
+	// for now check that source and name are not empty strings; due to the
+	// default zero values for strings in the "ref" struct, this will also
+	// cover the case that varComponents has wrong # of fields
+	if ref.GroupID == "" || ref.ID == "" || ref.Name == "" {
+		return varReference{}, fmt.Errorf("%s %s, expected format: %s",
+			errorMessages["invalidVar"], yamlReference, expectedVarFormat)
+	}
+	return ref, nil
+}
+
+// this function validates every field within a varReference struct and that
+// the reference must be to the same or earlier group.
+// ref.GroupID: this group must exist or be the value "deployment"
+// ref.ID: must be an existing module ID or "vars" (if groupID is "deployment")
+// ref.Name: must match a module output name or deployment variable name
+// ref.ExplicitInterGroup: intergroup references must explicitly identify the
+// target group ID and intragroup references cannot have an incorrect explicit
+// group ID
+func validateReference(ref varReference, context varContext, modToGrp map[string]int) error {
+	// simplest case to evaluate is a deployment variable's existence
+	if ref.GroupID == "deployment" {
+		if ref.ID == "vars" {
+			if _, ok := context.blueprint.Vars[ref.Name]; !ok {
+				return fmt.Errorf("%s: %s is not a deployment variable",
+					errorMessages["varNotFound"], ref.Name)
+			}
+			return nil
+		}
+		return fmt.Errorf("%s: %s", errorMessages["invalidDeploymentRef"], ref.ID)
+	}
+
+	// at this point, the reference is to a module output, not a deployment
+	// variable. find the deployment group in which target module exists
+	refGrpIndex, ok := modToGrp[ref.ID]
+	if !ok {
+		return fmt.Errorf("%s: module %s was not found",
+			errorMessages["varNotFound"], ref.ID)
+	}
+	refGrp := context.blueprint.DeploymentGroups[refGrpIndex]
+
+	// at this point, we know the target module exists. now record whether it
+	// is intergroup and whether it comes in a (disallowed) later group
+	isInterGroupReference := refGrpIndex != context.groupIndex
+	isLaterGroup := refGrpIndex > context.groupIndex
+
+	// intergroup references must be explicit about group and refer to an earlier group;
+	if isInterGroupReference {
+		if isLaterGroup {
+			return fmt.Errorf("%s: %s is in a later group",
+				errorMessages["intergroupOrder"], context.varString)
+		}
+
+		if !ref.ExplicitInterGroup {
+			return fmt.Errorf("%s: %s must specify a group ID before the module ID",
+				errorMessages["intergroupImplicit"], context.varString)
+		}
+	} else if ref.ExplicitInterGroup {
+		// intragroup references may be explicit or implicit; if explicit must
+		// be correct
+		return fmt.Errorf("%s: %s",
+			errorMessages["referenceWrongGroup"], context.varString)
+	}
+
+	// at this point, we have a valid intragroup or intergroup references to a
+	// module. must now determine whether the output value actually exists in
+	// the module.
+	refModIndex := slices.IndexFunc(refGrp.Modules, func(m Module) bool { return m.ID == ref.ID })
+	if refModIndex == -1 {
+		log.Fatalf("Could not find module referenced by variable %s",
+			context.varString)
+	}
+	refMod := refGrp.Modules[refModIndex]
+	modInfo, err := modulereader.GetModuleInfo(refMod.Source, refMod.Kind)
+	if err != nil {
+		log.Fatalf(
+			"failed to get info for module at %s while expanding variables: %e",
+			refMod.Source, err)
+	}
+	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.VarInfo) bool { return o.Name == ref.Name })
+	if !found {
+		return fmt.Errorf("%s: module %s did not have output %s",
+			errorMessages["noOutput"], refMod.ID, ref.Name)
+	}
+
+	return nil
+}
+
 // Needs DeploymentGroups, variable string, current group,
 func expandSimpleVariable(
 	context varContext,
@@ -427,71 +563,31 @@ func expandSimpleVariable(
 		return "", err
 	}
 
-	// Break up variable into source and value
-	varComponents := strings.SplitN(contents[1], ".", 2)
-	if len(varComponents) != 2 {
-		return "", fmt.Errorf("%s %s, expected format: %s",
-			errorMessages["invalidVar"], context.varString, expectedVarFormat)
-	}
-	varSource := varComponents[0]
-	varValue := varComponents[1]
+	callingGroup := context.blueprint.DeploymentGroups[context.groupIndex]
+	refStr := contents[1]
 
-	if varSource == "vars" { // Global variable
-		// Verify global variable exists
-		if _, ok := context.blueprint.Vars[varValue]; !ok {
-			return "", fmt.Errorf("%s: %s is not a deployment variable",
-				errorMessages["varNotFound"], context.varString)
-		}
-		return fmt.Sprintf("((var.%s))", varValue), nil
-	}
-
-	// Module variable
-	// Verify module exists
-	refGrpIndex, ok := modToGrp[varSource]
-	if !ok {
-		return "", fmt.Errorf("%s: module %s was not found",
-			errorMessages["varNotFound"], varSource)
-	}
-	if refGrpIndex != context.groupIndex {
-		return "", fmt.Errorf("%s: module %s was defined in group %d and called from group %d",
-			errorMessages["varInAnotherGroup"], varSource, refGrpIndex, context.groupIndex)
-	}
-
-	// Get the module info
-	refGrp := context.blueprint.DeploymentGroups[refGrpIndex]
-	refModIndex := -1
-	for i := range refGrp.Modules {
-		if refGrp.Modules[i].ID == varSource {
-			refModIndex = i
-			break
-		}
-	}
-	if refModIndex == -1 {
-		log.Fatalf("Could not find module referenced by variable %s",
-			context.varString)
-	}
-	refMod := refGrp.Modules[refModIndex]
-	reader := sourcereader.Factory(refMod.Source)
-	modInfo, err := reader.GetModuleInfo(refMod.Source, refMod.Kind)
+	ref, err := callingGroup.identifySimpleVariable(refStr)
 	if err != nil {
-		log.Fatalf(
-			"failed to get info for module at %s while expanding variables: %e",
-			refMod.Source, err)
+		return "", err
 	}
 
-	// Verify output exists in module
-	found := false
-	for _, output := range modInfo.Outputs {
-		if output.Name == varValue {
-			found = true
-			break
+	err = validateReference(ref, context, modToGrp)
+	if err != nil {
+		return "", err
+	}
+
+	var expandedVariable string
+	if ref.GroupID == "deployment" {
+		expandedVariable = fmt.Sprintf("((var.%s))", ref.Name)
+	} else {
+		if ref.ExplicitInterGroup {
+			expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
+			return "", fmt.Errorf("%s: %s is an intergroup reference",
+				errorMessages["varInAnotherGroup"], context.varString)
 		}
+		expandedVariable = fmt.Sprintf("((module.%s.%s))", ref.ID, ref.Name)
 	}
-	if !found {
-		return "", fmt.Errorf("%s: module %s did not have output %s",
-			errorMessages["noOutput"], refMod.ID, varValue)
-	}
-	return fmt.Sprintf("((module.%s.%s))", varSource, varValue), nil
+	return expandedVariable, nil
 }
 
 func expandVariable(

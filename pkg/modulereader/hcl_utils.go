@@ -16,16 +16,11 @@ package modulereader
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/sourcereader"
 	"os"
-	"strings"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
-
-// isEmbeddedPath checks if a source path points to an embedded module
-func isEmbeddedPath(source string) bool {
-	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
-}
 
 // getHCLInfo is wrapped by SourceReader interface which supports multiple
 // sources and stores remote modules locally, so the given source parameter to
@@ -34,7 +29,7 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	var module *tfconfig.Module
 	ret := ModuleInfo{}
 
-	if isEmbeddedPath(source) {
+	if sourcereader.IsEmbeddedPath(source) {
 		if !tfconfig.IsModuleDirOnFilesystem(tfconfig.WrapFS(ModuleFS), source) {
 			return ret, fmt.Errorf("Source is not a terraform or packer module: %s", source)
 		}

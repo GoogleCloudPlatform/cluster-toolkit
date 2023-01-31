@@ -64,7 +64,7 @@ func (b *Local) CopyFromPath(src string, dst string) error {
 	return copy.Copy(absPath, dst)
 }
 
-// CopyFromFS copyes the embedded source file to the destination file
+// CopyFromFS copies the embedded source file to the destination file
 func (b *Local) CopyFromFS(fs BaseFS, src string, dst string) error {
 	data, err := fs.ReadFile(src)
 	if err != nil {
