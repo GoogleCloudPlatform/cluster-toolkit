@@ -25,11 +25,11 @@ vars:
   network_name: hcls-cluster-net
   subnetwork_name: primary-subnet
   bucket_name_software: user-provided-software
-  bucket_name_inputs: input-bucket
-  bucket_name_outputs: output-bucket
+  bucket_name_inputs: ## Set Inputs Bucket Name Here ##
+  bucket_name_outputs: ## Set Outputs Bucket Name Here ##
   use_deployment_name_in_bucket_name: false
-  homefs_server_ip:  # Set on command line
-  appsfs_server_ip:  # Set on command line
+  homefs_server_ip:  ## Set Home Filestore IP Here ##
+  appsfs_server_ip:  ## Set Apps Filestore IP Here ##
 
 deployment_groups:
 - group: enable_apis
@@ -92,7 +92,7 @@ deployment_groups:
 - group: software_installation
   modules:
 
-  - id: network-install
+  - id: network-install  # This will reuse network created in setup group
     source: modules/network/pre-existing-vpc
 
   - id: appsfs-install
@@ -158,10 +158,6 @@ deployment_groups:
               - - $mpi_packages
               - - $%compilers
               - - $^mpis
-      # Un-comment and update mirror_url to install from spack cache
-      # spack_cache_url:
-      # - mirror_name: gcs_cache
-      #   mirror_url: gs://...
 
   - id: spack-builder-startup  # TODO: Update example or make generic
     source: modules/scripts/startup-script
@@ -173,8 +169,6 @@ deployment_groups:
         destination: setup_gromacs.sh
         content: |
           #!/bin/bash
-          source /apps/spack/share/spack/setup-env.sh
-          spack env activate gromacs
           chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
           mkdir -p /apps/gromacs
           chmod a+rwx /apps/gromacs
@@ -204,7 +198,7 @@ deployment_groups:
           gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
           mpirun -n 60 -hostfile hostfile -ppn 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
 
-      - type: shell  # TODO: consider making bool option
+      - type: shell
         destination: shutdown.sh
         content: |
           #!/bin/bash
@@ -223,7 +217,7 @@ deployment_groups:
 - group: cluster
   modules:
 
-  - id: network1
+  - id: network1  # This will reuse network created in setup group
     source: modules/network/pre-existing-vpc
 
   - id: homefs
@@ -288,29 +282,8 @@ deployment_groups:
         ./configure
         cd src/
         sudo make install
-        cd ../..
 
   ### Cluster ###
-
-  - id: debug_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
-
-  - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - debug_node_group
-    - homefs
-    - appsfs
-    - bucket-input
-    - bucket-output
-    settings:
-      partition_name: debug
-      enable_placement: false
-      is_default: true
 
   - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
@@ -333,24 +306,17 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
-    - debug_partition
     - compute_partition
     - homefs
     - appsfs
     - bucket-input
     - bucket-output
     settings:
-      disable_controller_public_ips: false
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use:
     - network1
     - slurm_controller
-    - homefs
-    - appsfs
-    - bucket-input
-    - bucket-output
     settings:
       machine_type: n2-standard-4
-      disable_login_public_ips: false
