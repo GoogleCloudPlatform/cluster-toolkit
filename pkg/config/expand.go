@@ -213,17 +213,17 @@ func (dc *DeploymentConfig) applyUseModules() error {
 		grpModsInfo := dc.ModulesInfo[group.Name]
 		for iMod := range group.Modules {
 			fromMod := &group.Modules[iMod]
-			modInfo := grpModsInfo[fromMod.Source]
-			modInputs := getModuleInputMap(modInfo.Inputs)
+			fromModInfo := grpModsInfo[fromMod.Source]
+			fromModInputs := getModuleInputMap(fromModInfo.Inputs)
 			changedSettings := make(map[string]bool)
 			for _, toModID := range fromMod.Use {
 				toMod := group.getModuleByID(toModID)
-				useInfo := dc.ModulesInfo[group.Name][toMod.Source]
+				toModInfo := dc.ModulesInfo[group.Name][toMod.Source]
 				if toMod.ID == "" {
 					return fmt.Errorf("could not find module %s used by %s in group %s",
 						toModID, fromMod.ID, group.Name)
 				}
-				usedVars := useModule(fromMod, toMod, modInputs, useInfo.Outputs, changedSettings)
+				usedVars := useModule(fromMod, toMod, fromModInputs, toModInfo.Outputs, changedSettings)
 				connection := ModConnection{
 					toID:            toModID,
 					fromID:          fromMod.ID,
@@ -680,7 +680,7 @@ func expandSimpleVariable(
 		expandedVariable = fmt.Sprintf("((var.%s))", ref.Name)
 	} else {
 		if ref.FromGroupID != ref.ToGroupID {
-			expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
+			// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
 			return "", fmt.Errorf("%s: %s is an intergroup reference",
 				errorMessages["varInAnotherGroup"], context.varString)
 		}
