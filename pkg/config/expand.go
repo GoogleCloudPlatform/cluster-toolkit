@@ -171,7 +171,8 @@ func useModule(
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
 		_, isAlreadySet := mod.Settings[settingName]
-		_, hasChanged := changedSettings[settingName]
+		// if key is not present, this will return false
+		hasChanged := changedSettings[settingName]
 
 		// Skip settings explicitly defined by users
 		if isAlreadySet && !hasChanged {
