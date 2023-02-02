@@ -180,7 +180,7 @@ deployment_groups:
           wget --no-verbose -P /data_input/protein_data_bank/ https://files.rcsb.org/download/1FJS.pdb
           wget --no-verbose -P /tmp/ https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz && \
             mkdir -p /data_input/gromacs_inputs/ && \
-            tar xzf /tmp/water_GMX50_bare.tar.gz -C $_ && \
+            tar xzf /tmp/water_GMX50_bare.tar.gz -C /data_input/gromacs_inputs/ && \
             rm /tmp/water_GMX50_bare.tar.gz
 
           # Set permissions for Spack environment
