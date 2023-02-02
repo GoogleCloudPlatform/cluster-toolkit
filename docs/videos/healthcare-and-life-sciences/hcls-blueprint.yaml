@@ -103,6 +103,14 @@ deployment_groups:
       local_mount: /apps
       fs_type: nfs
 
+  - id: bucket-input-install
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(vars.bucket_name_inputs)
+      local_mount: /data_input
+      fs_type: gcsfuse
+      mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
+
   ### Software ###
 
   - id: spack
@@ -159,22 +167,23 @@ deployment_groups:
               - - $%compilers
               - - $^mpis
 
-  - id: spack-builder-startup  # TODO: Update example or make generic
+  - id: spack-builder-startup
     source: modules/scripts/startup-script
     settings:
       runners:
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
       - type: shell
-        destination: setup_gromacs.sh
+        destination: data_staging.sh
         content: |
           #!/bin/bash
+          wget --no-verbose -P /data_input/protien_data_bank/ https://files.rcsb.org/download/1FJS.pdb
+          wget --no-verbose -P /data_input/gromacs_inputs https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz && \
+            tar xzf /data_input/gromacs_inputs/water_GMX50_bare.tar.gz -C /data_input/gromacs_inputs/ && \
+            rm /data_input/gromacs_inputs/water_GMX50_bare.tar.gz
+
+          # Set permissions for Spack environment
           chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
-          mkdir -p /apps/gromacs
-          chmod a+rwx /apps/gromacs
-          cd /apps/gromacs
-          wget --no-verbose https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz
-          tar xzf water_GMX50_bare.tar.gz
 
       - type: data  # rethink
         destination: /apps/gromacs/submit_gromacs.sh
@@ -193,10 +202,9 @@ deployment_groups:
           # Check that gmx_mpi exists
           which gmx_mpi
           cd $SLURM_SUBMIT_DIR
-          cp /apps/gromacs/water-cut1.0_GMX50_bare/1536/* .
-          scontrol show hostnames ${SLURM_JOB_NODELIST} > hostfile
+          cp /data_input/gromacs_inputs/water-cut1.0_GMX50_bare/1536/* .
           gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
-          mpirun -n 60 -hostfile hostfile -ppn 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
+          mpirun -n 60 -ppn 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
 
       - type: shell
         destination: shutdown.sh
@@ -209,10 +217,10 @@ deployment_groups:
 
   - id: spack-builder
     source: modules/compute/vm-instance
-    use: [network-install, appsfs-install, spack-builder-startup]
+    use: [network-install, appsfs-install, bucket-input-install, spack-builder-startup]
     settings:
       name_prefix: spack-builder
-      machine_type: c2-standard-16  # TODO Consider bumping up, left low for quota
+      machine_type: c2-standard-4
 
 - group: cluster
   modules:
@@ -277,7 +285,7 @@ deployment_groups:
       startup_script: |
         sudo apt-get update
         sudo apt-get -y upgrade
-        find /user_provided_software -name vmd-1.9.*.bin.LINUXAMD64*.tar.gz -exec tar xvzf  '{}' -C . \;
+        find /user_provided_software -name vmd-1.9.*.bin.LINUXAMD64*.tar.gz -exec tar xvzf '{}' -C . \;
         cd vmd-1.9.*/
         ./configure
         cd src/
