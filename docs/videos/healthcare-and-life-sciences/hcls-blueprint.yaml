@@ -177,10 +177,11 @@ deployment_groups:
         destination: data_staging.sh
         content: |
           #!/bin/bash
-          wget --no-verbose -P /data_input/protien_data_bank/ https://files.rcsb.org/download/1FJS.pdb
-          wget --no-verbose -P /data_input/gromacs_inputs https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz && \
-            tar xzf /data_input/gromacs_inputs/water_GMX50_bare.tar.gz -C /data_input/gromacs_inputs/ && \
-            rm /data_input/gromacs_inputs/water_GMX50_bare.tar.gz
+          wget --no-verbose -P /data_input/protein_data_bank/ https://files.rcsb.org/download/1FJS.pdb
+          wget --no-verbose -P /tmp/ https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz && \
+            mkdir -p /data_input/gromacs_inputs/ && \
+            tar xzf /tmp/water_GMX50_bare.tar.gz -C $_ && \
+            rm /tmp/water_GMX50_bare.tar.gz
 
           # Set permissions for Spack environment
           chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
@@ -220,7 +221,7 @@ deployment_groups:
     use: [network-install, appsfs-install, bucket-input-install, spack-builder-startup]
     settings:
       name_prefix: spack-builder
-      machine_type: c2-standard-4
+      machine_type: c2-standard-16
 
 - group: cluster
   modules:
