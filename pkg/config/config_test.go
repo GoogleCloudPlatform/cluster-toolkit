@@ -250,6 +250,75 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	}
 }
 
+// create a simple multigroup deployment with a use keyword that matches
+// one module to another in an earlier group
+func getMultiGroupDeploymentConfig() DeploymentConfig {
+	testModuleSource0 := filepath.Join(tmpTestDir, "module0")
+	testModuleSource1 := filepath.Join(tmpTestDir, "module1")
+
+	matchingName := "test_match"
+
+	testModuleInfo0 := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{},
+		Outputs: []modulereader.VarInfo{
+			{
+				Name: matchingName,
+			},
+		},
+	}
+	testModuleInfo1 := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{
+				Name: matchingName,
+			},
+		},
+		Outputs: []modulereader.VarInfo{},
+	}
+
+	testDeploymentGroup0 := DeploymentGroup{
+		Name: "primary",
+		Modules: []Module{
+			{
+				ID:       "TestModule0",
+				Kind:     "terraform",
+				Source:   testModuleSource0,
+				Settings: map[string]interface{}{},
+				Outputs:  []string{matchingName},
+			},
+		},
+	}
+	testDeploymentGroup1 := DeploymentGroup{
+		Name: "secondary",
+		Modules: []Module{
+			{
+				ID:       "TestModule1",
+				Kind:     "terraform",
+				Source:   testModuleSource1,
+				Settings: map[string]interface{}{},
+				Use: []string{
+					fmt.Sprintf("%s.%s", testDeploymentGroup0.Name, testDeploymentGroup0.Modules[0].ID),
+				},
+			},
+		},
+	}
+
+	dc := DeploymentConfig{
+		Config: Blueprint{BlueprintName: "simple", Vars: map[string]interface{}{"deployment_name": "deployment_name"}, DeploymentGroups: []DeploymentGroup{testDeploymentGroup0, testDeploymentGroup1}},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
+			testDeploymentGroup0.Name: {
+				testModuleSource0: testModuleInfo0,
+			},
+			testDeploymentGroup1.Name: {
+				testModuleSource1: testModuleInfo1,
+			},
+		},
+	}
+
+	dc.addMetadataToModules()
+	dc.addDefaultValidators()
+	return dc
+}
+
 func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 	testModuleSource := filepath.Join(tmpTestDir, "module")
 	testDeploymentGroup := DeploymentGroup{
@@ -425,6 +494,16 @@ func (s *MySuite) TestGetResouceByID(c *C) {
 	got, err = rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, expected)
 	c.Assert(err, IsNil)
+
+	dc := getBasicDeploymentConfigWithTestModule()
+	groupID := dc.Config.DeploymentGroups[0].Name
+	group, err := dc.getGroupByID(groupID)
+	c.Assert(err, IsNil)
+	c.Assert(group, DeepEquals, dc.Config.DeploymentGroups[0])
+
+	badGroupID := "not-a-group"
+	_, err = dc.getGroupByID(badGroupID)
+	c.Assert(err, NotNil)
 }
 
 func (s *MySuite) TestHasKind(c *C) {

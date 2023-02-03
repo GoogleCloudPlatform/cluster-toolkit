@@ -149,8 +149,9 @@ func (dc *DeploymentConfig) expandBackends() error {
 	return nil
 }
 
-func getModuleVarName(modID string, varName string) string {
-	return fmt.Sprintf("$(%s.%s)", modID, varName)
+// always use explicit group even for intragroup references
+func getModuleVarName(groupID string, modID string, varName string) string {
+	return fmt.Sprintf("$(%s.%s.%s)", groupID, modID, varName)
 }
 
 func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
@@ -164,6 +165,7 @@ func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
 func useModule(
 	mod *Module,
 	useMod Module,
+	useModGroupID string,
 	modInputs map[string]string,
 	useOutputs []modulereader.VarInfo,
 	settingsInBlueprint []string,
@@ -176,14 +178,16 @@ func useModule(
 			continue
 		}
 
-		// track whether setting already has a value; important when
-		// ensuring that the first used module takes precedence and also
-		// when flattening multiple values for settings that are lists
+		// if the input exists in the module doing the using, then we modify it
+		// according to these rules:
+		// if the setting has a value, then it was set by "use" because we have
+		// skipped anything explicitly in the blueprint. If the setting is a
+		// list of any type, then we want to concatenate these values in order
+		// they were used; otherwise, the setting should remain set to the
+		// existing used value
 		_, isAlreadySet := mod.Settings[settingName]
-
-		// This output corresponds to an input that was not explicitly set by the user
 		if inputType, ok := modInputs[settingName]; ok {
-			modVarName := getModuleVarName(useMod.ID, settingName)
+			modVarName := getModuleVarName(useModGroupID, useMod.ID, settingName)
 			isInputList := strings.HasPrefix(inputType, "list")
 			if isInputList {
 				if !isAlreadySet {
@@ -218,12 +222,27 @@ func (dc *DeploymentConfig) applyUseModules() error {
 			fromModInputs := getModuleInputMap(fromModInfo.Inputs)
 			settingsInBlueprint := maps.Keys(fromMod.Settings)
 			for _, toModID := range fromMod.Use {
-				toMod, err := group.getModuleByID(toModID)
+				modRef, err := identifyModuleByReference(toModID, *group)
 				if err != nil {
 					return err
 				}
-				toModInfo := dc.ModulesInfo[group.Name][toMod.Source]
-				usedVars := useModule(fromMod, toMod, fromModInputs, toModInfo.Outputs, settingsInBlueprint)
+				toGroup, err := dc.getGroupByID(modRef.ToGroupID)
+				if err != nil {
+					return err
+				}
+				toMod, err := toGroup.getModuleByID(modRef.ID)
+				if err != nil {
+					return err
+				}
+				if toMod.Kind == "packer" {
+					return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], toMod.ID)
+				}
+				// this line should probably be tested for success but our
+				// current unit test infrastructure does not support running
+				// dc.setModulesInfo() on our test configurations because the
+				// Source paths are not real
+				toModInfo := dc.ModulesInfo[toGroup.Name][toMod.Source]
+				usedVars := useModule(fromMod, toMod, modRef.ToGroupID, fromModInputs, toModInfo.Outputs, settingsInBlueprint)
 				connection := ModConnection{
 					toID:            toModID,
 					fromID:          fromMod.ID,
@@ -680,6 +699,17 @@ func expandSimpleVariable(
 		expandedVariable = fmt.Sprintf("((var.%s))", ref.Name)
 	} else {
 		if ref.FromGroupID != ref.ToGroupID {
+			// call to function that adds outputs in ToGroupID
+			toGrpIdx := modToGrp[ref.ToGroupID]
+			toModIdx := slices.IndexFunc(context.blueprint.DeploymentGroups[toGrpIdx].Modules, func(m Module) bool { return m.ID == ref.ID })
+			if toModIdx == -1 {
+				return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], ref.ID)
+			}
+			toMod := &context.blueprint.DeploymentGroups[toGrpIdx].Modules[toModIdx]
+
+			if !slices.Contains(toMod.Outputs, ref.Name) {
+				toMod.Outputs = append(toMod.Outputs, ref.Name)
+			}
 			// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
 			return "", fmt.Errorf("%s: %s is an intergroup reference",
 				errorMessages["varInAnotherGroup"], context.varString)

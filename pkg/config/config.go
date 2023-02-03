@@ -64,6 +64,7 @@ var errorMessages = map[string]string{
 	"noOutput":             "Output not found for a variable",
 	"varWithinStrings":     "variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally.",
 	"groupNotFound":        "The group ID was not found",
+	"cannotUsePacker":      "Packer modules cannot be used by other modules",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -103,6 +104,15 @@ func (g DeploymentGroup) getModuleByID(modID string) (Module, error) {
 		return Module{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], modID)
 	}
 	return g.Modules[idx], nil
+}
+
+func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error) {
+	groupIndex := slices.IndexFunc(dc.Config.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == groupID })
+	if groupIndex == -1 {
+		return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["groupNotFound"], groupID)
+	}
+	group := dc.Config.DeploymentGroups[groupIndex]
+	return group, nil
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
