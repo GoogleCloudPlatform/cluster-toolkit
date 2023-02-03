@@ -269,7 +269,7 @@ deployment_groups:
       fs_type: gcsfuse
       mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
 
-  ### Virtual Desktop ###
+  ### Remote Desktop ###
 
   - id: desktop
     source: ./community/modules/remote-desktop/chrome-remote-desktop
@@ -292,7 +292,7 @@ deployment_groups:
         cd src/
         sudo make install
 
-  ### Cluster ###
+  ### Slurm Cluster ###
 
   - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
