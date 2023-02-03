@@ -24,6 +24,7 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
 
@@ -165,18 +166,20 @@ func useModule(
 	useMod Module,
 	modInputs map[string]string,
 	useOutputs []modulereader.VarInfo,
-	changedSettings map[string]bool,
+	settingsInBlueprint []string,
 ) (usedVars []string) {
 	usedVars = []string{}
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
-		_, isAlreadySet := mod.Settings[settingName]
-		_, hasChanged := changedSettings[settingName]
-
 		// Skip settings explicitly defined by users
-		if isAlreadySet && !hasChanged {
+		if slices.Contains(settingsInBlueprint, settingName) {
 			continue
 		}
+
+		// track whether setting already has a value; important when
+		// ensuring that the first used module takes precedence and also
+		// when flattening multiple values for settings that are lists
+		_, isAlreadySet := mod.Settings[settingName]
 
 		// This output corresponds to an input that was not explicitly set by the user
 		if inputType, ok := modInputs[settingName]; ok {
@@ -186,7 +189,6 @@ func useModule(
 				if !isAlreadySet {
 					// Input is a list, create an outer list for it
 					mod.Settings[settingName] = []interface{}{}
-					changedSettings[settingName] = true
 					mod.createWrapSettingsWith()
 					mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
 				}
@@ -197,7 +199,6 @@ func useModule(
 			} else if !isAlreadySet {
 				// If input is not a list, set value if not already set and continue
 				mod.Settings[settingName] = modVarName
-				changedSettings[settingName] = true
 				usedVars = append(usedVars, settingName)
 			}
 		}
@@ -215,7 +216,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 			fromMod := &group.Modules[iMod]
 			fromModInfo := grpModsInfo[fromMod.Source]
 			fromModInputs := getModuleInputMap(fromModInfo.Inputs)
-			changedSettings := make(map[string]bool)
+			settingsInBlueprint := maps.Keys(fromMod.Settings)
 			for _, toModID := range fromMod.Use {
 				toMod := group.getModuleByID(toModID)
 				toModInfo := dc.ModulesInfo[group.Name][toMod.Source]
@@ -223,7 +224,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 					return fmt.Errorf("could not find module %s used by %s in group %s",
 						toModID, fromMod.ID, group.Name)
 				}
-				usedVars := useModule(fromMod, toMod, fromModInputs, toModInfo.Outputs, changedSettings)
+				usedVars := useModule(fromMod, toMod, fromModInputs, toModInfo.Outputs, settingsInBlueprint)
 				connection := ModConnection{
 					toID:            toModID,
 					fromID:          fromMod.ID,

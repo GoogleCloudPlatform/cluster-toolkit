@@ -19,6 +19,7 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"regexp"
 
+	"golang.org/x/exp/maps"
 	. "gopkg.in/check.v1"
 )
 
@@ -79,49 +80,56 @@ func (s *MySuite) TestUseModule(c *C) {
 		Source:   modSource,
 		Settings: make(map[string]interface{}),
 	}
-	useModSource := "useSource"
-	useMod := Module{
+	usedModSource := "usedSource"
+	usedMod := Module{
 		ID:     "UsedModule",
-		Source: useModSource,
+		Source: usedModSource,
 	}
 	modInfo := modulereader.ModuleInfo{}
-	useInfo := modulereader.ModuleInfo{}
-	hasChanged := make(map[string]bool)
+	usedInfo := modulereader.ModuleInfo{}
 
 	// Pass: No Inputs, No Outputs
 	modInputs := getModuleInputMap(modInfo.Inputs)
-	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	usedVars := useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings), Equals, 0)
-	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Has Output, no maching input
 	varInfoNumber := modulereader.VarInfo{
 		Name: "val1",
 		Type: "number",
 	}
-	useInfo.Outputs = []modulereader.VarInfo{varInfoNumber}
-	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	usedInfo.Outputs = []modulereader.VarInfo{varInfoNumber}
+	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings), Equals, 0)
-	c.Assert(len(hasChanged), Equals, 0)
 
 	// Pass: Single Input/Output match - no lists
 	modInfo.Inputs = []modulereader.VarInfo{varInfoNumber}
 	modInputs = getModuleInputMap(modInfo.Inputs)
-	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	c.Assert(len(usedVars), Equals, 1)
+	c.Assert(len(mod.Settings), Equals, 1)
 	expectedSetting := getModuleVarName("UsedModule", "val1")
 	c.Assert(mod.Settings["val1"], Equals, expectedSetting)
-	c.Assert(len(hasChanged), Equals, 1)
 
-	// Pass: Already set, has been changed by useModule
-	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	// Pass: Single Input/Output match - but setting was in blueprint so no-op
+	modInfo.Inputs = []modulereader.VarInfo{varInfoNumber}
+	modInputs = getModuleInputMap(modInfo.Inputs)
+	mod.Settings = make(map[string]interface{})
+	mod.Settings["val1"] = expectedSetting
+	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, maps.Keys(mod.Settings))
+	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings), Equals, 1)
-	c.Assert(len(hasChanged), Equals, 1)
+	expectedSetting = getModuleVarName("UsedModule", "val1")
+	c.Assert(mod.Settings["val1"], Equals, expectedSetting)
 
-	// Pass: Already set, has not been changed by useModule
-	hasChanged = make(map[string]bool)
-	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	// Pass: re-apply used modules, should be a no-op
+	// Assume no settings were in blueprint
+	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings), Equals, 1)
-	c.Assert(len(hasChanged), Equals, 0)
+	c.Assert(mod.Settings["val1"], Equals, expectedSetting)
 
 	// Pass: Single Input/Output match, input is list, not already set
 	varInfoList := modulereader.VarInfo{
@@ -131,18 +139,32 @@ func (s *MySuite) TestUseModule(c *C) {
 	modInfo.Inputs = []modulereader.VarInfo{varInfoList}
 	modInputs = getModuleInputMap(modInfo.Inputs)
 	mod.Settings = make(map[string]interface{})
-	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	c.Assert(len(usedVars), Equals, 1)
 	c.Assert(len(mod.Settings["val1"].([]interface{})), Equals, 1)
 	c.Assert(mod.Settings["val1"], DeepEquals, []interface{}{expectedSetting})
-	c.Assert(len(hasChanged), Equals, 1)
 
 	// Pass: Setting exists, Input is List, Output is not a list
-	useModule(&mod, useMod, modInputs, useInfo.Outputs, hasChanged)
+	// Assume setting was not set in blueprint
+	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	c.Assert(len(usedVars), Equals, 1)
 	c.Assert(len(mod.Settings["val1"].([]interface{})), Equals, 2)
 	c.Assert(
 		mod.Settings["val1"],
 		DeepEquals,
 		[]interface{}{expectedSetting, expectedSetting})
+
+	// Pass: Setting exists, Input is List, Output is not a list
+	// Assume setting was set in blueprint
+	mod.Settings = make(map[string]interface{})
+	mod.Settings["val1"] = []interface{}{expectedSetting}
+	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, maps.Keys(mod.Settings))
+	c.Assert(len(usedVars), Equals, 0)
+	c.Assert(len(mod.Settings["val1"].([]interface{})), Equals, 1)
+	c.Assert(
+		mod.Settings["val1"],
+		DeepEquals,
+		[]interface{}{expectedSetting})
 }
 
 func (s *MySuite) TestApplyUseModules(c *C) {
