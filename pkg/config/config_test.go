@@ -355,24 +355,25 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() works when nothing to do */
 	dc := getBasicDeploymentConfigWithTestModule()
-	expected := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
+	testMod, _ := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
+	expected := testMod.Kind
 	dc.addKindToModules()
-	got := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
+	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() works when kind is absent*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = "terraform"
 	dc.addKindToModules()
-	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
+	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() works when kind is empty*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = "terraform"
 	dc.addKindToModules()
-	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule2").Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
+	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() does nothing to packer types*/
 	moduleID := "packerModule"
@@ -380,8 +381,8 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
-	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID(moduleID)
+	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() does nothing to invalid types*/
 	moduleID = "funnyModule"
@@ -389,8 +390,8 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
-	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID(moduleID)
+	c.Assert(testMod.Kind, Equals, expected)
 }
 
 func (s *MySuite) TestSetModulesInfo(c *C) {
@@ -408,19 +409,22 @@ func (s *MySuite) TestGetResouceByID(c *C) {
 
 	// No Modules
 	rg := DeploymentGroup{}
-	got := rg.getModuleByID(testID)
+	got, err := rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, Module{})
+	c.Assert(err, NotNil)
 
 	// No Match
 	rg.Modules = []Module{{ID: "NoMatch"}}
-	got = rg.getModuleByID(testID)
+	got, _ = rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, Module{})
+	c.Assert(err, NotNil)
 
 	// Match
 	expected := Module{ID: testID}
 	rg.Modules = []Module{expected}
-	got = rg.getModuleByID(testID)
+	got, err = rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, expected)
+	c.Assert(err, IsNil)
 }
 
 func (s *MySuite) TestHasKind(c *C) {

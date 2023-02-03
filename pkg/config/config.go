@@ -29,6 +29,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
+	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -96,14 +97,12 @@ type DeploymentGroup struct {
 	Kind             string
 }
 
-func (g DeploymentGroup) getModuleByID(modID string) Module {
-	for i := range g.Modules {
-		mod := g.Modules[i]
-		if g.Modules[i].ID == modID {
-			return mod
-		}
+func (g DeploymentGroup) getModuleByID(modID string) (Module, error) {
+	idx := slices.IndexFunc(g.Modules, func(m Module) bool { return m.ID == modID })
+	if idx == -1 {
+		return Module{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], modID)
 	}
-	return Module{}
+	return g.Modules[idx], nil
 }
 
 // TerraformBackend defines the configuration for the terraform state backend

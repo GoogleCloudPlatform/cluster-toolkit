@@ -211,8 +211,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	modLen := len(dc.Config.DeploymentGroups[0].Modules)
 	dc.Config.DeploymentGroups[0].Modules[modLen-1].ID = "wrongID"
 	err = dc.applyUseModules()
-	c.Assert(err, ErrorMatches, "could not find module .* used by .* in group .*")
-
+	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s", errorMessages["invalidMod"], usedModuleID))
 }
 
 func (s *MySuite) TestUpdateVariableType(c *C) {

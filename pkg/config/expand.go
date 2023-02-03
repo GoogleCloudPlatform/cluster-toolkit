@@ -218,12 +218,11 @@ func (dc *DeploymentConfig) applyUseModules() error {
 			fromModInputs := getModuleInputMap(fromModInfo.Inputs)
 			settingsInBlueprint := maps.Keys(fromMod.Settings)
 			for _, toModID := range fromMod.Use {
-				toMod := group.getModuleByID(toModID)
-				toModInfo := dc.ModulesInfo[group.Name][toMod.Source]
-				if toMod.ID == "" {
-					return fmt.Errorf("could not find module %s used by %s in group %s",
-						toModID, fromMod.ID, group.Name)
+				toMod, err := group.getModuleByID(toModID)
+				if err != nil {
+					return err
 				}
+				toModInfo := dc.ModulesInfo[group.Name][toMod.Source]
 				usedVars := useModule(fromMod, toMod, fromModInputs, toModInfo.Outputs, settingsInBlueprint)
 				connection := ModConnection{
 					toID:            toModID,
