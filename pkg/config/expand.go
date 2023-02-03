@@ -173,8 +173,15 @@ func useModule(
 	usedVars = []string{}
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
+
 		// Skip settings explicitly defined by users
 		if slices.Contains(settingsInBlueprint, settingName) {
+			continue
+		}
+
+		// Skip settings that do not match module inputs
+		inputType, ok := modInputs[settingName]
+		if !ok {
 			continue
 		}
 
@@ -185,26 +192,24 @@ func useModule(
 		// list of any type, then we want to concatenate these values in order
 		// they were used; otherwise, the setting should remain set to the
 		// existing used value
-		_, isAlreadySet := mod.Settings[settingName]
-		if inputType, ok := modInputs[settingName]; ok {
-			modVarName := getModuleVarName(useModGroupID, useMod.ID, settingName)
-			isInputList := strings.HasPrefix(inputType, "list")
-			if isInputList {
-				if !isAlreadySet {
-					// Input is a list, create an outer list for it
-					mod.Settings[settingName] = []interface{}{}
-					mod.createWrapSettingsWith()
-					mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
-				}
-				// Append value list to the outer list
-				mod.Settings[settingName] = append(
-					mod.Settings[settingName].([]interface{}), modVarName)
-				usedVars = append(usedVars, settingName)
-			} else if !isAlreadySet {
-				// If input is not a list, set value if not already set and continue
-				mod.Settings[settingName] = modVarName
-				usedVars = append(usedVars, settingName)
+		_, setByUse := mod.Settings[settingName]
+		modVarName := getModuleVarName(useModGroupID, useMod.ID, settingName)
+		isInputList := strings.HasPrefix(inputType, "list")
+		if isInputList {
+			if !setByUse {
+				// Input is a list, create an outer list for it
+				mod.Settings[settingName] = []interface{}{}
+				mod.createWrapSettingsWith()
+				mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
 			}
+			// Append value list to the outer list
+			mod.Settings[settingName] = append(
+				mod.Settings[settingName].([]interface{}), modVarName)
+			usedVars = append(usedVars, settingName)
+		} else if !setByUse {
+			// If input is not a list, set value if not already set and continue
+			mod.Settings[settingName] = modVarName
+			usedVars = append(usedVars, settingName)
 		}
 	}
 	return
@@ -222,25 +227,42 @@ func (dc *DeploymentConfig) applyUseModules() error {
 			fromModInputs := getModuleInputMap(fromModInfo.Inputs)
 			settingsInBlueprint := maps.Keys(fromMod.Settings)
 			for _, toModID := range fromMod.Use {
+				// turn the raw string into a modReference struct
+				// which was previously validated by checkUsedModuleNames
+				// this will enable us to get structs about the module being
+				// used and search it for outputs that match inputs in the
+				// current module (the iterator)
 				modRef, err := identifyModuleByReference(toModID, *group)
 				if err != nil {
 					return err
 				}
+
+				// to get the module struct, we first needs its group
 				toGroup, err := dc.getGroupByID(modRef.ToGroupID)
 				if err != nil {
 					return err
 				}
+
+				// this module contains information about the target module that
+				// was specified by the user in the blueprint
 				toMod, err := toGroup.getModuleByID(modRef.ID)
 				if err != nil {
 					return err
 				}
+
+				// Packer modules cannot be used because they do not have a
+				// native concept of outputs. Without this, the validator
+				// that checks for matching inputs will always trigger
 				if toMod.Kind == "packer" {
 					return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], toMod.ID)
 				}
-				// this line should probably be tested for success but our
-				// current unit test infrastructure does not support running
-				// dc.setModulesInfo() on our test configurations because the
-				// Source paths are not real
+
+				// this struct contains the underlying module implementation,
+				// not just what the user specified in blueprint. e.g. module
+				// input variables and output values
+				// this line should probably be tested for success and unit
+				// tested but it our unit test infrastructure does not support
+				// running dc.setModulesInfo() on our test configurations
 				toModInfo := dc.ModulesInfo[toGroup.Name][toMod.Source]
 				usedVars := useModule(fromMod, toMod, modRef.ToGroupID, fromModInputs, toModInfo.Outputs, settingsInBlueprint)
 				connection := ModConnection{
@@ -684,37 +706,42 @@ func expandSimpleVariable(
 	callingGroup := context.blueprint.DeploymentGroups[context.groupIndex]
 	refStr := contents[1]
 
-	ref, err := identifySimpleVariable(refStr, callingGroup)
+	varRef, err := identifySimpleVariable(refStr, callingGroup)
 	if err != nil {
 		return "", err
 	}
 
-	err = ref.validate(context.blueprint.DeploymentGroups, context.blueprint.Vars, modToGrp)
+	err = varRef.validate(context.blueprint.DeploymentGroups, context.blueprint.Vars, modToGrp)
 	if err != nil {
 		return "", err
 	}
 
 	var expandedVariable string
-	if ref.ToGroupID == "deployment" {
-		expandedVariable = fmt.Sprintf("((var.%s))", ref.Name)
-	} else {
-		if ref.FromGroupID != ref.ToGroupID {
-			// call to function that adds outputs in ToGroupID
-			toGrpIdx := modToGrp[ref.ToGroupID]
-			toModIdx := slices.IndexFunc(context.blueprint.DeploymentGroups[toGrpIdx].Modules, func(m Module) bool { return m.ID == ref.ID })
-			if toModIdx == -1 {
-				return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], ref.ID)
-			}
-			toMod := &context.blueprint.DeploymentGroups[toGrpIdx].Modules[toModIdx]
-
-			if !slices.Contains(toMod.Outputs, ref.Name) {
-				toMod.Outputs = append(toMod.Outputs, ref.Name)
-			}
-			// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
-			return "", fmt.Errorf("%s: %s is an intergroup reference",
-				errorMessages["varInAnotherGroup"], context.varString)
+	switch varRef.ToGroupID {
+	case "deployment":
+		// deployment variables
+		expandedVariable = fmt.Sprintf("((var.%s))", varRef.Name)
+	case varRef.FromGroupID:
+		// intragroup reference can make direct reference to module output
+		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.ID, varRef.Name)
+	default:
+		// intergroup reference; being by finding the target module in blueprint
+		toGrpIdx := modToGrp[varRef.ToGroupID]
+		toModIdx := slices.IndexFunc(context.blueprint.DeploymentGroups[toGrpIdx].Modules, func(m Module) bool { return m.ID == varRef.ID })
+		if toModIdx == -1 {
+			return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], varRef.ID)
 		}
-		expandedVariable = fmt.Sprintf("((module.%s.%s))", ref.ID, ref.Name)
+		toMod := &context.blueprint.DeploymentGroups[toGrpIdx].Modules[toModIdx]
+
+		// ensure that the target module outputs the value in the root module
+		// state and not just internally within its deployment group
+		if !slices.Contains(toMod.Outputs, varRef.Name) {
+			toMod.Outputs = append(toMod.Outputs, varRef.Name)
+		}
+
+		// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
+		return "", fmt.Errorf("%s: %s is an intergroup reference",
+			errorMessages["varInAnotherGroup"], context.varString)
 	}
 	return expandedVariable, nil
 }
