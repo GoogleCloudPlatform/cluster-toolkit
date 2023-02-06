@@ -77,7 +77,7 @@ locals {
 
   allow_iap_ssh_ingress = {
     name                    = "${local.network_name}-fw-allow-iap-ssh-ingress"
-    description             = "allow console SSH access"
+    description             = "allow SSH access via Identity-Aware Proxy"
     direction               = "INGRESS"
     priority                = null
     ranges                  = ["35.235.240.0/20"]
@@ -94,6 +94,27 @@ locals {
       metadata = "INCLUDE_ALL_METADATA"
     }
   }
+
+  allow_iap_rdp_ingress = {
+    name                    = "${local.network_name}-fw-allow-iap-rdp-ingress"
+    description             = "allow Windows remote desktop access via Identity-Aware Proxy"
+    direction               = "INGRESS"
+    priority                = null
+    ranges                  = ["35.235.240.0/20"]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = ["3389"]
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
 
   allow_internal_traffic = {
     name                    = "${local.network_name}-fw-allow-internal-traffic"
@@ -124,7 +145,8 @@ locals {
 
   firewall_rules = concat(var.firewall_rules,
     var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
-    var.enable_iap_ssh_ingress ? [local.allow_iap_ssh_ingress] : []
+    var.enable_iap_rdp_ingress ? [local.allow_iap_rdp_ingress] : [],
+    var.enable_iap_ssh_ingress ? [local.allow_iap_ssh_ingress] : [],
   )
 }
 
