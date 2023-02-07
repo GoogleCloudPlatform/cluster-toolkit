@@ -29,6 +29,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
+	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -63,6 +64,7 @@ var errorMessages = map[string]string{
 	"noOutput":             "Output not found for a variable",
 	"varWithinStrings":     "variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally.",
 	"groupNotFound":        "The group ID was not found",
+	"cannotUsePacker":      "Packer modules cannot be used by other modules",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -96,14 +98,21 @@ type DeploymentGroup struct {
 	Kind             string
 }
 
-func (g DeploymentGroup) getModuleByID(modID string) Module {
-	for i := range g.Modules {
-		mod := g.Modules[i]
-		if g.Modules[i].ID == modID {
-			return mod
-		}
+func (g DeploymentGroup) getModuleByID(modID string) (Module, error) {
+	idx := slices.IndexFunc(g.Modules, func(m Module) bool { return m.ID == modID })
+	if idx == -1 {
+		return Module{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], modID)
 	}
-	return Module{}
+	return g.Modules[idx], nil
+}
+
+func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error) {
+	groupIndex := slices.IndexFunc(dc.Config.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == groupID })
+	if groupIndex == -1 {
+		return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["groupNotFound"], groupID)
+	}
+	group := dc.Config.DeploymentGroups[groupIndex]
+	return group, nil
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
