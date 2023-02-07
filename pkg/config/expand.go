@@ -919,8 +919,14 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	_, regionExists := dc.Config.Vars["region"]
 	_, zoneExists := dc.Config.Vars["zone"]
 
-	// always add the project ID validator first; remaining validators can only
-	// succeed if credentials can access the project
+	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+		Validator: testModuleNotUsedName.String(),
+		Inputs:    map[string]interface{}{},
+	})
+
+	// always add the project ID validator before subsequent validators that can
+	// only succeed if credentials can access the project. If the project ID
+	// validator fails, all remaining validators are not executed.
 	if projectIDExists {
 		v := validatorConfig{
 			Validator: testProjectExistsName.String(),
@@ -972,11 +978,6 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 		}
 		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
-
-	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
-		Validator: testModuleNotUsedName.String(),
-		Inputs:    map[string]interface{}{},
-	})
 
 	return nil
 }
