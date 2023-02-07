@@ -77,8 +77,8 @@
 
    Now that the file stores have been deployed we need to populate their IP
    addresses so subsequent deployment groups can use them. Look up the IP
-   addresses for the `apps` and `home` file system and populate them in the
-   command below.
+   addresses for the `appsshare` and `homeshare` file system and populate them
+   in the command below.
 
    > **Note**: You can use the following command to list information about
    > filestores, including their IP address.
