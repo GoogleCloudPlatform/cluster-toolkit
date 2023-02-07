@@ -200,6 +200,12 @@ variable "enable_iap_ssh_ingress" {
   default     = true
 }
 
+variable "enable_iap_rdp_ingress" {
+  type        = bool
+  description = "Enable a firewall rule to allow Windows Remote Desktop Protocol access using IAP tunnels"
+  default     = false
+}
+
 variable "enable_internal_traffic" {
   type        = bool
   description = "Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network"
