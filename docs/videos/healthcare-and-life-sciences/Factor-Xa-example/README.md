@@ -1,10 +1,17 @@
 # Factor Xa Example
 
-This example demonstrates a real life example of simulating the Factor Xa
-protein in water.
+This example demonstrates a real life case of simulating the Factor Xa protein
+in water.
+
+This example has been adapted with changes from tutorials by:
+
+- Justin Lemhul (http://www.mdtutorials.com) - licensed under [CC-BY-4.0]
+- Alessandra Villa (https://tutorials.gromacs.org/) - licensed under [CC-BY-4.0]
+
+[CC-BY-4.0]: https://creativecommons.org/licenses/by/4.0/
 
 > **Note** This example has not been optimized for performance and is meant to
-> demonstrate feasibility of a real world example
+> demonstrate feasibility of a real world example.
 
 ## Instructions
 

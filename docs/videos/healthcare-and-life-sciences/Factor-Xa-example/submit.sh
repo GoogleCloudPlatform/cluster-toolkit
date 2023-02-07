@@ -1,4 +1,12 @@
 #!/bin/bash
+# Factor Xa example (c) by Google LLC
+# Derived from Justin Lemhul (http://www.mdtutorials.com) - licensed under CC-BY-4.0 &
+# Alessandra Villa (https://tutorials.gromacs.org/) - licensed under CC-BY-4.0
+#
+# Factor Xa example is licensed under a
+# Creative Commons Attribution 4.0 International (CC BY 4.0) License.
+# See <https://creativecommons.org/licenses/by/4.0/>.
+
 #SBATCH -N 2
 #SBATCH --ntasks-per-node 30
 #SBATCH --partition compute
