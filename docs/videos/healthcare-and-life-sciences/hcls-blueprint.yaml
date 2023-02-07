@@ -67,12 +67,12 @@ deployment_groups:
   - id: homefs-create
     source: modules/file-system/filestore
     use: [network-create]
-    settings: {filestore_share_name: home}
+    settings: {filestore_share_name: homeshare}
 
   - id: appsfs-create
     source: modules/file-system/filestore
     use: [network-create]
-    settings: {filestore_share_name: apps}
+    settings: {filestore_share_name: appsshare}
 
   - id: bucket-software-create
     source: ./community/modules/file-system/cloud-storage-bucket
@@ -99,7 +99,7 @@ deployment_groups:
     source: modules/file-system/pre-existing-network-storage
     settings:
       server_ip: $(vars.appsfs_server_ip)
-      remote_mount: apps
+      remote_mount: appsshare
       local_mount: /apps
       fs_type: nfs
 
@@ -233,7 +233,7 @@ deployment_groups:
     source: modules/file-system/pre-existing-network-storage
     settings:
       server_ip: $(vars.homefs_server_ip)
-      remote_mount: home
+      remote_mount: homeshare
       local_mount: /home
       fs_type: nfs
 
@@ -241,7 +241,7 @@ deployment_groups:
     source: modules/file-system/pre-existing-network-storage
     settings:
       server_ip: $(vars.appsfs_server_ip)
-      remote_mount: apps
+      remote_mount: appsshare
       local_mount: /apps
       fs_type: nfs
 
