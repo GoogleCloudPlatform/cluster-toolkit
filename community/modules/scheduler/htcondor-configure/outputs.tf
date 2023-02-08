@@ -58,3 +58,8 @@ output "execute_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Execute Point"
   value       = local.runner_execute_role
 }
+
+output "central_manager_internal_ips" {
+  description = "Reserved internal IP addresses for use by Central Managers"
+  value       = module.address.addresses
+}

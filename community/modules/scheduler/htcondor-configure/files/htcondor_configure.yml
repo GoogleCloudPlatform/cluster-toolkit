@@ -20,6 +20,7 @@
   - name: User must supply HTCondor role
     ansible.builtin.assert:
       that:
+      - htcondor_central_manager_ips is defined
       - htcondor_role is defined
       - password_id is defined
       - project_id is defined
@@ -27,37 +28,55 @@
     ansible.builtin.file:
       name: /etc/condor/config.d/00-htcondor-9.0.config
       state: absent
+    notify:
+    - Reload HTCondor
   - name: Set HTCondor role
     ansible.builtin.copy:
-      dest: /etc/condor/config.d/01-role
+      dest: /etc/condor/config.d/00-role
       mode: 0644
       content: |
         use role:{{ htcondor_role }}
-  - name: Configure VM to be HTCondor Central Manager
-    when: htcondor_role == 'get_htcondor_central_manager'
-    block:
-    - name: Set HTCondor Central Manager
-      ansible.builtin.copy:
-        dest: /etc/condor/config.d/00-central-manager
-        mode: 0644
-        content: |
-          CONDOR_HOST={{ ansible_default_ipv4.address }}
-  - name: Read HTCondor Central Manager from metadata
-    when: htcondor_role != 'get_htcondor_central_manager'
-    block:
-    - name: Read metadata central-manager
-      ansible.builtin.uri:
-        url: http://metadata.google.internal/computeMetadata/v1/instance/attributes/central-manager
-        return_content: true
-        headers:
-          Metadata-Flavor: "Google"
-      register: cm
-    - name: Set HTCondor Central Manager
-      ansible.builtin.copy:
-        dest: /etc/condor/config.d/00-central-manager
-        mode: 0644
-        content: |
-          CONDOR_HOST={{ cm.content }}
+    notify:
+    - Reload HTCondor
+  - name: Set HTCondor Central Manager and Trust Domain
+    ansible.builtin.copy:
+      dest: /etc/condor/config.d/01-central-manager
+      mode: 0644
+      content: |
+        CONDOR_HOST={{ htcondor_central_manager_ips }}
+        UID_DOMAIN=c.{{ project_id }}.internal
+        TRUST_DOMAIN=c.{{ project_id }}.internal
+    notify:
+    - Reload HTCondor
+  - name: Generate list of Central Managers
+    ansible.builtin.set_fact:
+      central_manager_list: "{{ htcondor_central_manager_ips | split(',') }}"
+  - name: Set HTCondor Central Manager High Availability
+    when: htcondor_role == 'get_htcondor_central_manager' and central_manager_list | length > 1
+    ansible.builtin.copy:
+      dest: /etc/condor/config.d/01-central-manager-high-availability
+      mode: 0644
+      content: |
+        # following https://htcondor.readthedocs.io/en/latest/admin-manual/high-availability.html#high-availability-of-the-central-manager
+        CM_LIST = \
+          {{ central_manager_list[0] }}:$(SHARED_PORT_PORT), \
+          {{ central_manager_list[1] }}:$(SHARED_PORT_PORT)
+
+        HAD_USE_SHARED_PORT = TRUE
+        HAD_LIST = $(CM_LIST)
+
+        REPLICATION_USE_SHARED_PORT = TRUE
+        REPLICATION_LIST = $(CM_LIST)
+
+        HAD_USE_PRIMARY = TRUE
+        HAD_CONTROLLEE = NEGOTIATOR
+        MASTER_NEGOTIATOR_CONTROLLER = HAD
+
+        DAEMON_LIST = $(DAEMON_LIST), HAD, REPLICATION
+        HAD_USE_REPLICATION = TRUE
+        MASTER_HAD_BACKOFF_CONSTANT = 360
+    notify:
+    - Reload HTCondor
   - name: Configure HTCondor SchedD
     when: htcondor_role == 'get_htcondor_submit'
     block:
@@ -67,10 +86,11 @@
         mode: 0644
         content: |
           SCHEDD_INTERVAL=15
-          UID_DOMAIN = c.{{ project_id }}.internal
           TRUST_UID_DOMAIN = True
           SUBMIT_ATTRS = RunAsOwner
           RunAsOwner = True
+      notify:
+      - Reload HTCondor
   - name: Configure HTCondor StartD
     when: htcondor_role == 'get_htcondor_execute'
     block:
@@ -81,9 +101,10 @@
         content: |
           use feature:PartitionableSlot
           use feature:CommonCloudAttributesGoogle("-c created-by")
-          UID_DOMAIN = c.{{ project_id }}.internal
           TRUST_UID_DOMAIN = True
           STARTER_ALLOW_RUNAS_OWNER = True
+      notify:
+      - Reload HTCondor
   - name: Set HTCondor credentials
     ansible.builtin.shell: |
       set -e -o pipefail
@@ -105,3 +126,8 @@
     ansible.builtin.shell: |
       set -e -o pipefail
       wall "******* HTCondor system configuration complete ********"
+  handlers:
+  - name: Reload HTCondor
+    ansible.builtin.service:
+      name: condor
+      state: reloaded
