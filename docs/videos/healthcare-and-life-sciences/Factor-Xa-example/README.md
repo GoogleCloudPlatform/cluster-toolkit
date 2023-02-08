@@ -1,7 +1,8 @@
 # Factor Xa Example
 
 This example demonstrates a real life case of simulating the Factor Xa protein
-in water.
+in water. It uses the HCLS blueprint to run a multi-step GPU enabled gromacs
+run.
 
 This example has been adapted with changes from tutorials by:
 

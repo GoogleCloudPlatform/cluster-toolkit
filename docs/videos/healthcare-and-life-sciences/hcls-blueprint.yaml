@@ -24,7 +24,7 @@ vars:
 
   network_name: hcls-cluster-net
   subnetwork_name: primary-subnet
-  bucket_name_software: user-provided-software
+  bucket_name_software: ## Set User Provided Software Bucket Name Here ##
   bucket_name_inputs: ## Set Inputs Bucket Name Here ##
   bucket_name_outputs: ## Set Outputs Bucket Name Here ##
   use_deployment_name_in_bucket_name: false
@@ -145,7 +145,7 @@ deployment_groups:
                 - spec: slurm@21-08-8-2
                   prefix: /usr/local
               buildable: False
-      compilers: [gcc@9.3.0 target=x86_64]
+      compilers: [gcc@11.3.0 target=x86_64]
       environments:
       - name: gromacs
         type: file
@@ -153,26 +153,43 @@ deployment_groups:
           spack:
             definitions:
             - compilers:
-              - gcc@9.3.0
-            - mpis:
-              - intel-mpi@2018.4.274
-            - mpi_packages:
-              - gromacs@2020.5
+                - gcc@11.3.0
+            - cudas:
+                - cuda@11.8.0
+            - cuda_mpis:
+                - openmpi@4.1.4+cuda
+            - mpi_cuda_packages:
+                - gromacs@2022.3+cuda+mpi
             specs:
+            - $compilers
             - matrix:
-              - - $mpis
-              - - $%compilers
+                - [$cudas]
+                - [$%compilers]
             - matrix:
-              - - $mpi_packages
-              - - $%compilers
-              - - $^mpis
+                - [$cuda_mpis]
+                - [$%compilers]
+                - [$^cudas]
+                - [target=skylake]
+            - matrix:
+                - [$mpi_cuda_packages]
+                - [$^cudas]
+                - [$^cuda_mpis]
+                - [$%compilers]
+                - [target=skylake]
 
   - id: spack-builder-startup
     source: modules/scripts/startup-script
     settings:
       runners:
       - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+
+      - type: data
+        destination: /tmp/install_spack.sh
+        content: $(spack.startup_script)
+      - type: shell
+        destination: run_install_spack_with_env.sh
+        content: NVCC_PREPEND_FLAGS='-arch=all' bash /tmp/install_spack.sh
+
       - type: shell
         destination: data_staging.sh
         content: |
@@ -186,11 +203,11 @@ deployment_groups:
           # Set permissions for Spack environment
           chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
 
-      - type: data  # rethink
-        destination: /apps/gromacs/submit_gromacs.sh
+      - type: data
+        destination: /apps/gromacs/submit_gromacs_water_cpu.sh
         content: |
           #!/bin/bash
-          #SBATCH -N 2
+          #SBATCH -N 1
           #SBATCH --ntasks-per-node 30
           #SBATCH -p compute
 
@@ -204,8 +221,40 @@ deployment_groups:
           which gmx_mpi
           cd $SLURM_SUBMIT_DIR
           cp /data_input/gromacs_inputs/water-cut1.0_GMX50_bare/1536/* .
-          gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
-          mpirun -n 60 -ppn 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
+          mpirun -n 1 gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
+          mpirun -n 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
+
+      - type: data
+        destination: /apps/gromacs/submit_gromacs_water_gpu.sh
+        content: |
+          #!/bin/bash
+          #SBATCH -N 1
+          #SBATCH --ntasks-per-node 1
+          #SBATCH -p gpu
+          #SBATCH --gpus 1
+
+          # Size can be 0000.65  0000.96  0001.5  0003  0006  0012  0024  0048  0096  0192  0384  0768  1536  3072
+          # Type can be 'pme' or 'rf'
+
+          source /apps/spack/share/spack/setup-env.sh
+          spack env activate gromacs
+
+          # Check that gmx_mpi exists
+          which gmx_mpi
+          cd $SLURM_SUBMIT_DIR
+          cp /data_input/gromacs_inputs/water-cut1.0_GMX50_bare/1536/* .
+
+          # Significant GPU Optimizations only support constraints=h-bonds
+          # so we change this here for the water benchmark.
+          for a in *.mdp; do
+              sed -i 's/constraints[[:blank:]].*=.*all-bonds.*/constraints = h-bonds/' $a
+          done
+          mpirun -n 1 gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
+
+          mpirun -n 1 -H localhost \
+            env GMX_ENABLE_DIRECT_GPU_COMM=1 \
+            gmx_mpi mdrun -v -nsteps 100000 -resetstep 90000 -noconfout \
+            -pme gpu -update gpu -nb gpu -gputasks 00 -s input.tpr
 
       - type: shell
         destination: shutdown.sh
@@ -221,7 +270,8 @@ deployment_groups:
     use: [network-install, appsfs-install, bucket-input-install, spack-builder-startup]
     settings:
       name_prefix: spack-builder
-      machine_type: c2-standard-16
+      threads_per_core: 2
+      machine_type: a2-highgpu-1g
 
 - group: cluster
   modules:
@@ -298,6 +348,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 20
+      machine_type: c2-standard-60
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -311,11 +362,31 @@ deployment_groups:
     settings:
       partition_name: compute
 
+  - id: gpu_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      enable_smt: true
+      node_count_dynamic_max: 20
+      machine_type: a2-highgpu-1g
+
+  - id: gpu_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - gpu_node_group
+    - homefs
+    - appsfs
+    - bucket-input
+    - bucket-output
+    settings:
+      partition_name: gpu
+
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
     - compute_partition
+    - gpu_partition
     - homefs
     - appsfs
     - bucket-input
@@ -327,5 +398,3 @@ deployment_groups:
     use:
     - network1
     - slurm_controller
-    settings:
-      machine_type: n2-standard-4
