@@ -207,7 +207,7 @@ deployment_groups:
         destination: /apps/gromacs/submit_gromacs_water_cpu.sh
         content: |
           #!/bin/bash
-          #SBATCH -N 2
+          #SBATCH -N 1
           #SBATCH --ntasks-per-node 30
           #SBATCH -p compute
 
@@ -221,8 +221,8 @@ deployment_groups:
           which gmx_mpi
           cd $SLURM_SUBMIT_DIR
           cp /data_input/gromacs_inputs/water-cut1.0_GMX50_bare/1536/* .
-          gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
-          mpirun -n 60 -ppn 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
+          mpirun -n 1 gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
+          mpirun -n 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
 
       - type: data
         destination: /apps/gromacs/submit_gromacs_water_gpu.sh
