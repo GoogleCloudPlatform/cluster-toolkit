@@ -24,7 +24,7 @@ vars:
 
   network_name: hcls-cluster-net
   subnetwork_name: primary-subnet
-  bucket_name_software: user-provided-software
+  bucket_name_software: ## Set User Provided Software Bucket Name Here ##
   bucket_name_inputs: ## Set Inputs Bucket Name Here ##
   bucket_name_outputs: ## Set Outputs Bucket Name Here ##
   use_deployment_name_in_bucket_name: false
@@ -152,14 +152,14 @@ deployment_groups:
         content: |
           spack:
             definitions:
-              - compilers:
-                  - gcc@11.3.0
-              - cudas:
-                  - cuda@11.8.0
-              - cuda_mpis:
-                  - openmpi@4.1.4+cuda
-              - mpi_cuda_packages:
-                  - gromacs@2022.3+cuda+mpi
+            - compilers:
+                - gcc@11.3.0
+            - cudas:
+                - cuda@11.8.0
+            - cuda_mpis:
+                - openmpi@4.1.4+cuda
+            - mpi_cuda_packages:
+                - gromacs@2022.3+cuda+mpi
             specs:
             - $compilers
             - matrix:
@@ -232,7 +232,6 @@ deployment_groups:
           #SBATCH --ntasks-per-node 1
           #SBATCH -p gpu
           #SBATCH --gpus 1
-
 
           # Size can be 0000.65  0000.96  0001.5  0003  0006  0012  0024  0048  0096  0192  0384  0768  1536  3072
           # Type can be 'pme' or 'rf'
