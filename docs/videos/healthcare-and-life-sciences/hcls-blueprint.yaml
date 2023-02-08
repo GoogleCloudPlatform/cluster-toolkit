@@ -229,9 +229,9 @@ deployment_groups:
         content: |
           #!/bin/bash
           #SBATCH -N 1
-          #SBATCH --ntasks-per-node 3
-          #SBATCH -p gpu2
-          #SBATCH --gpus 2
+          #SBATCH --ntasks-per-node 1
+          #SBATCH -p gpu
+          #SBATCH --gpus 1
 
 
           # Size can be 0000.65  0000.96  0001.5  0003  0006  0012  0024  0048  0096  0192  0384  0768  1536  3072
@@ -248,16 +248,14 @@ deployment_groups:
           # Significant GPU Optimizations only support constraints=h-bonds
           # so we change this here for the water benchmark.
           for a in *.mdp; do
-             sed -i 's/constraints[[:blank:]].*=.*all-bonds.*/constraints = h-bonds/' $a
+              sed -i 's/constraints[[:blank:]].*=.*all-bonds.*/constraints = h-bonds/' $a
           done
           mpirun -n 1 gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
 
-          mpirun -cpus-per-rank 4 -report-bindings -n 3 \
-            -H localhost,localhost,localhost  \
-            env GMX_ENABLE_DIRECT_GPU_COMM=true \
+          mpirun -n 1 -H localhost \
+            env GMX_ENABLE_DIRECT_GPU_COMM=1 \
             gmx_mpi mdrun -v -nsteps 100000 -resetstep 90000 -noconfout \
-            -ntomp 4 -ntomp_pme 4   -npme 1 -pme gpu -update gpu -nb gpu \
-            -nstlist 400 -gputasks 011 -s input.tpr
+            -pme gpu -update gpu -nb gpu -gputasks 00 -s input.tpr
 
       - type: shell
         destination: shutdown.sh
@@ -365,18 +363,18 @@ deployment_groups:
     settings:
       partition_name: compute
 
-  - id: gpu1_node_group
+  - id: gpu_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       enable_smt: true
       node_count_dynamic_max: 20
       machine_type: a2-highgpu-1g
 
-  - id: gpu1_partition
+  - id: gpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
-    - gpu1_node_group
+    - gpu_node_group
     - homefs
     - appsfs
     - bucket-input
@@ -384,32 +382,12 @@ deployment_groups:
     settings:
       partition_name: gpu
 
-  - id: gpu2_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings:
-      enable_smt: true
-      node_count_dynamic_max: 20
-      machine_type: a2-highgpu-2g
-
-  - id: gpu2_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - gpu2_node_group
-    - homefs
-    - appsfs
-    - bucket-input
-    - bucket-output
-    settings:
-      partition_name: gpu2
-
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
     - compute_partition
-    - gpu1_partition
-    - gpu2_partition
+    - gpu_partition
     - homefs
     - appsfs
     - bucket-input
