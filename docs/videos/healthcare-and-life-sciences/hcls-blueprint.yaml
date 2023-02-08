@@ -230,7 +230,7 @@ deployment_groups:
           #!/bin/bash
           #SBATCH -N 1
           #SBATCH --ntasks-per-node 3
-          #SBATCH -p gpu
+          #SBATCH -p gpu2
           #SBATCH --gpus 2
 
 
@@ -365,18 +365,18 @@ deployment_groups:
     settings:
       partition_name: compute
 
-  - id: gpu_node_group
+  - id: gpu1_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       enable_smt: true
       node_count_dynamic_max: 20
       machine_type: a2-highgpu-1g
 
-  - id: gpu_partition
+  - id: gpu1_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
-    - gpu_node_group
+    - gpu1_node_group
     - homefs
     - appsfs
     - bucket-input
@@ -384,12 +384,32 @@ deployment_groups:
     settings:
       partition_name: gpu
 
+  - id: gpu2_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      enable_smt: true
+      node_count_dynamic_max: 20
+      machine_type: a2-highgpu-2g
+
+  - id: gpu2_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - gpu2_node_group
+    - homefs
+    - appsfs
+    - bucket-input
+    - bucket-output
+    settings:
+      partition_name: gpu2
+
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
     - compute_partition
-    - gpu_partition
+    - gpu1_partition
+    - gpu2_partition
     - homefs
     - appsfs
     - bucket-input
