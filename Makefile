@@ -68,7 +68,8 @@ add-google-license:
 	$(error "could not find addlicense in PATH, run: go install github.com/google/addlicense@latest")
 else
 add-google-license:
-	addlicense -c "Google LLC" -l apache .
+	# Factor-Xa-example is under CC-BY-4.0
+	addlicense -c "Google LLC" -l apache -ignore **/Factor-Xa-example/submit.sh .
 endif
 
 # RULES SUPPORTING THE ABOVE
