@@ -44,6 +44,8 @@ deployment_groups:
 
   - id: htcondor_configure
     source: community/modules/scheduler/htcondor-configure
+    use:
+    - network1
 
   - id: htcondor_configure_central_manager
     source: modules/scripts/startup-script
@@ -65,6 +67,17 @@ deployment_groups:
         email: $(htcondor_configure.central_manager_service_account)
         scopes:
         - cloud-platform
+      network_interfaces:
+      - network: null
+        subnetwork: $(network1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: $(htcondor_configure.central_manager_internal_ip)
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: VIRTIO_NET
+        queue_count: null
     outputs:
     - internal_ip
 
@@ -83,7 +96,6 @@ deployment_groups:
     settings:
       metadata:
         enable-oslogin: "TRUE"
-        central-manager: ((module.htcondor_cm.internal_ip[0]))
       service_account:
         email: $(htcondor_configure.execute_point_service_account)
         scopes:
@@ -118,8 +130,6 @@ deployment_groups:
     settings:
       name_prefix: access-point
       machine_type: c2-standard-4
-      metadata:
-        central-manager: ((module.htcondor_cm.internal_ip[0]))
       service_account:
         email: $(htcondor_configure.access_point_service_account)
         scopes:
