@@ -37,7 +37,6 @@ variable "region" {
 variable "subnetwork_self_link" {
   description = "The self link of the subnetwork in which Central Managers will be placed."
   type        = string
-  default     = null
 }
 
 variable "access_point_roles" {

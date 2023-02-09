@@ -71,7 +71,7 @@ deployment_groups:
       - network: null
         subnetwork: $(network1.subnetwork_self_link)
         subnetwork_project: $(vars.project_id)
-        network_ip: ((module.htcondor_configure.central_manager_internal_ips[0]))
+        network_ip: $(htcondor_configure.central_manager_internal_ip)
         stack_type: null
         access_config: []
         ipv6_access_config: []

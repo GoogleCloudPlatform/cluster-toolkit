@@ -125,7 +125,7 @@ limitations under the License.
 | <a name="input_pool_password"></a> [pool\_password](#input\_pool\_password) | HTCondor Pool Password | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Default region for creating resources | `string` | n/a | yes |
-| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork in which Central Managers will be placed. | `string` | `null` | no |
+| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork in which Central Managers will be placed. | `string` | n/a | yes |
 
 ## Outputs
 
@@ -133,7 +133,8 @@ limitations under the License.
 |------|-------------|
 | <a name="output_access_point_runner"></a> [access\_point\_runner](#output\_access\_point\_runner) | Toolkit Runner to configure an HTCondor Access Point |
 | <a name="output_access_point_service_account"></a> [access\_point\_service\_account](#output\_access\_point\_service\_account) | HTCondor Access Point Service Account (e-mail format) |
-| <a name="output_central_manager_internal_ips"></a> [central\_manager\_internal\_ips](#output\_central\_manager\_internal\_ips) | Reserved internal IP addresses for use by Central Managers |
+| <a name="output_central_manager_internal_ip"></a> [central\_manager\_internal\_ip](#output\_central\_manager\_internal\_ip) | Reserved internal IP address for use by Central Manager |
+| <a name="output_central_manager_internal_ips"></a> [central\_manager\_internal\_ips](#output\_central\_manager\_internal\_ips) | Reserved internal IP addresses for use by 2 Central Managers in HA mode |
 | <a name="output_central_manager_runner"></a> [central\_manager\_runner](#output\_central\_manager\_runner) | Toolkit Runner to configure an HTCondor Central Manager |
 | <a name="output_central_manager_service_account"></a> [central\_manager\_service\_account](#output\_central\_manager\_service\_account) | HTCondor Central Manager Service Account (e-mail format) |
 | <a name="output_execute_point_runner"></a> [execute\_point\_runner](#output\_execute\_point\_runner) | Toolkit Runner to configure an HTCondor Execute Point |

@@ -59,7 +59,12 @@ output "execute_point_runner" {
   value       = local.runner_execute_role
 }
 
+output "central_manager_internal_ip" {
+  description = "Reserved internal IP address for use by Central Manager"
+  value       = try(module.address.addresses[0], null)
+}
+
 output "central_manager_internal_ips" {
-  description = "Reserved internal IP addresses for use by Central Managers"
+  description = "Reserved internal IP addresses for use by 2 Central Managers in HA mode"
   value       = module.address.addresses
 }
