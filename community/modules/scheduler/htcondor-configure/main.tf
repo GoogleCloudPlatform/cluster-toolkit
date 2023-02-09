@@ -46,6 +46,8 @@ locals {
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_submit",
       "-e htcondor_central_manager_ips=${join(",", module.address.addresses)}",
+      "-e job_queue_ha=${var.job_queue_high_availability}",
+      "-e spool_dir=${var.spool_parent_dir}/spool",
       "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
       "-e project_id=${var.project_id}",
     ])

@@ -17,6 +17,8 @@
   hosts: localhost
   become: true
   vars:
+    job_queue_ha: false
+    spool_dir: /var/lib/condor/spool
     condor_config_root: /etc/condor
     role_file: 00-role
     pool_file: 01-pool
@@ -139,6 +141,7 @@
           SYSTEM_JOB_MACHINE_ATTRS=$(SYSTEM_JOB_MACHINE_ATTRS) \
             CloudMachineType CloudZone CloudInterruptible
           SYSTEM_JOB_MACHINE_ATTRS_HISTORY_LENGTH=10
+          SPOOL={{ spool_dir }}
       notify:
       - Reload HTCondor
     - name: Create IDTOKEN to advertise access point
@@ -149,6 +152,56 @@
           -token condor@{{ trust_domain }}
       args:
         creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
+    - name: Enable SchedD high availability
+      when: job_queue_ha | bool
+      block:
+      - name: Setup HA Spool directory
+        ansible.builtin.file:
+          path: "{{ spool_dir }}"
+          state: directory
+          owner: condor
+          group: condor
+          mode: 0700
+      - name: Set SchedD HA configuration (requires restart)
+        ansible.builtin.copy:
+          dest: "{{ condor_config_root }}/config.d/{{ schedd_ha_config_file }}"
+          mode: 0644
+          content: |
+            MASTER_HA_LIST=SCHEDD
+            HA_LOCK_URL=file:{{ spool_dir }}
+            VALID_SPOOL_FILES=$(VALID_SPOOL_FILES), SCHEDD.lock
+            HA_POLL_PERIOD=30
+        notify:
+        - Restart HTCondor
+      - name: Create SystemD override directory for HTCondor
+        ansible.builtin.file:
+          path: /etc/systemd/system/condor.service.d
+          state: directory
+          owner: root
+          group: root
+          mode: 0755
+      - name: Ensure HTCondor starts after shared filesystem is mounted
+        ansible.builtin.copy:
+          dest: /etc/systemd/system/condor.service.d/mount-spool.conf
+          mode: 0644
+          content: |
+            [Unit]
+            RequiresMountsFor={{ spool_dir }}
+        notify:
+        - Restart HTCondor
+    - name: Disable SchedD high availability
+      when: not job_queue_ha | bool
+      block:
+      - name: Remove SchedD HA configuration file
+        ansible.builtin.file:
+          path: "{{ condor_config_root }}/config.d/{{ schedd_ha_config_file }}"
+          state: absent
+        notify:
+        - Restart HTCondor
+      - name: Remove HTCondor SystemD override
+        ansible.builtin.file:
+          path: /etc/systemd/system/condor.service.d/mount-spool.conf
+          state: absent
   - name: Configure HTCondor StartD
     when: htcondor_role == 'get_htcondor_execute'
     block:
@@ -172,10 +225,11 @@
       args:
         creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
   - name: Start HTCondor
-    ansible.builtin.service:
+    ansible.builtin.systemd:
       name: condor
       state: started
       enabled: true
+      daemon_reload: true
   - name: Inform users
     changed_when: false
     ansible.builtin.shell: |
@@ -186,3 +240,7 @@
     ansible.builtin.service:
       name: condor
       state: reloaded
+  - name: Restart HTCondor
+    ansible.builtin.service:
+      name: condor
+      state: restarted
