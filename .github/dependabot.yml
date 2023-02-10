@@ -24,3 +24,11 @@ updates:
     time: "03:00"
     timezone: America/Los_Angeles
   target-branch: develop
+- package-ecosystem: pip
+  directory: /community/front-end/ofe/
+  schedule:
+    interval: weekly
+    day: monday
+    time: "03:00"
+    timezone: America/Los_Angeles
+  target-branch: develop
