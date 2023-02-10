@@ -52,7 +52,7 @@ variable "filestore_share_name" {
 }
 
 variable "local_mount" {
-  description = "Mountpoint for this filestore instance."
+  description = "Mountpoint for this filestore instance. Note: If set to the same as the `filestore_share_name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md))."
   type        = string
   default     = "/shared"
 }

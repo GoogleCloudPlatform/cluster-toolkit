@@ -212,3 +212,28 @@ We anticipate that this limit will be configured in future releases of the Slurm
 module, however we recommend that you use a dedicated build VM where possible
 to execute scripts of significat duration. This pattern is demonstrated in the
 [AMD-optimized Slurm cluster example](../community/examples/AMD/).
+
+### Slurm Controller Startup Fails with `exportfs` Error
+
+Example error in `/slurm/scripts/setup.log` (on Slurm V5 controller):
+
+```text
+exportfs: /****** does not support NFS export
+```
+
+This can be caused when you are mounting a Filestore that has the same name for
+`local_mount` and `filestore_share_name`.
+
+For example:
+
+```yaml
+  - id: samesharefs  # fails to exportfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      filestore_share_name: same
+      local_mount: /same
+```
+
+This is a known issue, the recommended workaround is to use different naming for
+the `local_mount` and `filestore_share_name`.
