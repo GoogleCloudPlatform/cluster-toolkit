@@ -63,7 +63,7 @@ sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/" "${EXAMPLE_YAML}" ||
 VARS="project_id=${PROJECT_ID},deployment_name=${DEPLOYMENT_NAME}"
 
 ## Create blueprint and create artifact
-./ghpc create "${EXAMPLE_YAML}" \
+./ghpc create  -l ERROR "${EXAMPLE_YAML}" \
 	--vars "${VARS}" ||
 	{
 		echo "could not write blueprint"
