@@ -134,8 +134,8 @@ limitations under the License.
 | <a name="output_access_point_runner"></a> [access\_point\_runner](#output\_access\_point\_runner) | Toolkit Runner to configure an HTCondor Access Point |
 | <a name="output_access_point_service_account"></a> [access\_point\_service\_account](#output\_access\_point\_service\_account) | HTCondor Access Point Service Account (e-mail format) |
 | <a name="output_central_manager_internal_ip"></a> [central\_manager\_internal\_ip](#output\_central\_manager\_internal\_ip) | Reserved internal IP address for use by Central Manager |
-| <a name="output_central_manager_internal_ips"></a> [central\_manager\_internal\_ips](#output\_central\_manager\_internal\_ips) | Reserved internal IP addresses for use by 2 Central Managers in HA mode |
 | <a name="output_central_manager_runner"></a> [central\_manager\_runner](#output\_central\_manager\_runner) | Toolkit Runner to configure an HTCondor Central Manager |
+| <a name="output_central_manager_secondary_internal_ip"></a> [central\_manager\_secondary\_internal\_ip](#output\_central\_manager\_secondary\_internal\_ip) | Reserved internal IP address for use by failover Central Manager |
 | <a name="output_central_manager_service_account"></a> [central\_manager\_service\_account](#output\_central\_manager\_service\_account) | HTCondor Central Manager Service Account (e-mail format) |
 | <a name="output_execute_point_runner"></a> [execute\_point\_runner](#output\_execute\_point\_runner) | Toolkit Runner to configure an HTCondor Execute Point |
 | <a name="output_execute_point_service_account"></a> [execute\_point\_service\_account](#output\_execute\_point\_service\_account) | HTCondor Execute Point Service Account (e-mail format) |
