@@ -55,7 +55,9 @@ steps:
   - |
     set -e
     export PROJECT=build-project
-    addlicense -check . >/dev/null
+    # Factor-Xa-example is under CC-BY-4.0
+    addlicense -check -ignore **/Factor-Xa-example/submit.sh . \
+      || { echo "addlicense failed"; exit 1; }
     make tests
 images: [
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder']
