@@ -36,6 +36,7 @@ import (
 
 const (
 	expectedVarFormat string = "$(vars.var_name) or $(module_id.output_name)"
+	expectedModFormat string = "$(module_id) or $(group_id.module_id)"
 	matchLabelExp     string = `^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`
 )
 
@@ -52,6 +53,7 @@ var errorMessages = map[string]string{
 	"globalLabelType":      "deployment variable 'labels' are not a map",
 	"settingsLabelType":    "labels in module settings are not a map",
 	"invalidVar":           "invalid variable definition in",
+	"invalidMod":           "invalid module reference",
 	"invalidDeploymentRef": "invalid deployment-wide reference (only \"vars\") is supported)",
 	"varNotFound":          "Could not find source of variable",
 	"varInAnotherGroup":    "References to other groups are not yet supported",
@@ -59,6 +61,8 @@ var errorMessages = map[string]string{
 	"intergroupOrder":      "References to outputs from other groups must be to earlier groups",
 	"referenceWrongGroup":  "Reference specified the wrong group for the module",
 	"noOutput":             "Output not found for a variable",
+	"varWithinStrings":     "variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally.",
+	"groupNotFound":        "The group ID was not found",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -481,17 +485,22 @@ func checkModuleAndGroupNames(
 // are in the correct group
 func checkUsedModuleNames(
 	depGroups []DeploymentGroup, idToGroup map[string]int) error {
-	for iGrp, grp := range depGroups {
+	for _, grp := range depGroups {
 		for _, mod := range grp.Modules {
 			for _, usedMod := range mod.Use {
-				// Check if module even exists
-				if _, ok := idToGroup[usedMod]; !ok {
-					return fmt.Errorf("used module ID %s does not exist", usedMod)
+				ref, err := identifyModuleByReference(usedMod, grp)
+				if err != nil {
+					return err
 				}
-				// Ensure module is from the correct group
-				if idToGroup[usedMod] != iGrp {
-					return fmt.Errorf(
-						"used module ID %s not found in this Deployment Group", usedMod)
+				err = ref.validate(depGroups, idToGroup)
+				if err != nil {
+					return err
+				}
+
+				// TODO: remove this when support is added!
+				if ref.FromGroupID != ref.ToGroupID {
+					return fmt.Errorf("%s: %s is an intergroup reference",
+						errorMessages["varInAnotherGroup"], usedMod)
 				}
 			}
 		}
