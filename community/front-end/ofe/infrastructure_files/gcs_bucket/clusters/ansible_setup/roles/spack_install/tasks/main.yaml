@@ -25,7 +25,7 @@
   ansible.builtin.git:
     repo: https://github.com/spack/spack.git
     dest: "{{ spack_dir }}"
-    version: v0.17.1
+    version: v0.19.1
     depth: 1
 
 - name: Apply Global Spack configurations
@@ -45,7 +45,7 @@
 
 - name: Get Slurm Version
   ansible.builtin.set_fact:
-    slurm_version={{ slurm_version_cmd.stdout }}
+    slurm_version={{ slurm_version_cmd.stdout }}   
 - name: Write Slurm Package file
   ansible.builtin.copy:
     dest: /tmp/spack_pkg.yml

@@ -13,10 +13,13 @@
 # limitations under the License.
 
 ---
-- name: Spack config externals
-  ansible.builtin.shell: |
-    module load openmpi
-    {{ spack_dir }}/bin/spack external find --scope=system --not-buildable
+- name: Load openmpi module
+  ansible.builtin.shell: ". /usr/share/Modules/init/sh;module load openmpi"
+  when: True
+
+- name: Spack find system modules
+  ansible.builtin.command: "{{ spack_dir }}/bin/spack external find --scope=system --not-buildable"
+  ignore_errors: true
   when: True
 
 - name: Spack mark cmake as buildable
