@@ -12,12 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
-terraform {
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:SchedMD-slurm-on-gcp-controller/v1.12.0"
-  }
+output "startup_script" {
+  description = "script to load and run all runners, as a string value."
+  value       = module.client_startup_script.startup_script
+}
 
-  required_version = ">= 0.14.0"
+output "instance_name" {
+  description = "Name of the first instance created, if any."
+  value       = var.instance_count > 0 ? module.instances.name[0] : null
 }
