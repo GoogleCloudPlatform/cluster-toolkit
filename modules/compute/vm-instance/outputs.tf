@@ -28,3 +28,13 @@ output "internal_ip" {
   description = "Internal IP of the instances"
   value       = google_compute_instance.compute_vm[*].network_interface[0].network_ip
 }
+
+output "instructions" {
+  description = "Instructions on how to SSH into the created VM. Commands may fail depending on VM configuration and IAM permissions."
+  value       = <<-EOT
+  Use the following commands to SSH into the first VM created:
+    gcloud compute ssh --zone ${var.zone} ${google_compute_instance.compute_vm[0].name} --project ${var.project_id}
+  If not accessible from the public internet, use an SSH tunnel through IAP:
+    gcloud compute ssh --zone ${var.zone} ${google_compute_instance.compute_vm[0].name} --project ${var.project_id} --tunnel-through-iap
+  EOT
+}
