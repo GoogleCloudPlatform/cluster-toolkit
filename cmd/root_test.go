@@ -19,13 +19,13 @@ package cmd
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
-	"github.com/go-git/go-billy/v5"
-	"github.com/go-git/go-billy/v5/memfs"
+	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/storage/memory"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	. "gopkg.in/check.v1"
 )
 
@@ -33,143 +33,174 @@ type MySuite struct{}
 
 var _ = Suite(&MySuite{})
 
-// git hash variables for testing
-var initialGitHash = "8fc4768edbef9b3f115a41eaf2a5740d41758cff"
-var oldGitHashFromMain = "b0a5f6f1ef6298ccda812e9c332be7a195e1f117"
 var randomGitHash = "a975c295ddeab5b1a5323df92f61c4cc9fc88207"
-var gitCommitInfo = "v1.0.0-393-gb8106eb"
-var gitTagVersion = "v1.0.0"
-var gitBranch = "main"
 
 func Test(t *testing.T) {
 	TestingT(t)
 }
 
 func TestMain(m *testing.M) {
-	setup()
+	wd, _ := os.Getwd()
 	code := m.Run()
+	os.Chdir(wd)
 	os.Exit(code)
-}
-
-func setup() {
-
-}
-
-// mockInjectedGitVariables()
-func mockInjectedGitVariables() {
-	GitTagVersion = gitTagVersion
-	GitBranch = gitBranch
-	GitCommitInfo = gitCommitInfo
-	GitCommitHash = oldGitHashFromMain
-	GitInitialHash = initialGitHash
 }
 
 /* Tests */
 // root.go
 func (s *MySuite) TestHpcToolkitRepo(c *C) {
-	mockInjectedGitVariables()
-	_, execPath, _, _ := runtime.Caller(0)
-	workDir := filepath.Dir(execPath)
-	repoDir := filepath.Dir(filepath.Dir(execPath))
+	path := c.MkDir()
+	repo, initHash, err := initTestRepo(path)
+	if err != nil {
+		c.Fatal(err)
+	}
+	GitInitialHash = initHash.String()
+	head, _ := repo.Head()
 
-	// find repo when workdir is in ./cmd subdir of repo
-	_, got, err := hpcToolkitRepo()
-	c.Assert(got, Equals, workDir)
-	c.Assert(err, IsNil)
+	{ // CWD is repo root
+		if err = os.Chdir(path); err != nil {
+			c.Fatal(err)
+		}
+		r, dir, err := hpcToolkitRepo()
+		c.Assert(err, IsNil)
+		c.Check(dir, Equals, path)
+		h, _ := r.Head()
+		c.Check(h.Hash(), Equals, head.Hash())
+	}
 
-	// find repo when workdir is root of repo
-	os.Chdir(repoDir)
-	_, got, err = hpcToolkitRepo()
-	c.Assert(got, Equals, repoDir)
-	c.Assert(err, IsNil)
+	{ // CWD is subdir in repo root
+		subDir := filepath.Join(path, "subidr")
+		if err = os.MkdirAll(subDir, os.ModePerm); err != nil {
+			c.Fatal(err)
+		}
+		if err = os.Chdir(subDir); err != nil {
+			c.Fatal(err)
+		}
+		r, dir, err := hpcToolkitRepo()
+		c.Assert(err, IsNil)
+		c.Check(dir, Equals, subDir)
+		h, _ := r.Head()
+		c.Check(h.Hash(), Equals, head.Hash())
+	}
 
-	// Try to find repo when workdir is outside root of repo. Normal execution
-	// returns binary site in. Empty value expected during tests since test
-	// binary is built in a test dir that is not in a git repository
-	err = os.Chdir(filepath.Dir(repoDir))
-	_, got, err = hpcToolkitRepo()
-	c.Assert(err, Equals, git.ErrRepositoryNotExists)
-	c.Assert(got, Equals, "")
+	{ // CWD is root of sub repo in repo root
+		subRepo := filepath.Join(path, "subrepo")
+		if err = os.MkdirAll(subRepo, os.ModePerm); err != nil {
+			c.Fatal(err)
+		}
+		_, _, err = initTestRepo(subRepo)
+		if err != nil {
+			c.Fatal(err)
+		}
+		if err = os.Chdir(subRepo); err != nil {
+			c.Fatal(err)
+		}
+		r, dir, err := hpcToolkitRepo()
+		c.Assert(err, IsNil)
+		c.Check(dir, Equals, path)
+		h, _ := r.Head()
+		c.Check(h.Hash(), Equals, head.Hash())
+	}
+
+	{ // CWD is parent of repo root, hope it's not repo itself.
+		os.Chdir(filepath.Dir(path))
+		_, _, err = hpcToolkitRepo()
+		c.Check(err, Equals, git.ErrRepositoryNotExists)
+	}
 }
 
 func (s *MySuite) TestIsHpcToolkitRepo(c *C) {
-	// sub directory of an hpc-toolkit git repository
-	_, callDir, _, _ := runtime.Caller(0)
-	repoDir := filepath.Dir(filepath.Dir(callDir))
-	repo, _ := git.PlainOpen(repoDir)
-	got := isHpcToolkitRepo(*repo)
-	c.Assert(got, Equals, true)
+	repo, initHash, err := initTestRepo(c.MkDir())
+	if err != nil {
+		c.Fatal(err)
+	}
 
-	// temporary git repo is not a hpc-toolkit repo
-	storer := memory.NewStorage()
-	fs := memfs.New()
-	testRepo, _ := git.Init(storer, fs)
-	initTestRepo(*testRepo, fs)
-	got = isHpcToolkitRepo(*testRepo)
-	c.Assert(got, Equals, false)
+	// Doesn't match
+	GitInitialHash = randomGitHash
+	c.Check(isHpcToolkitRepo(*repo), Equals, false)
+
+	// Matches
+	GitInitialHash = initHash.String()
+	c.Check(isHpcToolkitRepo(*repo), Equals, true)
 }
 
 func (s *MySuite) TestCheckGitHashMismatch(c *C) {
-	_, callDir, _, _ := runtime.Caller(0)
-	repoDir := filepath.Dir(filepath.Dir(callDir))
-	workDir := filepath.Dir(callDir)
-	repo, _ := git.PlainOpen(repoDir)
+	path := c.MkDir()
+	repo, init, err := initTestRepo(path)
+	if err != nil {
+		c.Fatal(err)
+	}
+	GitInitialHash = init.String()
+	if err = os.Chdir(path); err != nil {
+		c.Fatal(err)
+	}
+
 	head, _ := repo.Head()
 	hash := head.Hash().String()
 	branch := head.Name().Short()
 
-	// verify current working directory git hash against hash of v1.0.0
-	mockInjectedGitVariables()
-	mismatch, b, h, dir := checkGitHashMismatch()
-	c.Assert(mismatch, Equals, true)
-	c.Assert(dir, Equals, workDir)
-	c.Assert(b, Equals, branch)
-	c.Assert(h, Equals, hash)
+	{ // Matches
+		GitCommitHash = hash
+		mismatch, _, _, _ := checkGitHashMismatch()
+		c.Check(mismatch, Equals, false)
+	}
 
-	// verify current working directory git hash against random initial hash
-	mockInjectedGitVariables()
-	GitInitialHash = randomGitHash
-	mismatch, b, h, dir = checkGitHashMismatch()
-	c.Assert(mismatch, Equals, false)
-	c.Assert(b, Equals, "")
-	c.Assert(h, Equals, "")
+	{ // Baked commit hash doesn't match
+		GitCommitHash = randomGitHash
+		mismatch, b, h, dir := checkGitHashMismatch()
+		c.Check(mismatch, Equals, true)
+		c.Check(dir, Equals, path)
+		c.Check(b, Equals, branch)
+		c.Check(h, Equals, hash)
+	}
 
-	// verify current working directory git hash against a incorrect random hash
-	mockInjectedGitVariables()
-	GitCommitHash = randomGitHash
-	mismatch, b, h, dir = checkGitHashMismatch()
-	c.Assert(mismatch, Equals, true)
-	c.Assert(dir, Equals, workDir)
-	c.Assert(b, Equals, branch)
-	c.Assert(h, Equals, hash)
+	{ // Not a right repo, initial hash doesn't match
+		GitInitialHash = randomGitHash
+		mismatch, _, _, _ := checkGitHashMismatch()
+		c.Check(mismatch, Equals, false)
+		GitInitialHash = init.String() // restore
+	}
 
-	// Binary contains no git information
-	GitTagVersion = ""
-	GitBranch = ""
-	GitCommitInfo = ""
-	GitCommitHash = ""
-	GitInitialHash = ""
-	mismatch, b, h, dir = checkGitHashMismatch()
-	c.Assert(mismatch, Equals, false)
-	c.Assert(b, Equals, "")
-	c.Assert(h, Equals, "")
-	c.Assert(dir, Equals, "")
+	{ // Binary contains no git information
+		GitTagVersion = ""
+		GitBranch = ""
+		GitCommitInfo = ""
+		GitCommitHash = ""
+		GitInitialHash = ""
+		mismatch, _, _, _ := checkGitHashMismatch()
+		c.Check(mismatch, Equals, false)
+	}
 }
 
-// initTestRepo initializes an in-memory test repository and commits a test
-// file to it
-func initTestRepo(r git.Repository, fs billy.Filesystem) {
-	filePath := "test.txt"
-	testFile, err := fs.Create(filePath)
+// Creates a Git repo at `path`, performs multiple commits.
+func initTestRepo(path string) (repo *git.Repository, initHash plumbing.Hash, err error) {
+	fs := osfs.New(path)
+	storer := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
+
+	repo, err = git.Init(storer, fs)
+	if err != nil {
+		return
+	}
+	w, err := repo.Worktree()
 	if err != nil {
 		return
 	}
 
-	testFile.Write([]byte("Test file"))
-	testFile.Close()
+	commit := func(s string) (hash plumbing.Hash, err error) {
+		n := "test_" + s + ".txt"
+		f, err := fs.Create(n)
+		if err != nil {
+			return
+		}
+		// Set unique content to avoid hash collision
+		f.Write([]byte(s + " @ " + path))
+		f.Close()
+		w.Add(n)
+		hash, err = w.Commit(s, &git.CommitOptions{})
+		return
+	}
 
-	w, err := r.Worktree()
-	w.Add(filePath)
-
-	w.Commit("Initial commit", &git.CommitOptions{})
+	initHash, err = commit("Init")
+	_, err = commit("Last")
+	return
 }

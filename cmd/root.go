@@ -18,6 +18,7 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -157,10 +158,13 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	dir = filepath.Dir(e)
 
 	repo, err = git.PlainOpen(dir)
-	if err == nil && isHpcToolkitRepo(*repo) {
-		return repo, dir, err
+	if err != nil {
+		return
 	}
-	return nil, "", err
+	if isHpcToolkitRepo(*repo) {
+		return
+	}
+	return nil, "", errors.New("Not the hpc-toolkit repo")
 }
 
 // isHpcToolkitRepo will verify that the found git repository has a commit with
