@@ -46,8 +46,8 @@ var errorMessages = map[string]string{
 	"notImplemented": "not yet implemented",
 	// config
 	"fileLoadError":      "failed to read the input yaml",
-	"yamlUnmarshalError": "failed to unmarshal the yaml config",
-	"yamlMarshalError":   "failed to marshal the yaml config",
+	"yamlUnmarshalError": "failed to parse the blueprint at %s, check YAML syntax for errors, err=%w",
+	"yamlMarshalError":   "failed to export the configuration to a blueprint yaml file",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
 	"missingSetting":       "a required setting is missing from a module",
@@ -362,8 +362,8 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 
 	if err != nil {
 		deprecatedSchema070a()
-		return blueprint, fmt.Errorf("%s filename=%s: %v",
-			errorMessages["yamlUnmarshalError"], blueprintFilename, err)
+		return blueprint, fmt.Errorf(errorMessages["yamlUnmarshalError"],
+			blueprintFilename, err)
 	}
 
 	// Ensure Vars is not a nil map if not set by the user
