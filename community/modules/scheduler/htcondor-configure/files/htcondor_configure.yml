@@ -135,6 +135,10 @@
           TRUST_UID_DOMAIN=True
           SUBMIT_ATTRS=RunAsOwner
           RunAsOwner=True
+          use feature:JobsHaveInstanceIDs
+          SYSTEM_JOB_MACHINE_ATTRS=$(SYSTEM_JOB_MACHINE_ATTRS) \
+            CloudMachineType CloudZone CloudInterruptible
+          SYSTEM_JOB_MACHINE_ATTRS_HISTORY_LENGTH=10
       notify:
       - Reload HTCondor
     - name: Create IDTOKEN to advertise access point
