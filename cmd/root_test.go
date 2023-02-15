@@ -20,11 +20,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	. "gopkg.in/check.v1"
 )
@@ -196,7 +198,13 @@ func initTestRepo(path string) (repo *git.Repository, initHash plumbing.Hash, er
 		f.Write([]byte(s + " @ " + path))
 		f.Close()
 		w.Add(n)
-		hash, err = w.Commit(s, &git.CommitOptions{})
+		hash, err = w.Commit(s, &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  "T T",
+				Email: "t@t.io",
+				When:  time.Now(),
+			},
+		})
 		return
 	}
 
