@@ -45,7 +45,7 @@
 
 - name: Get Slurm Version
   ansible.builtin.set_fact:
-    slurm_version={{ slurm_version_cmd.stdout }}   
+    slurm_version={{ slurm_version_cmd.stdout }}
 - name: Write Slurm Package file
   ansible.builtin.copy:
     dest: /tmp/spack_pkg.yml
