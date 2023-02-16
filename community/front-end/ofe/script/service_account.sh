@@ -57,7 +57,8 @@ SA_ROLES=('aiplatform.admin'
 	'iam.serviceAccountAdmin'
 	'iam.serviceAccountUser'
 	'notebooks.admin'
-	'resourcemanager.projectIamAdmin')
+	'resourcemanager.projectIamAdmin'
+	'monitoring.viewer')
 
 #
 #

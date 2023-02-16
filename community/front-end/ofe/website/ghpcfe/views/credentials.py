@@ -97,7 +97,6 @@ class CredentialUpdateView(SuperUserRequiredMixin, UpdateView):
         initial[ "detail" ] = ""
         return initial
 
-
 class CredentialDeleteView(SuperUserRequiredMixin, DeleteView):
     """Custom DeleteView for Credential model"""
 
@@ -110,10 +109,20 @@ class CredentialDeleteView(SuperUserRequiredMixin, DeleteView):
         return context
 
     def get_success_url(self):
-        credential = Credential.objects.get(pk=self.kwargs["pk"])
-        messages.success(self.request, f"Credential {credential.name} deleted.")
         return reverse("credentials")
-
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            delete_request = super().delete(request, *args, **kwargs)
+            messages.success(self.request, f"Credential successfully deleted.")
+            return delete_request
+        except RestrictedError:
+            msg = """Credential deletion failed due to a foreign key constraint.
+            It is used by other objects such as clusters. In order to 
+            delete the credential, archived objects should be completely deleted.
+             """
+            messages.error(request, msg)
+            return HttpResponseRedirect(reverse('credentials'))
 
 # For APIs
 
