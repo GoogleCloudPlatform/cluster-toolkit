@@ -164,7 +164,7 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	if isHpcToolkitRepo(*repo) {
 		return repo, dir, nil
 	}
-	return nil, "", errors.New("unable to find the hpc-toolkit git repo in the file system")
+	return nil, "", errors.New("ghpc executable found in a git repo other than the hpc-toolkit git repo")
 }
 
 // isHpcToolkitRepo will verify that the found git repository has a commit with
