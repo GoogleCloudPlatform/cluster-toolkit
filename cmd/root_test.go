@@ -132,7 +132,6 @@ func (s *MySuite) TestCheckGitHashMismatch(c *C) {
 	if err != nil {
 		c.Fatal(err)
 	}
-	GitInitialHash = init.String()
 	if err = os.Chdir(path); err != nil {
 		c.Fatal(err)
 	}
@@ -142,25 +141,40 @@ func (s *MySuite) TestCheckGitHashMismatch(c *C) {
 	branch := head.Name().Short()
 
 	{ // Matches
+		GitInitialHash = init.String()
 		GitCommitHash = hash
 		mismatch, _, _, _ := checkGitHashMismatch()
 		c.Check(mismatch, Equals, false)
 	}
 
-	{ // Baked commit hash doesn't match
+	{ // Baked commit hash doesn't match (present in repo, but not HEAD)
+		GitInitialHash = init.String()
+		GitCommitHash = init.String()
+		mismatch, b, h, dir := checkGitHashMismatch()
+		c.Check(mismatch, Equals, true)
+		c.Check(b, Equals, branch)
+		c.Check(h, Equals, hash)
+		c.Check(dir, Equals, path)
+	}
+
+	{ // Baked commit hash doesn't match (not present in repo)
+		GitInitialHash = init.String()
 		GitCommitHash = randomGitHash
 		mismatch, b, h, dir := checkGitHashMismatch()
 		c.Check(mismatch, Equals, true)
-		c.Check(dir, Equals, path)
 		c.Check(b, Equals, branch)
 		c.Check(h, Equals, hash)
+		c.Check(dir, Equals, path)
 	}
 
 	{ // Not a right repo, initial hash doesn't match
 		GitInitialHash = randomGitHash
-		mismatch, _, _, _ := checkGitHashMismatch()
+		GitCommitHash = randomGitHash
+		mismatch, b, h, dir := checkGitHashMismatch()
 		c.Check(mismatch, Equals, false)
-		GitInitialHash = init.String() // restore
+		c.Check(b, Equals, "")
+		c.Check(h, Equals, "")
+		c.Check(dir, Equals, "")
 	}
 
 	{ // Binary contains no git information
@@ -169,8 +183,11 @@ func (s *MySuite) TestCheckGitHashMismatch(c *C) {
 		GitCommitInfo = ""
 		GitCommitHash = ""
 		GitInitialHash = ""
-		mismatch, _, _, _ := checkGitHashMismatch()
+		mismatch, b, h, dir := checkGitHashMismatch()
 		c.Check(mismatch, Equals, false)
+		c.Check(b, Equals, "")
+		c.Check(h, Equals, "")
+		c.Check(dir, Equals, "")
 	}
 }
 

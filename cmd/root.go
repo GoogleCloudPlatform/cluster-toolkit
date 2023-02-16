@@ -145,7 +145,7 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 			repo, err = git.PlainOpen(dir)
 
 			if err == nil && isHpcToolkitRepo(*repo) {
-				return
+				return repo, dir, nil
 			}
 		}
 	}
@@ -159,10 +159,10 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 
 	repo, err = git.PlainOpen(dir)
 	if err != nil {
-		return
+		return nil, "", err
 	}
 	if isHpcToolkitRepo(*repo) {
-		return
+		return repo, dir, nil
 	}
 	return nil, "", errors.New("unable to find the hpc-toolkit git repo in the file system")
 }
