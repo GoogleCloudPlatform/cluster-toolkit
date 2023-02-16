@@ -18,6 +18,7 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -144,7 +145,7 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 			repo, err = git.PlainOpen(dir)
 
 			if err == nil && isHpcToolkitRepo(*repo) {
-				return
+				return repo, dir, nil
 			}
 		}
 	}
@@ -157,10 +158,13 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	dir = filepath.Dir(e)
 
 	repo, err = git.PlainOpen(dir)
-	if err == nil && isHpcToolkitRepo(*repo) {
-		return repo, dir, err
+	if err != nil {
+		return nil, "", err
 	}
-	return nil, "", err
+	if isHpcToolkitRepo(*repo) {
+		return repo, dir, nil
+	}
+	return nil, "", errors.New("ghpc executable found in a git repo other than the hpc-toolkit git repo")
 }
 
 // isHpcToolkitRepo will verify that the found git repository has a commit with
