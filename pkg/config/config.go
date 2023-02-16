@@ -46,7 +46,7 @@ var errorMessages = map[string]string{
 	"notImplemented": "not yet implemented",
 	// config
 	"fileLoadError":      "failed to read the input yaml",
-	"yamlUnmarshalError": "failed to parse the blueprint at %s, check YAML syntax for errors, err=%w",
+	"yamlUnmarshalError": "failed to parse the blueprint in %s, check YAML syntax for errors, err=%w",
 	"yamlMarshalError":   "failed to export the configuration to a blueprint yaml file",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
