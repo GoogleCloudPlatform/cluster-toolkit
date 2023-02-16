@@ -7,6 +7,14 @@ requested nodes in a GCP project on-demand and scale after a period of not being
 used, in the same way as the [schedmd-slurm-gcp-v5-controller] module
 auto-scales VMs.
 
+Further documentation on how to use this module when deploying a hybrid Slurm
+cluster can be found in our [docs](../../../../docs/hybrid-slurm-cluster/). There, you can
+find two tutorials. The [first] tutorial walks you through deploying a test
+environment entirely in GCP that is designed to demonstrate the capabilities
+without needing to make any changes to your local slurm cluster. The [second]
+tutorial goes through the process of deploying the hybrid configuration onto a
+on-premise slurm cluster.
+
 > **_NOTE:_** This is an experimental module and the functionality and
 > documentation will likely be updated in the near future. This module has only
 > been tested in limited capacity with the HPC Toolkit. On Premise
@@ -14,6 +22,8 @@ auto-scales VMs.
 > be used as a starting point, not a complete solution.
 
 [schedmd-slurm-gcp-v5-controller]: ../schedmd-slurm-gcp-v5-controller/
+[first]: ../../../../docs/hybrid-slurm-cluster/README.md#demo-with-cloud-controller-instructionsmd
+[second]: ../../../../docs/hybrid-slurm-cluster/README.md#on-prem-instructionsmd
 
 ### Usage
 The [slurm-controller-hybrid] is intended to be run on the controller of the on
@@ -171,7 +181,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.4.0 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.4.1 |
 
 ## Resources
 

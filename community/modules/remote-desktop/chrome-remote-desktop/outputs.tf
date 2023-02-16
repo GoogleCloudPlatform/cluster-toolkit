@@ -12,26 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.42"
-    }
+output "startup_script" {
+  description = "script to load and run all runners, as a string value."
+  value       = module.client_startup_script.startup_script
+}
 
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.12"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.13.0"
-  }
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.13.0"
-  }
-
-  required_version = ">= 0.14.0"
+output "instance_name" {
+  description = "Name of the first instance created, if any."
+  value       = var.instance_count > 0 ? module.instances.name[0] : null
 }

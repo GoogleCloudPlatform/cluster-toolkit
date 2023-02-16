@@ -12,10 +12,26 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
 variable "project_id" {
-  description = "Project in which the HPC deployment will be created"
+  description = "Project in which Google Cloud resources will be created"
+  type        = string
+}
+
+variable "deployment_name" {
+  description = "HPC Toolkit deployment name. Cloud resource names will include this value."
+  type        = string
+  #default     = "chrome-remote-desktop"
+}
+
+variable "region" {
+  description = "Default region for creating resources"
+  type        = string
+}
+
+variable "zone" {
+  description = "Default zone for creating resources"
   type        = string
 }
 
@@ -23,66 +39,6 @@ variable "instance_count" {
   description = "Number of instances"
   type        = number
   default     = 1
-}
-
-variable "instance_image" {
-  description = "Instance Image"
-  type = object({
-    family  = string,
-    project = string
-  })
-  default = {
-    family  = "hpc-centos-7"
-    project = "cloud-hpc-image-public"
-  }
-}
-
-variable "disk_size_gb" {
-  description = "Size of disk for instances."
-  type        = number
-  default     = 200
-}
-
-variable "disk_type" {
-  description = "Disk type for instances."
-  type        = string
-  default     = "pd-standard"
-}
-
-variable "auto_delete_boot_disk" {
-  description = "Controls if boot disk should be auto-deleted when instance is deleted."
-  type        = bool
-  default     = true
-}
-
-variable "local_ssd_count" {
-  description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
-  type        = number
-  default     = 0
-}
-
-variable "local_ssd_interface" {
-  description = "Interface to be used with local SSDs. Can be either 'NVME' or 'SCSI'. No effect unless `local_ssd_count` is also set."
-  type        = string
-  default     = "NVME"
-}
-
-variable "name_prefix" {
-  description = "Name Prefix"
-  type        = string
-  default     = null
-}
-
-variable "disable_public_ips" {
-  description = "If set to true, instances will not have public IPs"
-  type        = bool
-  default     = false
-}
-
-variable "machine_type" {
-  description = "Machine type to use for the instance creation"
-  type        = string
-  default     = "c2-standard-60"
 }
 
 variable "network_storage" {
@@ -99,14 +55,58 @@ variable "network_storage" {
   default = []
 }
 
-variable "deployment_name" {
-  description = "Name of the deployment, used to name the cluster"
+variable "instance_image" {
+  description = "Instance Image. An alternative could be family  = \"ubuntu-2004-lts\" and project = \"ubuntu-os-cloud\" or family  = \"debian-11\" and project = \"debian-cloud\""
+  type = object({
+    family  = string,
+    project = string
+  })
+  default = {
+    family  = "ubuntu-2204-lts"
+    project = "ubuntu-os-cloud"
+  }
+}
+
+variable "disk_size_gb" {
+  description = "Size of disk for instances."
+  type        = number
+  default     = 200
+}
+
+variable "disk_type" {
+  description = "Disk type for instances."
   type        = string
+  default     = "pd-balanced"
+}
+
+variable "auto_delete_boot_disk" {
+  description = "Controls if boot disk should be auto-deleted when instance is deleted."
+  type        = bool
+  default     = true
+}
+
+variable "name_prefix" {
+  description = "Name Prefix"
+  type        = string
+  default     = null
+}
+
+variable "enable_public_ips" {
+  description = "If set to true, instances will have public IPs on the internet."
+  type        = bool
+  default     = true
+}
+
+variable "machine_type" {
+  description = "Machine type to use for the instance creation. Must be N1 family if GPU is used."
+  type        = string
+  default     = "n1-standard-8"
 }
 
 variable "labels" {
   description = "Labels to add to the instances. List key, value pairs."
   type        = any
+  default     = []
 }
 
 variable "service_account" {
@@ -116,8 +116,10 @@ variable "service_account" {
     scopes = set(string)
   })
   default = {
-    email  = null
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    email = null
+    scopes = [
+      "https://www.googleapis.com/auth/cloud-platform",
+    ]
   }
 }
 
@@ -139,12 +141,10 @@ variable "network_interfaces" {
     network_interface block of google_compute_instance. For descriptions of the
     subfields or more information see the documentation:
     https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_network_interface
-
     **_NOTE:_** If `network_interfaces` are set, `network_self_link` and
     `subnetwork_self_link` will be ignored, even if they are provided through
-    the `use` field. `bandwidth_tier` and `disable_public_ips` also do not apply
+    the `use` field. `bandwidth_tier` and `enable_public_ips` also do not apply
     to network interfaces defined in this variable.
-
     Subfields:
     network            (string, required if subnetwork is not supplied)
     subnetwork         (string, required if network is not supplied)
@@ -180,34 +180,6 @@ variable "network_interfaces" {
     }))
   }))
   default = []
-  validation {
-    condition = alltrue([
-      for ni in var.network_interfaces : (ni.network == null) != (ni.subnetwork == null)
-    ])
-    error_message = "All additional network interfaces must define exactly one of \"network\" or \"subnetwork\"."
-  }
-  validation {
-    condition = alltrue([
-      for ni in var.network_interfaces : ni.nic_type == "GVNIC" || ni.nic_type == "VIRTIO_NET" || ni.nic_type == null
-    ])
-    error_message = "In the variable network_interfaces, field \"nic_type\" must be either \"GVNIC\", \"VIRTIO_NET\" or null."
-  }
-  validation {
-    condition = alltrue([
-      for ni in var.network_interfaces : ni.stack_type == "IPV4_ONLY" || ni.stack_type == "IPV4_IPV6" || ni.stack_type == null
-    ])
-    error_message = "In the variable network_interfaces, field \"stack_type\" must be either \"IPV4_ONLY\", \"IPV4_IPV6\" or null."
-  }
-}
-
-variable "region" {
-  description = "The region to deploy to"
-  type        = string
-}
-
-variable "zone" {
-  description = "Compute Platform zone"
-  type        = string
 }
 
 variable "metadata" {
@@ -223,22 +195,27 @@ variable "startup_script" {
 }
 
 variable "guest_accelerator" {
-  description = "List of the type and count of accelerator cards attached to the instance."
+  description = "List of the type and count of accelerator cards attached to the instance. Requires virtual workstation accelerator if Nvidia Grid Drivers are required"
   type = list(object({
     type  = string,
     count = number
   }))
-  default = null
+  default = [{
+    type  = "nvidia-tesla-t4-vws"
+    count = 1
+  }]
+}
+
+variable "threads_per_core" {
+  description = "Sets the number of threads per physical core"
+  type        = number
+  default     = 2
 }
 
 variable "on_host_maintenance" {
   description = "Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy`, spot provisioning, or GPUs require it to be `TERMINATE`"
   type        = string
-  default     = null
-  validation {
-    condition     = var.on_host_maintenance == null ? true : contains(["MIGRATE", "TERMINATE"], var.on_host_maintenance)
-    error_message = "When set, the on_host_maintenance must be set to MIGRATE or TERMINATE."
-  }
+  default     = "TERMINATE"
 }
 
 variable "bandwidth_tier" {
@@ -246,25 +223,12 @@ variable "bandwidth_tier" {
   Tier 1 bandwidth increases the maximum egress bandwidth for VMs.
   Using the `tier_1_enabled` setting will enable both gVNIC and TIER_1 higher bandwidth networking.
   Using the `gvnic_enabled` setting will only enable gVNIC and will not enable TIER_1.
-  Note that TIER_1 only works with specific machine families & shapes and must be using an image that supports gVNIC. See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details.
+  Note that TIER_1 only works with specific machine families & shapes and must be using an image th
+at supports gVNIC. See [official docs](https://cloud.google.com/compute/docs/networking/configure-v
+m-with-high-bandwidth-configuration) for more details.
   EOT
   type        = string
   default     = "not_enabled"
-
-  validation {
-    condition     = contains(["not_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
-    error_message = "Allowed values for bandwidth_tier are 'not_enabled', 'gvnic_enabled', or  'tier_1_enabled'."
-  }
-}
-
-variable "placement_policy" {
-  description = "Control where your VM instances are physically located relative to each other within a zone."
-  type = object({
-    vm_count                  = number,
-    availability_domain_count = number,
-    collocation               = string,
-  })
-  default = null
 }
 
 variable "spot" {
@@ -279,42 +243,13 @@ variable "tags" {
   default     = []
 }
 
-variable "threads_per_core" {
-  description = <<-EOT
-  Sets the number of threads per physical core. By setting threads_per_core
-  to 2, Simultaneous Multithreading (SMT) is enabled extending the total number
-  of virtual cores. For example, a machine of type c2-standard-60 will have 60
-  virtual cores with threads_per_core equal to 2. With threads_per_core equal
-  to 1 (SMT turned off), only the 30 physical cores will be available on the VM.
-
-  The default value of \"0\" will turn off SMT for supported machine types, and
-  will fall back to GCE defaults for unsupported machine types (t2d, shared-core
-  instances, or instances with less than 2 vCPU).
-
-  Disabling SMT can be more performant in many HPC workloads, therefore it is
-  disabled by default where compatible.
-
-  null = SMT configuration will use the GCE defaults for the machine type
-  0 = SMT will be disabled where compatible (default)
-  1 = SMT will always be disabled (will fail on incompatible machine types)
-  2 = SMT will always be enabled (will fail on incompatible machine types)
-  EOT
-  type        = number
-  default     = 0
-
-  validation {
-    condition     = var.threads_per_core == null || try(var.threads_per_core >= 0, false) && try(var.threads_per_core <= 2, false)
-    error_message = "Allowed values for threads_per_core are \"null\", \"0\", \"1\", \"2\"."
-  }
-
-}
-
 variable "enable_oslogin" {
   description = "Enable or Disable OS Login with \"ENABLE\" or \"DISABLE\". Set to \"INHERIT\" to inherit project OS Login setting."
   type        = string
   default     = "ENABLE"
-  validation {
-    condition     = var.enable_oslogin == null ? false : contains(["ENABLE", "DISABLE", "INHERIT"], var.enable_oslogin)
-    error_message = "Allowed string values for var.enable_oslogin are \"ENABLE\", \"DISABLE\", or \"INHERIT\"."
-  }
+}
+
+variable "install_nvidia_driver" {
+  description = "Installs the nvidia driver (true/false). For details, see https://cloud.google.com/compute/docs/gpus/install-drivers-gpu"
+  type        = bool
 }

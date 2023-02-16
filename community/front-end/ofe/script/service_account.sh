@@ -354,7 +354,7 @@ case "${option}" in
 	;;
 esac
 
-exit $rc
+exit "$rc"
 
 #
 # eof
