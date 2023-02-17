@@ -19,30 +19,57 @@ It is expected to be used with the [htcondor-install] and
 
 ### Example
 
-The following code snippet uses this module to create startup scripts that
-install the HTCondor software and adds custom configurations using
-[htcondor-configure] and [htcondor-execute-point].
+The following code snippet uses this module to create a startup script that
+installs HTCondor software and configures an HTCondor Central Manager. A full
+example can be found in the [examples README][htc-example].
+
+[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
 
 ```yaml
+- id: network1
+  source: modules/network/pre-existing-vpc
+
 - id: htcondor_install
   source: community/modules/scripts/htcondor-install
 
-- id: htcondor_configure_central_manager
+- id: htcondor_configure
+  source: community/modules/scheduler/htcondor-configure
+  use:
+  - network1
+
+- id: htcondor_central_manager_startup
   source: modules/scripts/startup-script
   settings:
     runners:
     - $(htcondor_install.install_htcondor_runner)
     - $(htcondor_configure.central_manager_runner)
 
-- id: htcondor_configure_access_point
-  source: modules/scripts/startup-script
+- id: htcondor_cm
+  source: modules/compute/vm-instance
+  use:
+  - network1
+  - htcondor_central_manager_startup
   settings:
-    runners:
-    - $(htcondor_install.install_htcondor_runner)
-    - $(htcondor_install.install_autoscaler_deps_runner)
-    - $(htcondor_install.install_autoscaler_runner)
-    - $(htcondor_configure.access_point_runner)
-    - $(htcondor_execute_point.configure_autoscaler_runner)
+    name_prefix: cm0
+    machine_type: c2-standard-4
+    disable_public_ips: true
+    service_account:
+      email: $(htcondor_configure.central_manager_service_account)
+      scopes:
+      - cloud-platform
+    network_interfaces:
+    - network: null
+      subnetwork: $(network1.subnetwork_self_link)
+      subnetwork_project: $(vars.project_id)
+      network_ip: $(htcondor_configure.central_manager_internal_ip)
+      stack_type: null
+      access_config: []
+      ipv6_access_config: []
+      alias_ip_range: []
+      nic_type: VIRTIO_NET
+      queue_count: null
+  outputs:
+  - internal_ip
 ```
 
 A full example can be found in the [examples README][htc-example].
