@@ -409,6 +409,7 @@ variable "partition" {
       subnetwork                        = string
       zone_policy_allow                 = list(string)
       zone_policy_deny                  = list(string)
+      zone_target_shape                 = string
     })
   }))
   default = []

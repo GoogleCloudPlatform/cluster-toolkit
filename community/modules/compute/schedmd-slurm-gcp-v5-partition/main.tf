@@ -40,7 +40,7 @@ data "google_compute_zones" "available" {
 }
 
 module "slurm_partition" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=5.4.1"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=5.6.0"
 
   slurm_cluster_name                = local.slurm_cluster_name
   partition_nodes                   = var.node_groups
@@ -53,6 +53,7 @@ module "slurm_partition" {
   region                            = var.region
   zone_policy_allow                 = local.zone_policy_allow
   zone_policy_deny                  = local.zone_policy_deny
+  zone_target_shape                 = var.zone_target_shape
   subnetwork                        = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   subnetwork_project                = var.subnetwork_project
   partition_conf                    = local.partition_conf
