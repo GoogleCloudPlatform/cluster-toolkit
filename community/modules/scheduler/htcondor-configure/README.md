@@ -72,9 +72,81 @@ example can be found in the [examples README][htc-example].
   - internal_ip
 ```
 
-A full example can be found in the [examples README][htc-example].
+## High Availability
 
-[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
+This module supports high availability modes of the HTCondor Central Manager and
+of the Access Points. In these modes, the services can be resiliant against
+zonal failures by distributing the services across two zones. To implement
+HA of the Central Manager service, apply the startup script in the example
+snipppet to 2 VMs. The 2 VMs should differ only by using the primary and
+secondary IP addresses created by this module.
+
+```yaml
+- id: htcondor_cm_primary
+  source: modules/compute/vm-instance
+  use:
+  - network1
+  - htcondor_central_manager_startup
+  settings:
+    name_prefix: cm0
+    machine_type: c2-standard-4
+    disable_public_ips: true
+    service_account:
+      email: $(htcondor_configure.central_manager_service_account)
+      scopes:
+      - cloud-platform
+    network_interfaces:
+    - network: null
+      subnetwork: $(cluster_network.subnetwork_self_link)
+      subnetwork_project: $(vars.project_id)
+      network_ip: $(htcondor_configure.central_manager_internal_ip)
+      stack_type: null
+      access_config: []
+      ipv6_access_config: []
+      alias_ip_range: []
+      nic_type: VIRTIO_NET
+      queue_count: null
+  outputs:
+  - internal_ip
+
+- id: htcondor_cm_secondary
+  source: modules/compute/vm-instance
+  use:
+  - network1
+  - htcondor_central_manager_startup
+  settings:
+    name_prefix: cm0
+    machine_type: c2-standard-4
+    disable_public_ips: true
+    service_account:
+      email: $(htcondor_configure.central_manager_service_account)
+      scopes:
+      - cloud-platform
+    network_interfaces:
+    - network: null
+      subnetwork: $(network1.subnetwork_self_link)
+      subnetwork_project: $(vars.project_id)
+      network_ip: $(htcondor_configure.central_manager_secondary_internal_ip)
+      stack_type: null
+      access_config: []
+      ipv6_access_config: []
+      alias_ip_range: []
+      nic_type: VIRTIO_NET
+      queue_count: null
+  outputs:
+  - internal_ip
+
+```
+
+Access Point high availability is impacted by known issues [HTCONDOR-1590] and
+[HTCONDOR-1594]. These are anticipated to be resolved in LTS release 10.0.3 and
+above or feature release 10.4 and above. Please see [HTCondor version
+numbering][htcver] and [release notes][htcnotes] for details.
+
+[htcver]: https://htcondor.readthedocs.io/en/latest/version-history/introduction-version-history.html#types-of-releases
+[htcnotes]: https://htcondor.readthedocs.io/en/latest/version-history/index.html
+[HTCONDOR-1590]: https://opensciencegrid.atlassian.net/jira/software/c/projects/HTCONDOR/issues/HTCONDOR-1590
+[HTCONDOR-1594]: https://opensciencegrid.atlassian.net/jira/software/c/projects/HTCONDOR/issues/HTCONDOR-1594
 
 ## Support
 
@@ -148,7 +220,7 @@ limitations under the License.
 | <a name="input_central_manager_roles"></a> [central\_manager\_roles](#input\_central\_manager\_roles) | Project-wide roles for HTCondor Central Manager service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_execute_point_roles"></a> [execute\_point\_roles](#input\_execute\_point\_roles) | Project-wide roles for HTCondor Execute Point service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
-| <a name="input_job_queue_high_availability"></a> [job\_queue\_high\_availability](#input\_job\_queue\_high\_availability) | Provision HTCondor access points in high availability mode | `bool` | `false` | no |
+| <a name="input_job_queue_high_availability"></a> [job\_queue\_high\_availability](#input\_job\_queue\_high\_availability) | Provision HTCondor access points in high availability mode (experimental: see README) | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
 | <a name="input_pool_password"></a> [pool\_password](#input\_pool\_password) | HTCondor Pool Password | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |

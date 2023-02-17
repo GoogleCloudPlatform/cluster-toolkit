@@ -84,7 +84,7 @@ variable "central_manager_high_availability" {
 }
 
 variable "job_queue_high_availability" {
-  description = "Provision HTCondor access points in high availability mode"
+  description = "Provision HTCondor access points in high availability mode (experimental: see README)"
   type        = bool
   default     = false
 }
