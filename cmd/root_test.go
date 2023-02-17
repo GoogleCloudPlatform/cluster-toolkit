@@ -65,13 +65,13 @@ func (s *MySuite) TestHpcToolkitRepo(c *C) {
 		}
 		r, dir, err := hpcToolkitRepo()
 		c.Assert(err, IsNil)
-		c.Check(dir, Equals, path)
+		checkPathsEqual(c, dir, path)
 		h, _ := r.Head()
 		c.Check(h.Hash(), Equals, head.Hash())
 	}
 
 	{ // CWD is subdir in repo root
-		subDir := filepath.Join(path, "subidr")
+		subDir := filepath.Join(path, "subdir")
 		if err = os.MkdirAll(subDir, os.ModePerm); err != nil {
 			c.Fatal(err)
 		}
@@ -80,7 +80,7 @@ func (s *MySuite) TestHpcToolkitRepo(c *C) {
 		}
 		r, dir, err := hpcToolkitRepo()
 		c.Assert(err, IsNil)
-		c.Check(dir, Equals, subDir)
+		checkPathsEqual(c, dir, subDir)
 		h, _ := r.Head()
 		c.Check(h.Hash(), Equals, head.Hash())
 	}
@@ -99,7 +99,7 @@ func (s *MySuite) TestHpcToolkitRepo(c *C) {
 		}
 		r, dir, err := hpcToolkitRepo()
 		c.Assert(err, IsNil)
-		c.Check(dir, Equals, path)
+		checkPathsEqual(c, dir, path)
 		h, _ := r.Head()
 		c.Check(h.Hash(), Equals, head.Hash())
 	}
@@ -143,8 +143,11 @@ func (s *MySuite) TestCheckGitHashMismatch(c *C) {
 	{ // Matches
 		GitInitialHash = init.String()
 		GitCommitHash = hash
-		mismatch, _, _, _ := checkGitHashMismatch()
+		mismatch, b, h, dir := checkGitHashMismatch()
 		c.Check(mismatch, Equals, false)
+		c.Check(b, Equals, "")
+		c.Check(h, Equals, "")
+		c.Check(dir, Equals, "")
 	}
 
 	{ // Baked commit hash doesn't match (present in repo, but not HEAD)
@@ -154,7 +157,7 @@ func (s *MySuite) TestCheckGitHashMismatch(c *C) {
 		c.Check(mismatch, Equals, true)
 		c.Check(b, Equals, branch)
 		c.Check(h, Equals, hash)
-		c.Check(dir, Equals, path)
+		checkPathsEqual(c, dir, path)
 	}
 
 	{ // Baked commit hash doesn't match (not present in repo)
@@ -164,7 +167,7 @@ func (s *MySuite) TestCheckGitHashMismatch(c *C) {
 		c.Check(mismatch, Equals, true)
 		c.Check(b, Equals, branch)
 		c.Check(h, Equals, hash)
-		c.Check(dir, Equals, path)
+		checkPathsEqual(c, dir, path)
 	}
 
 	{ // Not a right repo, initial hash doesn't match
@@ -189,6 +192,18 @@ func (s *MySuite) TestCheckGitHashMismatch(c *C) {
 		c.Check(h, Equals, "")
 		c.Check(dir, Equals, "")
 	}
+}
+
+func checkPathsEqual(c *C, a, b string) {
+	a, err := filepath.EvalSymlinks(a)
+	if err != nil {
+		c.Fatal(err)
+	}
+	b, err = filepath.EvalSymlinks(a)
+	if err != nil {
+		c.Fatal(err)
+	}
+	c.Check(a, Equals, b)
 }
 
 // Creates a Git repo at `path`, performs multiple commits.
