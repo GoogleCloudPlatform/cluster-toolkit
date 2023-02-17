@@ -91,22 +91,19 @@ func init() {}
 func checkGitHashMismatch() (mismatch bool, branch, hash, dir string) {
 	// binary does not contain build-time git info
 	if len(GitCommitHash) == 0 {
-		mismatch = false
-		return
+		return false, "", "", ""
 	}
 
 	// could not find hpcToolkitRepo
 	repo, dir, err := hpcToolkitRepo()
 	if err != nil {
-		mismatch = false
-		return
+		return false, "", "", ""
 	}
 
 	// failed to open git
 	head, err := repo.Head()
 	if err != nil {
-		mismatch = false
-		return
+		return false, "", "", ""
 	}
 
 	// found hpc-toolkit git repo and hash does not match
@@ -116,8 +113,7 @@ func checkGitHashMismatch() (mismatch bool, branch, hash, dir string) {
 		hash = head.Hash().String()
 		return
 	}
-	mismatch = false
-	return
+	return false, "", "", ""
 }
 
 // hpcToolkitRepo will find the path of the directory containing the hpc-toolkit
