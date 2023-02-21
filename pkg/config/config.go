@@ -42,8 +42,6 @@ const (
 )
 
 var errorMessages = map[string]string{
-	// general
-	"notImplemented": "not yet implemented",
 	// config
 	"fileLoadError":      "failed to read the input yaml",
 	"yamlUnmarshalError": "failed to parse the blueprint in %s, check YAML syntax for errors, err=%w",
