@@ -42,6 +42,8 @@ const (
 )
 
 var errorMessages = map[string]string{
+	// general
+	"appendToNonList": "cannot append to a setting whose type is not a list",
 	// config
 	"fileLoadError":      "failed to read the input yaml",
 	"yamlUnmarshalError": "failed to parse the blueprint in %s, check YAML syntax for errors, err=%w",
