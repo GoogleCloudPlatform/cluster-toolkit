@@ -162,57 +162,84 @@ func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
 	return modInputs
 }
 
+// initialize a Toolkit setting that corresponds to a module input of type list
+// create new list if unset, append if already set, error if value not a list
+func (mod *Module) addListValue(settingName string, value string) error {
+	_, found := mod.Settings[settingName]
+	if !found {
+		mod.Settings[settingName] = []interface{}{}
+		mod.createWrapSettingsWith()
+		mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
+	}
+	currentValue, ok := mod.Settings[settingName].([]interface{})
+	if ok {
+		mod.Settings[settingName] = append(currentValue, value)
+		return nil
+	}
+	return fmt.Errorf("%s: module %s, setting %s",
+		errorMessages["appendToNonList"], mod.ID, settingName)
+}
+
+// useModule matches input variables in a "using" module to output values
+// from a "used" module. It may be used iteratively to successively apply used
+// modules in order of precedence. New input variables are added to the using
+// module as Toolkit variable references (in same format as a blueprint). If
+// the input variable already has a setting, it is ignored, unless the value is
+// a list, in which case output values are appended and flattened using HCL.
+//
+//	mod: "using" module as defined above
+//	useMod: "used" module as defined above
+//	useModGroupID: deployment group ID to which useMod belongs
+//	modInputs: input variables as defined by the using module code
+//	useOutputs: output values as defined by the used module code
+//	settingsToIgnore: a list of module settings not to modify for any reason;
+//	 typical usage will be to leave explicit blueprint settings unmodified
+//
+// returns: a list of variable names that were used during this function call
 func useModule(
 	mod *Module,
 	useMod Module,
 	useModGroupID string,
-	modInputs map[string]string,
+	modInputs []modulereader.VarInfo,
 	useOutputs []modulereader.VarInfo,
-	settingsInBlueprint []string,
-) (usedVars []string) {
-	usedVars = []string{}
+	settingsToIgnore []string,
+) ([]string, error) {
+	usedVars := []string{}
+	modInputsMap := getModuleInputMap(modInputs)
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
 
-		// Skip settings explicitly defined by users
-		if slices.Contains(settingsInBlueprint, settingName) {
+		// Explicitly ignore these settings (typically those in blueprint)
+		if slices.Contains(settingsToIgnore, settingName) {
 			continue
 		}
 
-		// Skip settings that do not match module inputs
-		inputType, ok := modInputs[settingName]
+		// Skip settings that do not have matching module inputs
+		inputType, ok := modInputsMap[settingName]
 		if !ok {
 			continue
 		}
 
-		// if the input exists in the module doing the using, then we modify it
-		// according to these rules:
-		// if the setting has a value, then it was set by "use" because we have
-		// skipped anything explicitly in the blueprint. If the setting is a
-		// list of any type, then we want to concatenate these values in order
-		// they were used; otherwise, the setting should remain set to the
-		// existing used value
-		_, setByUse := mod.Settings[settingName]
+		// skip settings that are not of list type, but already have a value
+		// these were probably added by a previous call to this function
+		_, alreadySet := mod.Settings[settingName]
+		isList := strings.HasPrefix(inputType, "list")
+		if alreadySet && !isList {
+			continue
+		}
+
 		modVarName := getModuleVarName(useModGroupID, useMod.ID, settingName)
-		isInputList := strings.HasPrefix(inputType, "list")
-		if isInputList {
-			if !setByUse {
-				// Input is a list, create an outer list for it
-				mod.Settings[settingName] = []interface{}{}
-				mod.createWrapSettingsWith()
-				mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
-			}
-			// Append value list to the outer list
-			mod.Settings[settingName] = append(
-				mod.Settings[settingName].([]interface{}), modVarName)
-			usedVars = append(usedVars, settingName)
-		} else if !setByUse {
-			// If input is not a list, set value if not already set and continue
+		if !isList {
 			mod.Settings[settingName] = modVarName
+			usedVars = append(usedVars, settingName)
+		} else {
+			if err := mod.addListValue(settingName, modVarName); err != nil {
+				return nil, err
+			}
 			usedVars = append(usedVars, settingName)
 		}
 	}
-	return
+	return usedVars, nil
 }
 
 // applyUseModules applies variables from modules listed in the "use" field
@@ -224,7 +251,6 @@ func (dc *DeploymentConfig) applyUseModules() error {
 		for iMod := range group.Modules {
 			fromMod := &group.Modules[iMod]
 			fromModInfo := grpModsInfo[fromMod.Source]
-			fromModInputs := getModuleInputMap(fromModInfo.Inputs)
 			settingsInBlueprint := maps.Keys(fromMod.Settings)
 			for _, toModID := range fromMod.Use {
 				// turn the raw string into a modReference struct
@@ -264,7 +290,11 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				// tested but it our unit test infrastructure does not support
 				// running dc.setModulesInfo() on our test configurations
 				toModInfo := dc.ModulesInfo[toGroup.Name][toMod.Source]
-				usedVars := useModule(fromMod, toMod, modRef.ToGroupID, fromModInputs, toModInfo.Outputs, settingsInBlueprint)
+				usedVars, err := useModule(fromMod, toMod, modRef.ToGroupID,
+					fromModInfo.Inputs, toModInfo.Outputs, settingsInBlueprint)
+				if err != nil {
+					return err
+				}
 				connection := ModConnection{
 					toID:            toModID,
 					fromID:          fromMod.ID,
