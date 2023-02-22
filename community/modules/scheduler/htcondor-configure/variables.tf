@@ -82,3 +82,15 @@ variable "central_manager_high_availability" {
   type        = bool
   default     = false
 }
+
+variable "job_queue_high_availability" {
+  description = "Provision HTCondor access points in high availability mode (experimental: see README)"
+  type        = bool
+  default     = false
+}
+
+variable "spool_parent_dir" {
+  description = "HTCondor access point configuration SPOOL will be set to subdirectory named \"spool\""
+  type        = string
+  default     = "/var/lib/condor"
+}
