@@ -270,6 +270,7 @@ deployment_groups:
     use: [network-install, appsfs-install, bucket-input-install, spack-builder-startup]
     settings:
       name_prefix: spack-builder
+      use_deployment_name_in_resource_name: true
       threads_per_core: 2
       machine_type: a2-highgpu-1g
 

@@ -73,6 +73,16 @@ variable "name_prefix" {
   default     = null
 }
 
+variable "use_deployment_name_in_resource_name" {
+  description = <<-EOT
+    If true, the deployment name will be included as part of the VM name. 
+    If false, it will never be included.
+    Default of null will use deployment name only if `name_prefix` is not provided.
+    EOT
+  type        = bool
+  default     = null
+}
+
 variable "disable_public_ips" {
   description = "If set to true, instances will not have public IPs"
   type        = bool
