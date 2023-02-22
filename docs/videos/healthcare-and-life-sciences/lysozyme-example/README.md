@@ -1,6 +1,6 @@
-# Factor Xa Example
+# Lysozyme Example
 
-This example demonstrates a real life case of simulating the Factor Xa protein
+This example demonstrates a real life case of simulating the Lysozyme protein
 in water. It uses the HCLS blueprint to run a multi-step GPU enabled gromacs
 run.
 
@@ -25,20 +25,20 @@ This example has been adapted with changes from tutorials by:
 1. Create a submission directory
 
    ```bash
-   mkdir factorxa_run01 && cd factorxa_run01
+   mkdir lysozyme_run01 && cd lysozyme_run01
    ```
 
 1. Copy the contents of this directory into the submission directory
 
    ```bash
    git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
-   cp -r hpc-toolkit/docs/videos/healthcare-and-life-sciences/Factor-Xa-example/* .
+   cp -r hpc-toolkit/docs/videos/healthcare-and-life-sciences/lysozyme-example/* .
    ```
 
-1. Copy the Factor Xa protein into the submission directory
+1. Copy the Lysozyme protein into the submission directory
 
    ```bash
-   cp /data_input/protein_data_bank/1FJS.pdb .
+   cp /data_input/protein_data_bank/1AKI.pdb .
    ```
 
 1. Submit the job
