@@ -271,7 +271,7 @@ deployment_groups:
     settings:
       name_prefix: spack-builder
       threads_per_core: 2
-      machine_type: a2-highgpu-1g
+      machine_type: c2-standard-16
 
 - group: cluster
   modules:
