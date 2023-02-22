@@ -49,8 +49,8 @@ steps:
   - |
     set -e
     export PROJECT=build-project
-    # Factor-Xa-example is under CC-BY-4.0
-    time addlicense -check -ignore **/Factor-Xa-example/submit.sh . \
+    # lysozyme-example is under CC-BY-4.0
+    time addlicense -check -ignore **/lysozyme-example/submit.sh . \
       || { echo "addlicense failed"; exit 1; }
     time make tests
 timeout: "1200s"
