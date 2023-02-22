@@ -25,6 +25,7 @@
     cm_config_file: 02-central-manager
     cm_ha_config_file: 02-central-manager-high-availability
     schedd_config_file: 02-schedd
+    schedd_ha_config_file: 02-schedd-high-availability
     execute_config_file: 02-execute
   tasks:
   - name: User must supply HTCondor role
@@ -171,8 +172,11 @@
             HA_LOCK_URL=file:{{ spool_dir }}
             VALID_SPOOL_FILES=$(VALID_SPOOL_FILES), SCHEDD.lock
             HA_POLL_PERIOD=30
+            SCHEDD_NAME=had-schedd@
         notify:
         - Restart HTCondor
+      # the need for this SystemD override will be eliminated in HTCondor 10.0.3
+      # (LTS) and 10.4 (feature release) by resolving HTCONDOR-1594
       - name: Create SystemD override directory for HTCondor
         ansible.builtin.file:
           path: /etc/systemd/system/condor.service.d

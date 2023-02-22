@@ -76,12 +76,30 @@ example can be found in the [examples README][htc-example].
 
 This module supports high availability modes of the HTCondor Central Manager and
 of the Access Points. In these modes, the services can be resiliant against
-zonal failures by distributing the services across two zones. To implement
-HA of the Central Manager service, apply the startup script in the example
-snipppet to 2 VMs. The 2 VMs should differ only by using the primary and
-secondary IP addresses created by this module.
+zonal failures by distributing the services across two zones. Modify the above
+example by setting `central_manager_high_availability` to `true` and adding a
+new deployment variable `zone_secondary` set to another zone in the same region.
+The 2 VMs can use the same startup script, but should differ by setting:
+
+- primary and secondary zones defined in deployment variables
+- primary and secondary IP addresses created by this module
+- differing name prefixes
 
 ```yaml
+vars:
+  # add typical settings (deployment_name, project_id, etc.)
+  # select a region and 2 different zones within the region
+  region: us-central1
+  zone: us-central1-c
+  zone_secondary: us-central1-f
+
+- id: htcondor_configure
+  source: community/modules/scheduler/htcondor-configure
+  use:
+  - network1
+  settings:
+    central_manager_high_availability: true
+
 - id: htcondor_cm_primary
   source: modules/compute/vm-instance
   use:
@@ -97,7 +115,7 @@ secondary IP addresses created by this module.
       - cloud-platform
     network_interfaces:
     - network: null
-      subnetwork: $(cluster_network.subnetwork_self_link)
+      subnetwork: $(network1.subnetwork_self_link)
       subnetwork_project: $(vars.project_id)
       network_ip: $(htcondor_configure.central_manager_internal_ip)
       stack_type: null
@@ -115,8 +133,9 @@ secondary IP addresses created by this module.
   - network1
   - htcondor_central_manager_startup
   settings:
-    name_prefix: cm0
+    name_prefix: cm1
     machine_type: c2-standard-4
+    zone: $(vars.zone_secondary)
     disable_public_ips: true
     service_account:
       email: $(htcondor_configure.central_manager_service_account)
