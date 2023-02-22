@@ -88,7 +88,7 @@
    ```
 
    ```bash
-   ./ghpc create docs/videos/build-your-own-blueprint/hcls-blueprint.yaml -w \
+   ./ghpc create docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml -w \
        --vars project_id=<project_id> \
        --vars homefs_server_ip=<home_ip> \
        --vars appsfs_server_ip=<apps_ip> \
