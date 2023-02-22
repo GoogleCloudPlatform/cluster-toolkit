@@ -180,20 +180,22 @@ func (mod *Module) addListValue(settingName string, value string) error {
 		errorMessages["appendToNonList"], mod.ID, settingName)
 }
 
-// This function matches input variables in a "using" module to output values
+// useModule matches input variables in a "using" module to output values
 // from a "used" module. It may be used iteratively to successively apply used
 // modules in order of precedence. New input variables are added to the using
 // module as Toolkit variable references (in same format as a blueprint). If
 // the input variable already has a setting, it is ignored, unless the value is
 // a list, in which case output values are appended and flattened using HCL.
-// mod: "using" module as defined above
-// useMod: "used" module as defined above
-// useModGroupID: deployment group ID to which useMod belongs
-// modInputs: input variables as defined by the using module code
-// useOutputs: output values as defined by the used module code
-// settingsToIgnore: a list of module settings not to modify for any reason;
 //
-//	typical usage will be to leave explicit blueprint settings unmodified
+//	mod: "using" module as defined above
+//	useMod: "used" module as defined above
+//	useModGroupID: deployment group ID to which useMod belongs
+//	modInputs: input variables as defined by the using module code
+//	useOutputs: output values as defined by the used module code
+//	settingsToIgnore: a list of module settings not to modify for any reason;
+//	 typical usage will be to leave explicit blueprint settings unmodified
+//
+// returns: a list of variable names that were used during this function call
 func useModule(
 	mod *Module,
 	useMod Module,
@@ -218,16 +220,19 @@ func useModule(
 			continue
 		}
 
-		_, setByUse := mod.Settings[settingName]
-		modVarName := getModuleVarName(useModGroupID, useMod.ID, settingName)
-		isInputList := strings.HasPrefix(inputType, "list")
-
-		if !setByUse && !isInputList {
-			mod.Settings[settingName] = modVarName
-			usedVars = append(usedVars, settingName)
+		// skip settings that are not of list type, but already have a value
+		// these were probably added by a previous call to this function
+		_, alreadySet := mod.Settings[settingName]
+		isList := strings.HasPrefix(inputType, "list")
+		if alreadySet && !isList {
+			continue
 		}
 
-		if isInputList {
+		modVarName := getModuleVarName(useModGroupID, useMod.ID, settingName)
+		if !isList {
+			mod.Settings[settingName] = modVarName
+			usedVars = append(usedVars, settingName)
+		} else {
 			if err := mod.addListValue(settingName, modVarName); err != nil {
 				return nil, err
 			}
