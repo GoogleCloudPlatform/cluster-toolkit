@@ -27,6 +27,9 @@ from oauth2client.client import GoogleCredentials
 import os
 import math
 import argparse
+import datetime
+import htcondor
+import classad
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--p", required=True, help="Project id", type=str)
@@ -69,9 +72,7 @@ parser.add_argument(
     choices=[0, 1],
 )
 
-
 args = parser.parse_args()
-
 
 class AutoScaler:
     def __init__(self, multizone=False):
@@ -180,25 +181,20 @@ class AutoScaler:
         else:
             self.zoneargs = {"zone": self.zone}
 
-        # Get total number of jobs in the queue that includes number of jobs
-        # waiting as well as number of jobs already assigned to nodes
-        queue_length_req = (
-            'condor_q -allusers -totals -format "%d " Jobs -format "%d " Idle -format "%d " Held'
-        )
-        queue_length_resp = os.popen(queue_length_req).read().split()
+        # Count jobs that are running or idle ("potentially runnable"); do not
+        # count held jobs or jobs in transitioning states
+        # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html#JobStatus
+        schedd = htcondor.Schedd()
+        job_attributes = [ "RequestCpus", "RequestMemory", "RequestGpus" ]
+        running_job_ads = schedd.query(constraint="JobStatus==2", projection=job_attributes)
+        idle_job_ads = schedd.query(constraint="JobStatus==1", projection=job_attributes)
 
-        if len(queue_length_resp) > 1:
-            queue = int(queue_length_resp[0])
-            idle_jobs = int(queue_length_resp[1])
-            on_hold_jobs = int(queue_length_resp[2])
-        else:
-            queue = 0
-            idle_jobs = 0
-            on_hold_jobs = 0
+        total_idle_request_cpus = sum(j["RequestCpus"] for j in idle_job_ads)
+        total_running_request_cpus = sum(j["RequestCpus"] for j in running_job_ads)
+        queue = total_idle_request_cpus + total_running_request_cpus
 
-        print("Total queue length: " + str(queue))
-        print("Idle jobs: " + str(idle_jobs))
-        print("Jobs on hold: " + str(on_hold_jobs))
+        print(f"Running job RequestCpus: {total_running_request_cpus}")
+        print(f"Idle job RequestCpus: {total_idle_request_cpus}")
 
         instanceTemplateInfo = self.getInstanceTemplateInfo()
         if self.debug > 1:
@@ -208,19 +204,7 @@ class AutoScaler:
         self.cores_per_node = instanceTemplateInfo["guest_cpus"]
         print("Number of CPU per compute node: " + str(self.cores_per_node))
 
-        # Get state for for all jobs in Condor
-        name_req = "condor_status  -af Name State CloudZone"
-        slot_names = os.popen(name_req).read().splitlines()
-        if self.debug > 1:
-            print("Currently running jobs in Condor")
-            print(slot_names)
-
-        # Adjust current queue length by the number of jos that are on-hold
-        queue -= on_hold_jobs
-        if on_hold_jobs > 0:
-            print("Adjusted queue length: " + str(queue))
-
-        # Calculate number instances to satisfy current job queue length
+        # Calculate number instances to satisfy current job queue CPU requests
         if queue > 0:
             self.size = int(math.ceil(float(queue) / float(self.cores_per_node)))
             if self.debug > 0:
@@ -272,47 +256,37 @@ class AutoScaler:
 
         if self.size < currentTarget:
             print("Scaling down. Looking for nodes that can be shut down")
-            # Find nodes that are not busy (all slots showing status as "Unclaimed")
 
-            idle_node_zones = {}
-            for slot_name in slot_names:
-                name_status = slot_name.split()
-                if len(name_status) > 1:
-                    name = name_status[0]
-                    status = name_status[1]
-                    zone = name_status[2]
-                    slot = "NO-SLOT"
-                    slot_server = name.split("@")
-                    if len(slot_server) > 1:
-                        slot = slot_server[0]
-                        server = slot_server[1].split(".")[0]
-                    else:
-                        server = slot_server[0].split(".")[0]
+            # Find VMs that are unused (no dynamic slots created from
+            # partitionable slots) and have been booted for at least 150 seconds
+            max_daemon_start_time = int(datetime.datetime.now().timestamp()-150)
+            filter_idle_vms = classad.ExprTree("PartitionableSlot && NumDynamicSlots==0")
+            filter_uptime = classad.ExprTree(f"DaemonStartTime<{max_daemon_start_time}")
 
-                    if self.debug > 0:
-                        print(slot + ", " + server + ", " + status + "\n")
-
-                    if server not in idle_node_zones:
-                        if status == "Unclaimed":
-                            idle_node_zones[server] = zone
-                        else:
-                            idle_node_zones[server] = None
-                    else:
-                        if status != "Unclaimed":
-                            idle_node_zones[server] = None
+            coll = htcondor.Collector()
+            idle_node_ads = coll.query(htcondor.AdTypes.Startd,
+                constraint=filter_idle_vms.and_(filter_uptime),
+                projection=["Machine", "CloudZone"])
 
             if self.debug > 1:
                 print("Compute node busy status:")
-                print(idle_node_zones)
+                for node_ad in idle_node_ads:
+                    print(node_ad["Machine"])
 
             # Shut down nodes that are not busy
-            for node, zone in idle_node_zones.items():
-                if zone:
-                    print("Will shut down: " + node + " ...")
-                    respDel = self.deleteFromMig(node, zone)
-                    if self.debug > 1:
-                        print("Shut down request for compute node " + node)
-                        pprint(respDel)
+            for node_ad in idle_node_ads:
+                try:
+                    node = node_ad["Machine"].split(".")[0]
+                    zone = node_ad["CloudZone"]
+                except KeyError:
+                    print(f"Skipping ad: {node_ad}")
+                    continue
+
+                print("Will shut down: " + node + " ...")
+                respDel = self.deleteFromMig(node, zone)
+                if self.debug > 1:
+                    print("Shut down request for compute node " + node)
+                    pprint(respDel)
 
             if self.debug > 1:
                 print("Scaling down complete")
