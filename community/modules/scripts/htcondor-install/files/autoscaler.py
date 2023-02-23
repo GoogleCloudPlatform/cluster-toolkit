@@ -156,12 +156,12 @@ class AutoScaler:
         if self.debug > 0:
             print("Guest CPUs: " + str(guest_cpus))
 
-        instanceTemlateInfo = {
+        instanceTemplateInfo = {
             "machine_type": machine_type,
             "is_preemtible": is_preemtible,
             "guest_cpus": guest_cpus,
         }
-        return instanceTemlateInfo
+        return instanceTemplateInfo
 
     def scale(self):
         # diagnosis
@@ -200,12 +200,12 @@ class AutoScaler:
         print("Idle jobs: " + str(idle_jobs))
         print("Jobs on hold: " + str(on_hold_jobs))
 
-        instanceTemlateInfo = self.getInstanceTemplateInfo()
+        instanceTemplateInfo = self.getInstanceTemplateInfo()
         if self.debug > 1:
             print("Information about the compute instance template")
-            pprint(instanceTemlateInfo)
+            pprint(instanceTemplateInfo)
 
-        self.cores_per_node = instanceTemlateInfo["guest_cpus"]
+        self.cores_per_node = instanceTemplateInfo["guest_cpus"]
         print("Number of CPU per compute node: " + str(self.cores_per_node))
 
         # Get state for for all jobs in Condor
