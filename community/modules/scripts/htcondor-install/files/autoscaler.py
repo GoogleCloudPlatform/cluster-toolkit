@@ -180,9 +180,10 @@ class AutoScaler:
         else:
             self.zoneargs = {"zone": self.zone}
 
-        # Get total number of jobs in the queue that includes number of jos waiting as well as number of jobs already assigned to nodes
+        # Get total number of jobs in the queue that includes number of jobs
+        # waiting as well as number of jobs already assigned to nodes
         queue_length_req = (
-            'condor_q -totals -format "%d " Jobs -format "%d " Idle -format "%d " Held'
+            'condor_q -allusers -totals -format "%d " Jobs -format "%d " Idle -format "%d " Held'
         )
         queue_length_resp = os.popen(queue_length_req).read().split()
 
