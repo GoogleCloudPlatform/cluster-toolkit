@@ -61,4 +61,21 @@ module "mig" {
   target_size       = var.target_size
   hostname          = "${var.deployment_name}-x"
   instance_template = module.execute_point_instance_template.self_link
+
+  health_check_name = "active-htcondor-service-${var.deployment_name}"
+  health_check = {
+    type                = "tcp"
+    initial_delay_sec   = 600
+    check_interval_sec  = 20
+    healthy_threshold   = 2
+    timeout_sec         = 8
+    unhealthy_threshold = 3
+    response            = ""
+    proxy_header        = "NONE"
+    port                = 9618
+    request             = ""
+    request_path        = ""
+    host                = ""
+    enable_logging      = true
+  }
 }

@@ -146,3 +146,41 @@ module "address" {
   subnetwork = var.subnetwork_self_link
   names      = local.central_manager_ip_names
 }
+
+data "google_compute_subnetwork" "htcondor" {
+  self_link = var.subnetwork_self_link
+}
+
+module "health_check_firewall_rule" {
+  source       = "terraform-google-modules/network/google//modules/firewall-rules"
+  version      = "~> 6.0"
+  project_id   = data.google_compute_subnetwork.htcondor.project
+  network_name = data.google_compute_subnetwork.htcondor.network
+
+  rules = [{
+    name        = "allow-health-check-${var.deployment_name}"
+    description = "Allow Managed Instance Group Health Checks for HTCondor VMs"
+    direction   = "INGRESS"
+    priority    = null
+    ranges = [
+      "130.211.0.0/22",
+      "35.191.0.0/16",
+    ]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = [
+      module.access_point_service_account.email,
+      module.central_manager_service_account.email,
+      module.execute_point_service_account.email,
+    ]
+    allow = [{
+      protocol = "tcp"
+      ports    = ["9618"]
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }]
+}
