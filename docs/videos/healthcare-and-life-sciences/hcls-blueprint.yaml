@@ -75,17 +75,17 @@ deployment_groups:
     settings: {filestore_share_name: appsshare}
 
   - id: bucket-software-create
-    source: ./community/modules/file-system/cloud-storage-bucket
+    source: community/modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: $(vars.bucket_name_software)
 
   - id: bucket-input-create
-    source: ./community/modules/file-system/cloud-storage-bucket
+    source: community/modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: $(vars.bucket_name_inputs)
 
   - id: bucket-output-create
-    source: ./community/modules/file-system/cloud-storage-bucket
+    source: community/modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: $(vars.bucket_name_outputs)
 
@@ -322,7 +322,7 @@ deployment_groups:
   ### Remote Desktop ###
 
   - id: desktop
-    source: ./community/modules/remote-desktop/chrome-remote-desktop
+    source: community/modules/remote-desktop/chrome-remote-desktop
     use:
     - network1
     - homefs
