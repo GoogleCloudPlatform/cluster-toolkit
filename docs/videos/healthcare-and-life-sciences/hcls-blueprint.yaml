@@ -75,17 +75,17 @@ deployment_groups:
     settings: {filestore_share_name: appsshare}
 
   - id: bucket-software-create
-    source: ./community/modules/file-system/cloud-storage-bucket
+    source: community/modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: $(vars.bucket_name_software)
 
   - id: bucket-input-create
-    source: ./community/modules/file-system/cloud-storage-bucket
+    source: community/modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: $(vars.bucket_name_inputs)
 
   - id: bucket-output-create
-    source: ./community/modules/file-system/cloud-storage-bucket
+    source: community/modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: $(vars.bucket_name_outputs)
 
@@ -271,7 +271,7 @@ deployment_groups:
     settings:
       name_prefix: spack-builder
       threads_per_core: 2
-      machine_type: a2-highgpu-1g
+      machine_type: c2-standard-16
 
 - group: cluster
   modules:
@@ -322,7 +322,7 @@ deployment_groups:
   ### Remote Desktop ###
 
   - id: desktop
-    source: ./community/modules/remote-desktop/chrome-remote-desktop
+    source: community/modules/remote-desktop/chrome-remote-desktop
     use:
     - network1
     - homefs
