@@ -1,4 +1,55 @@
-# Deployment Instructions
+# Healthcare and Life Science Blueprint
+
+The Healthcare and Life Science (HCLS) [blueprint](./hcls-blueprint.yaml) in
+this folder captures an advanced architecture that can be used to run GROMACS
+with GPUs on Google Cloud.
+
+## Getting Started
+
+There are several ways to get started with the HCLS blueprint.
+
+First you will want deploy the blueprint following the
+[Deployment Instructions](#deployment-instructions).
+
+Once deployed, you can test the cluster by running an example workload:
+
+- [Water Benchmark Example](#water-benchmark-example-instructions): All the
+  inputs needed to run this example are included as part of the blueprint. This
+  makes this example an easy test case to run GROMACS and confirm that the
+  cluster is working as expected.
+- [Lysozyme Example](./lysozyme-example/README.md): This example demonstrates a
+  real life case of simulating the Lysozyme protein in water. It is a multi-step
+  GPU enabled GROMACS simulation.
+
+## Architecture
+
+The blueprint includes:
+
+- Auto-scaling Slurm cluster
+- Filestore for shared NFS storage
+- Input and output Google Cloud Storage bucket
+- GPU accelerated remote desktop for visualization
+- Software builder VM to compile molecular dynamics software
+
+![blueprint-architecture](https://user-images.githubusercontent.com/22925983/221241948-598d88b7-51e7-4f28-94dd-bd930ccce2f8.png)
+
+### Deployment Stages
+
+This blueprint has 4 deployment groups:
+
+- `enable_apis`: Ensure that all of the needed apis are enabled before deploying
+  the cluster.
+- `setup`: Setup backbone infrastructure such as networking, file systems, &
+  monitoring.
+- `software_installation`: Compile and install HPC applications and populate the
+  input library.
+- `cluster`: Deploys an auto-scaling cluster and remote desktop.
+
+Having multiple deployment groups decouples the life cycle of some
+infrastructure. For example a) you can tear down the cluster while leaving the
+storage intact and b) you can build software before you deploy your cluster.
+
+## Deployment Instructions
 
 1. Clone the repo
 
