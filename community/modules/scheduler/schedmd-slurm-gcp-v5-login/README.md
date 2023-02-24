@@ -17,7 +17,6 @@ terraform modules. The login node is used in conjunction with the
   use:
   - network1
   - slurm_controller
-  - homefs
   settings:
     machine_type: n2-standard-4
 ```
@@ -25,13 +24,12 @@ terraform modules. The login node is used in conjunction with the
 This creates a Slurm login node which is:
 
 * connected to the primary subnet of network1 via `use`
-* mounted to the homefs filesystem via `use`
 * associated with the `slurm_controller` module as the slurm controller via
   `use`
 * of VM machine type `n2-standard-4`
 
 For a complete example using this module, see
-[slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
+[slurm-gcp-v5-hpc-centos7.yaml](../../../examples/slurm-gcp-v5-hpc-centos7.yaml).
 
 ## Custom Images
 
