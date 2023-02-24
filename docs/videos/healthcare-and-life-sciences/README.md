@@ -139,5 +139,78 @@
    - Follow
      [the instructions](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/develop/community/modules/remote-desktop/chrome-remote-desktop/README.md#setting-up-the-remote-desktop)
      for setting up the Remote Desktop.
-   - Connect to the remote desktop, open a terminal in the remote session and
-     run `vmd` on the command line
+
+## Water Benchmark Example Instructions
+
+As part of deployment, the GROMACS water benchmark has been placed in the
+`/data_input` Cloud Storage bucket. Additionally two sbatch Slurm submission
+scripts have been placed in the `/apps/gromacs` directory, one uses CPUs and the
+other uses GPUs.
+
+> **Note**: Make sure that you have followed all of the
+> [deployment instructions](#deployment-instructions) before running this
+> example.
+
+<!--  -->
+
+> **Note**: To run this example you will need quota for `A2 CPUs` (12) and
+> `NVIDIA A100 GPUs` (1).
+
+1. SSH into the Slurm login node
+
+   Go to the
+   [VM instances page](https://console.cloud.google.com/compute/instances) and
+   you should see a VM with `login` in the name. SSH into this VM by clicking
+   the `SSH` button or by any other means.
+
+1. Create a submission directory
+
+   ```bash
+   mkdir water_run && cd water_run
+   ```
+
+1. Submit the GROMACS job
+
+   There are two example sbatch scripts which have been populated at:
+
+   - `/apps/gromacs/submit_gromacs_water_cpu.sh`
+   - `/apps/gromacs/submit_gromacs_water_gpu.sh`
+
+   The first of these runs on the `compute` partition, which uses CPUs on a
+   `c2-standard-60` machine. The second targets the `gpu` partition. It runs on
+   an `a2-highgpu-1g` machine and uses a NVIDIA A100 for GPU acceleration.
+
+   The example below runs the GPU version of the job. You can switch out the
+   path of the script to try the CPU version.
+
+   Submit the sbatch script with the following commands:
+
+   ```bash
+   sbatch /apps/gromacs/submit_gromacs_water_gpu.sh
+   ```
+
+1. Monitor the job
+
+   Use the following command to see the status of the job:
+
+   ```bash
+   squeue
+   ```
+
+   The job state (`ST`) will show `CF` while the job is being configured. Once
+   the state switches to `R` the job is running.
+
+   If you refresh the
+   [VM instances page](https://console.cloud.google.com/compute/instances) you
+   will see an `a2-highgpu-1g` machine that has been auto-scaled up to run this
+   job. It will have a name like `hcls01-gpu-ghpc-0`.
+
+   Once the job is in the running state you can track progress with the
+   following command:
+
+   ```bash
+   tail -f slurm-*.out
+   ```
+
+   When the job has finished end of the `slurm-*.out` file will print
+   performance metrics such as `ns/day`.
