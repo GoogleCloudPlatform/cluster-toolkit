@@ -90,8 +90,8 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 7.8.0 |
-| <a name="module_mig"></a> [mig](#module\_mig) | terraform-google-modules/vm/google//modules/mig | ~> 7.8.0 |
+| <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 8.0 |
+| <a name="module_mig"></a> [mig](#module\_mig) | terraform-google-modules/vm/google//modules/mig | ~> 8.0 |
 
 ## Resources
 
