@@ -208,6 +208,28 @@ storage intact and b) you can build software before you deploy your cluster.
      [the instructions](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/develop/community/modules/remote-desktop/chrome-remote-desktop/README.md#setting-up-the-remote-desktop)
      for setting up the Remote Desktop.
 
+## Teardown Instructions
+
+When you would like to tear down the deployment, each stage must be destroyed,
+with the exception of the `enable_apis` stage. Since the `software_installation`
+and `cluster` depend on the network deployed in the `setup` stage, they must be
+destroyed first. You can use the following commands to destroy the deployment.
+
+```bash
+# cluster
+terraform -chdir=hcls-01/cluster init && \
+   terraform -chdir=hcls-01/cluster destroy --auto-approve
+# software_installation
+terraform -chdir=hcls-01/software_installation init && \
+   terraform -chdir=hcls-01/software_installation destroy --auto-approve
+# setup
+terraform -chdir=hcls-01/setup init && \
+   terraform -chdir=hcls-01/setup destroy --auto-approve
+```
+
+> **Note**: You may have to clean out items added to the Cloud Storage buckets
+> before terraform will be able to destroy them.
+
 ## Water Benchmark Example Instructions
 
 As part of deployment, the GROMACS water benchmark has been placed in the
