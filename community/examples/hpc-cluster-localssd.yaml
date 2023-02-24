@@ -112,7 +112,6 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use:
     - network1
-    - homefs
     - slurm_controller
     settings:
       machine_type: n1-standard-4
