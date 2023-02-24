@@ -17,10 +17,6 @@ modules.
 The following code snippet creates a pool of HTCondor execute points using
 a startup script and network created in previous steps.
 
-> **_NOTE:_** HTCondor does not appear to interoperate correctly with the user
-> identities created by OS Login. Until this is resolved, we advise disabling
-> OS Login on all HTCondor nodes, including execute points.
-
 ```yaml
 - id: htcondor_execute_point
   source: community/modules/compute/htcondor-execute-point
@@ -28,9 +24,6 @@ a startup script and network created in previous steps.
   - network1
   - htcondor_configure_execute_point
   settings:
-    metadata:
-      central-manager: ((module.htcondor_cm.internal_ip[0]))
-      enable-oslogin: "FALSE"
     service_account:
       email: $(htcondor_configure.execute_point_service_account)
       scopes:
@@ -51,6 +44,20 @@ the University of Wisconsin-Madison. Support for HTCondor is available via:
 - [HTCondor manual](https://htcondor.readthedocs.io/en/latest/)
 
 [chtc]: https://chtc.cs.wisc.edu/
+
+## Known Issues
+
+When using OS Login with "external users" (outside of the Google Cloud
+organization), then Docker universe jobs will fail and cause the Docker daemon
+to crash. This stems from the use of POSIX user ids (uid) outside the range
+supported by Docker. Please consider disabling OS Login if this atypical
+situation applies.
+
+```yaml
+vars:
+  # add setting below to existing deployment variables
+  enable_oslogin: DISABLE
+```
 
 ## License
 
@@ -95,7 +102,7 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
-| <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"DISABLE"` | no |
+| <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
 | <a name="input_image"></a> [image](#input\_image) | HTCondor execute point VM image | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to HTConodr execute points | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor execute points | `string` | `"n2-standard-4"` | no |
