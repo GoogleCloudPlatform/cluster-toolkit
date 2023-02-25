@@ -992,3 +992,60 @@ func (s *MySuite) TestCheckMovedModules(c *C) {
 	err = dc.checkMovedModules()
 	c.Assert(err, NotNil)
 }
+
+func (s *MySuite) TestValidatorConfigCheck(c *C) {
+	const vn = testProjectExistsName // some valid name
+
+	{ // FAIL: names mismatch
+		v := validatorConfig{
+			"who_is_this",
+			map[string]interface{}{},
+		}
+		err := v.check(vn, []string{})
+		c.Check(err, ErrorMatches, "passed wrong validator to test_project_exists implementation")
+	}
+
+	{ // OK: names match
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{},
+		}
+		c.Check(v.check(vn, []string{}), IsNil)
+	}
+
+	{ // OK: Inputs is equal to required inputs without regard to ordering
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{"in0": nil, "in1": nil},
+		}
+		c.Check(v.check(vn, []string{"in0", "in1"}), IsNil)
+		c.Check(v.check(vn, []string{"in1", "in0"}), IsNil)
+	}
+
+	{ // FAIL: inputs are a proper subset of required inputs
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{"in0": nil, "in1": nil},
+		}
+		err := v.check(vn, []string{"in0", "in1", "in2"})
+		c.Check(err, ErrorMatches, missingRequiredInputRegex)
+	}
+
+	{ // FAIL: inputs intersect with required inputs but are not a proper subset
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{"in0": nil, "in1": nil, "in3": nil},
+		}
+		err := v.check(vn, []string{"in0", "in1", "in2"})
+		c.Check(err, ErrorMatches, missingRequiredInputRegex)
+	}
+
+	{ // FAIL inputs are a proper superset of required inputs
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{"in0": nil, "in1": nil, "in2": nil, "in3": nil},
+		}
+		err := v.check(vn, []string{"in0", "in1", "in2"})
+		c.Check(err, ErrorMatches, "only 3 inputs \\[in0 in1 in2\\] should be provided to test_project_exists")
+	}
+}

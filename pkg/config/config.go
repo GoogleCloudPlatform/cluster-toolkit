@@ -190,28 +190,23 @@ func (v *validatorConfig) check(name validatorName, requiredInputs []string) err
 	if v.Validator != name.String() {
 		return fmt.Errorf("passed wrong validator to %s implementation", name.String())
 	}
-	err := testInputList(v.Validator, v.Inputs, requiredInputs)
-	return err
-}
 
-// check that the keys in inputs and requiredInputs are identical sets of strings
-func testInputList(function string, inputs map[string]interface{}, requiredInputs []string) error {
 	var errored bool
-	for _, requiredInput := range requiredInputs {
-		if _, found := inputs[requiredInput]; !found {
-			log.Printf("a required input %s was not provided to %s!", requiredInput, function)
+	for _, inp := range requiredInputs {
+		if _, found := v.Inputs[inp]; !found {
+			log.Printf("a required input %s was not provided to %s!", inp, v.Validator)
 			errored = true
 		}
 	}
 
 	if errored {
-		return fmt.Errorf("at least one required input was not provided to %s", function)
+		return fmt.Errorf("at least one required input was not provided to %s", v.Validator)
 	}
 
 	// ensure that no extra inputs were provided by comparing length
-	if len(requiredInputs) != len(inputs) {
+	if len(requiredInputs) != len(v.Inputs) {
 		errStr := "only %v inputs %s should be provided to %s"
-		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, function)
+		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, v.Validator)
 	}
 
 	return nil
