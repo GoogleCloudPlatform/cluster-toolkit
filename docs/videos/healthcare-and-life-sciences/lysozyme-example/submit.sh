@@ -39,7 +39,7 @@ mpirun -n 1 gmx_mpi solvate -cp ${PROTEIN}_newbox.gro -cs spc216.gro -o ${PROTEI
 
 # Add Ions
 mpirun -n 1 gmx_mpi grompp -f config/ions.mdp -c ${PROTEIN}_solv.gro -p topol.top -o ions.tpr
-printf "SOL\n" | mpirun -n 1 gmx_mpi genion -s ions.tpr -o ${PROTEIN}_solv_ions.gro -conc 0.15 -p topol.top -pname NA -nname CL -neutral
+printf "SOL\n" | mpirun -n 1 gmx_mpi genion -s ions.tpr -o ${PROTEIN}_solv_ions.gro -p topol.top -pname NA -nname CL -neutral
 
 MDRUN_GPU_PARAMS=(-gputasks 00 -bonded gpu -nb gpu -pme gpu -update gpu)
 MDRUN_MPIRUN_PREAMBLE=(mpirun -n 1 -H localhost env GMX_ENABLE_DIRECT_GPU_COMM=1)
