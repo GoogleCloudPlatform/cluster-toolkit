@@ -21,19 +21,9 @@ locals {
   network_storage = var.network_storage != null ? (
   { network_storage = jsonencode(var.network_storage) }) : {}
 
-  # original behavior
-  old_resource_prefix = var.name_prefix != null ? var.name_prefix : var.deployment_name
-
-  # new behavior
-  prefix = var.name_prefix != null ? var.name_prefix : ""
-  deployment = (
-    var.use_deployment_name_in_resource_name == true ? # var could be null
-    var.deployment_name : ""
-  )
-  dash                = local.prefix != "" && local.deployment != "" ? "-" : ""
-  new_resource_prefix = "${local.prefix}${local.dash}${local.deployment}"
-
-  resource_prefix = var.use_deployment_name_in_resource_name == null ? local.old_resource_prefix : local.new_resource_prefix
+  prefix_optional_deployment_name = var.name_prefix != null ? var.name_prefix : var.deployment_name
+  prefix_always_deployment_name   = var.name_prefix != null ? "{var.deployment_name}-{var.name_prefix}" : var.deployment_name
+  resource_prefix                 = var.always_include_deployment_name ? local.prefix_always_deployment_name : local.prefix_optional_deployment_name
 
   enable_gvnic  = var.bandwidth_tier != "not_enabled"
   enable_tier_1 = var.bandwidth_tier == "tier_1_enabled"

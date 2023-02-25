@@ -73,14 +73,13 @@ variable "name_prefix" {
   default     = null
 }
 
-variable "use_deployment_name_in_resource_name" {
+variable "always_include_deployment_name" {
   description = <<-EOT
-    If true, the deployment name will be included as part of the VM name. 
-    If false, it will never be included.
-    Default of null will use deployment name only if `name_prefix` is not provided.
+    If true, the deployment name will always be included as part of the VM name. 
+    If false, it will only be included if `name_prefix` is not provided.
     EOT
   type        = bool
-  default     = null
+  default     = false
 }
 
 variable "disable_public_ips" {
