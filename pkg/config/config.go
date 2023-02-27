@@ -186,6 +186,32 @@ type validatorConfig struct {
 	Inputs    map[string]interface{}
 }
 
+func (v *validatorConfig) check(name validatorName, requiredInputs []string) error {
+	if v.Validator != name.String() {
+		return fmt.Errorf("passed wrong validator to %s implementation", name.String())
+	}
+
+	var errored bool
+	for _, inp := range requiredInputs {
+		if _, found := v.Inputs[inp]; !found {
+			log.Printf("a required input %s was not provided to %s!", inp, v.Validator)
+			errored = true
+		}
+	}
+
+	if errored {
+		return fmt.Errorf("at least one required input was not provided to %s", v.Validator)
+	}
+
+	// ensure that no extra inputs were provided by comparing length
+	if len(requiredInputs) != len(v.Inputs) {
+		errStr := "only %v inputs %s should be provided to %s"
+		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, v.Validator)
+	}
+
+	return nil
+}
+
 // HasKind checks to see if a resource group contains any modules of the given
 // kind. Note that a DeploymentGroup should never have more than one kind, this
 // function is used in the validation step to ensure that is true.

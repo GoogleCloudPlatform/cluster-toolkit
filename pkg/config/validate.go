@@ -288,29 +288,6 @@ func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) err
 	return allValidators
 }
 
-// check that the keys in inputs and requiredInputs are identical sets of strings
-func testInputList(function string, inputs map[string]interface{}, requiredInputs []string) error {
-	var errored bool
-	for _, requiredInput := range requiredInputs {
-		if _, found := inputs[requiredInput]; !found {
-			log.Printf("a required input %s was not provided to %s!", requiredInput, function)
-			errored = true
-		}
-	}
-
-	if errored {
-		return fmt.Errorf("at least one required input was not provided to %s", function)
-	}
-
-	// ensure that no extra inputs were provided by comparing length
-	if len(requiredInputs) != len(inputs) {
-		errStr := "only %v inputs %s should be provided to %s"
-		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, function)
-	}
-
-	return nil
-}
-
 // The expected use case of this function is to merge blueprint requirements
 // that are maps from project_id to string slices containing APIs or IAM roles
 // required for provisioning. It will remove duplicate elements and ensure that
@@ -336,17 +313,8 @@ func mergeBlueprintRequirements(base map[string][]string, new map[string][]strin
 	return dest
 }
 
-func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
-	requiredInputs := []string{}
-	funcName := testApisEnabledName.String()
-	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
-
-	if validator.Validator != funcName {
-		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
-	}
-
-	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
-	if err != nil {
+func (dc *DeploymentConfig) testApisEnabled(c validatorConfig) error {
+	if err := c.check(testApisEnabledName, []string{}); err != nil {
 		return err
 	}
 
@@ -365,7 +333,7 @@ func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
 		} else {
 			project = pid
 		}
-		err = validators.TestApisEnabled(project, apis)
+		err := validators.TestApisEnabled(project, apis)
 		if err != nil {
 			log.Println(err)
 			errored = true
@@ -373,27 +341,20 @@ func (dc *DeploymentConfig) testApisEnabled(validator validatorConfig) error {
 	}
 
 	if errored {
-		return fmt.Errorf(funcErrorMsg)
+		return fmt.Errorf(funcErrorMsgTemplate, testApisEnabledName.String())
 	}
 	return nil
 }
 
-func (dc *DeploymentConfig) testProjectExists(validator validatorConfig) error {
-	requiredInputs := []string{"project_id"}
+func (dc *DeploymentConfig) testProjectExists(c validatorConfig) error {
 	funcName := testProjectExistsName.String()
 	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
-	if validator.Validator != funcName {
-		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
-	}
-
-	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
-	if err != nil {
-		log.Print(funcErrorMsg)
+	if err := c.check(testProjectExistsName, []string{"project_id"}); err != nil {
 		return err
 	}
 
-	projectID, err := dc.getStringValue(validator.Inputs["project_id"])
+	projectID, err := dc.getStringValue(c.Inputs["project_id"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -408,26 +369,19 @@ func (dc *DeploymentConfig) testProjectExists(validator validatorConfig) error {
 	return nil
 }
 
-func (dc *DeploymentConfig) testRegionExists(validator validatorConfig) error {
-	requiredInputs := []string{"project_id", "region"}
+func (dc *DeploymentConfig) testRegionExists(c validatorConfig) error {
 	funcName := testRegionExistsName.String()
 	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
-	if validator.Validator != funcName {
-		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
-	}
-
-	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
-	if err != nil {
+	if err := c.check(testRegionExistsName, []string{"project_id", "region"}); err != nil {
 		return err
 	}
-
-	projectID, err := dc.getStringValue(validator.Inputs["project_id"])
+	projectID, err := dc.getStringValue(c.Inputs["project_id"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
-	region, err := dc.getStringValue(validator.Inputs["region"])
+	region, err := dc.getStringValue(c.Inputs["region"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -442,26 +396,20 @@ func (dc *DeploymentConfig) testRegionExists(validator validatorConfig) error {
 	return nil
 }
 
-func (dc *DeploymentConfig) testZoneExists(validator validatorConfig) error {
-	requiredInputs := []string{"project_id", "zone"}
+func (dc *DeploymentConfig) testZoneExists(c validatorConfig) error {
 	funcName := testZoneExistsName.String()
 	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
-	if validator.Validator != funcName {
-		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
-	}
-
-	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
-	if err != nil {
+	if err := c.check(testZoneExistsName, []string{"project_id", "zone"}); err != nil {
 		return err
 	}
 
-	projectID, err := dc.getStringValue(validator.Inputs["project_id"])
+	projectID, err := dc.getStringValue(c.Inputs["project_id"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
-	zone, err := dc.getStringValue(validator.Inputs["zone"])
+	zone, err := dc.getStringValue(c.Inputs["zone"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -476,31 +424,25 @@ func (dc *DeploymentConfig) testZoneExists(validator validatorConfig) error {
 	return nil
 }
 
-func (dc *DeploymentConfig) testZoneInRegion(validator validatorConfig) error {
-	requiredInputs := []string{"project_id", "region", "zone"}
+func (dc *DeploymentConfig) testZoneInRegion(c validatorConfig) error {
 	funcName := testZoneInRegionName.String()
 	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
 
-	if validator.Validator != funcName {
-		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
-	}
-
-	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
-	if err != nil {
+	if err := c.check(testZoneInRegionName, []string{"project_id", "region", "zone"}); err != nil {
 		return err
 	}
 
-	projectID, err := dc.getStringValue(validator.Inputs["project_id"])
+	projectID, err := dc.getStringValue(c.Inputs["project_id"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
-	zone, err := dc.getStringValue(validator.Inputs["zone"])
+	zone, err := dc.getStringValue(c.Inputs["zone"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
-	region, err := dc.getStringValue(validator.Inputs["region"])
+	region, err := dc.getStringValue(c.Inputs["region"])
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -515,25 +457,14 @@ func (dc *DeploymentConfig) testZoneInRegion(validator validatorConfig) error {
 	return nil
 }
 
-func (dc *DeploymentConfig) testModuleNotUsed(validator validatorConfig) error {
-	requiredInputs := []string{}
-	funcName := testModuleNotUsedName.String()
-	funcErrorMsg := fmt.Sprintf(funcErrorMsgTemplate, funcName)
-
-	if validator.Validator != funcName {
-		return fmt.Errorf("passed wrong validator to %s implementation", funcName)
-	}
-
-	err := testInputList(validator.Validator, validator.Inputs, requiredInputs)
-	if err != nil {
+func (dc *DeploymentConfig) testModuleNotUsed(c validatorConfig) error {
+	if err := c.check(testModuleNotUsedName, []string{}); err != nil {
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestModuleNotUsed(dc.listUnusedModules())
-	if err != nil {
+	if err := validators.TestModuleNotUsed(dc.listUnusedModules()); err != nil {
 		log.Print(err)
-		return fmt.Errorf(funcErrorMsg)
+		return fmt.Errorf(funcErrorMsgTemplate, testModuleNotUsedName.String())
 	}
 	return nil
 }
