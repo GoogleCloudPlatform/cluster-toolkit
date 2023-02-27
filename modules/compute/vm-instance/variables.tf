@@ -68,15 +68,20 @@ variable "local_ssd_interface" {
 }
 
 variable "name_prefix" {
-  description = "Name Prefix"
+  description = <<-EOT
+    An optional name for all VM and disk resources. 
+    If not supplied, `deployment_name` will be used. 
+    When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set, 
+    then resources are named by "<`deployment_name`>-<`name_prefix`>-<#>".
+    EOT
   type        = string
   default     = null
 }
 
-variable "always_include_deployment_name" {
+variable "add_deployment_name_before_prefix" {
   description = <<-EOT
-    If true, the deployment name will always be included as part of the VM name. 
-    If false, it will only be included if `name_prefix` is not provided.
+    If true, the names of VMs and disks will always be prefixed with `deployment_name` to enable uniqueness across deployments.
+    See `name_prefix` for further details on resource naming behavior.
     EOT
   type        = bool
   default     = false
@@ -109,7 +114,7 @@ variable "network_storage" {
 }
 
 variable "deployment_name" {
-  description = "Name of the deployment, used to name the cluster"
+  description = "Name of the deployment, will optionally be used name resources according to `name_prefix`"
   type        = string
 }
 
