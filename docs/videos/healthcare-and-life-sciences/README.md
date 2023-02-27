@@ -205,7 +205,7 @@ storage intact and b) you can build software before you deploy your cluster.
 1. Set up Chrome Remote Desktop
 
    - Follow
-     [the instructions](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/develop/community/modules/remote-desktop/chrome-remote-desktop/README.md#setting-up-the-remote-desktop)
+     [the instructions](../../../community/modules/remote-desktop/chrome-remote-desktop/README.md#setting-up-the-remote-desktop)
      for setting up the Remote Desktop.
 
 ## Teardown Instructions
