@@ -185,7 +185,14 @@ class AutoScaler:
         # stewardship. A full list of Job ClassAd attributes can be found at
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html
         schedd = htcondor.Schedd()
-        job_attributes = [ "RequestCpus", "RequestMemory", "RequestGpus" ]
+        REQUEST_CPUS_ATTRIBUTE = "RequestCpus"
+        REQUEST_GPUS_ATTRIBUTE = "RequestGpus"
+        REQUEST_MEMORY_ATTRIBUTE = "RequestMemory"
+        job_attributes = [
+            REQUEST_CPUS_ATTRIBUTE,
+            REQUEST_GPUS_ATTRIBUTE,
+            REQUEST_MEMORY_ATTRIBUTE,
+        ]
 
         # For purpose of scaling a Managed Instance Group, count only jobs that
         # are running or idle ("potentially runnable"). Filter JobStatus by:
@@ -193,8 +200,8 @@ class AutoScaler:
         running_job_ads = schedd.query(constraint="JobStatus==2", projection=job_attributes)
         idle_job_ads = schedd.query(constraint="JobStatus==1", projection=job_attributes)
 
-        total_idle_request_cpus = sum(j["RequestCpus"] for j in idle_job_ads)
-        total_running_request_cpus = sum(j["RequestCpus"] for j in running_job_ads)
+        total_idle_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in idle_job_ads)
+        total_running_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in running_job_ads)
         queue = total_idle_request_cpus + total_running_request_cpus
 
         print(f"Total CPUs requested by running jobs: {total_running_request_cpus}")
