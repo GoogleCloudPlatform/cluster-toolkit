@@ -270,6 +270,7 @@ deployment_groups:
     use: [network-install, appsfs-install, bucket-input-install, spack-builder-startup]
     settings:
       name_prefix: spack-builder
+      add_deployment_name_before_prefix: true
       threads_per_core: 2
       machine_type: c2-standard-16
 
