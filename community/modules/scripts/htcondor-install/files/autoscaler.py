@@ -24,10 +24,10 @@ from pprint import pprint
 from googleapiclient import discovery
 from oauth2client.client import GoogleCredentials
 
+import argparse
 import os
 import math
-import argparse
-import datetime
+import time
 import htcondor
 import classad
 
@@ -181,11 +181,15 @@ class AutoScaler:
         else:
             self.zoneargs = {"zone": self.zone}
 
-        # Count jobs that are running or idle ("potentially runnable"); do not
-        # count held jobs or jobs in transitioning states
-        # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html#JobStatus
+        # Each HTCondor scheduler (SchedD), maintains a list of jobs under its
+        # stewardship. A full list of Job ClassAd attributes can be found at
+        # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html
         schedd = htcondor.Schedd()
         job_attributes = [ "RequestCpus", "RequestMemory", "RequestGpus" ]
+
+        # For purpose of scaling a Managed Instance Group, count only jobs that
+        # are running or idle ("potentially runnable"). Filter JobStatus by:
+        # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html#JobStatus
         running_job_ads = schedd.query(constraint="JobStatus==2", projection=job_attributes)
         idle_job_ads = schedd.query(constraint="JobStatus==1", projection=job_attributes)
 
@@ -193,8 +197,8 @@ class AutoScaler:
         total_running_request_cpus = sum(j["RequestCpus"] for j in running_job_ads)
         queue = total_idle_request_cpus + total_running_request_cpus
 
-        print(f"Running job RequestCpus: {total_running_request_cpus}")
-        print(f"Idle job RequestCpus: {total_idle_request_cpus}")
+        print(f"Total CPUs requested by running jobs: {total_running_request_cpus}")
+        print(f"Total CPUs requested by idle jobs: {total_idle_request_cpus}")
 
         instanceTemplateInfo = self.getInstanceTemplateInfo()
         if self.debug > 1:
@@ -259,10 +263,12 @@ class AutoScaler:
 
             # Find VMs that are unused (no dynamic slots created from
             # partitionable slots) and have been booted for at least 150 seconds
-            max_daemon_start_time = int(datetime.datetime.now().timestamp()-150)
+            max_daemon_start_time = int(time.time()-150)
             filter_idle_vms = classad.ExprTree("PartitionableSlot && NumDynamicSlots==0")
             filter_uptime = classad.ExprTree(f"DaemonStartTime<{max_daemon_start_time}")
 
+            # A full list of Machine (StartD) ClassAd attributes can be found at
+            # https://htcondor.readthedocs.io/en/latest/classad-attributes/machine-classad-attributes.html
             coll = htcondor.Collector()
             idle_node_ads = coll.query(htcondor.AdTypes.Startd,
                 constraint=filter_idle_vms.and_(filter_uptime),
