@@ -51,6 +51,19 @@ storage intact and b) you can build software before you deploy your cluster.
 
 ## Deployment Instructions
 
+> **Warning**: This tutorial uses the following billable components of Google
+> Cloud:
+>
+> - Compute Engine
+> - Filestore
+> - Cloud Storage
+>
+> To avoid continued billing once the tutorial is complete, closely follow the
+> [teardown instructions](#teardown-instructions). Additionally, you may want to
+> deploy this tutorial into a new project that can be deleted when the tutorial
+> is complete. To generate a cost estimate based on your projected usage, use
+> the [pricing calculator](https://cloud.google.com/products/calculator).
+
 1. Clone the repo
 
    ```bash
@@ -210,10 +223,16 @@ storage intact and b) you can build software before you deploy your cluster.
 
 ## Teardown Instructions
 
+> **Note**: If you created a new project for this tutorial, the easiest way to
+> eliminate billing is to delete the project.
+
 When you would like to tear down the deployment, each stage must be destroyed,
 with the exception of the `enable_apis` stage. Since the `software_installation`
 and `cluster` depend on the network deployed in the `setup` stage, they must be
 destroyed first. You can use the following commands to destroy the deployment.
+
+> **Warning**: If you do not destroy all three deployment groups then there may
+> be continued associated costs.
 
 ```bash
 # cluster
