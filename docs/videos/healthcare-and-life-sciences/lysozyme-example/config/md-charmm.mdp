@@ -1,4 +1,3 @@
-title                   = CHARMM NPT
 
 ; Parameters describing what to do, when to stop and what to save
 integrator              = md        ; leap-frog integrator
@@ -22,7 +21,7 @@ nstenergy                = 500     ; for writing energies to edr file
 nstxout-compressed       = 2500    ; for writing coords (x)
 
 ; Pressure coupling is on
-pcoupl                  = Berendsen               ; Pressure coupling on in NPT
+pcoupl                  = C-rescale               ; Pressure coupling on in NPT
 pcoupltype              = isotropic             ; uniform scaling of box vectors
 tau_p                   = 5.0                   ; time constant, in ps
 ref_p                   = 1.0                   ; reference pressure, in bar
