@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.6.0
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
