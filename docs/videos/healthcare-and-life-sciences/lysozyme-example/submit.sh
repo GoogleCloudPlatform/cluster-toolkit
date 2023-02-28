@@ -26,7 +26,7 @@ spack env activate gromacs
 which gmx_mpi
 
 # Prepare Inputs
-# Note: The protein in this example has been deliberately chosen because it requires minimal preparation. 
+# Note: The protein in this example has been deliberately chosen because it requires minimal preparation.
 # This procedure is not universally appropriate (e.g., for proteins with missing residues, occupancies less than 1, etc).
 grep -v -e HETATM -e CONECT ${PDB_FILE} >${PROTEIN}_protein.pdb
 
