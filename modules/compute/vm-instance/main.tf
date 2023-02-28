@@ -75,7 +75,7 @@ locals {
   default_network_interface = {
     network            = var.network_self_link
     subnetwork         = var.subnetwork_self_link
-    subnetwork_project = var.project_id
+    subnetwork_project = null # will populate from subnetwork_self_link
     network_ip         = null
     nic_type           = local.enable_gvnic ? "GVNIC" : null
     stack_type         = null
