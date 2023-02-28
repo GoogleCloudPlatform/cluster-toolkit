@@ -93,6 +93,8 @@
         content: |
           COLLECTOR_UPDATE_INTERVAL=60
           NEGOTIATOR_UPDATE_INTERVAL=60
+      notify:
+      - Reload HTCondor
     - name: Create Central Manager HA configuration file
       when: central_manager_list | length > 1
       ansible.builtin.copy:
@@ -118,17 +120,24 @@
           HAD_USE_REPLICATION=True
           MASTER_HAD_BACKOFF_CONSTANT=360
       notify:
-      - Reload HTCondor
+      - Restart HTCondor
     - name: Remove Central Manager HA configuration file
       when: central_manager_list | length == 1
       ansible.builtin.file:
         path: "{{ condor_config_root }}/config.d/{{ cm_ha_config_file }}"
         state: absent
       notify:
-      - Reload HTCondor
+      - Restart HTCondor
   - name: Configure HTCondor SchedD
     when: htcondor_role == 'get_htcondor_submit'
     block:
+    - name: Setup Spool directory
+      ansible.builtin.file:
+        path: "{{ spool_dir }}"
+        state: directory
+        owner: condor
+        group: condor
+        mode: 0755
     - name: Create SchedD configuration file
       ansible.builtin.copy:
         dest: "{{ condor_config_root }}/config.d/{{ schedd_config_file }}"
@@ -156,13 +165,6 @@
     - name: Enable SchedD high availability
       when: job_queue_ha | bool
       block:
-      - name: Setup HA Spool directory
-        ansible.builtin.file:
-          path: "{{ spool_dir }}"
-          state: directory
-          owner: condor
-          group: condor
-          mode: 0700
       - name: Set SchedD HA configuration (requires restart)
         ansible.builtin.copy:
           dest: "{{ condor_config_root }}/config.d/{{ schedd_ha_config_file }}"
@@ -192,7 +194,7 @@
             [Unit]
             RequiresMountsFor={{ spool_dir }}
         notify:
-        - Restart HTCondor
+        - Reload HTCondor SystemD unit
     - name: Disable SchedD high availability
       when: not job_queue_ha | bool
       block:
@@ -206,6 +208,8 @@
         ansible.builtin.file:
           path: /etc/systemd/system/condor.service.d/mount-spool.conf
           state: absent
+        notify:
+        - Reload HTCondor SystemD unit
   - name: Configure HTCondor StartD
     when: htcondor_role == 'get_htcondor_execute'
     block:
@@ -228,23 +232,26 @@
           -token condor@{{ trust_domain }}
       args:
         creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
-  - name: Start HTCondor
+  handlers:
+  - name: Reload HTCondor SystemD unit
     ansible.builtin.systemd:
+      daemon_reload: true
+  - name: Restart HTCondor
+    ansible.builtin.service:
+      name: condor
+      state: restarted
+  - name: Reload HTCondor
+    ansible.builtin.service:
+      name: condor
+      state: reloaded
+  post_tasks:
+  - name: Start HTCondor
+    ansible.builtin.service:
       name: condor
       state: started
       enabled: true
-      daemon_reload: true
   - name: Inform users
     changed_when: false
     ansible.builtin.shell: |
       set -e -o pipefail
       wall "******* HTCondor system configuration complete ********"
-  handlers:
-  - name: Reload HTCondor
-    ansible.builtin.service:
-      name: condor
-      state: reloaded
-  - name: Restart HTCondor
-    ansible.builtin.service:
-      name: condor
-      state: restarted
