@@ -53,7 +53,7 @@ resource "google_filestore_instance" "filestore_instance" {
   labels = var.labels
 
   networks {
-    network      = var.network_name
+    network      = var.network_id
     connect_mode = var.connect_mode
     modes        = ["MODE_IPV4"]
   }
