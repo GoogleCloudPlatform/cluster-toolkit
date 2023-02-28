@@ -361,16 +361,6 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 	return newDeploymentConfig, nil
 }
 
-func deprecatedSchema070a() {
-	os.Stderr.WriteString("*****************************************************************************************\n\n")
-	os.Stderr.WriteString("Our schemas have recently changed. Key changes:\n")
-	os.Stderr.WriteString("  'resource_groups'       becomes 'deployment_groups'\n")
-	os.Stderr.WriteString("  'resources'             becomes 'modules'\n")
-	os.Stderr.WriteString("  'source: resources/...' becomes 'source: modules/...'\n")
-	os.Stderr.WriteString("https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/examples#blueprint-schema\n")
-	os.Stderr.WriteString("*****************************************************************************************\n\n")
-}
-
 // ImportBlueprint imports the blueprint configuration provided.
 func importBlueprint(blueprintFilename string) (Blueprint, error) {
 	var blueprint Blueprint
@@ -384,10 +374,7 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 	decoder := yaml.NewDecoder(reader)
 	decoder.KnownFields(true)
 
-	err = decoder.Decode(&blueprint)
-
-	if err != nil {
-		deprecatedSchema070a()
+	if err = decoder.Decode(&blueprint); err != nil {
 		return blueprint, fmt.Errorf(errorMessages["yamlUnmarshalError"],
 			blueprintFilename, err)
 	}
