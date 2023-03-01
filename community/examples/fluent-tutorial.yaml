@@ -112,7 +112,7 @@ deployment_groups:
     kind: terraform
     id: homefs
     settings:
-      network_name: "default"
+      network_id: "default"
       size_gb: 1024
       filestore_tier: "BASIC_HDD"
       local_mount: /home
@@ -121,7 +121,7 @@ deployment_groups:
     kind: terraform
     id: sharefs
     settings:
-      network_name: "default"
+      network_id: "default"
       size_gb: 1024
       filestore_tier: "BASIC_HDD"
       local_mount: /shared
