@@ -40,6 +40,14 @@ locals {
       destination = "/usr/local/ghpc/configure-chrome-desktop.yml"
     }
   ]
+
+  disable_sleep = [
+    {
+      type        = "ansible-local"
+      content     = file("${path.module}/scripts/disable-sleep.yml")
+      destination = "/usr/local/ghpc/disable-sleep.yml"
+    }
+  ]
 }
 
 module "client_startup_script" {
@@ -51,7 +59,10 @@ module "client_startup_script" {
   labels          = var.labels
 
   runners = flatten([
-    local.user_startup_script_runners, local.configure_nvidia_driver_runners, local.configure_chrome_remote_desktop_runners
+    local.user_startup_script_runners,
+    local.configure_nvidia_driver_runners,
+    local.configure_chrome_remote_desktop_runners,
+    local.disable_sleep
   ])
 }
 
