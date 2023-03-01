@@ -23,7 +23,9 @@ vars:
   new_image_family: my-slurm-image
   network_name: image-builder
   subnetwork_name: image-builder-us-central1
-  disk_size: 100
+  # You can find size of source image by using following command
+  # gcloud compute images describe-from-family schedmd-v5-slurm-22-05-8-centos-7 --project schedmd-slurm-public
+  disk_size: 32
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

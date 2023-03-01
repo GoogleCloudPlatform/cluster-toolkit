@@ -472,8 +472,8 @@ For this example the following is needed in the selected region:
 
 * Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~200 GB static + 100
-  GB/node** up to 2200 GB
+* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
+  GB/node** up to 704 GB
 * Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
 * Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
   in `compute` partition up to 1,204
