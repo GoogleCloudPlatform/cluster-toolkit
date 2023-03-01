@@ -5,9 +5,9 @@ This module creates a login node for a Slurm cluster based on the
 terraform modules. The login node is used in conjunction with the
 [Slurm controller](../schedmd-slurm-gcp-v5-controller/README.md).
 
-[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
-[slurm\_login\_instance]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_login_instance
-[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.5.0
+[slurm\_login\_instance]: https://github.com/SchedMD/slurm-gcp/tree/v5.5.0/terraform/slurm_cluster/modules/slurm_login_instance
+[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/v5.5.0/terraform/slurm_cluster/modules/slurm_instance_template
 
 ### Example
 
@@ -51,8 +51,8 @@ The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
 
-[slurm-on-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2
-[slurm-gcp-readme]: https://github.com/SchedMD/slurm-gcp/tree/v5.0.2#slurm-on-google-cloud-platform
+[slurm-on-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5.5.0
+[slurm-gcp-readme]: https://github.com/SchedMD/slurm-gcp/tree/v5.5.0#slurm-on-google-cloud-platform
 
 ## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
