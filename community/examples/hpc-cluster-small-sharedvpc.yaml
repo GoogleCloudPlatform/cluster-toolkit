@@ -54,6 +54,7 @@ deployment_groups:
     settings:
       local_mount: /home
       connect_mode: PRIVATE_SERVICE_ACCESS
+      network_name: $(network1.network_id)
 
   # This debug_partition will work out of the box without requesting additional GCP quota.
   - id: debug_partition

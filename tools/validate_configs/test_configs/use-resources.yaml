@@ -36,7 +36,7 @@ deployment_groups:
     use: [network1]
     settings:
       local_mount: /home
-      network_id: $(network1.network_id)
+      network_name: $(network1.network_name)
 
 
   - id: projectsfs

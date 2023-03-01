@@ -34,13 +34,8 @@ variable "region" {
   type        = string
 }
 
-variable "network_id" {
-  description = <<-EOT
-    The name of the GCE VPC network to which the instance is connected. 
-    If using shared VPC, full network id must be given with format:
-    `projects/<project_id>/global/networks/<network_name>`"
-    Plain network name is accepted for non-shared VPC case.
-    EOT
+variable "network_name" {
+  description = "The name of the GCE VPC network to which the instance is connected."
   type        = string
 }
 
