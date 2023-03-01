@@ -152,6 +152,8 @@
             CloudVMType CloudZone CloudInterruptible
           SYSTEM_JOB_MACHINE_ATTRS_HISTORY_LENGTH=10
           SPOOL={{ spool_dir }}
+          use feature:ScheddCronOneShot(cloud, $(LIBEXEC)/common-cloud-attributes-google.py)
+          SCHEDD_CRON_cloud_PREFIX=Cloud
       notify:
       - Reload HTCondor
     - name: Create IDTOKEN to advertise access point
