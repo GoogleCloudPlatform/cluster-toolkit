@@ -79,4 +79,7 @@ output "network_storage" {
     client_install_runner = local.client_install_runner
     mount_runner          = local.mount_runner
   }
+  depends_on = [
+    module.ddn_exascaler
+  ]
 }
