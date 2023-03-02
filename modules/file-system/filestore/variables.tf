@@ -36,12 +36,14 @@ variable "region" {
 
 variable "network_id" {
   description = <<-EOT
-    The name of the GCE VPC network to which the instance is connected. 
-    If using shared VPC, full network id must be given with format:
+    The ID of the GCE VPC network to which the instance is connected given in the format:
     `projects/<project_id>/global/networks/<network_name>`"
-    Plain network name is accepted for non-shared VPC case.
     EOT
   type        = string
+  validation {
+    condition     = length(split("/", var.network_id)) == 5
+    error_message = "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
+  }
 }
 
 variable "name" {
