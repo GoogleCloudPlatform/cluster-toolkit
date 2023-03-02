@@ -154,6 +154,23 @@
           SPOOL={{ spool_dir }}
           use feature:ScheddCronOneShot(cloud, $(LIBEXEC)/common-cloud-attributes-google.py)
           SCHEDD_CRON_cloud_PREFIX=Cloud
+          # the sequence of job transforms and submit requirements below set
+          # a default job attribute RequireSpot to False but allow the user to
+          # specify *only* a boolean value with +RequireSpot = True in their job
+          # submit file; the requirements of the job are transformed to filter
+          # on +RequireSpot unless job has explicit CloudInterruptible requirements
+          JOB_TRANSFORM_NAMES = SPOT_DEFAULT, SPOT_REQS
+          JOB_TRANSFORM_SPOT_DEFAULT @=end
+             DEFAULT RequireSpot False
+          @end
+          # Unless explicit, set CloudInterruptible requirements to job RequireSpot attribute
+          JOB_TRANSFORM_SPOT_REQS @=end
+             REQUIREMENTS ! unresolved(Requirements, "^CloudInterruptible$")
+             SET Requirements $(MY.Requirements) && (CloudInterruptible is My.RequireSpot)
+          @end
+          SUBMIT_REQUIREMENT_NAMES = REQSPOT
+          SUBMIT_REQUIREMENT_REQSPOT = isBoolean(RequireSpot)
+          SUBMIT_REQUIREMENT_REQSPOT_REASON = "Jobs must set +RequireSpot to either True or False"
       notify:
       - Reload HTCondor
     - name: Create IDTOKEN to advertise access point
