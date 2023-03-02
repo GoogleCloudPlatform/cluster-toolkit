@@ -23,8 +23,6 @@ vars:
   new_image_family: my-slurm-image
   network_name: image-builder
   subnetwork_name: image-builder-us-central1
-  # You can find size of source image by using following command
-  # gcloud compute images describe-from-family schedmd-v5-slurm-22-05-8-centos-7 --project schedmd-slurm-public
   disk_size: 32
 
 # Documentation for each of the modules used below can be found at
@@ -56,6 +54,9 @@ deployment_groups:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
       source_image_family: schedmd-v5-slurm-22-05-6-hpc-centos-7
+      # You can find size of source image by using following command
+      # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
+      disk_size: $(vars.disk_size)
       image_family: $(vars.new_image_family)
       state_timeout: 15m
 
@@ -96,7 +97,6 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use: [cluster-network, slurm_controller]
     settings:
-      machine_type: n2-standard-4
       disable_login_public_ips: false
       disk_size_gb: $(vars.disk_size)
       instance_image:
