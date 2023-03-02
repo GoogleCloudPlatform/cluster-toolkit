@@ -224,6 +224,7 @@
           use feature:CommonCloudAttributesGoogle("-c created-by")
           TRUST_UID_DOMAIN=True
           STARTER_ALLOW_RUNAS_OWNER=True
+          RUNBENCHMARKS=False
       notify:
       - Reload HTCondor
     - name: Create IDTOKEN to advertise execute point
