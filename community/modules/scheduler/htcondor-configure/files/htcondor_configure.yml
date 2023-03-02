@@ -159,8 +159,11 @@
     - name: Create IDTOKEN to advertise access point
       ansible.builtin.shell: |
         umask 0077
+        # DAEMON authorization can likely be removed in future when scopes
+        # needed to trigger a negotiation cycle are changed. Suggest review
+        # https://opensciencegrid.atlassian.net/jira/software/c/projects/HTCONDOR/issues/?filter=allissues
         condor_token_create -authz READ -authz ADVERTISE_MASTER \
-          -authz ADVERTISE_SCHEDD -identity condor@{{ trust_domain }} \
+          -authz ADVERTISE_SCHEDD -authz DAEMON -identity condor@{{ trust_domain }} \
           -token condor@{{ trust_domain }}
       args:
         creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
