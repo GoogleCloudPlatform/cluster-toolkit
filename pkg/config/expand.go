@@ -911,13 +911,16 @@ func (dc *DeploymentConfig) expandVariables() error {
 	}
 
 	for iGrp, grp := range dc.Config.DeploymentGroups {
-		grpCtx := varContext{blueprint: dc.Config, groupIndex: iGrp}
-
 		for iMod, mod := range grp.Modules {
-			modCtx := grpCtx
-			modCtx.modIndex = iMod
-
-			err := updateVariables(modCtx, mod.Settings, dc.ModuleToGroup)
+			context := varContext{
+				groupIndex: iGrp,
+				modIndex:   iMod,
+				blueprint:  dc.Config,
+			}
+			err := updateVariables(
+				context,
+				mod.Settings,
+				dc.ModuleToGroup)
 			if err != nil {
 				return err
 			}
