@@ -27,10 +27,12 @@ vars:
 deployment_groups:
 - group: storage
   modules:
-  # the pre-existing-vpc is not needed here, since filestore will use the
-  # network-name from deployment vars
+  - id: network0
+    source: modules/network/pre-existing-vpc
+
   - id: homefs-filestore
     source: modules/file-system/filestore
+    use: [network0]
 
 - group: compute
   modules:

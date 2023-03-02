@@ -34,9 +34,16 @@ variable "region" {
   type        = string
 }
 
-variable "network_name" {
-  description = "The name of the GCE VPC network to which the instance is connected."
+variable "network_id" {
+  description = <<-EOT
+    The ID of the GCE VPC network to which the instance is connected given in the format:
+    `projects/<project_id>/global/networks/<network_name>`"
+    EOT
   type        = string
+  validation {
+    condition     = length(split("/", var.network_id)) == 5
+    error_message = "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
+  }
 }
 
 variable "name" {

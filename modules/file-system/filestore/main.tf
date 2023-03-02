@@ -36,6 +36,12 @@ locals {
     "args"        = "\"${local.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
     "destination" = "mount${replace(var.local_mount, "/", "_")}.sh"
   }
+
+  # id format: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_network#id
+  split_network_id = split("/", var.network_id)
+  network_name     = local.split_network_id[4]
+  network_project  = local.split_network_id[1]
+  shared_vpc       = local.network_project != var.project_id
 }
 
 resource "google_filestore_instance" "filestore_instance" {
@@ -53,7 +59,7 @@ resource "google_filestore_instance" "filestore_instance" {
   labels = var.labels
 
   networks {
-    network      = var.network_name
+    network      = local.shared_vpc ? var.network_id : local.network_name
     connect_mode = var.connect_mode
     modes        = ["MODE_IPV4"]
   }
