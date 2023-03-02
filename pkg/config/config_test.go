@@ -1049,3 +1049,83 @@ func (s *MySuite) TestValidatorConfigCheck(c *C) {
 		c.Check(err, ErrorMatches, "only 3 inputs \\[in0 in1 in2\\] should be provided to test_project_exists")
 	}
 }
+
+func (s *MySuite) TestCheckBackends(c *C) {
+	// Helper to create blueprient with backend blocks only (first one is defaults)
+	// and run checkBackends.
+	check := func(d TerraformBackend, gb ...TerraformBackend) error {
+		gs := []DeploymentGroup{}
+		for _, b := range gb {
+			gs = append(gs, DeploymentGroup{TerraformBackend: b})
+		}
+		bp := Blueprint{
+			TerraformBackendDefaults: d,
+			DeploymentGroups:         gs,
+		}
+		return checkBackends(bp)
+	}
+	dummy := TerraformBackend{}
+
+	{ // Absent
+		c.Check(checkBackends(Blueprint{}), IsNil)
+	}
+
+	{ // Dummies
+		c.Check(check(dummy, dummy, dummy), IsNil)
+	}
+
+	{ // OK
+		b := TerraformBackend{
+			Type: "gcs",
+			Configuration: map[string]interface{}{
+				"bucket":                      "trenta",
+				"impersonate_service_account": "who",
+			},
+		}
+		c.Check(check(b), IsNil)
+	}
+
+	{ // Variable in defaults type
+		b := TerraformBackend{Type: "$(vartype)"}
+		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
+	}
+
+	{ // Variable in group backend type
+		b := TerraformBackend{Type: "$(vartype)"}
+		c.Check(check(dummy, b), ErrorMatches, ".*type.*vartype.*")
+	}
+
+	{ // Deployment variable in defaults type
+		b := TerraformBackend{Type: "$(vars.type)"}
+		c.Check(check(b), ErrorMatches, ".*type.*vars\\.type.*")
+	}
+
+	{ // Not a variable
+		b := TerraformBackend{Type: "\\$(vartype)"}
+		c.Check(check(b), IsNil)
+	}
+
+	{ // Mid-string variable in defaults type
+		b := TerraformBackend{Type: "hugs_$(vartype)_hugs"}
+		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
+	}
+
+	{ // Variable in defaults configuration
+		b := TerraformBackend{
+			Type:          "gcs",
+			Configuration: map[string]interface{}{"bucket": "$(trenta)"},
+		}
+		c.Check(check(b), ErrorMatches, ".*bucket.*trenta.*")
+	}
+
+	{ // OK with nested configuration
+		b := TerraformBackend{
+			Type: "gcs",
+			Configuration: map[string]interface{}{
+				"bucket":  "trenta",
+				"complex": map[string]string{"alpha": "a", "beta": "b"},
+			},
+		}
+		c.Check(check(b), IsNil)
+	}
+}
