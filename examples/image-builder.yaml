@@ -23,6 +23,7 @@ vars:
   new_image_family: my-slurm-image
   network_name: image-builder
   subnetwork_name: image-builder-us-central1
+  disk_size: 32
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -32,6 +33,7 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
+
   - id: scripts_for_image
     source: modules/scripts/startup-script
     settings:
@@ -49,36 +51,54 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     settings:
-      disk_size: 20
       source_image_project_id: [schedmd-slurm-public]
-      source_image_family: schedmd-slurm-21-08-8-hpc-centos-7
+      # see latest in https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
+      source_image_family: schedmd-v5-slurm-22-05-6-hpc-centos-7
+      # You can find size of source image by using following command
+      # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
+      disk_size: $(vars.disk_size)
       image_family: $(vars.new_image_family)
+      state_timeout: 15m
 
 - group: cluster
   modules:
   - id: cluster-network
     source: modules/network/pre-existing-vpc
+
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 20
+      disk_size_gb: $(vars.disk_size)
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+
   - id: compute_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use: [cluster-network]
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - cluster-network
+    - compute_node_group
     settings:
       partition_name: compute
-      max_node_count: 20
-      instance_image:
-        family: $(vars.new_image_family)
-        project: $(vars.project_id)
+      is_default: true
+
   - id: slurm_controller
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use: [cluster-network, compute_partition]
     settings:
-      login_node_count: 1
+      disable_controller_public_ips: false
+      disk_size_gb: $(vars.disk_size)
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
+
   - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use: [cluster-network, slurm_controller]
     settings:
+      disable_login_public_ips: false
+      disk_size_gb: $(vars.disk_size)
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
