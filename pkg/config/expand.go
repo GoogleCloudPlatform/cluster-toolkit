@@ -78,7 +78,9 @@ func (dc *DeploymentConfig) expand() {
 			"failed to apply deployment variables in modules when expanding the config: %v",
 			err)
 	}
-	dc.expandVariables()
+	if err := dc.expandVariables(); err != nil {
+		log.Fatalf("failed to expand variables: %v", err)
+	}
 }
 
 func (dc *DeploymentConfig) addSettingsToModules() {
@@ -899,11 +901,12 @@ func updateVariables(
 
 // expandVariables recurses through the data structures in the yaml config and
 // expands all variables
-func (dc *DeploymentConfig) expandVariables() {
+func (dc *DeploymentConfig) expandVariables() error {
 	for _, validator := range dc.Config.Validators {
 		err := updateVariables(varContext{blueprint: dc.Config}, validator.Inputs, make(map[string]int))
 		if err != nil {
-			log.Fatalf("expandVariables: %v", err)
+			return err
+
 		}
 	}
 
@@ -919,7 +922,7 @@ func (dc *DeploymentConfig) expandVariables() {
 				mod.Settings,
 				dc.ModuleToGroup)
 			if err != nil {
-				log.Fatalf("expandVariables: %v", err)
+				return err
 			}
 
 			// ensure that variable references to projects in required APIs are expanded
@@ -927,7 +930,7 @@ func (dc *DeploymentConfig) expandVariables() {
 				if isDeploymentVariable(projectID) {
 					s, err := handleVariable(projectID, varContext{blueprint: dc.Config}, make(map[string]int))
 					if err != nil {
-						log.Fatalf("expandVariables: %v", err)
+						return err
 					}
 					mod.RequiredApis[s.(string)] = slices.Clone(requiredAPIs)
 					delete(mod.RequiredApis, projectID)
@@ -935,6 +938,7 @@ func (dc *DeploymentConfig) expandVariables() {
 			}
 		}
 	}
+	return nil
 }
 
 // this function adds default validators to the blueprint if none have been
