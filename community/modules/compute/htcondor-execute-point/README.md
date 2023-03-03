@@ -12,9 +12,56 @@ modules.
 [htcondor-install]: ../../scripts/htcondor-install/README.md
 [htcondor-configure]: ../../scheduler/htcondor-configure/README.md
 
+### Known limitations
+
+This module may be used exactly 1 or 2 times in a blueprint to create sets of
+execute points in an HTCondor pool. If using 1 set, it may use either Spot or
+On-demand pricing. If using 2 sets, one must use Spot and the other must
+use On-demand pricing. If you do not follow this constraint, you will likely
+receive an error while running `terraform apply` similar to that shown below.
+Future development is planned to support more than 2 sets of VM configurations,
+including all pricing options.
+
+```text
+│     │ var.runners is list of map of string with 7 elements
+│
+│ All startup-script runners must have a unique destination.
+│
+│ This was checked by the validation rule at modules/startup-script/variables.tf:72,3-13.
+```
+
+### How to run HTCondor jobs on Spot VMs
+
+HTCondor access points provisioned by the Toolkit are specially configured to
+add an attribute named `RequireSpot` to each [Job ClassAd][jobad]. When this
+value is true, a job's `requirements` are automatically updated to require
+that it run on a Spot VM. When this value is false, the `requirements` are
+similarly updated to run only on On-Demand VMs. The default value of this
+attribute is false. A job submit file may override this value as shown below.
+
+```text
+universe       = vanilla
+executable     = /bin/echo
+arguments      = "Hello, World!"
+output         = out.\$(ClusterId).\$(ProcId)
+error          = err.\$(ClusterId).\$(ProcId)
+log            = log.\$(ClusterId).\$(ProcId)
+request_cpus   = 1
+request_memory = 100MB
++RequireSpot   = true
+queue
+```
+
+[jobad]: https://htcondor.readthedocs.io/en/latest/users-manual/matchmaking-with-classads.html
+
 ### Example
 
-The following code snippet creates a pool of HTCondor execute points using
+A full example can be found in the [examples README][htc-example].
+
+[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
+
+The following code snippet creates a pool with 2 sets of HTCondor execute
+points, one using On-demand pricing and the other using Spot pricing. They use
 a startup script and network created in previous steps.
 
 ```yaml
@@ -28,11 +75,42 @@ a startup script and network created in previous steps.
       email: $(htcondor_configure.execute_point_service_account)
       scopes:
       - cloud-platform
+
+- id: htcondor_execute_point_spot
+  source: community/modules/compute/htcondor-execute-point
+  use:
+  - network1
+  - htcondor_configure_execute_point
+  settings:
+    service_account:
+      email: $(htcondor_configure.execute_point_service_account)
+      scopes:
+      - cloud-platform
+
+  - id: htcondor_startup_access_point
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(htcondor_install.install_htcondor_runner)
+      - $(htcondor_install.install_autoscaler_deps_runner)
+      - $(htcondor_install.install_autoscaler_runner)
+      - $(htcondor_configure.access_point_runner)
+      - $(htcondor_execute_point.configure_autoscaler_runner)
+      - $(htcondor_execute_point_spot.configure_autoscaler_runner)
+
+  - id: htcondor_access
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - htcondor_startup_access_point
+    settings:
+      name_prefix: access-point
+      machine_type: c2-standard-4
+      service_account:
+        email: $(htcondor_configure.access_point_service_account)
+        scopes:
+        - cloud-platform
 ```
-
-A full example can be found in the [examples README][htc-example].
-
-[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
 
 ## Support
 

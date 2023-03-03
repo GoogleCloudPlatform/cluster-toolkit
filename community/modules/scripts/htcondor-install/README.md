@@ -28,14 +28,14 @@ install the HTCondor software and adds custom configurations using
 - id: htcondor_install
   source: community/modules/scripts/htcondor-install
 
-- id: htcondor_configure_central_manager
+- id: htcondor_startup_central_manager
   source: modules/scripts/startup-script
   settings:
     runners:
     - $(htcondor_install.install_htcondor_runner)
     - $(htcondor_configure.central_manager_runner)
 
-- id: htcondor_configure_access_point
+- id: htcondor_startup_access_point
   source: modules/scripts/startup-script
   settings:
     runners:

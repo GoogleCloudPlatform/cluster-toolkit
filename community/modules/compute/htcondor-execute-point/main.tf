@@ -29,17 +29,18 @@ locals {
   configure_autoscaler_role = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure_autoscaler.yml")
-    "destination" = "htcondor_configure_autoscaler.yml"
+    "destination" = "htcondor_configure_autoscaler_${module.mig.instance_group_manager.name}.yml"
     "args"        = "-e project_id=${var.project_id} -e region=${var.region} -e zone=${var.zone} -e mig_id=${module.mig.instance_group_manager.name} -e max_size=${var.max_size}"
   }
 
+  hostnames = var.spot ? "${var.deployment_name}-spot-xp" : "${var.deployment_name}-xp"
 }
 
 module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "~> 8.0"
 
-  name_prefix     = "${var.deployment_name}-xp"
+  name_prefix     = local.hostnames
   project_id      = var.project_id
   network         = var.network_self_link
   subnetwork      = var.subnetwork_self_link
@@ -60,10 +61,10 @@ module "mig" {
   project_id        = var.project_id
   region            = var.region
   target_size       = var.target_size
-  hostname          = "${var.deployment_name}-x"
+  hostname          = local.hostnames
   instance_template = module.execute_point_instance_template.self_link
 
-  health_check_name = "active-htcondor-service-${var.deployment_name}"
+  health_check_name = "health-htcondor-${local.hostnames}"
   health_check = {
     type                = "tcp"
     initial_delay_sec   = 600

@@ -159,11 +159,12 @@ condor_submit helloworld.sub
 The job "submit file" will resemble:
 
 ```text
-universe       = docker
-docker_image   = hello-world
-output         = out.$(Cluster)-$(Process)
-error          = err.$(Cluster)-$(Process)
-log            = log.$(Cluster)-$(Process)
+universe       = vanilla
+executable     = /bin/echo
+arguments      = "Hello, World!"
+output         = out.\$(ClusterId).\$(ProcId)
+error          = err.\$(ClusterId).\$(ProcId)
+log            = log.\$(ClusterId).\$(ProcId)
 request_cpus   = 1
 request_memory = 100MB
 queue
@@ -194,12 +195,10 @@ ID: 1     1    -     -      1   1.0
 Once the pool autoscales (approx. 5 minutes), observe the output of your job:
 
 ```bash
-cat out
+cat out.1.0
 ```
 
-You should see the output of the Docker [Hello, World][helloworld] image.
-
-[helloworld]: https://hub.docker.com/_/hello-world
+You should see the output of your `echo` command: "Hello, World!"
 
 ## Destroy the Cluster
 
