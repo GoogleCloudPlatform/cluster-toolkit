@@ -194,7 +194,20 @@
 
     ## Always cleanup, even on failure
     always:
-    - name: Recover Resume Logs
+    - name: Recover Setup Log
+      become: true
+      become_user: slurm
+      changed_when: false
+      failed_when: false
+      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      ansible.builtin.command: cat /slurm/scripts/setup.log
+      register: setup_output
+    - name: Print Slurm setup.log
+      ansible.builtin.debug:
+        var: setup_output.stdout_lines
+    - name: Recover Resume Log
+      become: true
+      become_user: slurm
       changed_when: false
       failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
@@ -203,7 +216,9 @@
     - name: Print Slurm resume.log
       ansible.builtin.debug:
         var: resume_output.stdout_lines
-    - name: Recover Suspend Logs
+    - name: Recover Suspend Log
+      become: true
+      become_user: slurm
       changed_when: false
       failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
