@@ -29,6 +29,30 @@ Future development is planned to support more heterogeneity within a pool.
 │ This was checked by the validation rule at modules/startup-script/variables.tf:72,3-13.
 ```
 
+### How to run HTCondor jobs on Spot VMs
+
+HTCondor access points provisioned by the Toolkit are specially configured to
+add an attribute named `RequireSpot` to each [Job ClassAd][jobad]. When this
+value is true, a job's `requirements` are automatically updated to require
+that it run on a Spot VM. When this value is false, the `requirements` are
+similarly updated to run only on On-Demand VMs. The default value of this
+attribute is false. A job submit file may override this value as shown below.
+
+```text
+universe       = vanilla
+executable     = /bin/echo
+arguments      = "Hello, World!"
+output         = out.\$(ClusterId).\$(ProcId)
+error          = err.\$(ClusterId).\$(ProcId)
+log            = log.\$(ClusterId).\$(ProcId)
+request_cpus   = 1
+request_memory = 100MB
++RequireSpot   = true
+queue
+```
+
+[jobad]: https://htcondor.readthedocs.io/en/latest/users-manual/matchmaking-with-classads.html
+
 ### Example
 
 A full example can be found in the [examples README][htc-example].

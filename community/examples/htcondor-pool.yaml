@@ -131,6 +131,7 @@ deployment_groups:
           log            = log.\$(ClusterId).\$(ProcId)
           request_cpus   = 1
           request_memory = 100MB
+          +RequireSpot   = true # if unset, defaults to false
           queue
 
   - id: htcondor_access
