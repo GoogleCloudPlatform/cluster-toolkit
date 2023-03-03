@@ -113,6 +113,7 @@ No resources.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HTCondor execute points will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region in which HTCondor execute points will be created | `string` | n/a | yes |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to HTCondor execute points | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/cloud-platform"<br>  ]<br>}</pre> | no |
+| <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script to run at boot-time for HTCondor execute points | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork HTCondor execute points will join | `string` | `null` | no |
 | <a name="input_target_size"></a> [target\_size](#input\_target\_size) | Initial size of the HTCondor execute point pool; set to null (default) to avoid Terraform management of size. | `number` | `null` | no |

@@ -132,3 +132,9 @@ variable "enable_oslogin" {
     error_message = "Allowed string values for var.enable_oslogin are \"ENABLE\", \"DISABLE\", or \"INHERIT\"."
   }
 }
+
+variable "spot" {
+  description = "Provision VMs using discounted Spot pricing, allowing for preemption"
+  type        = bool
+  default     = false
+}

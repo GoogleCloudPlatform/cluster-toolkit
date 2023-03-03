@@ -140,12 +140,12 @@ class AutoScaler:
             pprint(responseInstanceTemplateInfo["properties"])
 
         machine_type = responseInstanceTemplateInfo["properties"]["machineType"]
-        is_preemtible = responseInstanceTemplateInfo["properties"]["scheduling"][
+        is_spot = responseInstanceTemplateInfo["properties"]["scheduling"][
             "preemptible"
         ]
         if self.debug > 0:
             print("Machine Type: " + machine_type)
-            print("Is preemtible: " + str(is_preemtible))
+            print("Is spot: " + str(is_spot))
         request = self.service.machineTypes().get(
             project=self.project, zone=self.zone, machineType=machine_type
         )
@@ -159,7 +159,7 @@ class AutoScaler:
 
         instanceTemplateInfo = {
             "machine_type": machine_type,
-            "is_preemtible": is_preemtible,
+            "is_spot": is_spot,
             "guest_cpus": guest_cpus,
         }
         return instanceTemplateInfo
