@@ -43,7 +43,7 @@ deployment_groups:
     use:
     - network1
 
-  - id: htcondor_configure_central_manager
+  - id: htcondor_startup_central_manager
     source: modules/scripts/startup-script
     settings:
       runners:
@@ -54,7 +54,7 @@ deployment_groups:
     source: modules/compute/vm-instance
     use:
     - network1
-    - htcondor_configure_central_manager
+    - htcondor_startup_central_manager
     settings:
       name_prefix: central-manager
       machine_type: c2-standard-4
@@ -77,25 +77,40 @@ deployment_groups:
     outputs:
     - internal_ip
 
-  - id: htcondor_configure_execute_point
+  - id: htcondor_startup_execute_point
     source: modules/scripts/startup-script
     settings:
       runners:
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.execute_point_runner)
 
+  # the HTCondor modules support up to 2 execute points per blueprint
+  # if using 1, it may use Spot or On-demand pricing
+  # if using 2, one must use Spot and the other must use On-demand (default)
   - id: htcondor_execute_point
     source: community/modules/compute/htcondor-execute-point
     use:
     - network1
-    - htcondor_configure_execute_point
+    - htcondor_startup_execute_point
     settings:
       service_account:
         email: $(htcondor_configure.execute_point_service_account)
         scopes:
         - cloud-platform
 
-  - id: htcondor_configure_access_point
+  - id: htcondor_execute_point_spot
+    source: community/modules/compute/htcondor-execute-point
+    use:
+    - network1
+    - htcondor_startup_execute_point
+    settings:
+      spot: true
+      service_account:
+        email: $(htcondor_configure.execute_point_service_account)
+        scopes:
+        - cloud-platform
+
+  - id: htcondor_startup_access_point
     source: modules/scripts/startup-script
     settings:
       runners:
@@ -104,6 +119,7 @@ deployment_groups:
       - $(htcondor_install.install_autoscaler_runner)
       - $(htcondor_configure.access_point_runner)
       - $(htcondor_execute_point.configure_autoscaler_runner)
+      - $(htcondor_execute_point_spot.configure_autoscaler_runner)
       - type: data
         destination: /var/tmp/helloworld.sub
         content: |
@@ -120,7 +136,7 @@ deployment_groups:
     source: modules/compute/vm-instance
     use:
     - network1
-    - htcondor_configure_access_point
+    - htcondor_startup_access_point
     settings:
       name_prefix: access-point
       machine_type: c2-standard-4
