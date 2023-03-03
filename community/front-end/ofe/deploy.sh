@@ -451,7 +451,7 @@ deploy() {
 		sdir=${SCRIPT_DIR#"${basedir}"}
 		tdir=/tmp/hpc-toolkit
 
-		cp --recursive "${basedir}" ${tdir}/
+		cp -R "${basedir}" ${tdir}/
 		(
 			cd ${tdir}
 			#
@@ -465,9 +465,10 @@ deploy() {
 				--exclude=.terraform \
 				--exclude=.terraform.lock.hcl \
 				--exclude=tf \
-				../hpc-toolkit 2>/dev/null
+				--directory=/tmp \
+				./hpc-toolkit 2>/dev/null
 		)
-		rm --force --recursive ${tdir}
+		rm -rf ${tdir}
 	fi
 
 	# -- All Terraform operations to be done in tf subdir
