@@ -91,8 +91,8 @@
         dest: "{{ condor_config_root }}/config.d/{{ cm_config_file }}"
         mode: 0644
         content: |
-          COLLECTOR_UPDATE_INTERVAL=60
-          NEGOTIATOR_UPDATE_INTERVAL=60
+          COLLECTOR_UPDATE_INTERVAL=30
+          NEGOTIATOR_UPDATE_INTERVAL=30
       notify:
       - Reload HTCondor
     - name: Create Central Manager HA configuration file
@@ -225,6 +225,7 @@
         content: |
           use feature:PartitionableSlot
           use feature:CommonCloudAttributesGoogle("-c created-by")
+          UPDATE_INTERVAL=30
           TRUST_UID_DOMAIN=True
           STARTER_ALLOW_RUNAS_OWNER=True
           RUNBENCHMARKS=False
