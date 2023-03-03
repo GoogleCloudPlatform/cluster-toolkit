@@ -1051,7 +1051,7 @@ func (s *MySuite) TestValidatorConfigCheck(c *C) {
 }
 
 func (s *MySuite) TestCheckBackends(c *C) {
-	// Helper to create blueprient with backend blocks only (first one is defaults)
+	// Helper to create blueprint with backend blocks only (first one is defaults)
 	// and run checkBackends.
 	check := func(d TerraformBackend, gb ...TerraformBackend) error {
 		gs := []DeploymentGroup{}
@@ -1066,15 +1066,15 @@ func (s *MySuite) TestCheckBackends(c *C) {
 	}
 	dummy := TerraformBackend{}
 
-	{ // Absent
+	{ // OK. Absent
 		c.Check(checkBackends(Blueprint{}), IsNil)
 	}
 
-	{ // Dummies
+	{ // OK. Dummies
 		c.Check(check(dummy, dummy, dummy), IsNil)
 	}
 
-	{ // OK
+	{ // OK. No variables used
 		b := TerraformBackend{
 			Type: "gcs",
 			Configuration: map[string]interface{}{
@@ -1085,32 +1085,32 @@ func (s *MySuite) TestCheckBackends(c *C) {
 		c.Check(check(b), IsNil)
 	}
 
-	{ // Variable in defaults type
+	{ // FAIL. Variable in defaults type
 		b := TerraformBackend{Type: "$(vartype)"}
 		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
 	}
 
-	{ // Variable in group backend type
+	{ // FAIL. Variable in group backend type
 		b := TerraformBackend{Type: "$(vartype)"}
 		c.Check(check(dummy, b), ErrorMatches, ".*type.*vartype.*")
 	}
 
-	{ // Deployment variable in defaults type
+	{ // FAIL. Deployment variable in defaults type
 		b := TerraformBackend{Type: "$(vars.type)"}
 		c.Check(check(b), ErrorMatches, ".*type.*vars\\.type.*")
 	}
 
-	{ // Not a variable
+	{ // OK. Not a variable
 		b := TerraformBackend{Type: "\\$(vartype)"}
 		c.Check(check(b), IsNil)
 	}
 
-	{ // Mid-string variable in defaults type
+	{ // FAIL. Mid-string variable in defaults type
 		b := TerraformBackend{Type: "hugs_$(vartype)_hugs"}
 		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
 	}
 
-	{ // Variable in defaults configuration
+	{ // FAIL. Variable in defaults configuration
 		b := TerraformBackend{
 			Type:          "gcs",
 			Configuration: map[string]interface{}{"bucket": "$(trenta)"},
@@ -1118,7 +1118,7 @@ func (s *MySuite) TestCheckBackends(c *C) {
 		c.Check(check(b), ErrorMatches, ".*bucket.*trenta.*")
 	}
 
-	{ // OK with nested configuration
+	{ // OK. handles nested configuration
 		b := TerraformBackend{
 			Type: "gcs",
 			Configuration: map[string]interface{}{
