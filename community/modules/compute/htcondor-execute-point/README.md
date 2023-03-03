@@ -19,7 +19,8 @@ execute points in an HTCondor pool. If using 1 set, it may use either Spot or
 On-demand pricing. If using 2 sets, one must use Spot and the other must
 use On-demand pricing. If you do not follow this constraint, you will likely
 receive an error while running `terraform apply` similar to that shown below.
-Future development is planned to support more heterogeneity within a pool.
+Future development is planned to support more than 2 sets of VM configurations,
+including all pricing options.
 
 ```text
 │     │ var.runners is list of map of string with 7 elements
