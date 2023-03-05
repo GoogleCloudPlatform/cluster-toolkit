@@ -93,6 +93,7 @@
         content: |
           COLLECTOR_UPDATE_INTERVAL=30
           NEGOTIATOR_UPDATE_INTERVAL=30
+          NEGOTIATOR_DEPTH_FIRST=True
       notify:
       - Reload HTCondor
     - name: Create Central Manager HA configuration file
