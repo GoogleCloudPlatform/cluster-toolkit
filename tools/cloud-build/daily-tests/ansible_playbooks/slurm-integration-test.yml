@@ -196,7 +196,6 @@
     always:
     - name: Recover Setup Log
       become: true
-      become_user: slurm
       changed_when: false
       failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
@@ -207,7 +206,6 @@
         var: setup_output.stdout_lines
     - name: Recover Resume Log
       become: true
-      become_user: slurm
       changed_when: false
       failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
@@ -218,7 +216,6 @@
         var: resume_output.stdout_lines
     - name: Recover Suspend Log
       become: true
-      become_user: slurm
       changed_when: false
       failed_when: false
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
