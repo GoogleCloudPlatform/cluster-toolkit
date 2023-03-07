@@ -18,6 +18,7 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -49,7 +50,7 @@ HPC deployments on the Google Cloud Platform.`,
 				log.Fatalf("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.13.0",
+		Version:     "v1.14.0",
 		Annotations: annotation,
 	}
 )
@@ -90,22 +91,19 @@ func init() {}
 func checkGitHashMismatch() (mismatch bool, branch, hash, dir string) {
 	// binary does not contain build-time git info
 	if len(GitCommitHash) == 0 {
-		mismatch = false
-		return
+		return false, "", "", ""
 	}
 
 	// could not find hpcToolkitRepo
 	repo, dir, err := hpcToolkitRepo()
 	if err != nil {
-		mismatch = false
-		return
+		return false, "", "", ""
 	}
 
 	// failed to open git
 	head, err := repo.Head()
 	if err != nil {
-		mismatch = false
-		return
+		return false, "", "", ""
 	}
 
 	// found hpc-toolkit git repo and hash does not match
@@ -115,8 +113,7 @@ func checkGitHashMismatch() (mismatch bool, branch, hash, dir string) {
 		hash = head.Hash().String()
 		return
 	}
-	mismatch = false
-	return
+	return false, "", "", ""
 }
 
 // hpcToolkitRepo will find the path of the directory containing the hpc-toolkit
@@ -144,7 +141,7 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 			repo, err = git.PlainOpen(dir)
 
 			if err == nil && isHpcToolkitRepo(*repo) {
-				return
+				return repo, dir, nil
 			}
 		}
 	}
@@ -157,10 +154,13 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	dir = filepath.Dir(e)
 
 	repo, err = git.PlainOpen(dir)
-	if err == nil && isHpcToolkitRepo(*repo) {
-		return repo, dir, err
+	if err != nil {
+		return nil, "", err
 	}
-	return nil, "", err
+	if isHpcToolkitRepo(*repo) {
+		return repo, dir, nil
+	}
+	return nil, "", errors.New("ghpc executable found in a git repo other than the hpc-toolkit git repo")
 }
 
 // isHpcToolkitRepo will verify that the found git repository has a commit with

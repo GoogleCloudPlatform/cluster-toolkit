@@ -20,6 +20,7 @@ import (
 	"regexp"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	. "gopkg.in/check.v1"
 )
 
@@ -65,11 +66,41 @@ func (s *MySuite) TestExpandBackends(c *C) {
 }
 
 func (s *MySuite) TestGetModuleVarName(c *C) {
+	groupID := "groupID"
 	modID := "modID"
 	varName := "varName"
-	expected := fmt.Sprintf("$(%s.%s)", modID, varName)
-	got := getModuleVarName(modID, varName)
+	expected := fmt.Sprintf("$(%s.%s.%s)", groupID, modID, varName)
+	got := getModuleVarName(groupID, modID, varName)
 	c.Assert(got, Equals, expected)
+}
+
+// a simple function for comparing interfaces for use by TestAddListValue
+func equalInterfaces(v1 interface{}, v2 interface{}) bool {
+	return v1 == v2
+}
+
+func (s *MySuite) TestAddListValue(c *C) {
+	mod := Module{
+		ID:       "TestModule",
+		Settings: make(map[string]interface{}),
+	}
+
+	settingName := "newSetting"
+	nonListSettingName := "not-a-list"
+	firstValue := "value1"
+	secondValue := "value2"
+
+	err := mod.addListValue(settingName, firstValue)
+	c.Assert(err, IsNil)
+	c.Assert(slices.EqualFunc(mod.Settings[settingName].([]interface{}),
+		[]interface{}{firstValue}, equalInterfaces), Equals, true)
+	err = mod.addListValue(settingName, secondValue)
+	c.Assert(err, IsNil)
+	c.Assert(slices.EqualFunc(mod.Settings[settingName].([]interface{}),
+		[]interface{}{firstValue, secondValue}, equalInterfaces), Equals, true)
+	mod.Settings[nonListSettingName] = "string-value"
+	err = mod.addListValue(nonListSettingName, secondValue)
+	c.Assert(err, NotNil)
 }
 
 func (s *MySuite) TestUseModule(c *C) {
@@ -80,6 +111,8 @@ func (s *MySuite) TestUseModule(c *C) {
 		Source:   modSource,
 		Settings: make(map[string]interface{}),
 	}
+
+	usedModGroup := "group0"
 	usedModSource := "usedSource"
 	usedMod := Module{
 		ID:     "UsedModule",
@@ -89,8 +122,8 @@ func (s *MySuite) TestUseModule(c *C) {
 	usedInfo := modulereader.ModuleInfo{}
 
 	// Pass: No Inputs, No Outputs
-	modInputs := getModuleInputMap(modInfo.Inputs)
-	usedVars := useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	usedVars, err := useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, []string{})
+	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings), Equals, 0)
 
@@ -100,33 +133,35 @@ func (s *MySuite) TestUseModule(c *C) {
 		Type: "number",
 	}
 	usedInfo.Outputs = []modulereader.VarInfo{varInfoNumber}
-	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	usedVars, err = useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, []string{})
+	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings), Equals, 0)
 
 	// Pass: Single Input/Output match - no lists
 	modInfo.Inputs = []modulereader.VarInfo{varInfoNumber}
-	modInputs = getModuleInputMap(modInfo.Inputs)
-	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	usedVars, err = useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, []string{})
+	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 1)
 	c.Assert(len(mod.Settings), Equals, 1)
-	expectedSetting := getModuleVarName("UsedModule", "val1")
+	expectedSetting := getModuleVarName(usedModGroup, usedMod.ID, varInfoNumber.Name)
 	c.Assert(mod.Settings["val1"], Equals, expectedSetting)
 
 	// Pass: Single Input/Output match - but setting was in blueprint so no-op
 	modInfo.Inputs = []modulereader.VarInfo{varInfoNumber}
-	modInputs = getModuleInputMap(modInfo.Inputs)
 	mod.Settings = make(map[string]interface{})
 	mod.Settings["val1"] = expectedSetting
-	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, maps.Keys(mod.Settings))
+	usedVars, err = useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, maps.Keys(mod.Settings))
+	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings), Equals, 1)
-	expectedSetting = getModuleVarName("UsedModule", "val1")
+	expectedSetting = getModuleVarName(usedModGroup, "UsedModule", "val1")
 	c.Assert(mod.Settings["val1"], Equals, expectedSetting)
 
 	// Pass: re-apply used modules, should be a no-op
 	// Assume no settings were in blueprint
-	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	usedVars, err = useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, []string{})
+	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings), Equals, 1)
 	c.Assert(mod.Settings["val1"], Equals, expectedSetting)
@@ -137,16 +172,17 @@ func (s *MySuite) TestUseModule(c *C) {
 		Type: "list",
 	}
 	modInfo.Inputs = []modulereader.VarInfo{varInfoList}
-	modInputs = getModuleInputMap(modInfo.Inputs)
 	mod.Settings = make(map[string]interface{})
-	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	usedVars, err = useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, []string{})
+	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 1)
 	c.Assert(len(mod.Settings["val1"].([]interface{})), Equals, 1)
 	c.Assert(mod.Settings["val1"], DeepEquals, []interface{}{expectedSetting})
 
 	// Pass: Setting exists, Input is List, Output is not a list
 	// Assume setting was not set in blueprint
-	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, []string{})
+	usedVars, err = useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, []string{})
+	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 1)
 	c.Assert(len(mod.Settings["val1"].([]interface{})), Equals, 2)
 	c.Assert(
@@ -158,7 +194,8 @@ func (s *MySuite) TestUseModule(c *C) {
 	// Assume setting was set in blueprint
 	mod.Settings = make(map[string]interface{})
 	mod.Settings["val1"] = []interface{}{expectedSetting}
-	usedVars = useModule(&mod, usedMod, modInputs, usedInfo.Outputs, maps.Keys(mod.Settings))
+	usedVars, err = useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, maps.Keys(mod.Settings))
+	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 0)
 	c.Assert(len(mod.Settings["val1"].([]interface{})), Equals, 1)
 	c.Assert(
@@ -211,8 +248,31 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	modLen := len(dc.Config.DeploymentGroups[0].Modules)
 	dc.Config.DeploymentGroups[0].Modules[modLen-1].ID = "wrongID"
 	err = dc.applyUseModules()
-	c.Assert(err, ErrorMatches, "could not find module .* used by .* in group .*")
+	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s", errorMessages["invalidMod"], usedModuleID))
 
+	// test multigroup deployment with config that has a known good match
+	dc = getMultiGroupDeploymentConfig()
+	c.Assert(len(dc.Config.DeploymentGroups[1].Modules[0].Settings), Equals, 0)
+	err = dc.applyUseModules()
+	c.Assert(err, IsNil)
+	c.Assert(len(dc.Config.DeploymentGroups[1].Modules[0].Settings), Equals, 1)
+
+	// Deliberately break the match and see that no settings are added
+	dc = getMultiGroupDeploymentConfig()
+	c.Assert(len(dc.Config.DeploymentGroups[1].Modules[0].Settings), Equals, 0)
+	groupName0 := dc.Config.DeploymentGroups[0].Name
+	moduleSource0 := dc.Config.DeploymentGroups[0].Modules[0].Source
+	// this eliminates the matching output from the used module
+	dc.ModulesInfo[groupName0][moduleSource0] = modulereader.ModuleInfo{}
+	err = dc.applyUseModules()
+	c.Assert(err, IsNil)
+	c.Assert(len(dc.Config.DeploymentGroups[1].Modules[0].Settings), Equals, 0)
+
+	// Use Packer module from group 0 (fail despite matching output/input)
+	dc = getMultiGroupDeploymentConfig()
+	dc.Config.DeploymentGroups[0].Modules[0].Kind = "packer"
+	err = dc.applyUseModules()
+	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s", errorMessages["cannotUsePacker"], dc.Config.DeploymentGroups[0].Modules[0].ID))
 }
 
 func (s *MySuite) TestUpdateVariableType(c *C) {

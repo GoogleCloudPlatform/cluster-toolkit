@@ -250,6 +250,75 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	}
 }
 
+// create a simple multigroup deployment with a use keyword that matches
+// one module to another in an earlier group
+func getMultiGroupDeploymentConfig() DeploymentConfig {
+	testModuleSource0 := filepath.Join(tmpTestDir, "module0")
+	testModuleSource1 := filepath.Join(tmpTestDir, "module1")
+
+	matchingName := "test_match"
+
+	testModuleInfo0 := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{},
+		Outputs: []modulereader.VarInfo{
+			{
+				Name: matchingName,
+			},
+		},
+	}
+	testModuleInfo1 := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{
+				Name: matchingName,
+			},
+		},
+		Outputs: []modulereader.VarInfo{},
+	}
+
+	testDeploymentGroup0 := DeploymentGroup{
+		Name: "primary",
+		Modules: []Module{
+			{
+				ID:       "TestModule0",
+				Kind:     "terraform",
+				Source:   testModuleSource0,
+				Settings: map[string]interface{}{},
+				Outputs:  []string{matchingName},
+			},
+		},
+	}
+	testDeploymentGroup1 := DeploymentGroup{
+		Name: "secondary",
+		Modules: []Module{
+			{
+				ID:       "TestModule1",
+				Kind:     "terraform",
+				Source:   testModuleSource1,
+				Settings: map[string]interface{}{},
+				Use: []string{
+					fmt.Sprintf("%s.%s", testDeploymentGroup0.Name, testDeploymentGroup0.Modules[0].ID),
+				},
+			},
+		},
+	}
+
+	dc := DeploymentConfig{
+		Config: Blueprint{BlueprintName: "simple", Vars: map[string]interface{}{"deployment_name": "deployment_name"}, DeploymentGroups: []DeploymentGroup{testDeploymentGroup0, testDeploymentGroup1}},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
+			testDeploymentGroup0.Name: {
+				testModuleSource0: testModuleInfo0,
+			},
+			testDeploymentGroup1.Name: {
+				testModuleSource1: testModuleInfo1,
+			},
+		},
+	}
+
+	dc.addMetadataToModules()
+	dc.addDefaultValidators()
+	return dc
+}
+
 func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 	testModuleSource := filepath.Join(tmpTestDir, "module")
 	testDeploymentGroup := DeploymentGroup{
@@ -355,24 +424,25 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() works when nothing to do */
 	dc := getBasicDeploymentConfigWithTestModule()
-	expected := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
+	testMod, _ := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
+	expected := testMod.Kind
 	dc.addKindToModules()
-	got := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
+	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() works when kind is absent*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = "terraform"
 	dc.addKindToModules()
-	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1").Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
+	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() works when kind is empty*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = "terraform"
 	dc.addKindToModules()
-	got = dc.Config.DeploymentGroups[0].getModuleByID("TestModule2").Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
+	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() does nothing to packer types*/
 	moduleID := "packerModule"
@@ -380,8 +450,8 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
-	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID(moduleID)
+	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() does nothing to invalid types*/
 	moduleID = "funnyModule"
@@ -389,8 +459,8 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
-	got = dc.Config.DeploymentGroups[0].getModuleByID(moduleID).Kind
-	c.Assert(got, Equals, expected)
+	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID(moduleID)
+	c.Assert(testMod.Kind, Equals, expected)
 }
 
 func (s *MySuite) TestSetModulesInfo(c *C) {
@@ -408,19 +478,32 @@ func (s *MySuite) TestGetResouceByID(c *C) {
 
 	// No Modules
 	rg := DeploymentGroup{}
-	got := rg.getModuleByID(testID)
+	got, err := rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, Module{})
+	c.Assert(err, NotNil)
 
 	// No Match
 	rg.Modules = []Module{{ID: "NoMatch"}}
-	got = rg.getModuleByID(testID)
+	got, _ = rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, Module{})
+	c.Assert(err, NotNil)
 
 	// Match
 	expected := Module{ID: testID}
 	rg.Modules = []Module{expected}
-	got = rg.getModuleByID(testID)
+	got, err = rg.getModuleByID(testID)
 	c.Assert(got, DeepEquals, expected)
+	c.Assert(err, IsNil)
+
+	dc := getBasicDeploymentConfigWithTestModule()
+	groupID := dc.Config.DeploymentGroups[0].Name
+	group, err := dc.getGroupByID(groupID)
+	c.Assert(err, IsNil)
+	c.Assert(group, DeepEquals, dc.Config.DeploymentGroups[0])
+
+	badGroupID := "not-a-group"
+	_, err = dc.getGroupByID(badGroupID)
+	c.Assert(err, NotNil)
 }
 
 func (s *MySuite) TestHasKind(c *C) {
@@ -908,4 +991,61 @@ func (s *MySuite) TestCheckMovedModules(c *C) {
 	dc.Config.DeploymentGroups[0].Modules[0].Source = "./community/modules/scheduler/cloud-batch-job"
 	err = dc.checkMovedModules()
 	c.Assert(err, NotNil)
+}
+
+func (s *MySuite) TestValidatorConfigCheck(c *C) {
+	const vn = testProjectExistsName // some valid name
+
+	{ // FAIL: names mismatch
+		v := validatorConfig{
+			"who_is_this",
+			map[string]interface{}{},
+		}
+		err := v.check(vn, []string{})
+		c.Check(err, ErrorMatches, "passed wrong validator to test_project_exists implementation")
+	}
+
+	{ // OK: names match
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{},
+		}
+		c.Check(v.check(vn, []string{}), IsNil)
+	}
+
+	{ // OK: Inputs is equal to required inputs without regard to ordering
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{"in0": nil, "in1": nil},
+		}
+		c.Check(v.check(vn, []string{"in0", "in1"}), IsNil)
+		c.Check(v.check(vn, []string{"in1", "in0"}), IsNil)
+	}
+
+	{ // FAIL: inputs are a proper subset of required inputs
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{"in0": nil, "in1": nil},
+		}
+		err := v.check(vn, []string{"in0", "in1", "in2"})
+		c.Check(err, ErrorMatches, missingRequiredInputRegex)
+	}
+
+	{ // FAIL: inputs intersect with required inputs but are not a proper subset
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{"in0": nil, "in1": nil, "in3": nil},
+		}
+		err := v.check(vn, []string{"in0", "in1", "in2"})
+		c.Check(err, ErrorMatches, missingRequiredInputRegex)
+	}
+
+	{ // FAIL inputs are a proper superset of required inputs
+		v := validatorConfig{
+			vn.String(),
+			map[string]interface{}{"in0": nil, "in1": nil, "in2": nil, "in3": nil},
+		}
+		err := v.check(vn, []string{"in0", "in1", "in2"})
+		c.Check(err, ErrorMatches, "only 3 inputs \\[in0 in1 in2\\] should be provided to test_project_exists")
+	}
 }

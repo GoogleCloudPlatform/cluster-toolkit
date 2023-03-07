@@ -15,7 +15,7 @@
  */
 
 locals {
-  instance_template = var.instance_template != null ? var.instance_template : one(module.instance_template[*].self_link)
+  instance_template = var.instance_template != null ? var.instance_template : module.instance_template.self_link
 
   tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
 
@@ -67,9 +67,8 @@ locals {
 module "instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "> 7.6.0"
-  count   = var.instance_template == null ? 1 : 0
 
-  name_prefix        = "${local.job_id}-instance-template"
+  name_prefix        = var.instance_template == null ? "${local.job_id}-instance-template" : "unused-template"
   project_id         = var.project_id
   subnetwork         = local.subnetwork_name
   subnetwork_project = local.subnetwork_project

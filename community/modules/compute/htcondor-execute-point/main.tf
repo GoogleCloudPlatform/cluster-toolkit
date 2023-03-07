@@ -37,7 +37,7 @@ locals {
 
 module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "~> 7.8.0"
+  version = "~> 8.0"
 
   name_prefix     = "${var.deployment_name}-xp"
   project_id      = var.project_id
@@ -55,10 +55,27 @@ module "execute_point_instance_template" {
 
 module "mig" {
   source            = "terraform-google-modules/vm/google//modules/mig"
-  version           = "~> 7.8.0"
+  version           = "~> 8.0"
   project_id        = var.project_id
   region            = var.region
   target_size       = var.target_size
   hostname          = "${var.deployment_name}-x"
   instance_template = module.execute_point_instance_template.self_link
+
+  health_check_name = "active-htcondor-service-${var.deployment_name}"
+  health_check = {
+    type                = "tcp"
+    initial_delay_sec   = 600
+    check_interval_sec  = 20
+    healthy_threshold   = 2
+    timeout_sec         = 8
+    unhealthy_threshold = 3
+    response            = ""
+    proxy_header        = "NONE"
+    port                = 9618
+    request             = ""
+    request_path        = ""
+    host                = ""
+    enable_logging      = true
+  }
 }

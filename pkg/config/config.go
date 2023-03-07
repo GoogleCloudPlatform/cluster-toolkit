@@ -29,6 +29,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
+	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -42,11 +43,11 @@ const (
 
 var errorMessages = map[string]string{
 	// general
-	"notImplemented": "not yet implemented",
+	"appendToNonList": "cannot append to a setting whose type is not a list",
 	// config
 	"fileLoadError":      "failed to read the input yaml",
-	"yamlUnmarshalError": "failed to unmarshal the yaml config",
-	"yamlMarshalError":   "failed to marshal the yaml config",
+	"yamlUnmarshalError": "failed to parse the blueprint in %s, check YAML syntax for errors, err=%w",
+	"yamlMarshalError":   "failed to export the configuration to a blueprint yaml file",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
 	"missingSetting":       "a required setting is missing from a module",
@@ -63,6 +64,7 @@ var errorMessages = map[string]string{
 	"noOutput":             "Output not found for a variable",
 	"varWithinStrings":     "variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally.",
 	"groupNotFound":        "The group ID was not found",
+	"cannotUsePacker":      "Packer modules cannot be used by other modules",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -96,14 +98,21 @@ type DeploymentGroup struct {
 	Kind             string
 }
 
-func (g DeploymentGroup) getModuleByID(modID string) Module {
-	for i := range g.Modules {
-		mod := g.Modules[i]
-		if g.Modules[i].ID == modID {
-			return mod
-		}
+func (g DeploymentGroup) getModuleByID(modID string) (Module, error) {
+	idx := slices.IndexFunc(g.Modules, func(m Module) bool { return m.ID == modID })
+	if idx == -1 {
+		return Module{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], modID)
 	}
-	return Module{}
+	return g.Modules[idx], nil
+}
+
+func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error) {
+	groupIndex := slices.IndexFunc(dc.Config.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == groupID })
+	if groupIndex == -1 {
+		return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["groupNotFound"], groupID)
+	}
+	group := dc.Config.DeploymentGroups[groupIndex]
+	return group, nil
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
@@ -175,6 +184,32 @@ func (v validatorName) String() string {
 type validatorConfig struct {
 	Validator string
 	Inputs    map[string]interface{}
+}
+
+func (v *validatorConfig) check(name validatorName, requiredInputs []string) error {
+	if v.Validator != name.String() {
+		return fmt.Errorf("passed wrong validator to %s implementation", name.String())
+	}
+
+	var errored bool
+	for _, inp := range requiredInputs {
+		if _, found := v.Inputs[inp]; !found {
+			log.Printf("a required input %s was not provided to %s!", inp, v.Validator)
+			errored = true
+		}
+	}
+
+	if errored {
+		return fmt.Errorf("at least one required input was not provided to %s", v.Validator)
+	}
+
+	// ensure that no extra inputs were provided by comparing length
+	if len(requiredInputs) != len(v.Inputs) {
+		errStr := "only %v inputs %s should be provided to %s"
+		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, v.Validator)
+	}
+
+	return nil
 }
 
 // HasKind checks to see if a resource group contains any modules of the given
@@ -326,16 +361,6 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 	return newDeploymentConfig, nil
 }
 
-func deprecatedSchema070a() {
-	os.Stderr.WriteString("*****************************************************************************************\n\n")
-	os.Stderr.WriteString("Our schemas have recently changed. Key changes:\n")
-	os.Stderr.WriteString("  'resource_groups'       becomes 'deployment_groups'\n")
-	os.Stderr.WriteString("  'resources'             becomes 'modules'\n")
-	os.Stderr.WriteString("  'source: resources/...' becomes 'source: modules/...'\n")
-	os.Stderr.WriteString("https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/examples#blueprint-schema\n")
-	os.Stderr.WriteString("*****************************************************************************************\n\n")
-}
-
 // ImportBlueprint imports the blueprint configuration provided.
 func importBlueprint(blueprintFilename string) (Blueprint, error) {
 	var blueprint Blueprint
@@ -349,12 +374,9 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 	decoder := yaml.NewDecoder(reader)
 	decoder.KnownFields(true)
 
-	err = decoder.Decode(&blueprint)
-
-	if err != nil {
-		deprecatedSchema070a()
-		return blueprint, fmt.Errorf("%s filename=%s: %v",
-			errorMessages["yamlUnmarshalError"], blueprintFilename, err)
+	if err = decoder.Decode(&blueprint); err != nil {
+		return blueprint, fmt.Errorf(errorMessages["yamlUnmarshalError"],
+			blueprintFilename, err)
 	}
 
 	// Ensure Vars is not a nil map if not set by the user

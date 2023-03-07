@@ -12,21 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# The instructions for installing HTCondor may change with time, although we
+# anticipate that they will stay fixed for the 10.x releases. Find up-to-date
+# recommendations at:
+## https://htcondor.readthedocs.io/en/latest/getting-htcondor/from-our-repositories.html
+
 ---
 - name: Ensure HTCondor is installed
   hosts: all
   vars:
-    block_metadata_server: true
     enable_docker: true
   become: true
   tasks:
-  - name: Setup HTCondor yum repository
-    ansible.builtin.yum:
+  - name: Enable EPEL repository
+    ansible.builtin.package:
       name:
       - epel-release
-      - https://research.cs.wisc.edu/htcondor/repo/10.x/htcondor-release-current.el7.noarch.rpm
+  - name: Enable HTCondor Feature Release repository
+    ansible.builtin.yum_repository:
+      name: htcondor-feature
+      description: HTCondor Feature Releases (10.x.0)
+      file: htcondor
+      baseurl: https://research.cs.wisc.edu/htcondor/repo/10.x/el$releasever/$basearch/release
+      gpgkey: https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-10.x-Key
+      gpgcheck: true
+      repo_gpgcheck: true
+      priority: "90"
+  - name: Enable HTCondor Feature Release Updates repository
+    ansible.builtin.yum_repository:
+      name: htcondor-feature-update
+      description: HTCondor Feature Release Updates (10.x.y)
+      file: htcondor
+      baseurl: https://research.cs.wisc.edu/htcondor/repo/10.x/el$releasever/$basearch/update
+      gpgkey: https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-10.x-Key
+      gpgcheck: true
+      repo_gpgcheck: true
+      priority: "90"
   - name: Install HTCondor
-    ansible.builtin.yum:
+    ansible.builtin.package:
       name: condor
       state: present
   - name: Ensure token directory
@@ -35,12 +58,6 @@
       mode: 0700
       owner: root
       group: root
-  - name: Ensure that firewall is started and enabled
-    ansible.builtin.systemd:
-      name: firewalld
-      enabled: true
-      state: started
-      masked: no
   - name: Install Docker and configure HTCondor to use it
     when: enable_docker | bool  # allows string to be passed at CLI
     block:
@@ -53,7 +70,7 @@
         gpgcheck: yes
         gpgkey: https://download.docker.com/linux/centos/gpg
     - name: Install Docker
-      ansible.builtin.yum:
+      ansible.builtin.package:
         name:
         - docker-ce
         - docker-ce-cli
@@ -69,16 +86,3 @@
         name: condor
         groups: docker
         append: yes
-  - name: Ensure that only root and condor users can access service account
-    when: block_metadata_server | bool # allows string to be passed at CLI
-    ansible.builtin.shell: |
-      firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 1 \
-          -m owner --uid-owner root -p tcp -d metadata.google.internal --dport 80 -j ACCEPT
-      firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 2 \
-          -m owner --uid-owner condor -p tcp -d metadata.google.internal --dport 80 -j ACCEPT
-      firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 3 \
-          -p tcp -d metadata.google.internal --dport 80 -j DROP
-      firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 4 \
-          -p tcp -d metadata.google.internal --dport 8080 -j DROP
-      firewall-cmd --permanent --zone=public --add-port=9618/tcp
-      firewall-cmd --reload

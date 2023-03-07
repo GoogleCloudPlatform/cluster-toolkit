@@ -1,0 +1,72 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: test_apt_collision
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: apt-collision
+  region: us-central1
+  zone: us-central1-a
+  name_prefix: workstation
+  machine_type: a2-highgpu-2g
+  gpu_per_vm: 2
+  instance_image:
+    family: pytorch-1-10-gpu-debian-10
+    project: ml-images
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  ## Network
+  - source: modules/network/vpc
+    kind: terraform
+    id: network1
+
+  - source: ./modules/scripts/startup-script
+    kind: terraform
+    id: startup
+    settings:
+      runners:
+      - type: shell
+        source: modules/startup-script/examples/install_ansible.sh
+        destination: install_ansible.sh
+      - type: shell
+        source: modules/startup-script/examples/install_cloud_ops_agent.sh
+        destination: install_cloud_ops_agent.sh
+
+  - source: modules/compute/vm-instance
+    kind: terraform
+    id: compute-vm-1
+    use:
+    - network1
+    - startup
+    settings:
+      disk_size_gb: 2000
+      metadata:
+        # Starts an apt runner that runs alongside startup scripts
+        install-nvidia-driver: "True"
+        enable-oslogin: "TRUE"
+        VmDnsSetting: "ZonalPreferred"
+      on_host_maintenance: TERMINATE
+      subnetwork_self_link: $(network1.subnetwork_self_link)
+      placement_policy:
+        vm_count: 1
+        collocation: "COLLOCATED"
+        availability_domain_count: null

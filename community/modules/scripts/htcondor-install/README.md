@@ -2,7 +2,11 @@
 
 This module creates a Toolkit runner that will install HTCondor on RedHat 7 or
 derivative operating systems such as the CentOS 7 release in the [HPC VM
-Image][hpcvmimage].
+Image][hpcvmimage]. It should also function on RedHat or Rocky Linux releases 8
+and 9, however it is not yet supported. Please report any [issues] on these
+platforms.
+
+[issues]: https://github.com/GoogleCloudPlatform/hpc-toolkit/issues
 
 It also exports a list of Google Cloud APIs which must be enabled prior to
 provisioning an HTCondor Pool.
@@ -48,11 +52,27 @@ A full example can be found in the [examples README][htc-example].
 
 ## Important note
 
-This module enables Linux firewall rules that block access to the instance
-metadata server for any POSIX user that is not `root` or `condor`. This prevents
-user jobs from being able to escalate privileges to act as the VM. System
-services and HTCondor itself can continue to do so, such as writing to Cloud
-Logging. This [feature can be disabled](#input_block_metadata_server).
+All POSIX users and HTCondor jobs can act as the service account attached to
+VMs within the pool. This enables the use of IAM restrictions via service
+accounts but also allows users to access services to which system daemons need
+access (e.g. to create Cloud Logging entries). If this is undesirable, one can
+restrict access to the instance metadata server to the `root` and `condor`
+users. This will allow system services to use the service account, but not
+other POSIX users or HTCondor jobs. The firewall example below is appropriate
+for CentOS 7.
+
+```shell
+firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 1 \
+    -m owner --uid-owner root -p tcp -d metadata.google.internal --dport 80 -j ACCEPT
+firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 2 \
+    -m owner --uid-owner condor -p tcp -d metadata.google.internal --dport 80 -j ACCEPT
+firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 3 \
+    -p tcp -d metadata.google.internal --dport 80 -j DROP
+firewall-cmd --direct --permanent --add-rule ipv4 filter OUTPUT_direct 4 \
+    -p tcp -d metadata.google.internal --dport 8080 -j DROP
+firewall-cmd --permanent --zone=public --add-port=9618/tcp
+firewall-cmd --reload
+```
 
 ## Support
 
@@ -104,7 +124,6 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_block_metadata_server"></a> [block\_metadata\_server](#input\_block\_metadata\_server) | Use Linux firewall to block the instance metadata server for users other than root and HTCondor daemons | `bool` | `true` | no |
 | <a name="input_enable_docker"></a> [enable\_docker](#input\_enable\_docker) | Install and enable docker daemon alongside HTCondor | `bool` | `true` | no |
 
 ## Outputs

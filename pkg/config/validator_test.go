@@ -197,47 +197,6 @@ func (s *MySuite) TestAddDefaultValidators(c *C) {
 	c.Assert(dc.Config.Validators, HasLen, 6)
 }
 
-func (s *MySuite) TestTestInputList(c *C) {
-	var err error
-	var requiredInputs []string
-
-	// SUCCESS: inputs is equal to required inputs without regard to ordering
-	requiredInputs = []string{"in0", "in1"}
-	inputs := map[string]interface{}{
-		"in0": nil,
-		"in1": nil,
-	}
-	err = testInputList("testfunc", inputs, requiredInputs)
-	c.Assert(err, IsNil)
-	requiredInputs = []string{"in1", "in0"}
-	err = testInputList("testfunc", inputs, requiredInputs)
-	c.Assert(err, IsNil)
-
-	// FAIL: inputs are a proper subset of required inputs
-	requiredInputs = []string{"in0", "in1", "in2"}
-	err = testInputList("testfunc", inputs, requiredInputs)
-	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
-
-	// FAIL: inputs intersect with required inputs but are not a proper subset
-	inputs = map[string]interface{}{
-		"in0": nil,
-		"in1": nil,
-		"in3": nil,
-	}
-	err = testInputList("testfunc", inputs, requiredInputs)
-	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
-
-	// FAIL inputs are a proper superset of required inputs
-	inputs = map[string]interface{}{
-		"in0": nil,
-		"in1": nil,
-		"in2": nil,
-		"in3": nil,
-	}
-	err = testInputList("testfunc", inputs, requiredInputs)
-	c.Assert(err, ErrorMatches, "only [0-9]+ inputs \\[.*\\] should be provided to testfunc")
-}
-
 // return the actual value of a global variable specified by the literal
 // variable inputReference in form ((var.project_id))
 // if it is a literal global variable defined as a string, return value as string

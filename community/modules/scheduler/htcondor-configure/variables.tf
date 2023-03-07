@@ -24,6 +24,21 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "labels" {
+  description = "Labels to add to resources. List key, value pairs."
+  type        = map(string)
+}
+
+variable "region" {
+  description = "Default region for creating resources"
+  type        = string
+}
+
+variable "subnetwork_self_link" {
+  description = "The self link of the subnetwork in which Central Managers will be placed."
+  type        = string
+}
+
 variable "access_point_roles" {
   description = "Project-wide roles for HTCondor Access Point service account"
   type        = list(string)
@@ -60,4 +75,22 @@ variable "pool_password" {
   type        = string
   sensitive   = true
   default     = null
+}
+
+variable "central_manager_high_availability" {
+  description = "Provision HTCondor central manager in high availability mode"
+  type        = bool
+  default     = false
+}
+
+variable "job_queue_high_availability" {
+  description = "Provision HTCondor access points in high availability mode (experimental: see README)"
+  type        = bool
+  default     = false
+}
+
+variable "spool_parent_dir" {
+  description = "HTCondor access point configuration SPOOL will be set to subdirectory named \"spool\""
+  type        = string
+  default     = "/var/lib/condor"
 }

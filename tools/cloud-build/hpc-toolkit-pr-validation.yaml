@@ -49,7 +49,9 @@ steps:
   - |
     set -e
     export PROJECT=build-project
-    time addlicense -check . || { echo "addlicense failed"; exit 1; }
+    # lysozyme-example is under CC-BY-4.0
+    time addlicense -check -ignore **/lysozyme-example/submit.sh . \
+      || { echo "addlicense failed"; exit 1; }
     time make tests
 timeout: "1200s"
 options:

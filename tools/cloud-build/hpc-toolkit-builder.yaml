@@ -24,7 +24,7 @@ steps:
   - '--cache-from'
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder:latest'
   - '--build-arg'
-  - 'TFLINT_VERSION=v0.40.0'
+  - 'TFLINT_VERSION=v0.45.0'
   - '-f'
   - 'tools/cloud-build/Dockerfile'
   - '.'
@@ -55,7 +55,9 @@ steps:
   - |
     set -e
     export PROJECT=build-project
-    addlicense -check . >/dev/null
+    # lysozyme-example is under CC-BY-4.0
+    addlicense -check -ignore **/lysozyme-example/submit.sh . \
+      || { echo "addlicense failed"; exit 1; }
     make tests
 images: [
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder']

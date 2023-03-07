@@ -20,10 +20,6 @@ vars:
   deployment_name: htcondor-001
   region: us-central1
   zone: us-central1-c
-  # if using OS Login with "external users" (outside of the Google Cloud
-  # organization), then Docker universe jobs will fail as of 2022-11-09
-  # consider setting DISABLE if this atypical situation applies
-  enable_oslogin: ENABLE
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -44,6 +40,8 @@ deployment_groups:
 
   - id: htcondor_configure
     source: community/modules/scheduler/htcondor-configure
+    use:
+    - network1
 
   - id: htcondor_configure_central_manager
     source: modules/scripts/startup-script
@@ -65,6 +63,17 @@ deployment_groups:
         email: $(htcondor_configure.central_manager_service_account)
         scopes:
         - cloud-platform
+      network_interfaces:
+      - network: null
+        subnetwork: $(network1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        network_ip: $(htcondor_configure.central_manager_internal_ip)
+        stack_type: null
+        access_config: []
+        ipv6_access_config: []
+        alias_ip_range: []
+        nic_type: VIRTIO_NET
+        queue_count: null
     outputs:
     - internal_ip
 
@@ -81,9 +90,6 @@ deployment_groups:
     - network1
     - htcondor_configure_execute_point
     settings:
-      metadata:
-        enable-oslogin: "TRUE"
-        central-manager: ((module.htcondor_cm.internal_ip[0]))
       service_account:
         email: $(htcondor_configure.execute_point_service_account)
         scopes:
@@ -118,8 +124,6 @@ deployment_groups:
     settings:
       name_prefix: access-point
       machine_type: c2-standard-4
-      metadata:
-        central-manager: ((module.htcondor_cm.internal_ip[0]))
       service_account:
         email: $(htcondor_configure.access_point_service_account)
         scopes:

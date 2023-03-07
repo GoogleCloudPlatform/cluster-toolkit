@@ -16,6 +16,7 @@
 LEGACY_MONITORING_PACKAGE='stackdriver-agent'
 LEGACY_LOGGING_PACKAGE='google-fluentd'
 OPSAGENT_PACKAGE='google-cloud-ops-agent'
+OPSAGENT_SCRIPT_URL='https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh'
 
 fail() {
 	echo >&2 "[$(date +'%Y-%m-%dT%H:%M:%S%z')] $*"
@@ -43,7 +44,17 @@ handle_debian() {
 	}
 
 	install_opsagent() {
-		curl -s https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh | bash -s -- --also-install
+		MAX_RETRY=50
+		RETRY=0
+		until [ ${RETRY} -eq ${MAX_RETRY} ] || curl -s "${OPSAGENT_SCRIPT_URL}" | bash -s -- --also-install; do
+			RETRY=$((RETRY + 1))
+			echo "WARNING: Cloud ops installation failed on try ${RETRY} of ${MAX_RETRY}"
+			sleep 5
+		done
+		if [ $RETRY -eq $MAX_RETRY ]; then
+			echo "ERROR: Cloud ops installation was not successful after ${MAX_RETRY} attempts."
+			exit 1
+		fi
 	}
 }
 

@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-variable "block_metadata_server" {
-  description = "Use Linux firewall to block the instance metadata server for users other than root and HTCondor daemons"
-  type        = bool
-  default     = true
-}
-
 variable "enable_docker" {
   description = "Install and enable docker daemon alongside HTCondor"
   type        = bool

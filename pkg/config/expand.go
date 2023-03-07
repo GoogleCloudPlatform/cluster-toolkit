@@ -149,8 +149,9 @@ func (dc *DeploymentConfig) expandBackends() error {
 	return nil
 }
 
-func getModuleVarName(modID string, varName string) string {
-	return fmt.Sprintf("$(%s.%s)", modID, varName)
+// always use explicit group even for intragroup references
+func getModuleVarName(groupID string, modID string, varName string) string {
+	return fmt.Sprintf("$(%s.%s.%s)", groupID, modID, varName)
 }
 
 func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
@@ -161,49 +162,84 @@ func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
 	return modInputs
 }
 
+// initialize a Toolkit setting that corresponds to a module input of type list
+// create new list if unset, append if already set, error if value not a list
+func (mod *Module) addListValue(settingName string, value string) error {
+	_, found := mod.Settings[settingName]
+	if !found {
+		mod.Settings[settingName] = []interface{}{}
+		mod.createWrapSettingsWith()
+		mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
+	}
+	currentValue, ok := mod.Settings[settingName].([]interface{})
+	if ok {
+		mod.Settings[settingName] = append(currentValue, value)
+		return nil
+	}
+	return fmt.Errorf("%s: module %s, setting %s",
+		errorMessages["appendToNonList"], mod.ID, settingName)
+}
+
+// useModule matches input variables in a "using" module to output values
+// from a "used" module. It may be used iteratively to successively apply used
+// modules in order of precedence. New input variables are added to the using
+// module as Toolkit variable references (in same format as a blueprint). If
+// the input variable already has a setting, it is ignored, unless the value is
+// a list, in which case output values are appended and flattened using HCL.
+//
+//	mod: "using" module as defined above
+//	useMod: "used" module as defined above
+//	useModGroupID: deployment group ID to which useMod belongs
+//	modInputs: input variables as defined by the using module code
+//	useOutputs: output values as defined by the used module code
+//	settingsToIgnore: a list of module settings not to modify for any reason;
+//	 typical usage will be to leave explicit blueprint settings unmodified
+//
+// returns: a list of variable names that were used during this function call
 func useModule(
 	mod *Module,
 	useMod Module,
-	modInputs map[string]string,
+	useModGroupID string,
+	modInputs []modulereader.VarInfo,
 	useOutputs []modulereader.VarInfo,
-	settingsInBlueprint []string,
-) (usedVars []string) {
-	usedVars = []string{}
+	settingsToIgnore []string,
+) ([]string, error) {
+	usedVars := []string{}
+	modInputsMap := getModuleInputMap(modInputs)
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
-		// Skip settings explicitly defined by users
-		if slices.Contains(settingsInBlueprint, settingName) {
+
+		// Explicitly ignore these settings (typically those in blueprint)
+		if slices.Contains(settingsToIgnore, settingName) {
 			continue
 		}
 
-		// track whether setting already has a value; important when
-		// ensuring that the first used module takes precedence and also
-		// when flattening multiple values for settings that are lists
-		_, isAlreadySet := mod.Settings[settingName]
+		// Skip settings that do not have matching module inputs
+		inputType, ok := modInputsMap[settingName]
+		if !ok {
+			continue
+		}
 
-		// This output corresponds to an input that was not explicitly set by the user
-		if inputType, ok := modInputs[settingName]; ok {
-			modVarName := getModuleVarName(useMod.ID, settingName)
-			isInputList := strings.HasPrefix(inputType, "list")
-			if isInputList {
-				if !isAlreadySet {
-					// Input is a list, create an outer list for it
-					mod.Settings[settingName] = []interface{}{}
-					mod.createWrapSettingsWith()
-					mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
-				}
-				// Append value list to the outer list
-				mod.Settings[settingName] = append(
-					mod.Settings[settingName].([]interface{}), modVarName)
-				usedVars = append(usedVars, settingName)
-			} else if !isAlreadySet {
-				// If input is not a list, set value if not already set and continue
-				mod.Settings[settingName] = modVarName
-				usedVars = append(usedVars, settingName)
+		// skip settings that are not of list type, but already have a value
+		// these were probably added by a previous call to this function
+		_, alreadySet := mod.Settings[settingName]
+		isList := strings.HasPrefix(inputType, "list")
+		if alreadySet && !isList {
+			continue
+		}
+
+		modVarName := getModuleVarName(useModGroupID, useMod.ID, settingName)
+		if !isList {
+			mod.Settings[settingName] = modVarName
+			usedVars = append(usedVars, settingName)
+		} else {
+			if err := mod.addListValue(settingName, modVarName); err != nil {
+				return nil, err
 			}
+			usedVars = append(usedVars, settingName)
 		}
 	}
-	return
+	return usedVars, nil
 }
 
 // applyUseModules applies variables from modules listed in the "use" field
@@ -215,16 +251,50 @@ func (dc *DeploymentConfig) applyUseModules() error {
 		for iMod := range group.Modules {
 			fromMod := &group.Modules[iMod]
 			fromModInfo := grpModsInfo[fromMod.Source]
-			fromModInputs := getModuleInputMap(fromModInfo.Inputs)
 			settingsInBlueprint := maps.Keys(fromMod.Settings)
 			for _, toModID := range fromMod.Use {
-				toMod := group.getModuleByID(toModID)
-				toModInfo := dc.ModulesInfo[group.Name][toMod.Source]
-				if toMod.ID == "" {
-					return fmt.Errorf("could not find module %s used by %s in group %s",
-						toModID, fromMod.ID, group.Name)
+				// turn the raw string into a modReference struct
+				// which was previously validated by checkUsedModuleNames
+				// this will enable us to get structs about the module being
+				// used and search it for outputs that match inputs in the
+				// current module (the iterator)
+				modRef, err := identifyModuleByReference(toModID, *group)
+				if err != nil {
+					return err
 				}
-				usedVars := useModule(fromMod, toMod, fromModInputs, toModInfo.Outputs, settingsInBlueprint)
+
+				// to get the module struct, we first needs its group
+				toGroup, err := dc.getGroupByID(modRef.ToGroupID)
+				if err != nil {
+					return err
+				}
+
+				// this module contains information about the target module that
+				// was specified by the user in the blueprint
+				toMod, err := toGroup.getModuleByID(modRef.ID)
+				if err != nil {
+					return err
+				}
+
+				// Packer modules cannot be used because they do not have a
+				// native concept of outputs. Without this, the validator
+				// that checks for matching inputs will always trigger
+				if toMod.Kind == "packer" {
+					return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], toMod.ID)
+				}
+
+				// this struct contains the underlying module implementation,
+				// not just what the user specified in blueprint. e.g. module
+				// input variables and output values
+				// this line should probably be tested for success and unit
+				// tested but it our unit test infrastructure does not support
+				// running dc.setModulesInfo() on our test configurations
+				toModInfo := dc.ModulesInfo[toGroup.Name][toMod.Source]
+				usedVars, err := useModule(fromMod, toMod, modRef.ToGroupID,
+					fromModInfo.Inputs, toModInfo.Outputs, settingsInBlueprint)
+				if err != nil {
+					return err
+				}
 				connection := ModConnection{
 					toID:            toModID,
 					fromID:          fromMod.ID,
@@ -666,26 +736,42 @@ func expandSimpleVariable(
 	callingGroup := context.blueprint.DeploymentGroups[context.groupIndex]
 	refStr := contents[1]
 
-	ref, err := identifySimpleVariable(refStr, callingGroup)
+	varRef, err := identifySimpleVariable(refStr, callingGroup)
 	if err != nil {
 		return "", err
 	}
 
-	err = ref.validate(context.blueprint.DeploymentGroups, context.blueprint.Vars, modToGrp)
+	err = varRef.validate(context.blueprint.DeploymentGroups, context.blueprint.Vars, modToGrp)
 	if err != nil {
 		return "", err
 	}
 
 	var expandedVariable string
-	if ref.ToGroupID == "deployment" {
-		expandedVariable = fmt.Sprintf("((var.%s))", ref.Name)
-	} else {
-		if ref.FromGroupID != ref.ToGroupID {
-			// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
-			return "", fmt.Errorf("%s: %s is an intergroup reference",
-				errorMessages["varInAnotherGroup"], context.varString)
+	switch varRef.ToGroupID {
+	case "deployment":
+		// deployment variables
+		expandedVariable = fmt.Sprintf("((var.%s))", varRef.Name)
+	case varRef.FromGroupID:
+		// intragroup reference can make direct reference to module output
+		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.ID, varRef.Name)
+	default:
+		// intergroup reference; being by finding the target module in blueprint
+		toGrpIdx := modToGrp[varRef.ToGroupID]
+		toModIdx := slices.IndexFunc(context.blueprint.DeploymentGroups[toGrpIdx].Modules, func(m Module) bool { return m.ID == varRef.ID })
+		if toModIdx == -1 {
+			return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], varRef.ID)
 		}
-		expandedVariable = fmt.Sprintf("((module.%s.%s))", ref.ID, ref.Name)
+		toMod := &context.blueprint.DeploymentGroups[toGrpIdx].Modules[toModIdx]
+
+		// ensure that the target module outputs the value in the root module
+		// state and not just internally within its deployment group
+		if !slices.Contains(toMod.Outputs, varRef.Name) {
+			toMod.Outputs = append(toMod.Outputs, varRef.Name)
+		}
+
+		// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
+		return "", fmt.Errorf("%s: %s is an intergroup reference",
+			errorMessages["varInAnotherGroup"], context.varString)
 	}
 	return expandedVariable, nil
 }
@@ -863,8 +949,14 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	_, regionExists := dc.Config.Vars["region"]
 	_, zoneExists := dc.Config.Vars["zone"]
 
-	// always add the project ID validator first; remaining validators can only
-	// succeed if credentials can access the project
+	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+		Validator: testModuleNotUsedName.String(),
+		Inputs:    map[string]interface{}{},
+	})
+
+	// always add the project ID validator before subsequent validators that can
+	// only succeed if credentials can access the project. If the project ID
+	// validator fails, all remaining validators are not executed.
 	if projectIDExists {
 		v := validatorConfig{
 			Validator: testProjectExistsName.String(),
@@ -916,11 +1008,6 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 		}
 		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
-
-	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
-		Validator: testModuleNotUsedName.String(),
-		Inputs:    map[string]interface{}{},
-	})
 
 	return nil
 }

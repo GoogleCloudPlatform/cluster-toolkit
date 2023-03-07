@@ -1,0 +1,17 @@
+
+; Parameters describing what to do, when to stop and what to save
+integrator  = steep  ; Algorithm (steep = steepest descent minimization)
+emtol       = 1000.0 ; Stop minimization when the maximum force < 1000.0 kJ/mol/nm
+emstep      = 0.01   ; Minimization step size
+nstenergy   = 500    ; save energies every 1.0 ps, so we can observe if we are successful
+nsteps      = -1     ; run as long as we need
+; Settings that make sure we run with parameters in harmony with the selected force-field
+constraints             = h-bonds   ; bonds involving H are constrained
+rcoulomb                = 1.2       ; short-range electrostatic cutoff (in nm)
+rvdw                    = 1.2       ; short-range van der Waals cutoff (in nm)
+vdw-modifier            = Force-switch ;  specific CHARMM
+rvdw_switch             = 1.0       ;
+DispCorr                = no        ; account for cut-off vdW scheme -
+;in case of CHARMM DispCorr = EnerPres only for monolayers
+coulombtype             = PME       ; Particle Mesh Ewald for long-range electrostatics
+fourierspacing          = 0.15     ; grid spacing for FFT

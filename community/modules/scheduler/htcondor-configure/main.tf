@@ -22,6 +22,9 @@ locals {
   central_manager_display_name = "HTCondor Central Manager (${var.deployment_name})"
   central_manager_roles        = [for role in var.central_manager_roles : "${var.project_id}=>${role}"]
 
+  central_manager_count    = var.central_manager_high_availability ? 2 : 1
+  central_manager_ip_names = [for i in range(local.central_manager_count) : "${var.deployment_name}-cm-ip-${i}"]
+
   pool_password = var.pool_password == null ? random_password.pool.result : var.pool_password
 
   runner_cm_role = {
@@ -30,6 +33,7 @@ locals {
     "destination" = "htcondor_configure.yml"
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_central_manager",
+      "-e htcondor_central_manager_ips=${join(",", module.address.addresses)}",
       "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
       "-e project_id=${var.project_id}",
     ])
@@ -41,6 +45,9 @@ locals {
     "destination" = "htcondor_configure.yml"
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_submit",
+      "-e htcondor_central_manager_ips=${join(",", module.address.addresses)}",
+      "-e job_queue_ha=${var.job_queue_high_availability}",
+      "-e spool_dir=${var.spool_parent_dir}/spool",
       "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
       "-e project_id=${var.project_id}",
     ])
@@ -52,6 +59,7 @@ locals {
     "destination" = "htcondor_configure.yml"
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_execute",
+      "-e htcondor_central_manager_ips=${join(",", module.address.addresses)}",
       "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
       "-e project_id=${var.project_id}",
     ])
@@ -100,9 +108,7 @@ resource "random_password" "pool" {
 resource "google_secret_manager_secret" "pool_password" {
   secret_id = "${var.deployment_name}-pool-password"
 
-  labels = {
-    label = var.deployment_name
-  }
+  labels = var.labels
 
   replication {
     automatic = true
@@ -130,4 +136,51 @@ resource "google_secret_manager_secret_iam_member" "execute_point" {
   secret_id = google_secret_manager_secret.pool_password.id
   role      = "roles/secretmanager.secretAccessor"
   member    = module.execute_point_service_account.iam_email
+}
+
+module "address" {
+  source     = "terraform-google-modules/address/google"
+  version    = "~> 3.0"
+  project_id = var.project_id
+  region     = var.region
+  subnetwork = var.subnetwork_self_link
+  names      = local.central_manager_ip_names
+}
+
+data "google_compute_subnetwork" "htcondor" {
+  self_link = var.subnetwork_self_link
+}
+
+module "health_check_firewall_rule" {
+  source       = "terraform-google-modules/network/google//modules/firewall-rules"
+  version      = "~> 6.0"
+  project_id   = data.google_compute_subnetwork.htcondor.project
+  network_name = data.google_compute_subnetwork.htcondor.network
+
+  rules = [{
+    name        = "allow-health-check-${var.deployment_name}"
+    description = "Allow Managed Instance Group Health Checks for HTCondor VMs"
+    direction   = "INGRESS"
+    priority    = null
+    ranges = [
+      "130.211.0.0/22",
+      "35.191.0.0/16",
+    ]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = [
+      module.access_point_service_account.email,
+      module.central_manager_service_account.email,
+      module.execute_point_service_account.email,
+    ]
+    allow = [{
+      protocol = "tcp"
+      ports    = ["9618"]
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }]
 }

@@ -1,0 +1,37 @@
+define                  = -DPOSRES  ; position restrain the protein
+
+; Parameters describing what to do, when to stop and what to save
+integrator              = md        ; leap-frog integrator
+dt                      = 0.002     ; 2 fs
+nsteps                  = 50000     ; 2 * 50000 = 100 ps
+nstenergy               = 500       ; save energy and temperature every 1.0 ps
+
+; periodic boundary condition
+pbc                     = xyz       ;
+
+continuation            = yes
+
+; Pressure coupling is on
+pcoupl                  = C-rescale             ; Pressure coupling on in NPT
+pcoupltype              = isotropic             ; uniform scaling of box vectors
+tau_p                   = 1.0                   ; time constant, in ps
+ref_p                   = 1.0                   ; reference pressure, in bar
+compressibility         = 4.5e-5                ; isothermal compressibility of water, bar^-1
+refcoord_scaling        = com
+
+; Keep system temperature fluctuating physically correct
+tcoupl                  = V-rescale           ; modified Berendsen thermostat
+tc-grps                 = system   ; coupling groups
+tau_t                   = 0.1      ; time constant, in ps
+ref_t                   = 300      ; reference temperature, one for each group, in K
+
+; Settings that make sure we run with parameters in harmony with the selected force-field
+constraints             = h-bonds   ; bonds involving H are constrained
+rcoulomb                = 1.2       ; short-range electrostatic cutoff (in nm)
+rvdw                    = 1.2       ; short-range van der Waals cutoff (in nm)
+vdw-modifier            = Force-switch ;  specific CHARMM
+rvdw_switch             = 1.0       ;
+DispCorr                = no        ; account for cut-off vdW scheme -
+;in case of CHARMM DispCorr = EnerPres only for monolayers
+coulombtype             = PME       ; Particle Mesh Ewald for long-range electrostatics
+fourierspacing          = 0.15     ; grid spacing for FFT
