@@ -98,8 +98,8 @@ variable "filestore_tier" {
 }
 
 variable "labels" {
-  description = "Labels to add to the filestore instance. List key, value pairs."
-  type        = any
+  description = "Labels to add to the filestore instance. Key-value pairs."
+  type        = map(string)
 }
 
 variable "connect_mode" {
