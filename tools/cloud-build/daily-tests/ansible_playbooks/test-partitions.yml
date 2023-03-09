@@ -41,7 +41,7 @@
 - name: Test Mounts on partitions
   register: srun_mounts
   changed_when: srun_mounts.rc == 0
-  ansible.builtin.command: "srun -N 1 ls -laF {{ custom_vars.mounts | join(' ') }}"
+  ansible.builtin.command: "srun -N 1 -p {{ item }} ls -laF {{ custom_vars.mounts | join(' ') }}"
   loop: "{{ custom_vars.partitions }}"
 - name: Test partitions with hostname
   register: srun_hostname
