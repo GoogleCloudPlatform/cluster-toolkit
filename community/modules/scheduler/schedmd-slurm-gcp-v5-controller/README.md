@@ -66,7 +66,7 @@ activated through the `enable_reconfigure` setting:
 This option has some additional requirements:
 
 * The Pub/Sub API must be activated in the target project:
-  `gcloud services enable file.googleapis.com --project "<<PROJECT_ID>>"`
+  `gcloud services enable pubsub.googleapis.com --project "<<PROJECT_ID>>"`
 * The authenticated user in the local development environment (or where
   `terraform apply` is called) must have the Pub/Sub Admin (roles/pubsub.admin)
   IAM role.
