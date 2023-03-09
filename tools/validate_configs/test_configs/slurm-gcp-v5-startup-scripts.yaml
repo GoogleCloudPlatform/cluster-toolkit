@@ -38,6 +38,14 @@ deployment_groups:
       local_mounts: [/home]
       auto_delete_disk: true
 
+  - id: bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      name_prefix: input-data
+      local_mount: /data
+      random_suffix: true
+      mount_options: defaults,_netdev,implicit_dirs,allow_other
+
   # Used by the partitions, this tests startup scripts that are partition specific
   - id: startup-partition
     source: modules/scripts/startup-script
@@ -61,6 +69,7 @@ deployment_groups:
     use:
     - network1
     - homefs
+    - bucket
     - debug_node_group
     settings:
       partition_name: debug
@@ -77,6 +86,7 @@ deployment_groups:
     use:
     - network1
     - homefs
+    - bucket
     - compute_node_group
     - startup-partition
     settings:
@@ -101,6 +111,7 @@ deployment_groups:
     - debug_partition
     - compute_partition
     - homefs
+    - bucket
     - startup-all
     settings:
       disable_controller_public_ips: false
