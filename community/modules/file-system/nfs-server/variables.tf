@@ -100,10 +100,20 @@ variable "scopes" {
   default     = ["https://www.googleapis.com/auth/cloud-platform"]
 }
 
-variable "local_mounts" {
+variable "local_mount" {
   description = "Mountpoint for this NFS compute instance"
+  type        = string
+  default     = "/data"
+  validation {
+    condition     = substr(var.local_mount, 0, 1) == "/"
+    error_message = "Local mountpoint must start with '/'."
+  }
+}
+
+variable "local_mounts" {
+  description = "DEPRECATED: Use `local_mount` instead: Mountpoint for this NFS compute instance"
   type        = list(string)
-  default     = ["/data"]
+  default     = []
 
   validation {
     condition = alltrue([
@@ -112,7 +122,7 @@ variable "local_mounts" {
     error_message = "Local mountpoints have to start with '/'."
   }
   validation {
-    condition     = length(var.local_mounts) > 0
-    error_message = "At least one local mount must be specified in var.local_mounts."
+    condition     = var.local_mounts != null
+    error_message = "Do not set local mounts to null."
   }
 }

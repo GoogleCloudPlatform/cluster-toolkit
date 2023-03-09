@@ -23,14 +23,15 @@ locals {
   server_ip     = google_compute_instance.compute_instance.network_interface[0].network_ip
   fs_type       = "nfs"
   mount_options = "defaults,hard,intr"
-  install_nfs_client_runners = [for mount in var.local_mounts :
+  local_mounts  = length(var.local_mounts) > 0 ? var.local_mounts : [var.local_mount]
+  install_nfs_client_runners = [for mount in local.local_mounts :
     {
       "type"        = "shell"
       "source"      = "${path.module}/scripts/install-nfs-client.sh"
       "destination" = "install-nfs${replace(mount, "/", "_")}.sh"
     }
   ]
-  mount_runners = [for mount in var.local_mounts :
+  mount_runners = [for mount in local.local_mounts :
     {
       "type"        = "shell"
       "source"      = "${path.module}/scripts/mount.sh"
@@ -55,6 +56,13 @@ resource "google_compute_disk" "attached_disk" {
   type    = var.type
   zone    = var.zone
   labels  = var.labels
+
+  lifecycle {
+    precondition {
+      condition     = length(var.local_mounts) == 0 || var.local_mount == "/data"
+      error_message = "Do not set both local_mount and local_mounts."
+    }
+  }
 }
 
 resource "google_compute_instance" "compute_instance" {
@@ -85,7 +93,7 @@ resource "google_compute_instance" "compute_instance" {
   }
 
   metadata                = var.metadata
-  metadata_startup_script = templatefile("${path.module}/scripts/install-nfs-server.sh.tpl", { local_mounts = var.local_mounts })
+  metadata_startup_script = templatefile("${path.module}/scripts/install-nfs-server.sh.tpl", { local_mounts = local.local_mounts })
 
   labels = var.labels
 }
