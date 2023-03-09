@@ -23,8 +23,6 @@ Toolkit, see the extended [Network Storage documentation](../../../../docs/netwo
   use: [network1]
   settings:
     auto_delete_disk: true
-    labels:
-      ghpc_role: storage-home
 ```
 
 This creates a NFS on a virtual machine which allow other VMs to mount the
