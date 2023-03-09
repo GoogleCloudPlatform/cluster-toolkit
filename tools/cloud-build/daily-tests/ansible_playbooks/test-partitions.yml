@@ -39,10 +39,10 @@
   when: item not in partition_output.stdout
   loop: "{{ custom_vars.partitions }}"
 
-- name: Get mounts on partitions
+- name: Test partition mounts, multi-node creation, & placement (when on)
   register: srun_mounts
   changed_when: srun_mounts.rc == 0
-  ansible.builtin.command: "srun -N 1 -p {{ item }} mount"
+  ansible.builtin.command: "srun -N 2 -p {{ item }} mount"
   loop: "{{ custom_vars.partitions }}"
 
 - name: Fail if partitions unmounted
@@ -53,11 +53,6 @@
   loop_control:
     label: "{{ item[1] }}"
 
-- name: Test partitions with hostname
-  register: srun_hostname
-  changed_when: srun_hostname.rc == 0
-  ansible.builtin.command: srun -N 2 --partition {{ item }} hostname
-  loop: "{{ custom_vars.partitions }}"
 - name: Ensure all nodes are powered down
   ansible.builtin.command: sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
   register: final_node_count
