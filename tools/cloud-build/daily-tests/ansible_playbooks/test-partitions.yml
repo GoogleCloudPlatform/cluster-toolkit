@@ -38,11 +38,21 @@
     msg: Test Check Partitions failed
   when: item not in partition_output.stdout
   loop: "{{ custom_vars.partitions }}"
-- name: Test Mounts on partitions
+
+- name: Get mounts on partitions
   register: srun_mounts
   changed_when: srun_mounts.rc == 0
-  ansible.builtin.command: "srun -N 1 -p {{ item }} ls -laF {{ custom_vars.mounts | join(' ') }}"
+  ansible.builtin.command: "srun -N 1 -p {{ item }} mount"
   loop: "{{ custom_vars.partitions }}"
+
+- name: Fail if partitions unmounted
+  ansible.builtin.fail: "mount: {{ item[1] }} was not found in {{ item[0].cmd }}"
+  # this is searching for "on /scratch " if local mount is /scratch
+  when: '"on " + item[1] + " "  not in item[0].stdout'
+  loop: "{{ srun_mounts.results | product( custom_vars.mounts ) | list }}"
+  loop_control:
+    label: "{{ item[1] }}"
+
 - name: Test partitions with hostname
   register: srun_hostname
   changed_when: srun_hostname.rc == 0
