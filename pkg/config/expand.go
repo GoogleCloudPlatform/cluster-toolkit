@@ -138,10 +138,9 @@ func (dc *DeploymentConfig) expandBackends() error {
 				}
 			}
 			if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration["prefix"] == nil {
-				DeploymentName := blueprint.Vars["deployment_name"]
 				prefix := blueprint.BlueprintName
-				if DeploymentName != nil {
-					prefix += "/" + DeploymentName.(string)
+				if deployment, err := blueprint.DeploymentName(); err == nil {
+					prefix += "/" + deployment
 				}
 				prefix += "/" + grp.Name
 				grp.TerraformBackend.Configuration["prefix"] = prefix
