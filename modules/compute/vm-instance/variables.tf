@@ -119,8 +119,8 @@ variable "deployment_name" {
 }
 
 variable "labels" {
-  description = "Labels to add to the instances. List key, value pairs."
-  type        = any
+  description = "Labels to add to the instances. Key-value pairs."
+  type        = map(string)
 }
 
 variable "service_account" {

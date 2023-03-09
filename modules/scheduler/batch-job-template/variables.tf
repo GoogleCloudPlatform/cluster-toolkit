@@ -30,8 +30,8 @@ variable "deployment_name" {
 }
 
 variable "labels" {
-  description = "Labels to add to the Google Cloud Batch compute nodes. List key, value pairs. Ignored if `instance_template` is provided."
-  type        = any
+  description = "Labels to add to the Google Cloud Batch compute nodes. Key-value pairs. Ignored if `instance_template` is provided."
+  type        = map(string)
 }
 
 variable "job_id" {
