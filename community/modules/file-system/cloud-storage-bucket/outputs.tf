@@ -21,7 +21,7 @@ output "network_storage" {
     local_mount           = var.local_mount
     fs_type               = "gcsfuse"
     mount_options         = var.mount_options
-    server_ip             = null
+    server_ip             = ""
     client_install_runner = local.client_install_runner
     mount_runner          = local.mount_runner
   }
