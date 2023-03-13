@@ -108,9 +108,15 @@ variable "target_size" {
 }
 
 variable "max_size" {
-  description = "Maximum size of the HTCondor execute point pool; set to constrain cost run-away."
+  description = "Maximum size of the HTCondor execute point pool."
   type        = number
   default     = 100
+}
+
+variable "min_idle" {
+  description = "Minimum number of idle VMs in the HTCondor pool (if pool reaches var.max_size, this minimum is not guaranteed); set to ensure jobs beginning run more quickly."
+  type        = number
+  default     = 0
 }
 
 variable "metadata" {

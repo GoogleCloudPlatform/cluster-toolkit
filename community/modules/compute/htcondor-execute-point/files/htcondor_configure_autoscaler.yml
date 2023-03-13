@@ -45,7 +45,7 @@
         [Service]
         User=condor
         Type=oneshot
-        ExecStart={{ python }} {{ autoscaler }} --p $PROJECT_ID --r $REGION --z $ZONE --mz --g %i --c $MAX_SIZE
+        ExecStart={{ python }} {{ autoscaler }} --p $PROJECT_ID --r $REGION --z $ZONE --mz --g %i --c $MAX_SIZE --i $MIN_IDLE
     notify:
     - Reload SystemD
   - name: Create SystemD override directory for autoscaler configuration
@@ -65,6 +65,7 @@
         Environment=REGION={{ region }}
         Environment=ZONE={{ zone }}
         Environment=MAX_SIZE={{ max_size }}
+        Environment=MIN_IDLE={{ min_idle }}
     notify:
     - Reload SystemD
   - name: Create SystemD timer for HTCondor autoscaler
