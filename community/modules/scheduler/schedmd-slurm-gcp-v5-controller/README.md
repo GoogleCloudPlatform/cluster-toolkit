@@ -71,8 +71,14 @@ This option has some additional requirements:
   `terraform apply` is called) must have the Pub/Sub Admin (roles/pubsub.admin)
   IAM role.
 * Python and some python packages need to be installed with pip in the local
-  development environment deploying the cluster. For more information, see the
-  warning in the [description](#description) of this module.
+  development environment deploying the cluster. One can use following commands:
+
+  ```bash
+  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.0/scripts/requirements.txt
+  pip3 install -r requirements.txt --user
+  ```
+  
+  For more information, see the [description](#optdeps) of this module.
 * The project in your gcloud config must match the project the cluster is being
   deployed onto due to a known issue with the reconfigure scripts. To set your
   default config project, run the following command:
