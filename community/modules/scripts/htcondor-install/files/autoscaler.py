@@ -185,10 +185,10 @@ class AutoScaler:
         # stewardship. A full list of Job ClassAd attributes can be found at
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html
         schedd = htcondor.Schedd()
-        # encourage the job queue to start a new negotiation cycle
-        # there are internal unconfigurable rate limits so not guaranteed
+        # encourage the job queue to start a new negotiation cycle; there are
+        # internal unconfigurable rate limits so not guaranteed; this is not
+        # strictly required for success, but may reduce latency of autoscaling
         schedd.reschedule()
-        time.sleep(3)
         REQUEST_CPUS_ATTRIBUTE = "RequestCpus"
         REQUEST_GPUS_ATTRIBUTE = "RequestGpus"
         REQUEST_MEMORY_ATTRIBUTE = "RequestMemory"
