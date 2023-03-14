@@ -298,9 +298,7 @@ func (mc *ModConnection) isEmpty() (isEmpty bool) {
 type DeploymentConfig struct {
 	Config Blueprint
 	// Indexed by Resource Group name and Module Source
-	ModulesInfo map[string]map[string]modulereader.ModuleInfo
-	// Maps module ID to group index
-	ModuleToGroup     map[string]int
+	ModulesInfo       map[string]map[string]modulereader.ModuleInfo
 	expanded          bool
 	moduleConnections []ModConnection
 }
@@ -471,38 +469,47 @@ func validateGroupName(name string, usedNames map[string]bool) {
 
 // checkModuleAndGroupNames checks and imports module and resource group IDs
 // and names respectively.
-func checkModuleAndGroupNames(
-	depGroups []DeploymentGroup) (map[string]int, error) {
-	moduleToGroup := make(map[string]int)
+func checkModuleAndGroupNames(depGroups []DeploymentGroup) error {
+	seen := map[string]struct{}{}
 	groupNames := make(map[string]bool)
 	for iGrp, grp := range depGroups {
 		validateGroupName(grp.Name, groupNames)
 		for _, mod := range grp.Modules {
-			// Verify no duplicate module names
-			if _, ok := moduleToGroup[mod.ID]; ok {
-				return moduleToGroup, fmt.Errorf(
-					"%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
+
+			if _, ok := seen[mod.ID]; ok {
+				return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
 			}
-			moduleToGroup[mod.ID] = iGrp
+			seen[mod.ID] = struct{}{}
 
 			// Verify Module Kind matches group Kind
 			if grp.Kind == "" {
 				depGroups[iGrp].Kind = mod.Kind
 			} else if grp.Kind != mod.Kind {
-				return moduleToGroup, fmt.Errorf(
+				return fmt.Errorf(
 					"%s: deployment group %s, got: %s, wanted: %s",
 					errorMessages["mixedModule"],
 					grp.Name, grp.Kind, mod.Kind)
 			}
 		}
 	}
-	return moduleToGroup, nil
+	return nil
+}
+
+func modToGrp(groups []DeploymentGroup, modID string) (int, error) {
+	i := slices.IndexFunc(groups, func(g DeploymentGroup) bool {
+		return slices.ContainsFunc(g.Modules, func(m Module) bool {
+			return m.ID == modID
+		})
+	})
+	if i == -1 {
+		return -1, fmt.Errorf("module %s was not found", modID)
+	}
+	return i, nil
 }
 
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
-func checkUsedModuleNames(
-	depGroups []DeploymentGroup, idToGroup map[string]int) error {
+func checkUsedModuleNames(depGroups []DeploymentGroup) error {
 	for _, grp := range depGroups {
 		for _, mod := range grp.Modules {
 			for _, usedMod := range mod.Use {
@@ -510,8 +517,8 @@ func checkUsedModuleNames(
 				if err != nil {
 					return err
 				}
-				err = ref.validate(depGroups, idToGroup)
-				if err != nil {
+
+				if err = ref.validate(depGroups); err != nil {
 					return err
 				}
 
@@ -561,13 +568,10 @@ func (dc *DeploymentConfig) validateConfig() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	moduleToGroup, err := checkModuleAndGroupNames(dc.Config.DeploymentGroups)
-	if err != nil {
+	if err = checkModuleAndGroupNames(dc.Config.DeploymentGroups); err != nil {
 		log.Fatal(err)
 	}
-	dc.ModuleToGroup = moduleToGroup
-	if err = checkUsedModuleNames(
-		dc.Config.DeploymentGroups, dc.ModuleToGroup); err != nil {
+	if err = checkUsedModuleNames(dc.Config.DeploymentGroups); err != nil {
 		log.Fatal(err)
 	}
 	if err = checkBackends(dc.Config); err != nil {
