@@ -496,14 +496,15 @@ func checkModuleAndGroupNames(depGroups []DeploymentGroup) error {
 }
 
 func modToGrp(groups []DeploymentGroup, modID string) (int, error) {
-	for iGrp, grp := range groups {
-		for _, mod := range grp.Modules {
-			if mod.ID == modID {
-				return iGrp, nil
-			}
-		}
+	i := slices.IndexFunc(groups, func(g DeploymentGroup) bool {
+		return slices.ContainsFunc(g.Modules, func(m Module) bool {
+			return m.ID == modID
+		})
+	})
+	if i == -1 {
+		return -1, fmt.Errorf("module %s was not found", modID)
 	}
-	return 0, fmt.Errorf("Module %s was not found", modID)
+	return i, nil
 }
 
 // checkUsedModuleNames verifies that any used modules have valid names and

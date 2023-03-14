@@ -603,7 +603,7 @@ func (s *MySuite) TestValidateModuleReference(c *C) {
 		FromGroupID: dg[0].Name,
 		Explicit:    true,
 	}
-	c.Assert(badTargetMod.validate(dg), ErrorMatches, fmt.Sprintf("Module bad-module was not found"))
+	c.Assert(badTargetMod.validate(dg), ErrorMatches, fmt.Sprintf("module bad-module was not found"))
 
 	// A source group ID that doesn't exist (bad)
 	badSourceGroup := modReference{
@@ -727,7 +727,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Module variable: Invalid -> Module not found
 	testVarContext1.varString = "$(bad_mod.someVar)"
 	_, err = expandSimpleVariable(testVarContext1)
-	c.Assert(err, ErrorMatches, "Module bad_mod was not found")
+	c.Assert(err, ErrorMatches, "module bad_mod was not found")
 
 	// Module variable: Invalid -> Output not found
 	reader := modulereader.Factory("terraform")
@@ -802,7 +802,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
 		testBlueprint.DeploymentGroups[0].Name, "bad_module", "bad_output")
 	_, err = expandSimpleVariable(testVarContext1)
-	c.Assert(err, ErrorMatches, "Module bad_module was not found")
+	c.Assert(err, ErrorMatches, "module bad_module was not found")
 
 	// Intergroup variable: failure because explicit group and output does not exist
 	fakeOutput = "bad_output"

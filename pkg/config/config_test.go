@@ -353,6 +353,20 @@ func (s *MySuite) TestExpandConfig(c *C) {
 	dc.ExpandConfig()
 }
 
+func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
+	{ // Duplicate module name same group
+		g := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}, {ID: "pony"}}}
+		err := checkModuleAndGroupNames([]DeploymentGroup{g})
+		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
+	}
+	{ // Duplicate module name different groups
+		ice := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}}}
+		fire := DeploymentGroup{Name: "fire", Modules: []Module{{ID: "pony"}}}
+		err := checkModuleAndGroupNames([]DeploymentGroup{ice, fire})
+		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
+	}
+}
+
 func (s *MySuite) TestIsEmpty(c *C) {
 	// Use connection is not empty
 	conn := ModConnection{
