@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	cloud.google.com/go/compute v1.18.0
-	cloud.google.com/go/storage v1.27.0 // indirect
+	cloud.google.com/go/storage v1.28.1 // indirect
 	github.com/go-git/go-git/v5 v5.6.0
 	github.com/hashicorp/go-getter v1.7.0
 	github.com/hashicorp/hcl v1.0.0 // indirect
@@ -16,7 +16,7 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/zclconf/go-cty v1.13.0
 	golang.org/x/exp v0.0.0-20230108222341-4b8118a2686a
-	google.golang.org/genproto v0.0.0-20230223222841-637eb2293923
+	google.golang.org/genproto v0.0.0-20230303212802-e74f57abe488
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -24,15 +24,15 @@ require (
 require (
 	cloud.google.com/go/serviceusage v1.5.0
 	github.com/go-git/go-billy/v5 v5.4.1
-	github.com/googleapis/gax-go/v2 v2.7.0
+	github.com/googleapis/gax-go/v2 v2.7.1
 	google.golang.org/api v0.111.0
 )
 
 require (
-	cloud.google.com/go v0.107.0 // indirect
+	cloud.google.com/go v0.110.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
-	cloud.google.com/go/iam v0.11.0 // indirect
-	cloud.google.com/go/longrunning v0.3.0 // indirect
+	cloud.google.com/go/iam v0.12.0 // indirect
+	cloud.google.com/go/longrunning v0.4.1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20221026131551-cf6655e29de4 // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
