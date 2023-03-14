@@ -540,13 +540,6 @@ func (s *MySuite) TestHasKind(c *C) {
 
 }
 
-func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
-	dc := getDeploymentConfigForTest()
-	checkModuleAndGroupNames(dc.Config.DeploymentGroups)
-	testModID := dc.Config.DeploymentGroups[0].Modules[0].ID
-	c.Assert(dc.ModuleToGroup[testModID], Equals, 0)
-}
-
 func (s *MySuite) TestDeploymentName(c *C) {
 	dc := getDeploymentConfigForTest()
 	var e *InputValueError

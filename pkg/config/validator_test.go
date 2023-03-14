@@ -67,10 +67,9 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 		Modules:          []Module{{Kind: "terraform", Source: testSource, Settings: testSettings}},
 	}
 	dc := DeploymentConfig{
-		Config:        Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
-		ModulesInfo:   map[string]map[string]modulereader.ModuleInfo{},
-		ModuleToGroup: map[string]int{},
-		expanded:      false,
+		Config:      Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
+		expanded:    false,
 	}
 	dc.validateModuleSettings()
 }
