@@ -78,7 +78,7 @@ This option has some additional requirements:
   pip3 install -r requirements.txt --user
   ```
   
-  For more information, see the [description](#optdeps) of this module.
+  For more information, see the [description][optdeps] of this module.
 * The project in your gcloud config must match the project the cluster is being
   deployed onto due to a known issue with the reconfigure scripts. To set your
   default config project, run the following command:
