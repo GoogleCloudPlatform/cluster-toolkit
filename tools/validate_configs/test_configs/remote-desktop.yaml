@@ -19,8 +19,8 @@ blueprint_name: remote-desktop
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: remote-desktop
-  region: us-east4
-  zone: us-east4-c
+  region: us-central1
+  zone: us-central1-c
 
 deployment_groups:
 - group: primary
