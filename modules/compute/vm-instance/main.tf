@@ -22,7 +22,7 @@ locals {
   { network_storage = jsonencode(var.network_storage) }) : {}
 
   prefix_optional_deployment_name = var.name_prefix != null ? var.name_prefix : var.deployment_name
-  prefix_always_deployment_name   = var.name_prefix != null ? "{var.deployment_name}-{var.name_prefix}" : var.deployment_name
+  prefix_always_deployment_name   = var.name_prefix != null ? "${var.deployment_name}-${var.name_prefix}" : var.deployment_name
   resource_prefix                 = var.add_deployment_name_before_prefix ? local.prefix_always_deployment_name : local.prefix_optional_deployment_name
 
   enable_gvnic  = var.bandwidth_tier != "not_enabled"
