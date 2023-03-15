@@ -70,6 +70,8 @@ deployment_groups:
   - id: slurm_login
     source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     use:
+    - homefs
+    - scratchfs
     - projectsfs
     - slurm_controller
     - network1
