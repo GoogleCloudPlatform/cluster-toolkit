@@ -463,6 +463,6 @@ variable "prefix" {
 
 variable "labels" {
   description = "Labels to add to EXAScaler Cloud deployment. Key-value pairs."
-  type        = map(any)
+  type        = map(string)
   default     = {}
 }
