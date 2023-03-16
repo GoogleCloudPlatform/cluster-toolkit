@@ -32,6 +32,10 @@
       - gdm3
       state: present
       update_cache: true
+    register: apt_result
+    retries: 6
+    delay: 10
+    until: apt_result is success
 
   - name: Download GPU driver
     ansible.builtin.get_url:
