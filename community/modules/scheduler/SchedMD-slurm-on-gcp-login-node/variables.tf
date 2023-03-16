@@ -87,8 +87,8 @@ variable "disable_login_public_ips" {
 }
 
 variable "labels" {
-  description = "Labels to add to login instances. List of key key, value pairs."
-  type        = any
+  description = "Labels to add to login instances. Key-value pairs."
+  type        = map(string)
   default     = {}
 }
 

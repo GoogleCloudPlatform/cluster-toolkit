@@ -213,8 +213,8 @@ variable "enable_smt" {
 }
 
 variable "labels" {
-  description = "Labels to add to partition compute instances. List of key key, value pairs."
-  type        = any
+  description = "Labels to add to partition compute instances. Key-value pairs."
+  type        = map(string)
   default     = {}
 }
 

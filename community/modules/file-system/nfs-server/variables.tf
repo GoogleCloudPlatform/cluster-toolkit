@@ -78,8 +78,8 @@ variable "machine_type" {
 }
 
 variable "labels" {
-  description = "Labels to add to the NFS instance. List key, value pairs."
-  type        = any
+  description = "Labels to add to the NFS instance. Key-value pairs."
+  type        = map(string)
 }
 
 variable "metadata" {
