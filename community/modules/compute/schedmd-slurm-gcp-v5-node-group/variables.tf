@@ -269,7 +269,7 @@ variable "guest_accelerator" {
 
 variable "preemptible" {
   description = "Should use preemptibles to burst."
-  type        = string
+  type        = bool
   default     = false
 }
 
