@@ -105,8 +105,8 @@ variable "disable_compute_public_ips" {
 }
 
 variable "labels" {
-  description = "Labels to add to controller instance. List of key key, value pairs."
-  type        = any
+  description = "Labels to add to controller instance.  Key-value pairs."
+  type        = map(string)
   default     = {}
 }
 

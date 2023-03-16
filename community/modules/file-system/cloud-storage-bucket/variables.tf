@@ -30,8 +30,8 @@ variable "region" {
 }
 
 variable "labels" {
-  description = "Labels to add to the GCS bucket. List key, value pairs."
-  type        = any
+  description = "Labels to add to the GCS bucket. Key-value pairs."
+  type        = map(string)
 }
 
 variable "local_mount" {
