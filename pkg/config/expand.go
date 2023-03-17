@@ -29,21 +29,24 @@ import (
 )
 
 const (
-	blueprintLabel        string = "ghpc_blueprint"
-	deploymentLabel       string = "ghpc_deployment"
-	roleLabel             string = "ghpc_role"
-	simpleVariableExp     string = `^\$\((.*)\)$`
-	deploymentVariableExp string = `^\$\(vars\.(.*)\)$`
+	blueprintLabel  string = "ghpc_blueprint"
+	deploymentLabel string = "ghpc_deployment"
+	roleLabel       string = "ghpc_role"
+)
+
+var (
 	// Checks if a variable exists only as a substring, ex:
 	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
 	// Doesn't match: "\$(vars.example)", "no variable in this string"
-	anyVariableExp string = `(^|[^\\])\$\((.*?)\)`
-	literalExp     string = `^\(\((.*)\)\)$`
+	anyVariableExp    *regexp.Regexp = regexp.MustCompile(`(^|[^\\])\$\((.*?)\)`)
+	literalExp        *regexp.Regexp = regexp.MustCompile(`^\(\((.*)\)\)$`)
+	simpleVariableExp *regexp.Regexp = regexp.MustCompile(`^\$\((.*)\)$`)
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
 	// consume only up to whitespace to get variable name
-	literalSplitExp string = `^\(\([[:space:]]*(.*?)\.(.*?)[[:space:]]*\)\)$`
+	literalSplitExp       *regexp.Regexp = regexp.MustCompile(`^\(\([[:space:]]*(.*?)\.(.*?)[[:space:]]*\)\)$`)
+	deploymentVariableExp *regexp.Regexp = regexp.MustCompile(`^\$\(vars\.(.*)\)$`)
 )
 
 // expand expands variables and strings in the yaml config. Used directly by
@@ -720,10 +723,8 @@ func (ref *varReference) validate(depGroups []DeploymentGroup, vars map[string]i
 
 // Needs DeploymentGroups, variable string, current group,
 func expandSimpleVariable(context varContext) (string, error) {
-
 	// Get variable contents
-	re := regexp.MustCompile(simpleVariableExp)
-	contents := re.FindStringSubmatch(context.varString)
+	contents := simpleVariableExp.FindStringSubmatch(context.varString)
 	if len(contents) != 2 { // Should always be (match, contents) here
 		err := fmt.Errorf("%s %s, failed to extract contents: %v",
 			errorMessages["invalidVar"], context.varString, contents)
@@ -781,8 +782,7 @@ func expandSimpleVariable(context varContext) (string, error) {
 }
 
 func expandVariable(context varContext) (string, error) {
-	re := regexp.MustCompile(anyVariableExp)
-	matchall := re.FindAllString(context.varString, -1)
+	matchall := anyVariableExp.FindAllString(context.varString, -1)
 	errHint := ""
 	for _, element := range matchall {
 		// the regex match will include the first matching character
@@ -800,29 +800,17 @@ func expandVariable(context varContext) (string, error) {
 
 // isDeploymentVariable checks if the entire string is just a single deployment variable
 func isDeploymentVariable(str string) bool {
-	matched, err := regexp.MatchString(deploymentVariableExp, str)
-	if err != nil {
-		log.Fatalf("isDeploymentVariable(%s): %v", str, err)
-	}
-	return matched
+	return deploymentVariableExp.MatchString(str)
 }
 
 // isSimpleVariable checks if the entire string is just a single variable
 func isSimpleVariable(str string) bool {
-	matched, err := regexp.MatchString(simpleVariableExp, str)
-	if err != nil {
-		log.Fatalf("isSimpleVariable(%s): %v", str, err)
-	}
-	return matched
+	return simpleVariableExp.MatchString(str)
 }
 
 // hasVariable checks to see if any variable exists in a string
 func hasVariable(str string) bool {
-	matched, err := regexp.MatchString(anyVariableExp, str)
-	if err != nil {
-		log.Fatalf("hasVariable(%s): %v", str, err)
-	}
-	return matched
+	return anyVariableExp.MatchString(str)
 }
 
 func handleVariable(prim interface{}, context varContext) (interface{}, error) {

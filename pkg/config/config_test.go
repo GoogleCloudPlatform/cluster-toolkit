@@ -926,57 +926,6 @@ func (s *MySuite) TestConvertMapToCty(c *C) {
 	c.Assert(found, Equals, false)
 }
 
-func (s *MySuite) TestResolveGlobalVariables(c *C) {
-	var err error
-	var testkey1 = "testkey1"
-	var testkey2 = "testkey2"
-	var testkey3 = "testkey3"
-	dc := getDeploymentConfigForTest()
-	ctyMap := make(map[string]cty.Value)
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
-	c.Assert(err, IsNil)
-
-	// confirm plain string is unchanged and does not error
-	testCtyString := cty.StringVal("testval")
-	ctyMap[testkey1] = testCtyString
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
-	c.Assert(err, IsNil)
-	c.Assert(ctyMap[testkey1], Equals, testCtyString)
-
-	// confirm literal, non-global, variable is unchanged and does not error
-	testCtyString = cty.StringVal("((module.testval))")
-	ctyMap[testkey1] = testCtyString
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
-	c.Assert(err, IsNil)
-	c.Assert(ctyMap[testkey1], Equals, testCtyString)
-
-	// confirm failed resolution of a literal global
-	testCtyString = cty.StringVal("((var.test_global_var))")
-	ctyMap[testkey1] = testCtyString
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Matches, ".*Unsupported attribute;.*")
-
-	// confirm successful resolution of literal globals in presence of other strings
-	testGlobalVarString := "test_global_string"
-	testGlobalValString := "testval"
-	testGlobalVarBool := "test_global_bool"
-	testGlobalValBool := "testval"
-	testPlainString := "plain-string"
-	dc.Config.Vars[testGlobalVarString] = testGlobalValString
-	dc.Config.Vars[testGlobalVarBool] = testGlobalValBool
-	testCtyString = cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarString))
-	testCtyBool := cty.StringVal(fmt.Sprintf("((var.%s))", testGlobalVarBool))
-	ctyMap[testkey1] = testCtyString
-	ctyMap[testkey2] = testCtyBool
-	ctyMap[testkey3] = cty.StringVal(testPlainString)
-	err = dc.Config.ResolveGlobalVariables(ctyMap)
-	c.Assert(err, IsNil)
-	c.Assert(ctyMap[testkey1], Equals, cty.StringVal(testGlobalValString))
-	c.Assert(ctyMap[testkey2], Equals, cty.StringVal(testGlobalValBool))
-	c.Assert(ctyMap[testkey3], Equals, cty.StringVal(testPlainString))
-}
-
 func (s *MySuite) TestCheckMovedModules(c *C) {
 
 	dc := DeploymentConfig{
