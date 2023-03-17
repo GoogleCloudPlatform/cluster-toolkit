@@ -31,6 +31,11 @@ type PackerReader struct {
 	allModInfo map[string]ModuleInfo
 }
 
+// NewPackerReader is a constructor for PackerReader
+func NewPackerReader() PackerReader {
+	return PackerReader{allModInfo: map[string]ModuleInfo{}}
+}
+
 // SetInfo sets the module info for a module key'd on the source
 func (r PackerReader) SetInfo(source string, modInfo ModuleInfo) {
 	r.allModInfo[source] = modInfo
