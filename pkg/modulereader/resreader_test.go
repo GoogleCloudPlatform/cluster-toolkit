@@ -193,27 +193,30 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 }
 
 // tfreader.go
-func (s *MySuite) TestGetInfo_TFWriter(c *C) {
-	reader := TFReader{allModInfo: make(map[string]ModuleInfo)}
-	moduleInfo, err := reader.GetInfo(terraformDir)
+func (s *MySuite) TestGetInfo_TFReder(c *C) {
+	reader := NewTFReader()
+	info, err := reader.GetInfo(terraformDir)
 	c.Assert(err, IsNil)
-	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
-	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
+	c.Check(info, DeepEquals, ModuleInfo{
+		Inputs:  []VarInfo{{Name: "test_variable", Type: "string", Description: "This is just a test", Required: true}},
+		Outputs: []VarInfo{{Name: "test_output", Type: "", Description: "This is just a test"}},
+	})
+
 }
 
 // packerreader.go
 func (s *MySuite) TestGetInfo_PackerReader(c *C) {
 	// Didn't already exist, succeeds
-	reader := PackerReader{allModInfo: make(map[string]ModuleInfo)}
-	moduleInfo, err := reader.GetInfo(packerDir)
+	reader := NewPackerReader()
+	info, err := reader.GetInfo(packerDir)
 	c.Assert(err, IsNil)
-	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
+	c.Check(info, DeepEquals, ModuleInfo{
+		Inputs: []VarInfo{{Name: "test_variable", Type: "string", Description: "This is just a test", Required: true}}})
 
 	// Already exists, succeeds
-	existingModuleInfo, err := reader.GetInfo(packerDir)
+	infoAgain, err := reader.GetInfo(packerDir)
 	c.Assert(err, IsNil)
-	c.Assert(
-		existingModuleInfo.Inputs[0].Name, Equals, moduleInfo.Inputs[0].Name)
+	c.Check(infoAgain, DeepEquals, info)
 }
 
 // metareader.go
