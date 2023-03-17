@@ -38,7 +38,6 @@ import (
 const (
 	expectedVarFormat string = "$(vars.var_name) or $(module_id.output_name)"
 	expectedModFormat string = "$(module_id) or $(group_id.module_id)"
-	matchLabelExp     string = `^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`
 )
 
 var errorMessages = map[string]string{
@@ -632,11 +631,7 @@ func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
 
 // IsLiteralVariable returns true if string matches variable ((ctx.name))
 func IsLiteralVariable(str string) bool {
-	match, err := regexp.MatchString(literalExp, str)
-	if err != nil {
-		log.Fatalf("Failed checking if variable is a literal: %v", err)
-	}
-	return match
+	return literalExp.MatchString(str)
 }
 
 // IdentifyLiteralVariable returns
@@ -644,8 +639,7 @@ func IsLiteralVariable(str string) bool {
 // string: variable name (e.g. "project_id")
 // bool: true/false reflecting success
 func IdentifyLiteralVariable(str string) (string, string, bool) {
-	re := regexp.MustCompile(literalSplitExp)
-	contents := re.FindStringSubmatch(str)
+	contents := literalSplitExp.FindStringSubmatch(str)
 	if len(contents) != 3 {
 		return "", "", false
 	}
@@ -655,8 +649,7 @@ func IdentifyLiteralVariable(str string) (string, string, bool) {
 
 // HandleLiteralVariable is exported for use in modulewriter as well
 func HandleLiteralVariable(str string) string {
-	re := regexp.MustCompile(literalExp)
-	contents := re.FindStringSubmatch(str)
+	contents := literalExp.FindStringSubmatch(str)
 	if len(contents) != 2 {
 		log.Fatalf("Incorrectly formatted literal variable: %s", str)
 	}
@@ -742,22 +735,13 @@ func (err *InputValueError) Error() string {
 	return fmt.Sprintf("%v input error, cause: %v", err.inputKey, err.cause)
 }
 
-// ResolveGlobalVariables will resolve literal variables "((var.*))" in the
-// provided map to their corresponding value in the global variables of the
-// Blueprint.
-func (b Blueprint) ResolveGlobalVariables(ctyVars map[string]cty.Value) error {
-	origin, err := ConvertMapToCty(b.Vars)
-	if err != nil {
-		return fmt.Errorf("error converting deployment variables to cty: %w", err)
-	}
-	return ResolveVariables(ctyVars, origin)
-}
+var matchLabelExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`)
 
 // isValidLabelValue checks if a string is a valid value for a GCP label.
 // For more information on valid label values, see the docs at:
 // https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
 func isValidLabelValue(value string) bool {
-	return regexp.MustCompile(matchLabelExp).MatchString(value)
+	return matchLabelExp.MatchString(value)
 }
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.
