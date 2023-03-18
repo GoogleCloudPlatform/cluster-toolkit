@@ -26,19 +26,17 @@ type SourceAndKind struct {
 	Kind   string
 }
 
-const rootPath = "../../"
-
 // ListModules in directory
-func ListModules(dir string) ([]SourceAndKind, error) {
+func ListModules(root string, dir string) ([]SourceAndKind, error) {
 	ret := []SourceAndKind{}
-	err := filepath.WalkDir(filepath.Join(rootPath, dir), func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() && d.Name() == ".terraform" {
 			return filepath.SkipDir
 		}
-		src, err := filepath.Rel(rootPath, filepath.Dir(path))
+		src, err := filepath.Rel(root, filepath.Dir(path))
 		if err != nil {
 			return err
 		}
@@ -61,7 +59,7 @@ func LocalModules() ([]SourceAndKind, error) {
 	ret := []SourceAndKind{}
 
 	for _, sub := range []string{"modules", "community/modules"} {
-		mods, err := ListModules(sub)
+		mods, err := ListModules("../../", sub)
 		if err != nil {
 			return []SourceAndKind{}, err
 		}

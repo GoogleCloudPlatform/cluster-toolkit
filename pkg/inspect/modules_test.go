@@ -89,6 +89,7 @@ func hasInput(name string) predicate {
 	}
 }
 
+// Fails test if slice is empty, returns not empty slice as is.
 func notEmpty[E any](l []E, t *testing.T) []E {
 	if l == nil || len(l) == 0 {
 		t.Fatal("Did not expect empty list")
@@ -96,7 +97,7 @@ func notEmpty[E any](l []E, t *testing.T) []E {
 	return l
 }
 
-// Self-test
+// Self-test checks that there are modules to inspect
 func TestSanity(t *testing.T) {
 	notEmpty(query(all()), t)
 }
