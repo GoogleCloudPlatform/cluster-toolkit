@@ -97,9 +97,7 @@ EOD
   default     = "ANY_SINGLE_ZONE"
   validation {
     condition     = contains(["ANY", "ANY_SINGLE_ZONE", "BALANCED"], var.zone_target_shape)
-    error_message = <<-EOD
-      Allowed values for zone_target_shape are "ANY", "ANY_SINGLE_ZONE", or "BALANCED".
-    EOD
+    error_message = "Allowed values for zone_target_shape are \"ANY\", \"ANY_SINGLE_ZONE\", or \"BALANCED\"."
   }
 }
 
