@@ -165,8 +165,8 @@ cloud.google.com/go/securitycenter v1.13.0/go.mod h1:cv5qNAqjY84FCN6Y9z28WlkKXyW
 cloud.google.com/go/securitycenter v1.14.0/go.mod h1:gZLAhtyKv85n52XYWt6RmeBdydyxfPeTrpToDPw4Auc=
 cloud.google.com/go/servicedirectory v1.4.0/go.mod h1:gH1MUaZCgtP7qQiI+F+A+OpeKF/HQWgtAddhTbhL2bs=
 cloud.google.com/go/servicedirectory v1.5.0/go.mod h1:QMKFL0NUySbpZJ1UZs3oFAmdvVxhhxB6eJ/Vlp73dfg=
-cloud.google.com/go/serviceusage v1.5.0 h1:fl1AGgOx7E2eyBmH5ofDXT9w8xGvEaEnHYyNYGkxaqg=
-cloud.google.com/go/serviceusage v1.5.0/go.mod h1:w8U1JvqUqwJNPEOTQjrMHkw3IaIFLoLsPLvsE3xueec=
+cloud.google.com/go/serviceusage v1.6.0 h1:rXyq+0+RSIm3HFypctp7WoXxIA563rn206CfMWdqXX4=
+cloud.google.com/go/serviceusage v1.6.0/go.mod h1:R5wwQcbOWsyuOfbP9tGdAnCAc6B9DRwPG1xtWMDeuPA=
 cloud.google.com/go/speech v1.6.0/go.mod h1:79tcr4FHCimOp56lwC01xnt/WPJZc4v3gzyT7FoBkCM=
 cloud.google.com/go/speech v1.7.0/go.mod h1:KptqL+BAQIhMsj1kOP2la5DSEEerPDuOP/2mmkhHhZQ=
 cloud.google.com/go/storage v1.0.0/go.mod h1:IhtSnM/ZTZV8YYJWCY8RULGVqBDmpoyjwiyrjsg+URw=
