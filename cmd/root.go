@@ -50,7 +50,7 @@ HPC deployments on the Google Cloud Platform.`,
 				log.Fatalf("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.14.1",
+		Version:     "v1.15.0",
 		Annotations: annotation,
 	}
 )
