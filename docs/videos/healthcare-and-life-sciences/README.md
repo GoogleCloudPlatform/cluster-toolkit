@@ -19,7 +19,8 @@ Once deployed, you can test the cluster by running an example workload:
   cluster is working as expected.
 - [Lysozyme Example](./lysozyme-example/README.md): This example demonstrates a
   real life case of simulating the Lysozyme protein in water. It is a multi-step
-  GPU enabled GROMACS simulation.
+  GPU enabled GROMACS simulation. This example was featured in
+  [this YouTube Video](https://youtu.be/kJ-naSow7GQ).
 
 ## Architecture
 
