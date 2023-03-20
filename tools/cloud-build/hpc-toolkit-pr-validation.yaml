@@ -53,6 +53,20 @@ steps:
     time addlicense -check -ignore **/lysozyme-example/submit.sh . \
       || { echo "addlicense failed"; exit 1; }
     time make tests
+- id: ofe-virtual-env
+  waitFor:
+  - git-fetch-unshallow
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  args:
+  - '-c'
+  - |
+    set -e
+    python3 -m venv /opt/ofe
+    source /opt/ofe/bin/activate
+    pip install --upgrade pip
+    pip install --dry-run --no-cache-dir -r community/front-end/ofe/requirements.txt
 timeout: "1200s"
 options:
   machineType: N1_HIGHCPU_8
