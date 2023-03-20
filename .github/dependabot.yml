@@ -27,8 +27,10 @@ updates:
 - package-ecosystem: pip
   directory: /community/front-end/ofe/
   schedule:
-    interval: weekly
-    day: monday
+    interval: monthly
     time: "03:00"
     timezone: America/Los_Angeles
   target-branch: develop
+  reviewers:
+  - ek-nag
+  - mattstreet-nag
