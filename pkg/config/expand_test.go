@@ -328,45 +328,99 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 }
 
 func (s *MySuite) TestCombineLabels(c *C) {
-	dc := getDeploymentConfigForTest()
+	infoWithLabels := modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{{Name: "labels"}}}
 
-	err := dc.combineLabels()
-	c.Assert(err, IsNil)
+	dc := DeploymentConfig{
+		Config: Blueprint{
+			BlueprintName: "simple",
+			Vars: map[string]interface{}{
+				"deployment_name": "golden"},
+			DeploymentGroups: []DeploymentGroup{
+				{
+					Name: "lime",
+					Modules: []Module{
+						{Source: "blue/salmon", Kind: "terraform", ID: "coral", Settings: map[string]interface{}{
+							"labels": map[string]interface{}{
+								"magenta":   "orchid",
+								"ghpc_role": "maroon",
+							},
+						}},
+						{Source: "brown/oak", Kind: "terraform", ID: "khaki", Settings: map[string]interface{}{
+							// has no labels set
+						}},
+						{Source: "ivory/black", Kind: "terraform", ID: "silver", Settings: map[string]interface{}{
+							// has no labels set
+						}},
+					},
+				},
+				{
+					Name: "pink",
+					Modules: []Module{
+						{Source: "red/velvet", Kind: "packer", ID: "orange", Settings: map[string]interface{}{
+							"labels": map[string]interface{}{
+								"olive":           "teal",
+								"ghpc_deployment": "navy",
+							},
+						}},
+					},
+				},
+			},
+		},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
+			"lime": {
+				"blue/salmon": infoWithLabels,
+				"brown/oak":   infoWithLabels,
+				"ivory/black": modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{}},
+			},
+			"pink": {
+				"red/velvet": infoWithLabels,
+			},
+		},
+	}
+	c.Check(dc.combineLabels(), IsNil)
 
 	// Were global labels created?
-	_, exists := dc.Config.Vars["labels"]
-	c.Assert(exists, Equals, true)
+	c.Check(dc.Config.Vars["labels"], DeepEquals, map[string]interface{}{
+		"ghpc_blueprint":  "simple",
+		"ghpc_deployment": "golden",
+	})
 
-	// Was the ghpc_blueprint label set correctly?
-	globalLabels := dc.Config.Vars["labels"].(map[string]interface{})
-	ghpcBlueprint, exists := globalLabels[blueprintLabel]
-	c.Assert(exists, Equals, true)
-	c.Assert(ghpcBlueprint, Equals, dc.Config.BlueprintName)
+	lime := dc.Config.DeploymentGroups[0]
+	// Labels are set and override role
+	coral := lime.Modules[0]
+	c.Check(coral.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
+	c.Check(coral.Settings["labels"], DeepEquals, []interface{}{
+		"((var.labels))",
+		map[string]interface{}{"magenta": "orchid", "ghpc_role": "maroon"},
+	})
+	// Labels are not set
+	khaki := lime.Modules[1]
+	c.Check(khaki.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
+	c.Check(khaki.Settings["labels"], DeepEquals, []interface{}{
+		"((var.labels))",
+		map[string]interface{}{"ghpc_role": "brown"},
+	})
+	// No labels input
+	silver := lime.Modules[2]
+	c.Check(silver.WrapSettingsWith["labels"], IsNil)
+	c.Check(silver.Settings["labels"], IsNil)
 
-	// Was the ghpc_deployment label set correctly?
-	ghpcDeployment, exists := globalLabels[deploymentLabel]
-	c.Assert(exists, Equals, true)
-	c.Assert(ghpcDeployment, Equals, "deployment_name")
-
-	// Was "labels" created for the module with no settings?
-	_, exists = dc.Config.DeploymentGroups[0].Modules[0].Settings["labels"]
-	c.Assert(exists, Equals, true)
-
-	moduleLabels := dc.Config.DeploymentGroups[0].Modules[0].
-		Settings["labels"].(map[string]interface{})
-
-	// Was the role created correctly?
-	ghpcRole, exists := moduleLabels[roleLabel]
-	c.Assert(exists, Equals, true)
-	c.Assert(ghpcRole, Equals, "other")
+	// Packer, include global include explicitly
+	// Keep overriden ghpc_deployment=navy
+	orange := dc.Config.DeploymentGroups[1].Modules[0]
+	c.Check(orange.WrapSettingsWith["labels"], IsNil)
+	c.Check(orange.Settings["labels"], DeepEquals, map[string]interface{}{
+		"ghpc_blueprint":  "simple",
+		"ghpc_deployment": "navy",
+		"ghpc_role":       "red",
+		"olive":           "teal",
+	})
 
 	// Test invalid labels
 	dc.Config.Vars["labels"] = "notAMap"
-	err = dc.combineLabels()
 	expectedErrorStr := fmt.Sprintf("%s: found %T",
 		errorMessages["globalLabelType"], dc.Config.Vars["labels"])
-	c.Assert(err, ErrorMatches, expectedErrorStr)
-
+	c.Check(dc.combineLabels(), ErrorMatches, expectedErrorStr)
 }
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {

@@ -250,38 +250,17 @@ func writeMain(
 		// For each Setting
 		for _, setting := range orderSettings(ctySettings) {
 			value, _ := ctySettings[setting]
-			if setting == "labels" {
-				// Manually compose merge(var.labels, {mod.labels}) using tokens
-				mergeBytes := []byte("merge(var.labels, ")
-
-				labelsStr := flattenHCLLabelsMap(
-					string(hclwrite.TokensForValue(value).Bytes()))
-
-				mergeBytes = append(mergeBytes, []byte(labelsStr)...)
-				mergeBytes = append(mergeBytes, byte(')'))
-
-				mergeTok := simpleTokenFromString(string(mergeBytes))
-				labelsTokens := []*hclwrite.Token{&mergeTok}
-
-				moduleBody.SetAttributeRaw(setting, labelsTokens)
-				continue
-			}
-
 			if wrap, ok := mod.WrapSettingsWith[setting]; ok {
 				if len(wrap) != 2 {
 					return fmt.Errorf(
 						"invalid length of WrapSettingsWith for %s.%s, expected 2 got %d",
 						mod.ID, setting, len(wrap))
 				}
-				wrapBytes := []byte(wrap[0])
-				endBytes := []byte(wrap[1])
-
-				valueStr := hclwrite.TokensForValue(value).Bytes()
-				wrapBytes = append(wrapBytes, valueStr...)
-				wrapBytes = append(wrapBytes, endBytes...)
-				wrapToken := simpleTokenFromString(string(wrapBytes))
-				wrapTokens := []*hclwrite.Token{&wrapToken}
-				moduleBody.SetAttributeRaw(setting, wrapTokens)
+				toks, err := tokensForWraped(wrap[0], value, wrap[1])
+				if err != nil {
+					return fmt.Errorf("failed to process %s.%s: %v", mod.ID, setting, err)
+				}
+				moduleBody.SetAttributeRaw(setting, toks)
 			} else {
 				// Add attributes
 				moduleBody.SetAttributeValue(setting, value)
@@ -300,11 +279,45 @@ func writeMain(
 	return nil
 }
 
-func flattenHCLLabelsMap(hclString string) string {
-	hclString = strings.ReplaceAll(hclString, "\"\n", "\",")
-	hclString = strings.ReplaceAll(hclString, "\n", "")
-	hclString = strings.Join(strings.Fields(hclString), " ")
-	return hclString
+func tokensForWraped(pref string, val cty.Value, suf string) (hclwrite.Tokens, error) {
+	var toks hclwrite.Tokens
+	if !val.Type().IsListType() && !val.Type().IsTupleType() {
+		return toks, fmt.Errorf(
+			"invalid value for wrapped setting, expected sequence, got %#v", val.Type())
+	}
+	prefTok := simpleTokenFromString(pref)
+	toks = append(toks, &prefTok)
+
+	it, first := val.ElementIterator(), true
+	for it.Next() {
+		if !first {
+			toks = append(toks, &hclwrite.Token{
+				Type:  hclsyntax.TokenComma,
+				Bytes: []byte{','}})
+		}
+		_, el := it.Element()
+		toks = append(toks, tokensForValue(el)...)
+		first = false
+	}
+
+	sufTok := simpleTokenFromString(suf)
+	toks = append(toks, &sufTok)
+
+	return toks, nil
+}
+
+// Attempts to create an compact map/object,
+// returns input as is if length of compacted string exceeds 80.
+func maybeCompactMapToken(toks hclwrite.Tokens) hclwrite.Tokens {
+	s := string(toks.Bytes())
+	s = strings.ReplaceAll(s, "\"\n", "\",")
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 80 {
+		return toks
+	}
+	t := simpleTokenFromString(s)
+	return hclwrite.Tokens{&t}
 }
 
 func simpleTokenFromString(str string) hclwrite.Token {
@@ -480,4 +493,12 @@ func orderSettings[T any](settings map[string]T) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func tokensForValue(val cty.Value) hclwrite.Tokens {
+	toks := hclwrite.TokensForValue(val)
+	if val.Type().IsMapType() || val.Type().IsObjectType() {
+		toks = maybeCompactMapToken(toks)
+	}
+	return toks
 }
