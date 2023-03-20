@@ -17,7 +17,7 @@ django-extensions==3.2.1
 git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb0465664ccfa5787
 djangorestframework==3.13.1
 google-api-core==2.5.0
-google-api-python-client==2.37.0
+google-api-python-client==2.81.0
 google-auth==2.6.0
 google-auth-httplib2==0.1.0
 google-cloud-billing==1.4.1
