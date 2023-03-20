@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -247,7 +248,8 @@ func writeMain(
 		moduleBody.SetAttributeValue("source", moduleSource)
 
 		// For each Setting
-		for setting, value := range ctySettings {
+		for _, setting := range orderSettings(ctySettings) {
+			value, _ := ctySettings[setting]
 			if setting == "labels" {
 				// Manually compose merge(var.labels, {mod.labels}) using tokens
 				mergeBytes := []byte("merge(var.labels, ")
@@ -291,6 +293,7 @@ func writeMain(
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
+	hclBytes = hclwrite.Format(hclBytes)
 	if err := appendHCLToFile(mainPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
 	}
@@ -468,4 +471,13 @@ func (w TFWriter) restoreState(deploymentDir string) error {
 
 	}
 	return nil
+}
+
+func orderSettings[T any](settings map[string]T) []string {
+	keys := make([]string, 0, len(settings))
+	for k := range settings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
