@@ -5,7 +5,7 @@ go 1.18
 require (
 	cloud.google.com/go/compute v1.18.0
 	cloud.google.com/go/storage v1.28.1 // indirect
-	github.com/go-git/go-git/v5 v5.6.0
+	github.com/go-git/go-git/v5 v5.6.1
 	github.com/hashicorp/go-getter v1.7.0
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.16.2
@@ -34,8 +34,8 @@ require (
 	cloud.google.com/go/iam v0.12.0 // indirect
 	cloud.google.com/go/longrunning v0.4.1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
-	github.com/ProtonMail/go-crypto v0.0.0-20221026131551-cf6655e29de4 // indirect
-	github.com/acomagu/bufpipe v1.0.3 // indirect
+	github.com/ProtonMail/go-crypto v0.0.0-20230217124315-7d5c6f04bbb8 // indirect
+	github.com/acomagu/bufpipe v1.0.4 // indirect
 	github.com/agext/levenshtein v1.2.2 // indirect
 	github.com/apparentlymart/go-textseg/v13 v13.0.0 // indirect
 	github.com/aws/aws-sdk-go v1.44.122 // indirect
@@ -69,7 +69,7 @@ require (
 	github.com/ulikunitz/xz v0.5.10 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	golang.org/x/crypto v0.3.0 // indirect
+	golang.org/x/crypto v0.6.0 // indirect
 	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/oauth2 v0.6.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
