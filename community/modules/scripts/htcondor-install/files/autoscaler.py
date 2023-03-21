@@ -140,12 +140,12 @@ class AutoScaler:
             pprint(responseInstanceTemplateInfo["properties"])
 
         machine_type = responseInstanceTemplateInfo["properties"]["machineType"]
-        is_preemtible = responseInstanceTemplateInfo["properties"]["scheduling"][
+        is_spot = responseInstanceTemplateInfo["properties"]["scheduling"][
             "preemptible"
         ]
         if self.debug > 0:
             print("Machine Type: " + machine_type)
-            print("Is preemtible: " + str(is_preemtible))
+            print("Is spot: " + str(is_spot))
         request = self.service.machineTypes().get(
             project=self.project, zone=self.zone, machineType=machine_type
         )
@@ -159,7 +159,7 @@ class AutoScaler:
 
         instanceTemplateInfo = {
             "machine_type": machine_type,
-            "is_preemtible": is_preemtible,
+            "is_spot": is_spot,
             "guest_cpus": guest_cpus,
         }
         return instanceTemplateInfo
@@ -194,11 +194,26 @@ class AutoScaler:
             REQUEST_MEMORY_ATTRIBUTE,
         ]
 
+        instanceTemplateInfo = self.getInstanceTemplateInfo()
+        self.is_spot = instanceTemplateInfo["is_spot"]
+        self.cores_per_node = instanceTemplateInfo["guest_cpus"]
+        print(f"MIG is configured for Spot pricing: {self.is_spot}")
+        print("Number of CPU per compute node: " + str(self.cores_per_node))
+
+        # this query will constrain the search for jobs to those that either
+        # require spot VMs or do not require Spot VMs based on whether the
+        # VM instance template is configured for Spot pricing
+        spot_query = classad.ExprTree(f"RequireSpot == {self.is_spot}")
+
         # For purpose of scaling a Managed Instance Group, count only jobs that
         # are running or idle ("potentially runnable"). Filter JobStatus by:
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html#JobStatus
-        running_job_ads = schedd.query(constraint="JobStatus==2", projection=job_attributes)
-        idle_job_ads = schedd.query(constraint="JobStatus==1", projection=job_attributes)
+        running_job_query = classad.ExprTree("JobStatus == 2")
+        idle_job_query = classad.ExprTree("JobStatus == 1")
+        running_job_ads = schedd.query(constraint=running_job_query.and_(spot_query),
+                                       projection=job_attributes)
+        idle_job_ads = schedd.query(constraint=idle_job_query.and_(spot_query),
+                                    projection=job_attributes)
 
         total_idle_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in idle_job_ads)
         total_running_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in running_job_ads)
@@ -207,13 +222,9 @@ class AutoScaler:
         print(f"Total CPUs requested by running jobs: {total_running_request_cpus}")
         print(f"Total CPUs requested by idle jobs: {total_idle_request_cpus}")
 
-        instanceTemplateInfo = self.getInstanceTemplateInfo()
         if self.debug > 1:
             print("Information about the compute instance template")
             pprint(instanceTemplateInfo)
-
-        self.cores_per_node = instanceTemplateInfo["guest_cpus"]
-        print("Number of CPU per compute node: " + str(self.cores_per_node))
 
         # Calculate number instances to satisfy current job queue CPU requests
         if queue > 0:

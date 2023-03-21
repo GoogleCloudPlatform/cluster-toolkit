@@ -23,8 +23,6 @@ Toolkit, see the extended [Network Storage documentation](../../../../docs/netwo
   use: [network1]
   settings:
     auto_delete_disk: true
-    labels:
-      ghpc_role: storage-home
 ```
 
 This creates a NFS on a virtual machine which allow other VMs to mount the
@@ -56,7 +54,7 @@ install the client and mount the file system. See the following example:
   - id: nfs
     source: community/modules/file-system/nfs-server
     use: [network1]
-    settings: {local_mount: /mnt1}
+    settings: {local_mounts: [/mnt1]}
 
   - id: mount-at-startup
     source: modules/scripts/startup-script

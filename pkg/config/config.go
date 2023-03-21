@@ -384,10 +384,6 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 		blueprint.Vars = make(map[string]interface{})
 	}
 
-	if len(blueprint.Vars) == 0 {
-		blueprint.Vars = make(map[string]interface{})
-	}
-
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
 	if !isValidValidationLevel(blueprint.ValidationLevel) {
@@ -530,6 +526,31 @@ func checkUsedModuleNames(
 	return nil
 }
 
+func checkBackend(b TerraformBackend) error {
+	const errMsg = "can not use variables in backend block, got '%s=%s'"
+	if hasVariable(b.Type) {
+		return fmt.Errorf(errMsg, "type", b.Type)
+	}
+	for k, v := range b.Configuration {
+		if s, ok := v.(string); ok && hasVariable(s) {
+			return fmt.Errorf(errMsg, k, s)
+		}
+	}
+	return nil
+}
+
+func checkBackends(bp Blueprint) error {
+	if err := checkBackend(bp.TerraformBackendDefaults); err != nil {
+		return err
+	}
+	for _, g := range bp.DeploymentGroups {
+		if err := checkBackend(g.TerraformBackend); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateConfig runs a set of simple early checks on the imported input YAML
 func (dc *DeploymentConfig) validateConfig() {
 	_, err := dc.Config.DeploymentName()
@@ -547,6 +568,9 @@ func (dc *DeploymentConfig) validateConfig() {
 	dc.ModuleToGroup = moduleToGroup
 	if err = checkUsedModuleNames(
 		dc.Config.DeploymentGroups, dc.ModuleToGroup); err != nil {
+		log.Fatal(err)
+	}
+	if err = checkBackends(dc.Config); err != nil {
 		log.Fatal(err)
 	}
 }

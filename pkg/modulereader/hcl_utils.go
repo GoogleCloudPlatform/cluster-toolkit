@@ -17,9 +17,14 @@ package modulereader
 import (
 	"fmt"
 	"hpc-toolkit/pkg/sourcereader"
+	"log"
 	"os"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/ext/typeexpr"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // getHCLInfo is wrapped by SourceReader interface which supports multiple
@@ -73,4 +78,34 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	}
 	ret.Outputs = outs
 	return ret, nil
+}
+
+// Transforms HCL type string into cty.Type
+func getCtyType(hclType string) (cty.Type, error) {
+	expr, diags := hclsyntax.ParseExpression([]byte(hclType), "", hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() {
+		return cty.Type{}, diags
+	}
+	typ, diags := typeexpr.TypeConstraint(expr)
+	if diags.HasErrors() {
+		return cty.Type{}, diags
+	}
+	return typ, nil
+}
+
+// Attempts to bring semantically equal types to equal string representation. E.g.:
+//
+//	 normalizeType("object({count=number,kind=string})")
+//		== normalizeType("object({kind=string,count=number})").
+//
+// Additionally it removes any comments, whitespaces and line breaks.
+//
+// This method is fail-safe, if error arises passed type will be returned without changes.
+func normalizeType(hclType string) string {
+	ctyType, err := getCtyType(hclType)
+	if err != nil {
+		log.Printf("Failed to parse HCL type='%s', got %v", hclType, err)
+		return hclType
+	}
+	return typeexpr.TypeString(ctyType)
 }

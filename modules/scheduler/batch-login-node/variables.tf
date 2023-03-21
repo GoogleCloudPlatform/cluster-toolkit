@@ -30,8 +30,8 @@ variable "region" {
 }
 
 variable "labels" {
-  description = "Labels to add to the login node. List key, value pairs"
-  type        = any
+  description = "Labels to add to the login node. Key-value pairs"
+  type        = map(string)
 }
 
 variable "instance_template" {

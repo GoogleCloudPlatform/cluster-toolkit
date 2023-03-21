@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/v5.1.0
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.6.0
 
 variable "deployment_name" {
   description = "Name of the deployment."
@@ -75,6 +75,31 @@ variable "zone_policy_deny" {
       for x in var.zone_policy_deny : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
     ])
     error_message = "A provided zone in zone_policy_deny is not a valid zone (Regexp '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
+  }
+}
+
+variable "zone_target_shape" {
+  description = <<EOD
+Strategy for distributing VMs across zones in a region.
+ANY
+  GCE picks zones for creating VM instances to fulfill the requested number of VMs
+  within present resource constraints and to maximize utilization of unused zonal
+  reservations.
+ANY_SINGLE_ZONE (default)
+  GCE always selects a single zone for all the VMs, optimizing for resource quotas,
+  available reservations and general capacity.
+BALANCED
+  GCE prioritizes acquisition of resources, scheduling VMs in zones where resources
+  are available while distributing VMs as evenly as possible across allowed zones
+  to minimize the impact of zonal failure.
+EOD
+  type        = string
+  default     = "ANY_SINGLE_ZONE"
+  validation {
+    condition     = contains(["ANY", "ANY_SINGLE_ZONE", "BALANCED"], var.zone_target_shape)
+    error_message = <<-EOD
+      Allowed values for zone_target_shape are "ANY", "ANY_SINGLE_ZONE", or "BALANCED".
+    EOD
   }
 }
 

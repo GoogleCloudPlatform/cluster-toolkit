@@ -44,7 +44,7 @@ variable "debug_file" {
 
 variable "labels" {
   description = "Labels for the created GCS bucket. List key, value pairs."
-  type        = any
+  type        = map(string)
 }
 
 variable "runners" {

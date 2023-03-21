@@ -23,43 +23,49 @@ if [ -z "$PROJECT_ID" ]; then
 fi
 
 ACTIVE_BUILDS=$(gcloud builds list --project "${PROJECT_ID}" --filter="id!=\"${BUILD_ID}\"" --ongoing 2>/dev/null)
-ACTIVE_FILESTORE=$(gcloud filestore instances list --project "${PROJECT_ID}" --format='value(name)')
-if [[ -z "$ACTIVE_BUILDS" && -z "$ACTIVE_FILESTORE" ]]; then
-	echo "Disabling Filestore API..."
-	gcloud services disable file.googleapis.com --force --project "${PROJECT_ID}"
-
-	echo "Deleting all Filestore peering networks"
-	# the output of this command matches
-	# filestore-peer-426414172628;filestore-peer-646290499454 default
-	peerings=$(gcloud compute networks peerings list --project "${PROJECT_ID}" --format="value(peerings.name,name)")
-	while read -r peering; do
-		# split the output into:
-		# 0: a semi-colon separated list of peerings
-		# 1: the name of a VPC network
-		read -ra parr <<<"$peering"
-		# split the list of peerings into an array
-		IFS=";" read -ra peers <<<"${parr[0]}"
-		# capture the VPC network
-		network=${parr[1]}
-
-		for peer in "${peers[@]}"; do
-			if [[ "$peer" =~ ^filestore-peer-[0-9]+$ ]]; then
-				echo "Deleting $peer from $network"
-				gcloud --project "${PROJECT_ID}" compute networks peerings delete --network "$network" "$peer"
-			fi
-		done
-	done <<<"$peerings"
-
-	echo "Re-enabling Filestore API..."
-	gcloud services enable file.googleapis.com --project "${PROJECT_ID}"
-	echo "Re-enabled Filestore API..."
-elif [[ -n "$ACTIVE_BUILDS" ]]; then
-	echo "There are active Cloud Build jobs. Refusing to disable/enable Filestore to reset internal limit."
-elif [[ -n "$ACTIVE_FILESTORE" ]]; then
-	echo "There are active Filestore instances. These may require manual cleanup."
-	# Fail if there are active filestore instances. This triggers an alert to the
-	# team, ensuring leftover resources are cleaned up if needed.
+if [[ -n "$ACTIVE_BUILDS" ]]; then
+	echo "There are active Cloud Build jobs. Skip clean up, may require re-run."
 	exit 1
 fi
+
+ACTIVE_FILESTORE=$(gcloud filestore instances list --project "${PROJECT_ID}" | tail -n +2 2>/dev/null)
+if [[ -n "$ACTIVE_FILESTORE" ]]; then
+	echo "Deleting filestore instances"
+	while read -r row; do
+		# get first two columns: INSTANCE_NAME and LOCATION
+		read -ra cols <<<"$row"
+		echo "Deleting ${cols[0]} at ${cols[0]}"
+		gcloud --project "${PROJECT_ID}" filestore instances delete --force --quiet --location="${cols[1]}" "${cols[0]}"
+	done <<<"$ACTIVE_FILESTORE"
+fi
+
+# See https://cloud.google.com/filestore/docs/troubleshooting#system_limit_for_internal_resources_has_been_reached_error_when_creating_an_instance
+echo "Disabling Filestore API..."
+gcloud services disable file.googleapis.com --force --project "${PROJECT_ID}"
+
+echo "Deleting all Filestore peering networks"
+# the output of this command matches
+# filestore-peer-426414172628;filestore-peer-646290499454 default
+peerings=$(gcloud compute networks peerings list --project "${PROJECT_ID}" --format="value(peerings.name,name)")
+while read -r peering; do
+	# split the output into:
+	# 0: a semi-colon separated list of peerings
+	# 1: the name of a VPC network
+	read -ra parr <<<"$peering"
+	# split the list of peerings into an array
+	IFS=";" read -ra peers <<<"${parr[0]}"
+	# capture the VPC network
+	network=${parr[1]}
+
+	for peer in "${peers[@]}"; do
+		if [[ "$peer" =~ ^filestore-peer-[0-9]+$ ]]; then
+			echo "Deleting $peer from $network"
+			gcloud --project "${PROJECT_ID}" compute networks peerings delete --network "$network" "$peer"
+		fi
+	done
+done <<<"$peerings"
+
+echo "Re-enabling Filestore API..."
+gcloud services enable file.googleapis.com --project "${PROJECT_ID}"
 
 exit 0
