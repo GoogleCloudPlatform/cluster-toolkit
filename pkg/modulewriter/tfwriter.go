@@ -172,7 +172,8 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 	hclBody := hclFile.Body()
 
 	// for each variable
-	for k, v := range vars {
+	for _, k := range orderKeys(vars) {
+		v, _ := vars[k]
 		// Create variable block
 		hclBlock := hclBody.AppendNewBlock("variable", []string{k})
 		blockBody := hclBlock.Body()
@@ -218,8 +219,8 @@ func writeMain(
 		tfBody := hclBody.AppendNewBlock("terraform", []string{}).Body()
 		backendBlock := tfBody.AppendNewBlock("backend", []string{tfBackend.Type})
 		backendBody := backendBlock.Body()
-		for setting, value := range tfConfig {
-			backendBody.SetAttributeValue(setting, value)
+		for _, setting := range orderKeys(tfConfig) {
+			backendBody.SetAttributeValue(setting, tfConfig[setting])
 		}
 		hclBody.AppendNewline()
 	}
@@ -248,7 +249,7 @@ func writeMain(
 		moduleBody.SetAttributeValue("source", moduleSource)
 
 		// For each Setting
-		for _, setting := range orderSettings(ctySettings) {
+		for _, setting := range orderKeys(ctySettings) {
 			value, _ := ctySettings[setting]
 			if setting == "labels" {
 				// Manually compose merge(var.labels, {mod.labels}) using tokens
@@ -473,7 +474,7 @@ func (w TFWriter) restoreState(deploymentDir string) error {
 	return nil
 }
 
-func orderSettings[T any](settings map[string]T) []string {
+func orderKeys[T any](settings map[string]T) []string {
 	keys := make([]string, 0, len(settings))
 	for k := range settings {
 		keys = append(keys, k)
