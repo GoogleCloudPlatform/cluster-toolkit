@@ -1,8 +1,9 @@
 # Lysozyme Example
 
-This example demonstrates a real life case of simulating the Lysozyme protein
-in water. It uses the HCLS blueprint to run a multi-step GPU enabled GROMACS
-run.
+This example demonstrates a real life case of simulating the Lysozyme protein in
+water. It uses the HCLS blueprint to run a multi-step GPU enabled GROMACS run.
+This example was featured in
+[this YouTube Video](https://youtu.be/kJ-naSow7GQ).
 
 This example has been adapted with changes from tutorials by:
 
