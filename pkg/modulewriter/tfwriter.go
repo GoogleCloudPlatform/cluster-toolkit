@@ -256,7 +256,7 @@ func writeMain(
 						"invalid length of WrapSettingsWith for %s.%s, expected 2 got %d",
 						mod.ID, setting, len(wrap))
 				}
-				toks, err := tokensForWraped(wrap[0], value, wrap[1])
+				toks, err := tokensForWrapped(wrap[0], value, wrap[1])
 				if err != nil {
 					return fmt.Errorf("failed to process %s.%s: %v", mod.ID, setting, err)
 				}
@@ -279,7 +279,7 @@ func writeMain(
 	return nil
 }
 
-func tokensForWraped(pref string, val cty.Value, suf string) (hclwrite.Tokens, error) {
+func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, error) {
 	var toks hclwrite.Tokens
 	if !val.Type().IsListType() && !val.Type().IsTupleType() {
 		return toks, fmt.Errorf(
