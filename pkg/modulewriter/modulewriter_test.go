@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
+	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
 	"os"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
 	. "gopkg.in/check.v1"
@@ -213,6 +215,13 @@ func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 
 // modulewriter.go
 func (s *MySuite) TestWriteDeployment(c *C) {
+	aferoFS := afero.NewMemMapFs()
+	aferoFS.MkdirAll("modules/red/pink", 0755)
+	afero.WriteFile(aferoFS, "modules/red/pink/main.tf", []byte("pink"), 0644)
+	aferoFS.MkdirAll("community/modules/green/lime", 0755)
+	afero.WriteFile(aferoFS, "community/modules/green/lime/main.tf", []byte("lime"), 0644)
+	sourcereader.ModuleFS = afero.NewIOFS(aferoFS)
+
 	testBlueprint := getBlueprintForTest()
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
 	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
@@ -769,4 +778,49 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	teardown()
 	os.Exit(code)
+}
+
+func (s *MySuite) TestDeploymentSource(c *C) {
+	{ // git
+		m := config.Module{Kind: "terraform", Source: "github.com/x/y.git"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "github.com/x/y.git")
+	}
+	{ // packer
+		m := config.Module{Kind: "packer", Source: "modules/packer/custom-image", ID: "custom-image"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "custom-image")
+	}
+	{ // embedded core
+		m := config.Module{Kind: "terraform", Source: "modules/x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "./modules/embedded/modules/x/y")
+	}
+	{ // embedded community
+		m := config.Module{Kind: "terraform", Source: "community/modules/x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "./modules/embedded/community/modules/x/y")
+	}
+	{ // local rel in repo
+		m := config.Module{Kind: "terraform", Source: "./modules/x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
+	}
+	{ // local rel
+		m := config.Module{Kind: "terraform", Source: "./../../../../x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
+	}
+	{ // local abs
+		m := config.Module{Kind: "terraform", Source: "/tmp/x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
+	}
 }

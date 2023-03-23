@@ -61,14 +61,14 @@ func copyDirFromModules(fs BaseFS, source string, dest string) error {
 		} else {
 			fileBytes, err := fs.ReadFile(entrySource)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to read embedded %#v: %v", entrySource, err)
 			}
 			copyFile, err := os.Create(entryDest)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create %#v: %v", entryDest, err)
 			}
 			if _, err = copyFile.Write(fileBytes); err != nil {
-				return err
+				return fmt.Errorf("failed to write %#v: %v", entryDest, err)
 			}
 		}
 	}
@@ -89,6 +89,9 @@ func copyFSToTempDir(fs BaseFS, modulePath string) (string, error) {
 
 // GetModule copies the embedded source to a provided destination (the deployment directory)
 func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
+	if ModuleFS == nil {
+		return fmt.Errorf("embedded file system is not initialized")
+	}
 	if !IsEmbeddedPath(modPath) {
 		return fmt.Errorf("Source is not valid: %s", modPath)
 	}
@@ -102,4 +105,12 @@ func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
 	}
 
 	return copyFromPath(modDir, copyPath)
+}
+
+// CopyDir copies embedded directory to destination path
+func (r EmbeddedSourceReader) CopyDir(src string, dst string) error {
+	if ModuleFS == nil {
+		return fmt.Errorf("embedded file system is not initialized")
+	}
+	return copyDirFromModules(ModuleFS, src, dst)
 }
