@@ -349,7 +349,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 							// has no labels set
 						}},
 						{Source: "ivory/black", Kind: "terraform", ID: "silver", Settings: map[string]interface{}{
-							// has no labels set
+							// has no labels set, also module has no labels input
 						}},
 					},
 				},
@@ -393,7 +393,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 		"((var.labels))",
 		map[string]interface{}{"magenta": "orchid", "ghpc_role": "maroon"},
 	})
-	// Labels are not set
+	// Labels are not set, infer role from module.source
 	khaki := lime.Modules[1]
 	c.Check(khaki.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
 	c.Check(khaki.Settings["labels"], DeepEquals, []interface{}{
