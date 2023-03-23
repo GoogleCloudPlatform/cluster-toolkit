@@ -237,3 +237,12 @@ For example:
 
 This is a known issue, the recommended workaround is to use different naming for
 the `local_mount` and `filestore_share_name`.
+
+### `local-exec provisioner error` During Terraform Apply
+
+Using the `enable_reconfigure` setting with Slurm v5 modules uses `local-exec`
+provisioners to perform additional cluster configuration. Some common issues
+experienced when using this feature are missing local python requirements and
+incorrectly configured gcloud cli. There is more information about these issues
+and fixes on the
+[`schedmd-slurm-gcp-v5-controller` documentation](../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md#live-cluster-reconfiguration-enable_reconfigure).

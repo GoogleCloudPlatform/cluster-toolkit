@@ -11,11 +11,13 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
-> **_WARNING:_** The variables [enable\_reconfigure], [enable\_cleanup\_compute] and
-> [enable\_cleanup\_subscriptions], if set to true, require additional
-> dependencies **to be installed on the system running `terraform apply`**.
-> Python3 (>=3.6.0, <4.0.0) must be installed along with the pip packages listed in the
-> [requirements.txt] file of [SchedMD/slurm-gcp].
+> **_WARNING:_** The variables [enable\_reconfigure],
+> [enable\_cleanup\_compute] and [enable\_cleanup\_subscriptions], if set to
+> true, require additional dependencies **to be installed on the system running
+> `terraform apply`**. Python3 (>=3.6.0, <4.0.0) must be installed along with
+> the pip packages listed in the [requirements.txt] file of
+> [SchedMD/slurm-gcp]. See the
+> [documentation below](#live-cluster-reconfiguration-enable_reconfigure).
 
 [SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.6.2
 [slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.6.2/terraform/slurm_cluster/modules/slurm_controller_instance
@@ -52,6 +54,7 @@ For a complete example using this module, see
 [slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
 
 ### Live Cluster Reconfiguration (`enable_reconfigure`)
+
 The schedmd-slurm-gcp-v5-controller module supports the reconfiguration of
 partitions and slurm configuration in a running, active cluster. This option is
 activated through the `enable_reconfigure` setting:
@@ -82,7 +85,19 @@ This option has some additional requirements:
 * The project in your gcloud config must match the project the cluster is being
   deployed onto due to a known issue with the reconfigure scripts. To set your
   default config project, run the following command:
-  `gcloud config set core/<<PROJECT ID>>`
+
+  ```bash
+  gcloud config set core/project <<PROJECT ID>>
+  ```
+
+  If the gcloud project ID is not properly set you may see an error during
+  terraform deployment similar to the following:
+
+  ```text
+  google.api_core.exceptions.NotFound: 404 Resource not found
+  Could not find in SpannerConfigStore:
+  TopicByProjectIdAndName(project_id=<incorrect project #>, topic_name=<topic name>)
+  ```
 
 [optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.6.2/terraform/slurm_cluster#optional
 
