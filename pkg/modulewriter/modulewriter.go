@@ -135,35 +135,38 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 
 func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 
-	for iGrp, grp := range *deploymentGroups {
+	for iGrp := range *deploymentGroups {
+		grp := &(*deploymentGroups)[iGrp]
 		basePath := filepath.Join(deploymentPath, grp.Name)
-		for iMod, module := range grp.Modules {
-			if sourcereader.IsGitPath(module.Source) {
+		for iMod := range grp.Modules {
+			mod := &grp.Modules[iMod]
+			if sourcereader.IsGitPath(mod.Source) {
+				mod.DeploymentSource = mod.Source
 				continue
 			}
 
 			/* Copy source files */
-			moduleName := filepath.Base(module.Source)
-			(*deploymentGroups)[iGrp].Modules[iMod].ModuleName = moduleName
-			var destPath string
-			switch module.Kind {
+			moduleName := filepath.Base(mod.Source)
+			var deplSource string
+			switch mod.Kind {
 			case "terraform":
-				destPath = filepath.Join(basePath, "modules", moduleName)
+				deplSource = "./" + filepath.Join("modules", moduleName)
 			case "packer":
-				destPath = filepath.Join(basePath, module.ID)
+				deplSource = mod.ID
 			}
-			_, err := os.Stat(destPath)
-			if err == nil {
+			mod.DeploymentSource = deplSource
+			fullPath := filepath.Join(basePath, deplSource)
+			if _, err := os.Stat(fullPath); err == nil {
 				continue
 			}
 
-			reader := sourcereader.Factory(module.Source)
-			if err := reader.GetModule(module.Source, destPath); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", module.Source, destPath, err)
+			reader := sourcereader.Factory(mod.Source)
+			if err := reader.GetModule(mod.Source, fullPath); err != nil {
+				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, fullPath, err)
 			}
 
 			/* Create module level files */
-			writer := factory(module.Kind)
+			writer := factory(mod.Kind)
 			writer.addNumModules(1)
 		}
 	}

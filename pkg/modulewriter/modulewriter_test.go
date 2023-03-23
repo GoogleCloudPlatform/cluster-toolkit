@@ -674,8 +674,9 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	}
 
 	testPackerModule := config.Module{
-		Kind: "packer",
-		ID:   "testPackerModule",
+		Kind:             "packer",
+		ID:               "testPackerModule",
+		DeploymentSource: "testPackerModule",
 	}
 	testDeploymentGroup := config.DeploymentGroup{
 		Name:    "packerGroup",
