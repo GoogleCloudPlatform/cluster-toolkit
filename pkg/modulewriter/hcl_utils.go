@@ -45,9 +45,9 @@ func writeHclAttributes(vars map[string]cty.Value, dst string) error {
 	hclBody := hclFile.Body()
 
 	// for each variable
-	for k, v := range vars {
+	for _, k := range orderKeys(vars) {
 		// Write attribute
-		hclBody.SetAttributeValue(k, v)
+		hclBody.SetAttributeValue(k, vars[k])
 	}
 
 	// Write file
