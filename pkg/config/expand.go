@@ -173,7 +173,7 @@ func (mod *Module) addListValue(settingName string, value string) error {
 	if !found {
 		mod.Settings[settingName] = []interface{}{}
 		mod.createWrapSettingsWith()
-		mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
+		mod.WrapSettingsWith[settingName] = []string{"flatten([", "])"}
 	}
 	currentValue, ok := mod.Settings[settingName].([]interface{})
 	if ok {
@@ -380,45 +380,71 @@ func (dc *DeploymentConfig) combineLabels() error {
 	}
 
 	// Add both default labels if they don't already exist
-	if _, exists := globalLabels[blueprintLabel]; !exists {
-		globalLabels[blueprintLabel] = defaultLabels[blueprintLabel]
-	}
-	if _, exists := globalLabels[deploymentLabel]; !exists {
-		globalLabels[deploymentLabel] = defaultLabels[deploymentLabel]
-	}
+	mergeInLabels(globalLabels, defaultLabels)
 
 	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod, mod := range grp.Modules {
-			// Check if labels are set for this module
-			if !dc.moduleHasInput(grp.Name, mod.Source, labels) {
-				continue
+		for iMod := range grp.Modules {
+			if err := combineModuleLabels(dc, iGrp, iMod); err != nil {
+				return err
 			}
-
-			var modLabels map[string]interface{}
-			var ok bool
-			// If labels aren't already set, prefill them with globals
-			if _, exists := mod.Settings[labels]; !exists {
-				modLabels = make(map[string]interface{})
-			} else {
-				// Cast into map so we can index into them
-				modLabels, ok = mod.Settings[labels].(map[string]interface{})
-
-				if !ok {
-					return fmt.Errorf("%s, Module %s, labels type: %T",
-						errorMessages["settingsLabelType"], mod.ID, mod.Settings[labels])
-				}
-			}
-
-			// Add the role (e.g. compute, network, etc)
-			if _, exists := modLabels[roleLabel]; !exists {
-				modLabels[roleLabel] = getRole(mod.Source)
-			}
-			dc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings[labels] =
-				modLabels
 		}
 	}
 	dc.Config.Vars[labels] = globalLabels
 	return nil
+}
+
+func combineModuleLabels(dc *DeploymentConfig, iGrp int, iMod int) error {
+	grp := &dc.Config.DeploymentGroups[iGrp]
+	mod := &grp.Modules[iMod]
+	mod.createWrapSettingsWith()
+	labels := "labels"
+
+	// previously expanded blueprint, user written BPs do not use `WrapSettingsWith`
+	if _, ok := mod.WrapSettingsWith[labels]; ok {
+		return nil // Do nothing
+	}
+
+	// Check if labels are set for this module
+	if !dc.moduleHasInput(grp.Name, mod.Source, labels) {
+		return nil
+	}
+
+	var modLabels map[string]interface{}
+	var err error
+
+	if _, exists := mod.Settings[labels]; !exists {
+		modLabels = map[string]interface{}{}
+	} else {
+		// Cast into map so we can index into them
+		modLabels, err = toStringInterfaceMap(mod.Settings[labels])
+		if err != nil {
+			return fmt.Errorf("%s, Module %s, labels type: %T",
+				errorMessages["settingsLabelType"], mod.ID, mod.Settings[labels])
+		}
+	}
+	// Add the role (e.g. compute, network, etc)
+	if _, exists := modLabels[roleLabel]; !exists {
+		modLabels[roleLabel] = getRole(mod.Source)
+	}
+
+	if mod.Kind == "terraform" {
+		// Terraform module labels to be expressed as
+		// `merge(var.labels, { ghpc_role=..., **settings.labels })`
+		mod.WrapSettingsWith[labels] = []string{"merge(", ")"}
+		mod.Settings[labels] = []interface{}{"((var.labels))", modLabels}
+	} else if mod.Kind == "packer" {
+		mergeInLabels(modLabels, dc.Config.Vars[labels].(map[string]interface{}))
+		mod.Settings[labels] = modLabels
+	}
+	return nil
+}
+
+func mergeInLabels[V interface{}](to map[string]V, from map[string]V) {
+	for k, v := range from {
+		if _, exists := to[k]; !exists {
+			to[k] = v
+		}
+	}
 }
 
 func applyGlobalVarsInGroup(
