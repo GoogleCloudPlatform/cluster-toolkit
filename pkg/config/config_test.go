@@ -403,11 +403,11 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 	// test used module with shared variables
 	usedConn := ModConnection{
 		ref: modReference{
-			ToModuleID:   "usedModule",
-			FromModuleID: "usingModule",
-			ToGroupID:    "group1",
-			FromGroupID:  "group1",
-			Explicit:     true,
+			toModuleID:   "usedModule",
+			fromModuleID: "usingModule",
+			toGroupID:    "group1",
+			fromGroupID:  "group1",
+			explicit:     true,
 		},
 		kind:            useConnection,
 		sharedVariables: []string{"var1"},
@@ -419,11 +419,11 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 	// test used module with no shared variables (i.e. "unused")
 	unusedConn := ModConnection{
 		ref: modReference{
-			ToModuleID:   "firstUnusedModule",
-			FromModuleID: "usingModule",
-			ToGroupID:    "group1",
-			FromGroupID:  "group1",
-			Explicit:     true,
+			toModuleID:   "firstUnusedModule",
+			fromModuleID: "usingModule",
+			toGroupID:    "group1",
+			fromGroupID:  "group1",
+			explicit:     true,
 		},
 		kind:            useConnection,
 		sharedVariables: []string{},
@@ -435,11 +435,11 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 	// test second used module with no shared variables (i.e. "unused")
 	secondUnusedConn := ModConnection{
 		ref: modReference{
-			ToModuleID:   "secondUnusedModule",
-			FromModuleID: "usingModule",
-			ToGroupID:    "group1",
-			FromGroupID:  "group1",
-			Explicit:     true,
+			toModuleID:   "secondUnusedModule",
+			fromModuleID: "usingModule",
+			toGroupID:    "group1",
+			fromGroupID:  "group1",
+			explicit:     true,
 		},
 		kind:            useConnection,
 		sharedVariables: []string{},

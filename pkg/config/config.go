@@ -319,8 +319,8 @@ func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 	unusedModules := make(map[string][]string)
 	for _, conn := range dc.moduleConnections {
 		if conn.isEmpty() {
-			fromMod := conn.ref.getFromModuleID()
-			unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.getToModuleID())
+			fromMod := conn.ref.FromModuleID()
+			unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.ToModuleID())
 		}
 	}
 	return unusedModules
@@ -520,7 +520,7 @@ func checkUsedModuleNames(bp Blueprint) error {
 				}
 
 				// TODO: remove this when support is added!
-				if ref.FromGroupID != ref.ToGroupID {
+				if ref.fromGroupID != ref.toGroupID {
 					return fmt.Errorf("%s: %s is an intergroup reference",
 						errorMessages["varInAnotherGroup"], usedMod)
 				}
