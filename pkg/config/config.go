@@ -271,11 +271,8 @@ const (
 // ModConnection defines details about connections between modules. Currently,
 // only modules connected with "use" are tracked.
 type ModConnection struct {
-	toID   string
-	fromID string
-	// Currently only supports useConnection
-	kind ConnectionKind
-	// List of variables shared from module `fromID` to module `toID`
+	ref             reference
+	kind            ConnectionKind
 	sharedVariables []string
 }
 
@@ -322,7 +319,8 @@ func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 	unusedModules := make(map[string][]string)
 	for _, conn := range dc.moduleConnections {
 		if conn.isEmpty() {
-			unusedModules[conn.fromID] = append(unusedModules[conn.fromID], conn.toID)
+			fromMod := conn.ref.getFromModuleID()
+			unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.getToModuleID())
 		}
 	}
 	return unusedModules
@@ -508,8 +506,8 @@ func modToGrp(groups []DeploymentGroup, modID string) (int, error) {
 
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
-func checkUsedModuleNames(depGroups []DeploymentGroup) error {
-	for _, grp := range depGroups {
+func checkUsedModuleNames(bp Blueprint) error {
+	for _, grp := range bp.DeploymentGroups {
 		for _, mod := range grp.Modules {
 			for _, usedMod := range mod.Use {
 				ref, err := identifyModuleByReference(usedMod, grp)
@@ -517,7 +515,7 @@ func checkUsedModuleNames(depGroups []DeploymentGroup) error {
 					return err
 				}
 
-				if err = ref.validate(depGroups); err != nil {
+				if err = ref.validate(bp); err != nil {
 					return err
 				}
 
@@ -570,7 +568,7 @@ func (dc *DeploymentConfig) validateConfig() {
 	if err = checkModuleAndGroupNames(dc.Config.DeploymentGroups); err != nil {
 		log.Fatal(err)
 	}
-	if err = checkUsedModuleNames(dc.Config.DeploymentGroups); err != nil {
+	if err = checkUsedModuleNames(dc.Config); err != nil {
 		log.Fatal(err)
 	}
 	if err = checkBackends(dc.Config); err != nil {
