@@ -770,3 +770,38 @@ func TestMain(m *testing.M) {
 	teardown()
 	os.Exit(code)
 }
+
+func (s *MySuite) TestDeploymentSource(c *C) {
+	{ // git
+		m := config.Module{Kind: "terraform", Source: "github.com/x/y.git"}
+		c.Check(deploymentSource(m), Equals, "github.com/x/y.git")
+	}
+	{ // packer
+		m := config.Module{Kind: "packer", Source: "modules/packer/custom-image", ID: "custom-image"}
+		c.Check(deploymentSource(m), Equals, "custom-image")
+	}
+	{ // embedded core
+		m := config.Module{Kind: "terraform", Source: "modules/x/y"}
+		c.Check(deploymentSource(m), Equals, "./modules/embedded/modules/x/y")
+	}
+	{ // embedded community
+		m := config.Module{Kind: "terraform", Source: "community/modules/x/y"}
+		c.Check(deploymentSource(m), Equals, "./modules/embedded/community/modules/x/y")
+	}
+	{ // dev core
+		m := config.Module{Kind: "terraform", Source: "./modules/x/y"}
+		c.Check(deploymentSource(m), Equals, "./modules/dev/modules/x/y")
+	}
+	{ // dev community
+		m := config.Module{Kind: "terraform", Source: "./community/modules/x/y"}
+		c.Check(deploymentSource(m), Equals, "./modules/dev/community/modules/x/y")
+	}
+	{ // local rel
+		m := config.Module{Kind: "terraform", Source: "../../../../../x/y"}
+		c.Check(deploymentSource(m), Equals, "./modules/local/y")
+	}
+	{ // local abs
+		m := config.Module{Kind: "terraform", Source: "/tmp/x/y"}
+		c.Check(deploymentSource(m), Equals, "./modules/local/y")
+	}
+}

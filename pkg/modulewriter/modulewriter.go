@@ -28,6 +28,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -89,22 +90,14 @@ func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFla
 	}
 
 	for _, grp := range blueprint.DeploymentGroups {
-
-		deploymentName, err := blueprint.DeploymentName()
-		if err != nil {
-			return err
-		}
-
-		deploymentPath := filepath.Join(outputDir, deploymentName)
 		writer, ok := kinds[grp.Kind]
 		if !ok {
 			return fmt.Errorf(
 				"Invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
 		}
 
-		if err := writer.writeDeploymentGroup(
-			grp, blueprint.Vars, deploymentPath,
-		); err != nil {
+		err := writer.writeDeploymentGroup(grp, blueprint.Vars, deploymentDir)
+		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
 	}
@@ -133,38 +126,65 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 	return nil
 }
 
-func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
+// Get module source within deployment group
+// Rules are following:
+//   - git source
+//     => keep the same source
+//   - packer
+//     => use module.ID as source
+//   - embedded (source starts with "modules" or "comunity/modules")
+//     => ./modules/embedded/<source>
+//   - within repos "modules" or "community/modules" folders.
+//     => ./modules/dev/<source>
+//   - outside of the repo folder.
+//     => ./modules/local/<basename(source)>
+func deploymentSource(mod config.Module) string {
+	if sourcereader.IsGitPath(mod.Source) {
+		return mod.Source
+	}
+	switch mod.Kind {
+	case "packer":
+		return mod.ID
+	case "terraform": // see bellow
+	default:
+		log.Fatalf("unexpected module kind %s", mod.Kind)
+	}
+	const common = "./modules/"
+	if sourcereader.IsEmbeddedPath(mod.Source) {
+		return common + filepath.Join("embedded", mod.Source)
+	}
+	if !sourcereader.IsLocalPath(mod.Source) {
+		log.Fatalf("unuexpected module source %s", mod.Source)
+	}
+	if strings.HasPrefix(mod.Source, "./modules/") ||
+		strings.HasPrefix(mod.Source, "./community/modules/") {
+		return common + filepath.Join("dev", mod.Source)
+	}
+	name := filepath.Base(mod.Source)
+	return common + filepath.Join("local", name)
 
+}
+
+func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 	for iGrp := range *deploymentGroups {
 		grp := &(*deploymentGroups)[iGrp]
 		basePath := filepath.Join(deploymentPath, grp.Name)
 		for iMod := range grp.Modules {
 			mod := &grp.Modules[iMod]
+			mod.DeploymentSource = deploymentSource(*mod)
+
 			if sourcereader.IsGitPath(mod.Source) {
-				mod.DeploymentSource = mod.Source
-				continue
+				continue // do not download
 			}
-
 			/* Copy source files */
-			moduleName := filepath.Base(mod.Source)
-			var deplSource string
-			switch mod.Kind {
-			case "terraform":
-				deplSource = "./" + filepath.Join("modules", moduleName)
-			case "packer":
-				deplSource = mod.ID
-			}
-			mod.DeploymentSource = deplSource
-			fullPath := filepath.Join(basePath, deplSource)
-			if _, err := os.Stat(fullPath); err == nil {
+			dst := filepath.Join(basePath, mod.DeploymentSource)
+			if _, err := os.Stat(dst); err == nil {
 				continue
 			}
-
 			reader := sourcereader.Factory(mod.Source)
-			if err := reader.GetModule(mod.Source, fullPath); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, fullPath, err)
+			if err := reader.GetModule(mod.Source, dst); err != nil {
+				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, dst, err)
 			}
-
 			/* Create module level files */
 			writer := factory(mod.Kind)
 			writer.addNumModules(1)
