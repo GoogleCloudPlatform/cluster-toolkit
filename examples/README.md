@@ -23,6 +23,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-) ![community-badge]
   * [cloud-batch.yaml](#cloud-batchyaml-) ![core-badge]
   * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
+  * [lustre.yaml](#lustreyaml-) ![core-badge]
   * [spack-gromacs.yaml](#spack-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
@@ -549,6 +550,29 @@ instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
 [cloud-batch.yaml]: ../examples/cloud-batch.yaml
+
+### [lustre.yaml] ![core-badge]
+
+Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
+
+The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+file system is designed for high IO performance. It has a default capacity of ~10TiB and is mounted at `/lustre`.
+
+After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
+
+```sh
+watch mount -t lustre
+```
+
+#### Quota Requirements for lustre.yaml
+
+For this example the following is needed in the selected region:
+
+* Compute Engine API: Persistent Disk SSD (GB): **~14TB: 3500GB MDT, 3500GB OST[0-2]**
+* Compute Engine API: Persistent Disk Standard (GB): **~756GB: 20GB MDS, 276GB MGS, 3x20GB OSS, 2x200GB client-vms**
+* Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
+
+[lustre.yaml]: ./lustre.yaml
 
 ### [batch-mpi.yaml] ![core-badge]
 
