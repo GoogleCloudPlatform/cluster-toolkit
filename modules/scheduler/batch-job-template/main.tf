@@ -66,7 +66,7 @@ locals {
 
 module "instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "> 7.6.0"
+  version = "~> 8.0"
 
   name_prefix        = var.instance_template == null ? "${local.job_id}-instance-template" : "unused-template"
   project_id         = var.project_id
