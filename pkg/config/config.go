@@ -36,8 +36,9 @@ import (
 )
 
 const (
-	expectedVarFormat string = "$(vars.var_name) or $(module_id.output_name)"
-	expectedModFormat string = "$(module_id) or $(group_id.module_id)"
+	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
+	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
+	unexpectedConnectionKind string = "connectionKind must be useConnection"
 )
 
 var errorMessages = map[string]string{
@@ -257,22 +258,26 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
-// ConnectionKind defines the kind of module connection, defined by the source
+// connectionKind defines the kind of module connection, defined by the source
 // of the connection. Currently, only Use is supported.
-type ConnectionKind int
+type connectionKind int
 
 const (
-	undefinedConnection ConnectionKind = iota
+	undefinedConnection connectionKind = iota
 	useConnection
 	// explicitConnection
 	// globalConnection
 )
 
+func (c connectionKind) IsValid() bool {
+	return c == useConnection
+}
+
 // ModConnection defines details about connections between modules. Currently,
 // only modules connected with "use" are tracked.
 type ModConnection struct {
 	ref             reference
-	kind            ConnectionKind
+	kind            connectionKind
 	sharedVariables []string
 }
 
@@ -296,7 +301,7 @@ type DeploymentConfig struct {
 	// Indexed by Resource Group name and Module Source
 	ModulesInfo       map[string]map[string]modulereader.ModuleInfo
 	expanded          bool
-	moduleConnections []ModConnection
+	moduleConnections map[string][]ModConnection
 }
 
 // ExpandConfig expands the yaml config in place
@@ -313,14 +318,36 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	return nil
 }
 
+func (dc *DeploymentConfig) addModuleConnection(ref reference, kind connectionKind, sharedVariables []string) error {
+	if dc.moduleConnections == nil {
+		dc.moduleConnections = make(map[string][]ModConnection)
+	}
+
+	if !kind.IsValid() {
+		log.Fatal(unexpectedConnectionKind)
+	}
+
+	conn := ModConnection{
+		ref:             ref,
+		kind:            kind,
+		sharedVariables: sharedVariables,
+	}
+
+	fromModID := ref.FromModuleID()
+	dc.moduleConnections[fromModID] = append(dc.moduleConnections[fromModID], conn)
+	return nil
+}
+
 // listUnusedModules provides a mapping of modules to modules that are in the
 // "use" field, but not actually used.
 func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 	unusedModules := make(map[string][]string)
-	for _, conn := range dc.moduleConnections {
-		if conn.isEmpty() {
-			fromMod := conn.ref.FromModuleID()
-			unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.ToModuleID())
+	for _, connections := range dc.moduleConnections {
+		for _, conn := range connections {
+			if conn.isEmpty() {
+				fromMod := conn.ref.FromModuleID()
+				unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.ToModuleID())
+			}
 		}
 	}
 	return unusedModules
@@ -351,7 +378,7 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 
 	newDeploymentConfig = DeploymentConfig{
 		Config:            blueprint,
-		moduleConnections: []ModConnection{},
+		moduleConnections: make(map[string][]ModConnection),
 	}
 	return newDeploymentConfig, nil
 }
