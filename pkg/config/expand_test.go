@@ -553,24 +553,24 @@ func (s *MySuite) TestIdentifyModuleByReference(c *C) {
 
 	ref, err = identifyModuleByReference("module_id", dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, dg.Name)
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Explicit, Equals, false)
+	c.Assert(ref.toGroupID, Equals, dg.Name)
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.explicit, Equals, false)
 
 	ref, err = identifyModuleByReference("explicit_group_id.module_id", dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, "explicit_group_id")
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Explicit, Equals, true)
+	c.Assert(ref.toGroupID, Equals, "explicit_group_id")
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.explicit, Equals, true)
 
 	ref, err = identifyModuleByReference(fmt.Sprintf("%s.module_id", dg.Name), dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, dg.Name)
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Explicit, Equals, true)
+	c.Assert(ref.toGroupID, Equals, dg.Name)
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.explicit, Equals, true)
 
 	ref, err = identifyModuleByReference("explicit_group_id.module_id.output_name", dg)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
@@ -605,68 +605,79 @@ func (s *MySuite) TestValidateModuleReference(c *C) {
 		},
 	}
 
+	bp := Blueprint{
+		DeploymentGroups: dg,
+	}
+
 	// An intragroup reference from group 0 to module B in 0 (good)
 	ref0ToB0 := modReference{
-		ID:          dg[0].Modules[1].ID,
-		ToGroupID:   dg[0].Name,
-		FromGroupID: dg[0].Name,
-		Explicit:    false,
+		toModuleID:   dg[0].Modules[1].ID,
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  dg[0].Name,
+		explicit:     false,
 	}
-	c.Assert(ref0ToB0.validate(dg), IsNil)
+	c.Assert(ref0ToB0.validate(bp), IsNil)
 
 	// An explicit intergroup reference from group 1 to module A in 0 (good)
 	xRef1ToA0 := modReference{
-		ID:          dg[0].Modules[0].ID,
-		ToGroupID:   dg[0].Name,
-		FromGroupID: dg[1].Name,
-		Explicit:    true,
+		toModuleID:   dg[0].Modules[0].ID,
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  dg[1].Name,
+		explicit:     true,
 	}
-	c.Assert(xRef1ToA0.validate(dg), IsNil)
+	c.Assert(xRef1ToA0.validate(bp), IsNil)
 
 	// An implicit intergroup reference from group 1 to module A in 0 (bad due to implicit)
 	iRef1ToA0 := modReference{
-		ID:          dg[0].Modules[0].ID,
-		ToGroupID:   dg[0].Name,
-		FromGroupID: dg[1].Name,
-		Explicit:    false,
+		toModuleID:   dg[0].Modules[0].ID,
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  dg[1].Name,
+		explicit:     false,
 	}
-	c.Assert(iRef1ToA0.validate(dg), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupImplicit"]))
+	c.Assert(iRef1ToA0.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupImplicit"]))
 
 	// An explicit intergroup reference from group 0 to module 1 in 1 (bad due to group ordering)
 	xRefA0To1 := modReference{
-		ID:          dg[1].Modules[0].ID,
-		ToGroupID:   dg[1].Name,
-		FromGroupID: dg[0].Name,
-		Explicit:    true,
+		toModuleID:   dg[1].Modules[0].ID,
+		fromModuleID: "",
+		toGroupID:    dg[1].Name,
+		fromGroupID:  dg[0].Name,
+		explicit:     true,
 	}
-	c.Assert(xRefA0To1.validate(dg), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupOrder"]))
+	c.Assert(xRefA0To1.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupOrder"]))
 
 	// An explicit intergroup reference from group 0 to B0 with a bad Group ID
 	badRef0ToB0 := modReference{
-		ID:          dg[0].Modules[1].ID,
-		ToGroupID:   dg[1].Name,
-		FromGroupID: dg[0].Name,
-		Explicit:    true,
+		toModuleID:   dg[0].Modules[1].ID,
+		fromModuleID: "",
+		toGroupID:    dg[1].Name,
+		fromGroupID:  dg[0].Name,
+		explicit:     true,
 	}
-	c.Assert(badRef0ToB0.validate(dg), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["referenceWrongGroup"]))
+	c.Assert(badRef0ToB0.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["referenceWrongGroup"]))
 
 	// A target module that doesn't exist (bad)
 	badTargetMod := modReference{
-		ID:          "bad-module",
-		ToGroupID:   dg[0].Name,
-		FromGroupID: dg[0].Name,
-		Explicit:    true,
+		toModuleID:   "bad-module",
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  dg[0].Name,
+		explicit:     true,
 	}
-	c.Assert(badTargetMod.validate(dg), ErrorMatches, fmt.Sprintf("module bad-module was not found"))
+	c.Assert(badTargetMod.validate(bp), ErrorMatches, "module bad-module was not found")
 
 	// A source group ID that doesn't exist (bad)
 	badSourceGroup := modReference{
-		ID:          dg[0].Modules[0].ID,
-		ToGroupID:   dg[0].Name,
-		FromGroupID: "bad-group",
-		Explicit:    true,
+		toModuleID:   dg[0].Modules[0].ID,
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  "bad-group",
+		explicit:     true,
 	}
-	c.Assert(badSourceGroup.validate(dg), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["groupNotFound"]))
+	c.Assert(badSourceGroup.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["groupNotFound"]))
 }
 
 func (s *MySuite) TestIdentifySimpleVariable(c *C) {
@@ -679,27 +690,27 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 
 	ref, err = identifySimpleVariable("group_id.module_id.output_name", dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, "group_id")
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Name, Equals, "output_name")
-	c.Assert(ref.Explicit, Equals, true)
+	c.Assert(ref.toGroupID, Equals, "group_id")
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.name, Equals, "output_name")
+	c.Assert(ref.explicit, Equals, true)
 
 	ref, err = identifySimpleVariable("module_id.output_name", dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, "calling_group_id")
-	c.Assert(ref.FromGroupID, Equals, "calling_group_id")
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Name, Equals, "output_name")
-	c.Assert(ref.Explicit, Equals, false)
+	c.Assert(ref.toGroupID, Equals, "calling_group_id")
+	c.Assert(ref.fromGroupID, Equals, "calling_group_id")
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.name, Equals, "output_name")
+	c.Assert(ref.explicit, Equals, false)
 
 	ref, err = identifySimpleVariable("vars.variable_name", dg)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, "deployment")
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "vars")
-	c.Assert(ref.Name, Equals, "variable_name")
-	c.Assert(ref.Explicit, Equals, false)
+	c.Assert(ref.toGroupID, Equals, "deployment")
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.toModuleID, Equals, "vars")
+	c.Assert(ref.name, Equals, "variable_name")
+	c.Assert(ref.explicit, Equals, false)
 
 	ref, err = identifySimpleVariable("foo", dg)
 	c.Assert(err, NotNil)

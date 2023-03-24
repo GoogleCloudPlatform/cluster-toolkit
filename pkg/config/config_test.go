@@ -400,10 +400,15 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 	got := dc.listUnusedModules()
 	c.Assert(got, HasLen, 0)
 
-	// All "use" modules actually used
+	// test used module with shared variables
 	usedConn := ModConnection{
-		toID:            "usedModule",
-		fromID:          "usingModule",
+		ref: modReference{
+			toModuleID:   "usedModule",
+			fromModuleID: "usingModule",
+			toGroupID:    "group1",
+			fromGroupID:  "group1",
+			explicit:     true,
+		},
 		kind:            useConnection,
 		sharedVariables: []string{"var1"},
 	}
@@ -411,10 +416,15 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 0)
 
-	// One fully unused module
+	// test used module with no shared variables (i.e. "unused")
 	unusedConn := ModConnection{
-		toID:            "usedModule",
-		fromID:          "usingModule",
+		ref: modReference{
+			toModuleID:   "firstUnusedModule",
+			fromModuleID: "usingModule",
+			toGroupID:    "group1",
+			fromGroupID:  "group1",
+			explicit:     true,
+		},
 		kind:            useConnection,
 		sharedVariables: []string{},
 	}
@@ -422,17 +432,21 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 1)
 
-	// Two fully unused modules
+	// test second used module with no shared variables (i.e. "unused")
 	secondUnusedConn := ModConnection{
-		toID:            "secondUnusedModule",
-		fromID:          "usingModule",
+		ref: modReference{
+			toModuleID:   "secondUnusedModule",
+			fromModuleID: "usingModule",
+			toGroupID:    "group1",
+			fromGroupID:  "group1",
+			explicit:     true,
+		},
 		kind:            useConnection,
 		sharedVariables: []string{},
 	}
 	dc.moduleConnections = append(dc.moduleConnections, secondUnusedConn)
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 2)
-
 }
 
 func (s *MySuite) TestAddKindToModules(c *C) {
