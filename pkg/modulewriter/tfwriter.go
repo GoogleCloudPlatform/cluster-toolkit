@@ -30,7 +30,6 @@ import (
 	"github.com/zclconf/go-cty/cty"
 
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/sourcereader"
 )
 
 const (
@@ -239,14 +238,7 @@ func writeMain(
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
-		var moduleSource cty.Value
-		if sourcereader.IsGitPath(mod.Source) {
-			moduleSource = cty.StringVal(mod.Source)
-		} else {
-			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", mod.ModuleName))
-		}
-
-		moduleBody.SetAttributeValue("source", moduleSource)
+		moduleBody.SetAttributeValue("source", cty.StringVal(mod.DeploymentSource))
 
 		// For each Setting
 		for _, setting := range orderKeys(ctySettings) {

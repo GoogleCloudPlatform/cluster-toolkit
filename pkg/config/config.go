@@ -226,10 +226,11 @@ func (g DeploymentGroup) HasKind(kind string) bool {
 
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
-	Source           string
+	Source string
+	// DeploymentSource - is source to be used for this module in written deployment.
+	DeploymentSource string `yaml:"-"` // "-" prevents user from specifying it
 	Kind             string
 	ID               string
-	ModuleName       string
 	Use              []string
 	WrapSettingsWith map[string][]string
 	Outputs          []string `yaml:"outputs,omitempty"`
