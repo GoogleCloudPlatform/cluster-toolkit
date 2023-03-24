@@ -220,7 +220,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 				testModuleSourceWithLabels: testModuleInfo,
 			},
 		},
-		moduleConnections: []ModConnection{},
+		moduleConnections: make(map[string][]ModConnection),
 	}
 	// the next two steps simulate relevant steps in ghpc expand
 	dc.addMetadataToModules()
@@ -312,6 +312,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				testModuleSource1: testModuleInfo1,
 			},
 		},
+		moduleConnections: make(map[string][]ModConnection),
 	}
 
 	dc.addMetadataToModules()
@@ -400,51 +401,38 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 	got := dc.listUnusedModules()
 	c.Assert(got, HasLen, 0)
 
-	// test used module with shared variables
-	usedConn := ModConnection{
-		ref: modReference{
-			toModuleID:   "usedModule",
-			fromModuleID: "usingModule",
-			toGroupID:    "group1",
-			fromGroupID:  "group1",
-			explicit:     true,
-		},
-		kind:            useConnection,
-		sharedVariables: []string{"var1"},
+	modRef0 := modReference{
+		toModuleID:   "usedModule",
+		fromModuleID: "usingModule",
+		toGroupID:    "group1",
+		fromGroupID:  "group1",
+		explicit:     true,
 	}
-	dc.moduleConnections = []ModConnection{usedConn}
+	dc.addModuleConnection(modRef0, useConnection, []string{"var1"})
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 0)
 
 	// test used module with no shared variables (i.e. "unused")
-	unusedConn := ModConnection{
-		ref: modReference{
-			toModuleID:   "firstUnusedModule",
-			fromModuleID: "usingModule",
-			toGroupID:    "group1",
-			fromGroupID:  "group1",
-			explicit:     true,
-		},
-		kind:            useConnection,
-		sharedVariables: []string{},
+	modRef1 := modReference{
+		toModuleID:   "firstUnusedModule",
+		fromModuleID: "usingModule",
+		toGroupID:    "group1",
+		fromGroupID:  "group1",
+		explicit:     true,
 	}
-	dc.moduleConnections = append(dc.moduleConnections, unusedConn)
+	dc.addModuleConnection(modRef1, useConnection, []string{})
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 1)
 
 	// test second used module with no shared variables (i.e. "unused")
-	secondUnusedConn := ModConnection{
-		ref: modReference{
-			toModuleID:   "secondUnusedModule",
-			fromModuleID: "usingModule",
-			toGroupID:    "group1",
-			fromGroupID:  "group1",
-			explicit:     true,
-		},
-		kind:            useConnection,
-		sharedVariables: []string{},
+	modRef2 := modReference{
+		toModuleID:   "secondUnusedModule",
+		fromModuleID: "usingModule",
+		toGroupID:    "group1",
+		fromGroupID:  "group1",
+		explicit:     true,
 	}
-	dc.moduleConnections = append(dc.moduleConnections, secondUnusedConn)
+	dc.addModuleConnection(modRef2, useConnection, []string{})
 	got = dc.listUnusedModules()
 	c.Assert(got["usingModule"], HasLen, 2)
 }

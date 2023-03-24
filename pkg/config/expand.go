@@ -299,12 +299,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				if err != nil {
 					return err
 				}
-				connection := ModConnection{
-					ref:             modRef,
-					kind:            useConnection,
-					sharedVariables: usedVars,
-				}
-				dc.moduleConnections = append(dc.moduleConnections, connection)
+				dc.addModuleConnection(modRef, useConnection, usedVars)
 			}
 		}
 	}
