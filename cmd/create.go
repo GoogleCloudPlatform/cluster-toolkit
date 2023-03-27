@@ -41,8 +41,8 @@ func init() {
 		"Sets the output directory where the HPC deployment directory will be created.")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
 	createCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
-	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
-		validationLevelDesc)
+	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING", validationLevelDesc)
+	createCmd.Flags().StringSliceVar(&validatorsToSkip, "skip-validators", nil, skipValidatorsDesc)
 	createCmd.Flags().BoolVarP(&overwriteDeployment, "overwrite-deployment", "w", false,
 		"If specified, an existing deployment directory is overwritten by the new deployment. \n"+
 			"Note: Terraform state IS preserved. \n"+
@@ -60,7 +60,10 @@ var (
 	overwriteDeployment bool
 	validationLevel     string
 	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
-	createCmd           = &cobra.Command{
+	validatorsToSkip    []string
+	skipValidatorsDesc  = "Validators to skip"
+
+	createCmd = &cobra.Command{
 		Use:   "create BLUEPRINT_NAME",
 		Short: "Create a new deployment.",
 		Long:  "Create a new deployment based on a provided blueprint.",
@@ -92,6 +95,9 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
 		log.Fatal(err)
 	}
+	if err := skipValidators(&deploymentConfig); err != nil {
+		log.Fatal(err)
+	}
 	if err := deploymentConfig.ExpandConfig(); err != nil {
 		log.Fatal(err)
 	}
@@ -104,4 +110,16 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 			log.Fatal(err)
 		}
 	}
+}
+
+func skipValidators(dc *config.DeploymentConfig) error {
+	if validatorsToSkip == nil {
+		return nil
+	}
+	for _, v := range validatorsToSkip {
+		if err := dc.SkipValidator(v); err != nil {
+			return err
+		}
+	}
+	return nil
 }

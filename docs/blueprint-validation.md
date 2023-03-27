@@ -81,12 +81,28 @@ Each validator is described below:
 ### Explicit validators
 
 Validators can be overwritten and supplied with alternative input values,
-however they are limited to the set of functions defined above. One method by
-which to disable validators is to explicitly set them to the empty list:
+however they are limited to the set of functions defined above.
+
+### Skipping or disabling validators
+
+There are three methods to disable configured validators:
+
+* Set `skip` value in validator config:
 
 ```yaml
-validators: []
+validators:
+- validator: test_apis_enabled
+  inputs: {}
+  skip: true
 ```
+
+* Use `skip-validators` CLI flag:
+
+```shell
+./ghpc create ... --skip-validators="test_project_exists,test_apis_enabled"
+```
+
+* To disable all validators, set the [validation level to IGNORE](#validation-levels).
 
 ### Validation levels
 
