@@ -730,7 +730,7 @@ walks through the use of this blueprint.
 
 ### [quantum-circuit-simulator.yaml] ![community-badge]
 
-This blueprint provisions an [A2 series VM with NVIDIA A100 GPU accelerator][a2]
+This blueprint provisions a [N1 series VM with NVIDIA T4 GPU accelerator][t4]
 and compiles [qsim], a [Google Quantum AI][gqai]-developed tool that simulates
 quantum circuits using CPUs and GPUs. The installation of qsim, the [CUDA
 Toolkit][cudatk], and the [cuQuantum SDK][cqsdk] is fully automated but takes a
@@ -744,7 +744,7 @@ python /var/tmp/qsim-example.py
 
 [gqai]: https://quantumai.google/
 [quantum-circuit-simulator.yaml]: ../community/examples/quantum-circuit-simulator.yaml
-[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[t4]: https://cloud.google.com/compute/docs/gpus#nvidia_t4_gpus
 [qsim]: https://quantumai.google/qsim
 [cqsdk]: https://developer.nvidia.com/cuquantum-sdk
 [cudatk]: https://developer.nvidia.com/cuda-toolkit

@@ -20,8 +20,8 @@ blueprint_name: quantum-circuit
 vars:
   project_id:  ## Set project id here
   deployment_name: qsim-demo
-  region: us-west4
-  zone: us-west4-b
+  region: us-central1
+  zone: us-central1-f
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -125,7 +125,10 @@ deployment_groups:
     - network1
     - quantum-simulator-setup
     settings:
-      machine_type: a2-highgpu-1g
+      machine_type: n1-standard-32
+      guest_accelerator:
+      - type: nvidia-tesla-t4
+        count: 1
       instance_image:
         project: ubuntu-os-cloud
         family: ubuntu-2004-lts
