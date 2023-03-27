@@ -64,8 +64,7 @@ locals {
   stdlib = join("", local.stdlib_list)
 
   runners_map = { for runner in local.runners :
-    basename(runner["destination"])
-    => {
+    basename(runner["destination"]) => {
       content = lookup(runner, "content", null)
       source  = lookup(runner, "source", null)
     }
@@ -89,9 +88,9 @@ resource "google_storage_bucket" "configs_bucket" {
 resource "google_storage_bucket_object" "scripts" {
   # this writes all scripts exactly once into GCS
   for_each = local.runners_map
-  name     = "${local.storage_folder_path_prefix}${each.key}"
-  content  = each.value["content"]
-  source   = each.value["source"]
+  name     = "${local.storage_folder_path_prefix}${each.key}-${substr(try(md5(each.value.content), filemd5(each.value.source)), 0, 4)}"
+  content  = each.value.content
+  source   = each.value.source
   bucket   = local.storage_bucket_name
   timeouts {
     create = "10m"
