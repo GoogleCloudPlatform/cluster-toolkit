@@ -33,8 +33,8 @@ func init() {
 		"Output file for the expanded HPC Environment Definition.")
 	expandCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
 	expandCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
-	expandCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING",
-		validationLevelDesc)
+	expandCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING", validationLevelDesc)
+	expandCmd.Flags().StringSliceVar(&validatorsToSkip, "skip-validators", nil, skipValidatorsDesc)
 	rootCmd.AddCommand(expandCmd)
 }
 
@@ -70,6 +70,9 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to set the backend config at CLI: %v", err)
 	}
 	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
+		log.Fatal(err)
+	}
+	if err := skipValidators(&deploymentConfig); err != nil {
 		log.Fatal(err)
 	}
 	if err := deploymentConfig.ExpandConfig(); err != nil {

@@ -184,6 +184,7 @@ func (v validatorName) String() string {
 type validatorConfig struct {
 	Validator string
 	Inputs    map[string]interface{}
+	Skip      bool
 }
 
 func (v *validatorConfig) check(name validatorName, requiredInputs []string) error {
@@ -652,6 +653,25 @@ func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
 
 	}
 
+	return nil
+}
+
+// SkipValidator marks validator(s) as skipped,
+// if no validator is present, adds one, marked as skipped.
+func (dc *DeploymentConfig) SkipValidator(name string) error {
+	if dc.Config.Validators == nil {
+		dc.Config.Validators = []validatorConfig{}
+	}
+	skipped := false
+	for i, v := range dc.Config.Validators {
+		if v.Validator == name {
+			dc.Config.Validators[i].Skip = true
+			skipped = true
+		}
+	}
+	if !skipped {
+		dc.Config.Validators = append(dc.Config.Validators, validatorConfig{Validator: name, Skip: true})
+	}
 	return nil
 }
 

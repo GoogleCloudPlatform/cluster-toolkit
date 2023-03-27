@@ -82,30 +82,36 @@ func (dc DeploymentConfig) executeValidators() error {
 	}
 
 	for _, validator := range dc.Config.Validators {
-		if f, ok := implementedValidators[validator.Validator]; ok {
-			err := f(validator)
-			if err != nil {
-				var prefix string
-				switch dc.Config.ValidationLevel {
-				case validationWarning:
-					warned = true
-					prefix = "warning: "
-				default:
-					errored = true
-					prefix = "error: "
-				}
-				log.Print(prefix, err)
-				log.Println()
+		if validator.Skip {
+			continue
+		}
 
-				// do not bother running further validators if project ID could not be found
-				if validator.Validator == testProjectExistsName.String() {
-					break
-				}
-			}
-		} else {
+		f, ok := implementedValidators[validator.Validator]
+		if !ok {
 			errored = true
 			log.Printf("%s is not an implemented validator", validator.Validator)
+			continue
 		}
+
+		if err := f(validator); err != nil {
+			var prefix string
+			switch dc.Config.ValidationLevel {
+			case validationWarning:
+				warned = true
+				prefix = "warning: "
+			default:
+				errored = true
+				prefix = "error: "
+			}
+			log.Print(prefix, err)
+			log.Println()
+
+			// do not bother running further validators if project ID could not be found
+			if validator.Validator == testProjectExistsName.String() {
+				break
+			}
+		}
+
 	}
 
 	if warned || errored {

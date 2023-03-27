@@ -980,19 +980,19 @@ func (dc *DeploymentConfig) expandVariables() error {
 	return nil
 }
 
-// this function adds default validators to the blueprint if none have been
-// defined. default validators are only added for global variables that exist
+// this function adds default validators to the blueprint.
+// default validators are only added for global variables that exist
 func (dc *DeploymentConfig) addDefaultValidators() error {
-	if dc.Config.Validators != nil {
-		return nil
+	if dc.Config.Validators == nil {
+		dc.Config.Validators = []validatorConfig{}
 	}
-	dc.Config.Validators = []validatorConfig{}
 
 	_, projectIDExists := dc.Config.Vars["project_id"]
 	_, regionExists := dc.Config.Vars["region"]
 	_, zoneExists := dc.Config.Vars["zone"]
 
-	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+	defaults := []validatorConfig{}
+	defaults = append(defaults, validatorConfig{
 		Validator: testModuleNotUsedName.String(),
 		Inputs:    map[string]interface{}{},
 	})
@@ -1001,53 +1001,60 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	// only succeed if credentials can access the project. If the project ID
 	// validator fails, all remaining validators are not executed.
 	if projectIDExists {
-		v := validatorConfig{
+		defaults = append(defaults, validatorConfig{
 			Validator: testProjectExistsName.String(),
 			Inputs: map[string]interface{}{
 				"project_id": "$(vars.project_id)",
 			},
-		}
-		dc.Config.Validators = append(dc.Config.Validators, v)
+		})
 	}
 
 	// it is safe to run this validator even if vars.project_id is undefined;
 	// it will likely fail but will do so helpfully to the user
-	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+	defaults = append(defaults, validatorConfig{
 		Validator: "test_apis_enabled",
 		Inputs:    map[string]interface{}{},
 	})
 
 	if projectIDExists && regionExists {
-		v := validatorConfig{
+		defaults = append(defaults, validatorConfig{
 			Validator: testRegionExistsName.String(),
 			Inputs: map[string]interface{}{
 				"project_id": "$(vars.project_id)",
 				"region":     "$(vars.region)",
 			},
-		}
-		dc.Config.Validators = append(dc.Config.Validators, v)
-
+		})
 	}
 
 	if projectIDExists && zoneExists {
-		v := validatorConfig{
+		defaults = append(defaults, validatorConfig{
 			Validator: testZoneExistsName.String(),
 			Inputs: map[string]interface{}{
 				"project_id": "$(vars.project_id)",
 				"zone":       "$(vars.zone)",
 			},
-		}
-		dc.Config.Validators = append(dc.Config.Validators, v)
+		})
 	}
 
 	if projectIDExists && regionExists && zoneExists {
-		v := validatorConfig{
+		defaults = append(defaults, validatorConfig{
 			Validator: testZoneInRegionName.String(),
 			Inputs: map[string]interface{}{
 				"project_id": "$(vars.project_id)",
 				"region":     "$(vars.region)",
 				"zone":       "$(vars.zone)",
 			},
+		})
+	}
+
+	used := map[string]bool{}
+	for _, v := range dc.Config.Validators {
+		used[v.Validator] = true
+	}
+
+	for _, v := range defaults {
+		if used[v.Validator] {
+			continue
 		}
 		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
