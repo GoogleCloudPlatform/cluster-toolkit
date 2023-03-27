@@ -64,7 +64,7 @@ Each validator is described below:
   * FAIL: if region does not exist or is not accessible within the project
   * Typical failures involve simple typos
   * Manual test: `gcloud compute regions describe $(vars.region) --project $(vars.project_id)`
-* `test_region_exists`
+* `test_zone_exists`
   * Inputs: `zone` (string)
   * PASS: if zone exists and is accessible within the project
   * FAIL: if zone does not exist or is not accessible within the project
