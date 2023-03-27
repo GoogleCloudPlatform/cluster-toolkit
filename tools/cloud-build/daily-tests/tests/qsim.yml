@@ -16,7 +16,7 @@
 
 test_name: qsim
 deployment_name: "qsim-{{ build }}"
-zone: us-west4-b
+zone: us-central1-f
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/quantum-circuit-simulator.yaml"
 network: "{{ deployment_name }}-net"

@@ -13,23 +13,23 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-) ![core-badge]
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-) ![core-badge]
+  * [image-builder.yaml](#image-builderyaml-) ![core-badge]
+  * [cloud-batch.yaml](#cloud-batchyaml-) ![core-badge]
+  * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
+  * [lustre.yaml](#lustreyaml-) ![core-badge]
   * [slurm-gcp-v5-hpc-centos7.yaml](#slurm-gcp-v5-hpc-centos7yaml-) ![community-badge]
   * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
   * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
-  * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-) ![community-badge]
   * [daos-cluster.yaml](#daos-clusteryaml-) ![community-badge]
   * [daos-slurm.yaml](#daos-slurmyaml-) ![community-badge]
   * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-) ![community-badge]
-  * [cloud-batch.yaml](#cloud-batchyaml-) ![core-badge]
-  * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
-  * [lustre.yaml](#lustreyaml-) ![core-badge]
+  * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
   * [spack-gromacs.yaml](#spack-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--) ![community-badge] ![experimental-badge]
   * [htcondor-pool.yaml](#htcondor-poolyaml--) ![community-badge] ![experimental-badge]
-  * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
   * [starccm-tutorial.yaml](#starccm-tutorialyaml--) ![community-badge] ![experimental-badge]
   * [fluent-tutorial.yaml](#fluent-tutorialyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
@@ -41,6 +41,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Variables](#variables)
   * [Blueprint Variables](#blueprint-variables)
   * [Literal Variables](#literal-variables)
+  * [Escape Variables](#escape-variables)
 
 ## Instructions
 
@@ -183,6 +184,249 @@ For this example the following is needed in the selected region:
   _only needed for `compute` partition_
 
 [hpc-cluster-high-io.yaml]: ./hpc-cluster-high-io.yaml
+
+### [image-builder.yaml] ![core-badge]
+
+This Blueprint uses the [Packer template module][pkr] to create custom VM images
+by applying software and configurations to existing images.
+
+This example performs the following:
+
+1. Creates a network needed to build the image (see
+   [Custom Network](#custom-network-deployment-group-1)).
+2. Sets up a script that will be used to configure the image (see
+   [Toolkit Runners](#toolkit-runners-deployment-group-1)).
+3. Builds a new image by modifying the Slurm image (see
+   [Packer Template](#packer-template-deployment-group-2)).
+4. Deploys a Slurm cluster using the newly built image (see
+   [Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
+
+> **Note**: this example relies on the default behavior of the Toolkit to derive
+> naming convention for networks and other modules from the `deployment_name`.
+
+The commands needed to run through this example would look like:
+
+```bash
+# Create a deployment from the blueprint
+./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+
+# Deploy the network for packer (1) and generate the startup script (2)
+terraform -chdir=image-builder-001/builder-env init
+terraform -chdir=image-builder-001/builder-env validate
+terraform -chdir=image-builder-001/builder-env apply
+
+# Provide startup script to Packer
+terraform -chdir=image-builder-001/builder-env output \
+  -raw startup_script_scripts_for_image > \
+  image-builder-001/packer/custom-image/startup_script.sh
+
+# Build image (3)
+cd image-builder-001/packer/custom-image
+packer init .
+packer validate -var startup_script_file=startup_script.sh .
+packer build -var startup_script_file=startup_script.sh .
+
+# Deploy Slurm cluster (4)
+cd -
+terraform -chdir=image-builder-001/cluster init
+terraform -chdir=image-builder-001/cluster validate
+terraform -chdir=image-builder-001/cluster apply
+
+# When you are done you can clean up the resources in reverse order of creation
+terraform -chdir=image-builder-001/cluster destroy --auto-approve
+terraform -chdir=image-builder-001/builder-env destroy --auto-approve
+```
+
+Using a custom VM image can be more scalable than installing software using
+boot-time startup scripts because:
+
+* it avoids reliance on continued availability of package repositories
+* VMs will join an HPC cluster and execute workloads more rapidly due to reduced
+  boot-time configuration
+* machines are guaranteed to boot with a static set of packages available when
+  the custom image was created. No potential for some machines to be upgraded
+  relative to other based upon their creation time!
+
+[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[pkr]: ../modules/packer/custom-image/README.md
+[image-builder.yaml]: ./image-builder.yaml
+
+#### Custom Network (deployment group 1)
+
+A tool called [Packer](https://packer.io) builds custom VM images by creating
+short-lived VMs, executing scripts on them, and saving the boot disk as an
+image that can be used by future VMs. The short-lived VM must operate in a
+network that
+
+* has outbound access to the internet for downloading software
+* has SSH access from the machine running Packer so that local files/scripts
+  can be copied to the VM
+
+This deployment group creates such a network, while using [Cloud Nat][cloudnat]
+and [Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
+connections without exposing the machine to the internet on a public IP address.
+
+[cloudnat]: https://cloud.google.com/nat/docs/overview
+[iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
+
+#### Toolkit Runners (deployment group 1)
+
+The Toolkit [startup-script](../modules/scripts/startup-script/README.md)
+module supports boot-time configuration of VMs using "runners". Runners are
+configured as a series of scripts uploaded to Cloud Storage. A simple, standard
+[VM startup script][vmstartup] runs at boot-time, downloads the scripts from
+Cloud Storage and executes them in sequence.
+
+The standard bash startup script is exported as a string by the startup-script
+module.
+
+The script in this example is performing the trivial task of creating a file in
+the image's home directory just to demonstrate the capability. You can expand
+the startup-script module to install more complex dependencies.
+
+[vmstartup]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
+
+#### Packer Template (deployment group 2)
+
+The Packer template in this deployment group accepts [several methods for
+executing custom scripts][pkr]. To pass the exported startup string to it, you
+must collect it from the Terraform module and provide it to the Packer template.
+After running `terraform -chdir=image-builder-001/builder-env apply` as
+instructed by `ghpc`, execute the following:
+
+```shell
+terraform -chdir=image-builder-001/builder-env \
+  output -raw startup_script_install_ansible > \
+  image-builder-001/packer/custom-image/startup_script.sh
+cd image-builder-001/packer/custom-image
+packer init .
+packer validate -var startup_script_file=startup_script.sh .
+packer build -var startup_script_file=startup_script.sh .
+```
+
+#### Quota Requirements for image-builder.yaml
+
+For this example the following is needed in the selected region:
+
+* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
+  GB/node** up to 704 GB
+* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+#### Slurm Cluster Based on Custom Image (deployment group 3)
+
+Once the Slurm cluster has been deployed we can test that our Slurm compute
+partition is now using the image we built. It should contain the `hello.txt`
+file that was added during image build:
+
+1. SSH into the login node `slurm-image-builder-001-login0`.
+2. Run a job that prints the contents of the added file:
+
+  ```bash
+  $ srun -N 2 cat /home/hello.txt
+  Hello World
+  Hello World
+  ```
+
+### [cloud-batch.yaml] ![core-badge]
+
+This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
+that mounts a Filestore instance and runs startup scripts.
+
+The blueprint creates a Filestore and uses the `startup-script` module to mount
+and load _"data"_ onto the shared storage. The `batch-job-template` module creates
+an instance template to be used for the Google Cloud Batch compute VMs and
+renders a Google Cloud Batch job template. A login node VM is created with
+instructions on how to SSH to the login node and submit the Google Cloud Batch
+job.
+
+[cloud-batch.yaml]: ../examples/cloud-batch.yaml
+
+### [batch-mpi.yaml] ![core-badge]
+
+This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
+
+The blueprint contains the following:
+
+* A shared `filestore` filesystem.
+* A `spack-install` module that builds a script to install Spack and the WRF
+  application onto the shared `filestore`.
+* A `startup-script` module which uses the above script and stages job data.
+* A builder `vm-instance` which performs the Spack install and then shuts down.
+* A `batch-job-template` that builds a Batch job to execute the WRF job.
+* A `batch-login` VM that can be used to test and submit the Batch job.
+
+**Usage instructions:**
+
+1. Spack install
+
+    After `terraform apply` completes, you must wait for Spack installation to
+    finish before running the Batch job. You will observe that a VM named
+    `spack-builder-0` has been created. This VM will automatically shut down
+    once Spack installation has completed. When using a Spack cache this takes
+    about 25 minutes. Without a Spack cache this will take 2 hours. To view
+    build progress or debug you can inspect `/var/logs/messages` and
+    `/var/log/spack.log` on the builder VM.
+
+2. Access login node
+
+    After the builder shuts down, you can ssh to the Batch login node named
+    `batch-wrf-batch-login`. Instructions on how to ssh to the login node are
+    printed to the terminal after a successful `terraform apply`. You can
+    reprint these instructions by calling the following:
+
+    ```sh
+    terraform -chdir=batch-wrf/primary output instructions_batch-login
+    ```
+
+    Once on the login node you should be able to inspect the Batch job template
+    found in the `/home/batch-jobs` directory. This Batch job will call a script
+    found at `/share/wrfv3/submit_wrfv3.sh`. Note that the `/share` directory is
+    shared between the login node and the Batch job.
+
+3. Submit the Batch job
+
+    Use the command provided in the terraform output instructions to submit your
+    Batch job and check its status. The Batch job may take several minutes to
+    start and once running should complete within 5 minutes.
+
+4. Inspect results
+
+    The Batch job will create a folder named `/share/jobs/<unique id>`. Once the
+    job has finished this folder will contain the results of the job. You can
+    inspect the `rsl.out.0000` file for a summary of the job.
+
+[batch-mpi.yaml]: ../examples/batch-mpi.yaml
+
+### [lustre.yaml] ![core-badge]
+
+Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
+
+The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+file system is designed for high IO performance. It has a default capacity of ~10TiB and is mounted at `/lustre`.
+
+After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
+
+```sh
+watch mount -t lustre
+```
+
+#### Quota Requirements for lustre.yaml
+
+For this example the following is needed in the selected region:
+
+* Compute Engine API: Persistent Disk SSD (GB): **~14TB: 3500GB MDT, 3500GB OST[0-2]**
+* Compute Engine API: Persistent Disk Standard (GB): **~756GB: 20GB MDS, 276GB MGS, 3x20GB OSS, 2x200GB client-vms**
+* Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
+
+[lustre.yaml]: ./lustre.yaml
 
 ### [slurm-gcp-v5-hpc-centos7.yaml] ![community-badge]
 
@@ -348,156 +592,6 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [image-builder.yaml] ![core-badge]
-
-This Blueprint uses the [Packer template module][pkr] to create custom VM images
-by applying software and configurations to existing images.
-
-This example performs the following:
-
-1. Creates a network needed to build the image (see
-   [Custom Network](#custom-network-deployment-group-1)).
-2. Sets up a script that will be used to configure the image (see
-   [Toolkit Runners](#toolkit-runners-deployment-group-1)).
-3. Builds a new image by modifying the Slurm image (see
-   [Packer Template](#packer-template-deployment-group-2)).
-4. Deploys a Slurm cluster using the newly built image (see
-   [Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
-
-> **Note**: this example relies on the default behavior of the Toolkit to derive
-> naming convention for networks and other modules from the `deployment_name`.
-
-The commands needed to run through this example would look like:
-
-```bash
-# Create a deployment from the blueprint
-./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-
-# Deploy the network for packer (1) and generate the startup script (2)
-terraform -chdir=image-builder-001/builder-env init
-terraform -chdir=image-builder-001/builder-env validate
-terraform -chdir=image-builder-001/builder-env apply
-
-# Provide startup script to Packer
-terraform -chdir=image-builder-001/builder-env output \
-  -raw startup_script_scripts_for_image > \
-  image-builder-001/packer/custom-image/startup_script.sh
-
-# Build image (3)
-cd image-builder-001/packer/custom-image
-packer init .
-packer validate -var startup_script_file=startup_script.sh .
-packer build -var startup_script_file=startup_script.sh .
-
-# Deploy Slurm cluster (4)
-cd -
-terraform -chdir=image-builder-001/cluster init
-terraform -chdir=image-builder-001/cluster validate
-terraform -chdir=image-builder-001/cluster apply
-
-# When you are done you can clean up the resources in reverse order of creation
-terraform -chdir=image-builder-001/cluster destroy --auto-approve
-terraform -chdir=image-builder-001/builder-env destroy --auto-approve
-```
-
-Using a custom VM image can be more scalable than installing software using
-boot-time startup scripts because:
-
-* it avoids reliance on continued availability of package repositories
-* VMs will join an HPC cluster and execute workloads more rapidly due to reduced
-  boot-time configuration
-* machines are guaranteed to boot with a static set of packages available when
-  the custom image was created. No potential for some machines to be upgraded
-  relative to other based upon their creation time!
-
-[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[pkr]: ../modules/packer/custom-image/README.md
-[image-builder.yaml]: ./image-builder.yaml
-
-#### Custom Network (deployment group 1)
-
-A tool called [Packer](https://packer.io) builds custom VM images by creating
-short-lived VMs, executing scripts on them, and saving the boot disk as an
-image that can be used by future VMs. The short-lived VM must operate in a
-network that
-
-* has outbound access to the internet for downloading software
-* has SSH access from the machine running Packer so that local files/scripts
-  can be copied to the VM
-
-This deployment group creates such a network, while using [Cloud Nat][cloudnat]
-and [Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
-connections without exposing the machine to the internet on a public IP address.
-
-[cloudnat]: https://cloud.google.com/nat/docs/overview
-[iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
-
-#### Toolkit Runners (deployment group 1)
-
-The Toolkit [startup-script](../modules/scripts/startup-script/README.md)
-module supports boot-time configuration of VMs using "runners". Runners are
-configured as a series of scripts uploaded to Cloud Storage. A simple, standard
-[VM startup script][vmstartup] runs at boot-time, downloads the scripts from
-Cloud Storage and executes them in sequence.
-
-The standard bash startup script is exported as a string by the startup-script
-module.
-
-The script in this example is performing the trivial task of creating a file in
-the image's home directory just to demonstrate the capability. You can expand
-the startup-script module to install more complex dependencies.
-
-[vmstartup]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
-
-#### Packer Template (deployment group 2)
-
-The Packer template in this deployment group accepts [several methods for
-executing custom scripts][pkr]. To pass the exported startup string to it, you
-must collect it from the Terraform module and provide it to the Packer template.
-After running `terraform -chdir=image-builder-001/builder-env apply` as
-instructed by `ghpc`, execute the following:
-
-```shell
-terraform -chdir=image-builder-001/builder-env \
-  output -raw startup_script_install_ansible > \
-  image-builder-001/packer/custom-image/startup_script.sh
-cd image-builder-001/packer/custom-image
-packer init .
-packer validate -var startup_script_file=startup_script.sh .
-packer build -var startup_script_file=startup_script.sh .
-```
-
-#### Quota Requirements for image-builder.yaml
-
-For this example the following is needed in the selected region:
-
-* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
-* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
-  GB/node** up to 704 GB
-* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
-* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
-  in `compute` partition up to 1,204
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-#### Slurm Cluster Based on Custom Image (deployment group 3)
-
-Once the Slurm cluster has been deployed we can test that our Slurm compute
-partition is now using the image we built. It should contain the `hello.txt`
-file that was added during image build:
-
-1. SSH into the login node `slurm-image-builder-001-login0`.
-2. Run a job that prints the contents of the added file:
-
-  ```bash
-  $ srun -N 2 cat /home/hello.txt
-  Hello World
-  Hello World
-  ```
-
 ### [hpc-cluster-intel-select.yaml] ![community-badge]
 
 This example provisions a Slurm cluster automating the [steps to comply to the
@@ -537,98 +631,26 @@ examples][amd-examples-readme].
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
-### [cloud-batch.yaml] ![core-badge]
+### [quantum-circuit-simulator.yaml] ![community-badge]
 
-This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
-that mounts a Filestore instance and runs startup scripts.
+This blueprint provisions a [N1 series VM with NVIDIA T4 GPU accelerator][t4]
+and compiles [qsim], a [Google Quantum AI][gqai]-developed tool that simulates
+quantum circuits using CPUs and GPUs. The installation of qsim, the [CUDA
+Toolkit][cudatk], and the [cuQuantum SDK][cqsdk] is fully automated but takes a
+significant time (approx. 20 minutes). Once complete, a qsim example can be run
+by connecting to the VM by SSH and running
 
-The blueprint creates a Filestore and uses the `startup-script` module to mount
-and load _"data"_ onto the shared storage. The `batch-job-template` module creates
-an instance template to be used for the Google Cloud Batch compute VMs and
-renders a Google Cloud Batch job template. A login node VM is created with
-instructions on how to SSH to the login node and submit the Google Cloud Batch
-job.
-
-[cloud-batch.yaml]: ../examples/cloud-batch.yaml
-
-### [lustre.yaml] ![core-badge]
-
-Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
-
-The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-file system is designed for high IO performance. It has a default capacity of ~10TiB and is mounted at `/lustre`.
-
-After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
-
-```sh
-watch mount -t lustre
+```shell
+conda activate qsim
+python /var/tmp/qsim-example.py
 ```
 
-#### Quota Requirements for lustre.yaml
-
-For this example the following is needed in the selected region:
-
-* Compute Engine API: Persistent Disk SSD (GB): **~14TB: 3500GB MDT, 3500GB OST[0-2]**
-* Compute Engine API: Persistent Disk Standard (GB): **~756GB: 20GB MDS, 276GB MGS, 3x20GB OSS, 2x200GB client-vms**
-* Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
-
-[lustre.yaml]: ./lustre.yaml
-
-### [batch-mpi.yaml] ![core-badge]
-
-This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
-
-The blueprint contains the following:
-
-* A shared `filestore` filesystem.
-* A `spack-install` module that builds a script to install Spack and the WRF
-  application onto the shared `filestore`.
-* A `startup-script` module which uses the above script and stages job data.
-* A builder `vm-instance` which performs the Spack install and then shuts down.
-* A `batch-job-template` that builds a Batch job to execute the WRF job.
-* A `batch-login` VM that can be used to test and submit the Batch job.
-
-**Usage instructions:**
-
-1. Spack install
-
-    After `terraform apply` completes, you must wait for Spack installation to
-    finish before running the Batch job. You will observe that a VM named
-    `spack-builder-0` has been created. This VM will automatically shut down
-    once Spack installation has completed. When using a Spack cache this takes
-    about 25 minutes. Without a Spack cache this will take 2 hours. To view
-    build progress or debug you can inspect `/var/logs/messages` and
-    `/var/log/spack.log` on the builder VM.
-
-2. Access login node
-
-    After the builder shuts down, you can ssh to the Batch login node named
-    `batch-wrf-batch-login`. Instructions on how to ssh to the login node are
-    printed to the terminal after a successful `terraform apply`. You can
-    reprint these instructions by calling the following:
-
-    ```sh
-    terraform -chdir=batch-wrf/primary output instructions_batch-login
-    ```
-
-    Once on the login node you should be able to inspect the Batch job template
-    found in the `/home/batch-jobs` directory. This Batch job will call a script
-    found at `/share/wrfv3/submit_wrfv3.sh`. Note that the `/share` directory is
-    shared between the login node and the Batch job.
-
-3. Submit the Batch job
-
-    Use the command provided in the terraform output instructions to submit your
-    Batch job and check its status. The Batch job may take several minutes to
-    start and once running should complete within 5 minutes.
-
-4. Inspect results
-
-    The Batch job will create a folder named `/share/jobs/<unique id>`. Once the
-    job has finished this folder will contain the results of the job. You can
-    inspect the `rsl.out.0000` file for a summary of the job.
-
-[batch-mpi.yaml]: ../examples/batch-mpi.yaml
+[gqai]: https://quantumai.google/
+[quantum-circuit-simulator.yaml]: ../community/examples/quantum-circuit-simulator.yaml
+[t4]: https://cloud.google.com/compute/docs/gpus#nvidia_t4_gpus
+[qsim]: https://quantumai.google/qsim
+[cqsdk]: https://developer.nvidia.com/cuquantum-sdk
+[cudatk]: https://developer.nvidia.com/cuda-toolkit
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
@@ -727,27 +749,6 @@ walks through the use of this blueprint.
 [htcondor]: https://htcondor.org/
 [htcondor-pool.yaml]: ../community/examples/htcondor-pool.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-
-### [quantum-circuit-simulator.yaml] ![community-badge]
-
-This blueprint provisions a [N1 series VM with NVIDIA T4 GPU accelerator][t4]
-and compiles [qsim], a [Google Quantum AI][gqai]-developed tool that simulates
-quantum circuits using CPUs and GPUs. The installation of qsim, the [CUDA
-Toolkit][cudatk], and the [cuQuantum SDK][cqsdk] is fully automated but takes a
-significant time (approx. 20 minutes). Once complete, a qsim example can be run
-by connecting to the VM by SSH and running
-
-```shell
-conda activate qsim
-python /var/tmp/qsim-example.py
-```
-
-[gqai]: https://quantumai.google/
-[quantum-circuit-simulator.yaml]: ../community/examples/quantum-circuit-simulator.yaml
-[t4]: https://cloud.google.com/compute/docs/gpus#nvidia_t4_gpus
-[qsim]: https://quantumai.google/qsim
-[cqsdk]: https://developer.nvidia.com/cuquantum-sdk
-[cudatk]: https://developer.nvidia.com/cuda-toolkit
 
 ### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
 
