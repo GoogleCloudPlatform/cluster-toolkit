@@ -285,14 +285,8 @@ type ModConnection struct {
 // Returns true if a connection does not functionally link the outputs and
 // inputs of the modules. This can happen when a module is connected with "use"
 // but none of the outputs of fromID match the inputs of toID.
-func (mc *ModConnection) isEmpty() (isEmpty bool) {
-	isEmpty = false
-	if mc.kind == useConnection {
-		if len(mc.sharedVariables) == 0 {
-			isEmpty = true
-		}
-	}
-	return
+func (mc *ModConnection) isUnused() bool {
+	return mc.kind == useConnection && len(mc.sharedVariables) == 0
 }
 
 // DeploymentConfig is a container for the imported YAML data and supporting data for
@@ -345,7 +339,7 @@ func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 	unusedModules := make(map[string][]string)
 	for _, connections := range dc.moduleConnections {
 		for _, conn := range connections {
-			if conn.isEmpty() {
+			if conn.isUnused() {
 				fromMod := conn.ref.FromModuleID()
 				unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.ToModuleID())
 			}

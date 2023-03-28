@@ -368,30 +368,24 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 	}
 }
 
-func (s *MySuite) TestIsEmpty(c *C) {
+func (s *MySuite) TestIsUnused(c *C) {
 	// Use connection is not empty
 	conn := ModConnection{
 		kind:            useConnection,
 		sharedVariables: []string{"var1"},
 	}
-	got := conn.isEmpty()
-	exp := false
-	c.Assert(got, Equals, exp)
+	c.Assert(conn.isUnused(), Equals, false)
 
 	// Use connection is empty
 	conn = ModConnection{
 		kind:            useConnection,
 		sharedVariables: []string{},
 	}
-	got = conn.isEmpty()
-	exp = true
-	c.Assert(got, Equals, exp)
+	c.Assert(conn.isUnused(), Equals, true)
 
 	// Undefined connection kind
 	conn = ModConnection{}
-	got = conn.isEmpty()
-	exp = false
-	c.Assert(got, Equals, exp)
+	c.Assert(conn.isUnused(), Equals, false)
 }
 
 func (s *MySuite) TestListUnusedModules(c *C) {
