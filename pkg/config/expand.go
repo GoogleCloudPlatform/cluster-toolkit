@@ -711,7 +711,7 @@ func (ref modReference) validate(bp Blueprint) error {
 // ref.explicitInterGroup: intergroup references must explicitly identify the
 // target group ID and intragroup references cannot have an incorrect explicit
 // group ID
-func (ref *varReference) validate(bp Blueprint) error {
+func (ref varReference) validate(bp Blueprint) error {
 	// simplest case to evaluate is a deployment variable's existence
 	if ref.toGroupID == "deployment" {
 		if ref.toModuleID == "vars" {
