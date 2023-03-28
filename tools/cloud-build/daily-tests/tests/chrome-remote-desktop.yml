@@ -14,7 +14,7 @@
 ---
 test_name: chrome-remote-desktop
 deployment_name: chrome-remote-desktop-{{ build }}
-zone: us-central1-c
+zone: us-central1-f
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/remote-desktop.yaml"
 network: "{{ deployment_name }}-net"

@@ -20,7 +20,7 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: remote-desktop
   region: us-central1
-  zone: us-central1-c
+  zone: us-central1-f
 
 deployment_groups:
 - group: primary
