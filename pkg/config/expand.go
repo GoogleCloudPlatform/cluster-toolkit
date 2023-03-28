@@ -262,7 +262,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				// this will enable us to get structs about the module being
 				// used and search it for outputs that match inputs in the
 				// current module (the iterator)
-				modRef, err := identifyModuleByReference(toModID, *group)
+				modRef, err := identifyModuleByReference(toModID, *group, *fromMod)
 				if err != nil {
 					return err
 				}
@@ -556,7 +556,7 @@ string into a modReference struct as defined above. An input string consists of
 1 or 2 fields or if either field is the empty string. This function does not
 ensure the existence of the module!
 */
-func identifyModuleByReference(yamlReference string, dg DeploymentGroup) (modReference, error) {
+func identifyModuleByReference(yamlReference string, dg DeploymentGroup, fromMod Module) (modReference, error) {
 	// struct defaults: empty strings and false booleans
 	var ref modReference
 	// intra-group references length 1 and inter-group references length 2
@@ -572,6 +572,7 @@ func identifyModuleByReference(yamlReference string, dg DeploymentGroup) (modRef
 		ref.fromGroupID = dg.Name
 		ref.explicit = true
 	}
+	ref.fromModuleID = fromMod.ID
 
 	// should consider more sophisticated definition of valid values here.
 	// for now check that no fields are the empty string; due to the default
@@ -627,12 +628,13 @@ string into a varReference struct as defined above. An input string consists of
 2 or 3 fields, or if any field is the empty string. This function does not
 ensure the existence of the reference!
 */
-func identifySimpleVariable(yamlReference string, dg DeploymentGroup) (varReference, error) {
+func identifySimpleVariable(yamlReference string, dg DeploymentGroup, fromMod Module) (varReference, error) {
 	varComponents := strings.Split(yamlReference, ".")
 
 	// struct defaults: empty strings and false booleans
 	var ref varReference
 	ref.fromGroupID = dg.Name
+	ref.fromModuleID = fromMod.ID
 
 	// intra-group references length 2 and inter-group references length 3
 	switch len(varComponents) {
@@ -798,7 +800,7 @@ func expandSimpleVariable(context varContext) (string, error) {
 	callingGroup := context.blueprint.DeploymentGroups[context.groupIndex]
 	refStr := contents[1]
 
-	varRef, err := identifySimpleVariable(refStr, callingGroup)
+	varRef, err := identifySimpleVariable(refStr, callingGroup, callingGroup.Modules[context.modIndex])
 	if err != nil {
 		return "", err
 	}

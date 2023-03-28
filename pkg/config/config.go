@@ -532,7 +532,7 @@ func checkUsedModuleNames(bp Blueprint) error {
 	for _, grp := range bp.DeploymentGroups {
 		for _, mod := range grp.Modules {
 			for _, usedMod := range mod.Use {
-				ref, err := identifyModuleByReference(usedMod, grp)
+				ref, err := identifyModuleByReference(usedMod, grp, mod)
 				if err != nil {
 					return err
 				}
