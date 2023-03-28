@@ -551,34 +551,41 @@ func (s *MySuite) TestIdentifyModuleByReference(c *C) {
 		Name: "zero",
 	}
 
-	ref, err = identifyModuleByReference("module_id", dg)
+	fromMod := Module{
+		ID: "from_module_id",
+	}
+
+	ref, err = identifyModuleByReference("to_module_id", dg, fromMod)
 	c.Assert(err, IsNil)
 	c.Assert(ref.toGroupID, Equals, dg.Name)
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
-	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
+	c.Assert(ref.toModuleID, Equals, "to_module_id")
 	c.Assert(ref.explicit, Equals, false)
 
-	ref, err = identifyModuleByReference("explicit_group_id.module_id", dg)
+	ref, err = identifyModuleByReference("explicit_group_id.module_id", dg, fromMod)
 	c.Assert(err, IsNil)
 	c.Assert(ref.toGroupID, Equals, "explicit_group_id")
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
 	c.Assert(ref.toModuleID, Equals, "module_id")
 	c.Assert(ref.explicit, Equals, true)
 
-	ref, err = identifyModuleByReference(fmt.Sprintf("%s.module_id", dg.Name), dg)
+	ref, err = identifyModuleByReference(fmt.Sprintf("%s.module_id", dg.Name), dg, fromMod)
 	c.Assert(err, IsNil)
 	c.Assert(ref.toGroupID, Equals, dg.Name)
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
 	c.Assert(ref.toModuleID, Equals, "module_id")
 	c.Assert(ref.explicit, Equals, true)
 
-	ref, err = identifyModuleByReference("explicit_group_id.module_id.output_name", dg)
+	ref, err = identifyModuleByReference("explicit_group_id.module_id.output_name", dg, fromMod)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
 
-	ref, err = identifyModuleByReference("module_id.", dg)
+	ref, err = identifyModuleByReference("module_id.", dg, fromMod)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
 
-	ref, err = identifyModuleByReference(".module_id", dg)
+	ref, err = identifyModuleByReference(".module_id", dg, fromMod)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
 }
 
@@ -685,46 +692,53 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 	var err error
 
 	dg := DeploymentGroup{
-		Name: "calling_group_id",
+		Name: "from_group_id",
 	}
 
-	ref, err = identifySimpleVariable("group_id.module_id.output_name", dg)
+	fromMod := Module{
+		ID: "from_module_id",
+	}
+
+	ref, err = identifySimpleVariable("group_id.module_id.output_name", dg, fromMod)
 	c.Assert(err, IsNil)
 	c.Assert(ref.toGroupID, Equals, "group_id")
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
 	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
 	c.Assert(ref.name, Equals, "output_name")
 	c.Assert(ref.explicit, Equals, true)
 
-	ref, err = identifySimpleVariable("module_id.output_name", dg)
+	ref, err = identifySimpleVariable("module_id.output_name", dg, fromMod)
 	c.Assert(err, IsNil)
-	c.Assert(ref.toGroupID, Equals, "calling_group_id")
-	c.Assert(ref.fromGroupID, Equals, "calling_group_id")
+	c.Assert(ref.toGroupID, Equals, dg.Name)
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
 	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
 	c.Assert(ref.name, Equals, "output_name")
 	c.Assert(ref.explicit, Equals, false)
 
-	ref, err = identifySimpleVariable("vars.variable_name", dg)
+	ref, err = identifySimpleVariable("vars.variable_name", dg, fromMod)
 	c.Assert(err, IsNil)
 	c.Assert(ref.toGroupID, Equals, "deployment")
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
 	c.Assert(ref.toModuleID, Equals, "vars")
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
 	c.Assert(ref.name, Equals, "variable_name")
 	c.Assert(ref.explicit, Equals, false)
 
-	ref, err = identifySimpleVariable("foo", dg)
+	ref, err = identifySimpleVariable("foo", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.baz.qux", dg)
+	ref, err = identifySimpleVariable("foo.bar.baz.qux", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..bar", dg)
+	ref, err = identifySimpleVariable("foo..bar", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.", dg)
+	ref, err = identifySimpleVariable("foo.bar.", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..", dg)
+	ref, err = identifySimpleVariable("foo..", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable(".foo", dg)
+	ref, err = identifySimpleVariable(".foo", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("..foo", dg)
+	ref, err = identifySimpleVariable("..foo", dg, fromMod)
 	c.Assert(err, NotNil)
 }
 
