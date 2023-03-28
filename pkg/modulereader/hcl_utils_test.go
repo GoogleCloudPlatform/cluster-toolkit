@@ -20,16 +20,16 @@ import (
 
 func (s *MySuite) TestNormalizeType(c *C) {
 	c.Check(
-		normalizeType("object({count=number,kind=string})"),
+		NormalizeType("object({count=number,kind=string})"),
 		Equals,
-		normalizeType("object({kind=string,count=number})"))
+		NormalizeType("object({kind=string,count=number})"))
 
-	c.Check(normalizeType("?invalid_type"), Equals, "?invalid_type")
+	c.Check(NormalizeType("?invalid_type"), Equals, "?invalid_type")
 
 	// `any` is special type, check that it works
-	c.Check(normalizeType("object({b=any,a=number})"), Equals, normalizeType("object({a=number,b=any})"))
+	c.Check(NormalizeType("object({b=any,a=number})"), Equals, NormalizeType("object({a=number,b=any})"))
 
-	c.Check(normalizeType(" object (  {\na=any\n} ) "), Equals, normalizeType("object({a=any})"))
+	c.Check(NormalizeType(" object (  {\na=any\n} ) "), Equals, NormalizeType("object({a=any})"))
 
-	c.Check(normalizeType(" string # comment"), Equals, normalizeType("string"))
+	c.Check(NormalizeType(" string # comment"), Equals, NormalizeType("string"))
 }

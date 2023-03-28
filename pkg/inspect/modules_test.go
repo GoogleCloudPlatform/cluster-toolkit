@@ -102,11 +102,36 @@ func TestSanity(t *testing.T) {
 	notEmpty(query(all()), t)
 }
 
+func checkInputType(t *testing.T, mod modInfo, input string, expected string) {
+	i, ok := mod.Input(input)
+	if !ok {
+		t.Errorf("%s does not have input %s", mod.Source, input)
+	}
+	expected = modulereader.NormalizeType(expected)
+	got := modulereader.NormalizeType(i.Type)
+	if expected != got {
+		t.Errorf("%s %s has unexpected type expected:\n%#v\ngot:\n%#v",
+			mod.Source, input, expected, got)
+	}
+}
+
 func TestLabelsType(t *testing.T) {
 	for _, mod := range notEmpty(query(hasInput("labels")), t) {
-		labels, _ := mod.Input("labels")
-		if labels.Type != "map(string)" {
-			t.Errorf("%s.labels has unexpected type %#v", mod.Source, labels.Type)
-		}
+		checkInputType(t, mod, "labels", "map(string)")
+	}
+}
+
+func TestNetworkStorage(t *testing.T) {
+	expected := `list(object({
+		server_ip             = string
+		remote_mount          = string
+		local_mount           = string
+		fs_type               = string
+		mount_options         = string
+		client_install_runner = map(string)
+		mount_runner          = map(string)
+	  }))`
+	for _, mod := range notEmpty(query(hasInput("network_storage")), t) {
+		checkInputType(t, mod, "network_storage", expected)
 	}
 }
