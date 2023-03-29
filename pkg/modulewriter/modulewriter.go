@@ -141,11 +141,10 @@ func deploymentSource(mod config.Module) (string, error) {
 	if sourcereader.IsGitPath(mod.Source) {
 		return mod.Source, nil
 	}
-	switch mod.Kind {
-	case "packer":
+	if mod.Kind == "packer" {
 		return mod.ID, nil
-	case "terraform": // see below
-	default:
+	}
+	if mod.Kind != "terraform" {
 		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
 	}
 
@@ -189,10 +188,8 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 	for iGrp := range *deploymentGroups {
 		grp := &(*deploymentGroups)[iGrp]
 		basePath := filepath.Join(deploymentPath, grp.Name)
-		if err := copyEmbeddedModules(basePath); err != nil {
-			return fmt.Errorf("failed to copy embedded modules: %v", err)
-		}
 
+		var copyEmbedded = false
 		for iMod := range grp.Modules {
 			mod := &grp.Modules[iMod]
 			ds, err := deploymentSource(*mod)
@@ -204,6 +201,11 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 			if sourcereader.IsGitPath(mod.Source) {
 				continue // do not download
 			}
+			factory(mod.Kind).addNumModules(1)
+			if sourcereader.IsEmbeddedPath(mod.Source) && mod.Kind == "terraform" {
+				copyEmbedded = true
+				continue // all embedded terraform modules fill be copied at once
+			}
 			/* Copy source files */
 			dst := filepath.Join(basePath, mod.DeploymentSource)
 			if _, err := os.Stat(dst); err == nil {
@@ -213,10 +215,13 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 			if err := reader.GetModule(mod.Source, dst); err != nil {
 				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, dst, err)
 			}
-			/* Create module level files */
-			writer := factory(mod.Kind)
-			writer.addNumModules(1)
 		}
+		if copyEmbedded {
+			if err := copyEmbeddedModules(basePath); err != nil {
+				return fmt.Errorf("failed to copy embedded modules: %v", err)
+			}
+		}
+
 	}
 	return nil
 }
