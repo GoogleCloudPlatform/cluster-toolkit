@@ -64,13 +64,10 @@ deployment_groups:
       - type: shell
         content: $(homefs.install_nfs_client)
         destination: "install-nfs.sh"
-      - type: "ansible-local"
-        source: "modules/startup-script/examples/mount.yaml"
-        destination: mount.yaml
 
   - id: license-server-1
     source: modules/compute/vm-instance
-    use: [network]
+    use: [network, homefs]
     settings:
       name_prefix: ls1
       machine_type: e2-standard-4

@@ -39,16 +39,19 @@ deployment_groups:
     kind: terraform
     id: network1
 
-  - source: ./modules/scripts/startup-script
+  - id: scripts-silo
+    source: modules/scripts/scripts-silo
+
+  - source: modules/scripts/startup-script
     kind: terraform
     id: startup
     settings:
       runners:
       - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
+        source: $(scripts-silo.examples_install_ansible)
         destination: install_ansible.sh
       - type: shell
-        source: modules/startup-script/examples/install_cloud_ops_agent.sh
+        source: $(scripts-silo.examples_install_cloud_ops_agent)
         destination: install_cloud_ops_agent.sh
 
   - source: modules/compute/vm-instance

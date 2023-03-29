@@ -28,12 +28,15 @@ deployment_groups:
   - id: network1
     source: ./modules/network/pre-existing-vpc
 
+  - id: scripts-silo
+    source: modules/scripts/scripts-silo
+
   - id: startup
-    source: ./modules/scripts/startup-script
+    source: modules/scripts/startup-script
     settings:
       runners:
       - type: shell
-        source: "modules/startup-script/examples/hello.sh"
+        source: $(scripts-silo.examples_hello_sh)
         destination: "hello.sh"
       - type: data
         source: /tmp/foo.tgz

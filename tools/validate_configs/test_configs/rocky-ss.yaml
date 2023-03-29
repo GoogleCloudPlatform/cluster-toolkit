@@ -52,12 +52,15 @@ deployment_groups:
       packages:
       - cmake%gcc@10.3.0 target=x86_64
 
+  - id: scripts-silo
+    source: modules/scripts/scripts-silo
+
   - id: startup
-    source: ./modules/scripts/startup-script
+    source: modules/scripts/startup-script
     settings:
       runners:
       - type: shell
-        source: "modules/startup-script/examples/hello.sh"
+        source: $(scripts-silo.examples_hello_sh)
         destination: "hello.sh"
       - type: data
         source: /tmp/foo.tgz
@@ -70,7 +73,7 @@ deployment_groups:
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
       - type: "ansible-local"
-        source: modules/startup-script/examples/hello.yaml
+        source: $(scripts-silo.examples_hello_yaml)
         destination: hello.yaml
       - $(spack.install_spack_deps_runner)
       - type: shell

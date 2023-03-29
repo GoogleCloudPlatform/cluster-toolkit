@@ -40,13 +40,16 @@ deployment_groups:
   - id: bucket-for-startup-script
     source: community/modules/file-system/cloud-storage-bucket
 
+  - id: scripts-silo
+    source: modules/scripts/scripts-silo
+
   - id: startup
-    source: ./modules/scripts/startup-script
+    source: modules/scripts/startup-script
     use: [bucket-for-startup-script]
     settings:
       runners:
       - type: shell
-        source: modules/startup-script/examples/install_cloud_ops_agent.sh
+        source: $(scripts-silo.examples_install_cloud_ops_agent)
         destination: install_cloud_ops_agent.sh
 
   - id: workstation
