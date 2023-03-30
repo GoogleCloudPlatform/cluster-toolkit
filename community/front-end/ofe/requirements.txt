@@ -16,19 +16,19 @@ django-extensions==3.2.1
 # Need version 0.11.0 to be released with fixes for Django 3.2
 git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb0465664ccfa5787
 djangorestframework==3.13.1
-google-api-core==2.5.0
+google-api-core==2.11.0
 google-api-python-client==2.82.0
-google-auth==2.6.0
+google-auth==2.16.2
 google-auth-httplib2==0.1.0
-google-cloud-billing==1.4.1
+google-cloud-billing==1.10.0
 google-cloud-core==2.3.2
-google-cloud-pubsub==2.9.0
-google-cloud-storage==2.1.0
-google-crc32c==1.3.0
-google-resumable-media==2.2.1
+google-cloud-pubsub==2.15.1
+google-cloud-storage==2.7.0
+google-crc32c==1.5.0
+google-resumable-media==2.4.1
 googleapis-common-protos==1.58.0
 grafana_api==1.0.3
-grpc-google-iam-v1==0.12.3
+grpc-google-iam-v1==0.12.6
 grpcio==1.51.3
 grpcio-status==1.51.3
 h11==0.13.0
