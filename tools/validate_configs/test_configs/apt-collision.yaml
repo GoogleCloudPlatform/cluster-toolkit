@@ -23,7 +23,6 @@ vars:
   zone: us-central1-a
   name_prefix: workstation
   machine_type: a2-highgpu-2g
-  gpu_per_vm: 2
   instance_image:
     family: pytorch-1-10-gpu-debian-10
     project: ml-images

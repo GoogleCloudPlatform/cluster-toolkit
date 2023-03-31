@@ -19,8 +19,6 @@ blueprint_name: dashboards
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: dashboards-test
-  region: europe-west4
-  zone: europe-west4-a
 
 deployment_groups:
 - group: primary
