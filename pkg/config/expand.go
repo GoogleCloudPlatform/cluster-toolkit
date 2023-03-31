@@ -441,10 +441,11 @@ func mergeInLabels[V interface{}](to map[string]V, from map[string]V) {
 	}
 }
 
-func applyGlobalVarsInGroup(
-	deploymentGroup DeploymentGroup,
-	modInfo map[string]modulereader.ModuleInfo,
-	globalVars map[string]interface{}) error {
+func (dc DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
+	deploymentGroup := dc.Config.DeploymentGroups[groupIndex]
+	modInfo := dc.ModulesInfo[deploymentGroup.Name]
+	globalVars := dc.Config.Vars
+
 	for _, mod := range deploymentGroup.Modules {
 		for _, input := range modInfo[mod.Source].Inputs {
 
@@ -455,7 +456,16 @@ func applyGlobalVarsInGroup(
 
 			// If it's not set, is there a global we can use?
 			if _, ok := globalVars[input.Name]; ok {
+				ref := varReference{
+					name:         input.Name,
+					toModuleID:   "vars",
+					fromModuleID: mod.ID,
+					toGroupID:    "deployment",
+					fromGroupID:  deploymentGroup.Name,
+					explicit:     false,
+				}
 				mod.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
+				dc.addModuleConnection(ref, deploymentConnection, []string{ref.name})
 				continue
 			}
 
@@ -490,9 +500,8 @@ func (dc *DeploymentConfig) applyGlobalVariables() error {
 		return err
 	}
 
-	for _, grp := range dc.Config.DeploymentGroups {
-		err := applyGlobalVarsInGroup(
-			grp, dc.ModulesInfo[grp.Name], dc.Config.Vars)
+	for groupIndex := range dc.Config.DeploymentGroups {
+		err := dc.applyGlobalVarsInGroup(groupIndex)
 		if err != nil {
 			return err
 		}
@@ -504,7 +513,7 @@ type varContext struct {
 	varString  string
 	groupIndex int
 	modIndex   int
-	blueprint  Blueprint
+	dc         DeploymentConfig
 }
 
 type reference interface {
@@ -797,7 +806,7 @@ func expandSimpleVariable(context varContext) (string, error) {
 		return "", err
 	}
 
-	callingGroup := context.blueprint.DeploymentGroups[context.groupIndex]
+	callingGroup := context.dc.Config.DeploymentGroups[context.groupIndex]
 	refStr := contents[1]
 
 	varRef, err := identifySimpleVariable(refStr, callingGroup, callingGroup.Modules[context.modIndex])
@@ -805,7 +814,7 @@ func expandSimpleVariable(context varContext) (string, error) {
 		return "", err
 	}
 
-	if err := varRef.validate(context.blueprint); err != nil {
+	if err := varRef.validate(context.dc.Config); err != nil {
 		return "", err
 	}
 
@@ -814,6 +823,7 @@ func expandSimpleVariable(context varContext) (string, error) {
 	case "deployment":
 		// deployment variables
 		expandedVariable = fmt.Sprintf("((var.%s))", varRef.name)
+		context.dc.addModuleConnection(varRef, deploymentConnection, []string{varRef.name})
 	case varRef.fromGroupID:
 		// intragroup reference can make direct reference to module output
 		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.toModuleID, varRef.name)
@@ -821,13 +831,13 @@ func expandSimpleVariable(context varContext) (string, error) {
 
 		// intergroup reference; begin by finding the target module in blueprint
 		toGrpIdx := slices.IndexFunc(
-			context.blueprint.DeploymentGroups,
+			context.dc.Config.DeploymentGroups,
 			func(g DeploymentGroup) bool { return g.Name == varRef.toGroupID })
 
 		if toGrpIdx == -1 {
 			return "", fmt.Errorf("invalid group reference: %s", varRef.toGroupID)
 		}
-		toGrp := context.blueprint.DeploymentGroups[toGrpIdx]
+		toGrp := context.dc.Config.DeploymentGroups[toGrpIdx]
 		toModIdx := slices.IndexFunc(toGrp.Modules, func(m Module) bool { return m.ID == varRef.toModuleID })
 		if toModIdx == -1 {
 			return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], varRef.toModuleID)
@@ -947,7 +957,7 @@ func updateVariables(context varContext, interfaceMap map[string]interface{}) er
 // expands all variables
 func (dc *DeploymentConfig) expandVariables() error {
 	for _, validator := range dc.Config.Validators {
-		err := updateVariables(varContext{blueprint: dc.Config}, validator.Inputs)
+		err := updateVariables(varContext{dc: *dc}, validator.Inputs)
 		if err != nil {
 			return err
 
@@ -959,7 +969,7 @@ func (dc *DeploymentConfig) expandVariables() error {
 			context := varContext{
 				groupIndex: iGrp,
 				modIndex:   iMod,
-				blueprint:  dc.Config,
+				dc:         *dc,
 			}
 			err := updateVariables(context, mod.Settings)
 			if err != nil {
@@ -969,7 +979,7 @@ func (dc *DeploymentConfig) expandVariables() error {
 			// ensure that variable references to projects in required APIs are expanded
 			for projectID, requiredAPIs := range mod.RequiredApis {
 				if isDeploymentVariable(projectID) {
-					s, err := handleVariable(projectID, varContext{blueprint: dc.Config})
+					s, err := handleVariable(projectID, context)
 					if err != nil {
 						return err
 					}

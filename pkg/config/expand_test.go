@@ -773,13 +773,17 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	}
 
 	testVarContext0 := varContext{
-		blueprint:  testBlueprint,
+		dc: DeploymentConfig{
+			Config: testBlueprint,
+		},
 		modIndex:   0,
 		groupIndex: 0,
 	}
 
 	testVarContext1 := varContext{
-		blueprint:  testBlueprint,
+		dc: DeploymentConfig{
+			Config: testBlueprint,
+		},
 		modIndex:   0,
 		groupIndex: 1,
 	}
@@ -797,7 +801,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Success
-	testVarContext1.blueprint.Vars["globalExists"] = "existsValue"
+	testVarContext1.dc.Config.Vars["globalExists"] = "existsValue"
 	testVarContext1.varString = "$(vars.globalExists)"
 	got, err := expandSimpleVariable(testVarContext1)
 	c.Assert(err, IsNil)
