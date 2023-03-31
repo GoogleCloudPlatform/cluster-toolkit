@@ -14,14 +14,14 @@
 
 """Signal handlers for model state"""
 
-from django.db.models.signals import pre_save, post_delete
+from django.db.models.signals import pre_save, post_delete, post_save
 from django.dispatch import receiver
 from .models import Cluster, VirtualNetwork
 
 # Pylint misses the sender decorator behaviour here
 #pylint: disable=unused-argument
 
-@receiver(pre_save, sender=VirtualNetwork)
+@receiver(post_save, sender=VirtualNetwork)
 def sync_vnet_subnet_state(sender, **kwargs):
     vpc = kwargs["instance"]
     for sn in vpc.subnets.all():
