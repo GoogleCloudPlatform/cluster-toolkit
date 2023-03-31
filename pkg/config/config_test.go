@@ -338,6 +338,9 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		moduleConnections: make(map[string][]ModConnection),
 	}
 
+	dc.addSettingsToModules()
+	dc.addMetadataToModules()
+	dc.addDefaultValidators()
 	reader := modulereader.Factory("terraform")
 	reader.SetInfo(testModuleSource0, testModuleInfo0)
 	reader.SetInfo(testModuleSource1, testModuleInfo1)
@@ -456,6 +459,19 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 	c.Assert(got["usingModule"], HasLen, 2)
 }
 
+func (s *MySuite) TestListUnusedDeploymentVariables(c *C) {
+	dc := getDeploymentConfigForTest()
+	dc.applyGlobalVariables()
+	dc.expandVariables()
+	unusedVars := dc.listUnusedDeploymentVariables()
+	c.Assert(unusedVars, DeepEquals, []string{"project_id"})
+	dc = getMultiGroupDeploymentConfig()
+	dc.applyGlobalVariables()
+	dc.expandVariables()
+	unusedVars = dc.listUnusedDeploymentVariables()
+	c.Assert(unusedVars, DeepEquals, []string{"unused_key"})
+}
+
 func (s *MySuite) TestAddKindToModules(c *C) {
 	/* Test addKindToModules() works when nothing to do */
 	dc := getBasicDeploymentConfigWithTestModule()
@@ -502,10 +518,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 	dc := getMultiGroupDeploymentConfig()
 	modID0 := dc.Config.DeploymentGroups[0].Modules[0].ID
 	modID1 := dc.Config.DeploymentGroups[1].Modules[0].ID
-
-	dc.addSettingsToModules()
-	dc.addMetadataToModules()
-	dc.addDefaultValidators()
 
 	err := dc.applyUseModules()
 	c.Assert(err, IsNil)

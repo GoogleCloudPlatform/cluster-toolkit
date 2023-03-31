@@ -284,12 +284,13 @@ func (dc DeploymentConfig) validateModuleSettings() error {
 
 func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) error {
 	allValidators := map[string]func(validatorConfig) error{
-		testApisEnabledName.String():   dc.testApisEnabled,
-		testProjectExistsName.String(): dc.testProjectExists,
-		testRegionExistsName.String():  dc.testRegionExists,
-		testZoneExistsName.String():    dc.testZoneExists,
-		testZoneInRegionName.String():  dc.testZoneInRegion,
-		testModuleNotUsedName.String(): dc.testModuleNotUsed,
+		testApisEnabledName.String():               dc.testApisEnabled,
+		testProjectExistsName.String():             dc.testProjectExists,
+		testRegionExistsName.String():              dc.testRegionExists,
+		testZoneExistsName.String():                dc.testZoneExists,
+		testZoneInRegionName.String():              dc.testZoneInRegion,
+		testModuleNotUsedName.String():             dc.testModuleNotUsed,
+		testDeploymentVariableNotUsedName.String(): dc.testDeploymentVariableNotUsed,
 	}
 	return allValidators
 }
@@ -471,6 +472,18 @@ func (dc *DeploymentConfig) testModuleNotUsed(c validatorConfig) error {
 	if err := validators.TestModuleNotUsed(dc.listUnusedModules()); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsgTemplate, testModuleNotUsedName.String())
+	}
+	return nil
+}
+
+func (dc *DeploymentConfig) testDeploymentVariableNotUsed(c validatorConfig) error {
+	if err := c.check(testDeploymentVariableNotUsedName, []string{}); err != nil {
+		return err
+	}
+
+	if err := validators.TestDeploymentVariablesNotUsed(dc.listUnusedDeploymentVariables()); err != nil {
+		log.Print(err)
+		return fmt.Errorf(funcErrorMsgTemplate, testDeploymentVariableNotUsedName.String())
 	}
 	return nil
 }
