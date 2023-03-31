@@ -773,7 +773,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	}
 
 	testVarContext0 := varContext{
-		dc: DeploymentConfig{
+		dc: &DeploymentConfig{
 			Config: testBlueprint,
 		},
 		modIndex:   0,
@@ -781,7 +781,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	}
 
 	testVarContext1 := varContext{
-		dc: DeploymentConfig{
+		dc: &DeploymentConfig{
 			Config: testBlueprint,
 		},
 		modIndex:   0,

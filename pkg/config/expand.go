@@ -441,7 +441,7 @@ func mergeInLabels[V interface{}](to map[string]V, from map[string]V) {
 	}
 }
 
-func (dc DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
+func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 	deploymentGroup := dc.Config.DeploymentGroups[groupIndex]
 	modInfo := dc.ModulesInfo[deploymentGroup.Name]
 	globalVars := dc.Config.Vars
@@ -513,7 +513,7 @@ type varContext struct {
 	varString  string
 	groupIndex int
 	modIndex   int
-	dc         DeploymentConfig
+	dc         *DeploymentConfig
 }
 
 type reference interface {
@@ -961,7 +961,7 @@ func updateVariables(context varContext, interfaceMap map[string]interface{}, tr
 // expands all variables
 func (dc *DeploymentConfig) expandVariables() error {
 	for _, validator := range dc.Config.Validators {
-		err := updateVariables(varContext{dc: *dc}, validator.Inputs, false)
+		err := updateVariables(varContext{dc: dc}, validator.Inputs, false)
 		if err != nil {
 			return err
 
@@ -973,7 +973,7 @@ func (dc *DeploymentConfig) expandVariables() error {
 			context := varContext{
 				groupIndex: iGrp,
 				modIndex:   iMod,
-				dc:         *dc,
+				dc:         dc,
 			}
 			err := updateVariables(context, mod.Settings, true)
 			if err != nil {

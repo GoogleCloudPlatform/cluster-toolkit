@@ -30,8 +30,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	. "gopkg.in/check.v1"
 )
 
@@ -518,38 +516,59 @@ func (s *MySuite) TestModuleConnections(c *C) {
 	c.Assert(err, NotNil)
 
 	// check that ModuleConnections has map keys for each module ID
-	c.Assert(len(dc.moduleConnections), Equals, 2)
-	connectionIDs := maps.Keys(dc.moduleConnections)
-	found := slices.Contains(connectionIDs, modID0)
-	c.Assert(found, Equals, true)
-	found = slices.Contains(connectionIDs, modID1)
-	c.Assert(found, Equals, true)
-
-	// check connections for module 0 (only to deployment variables)
-	connectionsMod0 := dc.moduleConnections[modID0]
-	c.Assert(len(connectionsMod0), Equals, 2)
-	found = slices.ContainsFunc(connectionsMod0, func(c ModConnection) bool {
-		return c.kind == deploymentConnection && slices.Equal(c.sharedVariables, []string{"project_id"})
+	c.Check(dc.moduleConnections, DeepEquals, map[string][]ModConnection{
+		modID0: {
+			{
+				ref: varReference{
+					name:         "deployment_name",
+					toModuleID:   "vars",
+					fromModuleID: "TestModule0",
+					toGroupID:    "deployment",
+					fromGroupID:  "primary",
+					explicit:     false,
+				},
+				kind:            deploymentConnection,
+				sharedVariables: []string{"deployment_name"},
+			},
+			{
+				ref: varReference{
+					name:         "project_id",
+					toModuleID:   "vars",
+					fromModuleID: "TestModule0",
+					toGroupID:    "deployment",
+					fromGroupID:  "primary",
+					explicit:     false,
+				},
+				kind:            deploymentConnection,
+				sharedVariables: []string{"project_id"},
+			},
+		},
+		modID1: {
+			{
+				ref: modReference{
+					toModuleID:   "TestModule0",
+					fromModuleID: "TestModule1",
+					toGroupID:    "primary",
+					fromGroupID:  "secondary",
+					explicit:     true,
+				},
+				kind:            useConnection,
+				sharedVariables: []string{"test_match"},
+			},
+			{
+				ref: varReference{
+					name:         "deployment_name",
+					toModuleID:   "vars",
+					fromModuleID: "TestModule1",
+					toGroupID:    "deployment",
+					fromGroupID:  "secondary",
+					explicit:     false,
+				},
+				kind:            deploymentConnection,
+				sharedVariables: []string{"deployment_name"},
+			},
+		},
 	})
-	c.Assert(found, Equals, true)
-	found = slices.ContainsFunc(connectionsMod0, func(c ModConnection) bool {
-		return c.kind == deploymentConnection && slices.Equal(c.sharedVariables, []string{"deployment_name"})
-	})
-	c.Assert(found, Equals, true)
-
-	// check connections for module 1 (1 deployment variable and 1 intergroup use)
-	connectionsMod1 := dc.moduleConnections[modID1]
-	c.Assert(len(connectionsMod1), Equals, 2)
-	found = slices.ContainsFunc(connectionsMod1, func(c ModConnection) bool {
-		return c.kind == deploymentConnection && slices.Equal(c.sharedVariables, []string{"deployment_name"})
-	})
-	c.Assert(found, Equals, true)
-	found = slices.ContainsFunc(connectionsMod1, func(c ModConnection) bool {
-		return c.kind == useConnection &&
-			slices.Equal(c.sharedVariables, []string{"test_match"}) &&
-			c.ref.IsIntergroup()
-	})
-	c.Assert(found, Equals, true)
 }
 
 func (s *MySuite) TestSetModulesInfo(c *C) {
