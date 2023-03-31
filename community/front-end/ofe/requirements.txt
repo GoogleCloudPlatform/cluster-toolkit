@@ -51,7 +51,6 @@ platformdirs==3.2.0
 pre-commit==3.2.1
 proto-plus==1.22.2
 protobuf==4.22.1
-py==1.11.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pycparser==2.21
