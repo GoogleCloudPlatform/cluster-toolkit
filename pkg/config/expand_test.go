@@ -280,49 +280,49 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 	// empty
 	testSlice := []interface{}{}
 	ctx := varContext{}
-	ret, err := updateVariableType(testSlice, ctx)
+	ret, err := updateVariableType(testSlice, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// single string
 	testSlice = append(testSlice, "string")
-	ret, err = updateVariableType(testSlice, ctx)
+	ret, err = updateVariableType(testSlice, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// add list
 	testSlice = append(testSlice, []interface{}{})
-	ret, err = updateVariableType(testSlice, ctx)
+	ret, err = updateVariableType(testSlice, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// add map
 	testSlice = append(testSlice, make(map[string]interface{}))
-	ret, err = updateVariableType(testSlice, ctx)
+	ret, err = updateVariableType(testSlice, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 
 	// map, success
 	testMap := make(map[string]interface{})
-	ret, err = updateVariableType(testMap, ctx)
+	ret, err = updateVariableType(testMap, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add string
 	testMap["string"] = "string"
-	ret, err = updateVariableType(testMap, ctx)
+	ret, err = updateVariableType(testMap, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add map
 	testMap["map"] = make(map[string]interface{})
-	ret, err = updateVariableType(testMap, ctx)
+	ret, err = updateVariableType(testMap, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add slice
 	testMap["slice"] = []interface{}{}
-	ret, err = updateVariableType(testMap, ctx)
+	ret, err = updateVariableType(testMap, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 
 	// string, success
 	testString := "string"
-	ret, err = updateVariableType(testString, ctx)
+	ret, err = updateVariableType(testString, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testString, DeepEquals, ret)
 }
@@ -790,26 +790,26 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 
 	// Invalid variable -> no .
 	testVarContext1.varString = "$(varsStringWithNoDot)"
-	_, err := expandSimpleVariable(testVarContext1)
+	_, err := expandSimpleVariable(testVarContext1, false)
 	expectedErr := fmt.Sprintf("%s.*", errorMessages["invalidVar"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Invalid -> not found
 	testVarContext1.varString = "$(vars.doesntExists)"
-	_, err = expandSimpleVariable(testVarContext1)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Success
 	testVarContext1.dc.Config.Vars["globalExists"] = "existsValue"
 	testVarContext1.varString = "$(vars.globalExists)"
-	got, err := expandSimpleVariable(testVarContext1)
+	got, err := expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, IsNil)
 	c.Assert(got, Equals, "((var.globalExists))")
 
 	// Module variable: Invalid -> Module not found
 	testVarContext1.varString = "$(bad_mod.someVar)"
-	_, err = expandSimpleVariable(testVarContext1)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, ErrorMatches, "module bad_mod was not found")
 
 	// Module variable: Invalid -> Output not found
@@ -817,7 +817,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, modulereader.ModuleInfo{})
 	fakeOutput := "doesntExist"
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s)", testModule1.ID, fakeOutput)
-	_, err = expandSimpleVariable(testVarContext1)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
 		errorMessages["noOutput"], testModule1.ID, fakeOutput)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -831,7 +831,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s)", testModule1.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext1)
+	got, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, IsNil)
 	expectedErr = fmt.Sprintf("((module.%s.%s))", testModule1.ID, existingOutput)
 	c.Assert(got, Equals, expectedErr)
@@ -845,7 +845,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[1].Name, testModule1.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext1)
+	got, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, IsNil)
 	c.Assert(got, Equals, fmt.Sprintf("((module.%s.%s))", testModule1.ID, existingOutput))
 
@@ -859,7 +859,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule1.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext1)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, NotNil)
 
 	expectedErr = fmt.Sprintf("%s: %s.%s should be %s.%s",
@@ -876,7 +876,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule0.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s)", testModule0.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext1)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	expectedErr = fmt.Sprintf("%s: %s .*",
 		errorMessages["intergroupImplicit"], testModule0.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -884,14 +884,14 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Intergroup variable: failure because explicit group and module does not exist
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
 		testBlueprint.DeploymentGroups[0].Name, "bad_module", "bad_output")
-	_, err = expandSimpleVariable(testVarContext1)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, ErrorMatches, "module bad_module was not found")
 
 	// Intergroup variable: failure because explicit group and output does not exist
 	fakeOutput = "bad_output"
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
 		testBlueprint.DeploymentGroups[0].Name, testModule0.ID, fakeOutput)
-	_, err = expandSimpleVariable(testVarContext1)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
 		errorMessages["noOutput"], testModule0.ID, fakeOutput)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -904,7 +904,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext0.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[1].Name, testModule1.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext0)
+	_, err = expandSimpleVariable(testVarContext0, false)
 	expectedErr = fmt.Sprintf("%s: %s .*",
 		errorMessages["intergroupOrder"], testModule1.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -918,7 +918,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule0.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule0.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext1)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s .*", errorMessages["varInAnotherGroup"], regexp.QuoteMeta(testVarContext1.varString)))
 }
 
@@ -926,7 +926,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 // presently it returns only an error
 func (s *MySuite) TestExpandVariable(c *C) {
 	testVarContext0 := varContext{}
-	str, err := expandVariable(testVarContext0)
+	str, err := expandVariable(testVarContext0, false)
 	c.Assert(str, Equals, "")
 	c.Assert(err, NotNil)
 }

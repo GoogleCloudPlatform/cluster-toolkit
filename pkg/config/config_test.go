@@ -505,6 +505,10 @@ func (s *MySuite) TestModuleConnections(c *C) {
 	modID0 := dc.Config.DeploymentGroups[0].Modules[0].ID
 	modID1 := dc.Config.DeploymentGroups[1].Modules[0].ID
 
+	dc.addSettingsToModules()
+	dc.addMetadataToModules()
+	dc.addDefaultValidators()
+
 	err := dc.applyUseModules()
 	c.Assert(err, IsNil)
 	err = dc.applyGlobalVariables()
@@ -546,23 +550,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 			c.ref.IsIntergroup()
 	})
 	c.Assert(found, Equals, true)
-
-	// the method of applying $(vars.project_id) to required APIs and default
-	// validators creates 2 extra edges in the graph that are attributed to group
-	// 0 and module 0 (L962 and L980 of expand.go)
-	dc = getMultiGroupDeploymentConfig()
-	dc.addSettingsToModules()
-	dc.addMetadataToModules()
-	dc.addDefaultValidators()
-	err = dc.applyUseModules()
-	c.Assert(err, IsNil)
-	err = dc.applyGlobalVariables()
-	c.Assert(err, IsNil)
-	err = dc.expandVariables()
-	// TODO: this will become nil once intergroup references are enabled
-	c.Assert(err, NotNil)
-	connectionsMod0 = dc.moduleConnections[modID0]
-	c.Assert(len(connectionsMod0), Equals, 4)
 }
 
 func (s *MySuite) TestSetModulesInfo(c *C) {
