@@ -12,10 +12,10 @@ project(s):
 One can [explicitly define validators](#explicit-validators), however, the
 expectation is that the implicit behavior will be useful for most users. When
 implicit, a validator is added if all deployment variables matching its inputs
-is defined. The `test_apis_enabled` validator is always enabled because it reads
-the entire blueprint and does not require any specific deployment variable. If
-`project_id`, `region`, and `zone` are defined as deployment variables, then the
-following validators are enabled:
+is defined. Validators listed below that have no inputs are always enabled
+because they read the entire blueprint and do not require any specific
+deployment variable. If `project_id`, `region`, and `zone` are defined as
+deployment variables, then the following validators are enabled:
 
 ```yaml
 validators:
@@ -76,7 +76,16 @@ Each validator is described below:
   * FAIL: if either region or zone do not exist or the zone is not within the
     region
   * Common failure: changing 1 value but not the other
-  * Manual test: `gcloud compute regions describe us-central1 --format="text(zones)" --project $(vars.project_id)
+  * Manual test: `gcloud compute regions describe us-central1 --format="text(zones)" --project $(vars.project_id)`
+* `test_module_not_used`
+  * Inputs: none; reads whole blueprint
+  * PASS: if all instances of use keyword pass matching variables
+  * FAIL: if any instances of use keyword do not pass matching variables
+* `test_deployment_variable_not_used`
+  * Inputs: none; reads whole blueprint
+  * PASS: if all deployment variables are automatically or explicitly used in
+    blueprint
+  * FAIL: if any deployment variable is unused in the blueprint
 
 ### Explicit validators
 
