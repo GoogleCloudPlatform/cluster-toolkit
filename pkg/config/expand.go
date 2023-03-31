@@ -538,7 +538,7 @@ func (ref modReference) String() string {
 }
 
 func (ref modReference) IsIntergroup() bool {
-	return ref.toGroupID == ref.fromGroupID
+	return ref.toGroupID != ref.fromGroupID
 }
 
 func (ref modReference) FromModuleID() string {
@@ -610,7 +610,7 @@ func (ref varReference) String() string {
 }
 
 func (ref varReference) IsIntergroup() bool {
-	return ref.toGroupID == ref.fromGroupID
+	return ref.toGroupID != ref.fromGroupID
 }
 
 func (ref varReference) FromModuleID() string {
