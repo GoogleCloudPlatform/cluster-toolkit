@@ -259,7 +259,16 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 	matchingName := "test_match"
 
 	testModuleInfo0 := modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{},
+		Inputs: []modulereader.VarInfo{
+			{
+				Name: "deployment_name",
+				Type: "string",
+			},
+			{
+				Name: "host_project_id",
+				Type: "string",
+			},
+		},
 		Outputs: []modulereader.VarInfo{
 			{
 				Name: matchingName,
@@ -268,6 +277,10 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 	}
 	testModuleInfo1 := modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{
+			{
+				Name: "deployment_name",
+				Type: "string",
+			},
 			{
 				Name: matchingName,
 			},
@@ -279,11 +292,13 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		Name: "primary",
 		Modules: []Module{
 			{
-				ID:       "TestModule0",
-				Kind:     "terraform",
-				Source:   testModuleSource0,
-				Settings: map[string]interface{}{},
-				Outputs:  []string{matchingName},
+				ID:     "TestModule0",
+				Kind:   "terraform",
+				Source: testModuleSource0,
+				Settings: map[string]interface{}{
+					"host_project_id": "$(vars.project_id)",
+				},
+				Outputs: []string{matchingName},
 			},
 		},
 	}
@@ -303,7 +318,15 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 	}
 
 	dc := DeploymentConfig{
-		Config: Blueprint{BlueprintName: "simple", Vars: map[string]interface{}{"deployment_name": "deployment_name"}, DeploymentGroups: []DeploymentGroup{testDeploymentGroup0, testDeploymentGroup1}},
+		Config: Blueprint{
+			BlueprintName: "simple",
+			Vars: map[string]interface{}{
+				"deployment_name": "deployment_name",
+				"project_id":      "test-project",
+				"unused_key":      "unused_value",
+			},
+			DeploymentGroups: []DeploymentGroup{testDeploymentGroup0, testDeploymentGroup1},
+		},
 		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
 			testDeploymentGroup0.Name: {
 				testModuleSource0: testModuleInfo0,
@@ -315,8 +338,10 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		moduleConnections: make(map[string][]ModConnection),
 	}
 
-	dc.addMetadataToModules()
-	dc.addDefaultValidators()
+	reader := modulereader.Factory("terraform")
+	reader.SetInfo(testModuleSource0, testModuleInfo0)
+	reader.SetInfo(testModuleSource1, testModuleInfo1)
+
 	return dc
 }
 
@@ -471,6 +496,79 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	dc.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID(moduleID)
 	c.Assert(testMod.Kind, Equals, expected)
+}
+
+func (s *MySuite) TestModuleConnections(c *C) {
+	dc := getMultiGroupDeploymentConfig()
+	modID0 := dc.Config.DeploymentGroups[0].Modules[0].ID
+	modID1 := dc.Config.DeploymentGroups[1].Modules[0].ID
+
+	dc.addSettingsToModules()
+	dc.addMetadataToModules()
+	dc.addDefaultValidators()
+
+	err := dc.applyUseModules()
+	c.Assert(err, IsNil)
+	err = dc.applyGlobalVariables()
+	c.Assert(err, IsNil)
+	err = dc.expandVariables()
+	// TODO: this will become nil once intergroup references are enabled
+	c.Assert(err, NotNil)
+
+	// check that ModuleConnections has map keys for each module ID
+	c.Check(dc.moduleConnections, DeepEquals, map[string][]ModConnection{
+		modID0: {
+			{
+				ref: varReference{
+					name:         "deployment_name",
+					toModuleID:   "vars",
+					fromModuleID: "TestModule0",
+					toGroupID:    "deployment",
+					fromGroupID:  "primary",
+					explicit:     false,
+				},
+				kind:            deploymentConnection,
+				sharedVariables: []string{"deployment_name"},
+			},
+			{
+				ref: varReference{
+					name:         "project_id",
+					toModuleID:   "vars",
+					fromModuleID: "TestModule0",
+					toGroupID:    "deployment",
+					fromGroupID:  "primary",
+					explicit:     false,
+				},
+				kind:            deploymentConnection,
+				sharedVariables: []string{"project_id"},
+			},
+		},
+		modID1: {
+			{
+				ref: modReference{
+					toModuleID:   "TestModule0",
+					fromModuleID: "TestModule1",
+					toGroupID:    "primary",
+					fromGroupID:  "secondary",
+					explicit:     true,
+				},
+				kind:            useConnection,
+				sharedVariables: []string{"test_match"},
+			},
+			{
+				ref: varReference{
+					name:         "deployment_name",
+					toModuleID:   "vars",
+					fromModuleID: "TestModule1",
+					toGroupID:    "deployment",
+					fromGroupID:  "secondary",
+					explicit:     false,
+				},
+				kind:            deploymentConnection,
+				sharedVariables: []string{"deployment_name"},
+			},
+		},
+	})
 }
 
 func (s *MySuite) TestSetModulesInfo(c *C) {

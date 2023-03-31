@@ -38,7 +38,7 @@ import (
 const (
 	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
 	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
-	unexpectedConnectionKind string = "connectionKind must be useConnection"
+	unexpectedConnectionKind string = "connectionKind must be useConnection or deploymentConnection"
 )
 
 var errorMessages = map[string]string{
@@ -267,12 +267,12 @@ type connectionKind int
 const (
 	undefinedConnection connectionKind = iota
 	useConnection
+	deploymentConnection
 	// explicitConnection
-	// globalConnection
 )
 
 func (c connectionKind) IsValid() bool {
-	return c == useConnection
+	return c == useConnection || c == deploymentConnection
 }
 
 // ModConnection defines details about connections between modules. Currently,

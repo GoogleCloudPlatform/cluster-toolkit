@@ -441,10 +441,11 @@ func mergeInLabels[V interface{}](to map[string]V, from map[string]V) {
 	}
 }
 
-func applyGlobalVarsInGroup(
-	deploymentGroup DeploymentGroup,
-	modInfo map[string]modulereader.ModuleInfo,
-	globalVars map[string]interface{}) error {
+func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
+	deploymentGroup := dc.Config.DeploymentGroups[groupIndex]
+	modInfo := dc.ModulesInfo[deploymentGroup.Name]
+	globalVars := dc.Config.Vars
+
 	for _, mod := range deploymentGroup.Modules {
 		for _, input := range modInfo[mod.Source].Inputs {
 
@@ -455,7 +456,16 @@ func applyGlobalVarsInGroup(
 
 			// If it's not set, is there a global we can use?
 			if _, ok := globalVars[input.Name]; ok {
+				ref := varReference{
+					name:         input.Name,
+					toModuleID:   "vars",
+					fromModuleID: mod.ID,
+					toGroupID:    "deployment",
+					fromGroupID:  deploymentGroup.Name,
+					explicit:     false,
+				}
 				mod.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
+				dc.addModuleConnection(ref, deploymentConnection, []string{ref.name})
 				continue
 			}
 
@@ -473,7 +483,7 @@ func applyGlobalVarsInGroup(
 
 func updateGlobalVarTypes(vars map[string]interface{}) error {
 	for k, v := range vars {
-		val, err := updateVariableType(v, varContext{})
+		val, err := updateVariableType(v, varContext{}, false)
 		if err != nil {
 			return fmt.Errorf("error setting type for deployment variable %s: %v", k, err)
 		}
@@ -490,9 +500,8 @@ func (dc *DeploymentConfig) applyGlobalVariables() error {
 		return err
 	}
 
-	for _, grp := range dc.Config.DeploymentGroups {
-		err := applyGlobalVarsInGroup(
-			grp, dc.ModulesInfo[grp.Name], dc.Config.Vars)
+	for groupIndex := range dc.Config.DeploymentGroups {
+		err := dc.applyGlobalVarsInGroup(groupIndex)
 		if err != nil {
 			return err
 		}
@@ -504,7 +513,7 @@ type varContext struct {
 	varString  string
 	groupIndex int
 	modIndex   int
-	blueprint  Blueprint
+	dc         *DeploymentConfig
 }
 
 type reference interface {
@@ -538,7 +547,7 @@ func (ref modReference) String() string {
 }
 
 func (ref modReference) IsIntergroup() bool {
-	return ref.toGroupID == ref.fromGroupID
+	return ref.toGroupID != ref.fromGroupID
 }
 
 func (ref modReference) FromModuleID() string {
@@ -610,7 +619,7 @@ func (ref varReference) String() string {
 }
 
 func (ref varReference) IsIntergroup() bool {
-	return ref.toGroupID == ref.fromGroupID
+	return ref.toGroupID != ref.fromGroupID
 }
 
 func (ref varReference) FromModuleID() string {
@@ -788,7 +797,7 @@ func (ref varReference) validate(bp Blueprint) error {
 }
 
 // Needs DeploymentGroups, variable string, current group,
-func expandSimpleVariable(context varContext) (string, error) {
+func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, error) {
 	// Get variable contents
 	contents := simpleVariableExp.FindStringSubmatch(context.varString)
 	if len(contents) != 2 { // Should always be (match, contents) here
@@ -797,7 +806,7 @@ func expandSimpleVariable(context varContext) (string, error) {
 		return "", err
 	}
 
-	callingGroup := context.blueprint.DeploymentGroups[context.groupIndex]
+	callingGroup := context.dc.Config.DeploymentGroups[context.groupIndex]
 	refStr := contents[1]
 
 	varRef, err := identifySimpleVariable(refStr, callingGroup, callingGroup.Modules[context.modIndex])
@@ -805,7 +814,7 @@ func expandSimpleVariable(context varContext) (string, error) {
 		return "", err
 	}
 
-	if err := varRef.validate(context.blueprint); err != nil {
+	if err := varRef.validate(context.dc.Config); err != nil {
 		return "", err
 	}
 
@@ -814,6 +823,9 @@ func expandSimpleVariable(context varContext) (string, error) {
 	case "deployment":
 		// deployment variables
 		expandedVariable = fmt.Sprintf("((var.%s))", varRef.name)
+		if trackModuleGraph {
+			context.dc.addModuleConnection(varRef, deploymentConnection, []string{varRef.name})
+		}
 	case varRef.fromGroupID:
 		// intragroup reference can make direct reference to module output
 		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.toModuleID, varRef.name)
@@ -821,13 +833,13 @@ func expandSimpleVariable(context varContext) (string, error) {
 
 		// intergroup reference; begin by finding the target module in blueprint
 		toGrpIdx := slices.IndexFunc(
-			context.blueprint.DeploymentGroups,
+			context.dc.Config.DeploymentGroups,
 			func(g DeploymentGroup) bool { return g.Name == varRef.toGroupID })
 
 		if toGrpIdx == -1 {
 			return "", fmt.Errorf("invalid group reference: %s", varRef.toGroupID)
 		}
-		toGrp := context.blueprint.DeploymentGroups[toGrpIdx]
+		toGrp := context.dc.Config.DeploymentGroups[toGrpIdx]
 		toModIdx := slices.IndexFunc(toGrp.Modules, func(m Module) bool { return m.ID == varRef.toModuleID })
 		if toModIdx == -1 {
 			return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], varRef.toModuleID)
@@ -847,7 +859,9 @@ func expandSimpleVariable(context varContext) (string, error) {
 	return expandedVariable, nil
 }
 
-func expandVariable(context varContext) (string, error) {
+// expandVariable will eventually implement string interpolation; right now it
+// only generates an error message guiding the user to proper escape syntax
+func expandVariable(context varContext, trackModuleGraph bool) (string, error) {
 	matchall := anyVariableExp.FindAllString(context.varString, -1)
 	errHint := ""
 	for _, element := range matchall {
@@ -879,15 +893,15 @@ func hasVariable(str string) bool {
 	return anyVariableExp.MatchString(str)
 }
 
-func handleVariable(prim interface{}, context varContext) (interface{}, error) {
+func handleVariable(prim interface{}, context varContext, trackModuleGraph bool) (interface{}, error) {
 	switch val := prim.(type) {
 	case string:
 		context.varString = val
 		if hasVariable(val) {
 			if isSimpleVariable(val) {
-				return expandSimpleVariable(context)
+				return expandSimpleVariable(context, trackModuleGraph)
 			}
-			return expandVariable(context)
+			return expandVariable(context, trackModuleGraph)
 		}
 		return val, nil
 	default:
@@ -895,14 +909,14 @@ func handleVariable(prim interface{}, context varContext) (interface{}, error) {
 	}
 }
 
-func updateVariableType(value interface{}, context varContext) (interface{}, error) {
+func updateVariableType(value interface{}, context varContext, trackModuleGraph bool) (interface{}, error) {
 	var err error
 	switch typedValue := value.(type) {
 	case []interface{}:
 		interfaceSlice := value.([]interface{})
 		{
 			for i := 0; i < len(interfaceSlice); i++ {
-				interfaceSlice[i], err = updateVariableType(interfaceSlice[i], context)
+				interfaceSlice[i], err = updateVariableType(interfaceSlice[i], context, trackModuleGraph)
 				if err != nil {
 					return interfaceSlice, err
 				}
@@ -912,7 +926,7 @@ func updateVariableType(value interface{}, context varContext) (interface{}, err
 	case map[string]interface{}:
 		retMap := map[string]interface{}{}
 		for k, v := range typedValue {
-			retMap[k], err = updateVariableType(v, context)
+			retMap[k], err = updateVariableType(v, context, trackModuleGraph)
 			if err != nil {
 				return retMap, err
 			}
@@ -921,20 +935,20 @@ func updateVariableType(value interface{}, context varContext) (interface{}, err
 	case map[interface{}]interface{}:
 		retMap := map[string]interface{}{}
 		for k, v := range typedValue {
-			retMap[k.(string)], err = updateVariableType(v, context)
+			retMap[k.(string)], err = updateVariableType(v, context, trackModuleGraph)
 			if err != nil {
 				return retMap, err
 			}
 		}
 		return retMap, err
 	default:
-		return handleVariable(value, context)
+		return handleVariable(value, context, trackModuleGraph)
 	}
 }
 
-func updateVariables(context varContext, interfaceMap map[string]interface{}) error {
+func updateVariables(context varContext, interfaceMap map[string]interface{}, trackModuleGraph bool) error {
 	for key, value := range interfaceMap {
-		updatedVal, err := updateVariableType(value, context)
+		updatedVal, err := updateVariableType(value, context, trackModuleGraph)
 		if err != nil {
 			return err
 		}
@@ -947,7 +961,7 @@ func updateVariables(context varContext, interfaceMap map[string]interface{}) er
 // expands all variables
 func (dc *DeploymentConfig) expandVariables() error {
 	for _, validator := range dc.Config.Validators {
-		err := updateVariables(varContext{blueprint: dc.Config}, validator.Inputs)
+		err := updateVariables(varContext{dc: dc}, validator.Inputs, false)
 		if err != nil {
 			return err
 
@@ -959,9 +973,9 @@ func (dc *DeploymentConfig) expandVariables() error {
 			context := varContext{
 				groupIndex: iGrp,
 				modIndex:   iMod,
-				blueprint:  dc.Config,
+				dc:         dc,
 			}
-			err := updateVariables(context, mod.Settings)
+			err := updateVariables(context, mod.Settings, true)
 			if err != nil {
 				return err
 			}
@@ -969,7 +983,7 @@ func (dc *DeploymentConfig) expandVariables() error {
 			// ensure that variable references to projects in required APIs are expanded
 			for projectID, requiredAPIs := range mod.RequiredApis {
 				if isDeploymentVariable(projectID) {
-					s, err := handleVariable(projectID, varContext{blueprint: dc.Config})
+					s, err := handleVariable(projectID, context, false)
 					if err != nil {
 						return err
 					}
