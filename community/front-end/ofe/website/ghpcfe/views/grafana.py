@@ -29,7 +29,7 @@ class GrafanaProxyView(LoginRequiredMixin, ProxyView):
 
     def dispatch(self, request, path):
         response = super().dispatch(request, path)
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response["X-Frame-Options"] = "SAMEORIGIN"
         return response
 
 class GrafanaView(LoginRequiredMixin, base.TemplateView):
