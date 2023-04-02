@@ -29,7 +29,6 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
-	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
 
@@ -354,32 +353,27 @@ func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 }
 
 func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
-	var usedVars = []string{}
+	// these variables are required or automatically constructed and applied;
+	// these should not be listed unused otherwise no blueprints are valid
+	var usedVars = map[string]bool{
+		"labels":          true,
+		"deployment_name": true,
+	}
+
 	for _, connections := range dc.moduleConnections {
 		for _, conn := range connections {
 			if conn.kind == deploymentConnection {
 				for _, v := range conn.sharedVariables {
-					if !slices.Contains(usedVars, v) {
-						usedVars = append(usedVars, v)
-					}
-
+					usedVars[v] = true
 				}
 			}
 		}
 	}
 
-	// variables that are either required or automatically constructed and
-	// applied; these should not be returned as unused otherwise no blueprints
-	// could be validated
-	requiredVars := []string{"labels", "deployment_name"}
-	var unusedVars = []string{}
-	for _, v := range maps.Keys(dc.Config.Vars) {
-		if slices.Contains(requiredVars, v) {
-			continue
-		}
-		found := slices.Contains(usedVars, v)
-		if !found {
-			unusedVars = append(unusedVars, v)
+	unusedVars := []string{}
+	for k := range dc.Config.Vars {
+		if _, ok := usedVars[k]; !ok {
+			unusedVars = append(unusedVars, k)
 		}
 	}
 

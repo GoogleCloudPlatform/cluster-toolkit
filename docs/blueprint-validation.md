@@ -12,32 +12,8 @@ project(s):
 One can [explicitly define validators](#explicit-validators), however, the
 expectation is that the implicit behavior will be useful for most users. When
 implicit, a validator is added if all deployment variables matching its inputs
-is defined. Validators listed below that have no inputs are always enabled
-because they read the entire blueprint and do not require any specific
-deployment variable. If `project_id`, `region`, and `zone` are defined as
-deployment variables, then the following validators are enabled:
-
-```yaml
-validators:
-- validator: test_project_exists
-  inputs:
-    project_id: $(vars.project_id)
-- validator: test_apis_enabled
-  inputs: {}
-- validator: test_region_exists
-  inputs:
-    project_id: $(vars.project_id)
-    region: $(vars.region)
-- validator: test_zone_exists
-  inputs:
-    project_id: $(vars.project_id)
-    zone: $(vars.zone)
-- validator: test_zone_in_region
-  inputs:
-    project_id: $(vars.project_id)
-    zone: $(vars.zone)
-    region: $(vars.region)
-```
+are defined. Validators that have no inputs are always enabled by default
+because they do not require any specific deployment variable.
 
 Each validator is described below:
 
@@ -90,7 +66,35 @@ Each validator is described below:
 ### Explicit validators
 
 Validators can be overwritten and supplied with alternative input values,
-however they are limited to the set of functions defined above.
+however they are limited to the set of functions defined above. As an example,
+the default validators added when `project_id`, `region`, and `zone` are defined
+is:
+
+```yaml
+validators:
+  - validator: test_module_not_used
+    inputs: {}
+  - validator: test_deployment_variable_not_used
+    inputs: {}
+  - validator: test_project_exists
+    inputs:
+      project_id: $(vars.project_id)
+  - validator: test_apis_enabled
+    inputs: {}
+  - validator: test_region_exists
+    inputs:
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+  - validator: test_zone_exists
+    inputs:
+      project_id: $(vars.project_id)
+      zone: $(vars.zone)
+  - validator: test_zone_in_region
+    inputs:
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+```
 
 ### Skipping or disabling validators
 

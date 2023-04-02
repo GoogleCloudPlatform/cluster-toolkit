@@ -54,13 +54,11 @@ func handleClientError(e error) error {
 // TestDeploymentVariablesNotUsed errors if there are any unused deployment
 // variables and prints any to the output for the user
 func TestDeploymentVariablesNotUsed(unusedVariables []string) error {
-	var foundUnused bool
 	for _, v := range unusedVariables {
-		foundUnused = true
 		log.Printf(unusedDeploymentVariableMsg, v)
 	}
 
-	if foundUnused {
+	if len(unusedVariables) > 0 {
 		return fmt.Errorf(unusedDeploymentVariableError)
 	}
 
