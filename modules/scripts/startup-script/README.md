@@ -171,7 +171,6 @@ they are able to do so by using the `gcs_bucket_path` as shown in the below exam
   source: ./modules/scripts/startup-script
   settings:
     gcs_bucket_path: gs://user-test-bucket/folder1/folder2
-    install_ansible: true
     install_cloud_ops_agent: true
 
 - id: compute-cluster

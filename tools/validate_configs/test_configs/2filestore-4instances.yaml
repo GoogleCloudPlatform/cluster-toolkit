@@ -46,14 +46,6 @@ deployment_groups:
       labels:
         ghpc_role: storage-apps
 
-  - id: startup
-    source: ./modules/scripts/startup-script
-    settings:
-      runners:
-      - type: shell
-        content: $(homefs.install_nfs_client)
-        destination: "install-nfs.sh"
-
   - id: license-server-1
     source: ./modules/compute/vm-instance
     use: [network, homefs]
@@ -83,8 +75,6 @@ deployment_groups:
       machine_type: c2-standard-30
       labels:
         ghpc_role: head-node
-      metadata:
-        startup-script: $(startup.startup_script)
 
   - id: compute
     source: modules/compute/vm-instance
@@ -92,7 +82,6 @@ deployment_groups:
     - network
     - homefs
     - apps
-    - startup
     settings:
       name_prefix: compute
       machine_type: c2-standard-60

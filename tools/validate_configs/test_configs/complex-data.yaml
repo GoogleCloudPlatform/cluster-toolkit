@@ -57,14 +57,6 @@ deployment_groups:
         ghpc_role: storage-home
         number_label: 44
 
-  - id: startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - type: shell
-        content: $(homefs.install_nfs_client)
-        destination: "install-nfs.sh"
-
   - id: license-server-1
     source: modules/compute/vm-instance
     use: [network, homefs]
