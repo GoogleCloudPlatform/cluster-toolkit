@@ -832,6 +832,9 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 		if trackModuleGraph {
 			var found bool
 			for _, conn := range context.dc.moduleConnections[varRef.fromModuleID] {
+				if conn.kind != useConnection {
+					continue
+				}
 				if slices.Contains(conn.sharedVariables, varRef.name) {
 					found = true
 					break
