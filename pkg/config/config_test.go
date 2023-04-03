@@ -255,8 +255,14 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 func getMultiGroupDeploymentConfig() DeploymentConfig {
 	testModuleSource0 := filepath.Join(tmpTestDir, "module0")
 	testModuleSource1 := filepath.Join(tmpTestDir, "module1")
+	testModuleSource2 := filepath.Join(tmpTestDir, "module2")
 
-	matchingName := "test_match"
+	matchingIntergroupName := "test_inter_0"
+	matchingIntragroupName0 := "test_intra_0"
+	matchingIntragroupName1 := "test_intra_1"
+	matchingIntragroupName2 := "test_intra_2"
+
+	altProjectIDSetting := "host_project_id"
 
 	testModuleInfo0 := modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{
@@ -265,40 +271,78 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Type: "string",
 			},
 			{
-				Name: "host_project_id",
+				Name: altProjectIDSetting,
 				Type: "string",
 			},
 		},
 		Outputs: []modulereader.VarInfo{
 			{
-				Name: matchingName,
+				Name: matchingIntergroupName,
+			},
+			{
+				Name: matchingIntragroupName0,
+			},
+			{
+				Name: matchingIntragroupName1,
+			},
+			{
+				Name: matchingIntragroupName2,
 			},
 		},
 	}
 	testModuleInfo1 := modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{
 			{
-				Name: "deployment_name",
-				Type: "string",
+				Name: matchingIntragroupName0,
 			},
 			{
-				Name: matchingName,
+				Name: matchingIntragroupName1,
+			},
+			{
+				Name: matchingIntragroupName2,
 			},
 		},
 		Outputs: []modulereader.VarInfo{},
 	}
 
+	testModuleInfo2 := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{
+				Name: "deployment_name",
+				Type: "string",
+			},
+			{
+				Name: matchingIntergroupName,
+			},
+		},
+		Outputs: []modulereader.VarInfo{},
+	}
+
+	dg0Name := "primary"
+	modID0 := "TestModule0"
 	testDeploymentGroup0 := DeploymentGroup{
-		Name: "primary",
+		Name: dg0Name,
 		Modules: []Module{
 			{
-				ID:     "TestModule0",
+				ID:     modID0,
 				Kind:   "terraform",
 				Source: testModuleSource0,
 				Settings: map[string]interface{}{
-					"host_project_id": "$(vars.project_id)",
+					altProjectIDSetting: "$(vars.project_id)",
 				},
-				Outputs: []string{matchingName},
+				Outputs: []string{matchingIntergroupName},
+			},
+			{
+				ID:     "TestModule1",
+				Kind:   "terraform",
+				Source: testModuleSource1,
+				Settings: map[string]interface{}{
+					matchingIntragroupName1: "explicit-intra-value",
+					matchingIntragroupName2: fmt.Sprintf("$(%s.%s)", modID0, matchingIntragroupName2),
+				},
+				Use: []string{
+					fmt.Sprintf("%s.%s", dg0Name, modID0),
+				},
 			},
 		},
 	}
@@ -306,9 +350,9 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		Name: "secondary",
 		Modules: []Module{
 			{
-				ID:       "TestModule1",
+				ID:       "TestModule2",
 				Kind:     "terraform",
-				Source:   testModuleSource1,
+				Source:   testModuleSource2,
 				Settings: map[string]interface{}{},
 				Use: []string{
 					fmt.Sprintf("%s.%s", testDeploymentGroup0.Name, testDeploymentGroup0.Modules[0].ID),
@@ -330,9 +374,10 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
 			testDeploymentGroup0.Name: {
 				testModuleSource0: testModuleInfo0,
+				testModuleSource1: testModuleInfo1,
 			},
 			testDeploymentGroup1.Name: {
-				testModuleSource1: testModuleInfo1,
+				testModuleSource2: testModuleInfo2,
 			},
 		},
 		moduleConnections: make(map[string][]ModConnection),
@@ -344,6 +389,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 	reader := modulereader.Factory("terraform")
 	reader.SetInfo(testModuleSource0, testModuleInfo0)
 	reader.SetInfo(testModuleSource1, testModuleInfo1)
+	reader.SetInfo(testModuleSource2, testModuleInfo2)
 
 	return dc
 }
@@ -517,7 +563,8 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 func (s *MySuite) TestModuleConnections(c *C) {
 	dc := getMultiGroupDeploymentConfig()
 	modID0 := dc.Config.DeploymentGroups[0].Modules[0].ID
-	modID1 := dc.Config.DeploymentGroups[1].Modules[0].ID
+	modID1 := dc.Config.DeploymentGroups[0].Modules[1].ID
+	modID2 := dc.Config.DeploymentGroups[1].Modules[0].ID
 
 	err := dc.applyUseModules()
 	c.Assert(err, IsNil)
@@ -561,17 +608,42 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					toModuleID:   "TestModule0",
 					fromModuleID: "TestModule1",
 					toGroupID:    "primary",
+					fromGroupID:  "primary",
+					explicit:     true,
+				},
+				kind:            useConnection,
+				sharedVariables: []string{"test_intra_0"},
+			},
+			{
+				ref: varReference{
+					name:         "test_intra_2",
+					toModuleID:   "TestModule0",
+					fromModuleID: "TestModule1",
+					toGroupID:    "primary",
+					fromGroupID:  "primary",
+					explicit:     false,
+				},
+				kind:            explicitConnection,
+				sharedVariables: []string{"test_intra_2"},
+			},
+		},
+		modID2: {
+			{
+				ref: modReference{
+					toModuleID:   "TestModule0",
+					fromModuleID: "TestModule2",
+					toGroupID:    "primary",
 					fromGroupID:  "secondary",
 					explicit:     true,
 				},
 				kind:            useConnection,
-				sharedVariables: []string{"test_match"},
+				sharedVariables: []string{"test_inter_0"},
 			},
 			{
 				ref: varReference{
 					name:         "deployment_name",
 					toModuleID:   "vars",
-					fromModuleID: "TestModule1",
+					fromModuleID: "TestModule2",
 					toGroupID:    "deployment",
 					fromGroupID:  "secondary",
 					explicit:     false,

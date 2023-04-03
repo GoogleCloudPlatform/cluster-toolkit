@@ -263,19 +263,26 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
-// connectionKind defines the kind of module connection, defined by the source
-// of the connection. Currently, only Use is supported.
+// connectionKind defines tracks graph edges between modules and from modules to
+// deployment variables:
+//
+// use: created via module-module use keyword
+// deployment: created by a module setting equal to $(vars.name)
+// explicit: created by a module setting equal to $(mod_id.output)
+//
+// no attempt is made to track edges made via Toolkit literal strings presently
+// required when wanting to index a list or map "((mod_id.output[0]))"
 type connectionKind int
 
 const (
 	undefinedConnection connectionKind = iota
 	useConnection
 	deploymentConnection
-	// explicitConnection
+	explicitConnection
 )
 
 func (c connectionKind) IsValid() bool {
-	return c == useConnection || c == deploymentConnection
+	return c == useConnection || c == deploymentConnection || c == explicitConnection
 }
 
 // ModConnection defines details about connections between modules. Currently,
