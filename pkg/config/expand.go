@@ -829,6 +829,18 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 	case varRef.fromGroupID:
 		// intragroup reference can make direct reference to module output
 		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.toModuleID, varRef.name)
+		if trackModuleGraph {
+			var found bool
+			for _, conn := range context.dc.moduleConnections[varRef.fromModuleID] {
+				if slices.Contains(conn.sharedVariables, varRef.name) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				context.dc.addModuleConnection(varRef, explicitConnection, []string{varRef.name})
+			}
+		}
 	default:
 
 		// intergroup reference; begin by finding the target module in blueprint
