@@ -109,7 +109,7 @@ def do(project, sha, selectors, concurency=1):
 
     build_status = {t: b.status for t, b in builds.items()}
     while action(cb, builds.values(), concurency):
-        builds = retrive_builds(cb, sha, selectors)
+        builds = retrive_builds(cb, project, sha, selectors)
 
         for t, b in builds.items():
             if b.status != build_status.get(t):
