@@ -1012,6 +1012,10 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 		Validator: testModuleNotUsedName.String(),
 		Inputs:    map[string]interface{}{},
 	})
+	defaults = append(defaults, validatorConfig{
+		Validator: testDeploymentVariableNotUsedName.String(),
+		Inputs:    map[string]interface{}{},
+	})
 
 	// always add the project ID validator before subsequent validators that can
 	// only succeed if credentials can access the project. If the project ID

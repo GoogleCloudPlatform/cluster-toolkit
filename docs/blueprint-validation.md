@@ -12,32 +12,8 @@ project(s):
 One can [explicitly define validators](#explicit-validators), however, the
 expectation is that the implicit behavior will be useful for most users. When
 implicit, a validator is added if all deployment variables matching its inputs
-is defined. The `test_apis_enabled` validator is always enabled because it reads
-the entire blueprint and does not require any specific deployment variable. If
-`project_id`, `region`, and `zone` are defined as deployment variables, then the
-following validators are enabled:
-
-```yaml
-validators:
-- validator: test_project_exists
-  inputs:
-    project_id: $(vars.project_id)
-- validator: test_apis_enabled
-  inputs: {}
-- validator: test_region_exists
-  inputs:
-    project_id: $(vars.project_id)
-    region: $(vars.region)
-- validator: test_zone_exists
-  inputs:
-    project_id: $(vars.project_id)
-    zone: $(vars.zone)
-- validator: test_zone_in_region
-  inputs:
-    project_id: $(vars.project_id)
-    zone: $(vars.zone)
-    region: $(vars.region)
-```
+are defined. Validators that have no inputs are always enabled by default
+because they do not require any specific deployment variable.
 
 Each validator is described below:
 
@@ -76,12 +52,49 @@ Each validator is described below:
   * FAIL: if either region or zone do not exist or the zone is not within the
     region
   * Common failure: changing 1 value but not the other
-  * Manual test: `gcloud compute regions describe us-central1 --format="text(zones)" --project $(vars.project_id)
+  * Manual test: `gcloud compute regions describe us-central1 --format="text(zones)" --project $(vars.project_id)`
+* `test_module_not_used`
+  * Inputs: none; reads whole blueprint
+  * PASS: if all instances of use keyword pass matching variables
+  * FAIL: if any instances of use keyword do not pass matching variables
+* `test_deployment_variable_not_used`
+  * Inputs: none; reads whole blueprint
+  * PASS: if all deployment variables are automatically or explicitly used in
+    blueprint
+  * FAIL: if any deployment variable is unused in the blueprint
 
 ### Explicit validators
 
 Validators can be overwritten and supplied with alternative input values,
-however they are limited to the set of functions defined above.
+however they are limited to the set of functions defined above. As an example,
+the default validators added when `project_id`, `region`, and `zone` are defined
+is:
+
+```yaml
+validators:
+  - validator: test_module_not_used
+    inputs: {}
+  - validator: test_deployment_variable_not_used
+    inputs: {}
+  - validator: test_project_exists
+    inputs:
+      project_id: $(vars.project_id)
+  - validator: test_apis_enabled
+    inputs: {}
+  - validator: test_region_exists
+    inputs:
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+  - validator: test_zone_exists
+    inputs:
+      project_id: $(vars.project_id)
+      zone: $(vars.zone)
+  - validator: test_zone_in_region
+    inputs:
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+```
 
 ### Skipping or disabling validators
 

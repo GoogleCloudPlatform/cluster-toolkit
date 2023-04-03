@@ -21,7 +21,6 @@ vars:
   deployment_name: hpc-slurm-project
   region: europe-west4
   zone: europe-west4-a
-  slurm_sa: slurm-sa
 
 terraform_backend_defaults:
   type: gcs

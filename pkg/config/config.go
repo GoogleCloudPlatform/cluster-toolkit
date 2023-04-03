@@ -132,6 +132,7 @@ const (
 	testModuleNotUsedName
 	testZoneInRegionName
 	testApisEnabledName
+	testDeploymentVariableNotUsedName
 )
 
 // this enum will be used to control how fatal validator failures will be
@@ -176,6 +177,8 @@ func (v validatorName) String() string {
 		return "test_apis_enabled"
 	case testModuleNotUsedName:
 		return "test_module_not_used"
+	case testDeploymentVariableNotUsedName:
+		return "test_deployment_variable_not_used"
 	default:
 		return "unknown_validator"
 	}
@@ -347,6 +350,34 @@ func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 		}
 	}
 	return unusedModules
+}
+
+func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
+	// these variables are required or automatically constructed and applied;
+	// these should not be listed unused otherwise no blueprints are valid
+	var usedVars = map[string]bool{
+		"labels":          true,
+		"deployment_name": true,
+	}
+
+	for _, connections := range dc.moduleConnections {
+		for _, conn := range connections {
+			if conn.kind == deploymentConnection {
+				for _, v := range conn.sharedVariables {
+					usedVars[v] = true
+				}
+			}
+		}
+	}
+
+	unusedVars := []string{}
+	for k := range dc.Config.Vars {
+		if _, ok := usedVars[k]; !ok {
+			unusedVars = append(unusedVars, k)
+		}
+	}
+
+	return unusedVars
 }
 
 func (dc *DeploymentConfig) checkMovedModules() error {
