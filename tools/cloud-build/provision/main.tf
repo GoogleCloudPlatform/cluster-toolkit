@@ -14,7 +14,6 @@
 
 terraform {
   backend "gcs" {
-    bucket = "hpc-toolkit-dev-automation"
     prefix = "dev-infra-tf/state"
   }
 }

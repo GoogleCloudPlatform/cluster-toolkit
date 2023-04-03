@@ -16,3 +16,4 @@
   pre-commits on all files.
 * `project-cleanup.yaml`: Cloud build config that performs a regular cleanup of
   resources in the test project.
+* `provision`: Terraform module that sets up CloudBuild triggers and schedule.

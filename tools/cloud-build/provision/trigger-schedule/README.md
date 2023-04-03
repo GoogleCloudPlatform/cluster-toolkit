@@ -1,3 +1,5 @@
+`trigger-schedule` is a helper module to schedule CloudBuild triggers, mimics default behaviour of CloudBuild UI schedule wizzard.
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
