@@ -17,6 +17,7 @@ from google.cloud.devtools import cloudbuild_v1
 from google.cloud.devtools.cloudbuild_v1.types.cloudbuild import Build, ApproveBuildRequest, ApprovalResult
 import time
 import argparse
+import subprocess
 
 
 def trig_name(build):
@@ -34,9 +35,9 @@ SELECTORS = {
 }
 
 
-def get_builds(cb, sha):
+def get_builds(cb, project, sha):
     req = cloudbuild_v1.ListBuildsRequest(
-        project_id="hpc-toolkit-dev",
+        project_id=project,
         filter=f"substitutions.SHORT_SHA={sha}",
         page_size=1000,
     )
@@ -44,7 +45,8 @@ def get_builds(cb, sha):
 
 
 def render_status(status):
-    if status is None: return "NONE"
+    if status is None:
+        return "NONE"
     return status.name
 
 
@@ -52,8 +54,8 @@ def render_build(build):
     return f"{render_status(build.status)} {trig_name(build)}\t{build.log_url}"
 
 
-def retrive_builds(cb, sha, selectors):
-    builds = get_builds(cb, sha)
+def retrive_builds(cb, project, sha, selectors):
+    builds = get_builds(cb, project, sha)
     builds = [b for b in builds if any(s(b) for s in selectors)]
     # Gather latest builds by trigger
     byt = {}
@@ -93,11 +95,11 @@ def action(cb, builds, concurency):
     return True
 
 
-def do(sha, selectors, concurency=1):
+def do(project, sha, selectors, concurency=1):
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
     selectors = [SELECTORS.get(s, by_name([s])) for s in selectors]
 
-    builds = retrive_builds(cb, sha, selectors)
+    builds = retrive_builds(cb, project, sha, selectors)
     if not builds:
         print(f"Found no builds referencing {sha=}")
         return
@@ -118,12 +120,25 @@ def do(sha, selectors, concurency=1):
         time.sleep(10)
 
 
+def get_default_project():
+    res = subprocess.run(["gcloud", "config", "get-value", "project"], stdout=subprocess.PIPE)
+    assert res.returncode == 0
+    return res.stdout.decode('ascii').strip()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("pr_sha", type=str, help="Short SHA of target PR")
     parser.add_argument("test_selector", nargs='+', type=str,
                         help="Selector for test, currently support 'all' and exact name match")
+    parser.add_argument("--project", type=str,
+                        help="GCP ProjectID, if not set will use default one (`gcloud config get-value project`)")
     parser.add_argument("-c", type=int, default=1,
                         help="Number of tests to run concurrently, default is 1")
     args = parser.parse_args()
-    do(args.pr_sha, args.test_selector, concurency=args.c)
+    if args.project is None:
+        project = get_default_project()
+        print(f"Using {project=}")
+    else:
+        project = args.project
+    do(project, args.pr_sha, args.test_selector, concurency=args.c)
