@@ -55,6 +55,7 @@ module "execute_point_instance_template" {
   labels          = var.labels
 
   machine_type         = var.machine_type
+  disk_size_gb         = var.disk_size_gb
   preemptible          = var.spot
   startup_script       = var.startup_script
   metadata             = local.metadata

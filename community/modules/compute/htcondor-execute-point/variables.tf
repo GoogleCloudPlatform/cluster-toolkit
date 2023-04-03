@@ -146,3 +146,9 @@ variable "spot" {
   type        = bool
   default     = false
 }
+
+variable "disk_size_gb" {
+  description = "Boot disk size in GB"
+  type        = string
+  default     = "100"
+}
