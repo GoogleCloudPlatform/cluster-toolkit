@@ -38,6 +38,22 @@ type BaseFS interface {
 // EmbeddedSourceReader reads modules from a local directory
 type EmbeddedSourceReader struct{}
 
+func copyFileOut(fs BaseFS, src string, dst string) error {
+	content, err := fs.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("failed to read embedded %#v: %v", src, err)
+	}
+	f, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create %#v: %v", dst, err)
+	}
+	defer f.Close()
+	if _, err = f.Write(content); err != nil {
+		return fmt.Errorf("failed to write %#v: %v", dst, err)
+	}
+	return nil
+}
+
 // copyDirFromModules copies an FS directory to a local path
 func copyDirFromModules(fs BaseFS, source string, dest string) error {
 	dirEntries, err := fs.ReadDir(source)
@@ -59,17 +75,10 @@ func copyDirFromModules(fs BaseFS, source string, dest string) error {
 				return err
 			}
 		} else {
-			fileBytes, err := fs.ReadFile(entrySource)
-			if err != nil {
-				return fmt.Errorf("failed to read embedded %#v: %v", entrySource, err)
+			if err := copyFileOut(fs, entrySource, entryDest); err != nil {
+				return err
 			}
-			copyFile, err := os.Create(entryDest)
-			if err != nil {
-				return fmt.Errorf("failed to create %#v: %v", entryDest, err)
-			}
-			if _, err = copyFile.Write(fileBytes); err != nil {
-				return fmt.Errorf("failed to write %#v: %v", entryDest, err)
-			}
+
 		}
 	}
 	return nil
