@@ -156,3 +156,15 @@ func (s *MySuite) TestGetModule_Embedded(c *C) {
 	expectedErr = "Source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
+
+func (s *MySuite) TestGetModule_NilFs(c *C) {
+	ModuleFS = nil
+	r := EmbeddedSourceReader{}
+	c.Assert(r.GetModule("here", "there"), ErrorMatches, "embedded file system is not initialized")
+}
+
+func (s *MySuite) TestCopyDir_NilFs(c *C) {
+	ModuleFS = nil
+	r := EmbeddedSourceReader{}
+	c.Assert(r.CopyDir("here", "there"), ErrorMatches, "embedded file system is not initialized")
+}
