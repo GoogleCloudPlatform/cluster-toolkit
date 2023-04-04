@@ -1,3 +1,59 @@
+## Description
+
+This module creates a Google Kubernetes Engine
+([GKE](https://cloud.google.com/kubernetes-engine)) cluster.
+
+> **_NOTE:_** This is an experimental module and the functionality and
+> documentation will likely be updated in the near future. This module has only
+> been tested in limited capacity.
+
+### Example
+
+The following example creates a GKE cluster and a VPC designed to work with GKE.
+See [VPC Network](#vpc-network) section for more information about network
+requirements.
+
+```yaml
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: gke-subnet
+      secondary_ranges:
+        gke-subnet:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: gke_cluster
+    source: community/modules/scheduler/gke-cluster
+    use: [network1]
+```
+
+Also see a full [GKE example blueprint](../../../examples/gke.yaml).
+
+### VPC Network
+
+This module is configured to create a
+[VPC-native cluster](https://cloud.google.com/kubernetes-engine/docs/concepts/alias-ips).
+This means that alias IPs are used and that the subnetwork requires secondary
+ranges for pods and services. In the example shown above these secondary ranges
+are created in the VPC module. By default the `gke-cluster` module will look for
+ranges with the names `pods` and `services`. These names can be configured using
+the `pods_ip_range_name` and `services_ip_range_name` settings.
+
+### Cluster Limitations
+
+The current implementations has the following limitations:
+
+- Autopilot is disabled
+- Auto-provisioning of new node pools is disabled
+- Network policies are not supported
+- General addon configuration is not supported
+- Only regional cluster is supported
+
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2022 Google LLC
 
