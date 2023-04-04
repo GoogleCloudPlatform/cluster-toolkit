@@ -21,20 +21,20 @@ In order to use the DAOS server terraform module a DAOS server image must be cre
 
 DAOS server images must be built from the same tagged version of the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repository that is specified in the `source:` attribute for modules used in the [community examples](../../../examples/intel/).
 
-For example, in the following snippet taken from the [community/example/intel/daos-cluster.yml](../../../examples/intel/daos-cluster.yaml) the `source:` attribute specifies v0.2.1 of the  daos_server terraform module
+For example, in the following snippet taken from the [community/example/intel/daos-cluster.yml](../../../examples/intel/daos-cluster.yaml) the `source:` attribute specifies v0.3.0 of the  daos_server terraform module
 
 ```yaml
   - id: daos-server
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.3.0
     use: [network1]
     settings:
       number_of_instances: 2
       labels: {ghpc_role: file-system}
 ```
 
-In order to use the daos_server module v0.2.1 , you need to
+In order to use the daos_server module v0.3.0 , you need to
 
-1. Clone the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repo and check out v0.2.1
+1. Clone the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repo and check out v0.3.0
 2. Follow the instructions in the images/README.md directory to build a DAOS server image
 
 ## Recommended settings
@@ -45,7 +45,7 @@ The following settings will configure this [system for TCO](https://github.com/d
 
 ```yaml
   - id: daos-server
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.3.0
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}
@@ -60,7 +60,7 @@ The following settings will configure this system for [best performance](https:/
 
 ```yaml
   - id: daos-server
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.2.1
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.3.0
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}
