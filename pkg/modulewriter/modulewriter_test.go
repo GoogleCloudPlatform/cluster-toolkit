@@ -408,22 +408,23 @@ func (s *MySuite) TestGetTypeTokens(c *C) {
 	// Success object
 	tok = getTypeTokens(cty.ObjectVal(map[string]cty.Value{}))
 	c.Assert(len(tok), Equals, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
 	val := cty.ObjectVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
 	tok = getTypeTokens(val)
 	c.Assert(len(tok), Equals, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
 	// Success Map
 	val = cty.MapVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
 	tok = getTypeTokens(val)
 	c.Assert(len(tok), Equals, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
-	// Failure
+	// Success any
 	tok = getTypeTokens(cty.NullVal(cty.DynamicPseudoType))
 	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
 }
 
