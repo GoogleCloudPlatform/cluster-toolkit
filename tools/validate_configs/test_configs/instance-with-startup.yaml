@@ -34,17 +34,6 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  - id: startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - type: shell
-        content: $(homefs.install_nfs_client)
-        destination: "install_nfs.sh"
-      - type: "ansible-local"
-        source: "modules/startup-script/examples/mount.yaml"
-        destination: "mount.sh"
-
   - id: workstation
     source: modules/compute/vm-instance
     use:
@@ -52,8 +41,6 @@ deployment_groups:
     - homefs
     settings:
       machine_type: e2-standard-8
-      metadata:
-        startup-script: $(startup.startup_script)
 
   - id: wait
     source: ./community/modules/scripts/wait-for-startup

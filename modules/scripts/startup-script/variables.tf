@@ -100,8 +100,27 @@ EOT
   default = []
 }
 
-variable "prepend_ansible_installer" {
-  description = "Prepend Ansible installation script if any of the specified runners are of type ansible-local"
+variable "install_cloud_ops_agent" {
+  description = "Run Google Ops Agent installation script if set to true."
   type        = bool
-  default     = true
+  default     = false
+}
+
+variable "install_ansible" {
+  description = "Run Ansible installation script if either set to true or unset and runner of type 'ansible-local' are used."
+  type        = bool
+  default     = null
+}
+
+variable "prepend_ansible_installer" {
+  description = <<EOT
+  DEPRECATED. Use `install_ansible=false` to prevent ansible installation.
+  EOT
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.prepend_ansible_installer == null
+    error_message = "The variable prepend_ansible_installer has been removed. Use install_ansible instead"
+  }
+
 }
