@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
@@ -130,33 +131,19 @@ func writeTfvars(vars map[string]cty.Value, dst string) error {
 	return err
 }
 
-func getTypeTokens(ctyVal cty.Value) hclwrite.Tokens {
-	typeToken := hclwrite.Token{
-		Type: hclsyntax.TokenIdent,
+func getHclType(t cty.Type) string {
+	if t.IsPrimitiveType() {
+		return typeexpr.TypeString(t)
 	}
+	if t.IsListType() || t.IsTupleType() || t.IsSetType() {
+		return "list"
+	}
+	return typeexpr.TypeString(cty.DynamicPseudoType) // any
+}
 
-	typeName := ctyVal.Type().FriendlyName()
-	if strings.HasPrefix(typeName, "list of") {
-		typeToken.Bytes = []byte("list")
-		return []*hclwrite.Token{&typeToken}
-	}
-	if strings.HasPrefix(typeName, "map of") {
-		typeToken.Bytes = []byte("map")
-		return []*hclwrite.Token{&typeToken}
-	}
-	switch typeName {
-	case "number", "string", "bool":
-		typeToken.Bytes = []byte(typeName)
-	case "tuple", "list":
-		typeToken.Bytes = []byte("list")
-	case "object", "map":
-		typeToken.Bytes = []byte("map")
-	case "dynamic":
-		typeToken.Bytes = []byte("any")
-	default:
-		return hclwrite.Tokens{}
-	}
-	return []*hclwrite.Token{&typeToken}
+func getTypeTokens(v cty.Value) hclwrite.Tokens {
+	tok := simpleTokenFromString(getHclType(v.Type()))
+	return hclwrite.Tokens{&tok}
 }
 
 func writeVariables(vars map[string]cty.Value, dst string) error {
