@@ -30,6 +30,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--) ![community-badge] ![experimental-badge]
   * [htcondor-pool.yaml](#htcondor-poolyaml--) ![community-badge] ![experimental-badge]
+  * [gke.yaml](#gkeyaml--) ![community-badge] ![experimental-badge]
   * [starccm-tutorial.yaml](#starccm-tutorialyaml--) ![community-badge] ![experimental-badge]
   * [fluent-tutorial.yaml](#fluent-tutorialyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
@@ -749,6 +750,14 @@ walks through the use of this blueprint.
 [htcondor]: https://htcondor.org/
 [htcondor-pool.yaml]: ../community/examples/htcondor-pool.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+
+### [gke.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions a Kubernetes cluster and a system node pool using GKE.
+It also creates a VPC configured to be used by a VPC native GKE cluster with
+subnet secondary IP ranges defined.
+
+[gke.yaml]: ../community/examples/gke.yaml
 
 ### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
 
