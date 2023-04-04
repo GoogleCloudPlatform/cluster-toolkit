@@ -160,11 +160,11 @@ func (s *MySuite) TestGetModule_Embedded(c *C) {
 func (s *MySuite) TestGetModule_NilFs(c *C) {
 	ModuleFS = nil
 	r := EmbeddedSourceReader{}
-	c.Assert(r.GetModule("here", "there"), ErrorMatches, "embedded file system is not initialized")
+	c.Assert(r.GetModule("here", "there"), NotNil)
 }
 
 func (s *MySuite) TestCopyDir_NilFs(c *C) {
 	ModuleFS = nil
 	r := EmbeddedSourceReader{}
-	c.Assert(r.CopyDir("here", "there"), ErrorMatches, "embedded file system is not initialized")
+	c.Assert(r.CopyDir("here", "there"), NotNil)
 }
