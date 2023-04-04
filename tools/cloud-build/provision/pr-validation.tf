@@ -12,21 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 0.13"
+resource "google_cloudbuild_trigger" "pr_validation" {
+  name        = "PR-validation"
+  description = "Multiple validations when submitting a PR"
 
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 4.58.0"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "~> 4.58.0"
-    }
-    external = {
-      source  = "hashicorp/external"
-      version = "~> 2.3.0"
+  filename = "tools/cloud-build/hpc-toolkit-pr-validation.yaml"
+
+  github {
+    owner = "GoogleCloudPlatform"
+    name  = "hpc-toolkit"
+    pull_request {
+      branch          = ".*"
+      comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
     }
   }
+
 }
