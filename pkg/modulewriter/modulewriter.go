@@ -18,7 +18,9 @@
 package modulewriter
 
 import (
+	"crypto/md5"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
@@ -89,22 +91,14 @@ func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFla
 	}
 
 	for _, grp := range blueprint.DeploymentGroups {
-
-		deploymentName, err := blueprint.DeploymentName()
-		if err != nil {
-			return err
-		}
-
-		deploymentPath := filepath.Join(outputDir, deploymentName)
 		writer, ok := kinds[grp.Kind]
 		if !ok {
 			return fmt.Errorf(
 				"Invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
 		}
 
-		if err := writer.writeDeploymentGroup(
-			grp, blueprint.Vars, deploymentPath,
-		); err != nil {
+		err := writer.writeDeploymentGroup(grp, blueprint.Vars, deploymentDir)
+		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
 	}
@@ -133,42 +127,101 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 	return nil
 }
 
-func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
+// Get module source within deployment group
+// Rules are following:
+//   - git source
+//     => keep the same source
+//   - packer
+//     => <mod.ID>
+//   - embedded (source starts with "modules" or "comunity/modules")
+//     => ./modules/embedded/<source>
+//   - other
+//     => ./modules/<basename(source)>-<hash(abs(source))>
+func deploymentSource(mod config.Module) (string, error) {
+	if sourcereader.IsGitPath(mod.Source) {
+		return mod.Source, nil
+	}
+	if mod.Kind == "packer" {
+		return mod.ID, nil
+	}
+	if mod.Kind != "terraform" {
+		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
+	}
 
+	if sourcereader.IsEmbeddedPath(mod.Source) {
+		return "./modules/" + filepath.Join("embedded", mod.Source), nil
+	}
+	if !sourcereader.IsLocalPath(mod.Source) {
+		return "", fmt.Errorf("unuexpected module source %s", mod.Source)
+	}
+
+	abs, err := filepath.Abs(mod.Source)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for %#v: %v", mod.Source, err)
+	}
+	base := filepath.Base(mod.Source)
+	return fmt.Sprintf("./modules/%s-%s", base, shortHash(abs)), nil
+}
+
+// Returns first 4 characters of md5 sum in hex form
+func shortHash(s string) string {
+	h := md5.Sum([]byte(s))
+	return hex.EncodeToString(h[:])[:4]
+}
+
+func copyEmbeddedModules(base string) error {
+	r := sourcereader.EmbeddedSourceReader{}
+	for _, src := range []string{"modules", "community/modules"} {
+		dst := filepath.Join(base, "modules/embedded", src)
+		if err := os.MkdirAll(dst, 0755); err != nil {
+			return err
+		}
+		if err := r.CopyDir(src, dst); err != nil {
+			return err
+		}
+
+	}
+	return nil
+}
+
+func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 	for iGrp := range *deploymentGroups {
 		grp := &(*deploymentGroups)[iGrp]
 		basePath := filepath.Join(deploymentPath, grp.Name)
+
+		var copyEmbedded = false
 		for iMod := range grp.Modules {
 			mod := &grp.Modules[iMod]
+			ds, err := deploymentSource(*mod)
+			if err != nil {
+				return err
+			}
+			mod.DeploymentSource = ds
+
 			if sourcereader.IsGitPath(mod.Source) {
-				mod.DeploymentSource = mod.Source
-				continue
+				continue // do not download
 			}
-
+			factory(mod.Kind).addNumModules(1)
+			if sourcereader.IsEmbeddedPath(mod.Source) && mod.Kind == "terraform" {
+				copyEmbedded = true
+				continue // all embedded terraform modules fill be copied at once
+			}
 			/* Copy source files */
-			moduleName := filepath.Base(mod.Source)
-			var deplSource string
-			switch mod.Kind {
-			case "terraform":
-				deplSource = "./" + filepath.Join("modules", moduleName)
-			case "packer":
-				deplSource = mod.ID
-			}
-			mod.DeploymentSource = deplSource
-			fullPath := filepath.Join(basePath, deplSource)
-			if _, err := os.Stat(fullPath); err == nil {
+			dst := filepath.Join(basePath, mod.DeploymentSource)
+			if _, err := os.Stat(dst); err == nil {
 				continue
 			}
-
 			reader := sourcereader.Factory(mod.Source)
-			if err := reader.GetModule(mod.Source, fullPath); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, fullPath, err)
+			if err := reader.GetModule(mod.Source, dst); err != nil {
+				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, dst, err)
 			}
-
-			/* Create module level files */
-			writer := factory(mod.Kind)
-			writer.addNumModules(1)
 		}
+		if copyEmbedded {
+			if err := copyEmbeddedModules(basePath); err != nil {
+				return fmt.Errorf("failed to copy embedded modules: %v", err)
+			}
+		}
+
 	}
 	return nil
 }
