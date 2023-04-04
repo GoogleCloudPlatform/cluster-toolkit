@@ -30,6 +30,29 @@ images to internal projects.
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
+## Example blueprints
+
+Several examples blueprints that create a startup-scripts using the HPC Toolkit [startup-script] module and then use it to build a specialized image can be found below.
+
+### [Image Builder]
+The [Image Builder] blueprint demonstrates a solution that builds an image using:
+
+* The [HPC VM Image][hpcimage] as a base upon which to customize
+* A VPC network with firewall rules that allow IAP-based SSH tunnels
+* A Toolkit runner that installs a custom script
+
+Please review the [examples README] for usage instructions.
+
+### Intel-Optimized Slurm Cluster
+
+The [Intel-Optimized] Slurm Cluster [blueprint](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/examples/intel/hpc-cluster-intel-select.yaml)
+Intel Select Solutions within the Toolkit. It adds the intel compliance software on top of a Slurm on GCP image.
+
+[Image Builder]: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/examples/image-builder.yaml
+[startup-script]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script
+[examples README]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#image-builderyaml-
+[Intel-Optimized]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/examples/intel#intel-optimized-slurm-cluster
+
 ## Order of execution
 
 The startup script specified in metadata executes in parallel with the other
@@ -172,18 +195,6 @@ Linux utility `tac`.
 
 [logging-console]: https://console.cloud.google.com/logs/
 [logging-read-docs]: https://cloud.google.com/sdk/gcloud/reference/logging/read
-
-## Example
-
-The [included blueprint](../../../examples/image-builder.yaml) demonstrates a
-solution that builds an image using:
-
-* The [HPC VM Image][hpcimage] as a base upon which to customize
-* A VPC network with firewall rules that allow IAP-based SSH tunnels
-* A Toolkit runner that installs a custom script
-
-Please review the [examples README](../../../examples/README.md#image-builderyaml)
-for usage instructions.
 
 ## License
 

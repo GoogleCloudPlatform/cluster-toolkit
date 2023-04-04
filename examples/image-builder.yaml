@@ -13,6 +13,11 @@
 # limitations under the License.
 
 ---
+# Deploying the various groups of this blueprint requires passing the output of
+# the builder-env group to the packer group. Instructions for how to do that are
+# available at the following link:
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#image-builderyaml-
+
 blueprint_name: image-builder
 
 vars:
