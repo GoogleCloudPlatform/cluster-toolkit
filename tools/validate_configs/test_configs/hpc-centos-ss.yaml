@@ -54,9 +54,6 @@ deployment_groups:
     source: ./modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        source: "modules/startup-script/examples/hello.sh"
-        destination: "hello.sh"
       - type: data
         source: /tmp/foo.tgz
         destination: /tmp/foo.tgz
@@ -67,9 +64,6 @@ deployment_groups:
           echo $2
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
-      - type: "ansible-local"
-        source: modules/startup-script/examples/hello.yaml
-        destination: hello.yaml
       - $(spack.install_spack_deps_runner)
       - type: shell
         content: $(spack.startup_script)

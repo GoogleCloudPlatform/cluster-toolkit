@@ -40,10 +40,7 @@ deployment_groups:
   - id: startup
     source: modules/scripts/startup-script
     settings:
-      runners:
-      - type: shell
-        source: "modules/startup-script/examples/install_ansible.sh"
-        destination: install_ansible.sh
+      install_ansible: true
 
   - id: compute_partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition

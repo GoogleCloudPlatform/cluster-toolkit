@@ -171,13 +171,7 @@ they are able to do so by using the `gcs_bucket_path` as shown in the below exam
   source: ./modules/scripts/startup-script
   settings:
     gcs_bucket_path: gs://user-test-bucket/folder1/folder2
-    runners:
-      - type: shell
-        source: modules/startup-script/examples/install_ansible.sh
-        destination: install_ansible.sh
-      - type: shell
-        source: modules/startup-script/examples/install_cloud_ops_agent.sh
-        destination: install_cloud_ops_agent.sh
+    install_cloud_ops_agent: true
 
 - id: compute-cluster
   source: ./modules/compute/vm-instance
@@ -238,8 +232,10 @@ No modules.
 | <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script'. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
 | <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object. | `string` | `null` | no |
+| <a name="input_install_ansible"></a> [install\_ansible](#input\_install\_ansible) | Run Ansible installation script if either set to true or unset and runner of type 'ansible-local' are used. | `bool` | `null` | no |
+| <a name="input_install_cloud_ops_agent"></a> [install\_cloud\_ops\_agent](#input\_install\_cloud\_ops\_agent) | Run Google Ops Agent installation script if set to true. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
-| <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | Prepend Ansible installation script if any of the specified runners are of type ansible-local | `bool` | `true` | no |
+| <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | DEPRECATED. Use `install_ansible=false` to prevent ansible installation. | `bool` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
 | <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM.<br>    Runners can be of type ansible-local, shell or data.<br>    A runner must specify one of 'source' or 'content'.<br>    All runners must specify 'destination'. If 'destination' does not include a<br>    path, it will be copied in a temporary folder and deleted after running.<br>    Runners may also pass 'args', which will be passed as argument to shell runners only. | `list(map(string))` | `[]` | no |
