@@ -71,6 +71,7 @@ source "googlecompute" "toolkit_image" {
   startup_script_file     = var.startup_script_file
   wrap_startup_script     = var.wrap_startup_script
   state_timeout           = var.state_timeout
+  image_storage_locations = var.image_storage_locations
 }
 
 build {
