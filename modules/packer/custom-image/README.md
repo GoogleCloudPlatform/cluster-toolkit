@@ -30,6 +30,31 @@ images to internal projects.
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
+## Example blueprints
+
+A recommended pattern for building images with this module is to use the terraform
+based [startup-script] module along with this packer custom-image module. Below you
+can find links to several examples of this pattern, including usage instructions.
+
+### [Image Builder]
+The [Image Builder] blueprint demonstrates a solution that builds an image using:
+
+* The [HPC VM Image][hpcimage] as a base upon which to customize
+* A VPC network with firewall rules that allow IAP-based SSH tunnels
+* A Toolkit runner that installs a custom script
+
+Please review the [examples README] for usage instructions.
+
+### Intel-Optimized Slurm Cluster
+
+The [Intel-Optimized] Slurm Cluster [blueprint](../../../community/examples/intel/hpc-cluster-intel-select.yaml)
+adds the Intel compliance software on top of a Slurm on GCP image.
+
+[Image Builder]: ../../../examples/image-builder.yaml
+[startup-script]: ../../../modules/scripts/startup-script
+[examples README]: ../../../examples/README.md#image-builderyaml-
+[Intel-Optimized]: ../../../community/examples/intel/README.md#intel-optimized-slurm-cluster
+
 ## Order of execution
 
 The startup script specified in metadata executes in parallel with the other
@@ -172,18 +197,6 @@ Linux utility `tac`.
 
 [logging-console]: https://console.cloud.google.com/logs/
 [logging-read-docs]: https://cloud.google.com/sdk/gcloud/reference/logging/read
-
-## Example
-
-The [included blueprint](../../../examples/image-builder.yaml) demonstrates a
-solution that builds an image using:
-
-* The [HPC VM Image][hpcimage] as a base upon which to customize
-* A VPC network with firewall rules that allow IAP-based SSH tunnels
-* A Toolkit runner that installs a custom script
-
-Please review the [examples README](../../../examples/README.md#image-builderyaml)
-for usage instructions.
 
 ## License
 
