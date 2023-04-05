@@ -224,3 +224,12 @@ variable "communicator" {
     error_message = "Set var.communicator to \"ssh\", \"winrm\", or null."
   }
 }
+
+variable "image_storage_locations" {
+  description = <<EOD
+Storage location, either regional or multi-regional, where snapshot content is to be stored and only accepts 1 value.
+See https://developer.hashicorp.com/packer/plugins/builders/googlecompute#image_storage_locations
+EOD
+  type        = list(string)
+  default     = null
+}
