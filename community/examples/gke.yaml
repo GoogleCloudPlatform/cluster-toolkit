@@ -20,7 +20,6 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: cluster-01
   region: us-central1
-  zone: us-central1-c
 
 deployment_groups:
 - group: primary
