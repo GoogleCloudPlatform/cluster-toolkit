@@ -133,6 +133,8 @@ Modules that are still in development and less stable are labeled with the
   template that works with other Toolkit modules.
 * **[batch-login-node]** ![core-badge] : Creates a VM that can be used for
   submission of Google Cloud Batch jobs.
+* **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
+  Kubernetes cluster using GKE.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![experimental-badge] :
@@ -152,6 +154,7 @@ Modules that are still in development and less stable are labeled with the
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
+[gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
 [htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
