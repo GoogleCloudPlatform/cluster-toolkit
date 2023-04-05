@@ -32,7 +32,9 @@ images to internal projects.
 
 ## Example blueprints
 
-Several examples blueprints that create a startup-scripts using the HPC Toolkit [startup-script] module and then use it to build a specialized image can be found below.
+A recommended pattern for building images with this module is to use the terraform
+based [startup-script] module along with this packer custom-image module. Below you
+can find links to several examples of this pattern, including usage instructions.
 
 ### [Image Builder]
 The [Image Builder] blueprint demonstrates a solution that builds an image using:
@@ -45,13 +47,13 @@ Please review the [examples README] for usage instructions.
 
 ### Intel-Optimized Slurm Cluster
 
-The [Intel-Optimized] Slurm Cluster [blueprint](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/examples/intel/hpc-cluster-intel-select.yaml)
-Intel Select Solutions within the Toolkit. It adds the intel compliance software on top of a Slurm on GCP image.
+The [Intel-Optimized] Slurm Cluster [blueprint](../../../community/examples/intel/hpc-cluster-intel-select.yaml)
+adds the Intel compliance software on top of a Slurm on GCP image.
 
-[Image Builder]: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/examples/image-builder.yaml
-[startup-script]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script
-[examples README]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#image-builderyaml-
-[Intel-Optimized]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/examples/intel#intel-optimized-slurm-cluster
+[Image Builder]: ../../../examples/image-builder.yaml
+[startup-script]: ../../../modules/scripts/startup-script
+[examples README]: ../../../examples/README.md#image-builderyaml-
+[Intel-Optimized]: ../../../community/examples/intel/README.md#intel-optimized-slurm-cluster
 
 ## Order of execution
 
