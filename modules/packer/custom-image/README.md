@@ -230,6 +230,7 @@ No resources.
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | The family name of the image to be built. Defaults to `deployment_name` | `string` | `null` | no |
 | <a name="input_image_name"></a> [image\_name](#input\_image\_name) | The name of the image to be built. If not supplied, it will be set to image\_family-$ISO\_TIMESTAMP | `string` | `null` | no |
+| <a name="input_image_storage_locations"></a> [image\_storage\_locations](#input\_image\_storage\_locations) | Storage location, either regional or multi-regional, where snapshot content is to be stored and only accepts 1 value.<br>See https://developer.hashicorp.com/packer/plugins/builders/googlecompute#image_storage_locations | `list(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the short-lived VM | `map(string)` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2-standard-4"` | no |
 | <a name="input_manifest_file"></a> [manifest\_file](#input\_manifest\_file) | File to which to write Packer build manifest | `string` | `"packer-manifest.json"` | no |
