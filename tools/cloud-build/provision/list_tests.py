@@ -34,7 +34,8 @@ $ ./list_tests.py | jq
 def list_builds():
     builds = glob.glob("*.yaml", root_dir="../daily-tests/builds/")
     assert builds, "No builds have been found"
-    builds = sorted([b[:-5] for b in builds])
+    # Sort and strip ".yaml"
+    builds = [b[:-5] for b in sorted(builds)]
 
     start_time = 30  # 00:30
     end_time = 5*60  # 05:00

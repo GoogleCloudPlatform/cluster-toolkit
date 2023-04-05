@@ -26,5 +26,5 @@ resource "google_cloudbuild_trigger" "pr_validation" {
       comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
     }
   }
-
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 }
