@@ -12,19 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Sequence, Dict, Tuple, Callable
+from typing import Sequence, Dict, Callable
 from dataclasses import dataclass
 from google.cloud.devtools import cloudbuild_v1
-from google.cloud.devtools.cloudbuild_v1.types.cloudbuild import Build, ApproveBuildRequest, ApprovalResult,RetryBuildRequest
+from google.cloud.devtools.cloudbuild_v1.types.cloudbuild import Build, ApproveBuildRequest, ApprovalResult, RetryBuildRequest
 import time
 import argparse
 import subprocess
 
 Selector = Callable[[Build], bool]
+Status = Build.Status
 
 
-def selector_by_name(names) -> Selector:
-    def selector(build):
+@dataclass
+class BuildAndCount:
+    build: Build  # latest build for this trigger
+    count: int  # total count of builds for this trigger
+
+
+def selector_by_name(names: Sequence[str]) -> Selector:
+    def selector(build: Build) -> bool:
         return any(trig_name(build) == n for n in names)
     return selector
 
@@ -42,12 +49,6 @@ def trig_name(build: Build) -> str:
     return build.substitutions.get("TRIGGER_NAME", "???")
 
 
-@dataclass
-class BuildAndCount:
-    build: Build
-    count: int
-
-
 def latest_by_trigger(builds: Sequence[Build]) -> Dict[str, BuildAndCount]:
     """
     Returns a map trigger_name -> (latest_build, num_of_builds)
@@ -63,24 +64,71 @@ def latest_by_trigger(builds: Sequence[Build]) -> Dict[str, BuildAndCount]:
     return byt
 
 
-Status = Build.Status
+class UI:
+    def __init__(self) -> None:
+        self._status: Dict[str, Status] = {}
+        self._change = False
+
+    def on_init(self, builds: Sequence[Build]) -> None:
+        for b in builds:
+            self._status[b.id] = b.status
+        if not builds:
+            print(f"found no builds")
+        else:
+            print(f"found {len(builds)} builds:")
+            self._render_summary(builds)
+
+    def on_done(self, builds: Sequence[Build]) -> None:
+        print("done")
+        if self._change:
+            self._render_summary(builds)
+
+    def on_update(self, builds: Sequence[Build]) -> None:
+        for b in builds:
+            if b.status != self._status.get(b.id):
+                br = self._render_build(b)
+                sr = self._render_status(self._status.get(b.id))
+                print(f"status update: {sr} > {br}")
+                self._change = True
+            self._status[b.id] = b.status
+
+    def on_action(self, action: str, build: Build) -> None:
+        print(f"{action} {self._render_build(build)}")
+
+    def sleep(self, sec: int) -> None:
+        time.sleep(sec)
+
+    def _render_summary(self, builds: Sequence[Build]) -> None:
+        for _, bc in sorted(latest_by_trigger(builds).items()):
+            print(self._render_build(bc.build, bc.count))
+
+    def _render_build(self, build: Build, count=1) -> str:
+        if count > 1:
+            return f"{self._render_status(build.status)}[{count}]\t{trig_name(build)}\t{build.log_url}"
+        else:
+            return f"{self._render_status(build.status)}\t{trig_name(build)}\t{build.log_url}"
+
+    def _render_status(self, status: Status) -> str:
+        if status is None:
+            return "NONE"
+        return status.name
 
 
 class Babysitter:
-    def __init__(self,
+    def __init__(self, ui: UI,
                  cb: cloudbuild_v1.services.cloud_build.CloudBuildClient,
                  project: str,
                  sha: str,
                  selectors: Sequence[Selector],
                  concurrency: int,
                  retries: int) -> None:
+        self.ui = ui
         self.cb = cb
         self.project = project
         self.sha = sha
         self.selectors = list(selectors)
         self.concurrency = concurrency
         self.retries = retries
-        self._status: Dict[str, Status] = {}
 
     def _get_builds(self) -> Sequence[Build]:
         req = cloudbuild_v1.ListBuildsRequest(
@@ -100,9 +148,10 @@ class Babysitter:
 
         if bc.build.status in [Status.FAILURE, Status.INTERNAL_ERROR, Status.TIMEOUT]:
             return bc.count > self.retries
-        assert False, f"Unexpected {bc.build.status=}"
+        assert False, f"Unexpected status {bc.build.status}"
 
     def _approve(self, build: Build) -> None:
+        self.ui.on_action("approve", build)
         req = ApproveBuildRequest(
             name=f"projects/{build.project_id}/builds/{build.id}",
             approval_result=ApprovalResult(
@@ -112,11 +161,14 @@ class Babysitter:
         self.cb.approve_build(request=req)
 
     def _retry(self, build: Build) -> None:
+        self.ui.on_action("retry", build)
         req = RetryBuildRequest(project_id=build.project_id, id=build.id)
         self.cb.retry_build(request=req)
 
-
-    def _act(self, builds: Sequence[Build]) -> bool:
+    def _take_action(self, builds: Sequence[Build]) -> bool:
+        """
+        Returns bool - whether "babysitting" should be continued.
+        """
         latest = latest_by_trigger(builds).values()
         active = [bc.build for bc in latest if not self._in_terminal_state(bc)]
         if not active:
@@ -137,70 +189,24 @@ class Babysitter:
             self._approve(pend)
             return True
 
-        assert not_running # sanity check
+        assert not_running  # sanity check
         failed = not_running[0]
-        assert failed.status in [Status.FAILURE, Status.INTERNAL_ERROR, Status.TIMEOUT]  # sanity check
-        self._retry(failed) # retry failed build
+        assert failed.status in [
+            Status.FAILURE, Status.INTERNAL_ERROR, Status.TIMEOUT]  # sanity check
+        self._retry(failed)  # retry failed build
         return True
-        
-
-    def _sleep(self) -> None:
-        time.sleep(5)
-        print(".", end="", flush=True)
-
-    def _render_summary(self, builds: Sequence[Build]) -> None:
-        for _, bc in sorted(latest_by_trigger(builds).items()):
-            print(render_build(bc.build, bc.count))
-
-    def _track_status_updates(self, builds: Sequence[Build]) -> None:
-        if not self._status: # state is empty, just populate
-            for b in builds:
-                self._status[b.id] = b.status
-            return
-        
-        for b in builds:
-            if b.status != self._status.get(b.id):
-                print_line(f"{render_status(self._status.get(b.id))} > {render_build(b)}")
-                self._status[b.id] = b.status
-
 
     def do(self):
         builds = self._get_builds()
+        self.ui.on_init(builds)
         if not builds:
-            print(f"Found no builds referencing SHA {self.sha}")
             return
 
-        print(f"Found {len(builds)} builds:")
-        self._render_summary(builds)
-        
-        acted = False
-        while self._act(builds):
-            acted = True
-            self._sleep()
+        while self._take_action(builds):
+            self.ui.sleep(10)
             builds = self._get_builds()
-            self._track_status_updates(builds)
-
-        print("Done, no actions left to take.")
-        if acted:
-            self._render_summary(builds)
-
-
-def render_status(status):
-    if status is None:
-        return "NONE"
-    return status.name
-
-
-def render_build(build, count=1):
-    if count > 1:
-        return f"{render_status(build.status)}[{count}]\t{trig_name(build)}\t{build.log_url}"
-    else:
-        return f"{render_status(build.status)}\t\t{trig_name(build)}\t{build.log_url}"
-
-
-def print_line(line):
-    print("", end="\r")  # remove "dots"
-    print(line)
+            self.ui.on_update(builds)
+        self.ui.on_done(builds)
 
 
 def get_default_project():
@@ -229,5 +235,5 @@ if __name__ == "__main__":
         project = args.project
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
     selectors = [make_selector(s) for s in args.test_selector]
-
-    Babysitter(cb, project, args.pr_sha, selectors, args.c, args.r).do()
+    ui = UI()
+    Babysitter(ui, cb, project, args.pr_sha, selectors, args.c, args.r).do()
