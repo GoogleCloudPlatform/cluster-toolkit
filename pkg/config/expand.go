@@ -32,6 +32,7 @@ const (
 	blueprintLabel  string = "ghpc_blueprint"
 	deploymentLabel string = "ghpc_deployment"
 	roleLabel       string = "ghpc_role"
+	globalGroupID   string = "deployment"
 )
 
 var (
@@ -460,7 +461,7 @@ func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 					name:         input.Name,
 					toModuleID:   "vars",
 					fromModuleID: mod.ID,
-					toGroupID:    "deployment",
+					toGroupID:    globalGroupID,
 					fromGroupID:  deploymentGroup.Name,
 					explicit:     false,
 				}
@@ -619,7 +620,14 @@ func (ref varReference) String() string {
 }
 
 func (ref varReference) IsIntergroup() bool {
-	return ref.toGroupID != ref.fromGroupID
+	switch ref.toGroupID {
+	case globalGroupID:
+		return false
+	case ref.fromGroupID:
+		return false
+	default:
+		return true
+	}
 }
 
 func (ref varReference) FromModuleID() string {
@@ -632,7 +640,7 @@ func (ref varReference) ToModuleID() string {
 
 func (ref varReference) HclString() string {
 	switch ref.toGroupID {
-	case "deployment":
+	case globalGroupID:
 		return "var." + ref.name
 	case ref.fromGroupID:
 		return "module." + ref.toModuleID + "." + ref.name
@@ -663,7 +671,7 @@ func identifySimpleVariable(yamlReference string, dg DeploymentGroup, fromMod Mo
 		ref.name = varComponents[1]
 
 		if ref.toModuleID == "vars" {
-			ref.toGroupID = "deployment"
+			ref.toGroupID = globalGroupID
 		} else {
 			ref.toGroupID = dg.Name
 		}
@@ -735,7 +743,7 @@ func (ref modReference) validate(bp Blueprint) error {
 // group ID
 func (ref varReference) validate(bp Blueprint) error {
 	// simplest case to evaluate is a deployment variable's existence
-	if ref.toGroupID == "deployment" {
+	if ref.toGroupID == globalGroupID {
 		if ref.toModuleID == "vars" {
 			if _, ok := bp.Vars[ref.name]; !ok {
 				return fmt.Errorf("%s: %s is not a deployment variable",
@@ -830,7 +838,7 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 	}
 
 	switch varRef.toGroupID {
-	case "deployment":
+	case globalGroupID:
 		if trackModuleGraph {
 			context.dc.addModuleConnection(varRef, deploymentConnection, []string{varRef.name})
 		}

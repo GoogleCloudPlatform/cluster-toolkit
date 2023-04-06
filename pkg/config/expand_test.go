@@ -719,7 +719,7 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 
 	ref, err = identifySimpleVariable("vars.variable_name", dg, fromMod)
 	c.Assert(err, IsNil)
-	c.Assert(ref.toGroupID, Equals, "deployment")
+	c.Assert(ref.toGroupID, Equals, globalGroupID)
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
 	c.Assert(ref.toModuleID, Equals, "vars")
 	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
