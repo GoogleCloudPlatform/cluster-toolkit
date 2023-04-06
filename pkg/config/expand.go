@@ -32,6 +32,7 @@ const (
 	blueprintLabel  string = "ghpc_blueprint"
 	deploymentLabel string = "ghpc_deployment"
 	roleLabel       string = "ghpc_role"
+	globalGroupID   string = "deployment"
 )
 
 var (
@@ -460,7 +461,7 @@ func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 					name:         input.Name,
 					toModuleID:   "vars",
 					fromModuleID: mod.ID,
-					toGroupID:    "deployment",
+					toGroupID:    globalGroupID,
 					fromGroupID:  deploymentGroup.Name,
 					explicit:     false,
 				}
@@ -619,7 +620,14 @@ func (ref varReference) String() string {
 }
 
 func (ref varReference) IsIntergroup() bool {
-	return ref.toGroupID != ref.fromGroupID
+	switch ref.toGroupID {
+	case globalGroupID:
+		return false
+	case ref.fromGroupID:
+		return false
+	default:
+		return true
+	}
 }
 
 func (ref varReference) FromModuleID() string {
@@ -628,6 +636,20 @@ func (ref varReference) FromModuleID() string {
 
 func (ref varReference) ToModuleID() string {
 	return ref.toModuleID
+}
+
+func (ref varReference) HclString() string {
+	switch ref.toGroupID {
+	case globalGroupID:
+		// deployment variable
+		return "var." + ref.name
+	case ref.fromGroupID:
+		// intragroup reference can make direct reference to module output
+		return "module." + ref.toModuleID + "." + ref.name
+	default:
+		// intergroup references to automatically created input variables
+		return "var." + ref.name + "_" + ref.toModuleID
+	}
 }
 
 /*
@@ -652,7 +674,7 @@ func identifySimpleVariable(yamlReference string, dg DeploymentGroup, fromMod Mo
 		ref.name = varComponents[1]
 
 		if ref.toModuleID == "vars" {
-			ref.toGroupID = "deployment"
+			ref.toGroupID = globalGroupID
 		} else {
 			ref.toGroupID = dg.Name
 		}
@@ -724,7 +746,7 @@ func (ref modReference) validate(bp Blueprint) error {
 // group ID
 func (ref varReference) validate(bp Blueprint) error {
 	// simplest case to evaluate is a deployment variable's existence
-	if ref.toGroupID == "deployment" {
+	if ref.toGroupID == globalGroupID {
 		if ref.toModuleID == "vars" {
 			if _, ok := bp.Vars[ref.name]; !ok {
 				return fmt.Errorf("%s: %s is not a deployment variable",
@@ -818,17 +840,13 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 		return "", err
 	}
 
-	var expandedVariable string
 	switch varRef.toGroupID {
-	case "deployment":
-		// deployment variables
-		expandedVariable = fmt.Sprintf("((var.%s))", varRef.name)
+	case globalGroupID:
 		if trackModuleGraph {
 			context.dc.addModuleConnection(varRef, deploymentConnection, []string{varRef.name})
 		}
 	case varRef.fromGroupID:
-		// intragroup reference can make direct reference to module output
-		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.toModuleID, varRef.name)
+		// intragroup; track connection if it was made explicitly (not via use)
 		if trackModuleGraph {
 			var found bool
 			for _, conn := range context.dc.moduleConnections[varRef.fromModuleID] {
@@ -845,8 +863,7 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 			}
 		}
 	default:
-
-		// intergroup reference; begin by finding the target module in blueprint
+		// intergroup
 		toGrpIdx := slices.IndexFunc(
 			context.dc.Config.DeploymentGroups,
 			func(g DeploymentGroup) bool { return g.Name == varRef.toGroupID })
@@ -867,11 +884,11 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 			toMod.Outputs = append(toMod.Outputs, varRef.name)
 		}
 
-		// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.name, ref.ID)
+		// TODO: remove error
 		return "", fmt.Errorf("%s: %s is an intergroup reference",
 			errorMessages["varInAnotherGroup"], context.varString)
 	}
-	return expandedVariable, nil
+	return fmt.Sprintf("((%s))", varRef.HclString()), nil
 }
 
 // expandVariable will eventually implement string interpolation; right now it
