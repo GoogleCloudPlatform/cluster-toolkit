@@ -25,7 +25,7 @@ babysit_tests is a tool to approve & retry CloudBuild tests.
 It monitors status of builds referenced by PR commit SHA, 
 it will approve and retry tests accoding to configured concurrency and retry policies.
 The tool will terminate itself once there is no more actions to take or no reasons to wait for status changes.
-The subset of tests to monitor can be configured by using test_selectors, e.g. "all", "slurm5", exact_name_of_test.
+The subset of tests to monitor can be configured by using test_selectors, e.g. "all", exact_name_of_test.
 Usage:
 tools/cloud-build/babysit_tests.py fafa333 all
 """
