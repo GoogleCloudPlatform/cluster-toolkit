@@ -641,10 +641,13 @@ func (ref varReference) ToModuleID() string {
 func (ref varReference) HclString() string {
 	switch ref.toGroupID {
 	case globalGroupID:
+		// deployment variable
 		return "var." + ref.name
 	case ref.fromGroupID:
+		// intragroup reference can make direct reference to module output
 		return "module." + ref.toModuleID + "." + ref.name
 	default:
+		// intergroup references to automatically created input variables
 		return "var." + ref.name + "_" + ref.toModuleID
 	}
 }
