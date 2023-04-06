@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,21 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 0.13"
-
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 4.58.0"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "~> 4.58.0"
-    }
-    external = {
-      source  = "hashicorp/external"
-      version = "~> 2.3.0"
-    }
-  }
+data "external" "list_tests_py" {
+  program = ["./list_tests.py"]
 }
