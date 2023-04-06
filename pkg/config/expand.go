@@ -630,6 +630,17 @@ func (ref varReference) ToModuleID() string {
 	return ref.toModuleID
 }
 
+func (ref varReference) HclString() string {
+	switch ref.toGroupID {
+	case "deployment":
+		return "var." + ref.name
+	case ref.fromGroupID:
+		return "module." + ref.toModuleID + "." + ref.name
+	default:
+		return "var." + ref.name + "_" + ref.toModuleID
+	}
+}
+
 /*
 This function performs only the most rudimentary conversion of an input
 string into a varReference struct as defined above. An input string consists of
