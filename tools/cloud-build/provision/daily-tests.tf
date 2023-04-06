@@ -30,6 +30,11 @@ resource "google_cloudbuild_trigger" "daily_test" {
     ref       = local.ref_develop
     repo_type = "GITHUB"
   }
+  # Following fields will be auto-set by CloudBuild after creation
+  # Specify it explicitly to reduce discreppancy.
+  ignored_files  = []
+  included_files = []
+  substitutions  = {}
 }
 
 module "daily_test_schedule" {
