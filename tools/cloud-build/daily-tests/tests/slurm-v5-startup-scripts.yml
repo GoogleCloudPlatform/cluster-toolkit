@@ -19,7 +19,7 @@ deployment_name: "ss-v5-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
 slurm_cluster_name: "ssv5{{ build[0:6] }}"
-zone: us-central1-c
+zone: us-west4-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/slurm-gcp-v5-startup-scripts.yaml"
 network: "{{ deployment_name }}-net"
