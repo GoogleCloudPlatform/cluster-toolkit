@@ -72,7 +72,6 @@ var errorMessages = map[string]string{
 	"extraSetting":       "a setting was added that is not found in the module",
 	"settingWithPeriod":  "a setting name contains a period, which is not supported; variable subfields cannot be set independently in a blueprint.",
 	"settingInvalidChar": "a setting name must begin with a non-numeric character and all characters must be either letters, numbers, dashes ('-') or underscores ('_').",
-	"mixedModules":       "mixing modules of differing kinds in a deployment group is not supported",
 	"duplicateGroup":     "group names must be unique",
 	"duplicateID":        "module IDs must be unique",
 	"emptyGroupName":     "group name must be set for each deployment group",
@@ -527,25 +526,25 @@ func validateGroupName(name string, usedNames map[string]bool) {
 
 // checkModuleAndGroupNames checks and imports module and resource group IDs
 // and names respectively.
-func checkModuleAndGroupNames(depGroups []DeploymentGroup) error {
-	seen := map[string]struct{}{}
+func checkModuleAndGroupNames(groups []DeploymentGroup) error {
+	seenMod := map[string]bool{}
 	groupNames := make(map[string]bool)
-	for iGrp, grp := range depGroups {
+	for ig := range groups {
+		grp := &groups[ig]
 		validateGroupName(grp.Name, groupNames)
 		for _, mod := range grp.Modules {
-
-			if _, ok := seen[mod.ID]; ok {
+			if seenMod[mod.ID] {
 				return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
 			}
-			seen[mod.ID] = struct{}{}
+			seenMod[mod.ID] = true
 
 			// Verify Module Kind matches group Kind
 			if grp.Kind == "" {
-				depGroups[iGrp].Kind = mod.Kind
-			} else if grp.Kind != mod.Kind {
+				grp.Kind = mod.Kind
+			}
+			if grp.Kind != mod.Kind {
 				return fmt.Errorf(
-					"%s: deployment group %s, got: %s, wanted: %s",
-					errorMessages["mixedModule"],
+					"mixing modules of differing kinds in a deployment group is not supported: deployment group %s, got %s and %s",
 					grp.Name, grp.Kind, mod.Kind)
 			}
 		}
