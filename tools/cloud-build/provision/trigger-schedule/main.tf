@@ -28,7 +28,6 @@ resource "google_cloud_scheduler_job" "schedule" {
   http_target {
     http_method = "POST"
     uri         = "https://cloudbuild.googleapis.com/v1/${var.trigger.id}:run"
-    headers     = { "User-Agent" = "Google-Cloud-Scheduler" }
     oauth_token {
       service_account_email = "cloud-build-trigger-scheduler@${var.trigger.project}.iam.gserviceaccount.com"
     }
