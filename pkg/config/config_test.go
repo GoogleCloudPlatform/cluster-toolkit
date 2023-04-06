@@ -440,6 +440,14 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 		err := checkModuleAndGroupNames([]DeploymentGroup{ice, fire})
 		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
 	}
+	{ // Mixing module kinds
+		g := DeploymentGroup{Name: "ice", Modules: []Module{
+			{ID: "pony", Kind: "packer"},
+			{ID: "zebra", Kind: "terraform"},
+		}}
+		err := checkModuleAndGroupNames([]DeploymentGroup{g})
+		c.Check(err, ErrorMatches, "mixing modules of differing kinds in a deployment group is not supported: deployment group ice, got packer and terraform")
+	}
 }
 
 func (s *MySuite) TestIsUnused(c *C) {
