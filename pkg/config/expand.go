@@ -829,17 +829,13 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 		return "", err
 	}
 
-	var expandedVariable string
 	switch varRef.toGroupID {
 	case "deployment":
-		// deployment variables
-		expandedVariable = fmt.Sprintf("((var.%s))", varRef.name)
 		if trackModuleGraph {
 			context.dc.addModuleConnection(varRef, deploymentConnection, []string{varRef.name})
 		}
 	case varRef.fromGroupID:
-		// intragroup reference can make direct reference to module output
-		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.toModuleID, varRef.name)
+		// intragroup; track connection if it was made explicitly (not via use)
 		if trackModuleGraph {
 			var found bool
 			for _, conn := range context.dc.moduleConnections[varRef.fromModuleID] {
@@ -856,8 +852,7 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 			}
 		}
 	default:
-
-		// intergroup reference; begin by finding the target module in blueprint
+		// intergroup
 		toGrpIdx := slices.IndexFunc(
 			context.dc.Config.DeploymentGroups,
 			func(g DeploymentGroup) bool { return g.Name == varRef.toGroupID })
@@ -878,11 +873,11 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 			toMod.Outputs = append(toMod.Outputs, varRef.name)
 		}
 
-		// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.name, ref.ID)
+		// TODO: remove error
 		return "", fmt.Errorf("%s: %s is an intergroup reference",
 			errorMessages["varInAnotherGroup"], context.varString)
 	}
-	return expandedVariable, nil
+	return fmt.Sprintf("((%s))", varRef.HclString()), nil
 }
 
 // expandVariable will eventually implement string interpolation; right now it
