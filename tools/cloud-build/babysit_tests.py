@@ -20,6 +20,16 @@ import time
 import argparse
 import subprocess
 
+DESCRIPTION = """
+babysit_tests is a tool to approve & retry CloudBuild tests.
+It monitors status of builds referenced by PR commit SHA, 
+it will approve and retry tests accoding to configure concurrency and retry policies.
+The tool will terminate itself once there is no more actions to take or no reasons to wait for status changes.
+The subset of tests to monitor can be configured by using test_selectors, e.g. "all", "slurm5", exact_name_of_test.
+Usage:
+tools/cloud-build/babysit_tests.py fafa333 all
+"""
+
 Selector = Callable[[Build], bool]
 Status = Build.Status
 
@@ -217,7 +227,7 @@ def get_default_project():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("pr_sha", type=str, help="Short SHA of target PR")
     parser.add_argument("test_selector", nargs='+', type=str,
                         help="Selector for test, currently support 'all' and exact name match")
