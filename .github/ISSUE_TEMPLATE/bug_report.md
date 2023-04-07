@@ -7,6 +7,10 @@ assignees: ''
 
 ---
 
+**If you find a similar existing issue, please comment on that issue instead of creating a new one.**
+
+**If you are submitting a feature request, please start a [discussion](https://github.com/GoogleCloudPlatform/hpc-toolkit/discussions/new?category=ideas-and-feature-requests) instead of creating an issue.**
+
 ### Describe the bug
 
 A clear and concise description of what the bug is.
