@@ -47,7 +47,20 @@ def selector_by_name(names: Sequence[str]) -> Selector:
 
 
 SELECTORS: Dict[str, Selector] = {
-    "all": lambda _: True
+    "all": lambda _: True,
+    "pr_legacy": selector_by_name([
+        "PR-legacy-test-integration-group-1",
+        "PR-legacy-test-integration-group-2",
+        "PR-legacy-test-integration-group-3",
+        "PR-legacy-test-integration-group-4",
+        "PR-legacy-test-integration-group-5",
+    ]),
+    "slurm5": selector_by_name([
+        "PR-test-hpc-high-io-v5",
+        "PR-test-slurm-gcp-v5-hpc-centos7",
+        "PR-test-slurm-gcp-v5-startup-scripts",
+        "PR-test-slurm-gcp-v5-ubuntu2004",
+    ])
 }
 
 
