@@ -14,6 +14,11 @@
 
 ---
 timeout: 14400s  # 4hr
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/spack_cache_url/versions/2
+    env: SPACK_CACHE
+
 steps:
 ## Test simple golang build
 - id: build_ghpc
