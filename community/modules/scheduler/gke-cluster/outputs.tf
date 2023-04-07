@@ -33,6 +33,7 @@ locals {
         gcloud container clusters update ${google_container_cluster.gke_cluster.name} \
           --region ${google_container_cluster.gke_cluster.location} \
           --project ${var.project_id} \
+          --enable-master-authorized-networks \
           --master-authorized-networks <IP Address>/32
     EOT
   )
