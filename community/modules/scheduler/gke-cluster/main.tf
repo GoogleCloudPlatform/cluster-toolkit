@@ -59,10 +59,6 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  pod_security_policy_config {
-    enabled = true
-  }
-
   enable_shielded_nodes = true
 
   cluster_autoscaling { # Auto provisioning of node-pools
