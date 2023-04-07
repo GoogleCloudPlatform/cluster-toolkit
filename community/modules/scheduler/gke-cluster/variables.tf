@@ -131,7 +131,7 @@ variable "system_node_pool_taints" {
   description = "Taints to be applied to the system node pool."
   type = list(object({
     key    = string
-    value  = bool
+    value  = any
     effect = string
   }))
   default = [{
