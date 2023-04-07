@@ -136,5 +136,7 @@ No modules.
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+|------|-------------|
+| <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
