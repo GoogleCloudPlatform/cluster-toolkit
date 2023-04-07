@@ -138,5 +138,6 @@ No modules.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | an identifier for the resource with format projects/<project\_id>/locations/<region>/clusters/<name>. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
