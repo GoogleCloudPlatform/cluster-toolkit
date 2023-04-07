@@ -53,18 +53,6 @@ locals {
   }
   enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 
-  machine_vals            = split("-", var.machine_type)
-  machine_family          = local.machine_vals[0]
-  machine_not_shared_core = length(local.machine_vals) > 2
-  machine_vcpus           = try(parseint(local.machine_vals[2], 10), 1)
-
-  smt_capable_family = !contains(["t2d"], local.machine_family)
-  smt_capable_vcpu   = local.machine_vcpus >= 2
-
-  smt_capable          = local.smt_capable_family && local.smt_capable_vcpu && local.machine_not_shared_core
-  set_threads_per_core = var.threads_per_core != null && (var.threads_per_core == 0 && local.smt_capable || try(var.threads_per_core >= 1, false))
-  threads_per_core     = var.threads_per_core == 2 ? 2 : 1
-
   # Network Interfaces
   # Support for `use` input and base network paramters like `network_self_link` and `subnetwork_self_link`
   empty_access_config = {
@@ -206,7 +194,7 @@ resource "google_compute_instance" "compute_vm" {
   dynamic "advanced_machine_features" {
     for_each = local.set_threads_per_core ? [1] : []
     content {
-      threads_per_core = local.threads_per_core
+      threads_per_core = local.threads_per_core # relies on threads_per_core_calc.tf
     }
   }
 
