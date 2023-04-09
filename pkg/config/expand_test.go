@@ -19,6 +19,7 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"regexp"
 
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	. "gopkg.in/check.v1"
@@ -36,19 +37,15 @@ func (s *MySuite) TestExpandBackends(c *C) {
 	err := dc.expandBackends()
 	c.Assert(err, IsNil)
 
-	tfBackend := &TerraformBackend{
-		Type:          "gcs",
-		Configuration: make(map[string]interface{}),
-	}
-	dc.Config.TerraformBackendDefaults = *tfBackend
+	dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
 	err = dc.expandBackends()
 	c.Assert(err, IsNil)
 	grp := dc.Config.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
-	gotPrefix := grp.TerraformBackend.Configuration["prefix"]
+	gotPrefix := grp.TerraformBackend.Configuration.Get("prefix")
 	expPrefix := fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName,
 		dc.Config.Vars["deployment_name"], grp.Name)
-	c.Assert(gotPrefix, Equals, expPrefix)
+	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
 
 	// Add a new resource group, ensure each group name is included
 	newGroup := DeploymentGroup{
@@ -59,10 +56,10 @@ func (s *MySuite) TestExpandBackends(c *C) {
 	c.Assert(err, IsNil)
 	newGrp := dc.Config.DeploymentGroups[1]
 	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
-	gotPrefix = newGrp.TerraformBackend.Configuration["prefix"]
+	gotPrefix = newGrp.TerraformBackend.Configuration.Get("prefix")
 	expPrefix = fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName,
 		dc.Config.Vars["deployment_name"], newGrp.Name)
-	c.Assert(gotPrefix, Equals, expPrefix)
+	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
 }
 
 func (s *MySuite) TestGetModuleVarName(c *C) {

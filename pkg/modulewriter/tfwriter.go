@@ -197,16 +197,12 @@ func writeMain(
 
 	// Write Terraform backend if needed
 	if tfBackend.Type != "" {
-		tfConfig, err := config.ConvertMapToCty(tfBackend.Configuration)
-		if err != nil {
-			errString := "error converting terraform backend configuration to cty when writing main.tf: %v"
-			return fmt.Errorf(errString, err)
-		}
 		tfBody := hclBody.AppendNewBlock("terraform", []string{}).Body()
 		backendBlock := tfBody.AppendNewBlock("backend", []string{tfBackend.Type})
 		backendBody := backendBlock.Body()
-		for _, setting := range orderKeys(tfConfig) {
-			backendBody.SetAttributeValue(setting, tfConfig[setting])
+		vals := tfBackend.Configuration.Items()
+		for _, setting := range orderKeys(vals) {
+			backendBody.SetAttributeValue(setting, vals[setting])
 		}
 		hclBody.AppendNewline()
 	}

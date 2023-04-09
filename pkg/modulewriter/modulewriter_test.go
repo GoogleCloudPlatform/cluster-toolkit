@@ -510,9 +510,8 @@ func (s *MySuite) TestWriteMain(c *C) {
 
 	// Test with Backend
 	testBackend.Type = "gcs"
-	testBackend.Configuration = map[string]interface{}{
-		"bucket": "a_bucket",
-	}
+	testBackend.Configuration.Set("bucket", cty.StringVal("a_bucket"))
+
 	err = writeMain(testModules, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("a_bucket", mainFilePath)

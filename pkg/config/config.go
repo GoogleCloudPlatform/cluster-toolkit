@@ -118,7 +118,7 @@ func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error)
 // TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string
-	Configuration map[string]interface{}
+	Configuration Dict
 }
 
 type validatorName int64
@@ -596,9 +596,9 @@ func checkBackend(b TerraformBackend) error {
 	if hasVariable(b.Type) {
 		return fmt.Errorf(errMsg, "type", b.Type)
 	}
-	for k, v := range b.Configuration {
-		if s, ok := v.(string); ok && hasVariable(s) {
-			return fmt.Errorf(errMsg, k, s)
+	for k, v := range b.Configuration.Items() {
+		if v.Type() == cty.String && hasVariable(v.AsString()) {
+			return fmt.Errorf(errMsg, k, v.AsString())
 		}
 	}
 	return nil
@@ -664,10 +664,9 @@ func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
 	// Set "gcs" as default value when --backend-config is specified at CLI
 	if len(cliBEConfigVars) > 0 {
-		dc.Config.TerraformBackendDefaults.Type = "gcs"
-		dc.Config.TerraformBackendDefaults.Configuration = make(map[string]interface{})
+		dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
 	}
-
+	be := &dc.Config.TerraformBackendDefaults
 	for _, config := range cliBEConfigVars {
 		arr := strings.SplitN(config, "=", 2)
 
@@ -678,9 +677,9 @@ func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
 		key, value := arr[0], arr[1]
 		switch key {
 		case "type":
-			dc.Config.TerraformBackendDefaults.Type = value
+			be.Type = value
 		default:
-			dc.Config.TerraformBackendDefaults.Configuration[key] = value
+			be.Configuration.Set(key, cty.StringVal(value))
 		}
 
 	}

@@ -24,6 +24,7 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -130,23 +131,25 @@ func (dc *DeploymentConfig) expandBackends() error {
 	//    TerraformBackend
 	// 3. In all cases, add a prefix for GCS backends if one is not defined
 	blueprint := &dc.Config
-	if blueprint.TerraformBackendDefaults.Type != "" {
+	defaults := blueprint.TerraformBackendDefaults
+	if defaults.Type != "" {
 		for i := range blueprint.DeploymentGroups {
 			grp := &blueprint.DeploymentGroups[i]
-			if grp.TerraformBackend.Type == "" {
-				grp.TerraformBackend.Type = blueprint.TerraformBackendDefaults.Type
-				grp.TerraformBackend.Configuration = make(map[string]interface{})
-				for k, v := range blueprint.TerraformBackendDefaults.Configuration {
-					grp.TerraformBackend.Configuration[k] = v
+			be := &grp.TerraformBackend
+			if be.Type == "" {
+				be.Type = defaults.Type
+				be.Configuration = Dict{}
+				for k, v := range defaults.Configuration.Items() {
+					be.Configuration.Set(k, v)
 				}
 			}
-			if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration["prefix"] == nil {
+			if be.Type == "gcs" && !be.Configuration.Has("prefix") {
 				prefix := blueprint.BlueprintName
 				if deployment, err := blueprint.DeploymentName(); err == nil {
 					prefix += "/" + deployment
 				}
 				prefix += "/" + grp.Name
-				grp.TerraformBackend.Configuration["prefix"] = prefix
+				be.Configuration.Set("prefix", cty.StringVal(prefix))
 			}
 		}
 	}
