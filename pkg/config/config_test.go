@@ -80,11 +80,7 @@ deployment_groups:
 		Vars: map[string]interface{}{
 			"project_id": "test-project",
 			"labels":     defaultLabels},
-		DeploymentGroups: []DeploymentGroup{{Name: "DeploymentGroup1", TerraformBackend: TerraformBackend{}, Modules: testModules}},
-		TerraformBackendDefaults: TerraformBackend{
-			Type:          "",
-			Configuration: map[string]interface{}{},
-		},
+		DeploymentGroups: []DeploymentGroup{{Name: "DeploymentGroup1", Modules: testModules}},
 	}
 	// For expand.go
 	requiredVar = modulereader.VarInfo{
@@ -196,17 +192,9 @@ func getDeploymentConfigForTest() DeploymentConfig {
 			"deployment_name": "deployment_name",
 			"project_id":      "test-project",
 		},
-		TerraformBackendDefaults: TerraformBackend{
-			Type:          "",
-			Configuration: map[string]interface{}{},
-		},
 		DeploymentGroups: []DeploymentGroup{
 			{
-				Name: "group1",
-				TerraformBackend: TerraformBackend{
-					Type:          "",
-					Configuration: map[string]interface{}{},
-				},
+				Name:    "group1",
 				Modules: []Module{testModule, testModuleWithLabels},
 			},
 		},
@@ -971,10 +959,8 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 func (s *MySuite) TestSetBackendConfig(c *C) {
 	// Success
 	dc := getDeploymentConfigForTest()
-	c.Assert(dc.Config.TerraformBackendDefaults.Type, Equals, "")
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["bucket"], IsNil)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], IsNil)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["prefix"], IsNil)
+	be := dc.Config.TerraformBackendDefaults
+	c.Check(be, DeepEquals, TerraformBackend{})
 
 	cliBEType := "gcs"
 	cliBEBucket := "a_bucket"
@@ -989,10 +975,13 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 	err := dc.SetBackendConfig(cliBEConfigVars)
 
 	c.Assert(err, IsNil)
-	c.Assert(dc.Config.TerraformBackendDefaults.Type, Equals, cliBEType)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["bucket"], Equals, cliBEBucket)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], Equals, cliBESA)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["prefix"], Equals, cliBEPrefix)
+	be = dc.Config.TerraformBackendDefaults
+	c.Check(be.Type, Equals, cliBEType)
+	c.Check(be.Configuration.Items(), DeepEquals, map[string]cty.Value{
+		"bucket":                      cty.StringVal(cliBEBucket),
+		"impersonate_service_account": cty.StringVal(cliBESA),
+		"prefix":                      cty.StringVal(cliBEPrefix),
+	})
 
 	// Failure: Variable without '='
 	dc = getDeploymentConfigForTest()
@@ -1217,13 +1206,10 @@ func (s *MySuite) TestCheckBackends(c *C) {
 	}
 
 	{ // OK. No variables used
-		b := TerraformBackend{
-			Type: "gcs",
-			Configuration: map[string]interface{}{
-				"bucket":                      "trenta",
-				"impersonate_service_account": "who",
-			},
-		}
+		b := TerraformBackend{Type: "gcs"}
+		b.Configuration.
+			Set("bucket", cty.StringVal("trenta")).
+			Set("impersonate_service_account", cty.StringVal("who"))
 		c.Check(check(b), IsNil)
 	}
 
@@ -1253,21 +1239,19 @@ func (s *MySuite) TestCheckBackends(c *C) {
 	}
 
 	{ // FAIL. Variable in defaults configuration
-		b := TerraformBackend{
-			Type:          "gcs",
-			Configuration: map[string]interface{}{"bucket": "$(trenta)"},
-		}
+		b := TerraformBackend{Type: "gcs"}
+		b.Configuration.Set("bucket", cty.StringVal("$(trenta)"))
 		c.Check(check(b), ErrorMatches, ".*bucket.*trenta.*")
 	}
 
 	{ // OK. handles nested configuration
-		b := TerraformBackend{
-			Type: "gcs",
-			Configuration: map[string]interface{}{
-				"bucket":  "trenta",
-				"complex": map[string]string{"alpha": "a", "beta": "b"},
-			},
-		}
+		b := TerraformBackend{Type: "gcs"}
+		b.Configuration.
+			Set("bucket", cty.StringVal("trenta")).
+			Set("complex", cty.MapVal(map[string]cty.Value{
+				"alpha": cty.StringVal("a"),
+				"beta":  cty.StringVal("b"),
+			}))
 		c.Check(check(b), IsNil)
 	}
 }
