@@ -236,7 +236,7 @@ type Module struct {
 	ID               string
 	Use              []string
 	WrapSettingsWith map[string][]string
-	Outputs          []string `yaml:"outputs,omitempty"`
+	Outputs          []modulereader.OutputInfo `yaml:"outputs,omitempty"`
 	Settings         map[string]interface{}
 	RequiredApis     map[string][]string `yaml:"required_apis"`
 }

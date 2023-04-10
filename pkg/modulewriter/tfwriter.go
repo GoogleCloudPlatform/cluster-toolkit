@@ -100,15 +100,21 @@ func writeOutputs(
 	for _, mod := range modules {
 		for _, output := range mod.Outputs {
 			// Create output block
-			outputName := fmt.Sprintf("%s_%s", output, mod.ID)
+			outputName := fmt.Sprintf("%s_%s", output.Name, mod.ID)
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
 			// Add attributes (description, value)
-			desc := fmt.Sprintf("Generated output from module '%s'", mod.ID)
+			desc := output.Description
+			if desc == "" {
+				desc = fmt.Sprintf("Generated output from module '%s'", mod.ID)
+			}
 			blockBody.SetAttributeValue("description", cty.StringVal(desc))
-			value := fmt.Sprintf("((module.%s.%s))", mod.ID, output)
+			value := fmt.Sprintf("((module.%s.%s))", mod.ID, output.Name)
 			blockBody.SetAttributeValue("value", cty.StringVal(value))
+			if output.Sensitive {
+				blockBody.SetAttributeValue("sensitive", cty.BoolVal(output.Sensitive))
+			}
 			hclBody.AppendNewline()
 		}
 	}

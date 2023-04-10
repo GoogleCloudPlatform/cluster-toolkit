@@ -25,6 +25,7 @@ import (
 
 	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -88,8 +89,8 @@ func (s *MySuite) TestGetOutputsAsMap(c *C) {
 
 	testDescription := "This is a test description"
 	testName := "testName"
-	varInfo := VarInfo{Name: testName, Description: testDescription}
-	modInfo.Outputs = []VarInfo{varInfo}
+	outputInfo := OutputInfo{Name: testName, Description: testDescription}
+	modInfo.Outputs = []OutputInfo{outputInfo}
 	outputMap = modInfo.GetOutputsAsMap()
 	c.Assert(len(outputMap), Equals, 1)
 	c.Assert(outputMap[testName].Description, Equals, testDescription)
@@ -199,7 +200,7 @@ func (s *MySuite) TestGetInfo_TFReder(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(info, DeepEquals, ModuleInfo{
 		Inputs:  []VarInfo{{Name: "test_variable", Type: "string", Description: "This is just a test", Required: true}},
-		Outputs: []VarInfo{{Name: "test_output", Type: "", Description: "This is just a test"}},
+		Outputs: []OutputInfo{{Name: "test_output", Description: "This is just a test"}},
 	})
 
 }
@@ -226,6 +227,45 @@ func (s *MySuite) TestGetInfo_MetaReader(c *C) {
 	_, err := reader.GetInfo("")
 	expErr := "Meta GetInfo not implemented: .*"
 	c.Assert(err, ErrorMatches, expErr)
+}
+
+// module outputs can be specified as a simple string for the output name or as
+// a YAML mapping of name/description/sensitive (str,str,bool)
+func (s *MySuite) TestUnmarshalOutputInfo(c *C) {
+	var oinfo OutputInfo
+	var y string
+
+	y = "foo"
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
+	c.Check(oinfo, DeepEquals, OutputInfo{Name: "foo", Description: "", Sensitive: false})
+
+	y = "{ name: foo }"
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
+	c.Check(oinfo, DeepEquals, OutputInfo{Name: "foo", Description: "", Sensitive: false})
+
+	y = "{ name: foo, description: bar }"
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
+	c.Check(oinfo, DeepEquals, OutputInfo{Name: "foo", Description: "bar", Sensitive: false})
+
+	y = "{ name: foo, description: bar, sensitive: true }"
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
+	c.Check(oinfo, DeepEquals, OutputInfo{Name: "foo", Description: "bar", Sensitive: true})
+
+	// extra key should generate error
+	y = "{ name: foo, description: bar, sensitive: true, extrakey: extraval }"
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
+
+	// missing required key name should generate error
+	y = "{ description: bar, sensitive: true }"
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
+
+	// should not ummarshal a sequence
+	y = "[ foo ]"
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
+
+	// should not ummarshal an object with non-boolean sensitive type
+	y = "{ name: foo, description: bar, sensitive: contingent }"
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
 }
 
 // Util Functions

@@ -186,16 +186,16 @@ func hasIllegalChars(name string) bool {
 func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
 
 	// Only get the map if needed
-	var outputsMap map[string]modulereader.VarInfo
+	var outputsMap map[string]modulereader.OutputInfo
 	if len(mod.Outputs) > 0 {
 		outputsMap = modInfo.GetOutputsAsMap()
 	}
 
 	// Ensure output exists in the underlying modules
 	for _, output := range mod.Outputs {
-		if _, ok := outputsMap[output]; !ok {
+		if _, ok := outputsMap[output.Name]; !ok {
 			return fmt.Errorf("%s, module: %s output: %s",
-				errorMessages["invalidOutput"], mod.ID, output)
+				errorMessages["invalidOutput"], mod.ID, output.Name)
 		}
 	}
 	return nil

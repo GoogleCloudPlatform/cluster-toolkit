@@ -155,25 +155,27 @@ func (s *MySuite) TestValidateModule(c *C) {
 func (s *MySuite) TestValidateOutputs(c *C) {
 	// Simple case, no outputs in either
 	testMod := Module{ID: "testMod"}
-	testInfo := modulereader.ModuleInfo{Outputs: []modulereader.VarInfo{}}
+	testInfo := modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{}}
 	err := validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
 	// Output in varInfo, nothing in module
 	matchingName := "match"
-	testVarInfo := modulereader.VarInfo{Name: matchingName}
+	testVarInfo := modulereader.OutputInfo{Name: matchingName}
 	testInfo.Outputs = append(testInfo.Outputs, testVarInfo)
 	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
 	// Output matches between varInfo and module
-	testMod.Outputs = []string{matchingName}
+	testMod.Outputs = []modulereader.OutputInfo{
+		{Name: matchingName},
+	}
 	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
 	// Addition output found in modules, not in varinfo
 	missingName := "missing"
-	testMod.Outputs = append(testMod.Outputs, missingName)
+	testMod.Outputs = append(testMod.Outputs, modulereader.OutputInfo{Name: missingName})
 	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, Not(IsNil))
 	expErr := fmt.Sprintf("%s.*", errorMessages["invalidOutput"])
