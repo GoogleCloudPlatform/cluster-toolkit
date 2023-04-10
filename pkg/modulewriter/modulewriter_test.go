@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
@@ -555,15 +556,18 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
 
 	// Success: Outputs added
-	outputList := []string{"output1", "output2"}
+	outputList := []modulereader.OutputInfo{
+		{Name: "output1"},
+		{Name: "output2"},
+	}
 	moduleWithOutputs := config.Module{Outputs: outputList, ID: "testMod"}
 	testModules = []config.Module{moduleWithOutputs}
 	err = writeOutputs(testModules, testOutputsDir)
 	c.Assert(err, IsNil)
-	exists, err := stringExistsInFile(outputList[0], outputsFilePath)
+	exists, err := stringExistsInFile(outputList[0].Name, outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
-	exists, err = stringExistsInFile(outputList[1], outputsFilePath)
+	exists, err = stringExistsInFile(outputList[1].Name, outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 }

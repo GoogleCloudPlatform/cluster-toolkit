@@ -167,13 +167,15 @@ func (s *MySuite) TestValidateOutputs(c *C) {
 	c.Assert(err, IsNil)
 
 	// Output matches between varInfo and module
-	testMod.Outputs = []string{matchingName}
+	testMod.Outputs = []modulereader.OutputInfo{
+		{Name: matchingName},
+	}
 	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
 	// Addition output found in modules, not in varinfo
 	missingName := "missing"
-	testMod.Outputs = append(testMod.Outputs, missingName)
+	testMod.Outputs = append(testMod.Outputs, modulereader.OutputInfo{Name: missingName})
 	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, Not(IsNil))
 	expErr := fmt.Sprintf("%s.*", errorMessages["invalidOutput"])
