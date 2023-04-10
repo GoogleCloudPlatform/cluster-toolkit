@@ -57,7 +57,7 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	}
 
 	var vars []VarInfo
-	var outs []VarInfo
+	var outs []OutputInfo
 	for _, v := range module.Variables {
 		vInfo := VarInfo{
 			Name:        v.Name,
@@ -70,11 +70,11 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	}
 	ret.Inputs = vars
 	for _, v := range module.Outputs {
-		vInfo := VarInfo{
+		oInfo := OutputInfo{
 			Name:        v.Name,
 			Description: v.Description,
 		}
-		outs = append(outs, vInfo)
+		outs = append(outs, oInfo)
 	}
 	ret.Outputs = outs
 	return ret, nil

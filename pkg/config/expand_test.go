@@ -132,7 +132,10 @@ func (s *MySuite) TestUseModule(c *C) {
 		Name: "val1",
 		Type: "number",
 	}
-	usedInfo.Outputs = []modulereader.VarInfo{varInfoNumber}
+	outputInfoNumber := modulereader.OutputInfo{
+		Name: "val1",
+	}
+	usedInfo.Outputs = []modulereader.OutputInfo{outputInfoNumber}
 	usedVars, err = useModule(&mod, usedMod, usedModGroup, modInfo.Inputs, usedInfo.Outputs, []string{})
 	c.Assert(err, IsNil)
 	c.Assert(len(usedVars), Equals, 0)
@@ -224,7 +227,9 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		Name: sharedVarName,
 		Type: "number",
 	}
-
+	sharedOutput := modulereader.OutputInfo{
+		Name: sharedVarName,
+	}
 	// Simple Case
 	dc := getDeploymentConfigForTest()
 	err := dc.applyUseModules()
@@ -240,7 +245,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	usingInfo := dc.ModulesInfo[grpName][usingModuleSource]
 	usedInfo := dc.ModulesInfo[grpName][usedModuleSource]
 	usingInfo.Inputs = []modulereader.VarInfo{sharedVar}
-	usedInfo.Outputs = []modulereader.VarInfo{sharedVar}
+	usedInfo.Outputs = []modulereader.OutputInfo{sharedOutput}
 	err = dc.applyUseModules()
 	c.Assert(err, IsNil)
 
@@ -824,9 +829,9 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 
 	// Module variable: Success
 	existingOutput := "outputExists"
-	testVarInfoOutput := modulereader.VarInfo{Name: existingOutput}
+	testVarInfoOutput := modulereader.OutputInfo{Name: existingOutput}
 	testModInfo := modulereader.ModuleInfo{
-		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+		Outputs: []modulereader.OutputInfo{testVarInfoOutput},
 	}
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
@@ -838,9 +843,9 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 
 	// Module variable: Success when using correct explicit intragroup
 	existingOutput = "outputExists"
-	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testVarInfoOutput = modulereader.OutputInfo{Name: existingOutput}
 	testModInfo = modulereader.ModuleInfo{
-		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+		Outputs: []modulereader.OutputInfo{testVarInfoOutput},
 	}
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
@@ -852,9 +857,9 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Module variable: Failure when using incorrect explicit intragroup
 	// Correct group is at index 1, specify group at index 0
 	existingOutput = "outputExists"
-	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testVarInfoOutput = modulereader.OutputInfo{Name: existingOutput}
 	testModInfo = modulereader.ModuleInfo{
-		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+		Outputs: []modulereader.OutputInfo{testVarInfoOutput},
 	}
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
@@ -869,9 +874,9 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Intergroup variable: failure because other group was implicit in reference
-	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testVarInfoOutput = modulereader.OutputInfo{Name: existingOutput}
 	testModInfo = modulereader.ModuleInfo{
-		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+		Outputs: []modulereader.OutputInfo{testVarInfoOutput},
 	}
 	reader.SetInfo(testModule0.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
@@ -897,9 +902,9 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Intergroup variable: failure due to later group
-	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testVarInfoOutput = modulereader.OutputInfo{Name: existingOutput}
 	testModInfo = modulereader.ModuleInfo{
-		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+		Outputs: []modulereader.OutputInfo{testVarInfoOutput},
 	}
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext0.varString = fmt.Sprintf(
@@ -911,9 +916,9 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 
 	// Intergroup variable: proper explicit reference to earlier group
 	// TODO: failure is temporary when support is added this should be a success!
-	testVarInfoOutput = modulereader.VarInfo{Name: existingOutput}
+	testVarInfoOutput = modulereader.OutputInfo{Name: existingOutput}
 	testModInfo = modulereader.ModuleInfo{
-		Outputs: []modulereader.VarInfo{testVarInfoOutput},
+		Outputs: []modulereader.OutputInfo{testVarInfoOutput},
 	}
 	reader.SetInfo(testModule0.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(

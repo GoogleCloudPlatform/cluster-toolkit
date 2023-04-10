@@ -155,13 +155,13 @@ func (s *MySuite) TestValidateModule(c *C) {
 func (s *MySuite) TestValidateOutputs(c *C) {
 	// Simple case, no outputs in either
 	testMod := Module{ID: "testMod"}
-	testInfo := modulereader.ModuleInfo{Outputs: []modulereader.VarInfo{}}
+	testInfo := modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{}}
 	err := validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
 
 	// Output in varInfo, nothing in module
 	matchingName := "match"
-	testVarInfo := modulereader.VarInfo{Name: matchingName}
+	testVarInfo := modulereader.OutputInfo{Name: matchingName}
 	testInfo.Outputs = append(testInfo.Outputs, testVarInfo)
 	err = validateOutputs(testMod, testInfo)
 	c.Assert(err, IsNil)
