@@ -275,7 +275,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Type: "string",
 			},
 		},
-		Outputs: []modulereader.VarInfo{
+		Outputs: []modulereader.OutputInfo{
 			{
 				Name: matchingIntergroupName,
 			},
@@ -302,7 +302,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Name: matchingIntragroupName2,
 			},
 		},
-		Outputs: []modulereader.VarInfo{},
+		Outputs: []modulereader.OutputInfo{},
 	}
 
 	testModuleInfo2 := modulereader.ModuleInfo{
@@ -315,7 +315,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Name: matchingIntergroupName,
 			},
 		},
-		Outputs: []modulereader.VarInfo{},
+		Outputs: []modulereader.OutputInfo{},
 	}
 
 	dg0Name := "primary"

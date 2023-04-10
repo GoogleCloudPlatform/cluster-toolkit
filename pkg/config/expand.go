@@ -206,7 +206,7 @@ func useModule(
 	useMod Module,
 	useModGroupID string,
 	modInputs []modulereader.VarInfo,
-	useOutputs []modulereader.VarInfo,
+	useOutputs []modulereader.OutputInfo,
 	settingsToIgnore []string,
 ) ([]string, error) {
 	usedVars := []string{}
@@ -809,7 +809,7 @@ func (ref varReference) validate(bp Blueprint) error {
 			"failed to get info for module at %s while expanding variables: %e",
 			refMod.Source, err)
 	}
-	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.VarInfo) bool { return o.Name == ref.name })
+	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == ref.name })
 	if !found {
 		return fmt.Errorf("%s: module %s did not have output %s",
 			errorMessages["noOutput"], refMod.ID, ref.name)

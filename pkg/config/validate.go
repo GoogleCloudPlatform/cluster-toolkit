@@ -186,7 +186,7 @@ func hasIllegalChars(name string) bool {
 func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
 
 	// Only get the map if needed
-	var outputsMap map[string]modulereader.VarInfo
+	var outputsMap map[string]modulereader.OutputInfo
 	if len(mod.Outputs) > 0 {
 		outputsMap = modInfo.GetOutputsAsMap()
 	}

@@ -89,8 +89,8 @@ func (s *MySuite) TestGetOutputsAsMap(c *C) {
 
 	testDescription := "This is a test description"
 	testName := "testName"
-	varInfo := VarInfo{Name: testName, Description: testDescription}
-	modInfo.Outputs = []VarInfo{varInfo}
+	outputInfo := OutputInfo{Name: testName, Description: testDescription}
+	modInfo.Outputs = []OutputInfo{outputInfo}
 	outputMap = modInfo.GetOutputsAsMap()
 	c.Assert(len(outputMap), Equals, 1)
 	c.Assert(outputMap[testName].Description, Equals, testDescription)
@@ -200,7 +200,7 @@ func (s *MySuite) TestGetInfo_TFReder(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(info, DeepEquals, ModuleInfo{
 		Inputs:  []VarInfo{{Name: "test_variable", Type: "string", Description: "This is just a test", Required: true}},
-		Outputs: []VarInfo{{Name: "test_output", Type: "", Description: "This is just a test"}},
+		Outputs: []OutputInfo{{Name: "test_output", Description: "This is just a test"}},
 	})
 
 }

@@ -102,13 +102,13 @@ func enforceMapKeys(input map[string]interface{}, allowedKeys map[string]bool) e
 // ModuleInfo stores information about a module
 type ModuleInfo struct {
 	Inputs       []VarInfo
-	Outputs      []VarInfo
+	Outputs      []OutputInfo
 	RequiredApis []string
 }
 
 // GetOutputsAsMap returns the outputs list as a map for quicker access
-func (i ModuleInfo) GetOutputsAsMap() map[string]VarInfo {
-	outputsMap := make(map[string]VarInfo)
+func (i ModuleInfo) GetOutputsAsMap() map[string]OutputInfo {
+	outputsMap := make(map[string]OutputInfo)
 	for _, output := range i.Outputs {
 		outputsMap[output.Name] = output
 	}
