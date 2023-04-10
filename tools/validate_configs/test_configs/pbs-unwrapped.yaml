@@ -22,7 +22,7 @@ vars:
   zone: us-central1-c
   client_host_count: 1
   client_hostname_prefix: pbs-client
-  execution_host_count: 10
+  execution_host_count: 3
   execution_hostname_prefix: pbs-execution
   pbs_client_rpm_url: gs://replace-pbspro-rpm-bucket/pbspro-client-2021.1.3.20220217134230-0.el7.x86_64.rpm
   pbs_execution_rpm_url: gs://replace-pbspro-rpm-bucket/pbspro-execution-2021.1.3.20220217134230-0.el7.x86_64.rpm

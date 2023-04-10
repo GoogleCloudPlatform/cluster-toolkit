@@ -22,4 +22,4 @@ remote_node: "{{ deployment_name }}-server-0"
 post_deploy_tests:
 - test-pbspro.yml
 custom_vars:
-  execution_host_count: "10"
+  execution_host_count: "3"
