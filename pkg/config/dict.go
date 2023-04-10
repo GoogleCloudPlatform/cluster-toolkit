@@ -48,7 +48,7 @@ func (d *Dict) Has(k string) bool {
 }
 
 // Set adds/overrides value by key.
-// Returns refernce to Dict-self.
+// Returns reference to Dict-self.
 func (d *Dict) Set(k string, v cty.Value) *Dict {
 	if d.m == nil {
 		d.m = map[string]cty.Value{k: v}
@@ -58,7 +58,7 @@ func (d *Dict) Set(k string, v cty.Value) *Dict {
 	return d
 }
 
-// Items returns instance of map[sring]cty.Value
+// Items returns instance of map[string]cty.Value
 // will same set of key-value pairs as stored in Dict.
 // This map is a copy, changes to returned map have no effect on the Dict.
 func (d *Dict) Items() map[string]cty.Value {

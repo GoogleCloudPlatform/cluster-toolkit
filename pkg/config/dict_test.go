@@ -157,3 +157,23 @@ func TestYAMLMarshalIntAsInt(t *testing.T) {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }
+
+func TestYAMLDecodeWithAlias(t *testing.T) {
+	yml := `
+pony: &passtime
+- eat
+- sleep
+zebra: *passtime
+`
+	want := Dict{}
+	want.
+		Set("pony", cty.TupleVal([]cty.Value{cty.StringVal("eat"), cty.StringVal("sleep")})).
+		Set("zebra", cty.TupleVal([]cty.Value{cty.StringVal("eat"), cty.StringVal("sleep")}))
+	var got Dict
+	if err := yaml.Unmarshal([]byte(yml), &got); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if diff := cmp.Diff(want.Items(), got.Items(), ctydebug.CmpOptions); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
