@@ -330,7 +330,9 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Settings: map[string]interface{}{
 					altProjectIDSetting: "$(vars.project_id)",
 				},
-				Outputs: []string{matchingIntergroupName},
+				Outputs: []modulereader.OutputInfo{
+					{Name: matchingIntergroupName},
+				},
 			},
 			{
 				ID:     "TestModule1",

@@ -880,8 +880,8 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 
 		// ensure that the target module outputs the value in the root module
 		// state and not just internally within its deployment group
-		if !slices.Contains(toMod.Outputs, varRef.name) {
-			toMod.Outputs = append(toMod.Outputs, varRef.name)
+		if !slices.ContainsFunc(toMod.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == varRef.name }) {
+			toMod.Outputs = append(toMod.Outputs, modulereader.OutputInfo{Name: varRef.name})
 		}
 
 		// TODO: remove error

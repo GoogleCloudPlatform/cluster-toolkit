@@ -193,9 +193,9 @@ func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
 
 	// Ensure output exists in the underlying modules
 	for _, output := range mod.Outputs {
-		if _, ok := outputsMap[output]; !ok {
+		if _, ok := outputsMap[output.Name]; !ok {
 			return fmt.Errorf("%s, module: %s output: %s",
-				errorMessages["invalidOutput"], mod.ID, output)
+				errorMessages["invalidOutput"], mod.ID, output.Name)
 		}
 	}
 	return nil

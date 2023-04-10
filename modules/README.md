@@ -365,12 +365,45 @@ value is in the following priority order:
 
 ### Outputs (Optional)
 
-The `outputs` field allows a module-level output to be made available at the
-deployment group level and therefore will be available via `terraform output` in
-terraform-based deployment groups. This can useful for displaying the IP of a
-login node or simply displaying instructions on how to use a module, as we
-have in the
+The `outputs` field adds the output of individual Terraform modules to the
+output of its deployment group. This enables the value to be available via
+`terraform output`. This can useful for displaying the IP of a login node or
+priting instructions on how to use a module, as we have in the
 [monitoring dashboard module](monitoring/dashboard/README.md#Outputs).
+
+The outputs field is a lists that it can be in either of two formats: a string
+equal to the name of the module output, or a map specifying the `name`,
+`description`, and whether the value is `sensitive` and should be suppressed
+from the standard output of Terraform commands. An example is shown below
+that displays the internal and public IP addresses of a VM created by the
+vm-instance module:
+
+```yaml
+  - id: vm
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    settings:
+      machine_type: e2-medium
+    outputs:
+    - internal_ip
+    - name: external_ip
+      description: "External IP of VM"
+      sensitive: true
+```
+
+The outputs shown after running Terraform apply will resemble:
+
+```text
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+external_ip_simplevm = <sensitive>
+internal_ip_simplevm = [
+  "10.128.0.19",
+]
+```
 
 ### Required Services (APIs) (optional)
 
