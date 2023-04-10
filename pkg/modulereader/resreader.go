@@ -64,7 +64,7 @@ func (mo *OutputInfo) UnmarshalYAML(value *yaml.Node) error {
 	var fields map[string]interface{}
 	err = value.Decode(&fields)
 	if err != nil {
-		return fmt.Errorf(yamlErrorMsg, value.Line, "outputs must each be a string or a map{name: string, description: string, sensitive: bool}")
+		return fmt.Errorf(yamlErrorMsg, value.Line, "outputs must each be a string or a map{name: string, description: string, sensitive: bool}; "+err.Error())
 	}
 
 	err = enforceMapKeys(fields, map[string]bool{
