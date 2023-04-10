@@ -156,7 +156,8 @@ class Babysitter:
     def _get_builds(self) -> Sequence[Build]:
         req = cloudbuild_v1.ListBuildsRequest(
             project_id=self.project,
-            filter=f"substitutions.SHORT_SHA={self.sha}",
+            # cloud build only recognizes SHORT_SHA of length 7
+            filter=f"substitutions.SHORT_SHA={self.sha[:7]}",
             page_size=1000,
         )
         builds = self.cb.list_builds(req).builds
