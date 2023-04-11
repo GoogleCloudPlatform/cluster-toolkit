@@ -591,16 +591,17 @@ func checkUsedModuleNames(bp Blueprint) error {
 }
 
 func checkBackend(b TerraformBackend) error {
-	const errMsg = "can not use variables in backend block, got '%s=%s'"
+	const errMsg = "can not use variables in backend block, got '%s'"
 	if hasVariable(b.Type) {
-		return fmt.Errorf(errMsg, "type", b.Type)
+		return fmt.Errorf(errMsg, b.Type)
 	}
-	for k, v := range b.Configuration.Items() {
+
+	return b.Configuration.Walk(func(p cty.Path, v cty.Value) (bool, error) {
 		if v.Type() == cty.String && hasVariable(v.AsString()) {
-			return fmt.Errorf(errMsg, k, v.AsString())
+			return false, fmt.Errorf(errMsg, v.AsString())
 		}
-	}
-	return nil
+		return true, nil
+	})
 }
 
 func checkBackends(bp Blueprint) error {

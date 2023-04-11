@@ -71,6 +71,12 @@ func (d *Dict) Items() map[string]cty.Value {
 	return m
 }
 
+// Walk is a wrapper for cty.Walk
+func (d *Dict) Walk(cb func(cty.Path, cty.Value) (bool, error)) error {
+	o := cty.ObjectVal(d.Items())
+	return cty.Walk(o, cb)
+}
+
 // yamlValue is wrapper around cty.Value to handle YAML unmarshal.
 type yamlValue struct {
 	v cty.Value

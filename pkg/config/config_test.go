@@ -1215,17 +1215,17 @@ func (s *MySuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Variable in defaults type
 		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(b), ErrorMatches, ".*vartype.*")
 	}
 
 	{ // FAIL. Variable in group backend type
 		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(check(dummy, b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(dummy, b), ErrorMatches, ".*vartype.*")
 	}
 
 	{ // FAIL. Deployment variable in defaults type
 		b := TerraformBackend{Type: "$(vars.type)"}
-		c.Check(check(b), ErrorMatches, ".*type.*vars\\.type.*")
+		c.Check(check(b), ErrorMatches, ".*vars\\.type.*")
 	}
 
 	{ // OK. Not a variable
@@ -1235,24 +1235,24 @@ func (s *MySuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Mid-string variable in defaults type
 		b := TerraformBackend{Type: "hugs_$(vartype)_hugs"}
-		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(b), ErrorMatches, ".*vartype.*")
 	}
 
 	{ // FAIL. Variable in defaults configuration
 		b := TerraformBackend{Type: "gcs"}
 		b.Configuration.Set("bucket", cty.StringVal("$(trenta)"))
-		c.Check(check(b), ErrorMatches, ".*bucket.*trenta.*")
+		c.Check(check(b), ErrorMatches, ".*trenta.*")
 	}
 
-	{ // OK. handles nested configuration
+	{ // FAIL. handles nested configuration
 		b := TerraformBackend{Type: "gcs"}
 		b.Configuration.
 			Set("bucket", cty.StringVal("trenta")).
 			Set("complex", cty.MapVal(map[string]cty.Value{
 				"alpha": cty.StringVal("a"),
-				"beta":  cty.StringVal("b"),
+				"beta":  cty.StringVal("$(boba)"),
 			}))
-		c.Check(check(b), IsNil)
+		c.Check(check(b), ErrorMatches, ".*boba.*")
 	}
 }
 
