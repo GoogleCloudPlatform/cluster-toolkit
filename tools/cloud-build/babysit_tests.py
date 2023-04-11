@@ -48,6 +48,10 @@ def selector_by_name(names: Sequence[str]) -> Selector:
 
 SELECTORS: Dict[str, Selector] = {
     "all": lambda _: True,
+    "batch": selector_by_name([
+        "PR-test-batch-mpi",
+        "PR-test-cloud-batch",
+    ]),
     "pr_legacy": selector_by_name([
         "PR-legacy-test-integration-group-1",
         "PR-legacy-test-integration-group-2",
@@ -60,7 +64,11 @@ SELECTORS: Dict[str, Selector] = {
         "PR-test-slurm-gcp-v5-hpc-centos7",
         "PR-test-slurm-gcp-v5-startup-scripts",
         "PR-test-slurm-gcp-v5-ubuntu2004",
-    ])
+    ]),
+    "spack": selector_by_name([
+        "PR-test-batch-mpi",
+        "PR-test-spack-gromacs",
+    ]),
 }
 
 
