@@ -30,7 +30,14 @@ locals {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure_autoscaler.yml")
     "destination" = "htcondor_configure_autoscaler_${module.mig.instance_group_manager.name}.yml"
-    "args"        = "-e project_id=${var.project_id} -e region=${var.region} -e zone=${var.zone} -e mig_id=${module.mig.instance_group_manager.name} -e max_size=${var.max_size}"
+    "args" = join(" ", [
+      "-e project_id=${var.project_id}",
+      "-e region=${var.region}",
+      "-e zone=${var.zone}",
+      "-e mig_id=${module.mig.instance_group_manager.name}",
+      "-e max_size=${var.max_size}",
+      "-e min_idle=${var.min_idle}",
+    ])
   }
 
   hostnames = var.spot ? "${var.deployment_name}-spot-xp" : "${var.deployment_name}-xp"
@@ -48,6 +55,7 @@ module "execute_point_instance_template" {
   labels          = var.labels
 
   machine_type         = var.machine_type
+  disk_size_gb         = var.disk_size_gb
   preemptible          = var.spot
   startup_script       = var.startup_script
   metadata             = local.metadata

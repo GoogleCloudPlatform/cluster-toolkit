@@ -23,6 +23,11 @@ type TFReader struct {
 	allModInfo map[string]ModuleInfo
 }
 
+// NewTFReader is a constructor for TFReader
+func NewTFReader() TFReader {
+	return TFReader{allModInfo: map[string]ModuleInfo{}}
+}
+
 // SetInfo sets the module info for a module key'd by the source string
 func (r TFReader) SetInfo(source string, modInfo ModuleInfo) {
 	r.allModInfo[source] = modInfo

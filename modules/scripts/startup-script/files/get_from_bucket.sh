@@ -48,13 +48,18 @@ stdlib::get_from_bucket() {
 		stdlib::debug "Computed filename='${fname}' given URL."
 	fi
 	[[ -d ${dir} ]] || mkdir "${dir}"
-	local attempt=1
-	local max_attempts=10
-	while [[ $attempt -lt $max_attempts ]]; do
+	local attempt=0
+	local max_retries=7
+	while [[ $attempt -le $max_retries ]]; do
+		if [[ $attempt -gt 0 ]]; then
+			local wait=$((2 ** attempt))
+			stdlib::error "Retry attempt ${attempt} of ${max_retries} with exponential backoff: ${wait} seconds."
+			sleep $wait
+		fi
 		if stdlib::cmd gsutil -q cp "${url}" "${dir}/${fname}"; then
 			break
 		else
-			stdlib::error "gsutil reported non-zero exit code fetching ${url}.  Retrying (${attempt}/${max_attempts})"
+			stdlib::error "gsutil reported non-zero exit code fetching ${url}."
 			((attempt++))
 		fi
 	done

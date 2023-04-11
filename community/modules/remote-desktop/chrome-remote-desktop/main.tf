@@ -51,7 +51,7 @@ locals {
 }
 
 module "client_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=1b1cdb0"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=34bb7250"
 
   deployment_name = var.deployment_name
   project_id      = var.project_id

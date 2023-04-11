@@ -103,8 +103,8 @@ type ModReader interface {
 }
 
 var kinds = map[string]ModReader{
-	"terraform": TFReader{allModInfo: make(map[string]ModuleInfo)},
-	"packer":    PackerReader{allModInfo: make(map[string]ModuleInfo)},
+	"terraform": NewTFReader(),
+	"packer":    NewPackerReader(),
 }
 
 // IsValidKind returns true if the kind input is valid

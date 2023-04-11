@@ -23,7 +23,7 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     dnsutils \
     shellcheck && \
     apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
-    apt-get -y update && apt-get install -y unzip python3-pip terraform packer jq && \
+    apt-get -y update && apt-get install -y unzip python3-pip python3-venv terraform packer jq && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
       | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
@@ -45,8 +45,9 @@ RUN go install github.com/terraform-docs/terraform-docs@latest      && \
 WORKDIR /ghpc-tmp
 COPY ./ ./
 
-RUN pip install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.3.0/scripts/requirements.txt && \
-    pip install -r tools/cloud-build/requirements.txt && \
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.2/scripts/requirements.txt && \
+    pip install --no-cache-dir -r tools/cloud-build/requirements.txt && \
     rm -rf ~/.cache/pip/*
 
 RUN make ghpc

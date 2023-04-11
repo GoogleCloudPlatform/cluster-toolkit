@@ -56,7 +56,7 @@ deployment_groups:
     id: {fs.name}
     settings:
       filestore_share_name: {export_name[1:]}
-      network_name: {fs.vpc.cloud_id}
+      network_id: projects/{project_id}/global/networks/{fs.vpc.cloud_id}
       zone: {fs.cloud_zone}
       size_gb: {fs.capacity}
       filestore_tier: {fs.get_performance_tier_display()}

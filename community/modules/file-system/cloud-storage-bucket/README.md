@@ -134,7 +134,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment; used as part of name of the GCS bucket. | `string` | n/a | yes |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the GCS bucket. List key, value pairs. | `any` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mount options to be put in fstab. Note: `implicit_dirs` makes it easier to work with objects added by other tools, but there is a performance impact. See: [more information](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/semantics.md#implicit-directories) | `string` | `"defaults,_netdev,implicit_dirs"` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name Prefix. | `string` | `null` | no |

@@ -21,6 +21,7 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
+	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region"
 	GHPC_PATH="${cwd}/ghpc"
 	# Cover the three possible starting sequences for local sources: ./ ../ /
 	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
@@ -35,7 +36,10 @@ run_test() {
 	else
 		cd "${tmpdir}"
 	fi
-	${GHPC_PATH} create -l IGNORE --vars "project_id=${PROJECT},deployment_name=${DEPLOYMENT}" "${tmpdir}"/"${exampleFile}" >/dev/null ||
+	${GHPC_PATH} create -l ERROR \
+		--skip-validators="${VALIDATORS_TO_SKIP}" \
+		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" \
+		"${tmpdir}"/"${exampleFile}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
 			exit 1

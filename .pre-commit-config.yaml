@@ -15,7 +15,7 @@
 ---
 repos:
 - repo: https://github.com/antonbabenko/pre-commit-terraform
-  rev: v1.77.0
+  rev: v1.77.1
   hooks:
   - id: terraform_fmt
   - id: terraform_tflint
@@ -66,7 +66,7 @@ repos:
   hooks:
   - id: go-critic
     args: [-disable, "#experimental,sloppyTypeAssert"]
-- repo: https://github.com/ansible/ansible-lint.git
+- repo: https://github.com/ansible/ansible-lint
   rev: v6.11.0
   hooks:
   - id: ansible-lint
@@ -75,13 +75,13 @@ repos:
     types: [yaml]
     additional_dependencies:
     - ansible==6.*
-- repo: https://github.com/adrienverge/yamllint.git
+- repo: https://github.com/adrienverge/yamllint
   rev: v1.29.0
   hooks:
   - id: yamllint
     args: [-c=.yamllint]
 - repo: https://github.com/jackdewinter/pymarkdown
-  rev: v0.9.8
+  rev: v0.9.9
   hooks:
   - id: pymarkdown
     # Rules at https://github.com/jackdewinter/pymarkdown/tree/main/docs/rules

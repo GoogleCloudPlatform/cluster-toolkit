@@ -80,7 +80,7 @@ func (w PackerWriter) writeDeploymentGroup(
 		if err != nil {
 			return err
 		}
-		modPath := filepath.Join(groupPath, mod.ID)
+		modPath := filepath.Join(groupPath, mod.DeploymentSource)
 		err = writePackerAutovars(ctySettings, modPath)
 		if err != nil {
 			return err

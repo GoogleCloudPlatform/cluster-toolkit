@@ -67,10 +67,9 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 		Modules:          []Module{{Kind: "terraform", Source: testSource, Settings: testSettings}},
 	}
 	dc := DeploymentConfig{
-		Config:        Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
-		ModulesInfo:   map[string]map[string]modulereader.ModuleInfo{},
-		ModuleToGroup: map[string]int{},
-		expanded:      false,
+		Config:      Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
+		expanded:    false,
 	}
 	dc.validateModuleSettings()
 }
@@ -184,17 +183,17 @@ func (s *MySuite) TestValidateOutputs(c *C) {
 func (s *MySuite) TestAddDefaultValidators(c *C) {
 	dc := getDeploymentConfigForTest()
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 3)
+	c.Assert(dc.Config.Validators, HasLen, 4)
 
 	dc.Config.Validators = nil
 	dc.Config.Vars["region"] = "us-central1"
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 4)
+	c.Assert(dc.Config.Validators, HasLen, 5)
 
 	dc.Config.Validators = nil
 	dc.Config.Vars["zone"] = "us-central1-c"
 	dc.addDefaultValidators()
-	c.Assert(dc.Config.Validators, HasLen, 6)
+	c.Assert(dc.Config.Validators, HasLen, 7)
 }
 
 // return the actual value of a global variable specified by the literal

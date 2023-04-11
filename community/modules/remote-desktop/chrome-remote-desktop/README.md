@@ -63,7 +63,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 1b1cdb0 |
+| <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 34bb7250 |
 | <a name="module_instances"></a> [instances](#module\_instances) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | 264e99c |
 
 ## Resources
@@ -85,7 +85,7 @@ No resources.
 | <a name="input_install_nvidia_driver"></a> [install\_nvidia\_driver](#input\_install\_nvidia\_driver) | Installs the nvidia driver (true/false). For details, see https://cloud.google.com/compute/docs/gpus/install-drivers-gpu | `bool` | n/a | yes |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of instances | `number` | `1` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Instance Image. An alternative could be family  = "ubuntu-2004-lts" and project = "ubuntu-os-cloud" or family  = "debian-11" and project = "debian-cloud" | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "ubuntu-2204-lts",<br>  "project": "ubuntu-os-cloud"<br>}</pre> | no |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. List key, value pairs. | `any` | `[]` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for the instance creation. Must be N1 family if GPU is used. | `string` | `"n1-standard-8"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name Prefix | `string` | `null` | no |

@@ -11,17 +11,19 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
-> **_WARNING:_** The variables [enable\_reconfigure], [enable\_cleanup\_compute] and
-> [enable\_cleanup\_subscriptions], if set to true, require additional
-> dependencies **to be installed on the system running `terraform apply`**.
-> Python3 (>=3.6.0, <4.0.0) must be installed along with the pip packages listed in the
-> [requirements.txt] file of [SchedMD/slurm-gcp].
+> **_WARNING:_** The variables [enable\_reconfigure],
+> [enable\_cleanup\_compute] and [enable\_cleanup\_subscriptions], if set to
+> true, require additional dependencies **to be installed on the system running
+> `terraform apply`**. Python3 (>=3.6.0, <4.0.0) must be installed along with
+> the pip packages listed in the [requirements.txt] file of
+> [SchedMD/slurm-gcp]. See the
+> [documentation below](#live-cluster-reconfiguration-enable_reconfigure).
 
-[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.6.0
-[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.6.0/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/5.6.0/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.6.2
+[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.6.2/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/5.6.2/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.6.0/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.6.2/scripts/requirements.txt
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
 [enable\_reconfigure]: #input\_enable\_reconfigure
@@ -52,6 +54,7 @@ For a complete example using this module, see
 [slurm-gcp-v5-cluster.yaml](../../../examples/slurm-gcp-v5-cluster.yaml).
 
 ### Live Cluster Reconfiguration (`enable_reconfigure`)
+
 The schedmd-slurm-gcp-v5-controller module supports the reconfiguration of
 partitions and slurm configuration in a running, active cluster. This option is
 activated through the `enable_reconfigure` setting:
@@ -74,17 +77,29 @@ This option has some additional requirements:
   development environment deploying the cluster. One can use following commands:
 
   ```bash
-  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.0/scripts/requirements.txt
+  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.2/scripts/requirements.txt
   pip3 install -r requirements.txt --user
   ```
   
-  For more information, see the [description](#optdeps) of this module.
+  For more information, see the [description][optdeps] of this module.
 * The project in your gcloud config must match the project the cluster is being
   deployed onto due to a known issue with the reconfigure scripts. To set your
   default config project, run the following command:
-  `gcloud config set core/<<PROJECT ID>>`
 
-[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.6.0/terraform/slurm_cluster#optional
+  ```bash
+  gcloud config set core/project <<PROJECT ID>>
+  ```
+
+  If the gcloud project ID is not properly set you may see an error during
+  terraform deployment similar to the following:
+
+  ```text
+  google.api_core.exceptions.NotFound: 404 Resource not found
+  Could not find in SpannerConfigStore:
+  TopicByProjectIdAndName(project_id=<incorrect project #>, topic_name=<topic name>)
+  ```
+
+[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.6.2/terraform/slurm_cluster#optional
 
 ## Custom Images
 
@@ -148,8 +163,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.6.0 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.6.0 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.6.2 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.6.2 |
 
 ## Resources
 
@@ -199,7 +214,7 @@ limitations under the License.
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | Specifies a minimum CPU platform. Applicable values are the friendly names of<br>CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:<br>https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform | `string` | `null` | no |
 | <a name="input_network_ip"></a> [network\_ip](#input\_network\_ip) | Private IP address to assign to the instance if desired. | `string` | `""` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network to deploy to. Either network\_self\_link or subnetwork\_self\_link must be specified. | `string` | `null` | no |
-| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | Storage to mounted on all instances.<br>  server\_ip     : Address of the storage server.<br>  remote\_mount  : The location in the remote instance filesystem to mount from.<br>  local\_mount   : The location on the instance filesystem to mount to.<br>  fs\_type       : Filesystem type (e.g. "nfs").<br>  mount\_options : Options to mount with. | <pre>list(object({<br>    server_ip     = string<br>    remote_mount  = string<br>    local_mount   = string<br>    fs_type       = string<br>    mount_options = string<br>  }))</pre> | `[]` | no |
+| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on all instances. | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy. | `string` | `"MIGRATE"` | no |
 | <a name="input_partition"></a> [partition](#input\_partition) | Cluster partitions as a list. | <pre>list(object({<br>    compute_list = list(string)<br>    partition = object({<br>      enable_job_exclusive    = bool<br>      enable_placement_groups = bool<br>      network_storage = list(object({<br>        server_ip     = string<br>        remote_mount  = string<br>        local_mount   = string<br>        fs_type       = string<br>        mount_options = string<br>      }))<br>      partition_conf = map(string)<br>      partition_name = string<br>      partition_nodes = map(object({<br>        access_config = list(object({<br>          network_tier = string<br>        }))<br>        bandwidth_tier         = string<br>        node_count_dynamic_max = number<br>        node_count_static      = number<br>        enable_spot_vm         = bool<br>        group_name             = string<br>        instance_template      = string<br>        node_conf              = map(string)<br>        spot_instance_config = object({<br>          termination_action = string<br>        })<br>      }))<br>      partition_startup_scripts_timeout = number<br>      subnetwork                        = string<br>      zone_policy_allow                 = list(string)<br>      zone_policy_deny                  = list(string)<br>      zone_target_shape                 = string<br>    })<br>  }))</pre> | `[]` | no |
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Allow the instance to be preempted. | `bool` | `false` | no |

@@ -104,9 +104,9 @@ variable "machine_type" {
 }
 
 variable "labels" {
-  description = "Labels to add to the instances. List key, value pairs."
-  type        = any
-  default     = []
+  description = "Labels to add to the instances. Key-value pairs."
+  type        = map(string)
+  default     = {}
 }
 
 variable "service_account" {

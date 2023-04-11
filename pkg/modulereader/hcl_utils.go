@@ -93,15 +93,15 @@ func getCtyType(hclType string) (cty.Type, error) {
 	return typ, nil
 }
 
-// Attempts to bring semantically equal types to equal string representation. E.g.:
+// NormalizeType attempts to bring semantically equal types to equal string representation. E.g.:
 //
-//	 normalizeType("object({count=number,kind=string})")
-//		== normalizeType("object({kind=string,count=number})").
+//	 NormalizeType("object({count=number,kind=string})")
+//		== NormalizeType("object({kind=string,count=number})").
 //
 // Additionally it removes any comments, whitespaces and line breaks.
 //
 // This method is fail-safe, if error arises passed type will be returned without changes.
-func normalizeType(hclType string) string {
+func NormalizeType(hclType string) string {
 	ctyType, err := getCtyType(hclType)
 	if err != nil {
 		log.Printf("Failed to parse HCL type='%s', got %v", hclType, err)

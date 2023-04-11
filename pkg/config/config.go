@@ -36,9 +36,9 @@ import (
 )
 
 const (
-	expectedVarFormat string = "$(vars.var_name) or $(module_id.output_name)"
-	expectedModFormat string = "$(module_id) or $(group_id.module_id)"
-	matchLabelExp     string = `^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`
+	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
+	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
+	unexpectedConnectionKind string = "connectionKind must be useConnection or deploymentConnection"
 )
 
 var errorMessages = map[string]string{
@@ -132,6 +132,7 @@ const (
 	testModuleNotUsedName
 	testZoneInRegionName
 	testApisEnabledName
+	testDeploymentVariableNotUsedName
 )
 
 // this enum will be used to control how fatal validator failures will be
@@ -176,6 +177,8 @@ func (v validatorName) String() string {
 		return "test_apis_enabled"
 	case testModuleNotUsedName:
 		return "test_module_not_used"
+	case testDeploymentVariableNotUsedName:
+		return "test_deployment_variable_not_used"
 	default:
 		return "unknown_validator"
 	}
@@ -184,6 +187,7 @@ func (v validatorName) String() string {
 type validatorConfig struct {
 	Validator string
 	Inputs    map[string]interface{}
+	Skip      bool
 }
 
 func (v *validatorConfig) check(name validatorName, requiredInputs []string) error {
@@ -226,10 +230,11 @@ func (g DeploymentGroup) HasKind(kind string) bool {
 
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
-	Source           string
+	Source string
+	// DeploymentSource - is source to be used for this module in written deployment.
+	DeploymentSource string `yaml:"-"` // "-" prevents user from specifying it
 	Kind             string
 	ID               string
-	ModuleName       string
 	Use              []string
 	WrapSettingsWith map[string][]string
 	Outputs          []string `yaml:"outputs,omitempty"`
@@ -258,39 +263,41 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
-// ConnectionKind defines the kind of module connection, defined by the source
-// of the connection. Currently, only Use is supported.
-type ConnectionKind int
+// connectionKind defines tracks graph edges between modules and from modules to
+// deployment variables:
+//
+// use: created via module-module use keyword
+// deployment: created by a module setting equal to $(vars.name)
+// explicit: created by a module setting equal to $(mod_id.output)
+//
+// no attempt is made to track edges made via Toolkit literal strings presently
+// required when wanting to index a list or map "((mod_id.output[0]))"
+type connectionKind int
 
 const (
-	undefinedConnection ConnectionKind = iota
+	undefinedConnection connectionKind = iota
 	useConnection
-	// explicitConnection
-	// globalConnection
+	deploymentConnection
+	explicitConnection
 )
+
+func (c connectionKind) IsValid() bool {
+	return c == useConnection || c == deploymentConnection || c == explicitConnection
+}
 
 // ModConnection defines details about connections between modules. Currently,
 // only modules connected with "use" are tracked.
 type ModConnection struct {
-	toID   string
-	fromID string
-	// Currently only supports useConnection
-	kind ConnectionKind
-	// List of variables shared from module `fromID` to module `toID`
+	ref             reference
+	kind            connectionKind
 	sharedVariables []string
 }
 
 // Returns true if a connection does not functionally link the outputs and
 // inputs of the modules. This can happen when a module is connected with "use"
 // but none of the outputs of fromID match the inputs of toID.
-func (mc *ModConnection) isEmpty() (isEmpty bool) {
-	isEmpty = false
-	if mc.kind == useConnection {
-		if len(mc.sharedVariables) == 0 {
-			isEmpty = true
-		}
-	}
-	return
+func (mc *ModConnection) isUnused() bool {
+	return mc.kind == useConnection && len(mc.sharedVariables) == 0
 }
 
 // DeploymentConfig is a container for the imported YAML data and supporting data for
@@ -298,11 +305,9 @@ func (mc *ModConnection) isEmpty() (isEmpty bool) {
 type DeploymentConfig struct {
 	Config Blueprint
 	// Indexed by Resource Group name and Module Source
-	ModulesInfo map[string]map[string]modulereader.ModuleInfo
-	// Maps module ID to group index
-	ModuleToGroup     map[string]int
+	ModulesInfo       map[string]map[string]modulereader.ModuleInfo
 	expanded          bool
-	moduleConnections []ModConnection
+	moduleConnections map[string][]ModConnection
 }
 
 // ExpandConfig expands the yaml config in place
@@ -319,16 +324,67 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	return nil
 }
 
+func (dc *DeploymentConfig) addModuleConnection(ref reference, kind connectionKind, sharedVariables []string) error {
+	if dc.moduleConnections == nil {
+		dc.moduleConnections = make(map[string][]ModConnection)
+	}
+
+	if !kind.IsValid() {
+		log.Fatal(unexpectedConnectionKind)
+	}
+
+	conn := ModConnection{
+		ref:             ref,
+		kind:            kind,
+		sharedVariables: sharedVariables,
+	}
+
+	fromModID := ref.FromModuleID()
+	dc.moduleConnections[fromModID] = append(dc.moduleConnections[fromModID], conn)
+	return nil
+}
+
 // listUnusedModules provides a mapping of modules to modules that are in the
 // "use" field, but not actually used.
 func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
 	unusedModules := make(map[string][]string)
-	for _, conn := range dc.moduleConnections {
-		if conn.isEmpty() {
-			unusedModules[conn.fromID] = append(unusedModules[conn.fromID], conn.toID)
+	for _, connections := range dc.moduleConnections {
+		for _, conn := range connections {
+			if conn.isUnused() {
+				fromMod := conn.ref.FromModuleID()
+				unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.ToModuleID())
+			}
 		}
 	}
 	return unusedModules
+}
+
+func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
+	// these variables are required or automatically constructed and applied;
+	// these should not be listed unused otherwise no blueprints are valid
+	var usedVars = map[string]bool{
+		"labels":          true,
+		"deployment_name": true,
+	}
+
+	for _, connections := range dc.moduleConnections {
+		for _, conn := range connections {
+			if conn.kind == deploymentConnection {
+				for _, v := range conn.sharedVariables {
+					usedVars[v] = true
+				}
+			}
+		}
+	}
+
+	unusedVars := []string{}
+	for k := range dc.Config.Vars {
+		if _, ok := usedVars[k]; !ok {
+			unusedVars = append(unusedVars, k)
+		}
+	}
+
+	return unusedVars
 }
 
 func (dc *DeploymentConfig) checkMovedModules() error {
@@ -356,7 +412,7 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 
 	newDeploymentConfig = DeploymentConfig{
 		Config:            blueprint,
-		moduleConnections: []ModConnection{},
+		moduleConnections: make(map[string][]ModConnection),
 	}
 	return newDeploymentConfig, nil
 }
@@ -471,52 +527,61 @@ func validateGroupName(name string, usedNames map[string]bool) {
 
 // checkModuleAndGroupNames checks and imports module and resource group IDs
 // and names respectively.
-func checkModuleAndGroupNames(
-	depGroups []DeploymentGroup) (map[string]int, error) {
-	moduleToGroup := make(map[string]int)
+func checkModuleAndGroupNames(depGroups []DeploymentGroup) error {
+	seen := map[string]struct{}{}
 	groupNames := make(map[string]bool)
 	for iGrp, grp := range depGroups {
 		validateGroupName(grp.Name, groupNames)
 		for _, mod := range grp.Modules {
-			// Verify no duplicate module names
-			if _, ok := moduleToGroup[mod.ID]; ok {
-				return moduleToGroup, fmt.Errorf(
-					"%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
+
+			if _, ok := seen[mod.ID]; ok {
+				return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
 			}
-			moduleToGroup[mod.ID] = iGrp
+			seen[mod.ID] = struct{}{}
 
 			// Verify Module Kind matches group Kind
 			if grp.Kind == "" {
 				depGroups[iGrp].Kind = mod.Kind
 			} else if grp.Kind != mod.Kind {
-				return moduleToGroup, fmt.Errorf(
+				return fmt.Errorf(
 					"%s: deployment group %s, got: %s, wanted: %s",
 					errorMessages["mixedModule"],
 					grp.Name, grp.Kind, mod.Kind)
 			}
 		}
 	}
-	return moduleToGroup, nil
+	return nil
+}
+
+func modToGrp(groups []DeploymentGroup, modID string) (int, error) {
+	i := slices.IndexFunc(groups, func(g DeploymentGroup) bool {
+		return slices.ContainsFunc(g.Modules, func(m Module) bool {
+			return m.ID == modID
+		})
+	})
+	if i == -1 {
+		return -1, fmt.Errorf("module %s was not found", modID)
+	}
+	return i, nil
 }
 
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
-func checkUsedModuleNames(
-	depGroups []DeploymentGroup, idToGroup map[string]int) error {
-	for _, grp := range depGroups {
+func checkUsedModuleNames(bp Blueprint) error {
+	for _, grp := range bp.DeploymentGroups {
 		for _, mod := range grp.Modules {
 			for _, usedMod := range mod.Use {
-				ref, err := identifyModuleByReference(usedMod, grp)
-				if err != nil {
-					return err
-				}
-				err = ref.validate(depGroups, idToGroup)
+				ref, err := identifyModuleByReference(usedMod, grp, mod)
 				if err != nil {
 					return err
 				}
 
+				if err = ref.validate(bp); err != nil {
+					return err
+				}
+
 				// TODO: remove this when support is added!
-				if ref.FromGroupID != ref.ToGroupID {
+				if ref.fromGroupID != ref.toGroupID {
 					return fmt.Errorf("%s: %s is an intergroup reference",
 						errorMessages["varInAnotherGroup"], usedMod)
 				}
@@ -561,13 +626,10 @@ func (dc *DeploymentConfig) validateConfig() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	moduleToGroup, err := checkModuleAndGroupNames(dc.Config.DeploymentGroups)
-	if err != nil {
+	if err = checkModuleAndGroupNames(dc.Config.DeploymentGroups); err != nil {
 		log.Fatal(err)
 	}
-	dc.ModuleToGroup = moduleToGroup
-	if err = checkUsedModuleNames(
-		dc.Config.DeploymentGroups, dc.ModuleToGroup); err != nil {
+	if err = checkUsedModuleNames(dc.Config); err != nil {
 		log.Fatal(err)
 	}
 	if err = checkBackends(dc.Config); err != nil {
@@ -626,13 +688,28 @@ func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
 	return nil
 }
 
+// SkipValidator marks validator(s) as skipped,
+// if no validator is present, adds one, marked as skipped.
+func (dc *DeploymentConfig) SkipValidator(name string) error {
+	if dc.Config.Validators == nil {
+		dc.Config.Validators = []validatorConfig{}
+	}
+	skipped := false
+	for i, v := range dc.Config.Validators {
+		if v.Validator == name {
+			dc.Config.Validators[i].Skip = true
+			skipped = true
+		}
+	}
+	if !skipped {
+		dc.Config.Validators = append(dc.Config.Validators, validatorConfig{Validator: name, Skip: true})
+	}
+	return nil
+}
+
 // IsLiteralVariable returns true if string matches variable ((ctx.name))
 func IsLiteralVariable(str string) bool {
-	match, err := regexp.MatchString(literalExp, str)
-	if err != nil {
-		log.Fatalf("Failed checking if variable is a literal: %v", err)
-	}
-	return match
+	return literalExp.MatchString(str)
 }
 
 // IdentifyLiteralVariable returns
@@ -640,8 +717,7 @@ func IsLiteralVariable(str string) bool {
 // string: variable name (e.g. "project_id")
 // bool: true/false reflecting success
 func IdentifyLiteralVariable(str string) (string, string, bool) {
-	re := regexp.MustCompile(literalSplitExp)
-	contents := re.FindStringSubmatch(str)
+	contents := literalSplitExp.FindStringSubmatch(str)
 	if len(contents) != 3 {
 		return "", "", false
 	}
@@ -651,8 +727,7 @@ func IdentifyLiteralVariable(str string) (string, string, bool) {
 
 // HandleLiteralVariable is exported for use in modulewriter as well
 func HandleLiteralVariable(str string) string {
-	re := regexp.MustCompile(literalExp)
-	contents := re.FindStringSubmatch(str)
+	contents := literalExp.FindStringSubmatch(str)
 	if len(contents) != 2 {
 		log.Fatalf("Incorrectly formatted literal variable: %s", str)
 	}
@@ -738,22 +813,13 @@ func (err *InputValueError) Error() string {
 	return fmt.Sprintf("%v input error, cause: %v", err.inputKey, err.cause)
 }
 
-// ResolveGlobalVariables will resolve literal variables "((var.*))" in the
-// provided map to their corresponding value in the global variables of the
-// Blueprint.
-func (b Blueprint) ResolveGlobalVariables(ctyVars map[string]cty.Value) error {
-	origin, err := ConvertMapToCty(b.Vars)
-	if err != nil {
-		return fmt.Errorf("error converting deployment variables to cty: %w", err)
-	}
-	return ResolveVariables(ctyVars, origin)
-}
+var matchLabelExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`)
 
 // isValidLabelValue checks if a string is a valid value for a GCP label.
 // For more information on valid label values, see the docs at:
 // https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
 func isValidLabelValue(value string) bool {
-	return regexp.MustCompile(matchLabelExp).MatchString(value)
+	return matchLabelExp.MatchString(value)
 }
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.

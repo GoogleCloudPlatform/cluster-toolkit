@@ -280,94 +280,147 @@ func (s *MySuite) TestUpdateVariableType(c *C) {
 	// empty
 	testSlice := []interface{}{}
 	ctx := varContext{}
-	modToGrp := make(map[string]int)
-	ret, err := updateVariableType(testSlice, ctx, modToGrp)
+	ret, err := updateVariableType(testSlice, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// single string
 	testSlice = append(testSlice, "string")
-	ret, err = updateVariableType(testSlice, ctx, modToGrp)
+	ret, err = updateVariableType(testSlice, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// add list
 	testSlice = append(testSlice, []interface{}{})
-	ret, err = updateVariableType(testSlice, ctx, modToGrp)
+	ret, err = updateVariableType(testSlice, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 	// add map
 	testSlice = append(testSlice, make(map[string]interface{}))
-	ret, err = updateVariableType(testSlice, ctx, modToGrp)
+	ret, err = updateVariableType(testSlice, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testSlice, DeepEquals, ret)
 
 	// map, success
 	testMap := make(map[string]interface{})
-	ret, err = updateVariableType(testMap, ctx, modToGrp)
+	ret, err = updateVariableType(testMap, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add string
 	testMap["string"] = "string"
-	ret, err = updateVariableType(testMap, ctx, modToGrp)
+	ret, err = updateVariableType(testMap, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add map
 	testMap["map"] = make(map[string]interface{})
-	ret, err = updateVariableType(testMap, ctx, modToGrp)
+	ret, err = updateVariableType(testMap, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 	// add slice
 	testMap["slice"] = []interface{}{}
-	ret, err = updateVariableType(testMap, ctx, modToGrp)
+	ret, err = updateVariableType(testMap, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testMap, DeepEquals, ret)
 
 	// string, success
 	testString := "string"
-	ret, err = updateVariableType(testString, ctx, modToGrp)
+	ret, err = updateVariableType(testString, ctx, false)
 	c.Assert(err, IsNil)
 	c.Assert(testString, DeepEquals, ret)
 }
 
 func (s *MySuite) TestCombineLabels(c *C) {
-	dc := getDeploymentConfigForTest()
+	infoWithLabels := modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{{Name: "labels"}}}
 
-	err := dc.combineLabels()
-	c.Assert(err, IsNil)
+	dc := DeploymentConfig{
+		Config: Blueprint{
+			BlueprintName: "simple",
+			Vars: map[string]interface{}{
+				"deployment_name": "golden"},
+			DeploymentGroups: []DeploymentGroup{
+				{
+					Name: "lime",
+					Modules: []Module{
+						{Source: "blue/salmon", Kind: "terraform", ID: "coral", Settings: map[string]interface{}{
+							"labels": map[string]interface{}{
+								"magenta":   "orchid",
+								"ghpc_role": "maroon",
+							},
+						}},
+						{Source: "brown/oak", Kind: "terraform", ID: "khaki", Settings: map[string]interface{}{
+							// has no labels set
+						}},
+						{Source: "ivory/black", Kind: "terraform", ID: "silver", Settings: map[string]interface{}{
+							// has no labels set, also module has no labels input
+						}},
+					},
+				},
+				{
+					Name: "pink",
+					Modules: []Module{
+						{Source: "red/velvet", Kind: "packer", ID: "orange", Settings: map[string]interface{}{
+							"labels": map[string]interface{}{
+								"olive":           "teal",
+								"ghpc_deployment": "navy",
+							},
+						}},
+					},
+				},
+			},
+		},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
+			"lime": {
+				"blue/salmon": infoWithLabels,
+				"brown/oak":   infoWithLabels,
+				"ivory/black": modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{}},
+			},
+			"pink": {
+				"red/velvet": infoWithLabels,
+			},
+		},
+	}
+	c.Check(dc.combineLabels(), IsNil)
 
 	// Were global labels created?
-	_, exists := dc.Config.Vars["labels"]
-	c.Assert(exists, Equals, true)
+	c.Check(dc.Config.Vars["labels"], DeepEquals, map[string]interface{}{
+		"ghpc_blueprint":  "simple",
+		"ghpc_deployment": "golden",
+	})
 
-	// Was the ghpc_blueprint label set correctly?
-	globalLabels := dc.Config.Vars["labels"].(map[string]interface{})
-	ghpcBlueprint, exists := globalLabels[blueprintLabel]
-	c.Assert(exists, Equals, true)
-	c.Assert(ghpcBlueprint, Equals, dc.Config.BlueprintName)
+	lime := dc.Config.DeploymentGroups[0]
+	// Labels are set and override role
+	coral := lime.Modules[0]
+	c.Check(coral.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
+	c.Check(coral.Settings["labels"], DeepEquals, []interface{}{
+		"((var.labels))",
+		map[string]interface{}{"magenta": "orchid", "ghpc_role": "maroon"},
+	})
+	// Labels are not set, infer role from module.source
+	khaki := lime.Modules[1]
+	c.Check(khaki.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
+	c.Check(khaki.Settings["labels"], DeepEquals, []interface{}{
+		"((var.labels))",
+		map[string]interface{}{"ghpc_role": "brown"},
+	})
+	// No labels input
+	silver := lime.Modules[2]
+	c.Check(silver.WrapSettingsWith["labels"], IsNil)
+	c.Check(silver.Settings["labels"], IsNil)
 
-	// Was the ghpc_deployment label set correctly?
-	ghpcDeployment, exists := globalLabels[deploymentLabel]
-	c.Assert(exists, Equals, true)
-	c.Assert(ghpcDeployment, Equals, "deployment_name")
-
-	// Was "labels" created for the module with no settings?
-	_, exists = dc.Config.DeploymentGroups[0].Modules[0].Settings["labels"]
-	c.Assert(exists, Equals, true)
-
-	moduleLabels := dc.Config.DeploymentGroups[0].Modules[0].
-		Settings["labels"].(map[string]interface{})
-
-	// Was the role created correctly?
-	ghpcRole, exists := moduleLabels[roleLabel]
-	c.Assert(exists, Equals, true)
-	c.Assert(ghpcRole, Equals, "other")
+	// Packer, include global include explicitly
+	// Keep overriden ghpc_deployment=navy
+	orange := dc.Config.DeploymentGroups[1].Modules[0]
+	c.Check(orange.WrapSettingsWith["labels"], IsNil)
+	c.Check(orange.Settings["labels"], DeepEquals, map[string]interface{}{
+		"ghpc_blueprint":  "simple",
+		"ghpc_deployment": "navy",
+		"ghpc_role":       "red",
+		"olive":           "teal",
+	})
 
 	// Test invalid labels
 	dc.Config.Vars["labels"] = "notAMap"
-	err = dc.combineLabels()
 	expectedErrorStr := fmt.Sprintf("%s: found %T",
 		errorMessages["globalLabelType"], dc.Config.Vars["labels"])
-	c.Assert(err, ErrorMatches, expectedErrorStr)
-
+	c.Check(dc.combineLabels(), ErrorMatches, expectedErrorStr)
 }
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {
@@ -498,40 +551,45 @@ func (s *MySuite) TestIdentifyModuleByReference(c *C) {
 		Name: "zero",
 	}
 
-	ref, err = identifyModuleByReference("module_id", dg)
-	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, dg.Name)
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Explicit, Equals, false)
+	fromMod := Module{
+		ID: "from_module_id",
+	}
 
-	ref, err = identifyModuleByReference("explicit_group_id.module_id", dg)
+	ref, err = identifyModuleByReference("to_module_id", dg, fromMod)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, "explicit_group_id")
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Explicit, Equals, true)
+	c.Assert(ref.toGroupID, Equals, dg.Name)
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
+	c.Assert(ref.toModuleID, Equals, "to_module_id")
+	c.Assert(ref.explicit, Equals, false)
 
-	ref, err = identifyModuleByReference(fmt.Sprintf("%s.module_id", dg.Name), dg)
+	ref, err = identifyModuleByReference("explicit_group_id.module_id", dg, fromMod)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, dg.Name)
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Explicit, Equals, true)
+	c.Assert(ref.toGroupID, Equals, "explicit_group_id")
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.explicit, Equals, true)
 
-	ref, err = identifyModuleByReference("explicit_group_id.module_id.output_name", dg)
+	ref, err = identifyModuleByReference(fmt.Sprintf("%s.module_id", dg.Name), dg, fromMod)
+	c.Assert(err, IsNil)
+	c.Assert(ref.toGroupID, Equals, dg.Name)
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.explicit, Equals, true)
+
+	ref, err = identifyModuleByReference("explicit_group_id.module_id.output_name", dg, fromMod)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
 
-	ref, err = identifyModuleByReference("module_id.", dg)
+	ref, err = identifyModuleByReference("module_id.", dg, fromMod)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
 
-	ref, err = identifyModuleByReference(".module_id", dg)
+	ref, err = identifyModuleByReference(".module_id", dg, fromMod)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
 }
 
 func (s *MySuite) TestValidateModuleReference(c *C) {
-	var err error
-
 	dg := []DeploymentGroup{
 		{
 			Name: "zero",
@@ -554,84 +612,79 @@ func (s *MySuite) TestValidateModuleReference(c *C) {
 		},
 	}
 
-	// strictly speaking this unit test now also tests this function
-	// we should expand the blueprint used in config_test.go to include
-	// multiple deployment groups
-	testModToGrp, err := checkModuleAndGroupNames(dg)
-	c.Assert(err, IsNil)
-	c.Assert(testModToGrp[dg[0].Modules[0].ID], Equals, 0)
-	c.Assert(testModToGrp[dg[0].Modules[1].ID], Equals, 0)
-	c.Assert(testModToGrp[dg[1].Modules[0].ID], Equals, 1)
+	bp := Blueprint{
+		DeploymentGroups: dg,
+	}
 
 	// An intragroup reference from group 0 to module B in 0 (good)
 	ref0ToB0 := modReference{
-		ID:          dg[0].Modules[1].ID,
-		ToGroupID:   dg[0].Name,
-		FromGroupID: dg[0].Name,
-		Explicit:    false,
+		toModuleID:   dg[0].Modules[1].ID,
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  dg[0].Name,
+		explicit:     false,
 	}
-	err = ref0ToB0.validate(dg, testModToGrp)
-	c.Assert(err, IsNil)
+	c.Assert(ref0ToB0.validate(bp), IsNil)
 
 	// An explicit intergroup reference from group 1 to module A in 0 (good)
 	xRef1ToA0 := modReference{
-		ID:          dg[0].Modules[0].ID,
-		ToGroupID:   dg[0].Name,
-		FromGroupID: dg[1].Name,
-		Explicit:    true,
+		toModuleID:   dg[0].Modules[0].ID,
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  dg[1].Name,
+		explicit:     true,
 	}
-	err = xRef1ToA0.validate(dg, testModToGrp)
-	c.Assert(err, IsNil)
+	c.Assert(xRef1ToA0.validate(bp), IsNil)
 
 	// An implicit intergroup reference from group 1 to module A in 0 (bad due to implicit)
 	iRef1ToA0 := modReference{
-		ID:          dg[0].Modules[0].ID,
-		ToGroupID:   dg[0].Name,
-		FromGroupID: dg[1].Name,
-		Explicit:    false,
+		toModuleID:   dg[0].Modules[0].ID,
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  dg[1].Name,
+		explicit:     false,
 	}
-	err = iRef1ToA0.validate(dg, testModToGrp)
-	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupImplicit"]))
+	c.Assert(iRef1ToA0.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupImplicit"]))
 
 	// An explicit intergroup reference from group 0 to module 1 in 1 (bad due to group ordering)
 	xRefA0To1 := modReference{
-		ID:          dg[1].Modules[0].ID,
-		ToGroupID:   dg[1].Name,
-		FromGroupID: dg[0].Name,
-		Explicit:    true,
+		toModuleID:   dg[1].Modules[0].ID,
+		fromModuleID: "",
+		toGroupID:    dg[1].Name,
+		fromGroupID:  dg[0].Name,
+		explicit:     true,
 	}
-	err = xRefA0To1.validate(dg, testModToGrp)
-	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupOrder"]))
+	c.Assert(xRefA0To1.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupOrder"]))
 
 	// An explicit intergroup reference from group 0 to B0 with a bad Group ID
 	badRef0ToB0 := modReference{
-		ID:          dg[0].Modules[1].ID,
-		ToGroupID:   dg[1].Name,
-		FromGroupID: dg[0].Name,
-		Explicit:    true,
+		toModuleID:   dg[0].Modules[1].ID,
+		fromModuleID: "",
+		toGroupID:    dg[1].Name,
+		fromGroupID:  dg[0].Name,
+		explicit:     true,
 	}
-	err = badRef0ToB0.validate(dg, testModToGrp)
-	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["referenceWrongGroup"]))
+	c.Assert(badRef0ToB0.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["referenceWrongGroup"]))
 
 	// A target module that doesn't exist (bad)
 	badTargetMod := modReference{
-		ID:          "bad-module",
-		ToGroupID:   dg[0].Name,
-		FromGroupID: dg[0].Name,
-		Explicit:    true,
+		toModuleID:   "bad-module",
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  dg[0].Name,
+		explicit:     true,
 	}
-	err = badTargetMod.validate(dg, testModToGrp)
-	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["varNotFound"]))
+	c.Assert(badTargetMod.validate(bp), ErrorMatches, "module bad-module was not found")
 
 	// A source group ID that doesn't exist (bad)
 	badSourceGroup := modReference{
-		ID:          dg[0].Modules[0].ID,
-		ToGroupID:   dg[0].Name,
-		FromGroupID: "bad-group",
-		Explicit:    true,
+		toModuleID:   dg[0].Modules[0].ID,
+		fromModuleID: "",
+		toGroupID:    dg[0].Name,
+		fromGroupID:  "bad-group",
+		explicit:     true,
 	}
-	err = badSourceGroup.validate(dg, testModToGrp)
-	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["groupNotFound"]))
+	c.Assert(badSourceGroup.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["groupNotFound"]))
 }
 
 func (s *MySuite) TestIdentifySimpleVariable(c *C) {
@@ -639,46 +692,53 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 	var err error
 
 	dg := DeploymentGroup{
-		Name: "calling_group_id",
+		Name: "from_group_id",
 	}
 
-	ref, err = identifySimpleVariable("group_id.module_id.output_name", dg)
-	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, "group_id")
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Name, Equals, "output_name")
-	c.Assert(ref.Explicit, Equals, true)
+	fromMod := Module{
+		ID: "from_module_id",
+	}
 
-	ref, err = identifySimpleVariable("module_id.output_name", dg)
+	ref, err = identifySimpleVariable("group_id.module_id.output_name", dg, fromMod)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, "calling_group_id")
-	c.Assert(ref.FromGroupID, Equals, "calling_group_id")
-	c.Assert(ref.ID, Equals, "module_id")
-	c.Assert(ref.Name, Equals, "output_name")
-	c.Assert(ref.Explicit, Equals, false)
+	c.Assert(ref.toGroupID, Equals, "group_id")
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
+	c.Assert(ref.name, Equals, "output_name")
+	c.Assert(ref.explicit, Equals, true)
 
-	ref, err = identifySimpleVariable("vars.variable_name", dg)
+	ref, err = identifySimpleVariable("module_id.output_name", dg, fromMod)
 	c.Assert(err, IsNil)
-	c.Assert(ref.ToGroupID, Equals, "deployment")
-	c.Assert(ref.FromGroupID, Equals, dg.Name)
-	c.Assert(ref.ID, Equals, "vars")
-	c.Assert(ref.Name, Equals, "variable_name")
-	c.Assert(ref.Explicit, Equals, false)
+	c.Assert(ref.toGroupID, Equals, dg.Name)
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.toModuleID, Equals, "module_id")
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
+	c.Assert(ref.name, Equals, "output_name")
+	c.Assert(ref.explicit, Equals, false)
 
-	ref, err = identifySimpleVariable("foo", dg)
+	ref, err = identifySimpleVariable("vars.variable_name", dg, fromMod)
+	c.Assert(err, IsNil)
+	c.Assert(ref.toGroupID, Equals, "deployment")
+	c.Assert(ref.fromGroupID, Equals, dg.Name)
+	c.Assert(ref.toModuleID, Equals, "vars")
+	c.Assert(ref.fromModuleID, Equals, fromMod.ID)
+	c.Assert(ref.name, Equals, "variable_name")
+	c.Assert(ref.explicit, Equals, false)
+
+	ref, err = identifySimpleVariable("foo", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.baz.qux", dg)
+	ref, err = identifySimpleVariable("foo.bar.baz.qux", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..bar", dg)
+	ref, err = identifySimpleVariable("foo..bar", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.", dg)
+	ref, err = identifySimpleVariable("foo.bar.", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..", dg)
+	ref, err = identifySimpleVariable("foo..", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable(".foo", dg)
+	ref, err = identifySimpleVariable(".foo", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("..foo", dg)
+	ref, err = identifySimpleVariable("..foo", dg, fromMod)
 	c.Assert(err, NotNil)
 }
 
@@ -713,56 +773,51 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	}
 
 	testVarContext0 := varContext{
-		blueprint:  testBlueprint,
+		dc: &DeploymentConfig{
+			Config: testBlueprint,
+		},
 		modIndex:   0,
 		groupIndex: 0,
 	}
 
 	testVarContext1 := varContext{
-		blueprint:  testBlueprint,
+		dc: &DeploymentConfig{
+			Config: testBlueprint,
+		},
 		modIndex:   0,
 		groupIndex: 1,
 	}
 
-	// strictly speaking this unit test now also tests this function
-	// we should expand the blueprint used in config_test.go to include
-	// multiple deployment groups
-	testModToGrp, err := checkModuleAndGroupNames(testBlueprint.DeploymentGroups)
-	c.Assert(err, IsNil)
-	c.Assert(testModToGrp[testModule0.ID], Equals, 0)
-	c.Assert(testModToGrp[testModule1.ID], Equals, 1)
-
 	// Invalid variable -> no .
 	testVarContext1.varString = "$(varsStringWithNoDot)"
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err := expandSimpleVariable(testVarContext1, false)
 	expectedErr := fmt.Sprintf("%s.*", errorMessages["invalidVar"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Invalid -> not found
 	testVarContext1.varString = "$(vars.doesntExists)"
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Success
-	testVarContext1.blueprint.Vars["globalExists"] = "existsValue"
+	testVarContext1.dc.Config.Vars["globalExists"] = "existsValue"
 	testVarContext1.varString = "$(vars.globalExists)"
-	got, err := expandSimpleVariable(testVarContext1, testModToGrp)
+	got, err := expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, IsNil)
 	c.Assert(got, Equals, "((var.globalExists))")
 
 	// Module variable: Invalid -> Module not found
 	testVarContext1.varString = "$(bad_mod.someVar)"
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
-	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
-	c.Assert(err, ErrorMatches, expectedErr)
+	_, err = expandSimpleVariable(testVarContext1, false)
+	c.Assert(err, ErrorMatches, "module bad_mod was not found")
 
 	// Module variable: Invalid -> Output not found
 	reader := modulereader.Factory("terraform")
 	reader.SetInfo(testModule1.Source, modulereader.ModuleInfo{})
 	fakeOutput := "doesntExist"
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s)", testModule1.ID, fakeOutput)
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
 		errorMessages["noOutput"], testModule1.ID, fakeOutput)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -776,7 +831,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s)", testModule1.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	got, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, IsNil)
 	expectedErr = fmt.Sprintf("((module.%s.%s))", testModule1.ID, existingOutput)
 	c.Assert(got, Equals, expectedErr)
@@ -790,7 +845,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[1].Name, testModule1.ID, existingOutput)
-	got, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	got, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, IsNil)
 	c.Assert(got, Equals, fmt.Sprintf("((module.%s.%s))", testModule1.ID, existingOutput))
 
@@ -804,7 +859,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule1.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, NotNil)
 
 	expectedErr = fmt.Sprintf("%s: %s.%s should be %s.%s",
@@ -821,7 +876,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule0.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s)", testModule0.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	expectedErr = fmt.Sprintf("%s: %s .*",
 		errorMessages["intergroupImplicit"], testModule0.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -829,15 +884,14 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Intergroup variable: failure because explicit group and module does not exist
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
 		testBlueprint.DeploymentGroups[0].Name, "bad_module", "bad_output")
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
-	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
-	c.Assert(err, ErrorMatches, expectedErr)
+	_, err = expandSimpleVariable(testVarContext1, false)
+	c.Assert(err, ErrorMatches, "module bad_module was not found")
 
 	// Intergroup variable: failure because explicit group and output does not exist
 	fakeOutput = "bad_output"
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s.%s)",
 		testBlueprint.DeploymentGroups[0].Name, testModule0.ID, fakeOutput)
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	expectedErr = fmt.Sprintf("%s: module %s did not have output %s",
 		errorMessages["noOutput"], testModule0.ID, fakeOutput)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -850,7 +904,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule1.Source, testModInfo)
 	testVarContext0.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[1].Name, testModule1.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext0, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext0, false)
 	expectedErr = fmt.Sprintf("%s: %s .*",
 		errorMessages["intergroupOrder"], testModule1.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
@@ -864,7 +918,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	reader.SetInfo(testModule0.Source, testModInfo)
 	testVarContext1.varString = fmt.Sprintf(
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule0.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext1, testModToGrp)
+	_, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s .*", errorMessages["varInAnotherGroup"], regexp.QuoteMeta(testVarContext1.varString)))
 }
 
@@ -872,8 +926,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 // presently it returns only an error
 func (s *MySuite) TestExpandVariable(c *C) {
 	testVarContext0 := varContext{}
-	testModToGrp := make(map[string]int)
-	str, err := expandVariable(testVarContext0, testModToGrp)
+	str, err := expandVariable(testVarContext0, false)
 	c.Assert(str, Equals, "")
 	c.Assert(err, NotNil)
 }

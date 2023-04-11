@@ -20,7 +20,7 @@
 #    └── htcondor (group 4)
 #       └── Cloud Batch
 #          └── slurm-gcp-v5-ubuntu2004
-
+#             └── chrome-remote-desktop
 
 timeout: 14400s  # 4hr
 steps:
@@ -107,3 +107,26 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v5-ubuntu.yml"
+
+## Test chrome-remote-desktop module
+- id: chrome-remote-desktop
+  waitFor:
+  - slurm-gcp-v5-ubuntu2004
+  - fetch_builder
+  - build_ghpc
+  name: >-
+    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/chrome-remote-desktop.yml"

@@ -54,11 +54,13 @@ variable "startup_script" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured"
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string)
+    mount_runner          = map(string)
   }))
   default = []
 }
@@ -108,9 +110,15 @@ variable "target_size" {
 }
 
 variable "max_size" {
-  description = "Maximum size of the HTCondor execute point pool; set to constrain cost run-away."
+  description = "Maximum size of the HTCondor execute point pool."
   type        = number
   default     = 100
+}
+
+variable "min_idle" {
+  description = "Minimum number of idle VMs in the HTCondor pool (if pool reaches var.max_size, this minimum is not guaranteed); set to ensure jobs beginning run more quickly."
+  type        = number
+  default     = 0
 }
 
 variable "metadata" {
@@ -137,4 +145,10 @@ variable "spot" {
   description = "Provision VMs using discounted Spot pricing, allowing for preemption"
   type        = bool
   default     = false
+}
+
+variable "disk_size_gb" {
+  description = "Boot disk size in GB"
+  type        = number
+  default     = 100
 }

@@ -87,8 +87,8 @@ variable "disable_login_public_ips" {
 }
 
 variable "labels" {
-  description = "Labels to add to login instances. List of key key, value pairs."
-  type        = any
+  description = "Labels to add to login instances. Key-value pairs."
+  type        = map(string)
   default     = {}
 }
 
@@ -107,11 +107,14 @@ variable "munge_key" {
 variable "network_storage" {
   description = " An array of network attached storage mounts to be configured on all instances."
   type = list(object({
-    server_ip    = string,
-    remote_mount = string,
-    local_mount  = string,
-    fs_type      = string,
-  mount_options = string }))
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string)
+    mount_runner          = map(string)
+  }))
   default = []
 }
 

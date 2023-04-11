@@ -24,6 +24,10 @@
       - xfce4-goodies
       state: present
       update_cache: true
+    register: apt_result
+    retries: 6
+    delay: 10
+    until: apt_result is success
 
   - name: Download and configure CRD
     ansible.builtin.get_url:
@@ -36,6 +40,10 @@
       deb: /tmp/chrome-remote-desktop_current_amd64.deb
     environment:
       DEBIAN_FRONTEND: noninteractive
+    register: apt_result
+    retries: 6
+    delay: 10
+    until: apt_result is success
 
   - name: Configure CRD to use Xfce by default
     ansible.builtin.copy:

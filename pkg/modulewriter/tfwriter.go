@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -29,7 +30,6 @@ import (
 	"github.com/zclconf/go-cty/cty"
 
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/sourcereader"
 )
 
 const (
@@ -171,7 +171,8 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 	hclBody := hclFile.Body()
 
 	// for each variable
-	for k, v := range vars {
+	for _, k := range orderKeys(vars) {
+		v, _ := vars[k]
 		// Create variable block
 		hclBlock := hclBody.AppendNewBlock("variable", []string{k})
 		blockBody := hclBlock.Body()
@@ -217,8 +218,8 @@ func writeMain(
 		tfBody := hclBody.AppendNewBlock("terraform", []string{}).Body()
 		backendBlock := tfBody.AppendNewBlock("backend", []string{tfBackend.Type})
 		backendBody := backendBlock.Body()
-		for setting, value := range tfConfig {
-			backendBody.SetAttributeValue(setting, value)
+		for _, setting := range orderKeys(tfConfig) {
+			backendBody.SetAttributeValue(setting, tfConfig[setting])
 		}
 		hclBody.AppendNewline()
 	}
@@ -237,49 +238,22 @@ func writeMain(
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
-		var moduleSource cty.Value
-		if sourcereader.IsGitPath(mod.Source) {
-			moduleSource = cty.StringVal(mod.Source)
-		} else {
-			moduleSource = cty.StringVal(fmt.Sprintf("./modules/%s", mod.ModuleName))
-		}
-
-		moduleBody.SetAttributeValue("source", moduleSource)
+		moduleBody.SetAttributeValue("source", cty.StringVal(mod.DeploymentSource))
 
 		// For each Setting
-		for setting, value := range ctySettings {
-			if setting == "labels" {
-				// Manually compose merge(var.labels, {mod.labels}) using tokens
-				mergeBytes := []byte("merge(var.labels, ")
-
-				labelsStr := flattenHCLLabelsMap(
-					string(hclwrite.TokensForValue(value).Bytes()))
-
-				mergeBytes = append(mergeBytes, []byte(labelsStr)...)
-				mergeBytes = append(mergeBytes, byte(')'))
-
-				mergeTok := simpleTokenFromString(string(mergeBytes))
-				labelsTokens := []*hclwrite.Token{&mergeTok}
-
-				moduleBody.SetAttributeRaw(setting, labelsTokens)
-				continue
-			}
-
+		for _, setting := range orderKeys(ctySettings) {
+			value, _ := ctySettings[setting]
 			if wrap, ok := mod.WrapSettingsWith[setting]; ok {
 				if len(wrap) != 2 {
 					return fmt.Errorf(
 						"invalid length of WrapSettingsWith for %s.%s, expected 2 got %d",
 						mod.ID, setting, len(wrap))
 				}
-				wrapBytes := []byte(wrap[0])
-				endBytes := []byte(wrap[1])
-
-				valueStr := hclwrite.TokensForValue(value).Bytes()
-				wrapBytes = append(wrapBytes, valueStr...)
-				wrapBytes = append(wrapBytes, endBytes...)
-				wrapToken := simpleTokenFromString(string(wrapBytes))
-				wrapTokens := []*hclwrite.Token{&wrapToken}
-				moduleBody.SetAttributeRaw(setting, wrapTokens)
+				toks, err := tokensForWrapped(wrap[0], value, wrap[1])
+				if err != nil {
+					return fmt.Errorf("failed to process %s.%s: %v", mod.ID, setting, err)
+				}
+				moduleBody.SetAttributeRaw(setting, toks)
 			} else {
 				// Add attributes
 				moduleBody.SetAttributeValue(setting, value)
@@ -291,17 +265,52 @@ func writeMain(
 	hclBytes := handleLiteralVariables(hclFile.Bytes())
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
+	hclBytes = hclwrite.Format(hclBytes)
 	if err := appendHCLToFile(mainPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
 	}
 	return nil
 }
 
-func flattenHCLLabelsMap(hclString string) string {
-	hclString = strings.ReplaceAll(hclString, "\"\n", "\",")
-	hclString = strings.ReplaceAll(hclString, "\n", "")
-	hclString = strings.Join(strings.Fields(hclString), " ")
-	return hclString
+func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, error) {
+	var toks hclwrite.Tokens
+	if !val.Type().IsListType() && !val.Type().IsTupleType() {
+		return toks, fmt.Errorf(
+			"invalid value for wrapped setting, expected sequence, got %#v", val.Type())
+	}
+	prefTok := simpleTokenFromString(pref)
+	toks = append(toks, &prefTok)
+
+	it, first := val.ElementIterator(), true
+	for it.Next() {
+		if !first {
+			toks = append(toks, &hclwrite.Token{
+				Type:  hclsyntax.TokenComma,
+				Bytes: []byte{','}})
+		}
+		_, el := it.Element()
+		toks = append(toks, tokensForValue(el)...)
+		first = false
+	}
+
+	sufTok := simpleTokenFromString(suf)
+	toks = append(toks, &sufTok)
+
+	return toks, nil
+}
+
+// Attempts to create an compact map/object,
+// returns input as is if length of compacted string exceeds 80.
+func maybeCompactMapToken(toks hclwrite.Tokens) hclwrite.Tokens {
+	s := string(toks.Bytes())
+	s = strings.ReplaceAll(s, "\"\n", "\",")
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 80 {
+		return toks
+	}
+	t := simpleTokenFromString(s)
+	return hclwrite.Tokens{&t}
 }
 
 func simpleTokenFromString(str string) hclwrite.Token {
@@ -468,4 +477,21 @@ func (w TFWriter) restoreState(deploymentDir string) error {
 
 	}
 	return nil
+}
+
+func orderKeys[T any](settings map[string]T) []string {
+	keys := make([]string, 0, len(settings))
+	for k := range settings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func tokensForValue(val cty.Value) hclwrite.Tokens {
+	toks := hclwrite.TokensForValue(val)
+	if val.Type().IsMapType() || val.Type().IsObjectType() {
+		toks = maybeCompactMapToken(toks)
+	}
+	return toks
 }

@@ -56,7 +56,8 @@ deployment_groups:
     - network1
     - htcondor_startup_central_manager
     settings:
-      name_prefix: central-manager
+      name_prefix: cm
+      add_deployment_name_before_prefix: true
       machine_type: c2-standard-4
       disable_public_ips: true
       service_account:
@@ -140,7 +141,8 @@ deployment_groups:
     - network1
     - htcondor_startup_access_point
     settings:
-      name_prefix: access-point
+      name_prefix: ap
+      add_deployment_name_before_prefix: true
       machine_type: c2-standard-4
       service_account:
         email: $(htcondor_configure.access_point_service_account)

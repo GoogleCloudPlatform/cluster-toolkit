@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 # Copyright 2018 Google Inc. All Rights Reserved.
@@ -20,6 +20,7 @@
 
 from absl import app
 from absl import flags
+from collections import OrderedDict
 from pprint import pprint
 from googleapiclient import discovery
 from oauth2client.client import GoogleCredentials
@@ -31,7 +32,7 @@ import time
 import htcondor
 import classad
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--p", required=True, help="Project id", type=str)
 parser.add_argument(
     "--z",
@@ -53,6 +54,12 @@ parser.add_argument(
 )
 parser.add_argument(
     "--g", required=True, help="Name of the managed instance group", type=str
+)
+parser.add_argument(
+    "--i",
+    default=0,
+    help="Minimum number of idle compute instances",
+    type=int
 )
 parser.add_argument(
     "--c", required=True, help="Maximum number of compute instances", type=int
@@ -87,26 +94,19 @@ class AutoScaler:
         else:
             self.instanceGroupManagers = self.service.instanceGroupManagers()
 
-    # Remove specified instance from MIG and decrease MIG size
-    def deleteFromMig(self, instance, zone):
-        instanceUrl = "https://www.googleapis.com/compute/v1/projects/" + self.project
-        instanceUrl += "/zones/" + zone
-        instanceUrl += "/instances/" + instance
-
-        instances_to_delete = {"instances": [instanceUrl]}
-
+    # Remove specified instances from MIG and decrease MIG size
+    def deleteFromMig(self, node_self_links):
         requestDelInstance = self.instanceGroupManagers.deleteInstances(
             project=self.project,
             **self.zoneargs,
             instanceGroupManager=self.instance_group_manager,
-            body=instances_to_delete,
+            body={ "instances": node_self_links },
         )
 
         # execute if not a dry-run
         if not self.dryrun:
             response = requestDelInstance.execute()
             if self.debug > 0:
-                print("Request to delete instance " + instance)
                 pprint(response)
             return response
         return "Dry Run"
@@ -185,6 +185,10 @@ class AutoScaler:
         # stewardship. A full list of Job ClassAd attributes can be found at
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html
         schedd = htcondor.Schedd()
+        # encourage the job queue to start a new negotiation cycle; there are
+        # internal unconfigurable rate limits so not guaranteed; this is not
+        # strictly required for success, but may reduce latency of autoscaling
+        schedd.reschedule()
         REQUEST_CPUS_ATTRIBUTE = "RequestCpus"
         REQUEST_GPUS_ATTRIBUTE = "RequestGpus"
         REQUEST_MEMORY_ATTRIBUTE = "RequestMemory"
@@ -206,49 +210,37 @@ class AutoScaler:
         spot_query = classad.ExprTree(f"RequireSpot == {self.is_spot}")
 
         # For purpose of scaling a Managed Instance Group, count only jobs that
-        # are running or idle ("potentially runnable"). Filter JobStatus by:
+        # are idle and likely participated in a negotiation cycle (there does
+        # not appear to be a single classad attribute for this).
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html#JobStatus
-        running_job_query = classad.ExprTree("JobStatus == 2")
-        idle_job_query = classad.ExprTree("JobStatus == 1")
-        running_job_ads = schedd.query(constraint=running_job_query.and_(spot_query),
-                                       projection=job_attributes)
+        LAST_CYCLE_ATTRIBUTE = "LastNegotiationCycleTime0"
+        coll = htcondor.Collector()
+        negotiator_ad = coll.query(htcondor.AdTypes.Negotiator, projection=[LAST_CYCLE_ATTRIBUTE])
+        if len(negotiator_ad) != 1:
+            print(f"There should be exactly 1 negotiator in the pool. There is {len(negotiator_ad)}")
+            exit()
+        last_negotiation_cycle_time = negotiator_ad[0].get(LAST_CYCLE_ATTRIBUTE)
+        if not last_negotiation_cycle_time:
+            print(f"The negotiator has not yet started a match cycle. Exiting auto-scaling.")
+            exit()
+
+        print(f"Last negotiation cycle occurred at: {last_negotiation_cycle_time}")
+        idle_job_query = classad.ExprTree(f"JobStatus == 1 && QDate < {last_negotiation_cycle_time}")
         idle_job_ads = schedd.query(constraint=idle_job_query.and_(spot_query),
                                     projection=job_attributes)
 
         total_idle_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in idle_job_ads)
-        total_running_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in running_job_ads)
-        queue = total_idle_request_cpus + total_running_request_cpus
-
-        print(f"Total CPUs requested by running jobs: {total_running_request_cpus}")
         print(f"Total CPUs requested by idle jobs: {total_idle_request_cpus}")
 
         if self.debug > 1:
             print("Information about the compute instance template")
             pprint(instanceTemplateInfo)
 
-        # Calculate number instances to satisfy current job queue CPU requests
-        if queue > 0:
-            self.size = int(math.ceil(float(queue) / float(self.cores_per_node)))
-            if self.debug > 0:
-                print(
-                    "Calculating size of MIG: ⌈"
-                    + str(queue)
-                    + "/"
-                    + str(self.cores_per_node)
-                    + "⌉ = "
-                    + str(self.size)
-                )
-        else:
-            self.size = 0
-
-        # If compute instance limit is specified, can not start more instances then specified in the limit
-        if self.compute_instance_limit > 0 and self.size > self.compute_instance_limit:
-            self.size = self.compute_instance_limit
-            print(
-                "MIG target size will be limited by " + str(self.compute_instance_limit)
-            )
-
-        print("New MIG target size: " + str(self.size))
+        # Calculate the minimum number of instances that, for fully packed
+        # execute points, could satisfy current job queue
+        min_hosts_for_idle_jobs = math.ceil(total_idle_request_cpus / self.cores_per_node)
+        if self.debug > 0:
+            print(f"Minimum hosts needed: {total_idle_request_cpus} / {self.cores_per_node} = {min_hosts_for_idle_jobs}")
 
         # Get current number of instances in the MIG
         requestGroupInfo = self.instanceGroupManagers.get(
@@ -257,65 +249,110 @@ class AutoScaler:
             instanceGroupManager=self.instance_group_manager,
         )
         responseGroupInfo = requestGroupInfo.execute()
-        currentTarget = int(responseGroupInfo["targetSize"])
-        print("Current MIG target size: " + str(currentTarget))
+        current_target = responseGroupInfo["targetSize"]
+        print(f"Current MIG target size: {current_target}")
+
+        being_born_states = ["CREATING", "RECREATING", "VERIFYING"]
+        being_born_filters = [ f"currentAction = \"{state}\"" for state in being_born_states ]
+        being_born_combined_filter = ' OR '.join(being_born_filters)
+        reqCreatingInstances = self.instanceGroupManagers.listManagedInstances(
+            project=self.project,
+            **self.zoneargs,
+            instanceGroupManager=self.instance_group_manager,
+            filter=being_born_combined_filter,
+            orderBy="creationTimestamp desc"
+        )
+        respCreatingInstances = reqCreatingInstances.execute()
+
+        # Find VMs that are idle (no dynamic slots created from partitionable
+        # slots) in the MIG handled by this autoscaler
+        filter_idle_vms = classad.ExprTree(f"PartitionableSlot && NumDynamicSlots==0")
+        filter_claimed_vms = classad.ExprTree(f"PartitionableSlot && NumDynamicSlots>0")
+        filter_mig = classad.ExprTree(f"regexp(\".*/{self.instance_group_manager}$\", CloudCreatedBy)")
+        # A full list of Machine (StartD) ClassAd attributes can be found at
+        # https://htcondor.readthedocs.io/en/latest/classad-attributes/machine-classad-attributes.html
+        idle_node_ads = coll.query(htcondor.AdTypes.Startd,
+            constraint=filter_idle_vms.and_(filter_mig),
+            projection=["Machine", "CloudZone"])
+
+        NODENAME_ATTRIBUTE = "UtsnameNodename"
+        claimed_node_ads = coll.query(htcondor.AdTypes.Startd,
+            constraint=filter_claimed_vms.and_(filter_mig),
+            projection=[NODENAME_ATTRIBUTE])
+        claimed_nodes = [ ad[NODENAME_ATTRIBUTE] for ad in claimed_node_ads]
+
+        # treat OrderedDict as a set by ignoring key values; this set will
+        # contain VMs we would consider deleting, in inverse order of
+        # their readiness to join pool (creating, unhealthy, healthy+idle)
+        idle_nodes = OrderedDict()
+        try:
+            creatingInstances = respCreatingInstances["managedInstances"]
+        except KeyError:
+            creatingInstances = []
+
+        # there is potential for nodes in MIG health check "VERIFYING" state
+        # to have already joined the pool and be running jobs
+        for instance in creatingInstances:
+            self_link = instance["instance"]
+            node_name = self_link.rsplit("/", 1)[-1]
+            if node_name not in claimed_nodes:
+                idle_nodes[self_link] = "creating"
+
+        for ad in idle_node_ads:
+            node = ad["Machine"].split(".")[0]
+            zone = ad["CloudZone"]
+            self_link = "https://www.googleapis.com/compute/v1/projects/" + \
+                self.project + "/zones/" + zone + "/instances/" + node
+            # there is potential for nodes in MIG health check "VERIFYING" state
+            # to have already joined the pool and be idle; delete them last
+            if self_link in idle_nodes:
+                idle_nodes.move_to_end(self_link)
+            idle_nodes[self_link] = "idle"
+        n_idle = len(idle_nodes)
+
+        print(f"There are {n_idle} VMs being created or idle in the pool")
+        if self.debug > 1:
+            print("Listing idle nodes:")
+            pprint(idle_nodes)
+
+        # always keep size tending toward the minimum idle VMs requested
+        new_target = current_target + self.compute_instance_min_idle - n_idle + min_hosts_for_idle_jobs
+        if new_target > self.compute_instance_limit:
+            self.size = self.compute_instance_limit
+            print(f"MIG target size will be limited by {self.compute_instance_limit}")
+        else:
+            self.size = new_target
+
+        print(f"New MIG target size: {self.size}")
 
         if self.debug > 1:
             print("MIG Information:")
             print(responseGroupInfo)
 
-        if self.size == 0 and currentTarget == 0:
-            print(
-                "No jobs in the queue and no compute instances running. Nothing to do"
-            )
+        if self.size == current_target:
+            if current_target == 0:
+                print("Queue is empty")
+            print("Running correct number of VMs to handle queue")
             exit()
 
-        if self.size == currentTarget:
-            print(
-                "Running correct number of compute nodes to handle number of jobs in the queue"
-            )
-            exit()
-
-        if self.size < currentTarget:
+        if self.size < current_target:
             print("Scaling down. Looking for nodes that can be shut down")
-
-            # Find VMs that are unused (no dynamic slots created from
-            # partitionable slots) and have been booted for at least 150 seconds
-            max_daemon_start_time = int(time.time()-150)
-            filter_idle_vms = classad.ExprTree("PartitionableSlot && NumDynamicSlots==0")
-            filter_uptime = classad.ExprTree(f"DaemonStartTime<{max_daemon_start_time}")
-
-            # A full list of Machine (StartD) ClassAd attributes can be found at
-            # https://htcondor.readthedocs.io/en/latest/classad-attributes/machine-classad-attributes.html
-            coll = htcondor.Collector()
-            idle_node_ads = coll.query(htcondor.AdTypes.Startd,
-                constraint=filter_idle_vms.and_(filter_uptime),
-                projection=["Machine", "CloudZone"])
 
             if self.debug > 1:
                 print("Compute node busy status:")
-                for node_ad in idle_node_ads:
-                    print(node_ad["Machine"])
+                for node in idle_nodes:
+                    print(node)
 
-            # Shut down nodes that are not busy
-            for node_ad in idle_node_ads:
-                try:
-                    node = node_ad["Machine"].split(".")[0]
-                    zone = node_ad["CloudZone"]
-                except KeyError:
-                    print(f"Skipping ad: {node_ad}")
-                    continue
-
-                print("Will shut down: " + node + " ...")
-                respDel = self.deleteFromMig(node, zone)
-                if self.debug > 1:
-                    print("Shut down request for compute node " + node)
-                    pprint(respDel)
+            # Shut down idle nodes up to our calculated limit
+            nodes_to_delete = list(idle_nodes.keys())[0:current_target-self.size]
+            for node in nodes_to_delete:
+                print(f"Attempting to delete: {node.rsplit('/',1)[-1]}")
+            respDel = self.deleteFromMig(nodes_to_delete)
 
             if self.debug > 1:
                 print("Scaling down complete")
 
-        if self.size > currentTarget:
+        if self.size > current_target:
             print(
                 "Scaling up. Need to increase number of instances to " + str(self.size)
             )
@@ -354,6 +391,8 @@ def main():
 
     # Default number of running instances that the managed instance group should maintain at any given time. This number will go up and down based on the load (number of jobs in the queue)
     scaler.size = 0
+
+    scaler.compute_instance_min_idle = args.i
 
     # Dry run: : 0, run scaling; 1, only provide info.
     scaler.dryrun = args.d > 0

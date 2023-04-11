@@ -36,7 +36,6 @@ deployment_groups:
     use: [network1]
     settings:
       local_mount: /home
-      network_id: $(network1.network_id)
 
 
   - id: projectsfs
@@ -78,4 +77,3 @@ deployment_groups:
     - network1
     settings:
       login_machine_type: n2-standard-4
-      network_storage: $(projectsfs.network_storage)

@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.6.0
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.6.2
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -213,8 +213,8 @@ variable "enable_smt" {
 }
 
 variable "labels" {
-  description = "Labels to add to partition compute instances. List of key key, value pairs."
-  type        = any
+  description = "Labels to add to partition compute instances. Key-value pairs."
+  type        = map(string)
   default     = {}
 }
 
@@ -269,7 +269,7 @@ variable "guest_accelerator" {
 
 variable "preemptible" {
   description = "Should use preemptibles to burst."
-  type        = string
+  type        = bool
   default     = false
 }
 

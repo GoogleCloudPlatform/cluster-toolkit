@@ -29,21 +29,24 @@ import (
 )
 
 const (
-	blueprintLabel        string = "ghpc_blueprint"
-	deploymentLabel       string = "ghpc_deployment"
-	roleLabel             string = "ghpc_role"
-	simpleVariableExp     string = `^\$\((.*)\)$`
-	deploymentVariableExp string = `^\$\(vars\.(.*)\)$`
+	blueprintLabel  string = "ghpc_blueprint"
+	deploymentLabel string = "ghpc_deployment"
+	roleLabel       string = "ghpc_role"
+)
+
+var (
 	// Checks if a variable exists only as a substring, ex:
 	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
 	// Doesn't match: "\$(vars.example)", "no variable in this string"
-	anyVariableExp string = `(^|[^\\])\$\((.*?)\)`
-	literalExp     string = `^\(\((.*)\)\)$`
+	anyVariableExp    *regexp.Regexp = regexp.MustCompile(`(^|[^\\])\$\((.*?)\)`)
+	literalExp        *regexp.Regexp = regexp.MustCompile(`^\(\((.*)\)\)$`)
+	simpleVariableExp *regexp.Regexp = regexp.MustCompile(`^\$\((.*)\)$`)
 	// the greediness and non-greediness of expression below is important
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
 	// consume only up to whitespace to get variable name
-	literalSplitExp string = `^\(\([[:space:]]*(.*?)\.(.*?)[[:space:]]*\)\)$`
+	literalSplitExp       *regexp.Regexp = regexp.MustCompile(`^\(\([[:space:]]*(.*?)\.(.*?)[[:space:]]*\)\)$`)
+	deploymentVariableExp *regexp.Regexp = regexp.MustCompile(`^\$\(vars\.(.*)\)$`)
 )
 
 // expand expands variables and strings in the yaml config. Used directly by
@@ -170,7 +173,7 @@ func (mod *Module) addListValue(settingName string, value string) error {
 	if !found {
 		mod.Settings[settingName] = []interface{}{}
 		mod.createWrapSettingsWith()
-		mod.WrapSettingsWith[settingName] = []string{"flatten(", ")"}
+		mod.WrapSettingsWith[settingName] = []string{"flatten([", "])"}
 	}
 	currentValue, ok := mod.Settings[settingName].([]interface{})
 	if ok {
@@ -210,7 +213,7 @@ func useModule(
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
 
-		// Explicitly ignore these settings (typically those in blueprint)
+		// explicitly ignore these settings (typically those in blueprint)
 		if slices.Contains(settingsToIgnore, settingName) {
 			continue
 		}
@@ -259,20 +262,20 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				// this will enable us to get structs about the module being
 				// used and search it for outputs that match inputs in the
 				// current module (the iterator)
-				modRef, err := identifyModuleByReference(toModID, *group)
+				modRef, err := identifyModuleByReference(toModID, *group, *fromMod)
 				if err != nil {
 					return err
 				}
 
 				// to get the module struct, we first needs its group
-				toGroup, err := dc.getGroupByID(modRef.ToGroupID)
+				toGroup, err := dc.getGroupByID(modRef.toGroupID)
 				if err != nil {
 					return err
 				}
 
 				// this module contains information about the target module that
 				// was specified by the user in the blueprint
-				toMod, err := toGroup.getModuleByID(modRef.ID)
+				toMod, err := toGroup.getModuleByID(modRef.toModuleID)
 				if err != nil {
 					return err
 				}
@@ -291,18 +294,12 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				// tested but it our unit test infrastructure does not support
 				// running dc.setModulesInfo() on our test configurations
 				toModInfo := dc.ModulesInfo[toGroup.Name][toMod.Source]
-				usedVars, err := useModule(fromMod, toMod, modRef.ToGroupID,
+				usedVars, err := useModule(fromMod, toMod, modRef.toGroupID,
 					fromModInfo.Inputs, toModInfo.Outputs, settingsInBlueprint)
 				if err != nil {
 					return err
 				}
-				connection := ModConnection{
-					toID:            toModID,
-					fromID:          fromMod.ID,
-					kind:            useConnection,
-					sharedVariables: usedVars,
-				}
-				dc.moduleConnections = append(dc.moduleConnections, connection)
+				dc.addModuleConnection(modRef, useConnection, usedVars)
 			}
 		}
 	}
@@ -377,51 +374,78 @@ func (dc *DeploymentConfig) combineLabels() error {
 	}
 
 	// Add both default labels if they don't already exist
-	if _, exists := globalLabels[blueprintLabel]; !exists {
-		globalLabels[blueprintLabel] = defaultLabels[blueprintLabel]
-	}
-	if _, exists := globalLabels[deploymentLabel]; !exists {
-		globalLabels[deploymentLabel] = defaultLabels[deploymentLabel]
-	}
+	mergeInLabels(globalLabels, defaultLabels)
 
 	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod, mod := range grp.Modules {
-			// Check if labels are set for this module
-			if !dc.moduleHasInput(grp.Name, mod.Source, labels) {
-				continue
+		for iMod := range grp.Modules {
+			if err := combineModuleLabels(dc, iGrp, iMod); err != nil {
+				return err
 			}
-
-			var modLabels map[string]interface{}
-			var ok bool
-			// If labels aren't already set, prefill them with globals
-			if _, exists := mod.Settings[labels]; !exists {
-				modLabels = make(map[string]interface{})
-			} else {
-				// Cast into map so we can index into them
-				modLabels, ok = mod.Settings[labels].(map[string]interface{})
-
-				if !ok {
-					return fmt.Errorf("%s, Module %s, labels type: %T",
-						errorMessages["settingsLabelType"], mod.ID, mod.Settings[labels])
-				}
-			}
-
-			// Add the role (e.g. compute, network, etc)
-			if _, exists := modLabels[roleLabel]; !exists {
-				modLabels[roleLabel] = getRole(mod.Source)
-			}
-			dc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings[labels] =
-				modLabels
 		}
 	}
 	dc.Config.Vars[labels] = globalLabels
 	return nil
 }
 
-func applyGlobalVarsInGroup(
-	deploymentGroup DeploymentGroup,
-	modInfo map[string]modulereader.ModuleInfo,
-	globalVars map[string]interface{}) error {
+func combineModuleLabels(dc *DeploymentConfig, iGrp int, iMod int) error {
+	grp := &dc.Config.DeploymentGroups[iGrp]
+	mod := &grp.Modules[iMod]
+	mod.createWrapSettingsWith()
+	labels := "labels"
+
+	// previously expanded blueprint, user written BPs do not use `WrapSettingsWith`
+	if _, ok := mod.WrapSettingsWith[labels]; ok {
+		return nil // Do nothing
+	}
+
+	// Check if labels are set for this module
+	if !dc.moduleHasInput(grp.Name, mod.Source, labels) {
+		return nil
+	}
+
+	var modLabels map[string]interface{}
+	var err error
+
+	if _, exists := mod.Settings[labels]; !exists {
+		modLabels = map[string]interface{}{}
+	} else {
+		// Cast into map so we can index into them
+		modLabels, err = toStringInterfaceMap(mod.Settings[labels])
+		if err != nil {
+			return fmt.Errorf("%s, Module %s, labels type: %T",
+				errorMessages["settingsLabelType"], mod.ID, mod.Settings[labels])
+		}
+	}
+	// Add the role (e.g. compute, network, etc)
+	if _, exists := modLabels[roleLabel]; !exists {
+		modLabels[roleLabel] = getRole(mod.Source)
+	}
+
+	if mod.Kind == "terraform" {
+		// Terraform module labels to be expressed as
+		// `merge(var.labels, { ghpc_role=..., **settings.labels })`
+		mod.WrapSettingsWith[labels] = []string{"merge(", ")"}
+		mod.Settings[labels] = []interface{}{"((var.labels))", modLabels}
+	} else if mod.Kind == "packer" {
+		mergeInLabels(modLabels, dc.Config.Vars[labels].(map[string]interface{}))
+		mod.Settings[labels] = modLabels
+	}
+	return nil
+}
+
+func mergeInLabels[V interface{}](to map[string]V, from map[string]V) {
+	for k, v := range from {
+		if _, exists := to[k]; !exists {
+			to[k] = v
+		}
+	}
+}
+
+func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
+	deploymentGroup := dc.Config.DeploymentGroups[groupIndex]
+	modInfo := dc.ModulesInfo[deploymentGroup.Name]
+	globalVars := dc.Config.Vars
+
 	for _, mod := range deploymentGroup.Modules {
 		for _, input := range modInfo[mod.Source].Inputs {
 
@@ -432,7 +456,16 @@ func applyGlobalVarsInGroup(
 
 			// If it's not set, is there a global we can use?
 			if _, ok := globalVars[input.Name]; ok {
+				ref := varReference{
+					name:         input.Name,
+					toModuleID:   "vars",
+					fromModuleID: mod.ID,
+					toGroupID:    "deployment",
+					fromGroupID:  deploymentGroup.Name,
+					explicit:     false,
+				}
 				mod.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
+				dc.addModuleConnection(ref, deploymentConnection, []string{ref.name})
 				continue
 			}
 
@@ -450,7 +483,7 @@ func applyGlobalVarsInGroup(
 
 func updateGlobalVarTypes(vars map[string]interface{}) error {
 	for k, v := range vars {
-		val, err := updateVariableType(v, varContext{}, make(map[string]int))
+		val, err := updateVariableType(v, varContext{}, false)
 		if err != nil {
 			return fmt.Errorf("error setting type for deployment variable %s: %v", k, err)
 		}
@@ -467,9 +500,8 @@ func (dc *DeploymentConfig) applyGlobalVariables() error {
 		return err
 	}
 
-	for _, grp := range dc.Config.DeploymentGroups {
-		err := applyGlobalVarsInGroup(
-			grp, dc.ModulesInfo[grp.Name], dc.Config.Vars)
+	for groupIndex := range dc.Config.DeploymentGroups {
+		err := dc.applyGlobalVarsInGroup(groupIndex)
 		if err != nil {
 			return err
 		}
@@ -481,23 +513,49 @@ type varContext struct {
 	varString  string
 	groupIndex int
 	modIndex   int
-	blueprint  Blueprint
+	dc         *DeploymentConfig
+}
+
+type reference interface {
+	validate(Blueprint) error
+	IsIntergroup() bool
+	String() string
+	FromModuleID() string
+	ToModuleID() string
 }
 
 /*
 A module reference is made by the use keyword and is subject to IGC constraints
 of references (ordering, explicitness). It has the following fields:
-  - ID: a module ID
-  - ToGroupID: the deployment group in which the module is *expected* to be found
-  - FromGroupID: the deployment group from which the reference is made
-  - Explicit: a boolean value indicating whether the user made a reference that
-    explicitly identified ToGroupID rather than inferring it using FromGroupID
+  - toModuleID: the target module ID
+  - fromModuleID: the source module ID
+  - toGroupID: the deployment group in which the module is *expected* to be found
+  - fromGroupID: the deployment group from which the reference is made
+  - explicit: a boolean value indicating whether the user made a reference that
+    explicitly identified toGroupID rather than inferring it using fromGroupID
 */
 type modReference struct {
-	ID          string
-	ToGroupID   string
-	FromGroupID string
-	Explicit    bool
+	toModuleID   string
+	fromModuleID string
+	toGroupID    string
+	fromGroupID  string
+	explicit     bool
+}
+
+func (ref modReference) String() string {
+	return ref.toGroupID + "." + ref.toModuleID
+}
+
+func (ref modReference) IsIntergroup() bool {
+	return ref.toGroupID != ref.fromGroupID
+}
+
+func (ref modReference) FromModuleID() string {
+	return ref.fromModuleID
+}
+
+func (ref modReference) ToModuleID() string {
+	return ref.toModuleID
 }
 
 /*
@@ -507,28 +565,29 @@ string into a modReference struct as defined above. An input string consists of
 1 or 2 fields or if either field is the empty string. This function does not
 ensure the existence of the module!
 */
-func identifyModuleByReference(yamlReference string, dg DeploymentGroup) (modReference, error) {
+func identifyModuleByReference(yamlReference string, dg DeploymentGroup, fromMod Module) (modReference, error) {
 	// struct defaults: empty strings and false booleans
 	var ref modReference
 	// intra-group references length 1 and inter-group references length 2
 	modComponents := strings.Split(yamlReference, ".")
 	switch len(modComponents) {
 	case 1:
-		ref.ID = modComponents[0]
-		ref.ToGroupID = dg.Name
-		ref.FromGroupID = dg.Name
+		ref.toModuleID = modComponents[0]
+		ref.toGroupID = dg.Name
+		ref.fromGroupID = dg.Name
 	case 2:
-		ref.ToGroupID = modComponents[0]
-		ref.ID = modComponents[1]
-		ref.FromGroupID = dg.Name
-		ref.Explicit = true
+		ref.toGroupID = modComponents[0]
+		ref.toModuleID = modComponents[1]
+		ref.fromGroupID = dg.Name
+		ref.explicit = true
 	}
+	ref.fromModuleID = fromMod.ID
 
 	// should consider more sophisticated definition of valid values here.
 	// for now check that no fields are the empty string; due to the default
 	// zero values for strings in the "ref" struct, this will also cover the
 	// case that modComponents has wrong # of fields
-	if ref.ID == "" || ref.ToGroupID == "" || ref.FromGroupID == "" {
+	if ref.toModuleID == "" || ref.toGroupID == "" || ref.fromGroupID == "" {
 		return ref, fmt.Errorf("%s: %s, expected %s",
 			errorMessages["invalidMod"], yamlReference, expectedModFormat)
 	}
@@ -538,19 +597,37 @@ func identifyModuleByReference(yamlReference string, dg DeploymentGroup) (modRef
 
 /*
 A variable reference has the following fields
-  - ID: a module ID or "vars" if referring to a deployment variable
   - Name: the name of the module output or deployment variable
-  - ToGroupID: the deployment group in which the module is *expected* to be found
-  - FromGroupID: the deployment group from which the reference is made
-  - Explicit: a boolean value indicating whether the user made a reference that
-    explicitly identified ToGroupID rather than inferring it using FromGroupID
+  - toModuleID: the target module ID or "vars" if referring to a deployment variable
+  - fromModuleID: the source module ID
+  - toGroupID: the deployment group in which the module is *expected* to be found
+  - fromGroupID: the deployment group from which the reference is made
+  - explicit: a boolean value indicating whether the user made a reference that
+    explicitly identified toGroupID rather than inferring it using fromGroupID
 */
 type varReference struct {
-	ID          string
-	ToGroupID   string
-	FromGroupID string
-	Name        string
-	Explicit    bool
+	name         string
+	toModuleID   string
+	fromModuleID string
+	toGroupID    string
+	fromGroupID  string
+	explicit     bool
+}
+
+func (ref varReference) String() string {
+	return ref.toGroupID + "." + ref.toModuleID + "." + ref.name
+}
+
+func (ref varReference) IsIntergroup() bool {
+	return ref.toGroupID != ref.fromGroupID
+}
+
+func (ref varReference) FromModuleID() string {
+	return ref.fromModuleID
+}
+
+func (ref varReference) ToModuleID() string {
+	return ref.toModuleID
 }
 
 /*
@@ -560,69 +637,69 @@ string into a varReference struct as defined above. An input string consists of
 2 or 3 fields, or if any field is the empty string. This function does not
 ensure the existence of the reference!
 */
-func identifySimpleVariable(yamlReference string, dg DeploymentGroup) (varReference, error) {
+func identifySimpleVariable(yamlReference string, dg DeploymentGroup, fromMod Module) (varReference, error) {
 	varComponents := strings.Split(yamlReference, ".")
 
 	// struct defaults: empty strings and false booleans
 	var ref varReference
-	ref.FromGroupID = dg.Name
+	ref.fromGroupID = dg.Name
+	ref.fromModuleID = fromMod.ID
 
 	// intra-group references length 2 and inter-group references length 3
 	switch len(varComponents) {
 	case 2:
-		ref.ID = varComponents[0]
-		ref.Name = varComponents[1]
+		ref.toModuleID = varComponents[0]
+		ref.name = varComponents[1]
 
-		if ref.ID == "vars" {
-			ref.ToGroupID = "deployment"
+		if ref.toModuleID == "vars" {
+			ref.toGroupID = "deployment"
 		} else {
-			ref.ToGroupID = dg.Name
+			ref.toGroupID = dg.Name
 		}
 	case 3:
-		ref.ToGroupID = varComponents[0]
-		ref.ID = varComponents[1]
-		ref.Name = varComponents[2]
-		ref.Explicit = true
+		ref.toGroupID = varComponents[0]
+		ref.toModuleID = varComponents[1]
+		ref.name = varComponents[2]
+		ref.explicit = true
 	}
 
 	// should consider more sophisticated definition of valid values here.
 	// for now check that source and name are not empty strings; due to the
 	// default zero values for strings in the "ref" struct, this will also
 	// cover the case that varComponents has wrong # of fields
-	if ref.FromGroupID == "" || ref.ToGroupID == "" || ref.ID == "" || ref.Name == "" {
+	if ref.fromGroupID == "" || ref.toGroupID == "" || ref.toModuleID == "" || ref.name == "" {
 		return varReference{}, fmt.Errorf("%s %s, expected format: %s",
 			errorMessages["invalidVar"], yamlReference, expectedVarFormat)
 	}
 	return ref, nil
 }
 
-func (ref *modReference) validate(depGroups []DeploymentGroup, modToGrp map[string]int) error {
-	callingModuleGroupIndex := slices.IndexFunc(depGroups, func(d DeploymentGroup) bool { return d.Name == ref.FromGroupID })
+func (ref modReference) validate(bp Blueprint) error {
+	callingModuleGroupIndex := slices.IndexFunc(bp.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == ref.fromGroupID })
 	if callingModuleGroupIndex == -1 {
-		return fmt.Errorf("%s: %s", errorMessages["groupNotFound"], ref.FromGroupID)
+		return fmt.Errorf("%s: %s", errorMessages["groupNotFound"], ref.fromGroupID)
 	}
 
-	targetModuleGroupIndex, ok := modToGrp[ref.ID]
-	if !ok {
-		return fmt.Errorf("%s: module %s was not found",
-			errorMessages["varNotFound"], ref.ID)
+	targetModuleGroupIndex, err := modToGrp(bp.DeploymentGroups, ref.toModuleID)
+	if err != nil {
+		return err
 	}
-	targetModuleGroupName := depGroups[targetModuleGroupIndex].Name
+	targetModuleGroupName := bp.DeploymentGroups[targetModuleGroupIndex].Name
 
 	// Ensure module is from the correct group
 	isInterGroupReference := callingModuleGroupIndex != targetModuleGroupIndex
 	isRefToLaterGroup := targetModuleGroupIndex > callingModuleGroupIndex
-	isCorrectToGroup := ref.ToGroupID == targetModuleGroupName
+	isCorrectToGroup := ref.toGroupID == targetModuleGroupName
 
 	if isInterGroupReference {
 		if isRefToLaterGroup {
 			return fmt.Errorf("%s: %s is in a later group",
-				errorMessages["intergroupOrder"], ref.ID)
+				errorMessages["intergroupOrder"], ref.toModuleID)
 		}
 
-		if !ref.Explicit {
+		if !ref.explicit {
 			return fmt.Errorf("%s: %s must specify a group ID before the module ID",
-				errorMessages["intergroupImplicit"], ref.ID)
+				errorMessages["intergroupImplicit"], ref.toModuleID)
 		}
 	}
 
@@ -631,7 +708,7 @@ func (ref *modReference) validate(depGroups []DeploymentGroup, modToGrp map[stri
 	// error after enforcing explicitness of intergroup references
 	if !isCorrectToGroup {
 		return fmt.Errorf("%s: %s.%s",
-			errorMessages["referenceWrongGroup"], ref.ToGroupID, ref.ID)
+			errorMessages["referenceWrongGroup"], ref.toGroupID, ref.toModuleID)
 	}
 
 	return nil
@@ -641,51 +718,50 @@ func (ref *modReference) validate(depGroups []DeploymentGroup, modToGrp map[stri
 // the reference must be to the same or earlier group.
 // ref.GroupID: this group must exist or be the value "deployment"
 // ref.ID: must be an existing module ID or "vars" (if groupID is "deployment")
-// ref.Name: must match a module output name or deployment variable name
-// ref.ExplicitInterGroup: intergroup references must explicitly identify the
+// ref.name: must match a module output name or deployment variable name
+// ref.explicitInterGroup: intergroup references must explicitly identify the
 // target group ID and intragroup references cannot have an incorrect explicit
 // group ID
-func (ref *varReference) validate(depGroups []DeploymentGroup, vars map[string]interface{}, modToGrp map[string]int) error {
+func (ref varReference) validate(bp Blueprint) error {
 	// simplest case to evaluate is a deployment variable's existence
-	if ref.ToGroupID == "deployment" {
-		if ref.ID == "vars" {
-			if _, ok := vars[ref.Name]; !ok {
+	if ref.toGroupID == "deployment" {
+		if ref.toModuleID == "vars" {
+			if _, ok := bp.Vars[ref.name]; !ok {
 				return fmt.Errorf("%s: %s is not a deployment variable",
-					errorMessages["varNotFound"], ref.Name)
+					errorMessages["varNotFound"], ref.name)
 			}
 			return nil
 		}
-		return fmt.Errorf("%s: %s", errorMessages["invalidDeploymentRef"], ref.ID)
+		return fmt.Errorf("%s: %s", errorMessages["invalidDeploymentRef"], ref)
 	}
 
-	targetModuleGroupIndex, ok := modToGrp[ref.ID]
-	if !ok {
-		return fmt.Errorf("%s: module %s was not found",
-			errorMessages["varNotFound"], ref.ID)
+	targetModuleGroupIndex, err := modToGrp(bp.DeploymentGroups, ref.toModuleID)
+	if err != nil {
+		return err
 	}
-	targetModuleGroup := depGroups[targetModuleGroupIndex]
+	targetModuleGroup := bp.DeploymentGroups[targetModuleGroupIndex]
 
-	callingModuleGroupIndex := slices.IndexFunc(depGroups, func(d DeploymentGroup) bool { return d.Name == ref.FromGroupID })
+	callingModuleGroupIndex := slices.IndexFunc(bp.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == ref.fromGroupID })
 	if callingModuleGroupIndex == -1 {
-		return fmt.Errorf("%s: %s", errorMessages["groupNotFound"], ref.FromGroupID)
+		return fmt.Errorf("%s: %s", errorMessages["groupNotFound"], ref.fromGroupID)
 	}
 
 	// at this point, we know the target module exists. now record whether it
 	// is intergroup and whether it comes in a (disallowed) later group
 	isInterGroupReference := targetModuleGroupIndex != callingModuleGroupIndex
 	isRefToLaterGroup := targetModuleGroupIndex > callingModuleGroupIndex
-	isCorrectToGroup := ref.ToGroupID == targetModuleGroup.Name
+	isCorrectToGroup := ref.toGroupID == targetModuleGroup.Name
 
 	// intergroup references must be explicit about group and refer to an earlier group;
 	if isInterGroupReference {
 		if isRefToLaterGroup {
 			return fmt.Errorf("%s: %s is in the later group %s",
-				errorMessages["intergroupOrder"], ref.ID, ref.ToGroupID)
+				errorMessages["intergroupOrder"], ref.toModuleID, ref.toGroupID)
 		}
 
-		if !ref.Explicit {
+		if !ref.explicit {
 			return fmt.Errorf("%s: %s must specify the group ID %s before the module ID",
-				errorMessages["intergroupImplicit"], ref.ID, ref.ToGroupID)
+				errorMessages["intergroupImplicit"], ref.toModuleID, ref.toGroupID)
 		}
 	}
 
@@ -694,15 +770,15 @@ func (ref *varReference) validate(depGroups []DeploymentGroup, vars map[string]i
 	// error after enforcing explicitness of intergroup references
 	if !isCorrectToGroup {
 		return fmt.Errorf("%s: %s.%s should be %s.%s",
-			errorMessages["referenceWrongGroup"], ref.ToGroupID, ref.ID, targetModuleGroup.Name, ref.ID)
+			errorMessages["referenceWrongGroup"], ref.toGroupID, ref.toModuleID, targetModuleGroup.Name, ref.toModuleID)
 	}
 
 	// at this point, we have a valid intragroup or intergroup references to a
 	// module. must now determine whether the output value actually exists in
 	// the module.
-	refModIndex := slices.IndexFunc(targetModuleGroup.Modules, func(m Module) bool { return m.ID == ref.ID })
+	refModIndex := slices.IndexFunc(targetModuleGroup.Modules, func(m Module) bool { return m.ID == ref.toModuleID })
 	if refModIndex == -1 {
-		log.Fatalf("Could not find module %s", ref.ID)
+		log.Fatalf("Could not find module %s", ref.toModuleID)
 	}
 	refMod := targetModuleGroup.Modules[refModIndex]
 	modInfo, err := modulereader.GetModuleInfo(refMod.Source, refMod.Kind)
@@ -711,77 +787,97 @@ func (ref *varReference) validate(depGroups []DeploymentGroup, vars map[string]i
 			"failed to get info for module at %s while expanding variables: %e",
 			refMod.Source, err)
 	}
-	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.VarInfo) bool { return o.Name == ref.Name })
+	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.VarInfo) bool { return o.Name == ref.name })
 	if !found {
 		return fmt.Errorf("%s: module %s did not have output %s",
-			errorMessages["noOutput"], refMod.ID, ref.Name)
+			errorMessages["noOutput"], refMod.ID, ref.name)
 	}
 
 	return nil
 }
 
 // Needs DeploymentGroups, variable string, current group,
-func expandSimpleVariable(
-	context varContext,
-	modToGrp map[string]int) (string, error) {
-
+func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, error) {
 	// Get variable contents
-	re := regexp.MustCompile(simpleVariableExp)
-	contents := re.FindStringSubmatch(context.varString)
+	contents := simpleVariableExp.FindStringSubmatch(context.varString)
 	if len(contents) != 2 { // Should always be (match, contents) here
 		err := fmt.Errorf("%s %s, failed to extract contents: %v",
 			errorMessages["invalidVar"], context.varString, contents)
 		return "", err
 	}
 
-	callingGroup := context.blueprint.DeploymentGroups[context.groupIndex]
+	callingGroup := context.dc.Config.DeploymentGroups[context.groupIndex]
 	refStr := contents[1]
 
-	varRef, err := identifySimpleVariable(refStr, callingGroup)
+	varRef, err := identifySimpleVariable(refStr, callingGroup, callingGroup.Modules[context.modIndex])
 	if err != nil {
 		return "", err
 	}
 
-	err = varRef.validate(context.blueprint.DeploymentGroups, context.blueprint.Vars, modToGrp)
-	if err != nil {
+	if err := varRef.validate(context.dc.Config); err != nil {
 		return "", err
 	}
 
 	var expandedVariable string
-	switch varRef.ToGroupID {
+	switch varRef.toGroupID {
 	case "deployment":
 		// deployment variables
-		expandedVariable = fmt.Sprintf("((var.%s))", varRef.Name)
-	case varRef.FromGroupID:
-		// intragroup reference can make direct reference to module output
-		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.ID, varRef.Name)
-	default:
-		// intergroup reference; being by finding the target module in blueprint
-		toGrpIdx := modToGrp[varRef.ToGroupID]
-		toModIdx := slices.IndexFunc(context.blueprint.DeploymentGroups[toGrpIdx].Modules, func(m Module) bool { return m.ID == varRef.ID })
-		if toModIdx == -1 {
-			return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], varRef.ID)
+		expandedVariable = fmt.Sprintf("((var.%s))", varRef.name)
+		if trackModuleGraph {
+			context.dc.addModuleConnection(varRef, deploymentConnection, []string{varRef.name})
 		}
-		toMod := &context.blueprint.DeploymentGroups[toGrpIdx].Modules[toModIdx]
+	case varRef.fromGroupID:
+		// intragroup reference can make direct reference to module output
+		expandedVariable = fmt.Sprintf("((module.%s.%s))", varRef.toModuleID, varRef.name)
+		if trackModuleGraph {
+			var found bool
+			for _, conn := range context.dc.moduleConnections[varRef.fromModuleID] {
+				if conn.kind != useConnection {
+					continue
+				}
+				if slices.Contains(conn.sharedVariables, varRef.name) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				context.dc.addModuleConnection(varRef, explicitConnection, []string{varRef.name})
+			}
+		}
+	default:
+
+		// intergroup reference; begin by finding the target module in blueprint
+		toGrpIdx := slices.IndexFunc(
+			context.dc.Config.DeploymentGroups,
+			func(g DeploymentGroup) bool { return g.Name == varRef.toGroupID })
+
+		if toGrpIdx == -1 {
+			return "", fmt.Errorf("invalid group reference: %s", varRef.toGroupID)
+		}
+		toGrp := context.dc.Config.DeploymentGroups[toGrpIdx]
+		toModIdx := slices.IndexFunc(toGrp.Modules, func(m Module) bool { return m.ID == varRef.toModuleID })
+		if toModIdx == -1 {
+			return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], varRef.toModuleID)
+		}
+		toMod := toGrp.Modules[toModIdx]
 
 		// ensure that the target module outputs the value in the root module
 		// state and not just internally within its deployment group
-		if !slices.Contains(toMod.Outputs, varRef.Name) {
-			toMod.Outputs = append(toMod.Outputs, varRef.Name)
+		if !slices.Contains(toMod.Outputs, varRef.name) {
+			toMod.Outputs = append(toMod.Outputs, varRef.name)
 		}
 
-		// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.Name, ref.ID)
+		// TODO: expandedVariable = fmt.Sprintf("((var.%s_%s))", ref.name, ref.ID)
 		return "", fmt.Errorf("%s: %s is an intergroup reference",
 			errorMessages["varInAnotherGroup"], context.varString)
 	}
 	return expandedVariable, nil
 }
 
-func expandVariable(
-	context varContext,
-	modToGrp map[string]int) (string, error) {
-	re := regexp.MustCompile(anyVariableExp)
-	matchall := re.FindAllString(context.varString, -1)
+// expandVariable will eventually implement string interpolation; right now it
+// only generates an error message guiding the user to proper escape syntax
+func expandVariable(context varContext, trackModuleGraph bool) (string, error) {
+	matchall := anyVariableExp.FindAllString(context.varString, -1)
 	errHint := ""
 	for _, element := range matchall {
 		// the regex match will include the first matching character
@@ -799,43 +895,28 @@ func expandVariable(
 
 // isDeploymentVariable checks if the entire string is just a single deployment variable
 func isDeploymentVariable(str string) bool {
-	matched, err := regexp.MatchString(deploymentVariableExp, str)
-	if err != nil {
-		log.Fatalf("isDeploymentVariable(%s): %v", str, err)
-	}
-	return matched
+	return deploymentVariableExp.MatchString(str)
 }
 
 // isSimpleVariable checks if the entire string is just a single variable
 func isSimpleVariable(str string) bool {
-	matched, err := regexp.MatchString(simpleVariableExp, str)
-	if err != nil {
-		log.Fatalf("isSimpleVariable(%s): %v", str, err)
-	}
-	return matched
+	return simpleVariableExp.MatchString(str)
 }
 
 // hasVariable checks to see if any variable exists in a string
 func hasVariable(str string) bool {
-	matched, err := regexp.MatchString(anyVariableExp, str)
-	if err != nil {
-		log.Fatalf("hasVariable(%s): %v", str, err)
-	}
-	return matched
+	return anyVariableExp.MatchString(str)
 }
 
-func handleVariable(
-	prim interface{},
-	context varContext,
-	modToGrp map[string]int) (interface{}, error) {
+func handleVariable(prim interface{}, context varContext, trackModuleGraph bool) (interface{}, error) {
 	switch val := prim.(type) {
 	case string:
 		context.varString = val
 		if hasVariable(val) {
 			if isSimpleVariable(val) {
-				return expandSimpleVariable(context, modToGrp)
+				return expandSimpleVariable(context, trackModuleGraph)
 			}
-			return expandVariable(context, modToGrp)
+			return expandVariable(context, trackModuleGraph)
 		}
 		return val, nil
 	default:
@@ -843,18 +924,14 @@ func handleVariable(
 	}
 }
 
-func updateVariableType(
-	value interface{},
-	context varContext,
-	modToGrp map[string]int) (interface{}, error) {
+func updateVariableType(value interface{}, context varContext, trackModuleGraph bool) (interface{}, error) {
 	var err error
 	switch typedValue := value.(type) {
 	case []interface{}:
 		interfaceSlice := value.([]interface{})
 		{
 			for i := 0; i < len(interfaceSlice); i++ {
-				interfaceSlice[i], err = updateVariableType(
-					interfaceSlice[i], context, modToGrp)
+				interfaceSlice[i], err = updateVariableType(interfaceSlice[i], context, trackModuleGraph)
 				if err != nil {
 					return interfaceSlice, err
 				}
@@ -864,7 +941,7 @@ func updateVariableType(
 	case map[string]interface{}:
 		retMap := map[string]interface{}{}
 		for k, v := range typedValue {
-			retMap[k], err = updateVariableType(v, context, modToGrp)
+			retMap[k], err = updateVariableType(v, context, trackModuleGraph)
 			if err != nil {
 				return retMap, err
 			}
@@ -873,23 +950,20 @@ func updateVariableType(
 	case map[interface{}]interface{}:
 		retMap := map[string]interface{}{}
 		for k, v := range typedValue {
-			retMap[k.(string)], err = updateVariableType(v, context, modToGrp)
+			retMap[k.(string)], err = updateVariableType(v, context, trackModuleGraph)
 			if err != nil {
 				return retMap, err
 			}
 		}
 		return retMap, err
 	default:
-		return handleVariable(value, context, modToGrp)
+		return handleVariable(value, context, trackModuleGraph)
 	}
 }
 
-func updateVariables(
-	context varContext,
-	interfaceMap map[string]interface{},
-	modToGrp map[string]int) error {
+func updateVariables(context varContext, interfaceMap map[string]interface{}, trackModuleGraph bool) error {
 	for key, value := range interfaceMap {
-		updatedVal, err := updateVariableType(value, context, modToGrp)
+		updatedVal, err := updateVariableType(value, context, trackModuleGraph)
 		if err != nil {
 			return err
 		}
@@ -902,7 +976,7 @@ func updateVariables(
 // expands all variables
 func (dc *DeploymentConfig) expandVariables() error {
 	for _, validator := range dc.Config.Validators {
-		err := updateVariables(varContext{blueprint: dc.Config}, validator.Inputs, make(map[string]int))
+		err := updateVariables(varContext{dc: dc}, validator.Inputs, false)
 		if err != nil {
 			return err
 
@@ -914,12 +988,9 @@ func (dc *DeploymentConfig) expandVariables() error {
 			context := varContext{
 				groupIndex: iGrp,
 				modIndex:   iMod,
-				blueprint:  dc.Config,
+				dc:         dc,
 			}
-			err := updateVariables(
-				context,
-				mod.Settings,
-				dc.ModuleToGroup)
+			err := updateVariables(context, mod.Settings, true)
 			if err != nil {
 				return err
 			}
@@ -927,7 +998,7 @@ func (dc *DeploymentConfig) expandVariables() error {
 			// ensure that variable references to projects in required APIs are expanded
 			for projectID, requiredAPIs := range mod.RequiredApis {
 				if isDeploymentVariable(projectID) {
-					s, err := handleVariable(projectID, varContext{blueprint: dc.Config}, make(map[string]int))
+					s, err := handleVariable(projectID, context, false)
 					if err != nil {
 						return err
 					}
@@ -940,20 +1011,24 @@ func (dc *DeploymentConfig) expandVariables() error {
 	return nil
 }
 
-// this function adds default validators to the blueprint if none have been
-// defined. default validators are only added for global variables that exist
+// this function adds default validators to the blueprint.
+// default validators are only added for global variables that exist
 func (dc *DeploymentConfig) addDefaultValidators() error {
-	if dc.Config.Validators != nil {
-		return nil
+	if dc.Config.Validators == nil {
+		dc.Config.Validators = []validatorConfig{}
 	}
-	dc.Config.Validators = []validatorConfig{}
 
 	_, projectIDExists := dc.Config.Vars["project_id"]
 	_, regionExists := dc.Config.Vars["region"]
 	_, zoneExists := dc.Config.Vars["zone"]
 
-	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+	defaults := []validatorConfig{}
+	defaults = append(defaults, validatorConfig{
 		Validator: testModuleNotUsedName.String(),
+		Inputs:    map[string]interface{}{},
+	})
+	defaults = append(defaults, validatorConfig{
+		Validator: testDeploymentVariableNotUsedName.String(),
 		Inputs:    map[string]interface{}{},
 	})
 
@@ -961,53 +1036,60 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	// only succeed if credentials can access the project. If the project ID
 	// validator fails, all remaining validators are not executed.
 	if projectIDExists {
-		v := validatorConfig{
+		defaults = append(defaults, validatorConfig{
 			Validator: testProjectExistsName.String(),
 			Inputs: map[string]interface{}{
 				"project_id": "$(vars.project_id)",
 			},
-		}
-		dc.Config.Validators = append(dc.Config.Validators, v)
+		})
 	}
 
 	// it is safe to run this validator even if vars.project_id is undefined;
 	// it will likely fail but will do so helpfully to the user
-	dc.Config.Validators = append(dc.Config.Validators, validatorConfig{
+	defaults = append(defaults, validatorConfig{
 		Validator: "test_apis_enabled",
 		Inputs:    map[string]interface{}{},
 	})
 
 	if projectIDExists && regionExists {
-		v := validatorConfig{
+		defaults = append(defaults, validatorConfig{
 			Validator: testRegionExistsName.String(),
 			Inputs: map[string]interface{}{
 				"project_id": "$(vars.project_id)",
 				"region":     "$(vars.region)",
 			},
-		}
-		dc.Config.Validators = append(dc.Config.Validators, v)
-
+		})
 	}
 
 	if projectIDExists && zoneExists {
-		v := validatorConfig{
+		defaults = append(defaults, validatorConfig{
 			Validator: testZoneExistsName.String(),
 			Inputs: map[string]interface{}{
 				"project_id": "$(vars.project_id)",
 				"zone":       "$(vars.zone)",
 			},
-		}
-		dc.Config.Validators = append(dc.Config.Validators, v)
+		})
 	}
 
 	if projectIDExists && regionExists && zoneExists {
-		v := validatorConfig{
+		defaults = append(defaults, validatorConfig{
 			Validator: testZoneInRegionName.String(),
 			Inputs: map[string]interface{}{
 				"project_id": "$(vars.project_id)",
 				"region":     "$(vars.region)",
 				"zone":       "$(vars.zone)",
 			},
+		})
+	}
+
+	used := map[string]bool{}
+	for _, v := range dc.Config.Validators {
+		used[v.Validator] = true
+	}
+
+	for _, v := range defaults {
+		if used[v.Validator] {
+			continue
 		}
 		dc.Config.Validators = append(dc.Config.Validators, v)
 	}

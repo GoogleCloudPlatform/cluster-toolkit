@@ -45,7 +45,27 @@
         [Service]
         User=condor
         Type=oneshot
-        ExecStart={{ python }} {{ autoscaler }} --p {{ project_id }} --r {{ region }} --z {{ zone }} --mz --g %i --c {{ max_size }}
+        ExecStart={{ python }} {{ autoscaler }} --p $PROJECT_ID --r $REGION --z $ZONE --mz --g %i --c $MAX_SIZE --i $MIN_IDLE
+    notify:
+    - Reload SystemD
+  - name: Create SystemD override directory for autoscaler configuration
+    ansible.builtin.file:
+      path: "{{ systemd_override_path }}/htcondor-autoscaler@{{ mig_id }}.service.d"
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+  - name: Create autoscaler configuration
+    ansible.builtin.copy:
+      dest: "{{ systemd_override_path }}/htcondor-autoscaler@{{ mig_id }}.service.d/miglimit.conf"
+      mode: 0644
+      content: |
+        [Service]
+        Environment=PROJECT_ID={{ project_id }}
+        Environment=REGION={{ region }}
+        Environment=ZONE={{ zone }}
+        Environment=MAX_SIZE={{ max_size }}
+        Environment=MIN_IDLE={{ min_idle }}
     notify:
     - Reload SystemD
   - name: Create SystemD timer for HTCondor autoscaler

@@ -25,11 +25,12 @@ class GrafanaProxyView(LoginRequiredMixin, ProxyView):
     def get_proxy_request_headers(self, request):
         headers = super().get_proxy_request_headers(request)
         headers["X-WEBAUTH-USER"] = request.user.email
+        headers["Host"] = request.get_host()
         return headers
 
     def dispatch(self, request, path):
         response = super().dispatch(request, path)
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response["X-Frame-Options"] = "SAMEORIGIN"
         return response
 
 class GrafanaView(LoginRequiredMixin, base.TemplateView):

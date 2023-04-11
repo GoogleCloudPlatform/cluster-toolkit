@@ -39,6 +39,8 @@ const computeDisabledMsg = "the Compute Engine API must be enabled in project %s
 const serviceDisabledMsg = "the Service Usage API must be enabled in project %s to validate that all APIs needed by the blueprint are enabled"
 const unusedModuleMsg = "module %s uses module %s, but matching setting and outputs were not found. This may be because the value is set explicitly or set by a prior used module"
 const unusedModuleError = "One or more used modules could not have their settings and outputs linked."
+const unusedDeploymentVariableMsg = "the deployment variable \"%s\" was not used in this blueprint"
+const unusedDeploymentVariableError = "one or more deployment variables was not used by any modules"
 
 func handleClientError(e error) error {
 	if strings.Contains(e.Error(), "could not find default credentials") {
@@ -49,19 +51,31 @@ func handleClientError(e error) error {
 	return e
 }
 
+// TestDeploymentVariablesNotUsed errors if there are any unused deployment
+// variables and prints any to the output for the user
+func TestDeploymentVariablesNotUsed(unusedVariables []string) error {
+	for _, v := range unusedVariables {
+		log.Printf(unusedDeploymentVariableMsg, v)
+	}
+
+	if len(unusedVariables) > 0 {
+		return fmt.Errorf(unusedDeploymentVariableError)
+	}
+
+	return nil
+}
+
 // TestModuleNotUsed validates that all modules referenced in the "use" field
 // of the blueprint are actually used, i.e. the outputs and settings are
 // connected.
 func TestModuleNotUsed(unusedModules map[string][]string) error {
-	foundUnused := false
 	for mod, unusedMods := range unusedModules {
-		foundUnused = true
 		for _, unusedMod := range unusedMods {
 			log.Printf(unusedModuleMsg, mod, unusedMod)
 		}
 	}
 
-	if foundUnused {
+	if len(unusedModules) > 0 {
 		return fmt.Errorf(unusedModuleError)
 	}
 

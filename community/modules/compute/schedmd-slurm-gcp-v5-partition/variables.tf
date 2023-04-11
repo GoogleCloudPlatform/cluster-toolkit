@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.6.0
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.6.2
 
 variable "deployment_name" {
   description = "Name of the deployment."
@@ -97,9 +97,7 @@ EOD
   default     = "ANY_SINGLE_ZONE"
   validation {
     condition     = contains(["ANY", "ANY_SINGLE_ZONE", "BALANCED"], var.zone_target_shape)
-    error_message = <<-EOD
-      Allowed values for zone_target_shape are "ANY", "ANY_SINGLE_ZONE", or "BALANCED".
-    EOD
+    error_message = "Allowed values for zone_target_shape are \"ANY\", \"ANY_SINGLE_ZONE\", or \"BALANCED\"."
   }
 }
 
@@ -191,11 +189,13 @@ variable "enable_reconfigure" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on the partition compute nodes."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string)
+    mount_runner          = map(string)
   }))
   default = []
 }

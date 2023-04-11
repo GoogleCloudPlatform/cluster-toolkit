@@ -192,7 +192,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nInitalising Django environments...\n"
   mkdir /opt/gcluster/run
   pushd website
-  python manage.py makemigrations
+  python manage.py makemigrations ghpcfe
   python manage.py migrate
   printf "\nCreating django super user..."
   DJANGO_SUPERUSER_PASSWORD=$DJANGO_PASSWORD python manage.py createsuperuser --username $DJANGO_USERNAME --email $DJANGO_EMAIL --noinput

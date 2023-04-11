@@ -498,20 +498,6 @@ func (s *MySuite) TestWriteMain(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
-	// Test with labels setting
-	testModule.Settings["labels"] = map[string]interface{}{
-		"ghpc_role":    "testModule",
-		"custom_label": "",
-	}
-	err = writeMain(testModules, testBackend, testMainDir)
-	c.Assert(err, IsNil)
-	exists, err = stringExistsInFile("custom_label", mainFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
-	exists, err = stringExistsInFile("var.labels", mainFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
-
 	// Test with Backend
 	testBackend.Type = "gcs"
 	testBackend.Configuration = map[string]interface{}{
@@ -688,8 +674,9 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	}
 
 	testPackerModule := config.Module{
-		Kind: "packer",
-		ID:   "testPackerModule",
+		Kind:             "packer",
+		ID:               "testPackerModule",
+		DeploymentSource: "testPackerModule",
 	}
 	testDeploymentGroup := config.DeploymentGroup{
 		Name:    "packerGroup",
