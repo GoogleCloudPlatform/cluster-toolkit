@@ -105,6 +105,26 @@ HELP1
         (or Service Account Admin)
       - Project IAM Admin
 
+  Usage: ./deploy.sh [--config <path-to-config-file>] [--help]
+
+      --config <path-to-config-file> : path to YAML configuration file containing deployment variables.
+                                       If not specified, script will prompt user for input.
+      --help                         : display this help message
+
+  If --config option is used, all variables required for deployment must be specified in the YAML
+  file. The script will not prompt for any input in this case.
+
+  Example YAML file:
+  deployment_name: MyDeployment
+  project_id: my-project-id
+  zone: us-west1-a
+  subnet_name: my-subnet (optional)
+  dns_hostname: myhostname.com (optiona)
+  ip_address: 1.2.3.4 (optional)
+  django_superuser_username: sysadm
+  django_superuser_password: Passw0rd!
+  django_superuser_email: sysadmin@example.com
+
 HELP2
 }
 
@@ -855,6 +875,64 @@ SERVICEACC
 	echo ""
 }
 
+deploy_from_config() {
+	# Read the YAML file as an associative array
+	declare -A yaml_array
+	while IFS='=: ' read -r key value; do
+		[[ -n $key ]] && yaml_array[$key]=$value
+	done < <(grep -vE '^#|^\s*$' "$config_file" | sed -n '/:/p')
+
+	local required_params=("deployment_name" "project_id" "zone" "django_superuser_username" "django_superuser_password" "django_superuser_email")
+	# Check that all required parameters are present in the YAML file
+	for param in "${required_params[@]}"; do
+		if [[ -z ${yaml_array[$param]} ]]; then
+			echo "Required parameter '$param' not found in YAML file"
+			exit 1
+		fi
+	done
+
+	# Set variables based on keys in the array
+	deployment_name=${yaml_array[deployment_name]}
+	project_id=${yaml_array[project_id]}
+	zone=${yaml_array[zone]}
+	subnet_name=${yaml_array[subnet_name]}
+	dns_hostname=${yaml_array[dns_hostname]}
+	ip_address=${yaml_array[ip_address]}
+	django_superuser_username=${yaml_array[django_superuser_username]}
+	django_superuser_password=${yaml_array[django_superuser_password]}
+	django_superuser_email=${yaml_array[django_superuser_email]}
+
+	# Print deployment summary
+	echo ""
+	echo "***  Deployment summary:  ***"
+	echo ""
+	echo "    Deployment name:  ${deployment_name}"
+	echo "    GCP project ID:   ${project_id}"
+	echo "    GCP zone:         ${zone}"
+	if [[ ${subnet_name} ]]; then
+		echo "    GCP subnet:       ${subnet_name}"
+	else
+		echo "    GCP subnet:       Automatically created"
+	fi
+	if [[ ${dns_hostname} ]]; then
+		echo "    DNS hostname:     ${dns_hostname}"
+	else
+		echo "    DNS hostname:     None - will use standard HTTP"
+	fi
+	if [[ ${ip_address} ]]; then
+		echo "    IP address:       ${ip_address}"
+	else
+		echo "    IP address:       Automatically created"
+	fi
+	echo ""
+	echo "    Admin username:   ${django_superuser_username}"
+	echo "    Admin email:      ${django_superuser_email}"
+	echo ""
+
+	deployment_mode="tarball"
+	deploy
+}
+
 ################################################################################
 #
 
@@ -877,8 +955,25 @@ while [[ ${#} -gt 0 ]]; do
 		help
 		exit 0
 		;;
+	--config)
+		if [[ ${2} == "" ]]; then
+			echo "Error: --config option requires an argument - path to deployment config. "
+			exit 1
+		fi
+		if [[ ! -e ${2} ]]; then
+			echo "Error: ${2} is not a valid Unix path"
+			exit 1
+		fi
+		echo "Deploying OFE from the config file."
+		config_file=${2}
+		deploy_from_config
+		exit 0
+		;;
+	*)
+		echo "Error: Unknown option: ${1}"
+		exit 1
+		;;
 	esac
-	shift
 done
 
 setup
