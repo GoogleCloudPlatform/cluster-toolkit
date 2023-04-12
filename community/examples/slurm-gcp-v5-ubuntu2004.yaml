@@ -19,8 +19,8 @@ blueprint_name: slurm-gcp-v5-ubuntu2004
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: slurm-gcp-v5
-  region: us-central1
-  zone: us-central1-c
+  region: us-west4
+  zone: us-west4-c
   instance_image:
     # Please refer to the following link for the latest images:
     # https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
