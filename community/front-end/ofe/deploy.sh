@@ -547,13 +547,16 @@ TFVARS
 		# TODO - upload terraform files to the FE server, so that they can be recovered if ever
 		#        needed
 
-		case $(ask "    Proceed to deploy? [y/N] ") in
-		[Yy]*) ;;
-		*)
-			echo "Exiting."
-			exit 0
-			;;
-		esac
+		if [ -z "$config_file" ]; then
+			# Ask for user confirmation before deploying
+			case $(ask "    Proceed to deploy? [y/N] ") in
+			[Yy]*) ;;
+			*)
+				echo "Exiting."
+				exit 0
+				;;
+			esac
+		fi
 
 		# -- Start the deployment using Terraform.
 		#    Note: Extract $? for terraform using PIPESTATUS, as $? below is
