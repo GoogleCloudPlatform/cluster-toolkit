@@ -27,7 +27,7 @@ locals {
 }
 
 module "pbs_install" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install?ref=be2673b"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install?ref=6c6b9e0a"
 
   pbs_data_service_user   = var.pbs_data_service_user
   pbs_exec                = var.pbs_exec
@@ -40,7 +40,7 @@ module "pbs_install" {
 }
 
 module "pbs_qmgr" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-qmgr?ref=be2673b"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-qmgr?ref=6c6b9e0a"
 
   client_host_count         = var.client_host_count
   client_hostname_prefix    = var.client_hostname_prefix
@@ -65,7 +65,7 @@ module "server_startup_script" {
 }
 
 module "pbs_server" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=264e99c"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=6c6b9e0a"
 
   instance_count = var.instance_count
   spot           = var.spot

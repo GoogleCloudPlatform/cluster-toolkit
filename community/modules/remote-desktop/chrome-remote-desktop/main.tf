@@ -67,7 +67,7 @@ module "client_startup_script" {
 }
 
 module "instances" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=264e99c"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=6c6b9e0a"
 
   instance_count = var.instance_count
   name_prefix    = var.name_prefix
