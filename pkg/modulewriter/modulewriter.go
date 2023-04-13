@@ -18,6 +18,7 @@
 package modulewriter
 
 import (
+	"bytes"
 	"crypto/md5"
 	"embed"
 	"encoding/hex"
@@ -30,12 +31,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	hiddenGhpcDirName          = ".ghpc"
 	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
+	deploymentMetadataName     = "deployment_metadata.yaml"
 )
 
 // ModuleWriter interface for writing modules to a deployment
@@ -48,6 +52,16 @@ type ModuleWriter interface {
 		deployDir string,
 	) error
 	restoreState(deploymentDir string) error
+}
+
+type deploymentMetadata struct {
+	DeploymentMetadata []groupMetadata `yaml:"deployment_metadata"`
+}
+
+type groupMetadata struct {
+	Name    string
+	Inputs  []string
+	Outputs []string
 }
 
 var kinds = map[string]ModuleWriter{
@@ -90,6 +104,9 @@ func WriteDeployment(blueprint *config.Blueprint, graph map[string][]config.ModC
 		return err
 	}
 
+	metadata := deploymentMetadata{
+		DeploymentMetadata: []groupMetadata{},
+	}
 	for _, grp := range blueprint.DeploymentGroups {
 		writer, ok := kinds[grp.Kind]
 		if !ok {
@@ -98,11 +115,20 @@ func WriteDeployment(blueprint *config.Blueprint, graph map[string][]config.ModC
 		}
 
 		filteredVars := filterVarsByGraph(blueprint.Vars, grp, graph)
+		metadata.DeploymentMetadata = append(metadata.DeploymentMetadata, groupMetadata{
+			Name:    grp.Name,
+			Inputs:  orderKeys(filteredVars),
+			Outputs: getAllOutputs(grp),
+		})
 
 		err := writer.writeDeploymentGroup(grp, filteredVars, deploymentDir)
 		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
+	}
+
+	if err := writeDeploymentMetadata(deploymentDir, metadata); err != nil {
+		return err
 	}
 
 	for _, writer := range kinds {
@@ -366,4 +392,42 @@ func filterVarsByGraph(vars map[string]interface{}, group config.DeploymentGroup
 		}
 	}
 	return filteredVars
+}
+
+func writeDeploymentMetadata(depDir string, metadata deploymentMetadata) error {
+	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
+		return fmt.Errorf(
+			"While trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
+	}
+
+	metadataFile := filepath.Join(ghpcDir, deploymentMetadataName)
+	f, err := os.OpenFile(metadataFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	err = encoder.Encode(metadata)
+	encoder.Close()
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		log.Fatal(err)
+	}
+
+	return nil
+}
+
+func getAllOutputs(group config.DeploymentGroup) []string {
+	outputs := make(map[string]bool)
+	for _, mod := range group.Modules {
+		for _, output := range mod.Outputs {
+			outputs[config.AutomaticOutputName(output.Name, mod.ID)] = true
+		}
+	}
+	return orderKeys(outputs)
 }
