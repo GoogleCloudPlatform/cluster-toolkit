@@ -292,11 +292,26 @@ type ModConnection struct {
 	sharedVariables []string
 }
 
+// IsDeploymentKind returns true if connection is to a deployment variable
+func (c ModConnection) IsDeploymentKind() bool {
+	return c.kind == deploymentConnection
+}
+
+// IsUseKind returns true if connection is module-to-module via use keyword
+func (c ModConnection) IsUseKind() bool {
+	return c.kind == useConnection
+}
+
+// GetSharedVariables returns variables used in the connection (can be empty!)
+func (c ModConnection) GetSharedVariables() []string {
+	return c.sharedVariables
+}
+
 // Returns true if a connection does not functionally link the outputs and
 // inputs of the modules. This can happen when a module is connected with "use"
 // but none of the outputs of fromID match the inputs of toID.
-func (mc *ModConnection) isUnused() bool {
-	return mc.kind == useConnection && len(mc.sharedVariables) == 0
+func (c *ModConnection) isUnused() bool {
+	return c.kind == useConnection && len(c.sharedVariables) == 0
 }
 
 // DeploymentConfig is a container for the imported YAML data and supporting data for
@@ -341,6 +356,12 @@ func (dc *DeploymentConfig) addModuleConnection(ref reference, kind connectionKi
 	fromModID := ref.FromModuleID()
 	dc.moduleConnections[fromModID] = append(dc.moduleConnections[fromModID], conn)
 	return nil
+}
+
+// GetModuleConnections returns the graph of connections between modules and
+// from modules to deployment variables
+func (dc *DeploymentConfig) GetModuleConnections() map[string][]ModConnection {
+	return dc.moduleConnections
 }
 
 // listUnusedModules provides a mapping of modules to modules that are in the

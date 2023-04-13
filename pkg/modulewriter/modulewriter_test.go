@@ -154,7 +154,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	realDepDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string))
 
 	// writes a full deployment w/ actual resource groups
-	WriteDeployment(&testBlueprint, testDir, false /* overwrite */)
+	WriteDeployment(&testBlueprint, nil, testDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
 	files, _ := ioutil.ReadDir(realDepDir)
@@ -224,13 +224,13 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 
 	testBlueprint := getBlueprintForTest()
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
-	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	err := WriteDeployment(&testBlueprint, nil, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the deployment fails
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(&testBlueprint, nil, testDir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
 	// Overwriting the deployment succeeds with flag
-	err = WriteDeployment(&testBlueprint, testDir, true /* overwriteFlag */)
+	err = WriteDeployment(&testBlueprint, nil, testDir, true /* overwriteFlag */)
 	c.Check(err, IsNil)
 }
 
@@ -297,19 +297,19 @@ func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
 	var e *config.InputValueError
 
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": 100}
-	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	err := WriteDeployment(&testBlueprint, nil, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": false}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(&testBlueprint, nil, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
 	testBlueprint.Vars = map[string]interface{}{"deployment_name": ""}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(&testBlueprint, nil, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
 	testBlueprint.Vars = map[string]interface{}{}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(&testBlueprint, nil, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 }
 
