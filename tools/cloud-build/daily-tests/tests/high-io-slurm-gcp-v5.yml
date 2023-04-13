@@ -17,7 +17,7 @@
 test_name: high-io-slurm-gcp-v5
 deployment_name: "io-v5-{{ build }}"
 slurm_cluster_name: "iov5{{ build[0:6] }}"
-zone: us-central1-c
+zone: us-west4-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/slurm-gcp-v5-high-io.yaml"
 network: "{{ deployment_name }}-net"
