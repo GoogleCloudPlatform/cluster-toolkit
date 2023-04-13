@@ -101,7 +101,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	if err := deploymentConfig.ExpandConfig(); err != nil {
 		log.Fatal(err)
 	}
-	if err := modulewriter.WriteDeployment(&deploymentConfig.Config, outputDir, overwriteDeployment); err != nil {
+	if err := modulewriter.WriteDeployment(&deploymentConfig.Config, deploymentConfig.GetModuleConnections(), outputDir, overwriteDeployment); err != nil {
 		var target *modulewriter.OverwriteDeniedError
 		if errors.As(err, &target) {
 			fmt.Printf("\n%s\n", err.Error())

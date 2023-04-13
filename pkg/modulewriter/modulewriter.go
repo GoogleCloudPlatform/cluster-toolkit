@@ -70,7 +70,7 @@ func factory(kind string) ModuleWriter {
 
 // WriteDeployment writes a deployment directory using modules defined the
 // environment blueprint.
-func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFlag bool) error {
+func WriteDeployment(blueprint *config.Blueprint, graph map[string][]config.ModConnection, outputDir string, overwriteFlag bool) error {
 	deploymentName, err := blueprint.DeploymentName()
 	if err != nil {
 		return err
@@ -97,7 +97,9 @@ func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFla
 				"Invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
 		}
 
-		err := writer.writeDeploymentGroup(grp, blueprint.Vars, deploymentDir)
+		filteredVars := filterVarsByGraph(blueprint.Vars, grp, graph)
+
+		err := writer.writeDeploymentGroup(grp, filteredVars, deploymentDir)
 		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
@@ -337,4 +339,31 @@ func prepDepDir(depDir string, overwrite bool) error {
 		}
 	}
 	return nil
+}
+
+func filterVarsByGraph(vars map[string]interface{}, group config.DeploymentGroup, graph map[string][]config.ModConnection) map[string]interface{} {
+	if graph == nil {
+		return vars
+	}
+
+	groupInputs := make(map[string]bool)
+	for _, mod := range group.Modules {
+		if connections, ok := graph[mod.ID]; ok {
+			for _, conn := range connections {
+				if conn.IsDeploymentKind() {
+					for _, v := range conn.GetSharedVariables() {
+						groupInputs[v] = true
+					}
+				}
+			}
+		}
+	}
+
+	filteredVars := make(map[string]interface{})
+	for key, val := range vars {
+		if _, ok := groupInputs[key]; ok {
+			filteredVars[key] = val
+		}
+	}
+	return filteredVars
 }
