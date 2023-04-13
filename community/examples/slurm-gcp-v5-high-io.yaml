@@ -19,8 +19,8 @@ blueprint_name: hpc-cluster-high-io-v5
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: high-io-slurm-gcp-v5
-  region: us-central1
-  zone: us-central1-c
+  region: us-west4
+  zone: us-west4-c
   # By default, public IPs are set in the login and controller to allow easier
   # SSH access. To turn this behavior off, set this to true.
   disable_public_ips: false
