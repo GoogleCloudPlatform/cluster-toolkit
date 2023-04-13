@@ -68,16 +68,16 @@ func SimpleVarToReference(s string) (Reference, error) {
 // VariableTranslator is an interface that provides function
 // to translate "simple" variable (`$(...)`) into HCL format
 type VariableTranslator interface {
-	TranlateSimpleToHcl(s string) (string, error)
+	TranslateSimpleToHcl(s string) (string, error)
 }
 
-// DoNotAllowVariablesTranslator does not do any translation, it raises an error if any varaibles are met
+// DoNotAllowVariablesTranslator does not do any translation, it raises an error if any variables are met
 type DoNotAllowVariablesTranslator struct {
 	VariableTranslator
 }
 
-// TranlateSimpleToHcl raises an error
-func (t DoNotAllowVariablesTranslator) TranlateSimpleToHcl(s string) (string, error) {
+// TranslateSimpleToHcl raises an error
+func (t DoNotAllowVariablesTranslator) TranslateSimpleToHcl(s string) (string, error) {
 	return "", fmt.Errorf("variables aren't allowed here, got %#v", s)
 }
 
@@ -88,7 +88,7 @@ func TransformSimpleToHcl(val cty.Value, translator VariableTranslator) (cty.Val
 		if v.Type() != cty.String || !hasVariable(v.AsString()) {
 			return v, nil
 		}
-		h, err := translator.TranlateSimpleToHcl(v.AsString())
+		h, err := translator.TranslateSimpleToHcl(v.AsString())
 		return cty.StringVal(h), err
 	})
 }
