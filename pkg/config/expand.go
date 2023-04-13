@@ -641,6 +641,11 @@ func (ref varReference) ToModuleID() string {
 	return ref.toModuleID
 }
 
+// AutomaticOutputName generates unique deployment-group-level output names
+func AutomaticOutputName(outputName string, moduleID string) string {
+	return outputName + "_" + moduleID
+}
+
 func (ref varReference) HclString() string {
 	switch ref.toGroupID {
 	case globalGroupID:
@@ -651,7 +656,7 @@ func (ref varReference) HclString() string {
 		return "module." + ref.toModuleID + "." + ref.name
 	default:
 		// intergroup references to automatically created input variables
-		return "var." + ref.name + "_" + ref.toModuleID
+		return "var." + AutomaticOutputName(ref.name, ref.toModuleID)
 	}
 }
 
