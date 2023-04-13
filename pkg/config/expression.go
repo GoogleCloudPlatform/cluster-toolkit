@@ -61,7 +61,7 @@ func SimpleVarToReference(s string) (Reference, error) {
 			Name:   components[2]}, nil
 	default:
 		return Reference{}, fmt.Errorf(
-			"expected either 2 or 3 compontens, got %d in %#v", len(components), s)
+			"expected either 2 or 3 components, got %d in %#v", len(components), s)
 	}
 }
 
