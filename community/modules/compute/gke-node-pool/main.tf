@@ -33,15 +33,15 @@ resource "google_container_node_pool" "node_pool" {
     location_policy      = "ANY"
   }
 
+  management {
+    auto_repair  = true
+    auto_upgrade = var.auto_upgrade
+  }
+
   upgrade_settings {
     strategy        = "SURGE"
     max_surge       = 0
-    max_unavailable = 20
-  }
-
-  management {
-    auto_repair  = true
-    auto_upgrade = true
+    max_unavailable = 1
   }
 
   dynamic "placement_policy" {
