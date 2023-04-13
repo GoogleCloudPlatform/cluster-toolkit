@@ -14,6 +14,11 @@
   * limitations under the License.
   */
 
+output "cluster_id" {
+  description = "an identifier for the resource with format projects/<project_id>/locations/<region>/clusters/<name>."
+  value       = google_container_cluster.gke_cluster.id
+}
+
 locals {
   private_endpoint_message = trimspace(
     <<-EOT

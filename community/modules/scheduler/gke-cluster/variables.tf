@@ -76,7 +76,7 @@ variable "enable_private_ipv6_google_access" {
 variable "release_channel" {
   description = "The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR` and `STABLE`."
   type        = string
-  default     = "REGULAR"
+  default     = "UNSPECIFIED"
 }
 
 variable "maintenance_start_time" {
@@ -131,7 +131,7 @@ variable "system_node_pool_taints" {
   description = "Taints to be applied to the system node pool."
   type = list(object({
     key    = string
-    value  = bool
+    value  = any
     effect = string
   }))
   default = [{
