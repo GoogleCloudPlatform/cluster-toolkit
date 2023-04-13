@@ -21,7 +21,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
@@ -62,11 +61,6 @@ func createBaseFile(path string) error {
 	defer baseFile.Close()
 	_, err = baseFile.WriteString(license)
 	return err
-}
-
-func handleLiteralVariables(hclBytes []byte) []byte {
-	re := regexp.MustCompile(`"\(\((.*?)\)\)"`)
-	return re.ReplaceAll(hclBytes, []byte(`${1}`))
 }
 
 func appendHCLToFile(path string, hclBytes []byte) error {
@@ -119,7 +113,7 @@ func writeOutputs(
 	}
 
 	// Write file
-	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes := hclFile.Bytes()
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
 	err := appendHCLToFile(outputsPath, hclBytes)
@@ -147,8 +141,7 @@ func getHclType(t cty.Type) string {
 }
 
 func getTypeTokens(v cty.Value) hclwrite.Tokens {
-	tok := simpleTokenFromString(getHclType(v.Type()))
-	return hclwrite.Tokens{&tok}
+	return simpleTokens(getHclType(v.Type()))
 }
 
 func writeVariables(vars map[string]cty.Value, dst string) error {
@@ -243,14 +236,13 @@ func writeMain(
 				}
 				moduleBody.SetAttributeRaw(setting, toks)
 			} else {
-				moduleBody.SetAttributeRaw(setting, tokensForValue(value))
+				moduleBody.SetAttributeRaw(setting, TokensForValue(value))
 			}
 		}
 		hclBody.AppendNewline()
 	}
 	// Write file
 	hclBytes := hclFile.Bytes()
-	hclBytes = handleLiteralVariables(hclBytes)
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
 	hclBytes = hclwrite.Format(hclBytes)
@@ -266,8 +258,7 @@ func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, 
 		return toks, fmt.Errorf(
 			"invalid value for wrapped setting, expected sequence, got %#v", val.Type())
 	}
-	prefTok := simpleTokenFromString(pref)
-	toks = append(toks, &prefTok)
+	toks = append(toks, simpleTokens(pref)...)
 
 	it, first := val.ElementIterator(), true
 	for it.Next() {
@@ -277,22 +268,15 @@ func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, 
 				Bytes: []byte{','}})
 		}
 		_, el := it.Element()
-		toks = append(toks, tokensForValue(el)...)
+		toks = append(toks, TokensForValue(el)...)
 		first = false
 	}
-
-	sufTok := simpleTokenFromString(suf)
-	toks = append(toks, &sufTok)
+	toks = append(toks, simpleTokens(suf)...)
 
 	return toks, nil
 }
 
-func simpleTokenFromString(str string) hclwrite.Token {
-	return hclwrite.Token{
-		Type:  hclsyntax.TokenIdent,
-		Bytes: []byte(str),
-	}
-}
+var simpleTokens = hclwrite.TokensForIdentifier
 
 func writeProviders(vars map[string]cty.Value, dst string) error {
 	// Create file
@@ -309,25 +293,19 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 		provBlock := hclBody.AppendNewBlock("provider", []string{prov})
 		provBody := provBlock.Body()
 		if _, ok := vars["project_id"]; ok {
-			pidToken := simpleTokenFromString("var.project_id")
-			pidTokens := []*hclwrite.Token{&pidToken}
-			provBody.SetAttributeRaw("project", pidTokens)
+			provBody.SetAttributeRaw("project", simpleTokens("var.project_id"))
 		}
 		if _, ok := vars["zone"]; ok {
-			zoneToken := simpleTokenFromString("var.zone")
-			zoneTokens := []*hclwrite.Token{&zoneToken}
-			provBody.SetAttributeRaw("zone", zoneTokens)
+			provBody.SetAttributeRaw("zone", simpleTokens("var.zone"))
 		}
 		if _, ok := vars["region"]; ok {
-			regToken := simpleTokenFromString("var.region")
-			regTokens := []*hclwrite.Token{&regToken}
-			provBody.SetAttributeRaw("region", regTokens)
+			provBody.SetAttributeRaw("region", simpleTokens("var.region"))
 		}
 		hclBody.AppendNewline()
 	}
 
 	// Write file
-	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes := hclFile.Bytes()
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
 	if err := appendHCLToFile(providersPath, hclBytes); err != nil {
@@ -460,23 +438,4 @@ func orderKeys[T any](settings map[string]T) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-func tokensForValue(val cty.Value) hclwrite.Tokens {
-	if hclStr, is := isLiteralHCLString(val); is {
-		tok := simpleTokenFromString(hclStr)
-		return hclwrite.Tokens{&tok}
-	}
-	return hclwrite.TokensForValue(val)
-}
-
-func isLiteralHCLString(v cty.Value) (string, bool) {
-	if v.Type() != cty.String {
-		return "", false
-	}
-	s := v.AsString()
-	if len(s) < 4 || s[:2] != "((" || s[len(s)-2:] != "))" {
-		return "", false
-	}
-	return s[2 : len(s)-2], true
 }
