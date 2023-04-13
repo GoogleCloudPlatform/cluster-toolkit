@@ -262,7 +262,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.project is None:
         project = get_default_project()
-        print(f"Using {project=}")
+        print(f"Using project={project}")
     else:
         project = args.project
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
