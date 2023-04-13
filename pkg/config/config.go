@@ -364,6 +364,12 @@ func (dc *DeploymentConfig) GetModuleConnections() map[string][]ModConnection {
 	return dc.moduleConnections
 }
 
+// SetModuleConnections directly sets module connection graph (primarily for
+// unit testing where config expansion is not well-supported)
+func (dc *DeploymentConfig) SetModuleConnections(mc map[string][]ModConnection) {
+	dc.moduleConnections = mc
+}
+
 // listUnusedModules provides a mapping of modules to modules that are in the
 // "use" field, but not actually used.
 func (dc *DeploymentConfig) listUnusedModules() map[string][]string {

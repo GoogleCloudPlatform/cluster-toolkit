@@ -1313,4 +1313,8 @@ func (s *MySuite) TestModuleConnectionGetters(c *C) {
 	c.Check(mc.IsUseKind(), Equals, true)
 	c.Check(mc.IsDeploymentKind(), Equals, false)
 	c.Check(mc.GetSharedVariables(), DeepEquals, sharedVariables)
+
+	mc = ModConnection{}
+	c.Check(mc.IsUseKind(), Equals, false)
+	c.Check(mc.IsDeploymentKind(), Equals, false)
 }
