@@ -19,6 +19,10 @@ FROM us-central1-docker.pkg.dev/cloud-workstations-images/predefined/code-oss:la
 
 ARG TFLINT_VERSION
 
+COPY tools/cloud-workstations/configure-hpc-toolkit.sh /bin/
+COPY tools/cloud-workstations/030_configure-hpc-toolkit.sh /etc/workstation-startup.d/
+
+
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get -y update && apt-get -y install \
     software-properties-common \
@@ -36,15 +40,7 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
 
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
-RUN go install github.com/terraform-docs/terraform-docs@latest      && \
-    go install golang.org/x/lint/golint@latest                      && \
-    go install github.com/fzipp/gocyclo/cmd/gocyclo@latest          && \
-    go install github.com/go-critic/go-critic/cmd/gocritic@latest   && \
-    go install github.com/google/addlicense@latest                  && \
-    go install mvdan.cc/sh/v3/cmd/shfmt@latest                      && \
-    go install golang.org/x/tools/cmd/goimports@latest
-
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.2/scripts/requirements.txt && \
-    pip install --no-cache-dir -r tools/cloud-build/requirements.txt && \
+    pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/master/scripts/requirements.txt && \
+    pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/hpc-toolkit/main/tools/cloud-build/requirements.txt && \
     rm -rf ~/.cache/pip/*

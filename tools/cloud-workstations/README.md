@@ -1,7 +1,7 @@
 # Configuring Cloud Workstations for usage with the Cloud HPC Toolkit
 
-> **_NOTE:_** If you want to redirect container registry repos to artifact registry, please see:
-> https://cloud.google.com/artifact-registry/docs/transition/setup-gcr-repo?&_ga=2.33584865.-1391632029.1681343137#redirect-enable
+> **_NOTE:_** If you want to redirect container registry repos to artifact registry, please see
+> [this artifact registry guide](https://cloud.google.com/artifact-registry/docs/transition/setup-gcr-repo?&_ga=2.33584865.-1391632029.1681343137#redirect-enable).
 
 ## Create an artifact registry repository
 
