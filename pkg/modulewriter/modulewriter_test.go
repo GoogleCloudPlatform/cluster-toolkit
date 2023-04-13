@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
@@ -429,14 +428,6 @@ func (s *MySuite) TestGetTypeTokens(c *C) {
 
 }
 
-func (s *MySuite) TestSimpleTokenFromString(c *C) {
-	inputString := "Lorem"
-	tok := simpleTokenFromString("Lorem")
-	c.Assert(tok.Type, Equals, hclsyntax.TokenIdent)
-	c.Assert(len(tok.Bytes), Equals, len(inputString))
-	c.Assert(string(tok.Bytes), Equals, inputString)
-}
-
 func (s *MySuite) TestCreateBaseFile(c *C) {
 	// Success
 	baseFilename := "main.tf_TestCreateBaseFile"
@@ -500,6 +491,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 		ID: "test_module",
 		Settings: map[string]interface{}{
 			"testSetting": "testValue",
+			"passthrough": `(("${vars.deployment_name}-allow\"))`,
 		},
 	}
 	testModules = append(testModules, testModule)
@@ -508,6 +500,14 @@ func (s *MySuite) TestWriteMain(c *C) {
 	exists, err := stringExistsInFile("testSetting", mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
+
+	exists, err = stringExistsInFile(`"${vars.deployment_name}-allow\"`, mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
+	exists, err = stringExistsInFile(`("${vars.deployment_name}-allow\")`, mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, false)
 
 	// Test with Backend
 	testBackend.Type = "gcs"
@@ -635,22 +635,6 @@ func (s *MySuite) TestWriteProviders(c *C) {
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("var.region", provFilePath)
 	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
-}
-
-func (s *MySuite) TestHandleLiteralVariables(c *C) {
-	// Setup
-	hclFile := hclwrite.NewEmptyFile()
-	hclBody := hclFile.Body()
-
-	// Set literal var value
-	hclBody.SetAttributeValue("dummyAttributeName1", cty.StringVal("((var.literal))"))
-	hclBody.AppendNewline()
-	hclBytes := handleLiteralVariables(hclFile.Bytes())
-	hclString := string(hclBytes)
-
-	// Sucess
-	exists := strings.Contains(hclString, "dummyAttributeName1 = var.literal")
 	c.Assert(exists, Equals, true)
 }
 
