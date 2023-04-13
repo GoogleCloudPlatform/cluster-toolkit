@@ -55,6 +55,12 @@ variable "total_max_nodes" {
   default     = 1000
 }
 
+variable "auto_upgrade" {
+  description = "Whether the nodes will be automatically upgraded."
+  type        = bool
+  default     = false
+}
+
 variable "threads_per_core" {
   description = <<-EOT
   Sets the number of threads per physical core. By setting threads_per_core
