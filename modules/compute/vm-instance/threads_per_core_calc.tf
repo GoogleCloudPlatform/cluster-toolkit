@@ -33,7 +33,7 @@ locals {
   machine_not_shared_core = length(local.machine_vals) > 2
   machine_vcpus           = try(parseint(local.machine_vals[2], 10), 1)
 
-  smt_capable_family = !contains(["t2d"], local.machine_family)
+  smt_capable_family = !contains(["t2d", "t2a"], local.machine_family)
   smt_capable_vcpu   = local.machine_vcpus >= 2
 
   smt_capable          = local.smt_capable_family && local.smt_capable_vcpu && local.machine_not_shared_core
