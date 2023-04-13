@@ -93,7 +93,7 @@ func writeOutputs(
 	for _, mod := range modules {
 		for _, output := range mod.Outputs {
 			// Create output block
-			outputName := fmt.Sprintf("%s_%s", output.Name, mod.ID)
+			outputName := config.AutomaticOutputName(output.Name, mod.ID)
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
