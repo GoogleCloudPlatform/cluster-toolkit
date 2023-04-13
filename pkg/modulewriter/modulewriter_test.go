@@ -500,6 +500,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 		ID: "test_module",
 		Settings: map[string]interface{}{
 			"testSetting": "testValue",
+			"passthrough": `(("${vars.deployment_name}-allow\"))`,
 		},
 	}
 	testModules = append(testModules, testModule)
@@ -508,6 +509,14 @@ func (s *MySuite) TestWriteMain(c *C) {
 	exists, err := stringExistsInFile("testSetting", mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
+
+	exists, err = stringExistsInFile(`"${vars.deployment_name}-allow\"`, mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
+	exists, err = stringExistsInFile(`("${vars.deployment_name}-allow\")`, mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, false)
 
 	// Test with Backend
 	testBackend.Type = "gcs"

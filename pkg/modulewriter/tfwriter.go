@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -244,14 +243,14 @@ func writeMain(
 				}
 				moduleBody.SetAttributeRaw(setting, toks)
 			} else {
-				// Add attributes
-				moduleBody.SetAttributeValue(setting, value)
+				moduleBody.SetAttributeRaw(setting, tokensForValue(value))
 			}
 		}
 		hclBody.AppendNewline()
 	}
 	// Write file
-	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes := hclFile.Bytes()
+	hclBytes = handleLiteralVariables(hclBytes)
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
 	hclBytes = hclwrite.Format(hclBytes)
@@ -286,20 +285,6 @@ func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, 
 	toks = append(toks, &sufTok)
 
 	return toks, nil
-}
-
-// Attempts to create an compact map/object,
-// returns input as is if length of compacted string exceeds 80.
-func maybeCompactMapToken(toks hclwrite.Tokens) hclwrite.Tokens {
-	s := string(toks.Bytes())
-	s = strings.ReplaceAll(s, "\"\n", "\",")
-	s = strings.ReplaceAll(s, "\n", "")
-	s = strings.Join(strings.Fields(s), " ")
-	if len(s) > 80 {
-		return toks
-	}
-	t := simpleTokenFromString(s)
-	return hclwrite.Tokens{&t}
 }
 
 func simpleTokenFromString(str string) hclwrite.Token {
@@ -478,9 +463,20 @@ func orderKeys[T any](settings map[string]T) []string {
 }
 
 func tokensForValue(val cty.Value) hclwrite.Tokens {
-	toks := hclwrite.TokensForValue(val)
-	if val.Type().IsMapType() || val.Type().IsObjectType() {
-		toks = maybeCompactMapToken(toks)
+	if hclStr, is := isLiteralHCLString(val); is {
+		tok := simpleTokenFromString(hclStr)
+		return hclwrite.Tokens{&tok}
 	}
-	return toks
+	return hclwrite.TokensForValue(val)
+}
+
+func isLiteralHCLString(v cty.Value) (string, bool) {
+	if v.Type() != cty.String {
+		return "", false
+	}
+	s := v.AsString()
+	if len(s) < 4 || s[:2] != "((" || s[len(s)-2:] != "))" {
+		return "", false
+	}
+	return s[2 : len(s)-2], true
 }
