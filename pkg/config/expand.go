@@ -667,30 +667,26 @@ string into a varReference struct as defined above. An input string consists of
 2 or 3 fields, or if any field is the empty string. This function does not
 ensure the existence of the reference!
 */
-func identifySimpleVariable(yamlReference string, dg DeploymentGroup, fromMod Module) (varReference, error) {
-	varComponents := strings.Split(yamlReference, ".")
+func identifySimpleVariable(s string, dg DeploymentGroup, fromMod Module) (varReference, error) {
+	r, err := SimpleVarToReference(s)
+	if err != nil {
+		return varReference{}, err
+	}
 
-	// struct defaults: empty strings and false booleans
-	var ref varReference
-	ref.fromGroupID = dg.Name
-	ref.fromModuleID = fromMod.ID
+	ref := varReference{
+		fromGroupID:  dg.Name,
+		fromModuleID: fromMod.ID,
+		toGroupID:    r.Group,
+		toModuleID:   r.Module,
+		name:         r.Name,
+		explicit:     r.Group != "",
+	}
 
-	// intra-group references length 2 and inter-group references length 3
-	switch len(varComponents) {
-	case 2:
-		ref.toModuleID = varComponents[0]
-		ref.name = varComponents[1]
-
-		if ref.toModuleID == "vars" {
-			ref.toGroupID = globalGroupID
-		} else {
-			ref.toGroupID = dg.Name
-		}
-	case 3:
-		ref.toGroupID = varComponents[0]
-		ref.toModuleID = varComponents[1]
-		ref.name = varComponents[2]
-		ref.explicit = true
+	if r.GlobalVar {
+		ref.toGroupID = globalGroupID
+		ref.toModuleID = "vars"
+	} else if r.Group == "" {
+		ref.toGroupID = dg.Name
 	}
 
 	// should consider more sophisticated definition of valid values here.
@@ -699,7 +695,7 @@ func identifySimpleVariable(yamlReference string, dg DeploymentGroup, fromMod Mo
 	// cover the case that varComponents has wrong # of fields
 	if ref.fromGroupID == "" || ref.toGroupID == "" || ref.toModuleID == "" || ref.name == "" {
 		return varReference{}, fmt.Errorf("%s %s, expected format: %s",
-			errorMessages["invalidVar"], yamlReference, expectedVarFormat)
+			errorMessages["invalidVar"], s, expectedVarFormat)
 	}
 	return ref, nil
 }
@@ -828,18 +824,8 @@ func (ref varReference) validate(bp Blueprint) error {
 
 // Needs DeploymentGroups, variable string, current group,
 func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, error) {
-	// Get variable contents
-	contents := simpleVariableExp.FindStringSubmatch(context.varString)
-	if len(contents) != 2 { // Should always be (match, contents) here
-		err := fmt.Errorf("%s %s, failed to extract contents: %v",
-			errorMessages["invalidVar"], context.varString, contents)
-		return "", err
-	}
-
 	callingGroup := context.dc.Config.DeploymentGroups[context.groupIndex]
-	refStr := contents[1]
-
-	varRef, err := identifySimpleVariable(refStr, callingGroup, callingGroup.Modules[context.modIndex])
+	varRef, err := identifySimpleVariable(context.varString, callingGroup, callingGroup.Modules[context.modIndex])
 	if err != nil {
 		return "", err
 	}
@@ -899,25 +885,6 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 	return fmt.Sprintf("((%s))", varRef.HclString()), nil
 }
 
-// expandVariable will eventually implement string interpolation; right now it
-// only generates an error message guiding the user to proper escape syntax
-func expandVariable(context varContext, trackModuleGraph bool) (string, error) {
-	matchall := anyVariableExp.FindAllString(context.varString, -1)
-	errHint := ""
-	for _, element := range matchall {
-		// the regex match will include the first matching character
-		// this might be (1) "^" or (2) any character EXCEPT "\"
-		// if (2), we have to remove the first character from the match
-		firstChars := element[0:2]
-		if firstChars != "$(" {
-			element = strings.Replace(element, element[0:1], "", 1)
-		}
-		errHint += "\\" + element + " will be rendered as " + element + "\n"
-	}
-	return "", fmt.Errorf("%s \n%s",
-		errorMessages["varWithinStrings"], errHint)
-}
-
 // isDeploymentVariable checks if the entire string is just a single deployment variable
 func isDeploymentVariable(str string) bool {
 	return deploymentVariableExp.MatchString(str)
@@ -938,10 +905,7 @@ func handleVariable(prim interface{}, context varContext, trackModuleGraph bool)
 	case string:
 		context.varString = val
 		if hasVariable(val) {
-			if isSimpleVariable(val) {
-				return expandSimpleVariable(context, trackModuleGraph)
-			}
-			return expandVariable(context, trackModuleGraph)
+			return expandSimpleVariable(context, trackModuleGraph)
 		}
 		return val, nil
 	default:
