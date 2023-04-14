@@ -31,11 +31,27 @@ type Reference struct {
 	Name      string // required
 }
 
+// MakeStringInterpolationError generates an error message guiding the user to proper escape syntax
+func MakeStringInterpolationError(s string) error {
+	matchall := anyVariableExp.FindAllString(s, -1)
+	hint := ""
+	for _, element := range matchall {
+		// the regex match will include the first matching character
+		// this might be (1) "^" or (2) any character EXCEPT "\"
+		// if (2), we have to remove the first character from the match
+		if element[0:2] != "$(" {
+			element = strings.Replace(element, element[0:1], "", 1)
+		}
+		hint += "\\" + element + " will be rendered as " + element + "\n"
+	}
+	return fmt.Errorf(
+		"variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally. \n%s", hint)
+}
+
 // SimpleVarToReference takes a string `$(...)` and transforms it to `Reference`
 func SimpleVarToReference(s string) (Reference, error) {
 	if !isSimpleVariable(s) {
-		return Reference{}, fmt.Errorf(
-			"got %s, variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally", s)
+		return Reference{}, MakeStringInterpolationError(s)
 	}
 	contents := simpleVariableExp.FindStringSubmatch(s)
 	if len(contents) != 2 { // Should always be (match, contents) here
