@@ -19,10 +19,6 @@ FROM us-central1-docker.pkg.dev/cloud-workstations-images/predefined/code-oss:la
 
 ARG TFLINT_VERSION
 
-COPY tools/cloud-workstations/configure-hpc-toolkit.sh /bin/
-COPY tools/cloud-workstations/030_configure-hpc-toolkit.sh /etc/workstation-startup.d/
-
-
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get -y update && apt-get -y install \
     software-properties-common \
