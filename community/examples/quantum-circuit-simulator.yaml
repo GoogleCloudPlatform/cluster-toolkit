@@ -67,7 +67,7 @@ deployment_groups:
           pip install pybind11 cirq
           git clone https://github.com/quantumlib/qsim.git /opt/qsim
           cd /opt/qsim
-          export CUQUANTUM_DIR=/opt/conda/envs/qsim
+          export CUQUANTUM_ROOT=/opt/conda/envs/qsim
           make
           pip install .
       - type: data
