@@ -71,6 +71,11 @@ func (d *Dict) Items() map[string]cty.Value {
 	return m
 }
 
+// AsObject returns Dict as cty.ObjectVal
+func (d *Dict) AsObject() cty.Value {
+	return cty.ObjectVal(d.Items())
+}
+
 // yamlValue is wrapper around cty.Value to handle YAML unmarshal.
 type yamlValue struct {
 	v cty.Value

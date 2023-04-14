@@ -62,7 +62,6 @@ var errorMessages = map[string]string{
 	"intergroupOrder":      "References to outputs from other groups must be to earlier groups",
 	"referenceWrongGroup":  "Reference specified the wrong group for the module",
 	"noOutput":             "Output not found for a variable",
-	"varWithinStrings":     "variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally.",
 	"groupNotFound":        "The group ID was not found",
 	"cannotUsePacker":      "Packer modules cannot be used by other modules",
 	// validator
@@ -622,12 +621,8 @@ func checkBackend(b TerraformBackend) error {
 	if hasVariable(b.Type) {
 		return fmt.Errorf(errMsg, "type", b.Type)
 	}
-	for k, v := range b.Configuration.Items() {
-		if v.Type() == cty.String && hasVariable(v.AsString()) {
-			return fmt.Errorf(errMsg, k, v.AsString())
-		}
-	}
-	return nil
+	_, err := TransformSimpleToHcl(b.Configuration.AsObject(), DoNotAllowVariablesTranslator{})
+	return err
 }
 
 func checkBackends(bp Blueprint) error {

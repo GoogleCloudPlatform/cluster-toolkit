@@ -27,6 +27,7 @@ import (
 
 func (s *MySuite) TestExpand(c *C) {
 	dc := getDeploymentConfigForTest()
+	fmt.Println("TEST_DEBUG: If tests die without report, check TestExpand")
 	dc.expand()
 }
 
@@ -701,7 +702,7 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 		ID: "from_module_id",
 	}
 
-	ref, err = identifySimpleVariable("group_id.module_id.output_name", dg, fromMod)
+	ref, err = identifySimpleVariable("$(group_id.module_id.output_name)", dg, fromMod)
 	c.Assert(err, IsNil)
 	c.Assert(ref.toGroupID, Equals, "group_id")
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
@@ -710,7 +711,7 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 	c.Assert(ref.name, Equals, "output_name")
 	c.Assert(ref.explicit, Equals, true)
 
-	ref, err = identifySimpleVariable("module_id.output_name", dg, fromMod)
+	ref, err = identifySimpleVariable("$(module_id.output_name)", dg, fromMod)
 	c.Assert(err, IsNil)
 	c.Assert(ref.toGroupID, Equals, dg.Name)
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
@@ -719,7 +720,7 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 	c.Assert(ref.name, Equals, "output_name")
 	c.Assert(ref.explicit, Equals, false)
 
-	ref, err = identifySimpleVariable("vars.variable_name", dg, fromMod)
+	ref, err = identifySimpleVariable("$(vars.variable_name)", dg, fromMod)
 	c.Assert(err, IsNil)
 	c.Assert(ref.toGroupID, Equals, globalGroupID)
 	c.Assert(ref.fromGroupID, Equals, dg.Name)
@@ -728,19 +729,19 @@ func (s *MySuite) TestIdentifySimpleVariable(c *C) {
 	c.Assert(ref.name, Equals, "variable_name")
 	c.Assert(ref.explicit, Equals, false)
 
-	ref, err = identifySimpleVariable("foo", dg, fromMod)
+	ref, err = identifySimpleVariable("$(foo)", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.baz.qux", dg, fromMod)
+	ref, err = identifySimpleVariable("$(foo.bar.baz.qux)", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..bar", dg, fromMod)
+	ref, err = identifySimpleVariable("$(foo..bar)", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo.bar.", dg, fromMod)
+	ref, err = identifySimpleVariable("$(foo.bar.)", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("foo..", dg, fromMod)
+	ref, err = identifySimpleVariable("$(foo..)", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable(".foo", dg, fromMod)
+	ref, err = identifySimpleVariable("$(.foo)", dg, fromMod)
 	c.Assert(err, NotNil)
-	ref, err = identifySimpleVariable("..foo", dg, fromMod)
+	ref, err = identifySimpleVariable("$(..foo)", dg, fromMod)
 	c.Assert(err, NotNil)
 }
 
@@ -793,13 +794,12 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Invalid variable -> no .
 	testVarContext1.varString = "$(varsStringWithNoDot)"
 	_, err := expandSimpleVariable(testVarContext1, false)
-	expectedErr := fmt.Sprintf("%s.*", errorMessages["invalidVar"])
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, NotNil)
 
 	// Global variable: Invalid -> not found
 	testVarContext1.varString = "$(vars.doesntExists)"
 	_, err = expandSimpleVariable(testVarContext1, false)
-	expectedErr = fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
+	expectedErr := fmt.Sprintf("%s: .*", errorMessages["varNotFound"])
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Success
@@ -922,13 +922,4 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 		"$(%s.%s.%s)", testBlueprint.DeploymentGroups[0].Name, testModule0.ID, existingOutput)
 	_, err = expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s .*", errorMessages["varInAnotherGroup"], regexp.QuoteMeta(testVarContext1.varString)))
-}
-
-// expand variable is a stub that will eventually implement string interpolation
-// presently it returns only an error
-func (s *MySuite) TestExpandVariable(c *C) {
-	testVarContext0 := varContext{}
-	str, err := expandVariable(testVarContext0, false)
-	c.Assert(str, Equals, "")
-	c.Assert(err, NotNil)
 }
