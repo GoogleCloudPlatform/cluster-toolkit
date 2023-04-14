@@ -573,7 +573,7 @@ func (s *MySuite) TestModuleConnections(c *C) {
 	c.Assert(err, NotNil)
 
 	// check that ModuleConnections has map keys for each module ID
-	c.Check(dc.moduleConnections, DeepEquals, map[string][]ModConnection{
+	c.Check(dc.GetModuleConnections(), DeepEquals, map[string][]ModConnection{
 		modID0: {
 			{
 				ref: varReference{
@@ -1301,4 +1301,20 @@ func (s *MySuite) TestSkipValidator(c *C) {
 			{Validator: "zebra", Skip: true}})
 	}
 
+}
+
+func (s *MySuite) TestModuleConnectionGetters(c *C) {
+	sharedVariables := []string{"foo", "bar"}
+	mc := ModConnection{
+		ref:             nil,
+		kind:            useConnection,
+		sharedVariables: sharedVariables,
+	}
+	c.Check(mc.IsUseKind(), Equals, true)
+	c.Check(mc.IsDeploymentKind(), Equals, false)
+	c.Check(mc.GetSharedVariables(), DeepEquals, sharedVariables)
+
+	mc = ModConnection{}
+	c.Check(mc.IsUseKind(), Equals, false)
+	c.Check(mc.IsDeploymentKind(), Equals, false)
 }

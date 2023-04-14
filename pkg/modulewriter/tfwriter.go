@@ -93,7 +93,7 @@ func writeOutputs(
 	for _, mod := range modules {
 		for _, output := range mod.Outputs {
 			// Create output block
-			outputName := fmt.Sprintf("%s_%s", output.Name, mod.ID)
+			outputName := config.AutomaticOutputName(output.Name, mod.ID)
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
@@ -157,7 +157,7 @@ func writeVariables(vars map[string]cty.Value, dst string) error {
 
 	// for each variable
 	for _, k := range orderKeys(vars) {
-		v, _ := vars[k]
+		v := vars[k]
 		// Create variable block
 		hclBlock := hclBody.AppendNewBlock("variable", []string{k})
 		blockBody := hclBlock.Body()
@@ -223,7 +223,7 @@ func writeMain(
 
 		// For each Setting
 		for _, setting := range orderKeys(ctySettings) {
-			value, _ := ctySettings[setting]
+			value := ctySettings[setting]
 			if wrap, ok := mod.WrapSettingsWith[setting]; ok {
 				if len(wrap) != 2 {
 					return fmt.Errorf(
@@ -341,15 +341,23 @@ func printTerraformInstructions(grpPath string, moduleName string) {
 // variables.tf
 // groupDir: The path to the directory the resource group will be created in
 func (w TFWriter) writeDeploymentGroup(
-	depGroup config.DeploymentGroup,
-	globalVars map[string]interface{},
+	dc config.DeploymentConfig,
+	groupIndex int,
 	deploymentDir string,
-) error {
+) (groupMetadata, error) {
 
-	ctyVars, err := config.ConvertMapToCty(globalVars)
+	ctyVars, err := config.ConvertMapToCty(dc.Config.Vars)
 	if err != nil {
-		return fmt.Errorf(
+		return groupMetadata{}, fmt.Errorf(
 			"error converting deployment vars to cty for writing: %v", err)
+	}
+
+	depGroup := dc.Config.DeploymentGroups[groupIndex]
+	filteredVars := filterVarsByGraph(ctyVars, depGroup, dc.GetModuleConnections())
+	gmd := groupMetadata{
+		Name:    depGroup.Name,
+		Inputs:  orderKeys(filteredVars),
+		Outputs: getAllOutputs(depGroup),
 	}
 
 	writePath := filepath.Join(deploymentDir, depGroup.Name)
@@ -358,48 +366,48 @@ func (w TFWriter) writeDeploymentGroup(
 	if err := writeMain(
 		depGroup.Modules, depGroup.TerraformBackend, writePath,
 	); err != nil {
-		return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
+		return groupMetadata{}, fmt.Errorf("error writing main.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write variables.tf file
-	if err := writeVariables(ctyVars, writePath); err != nil {
-		return fmt.Errorf(
+	if err := writeVariables(filteredVars, writePath); err != nil {
+		return groupMetadata{}, fmt.Errorf(
 			"error writing variables.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write outputs.tf file
 	if err := writeOutputs(depGroup.Modules, writePath); err != nil {
-		return fmt.Errorf(
+		return groupMetadata{}, fmt.Errorf(
 			"error writing outputs.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write terraform.tfvars file
-	if err := writeTfvars(ctyVars, writePath); err != nil {
-		return fmt.Errorf(
+	if err := writeTfvars(filteredVars, writePath); err != nil {
+		return groupMetadata{}, fmt.Errorf(
 			"error writing terraform.tfvars file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write providers.tf file
-	if err := writeProviders(ctyVars, writePath); err != nil {
-		return fmt.Errorf(
+	if err := writeProviders(filteredVars, writePath); err != nil {
+		return groupMetadata{}, fmt.Errorf(
 			"error writing providers.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write versions.tf file
 	if err := writeVersions(writePath); err != nil {
-		return fmt.Errorf(
+		return groupMetadata{}, fmt.Errorf(
 			"error writing versions.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	printTerraformInstructions(writePath, depGroup.Name)
 
-	return nil
+	return gmd, nil
 }
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
@@ -422,7 +430,7 @@ func (w TFWriter) restoreState(deploymentDir string) error {
 			if bytesRead, err := ioutil.ReadFile(src); err == nil {
 				err = ioutil.WriteFile(dest, bytesRead, 0644)
 				if err != nil {
-					return fmt.Errorf("Failed to write previous state file %s, %w", dest, err)
+					return fmt.Errorf("failed to write previous state file %s, %w", dest, err)
 				}
 			}
 		}
@@ -438,4 +446,40 @@ func orderKeys[T any](settings map[string]T) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func filterVarsByGraph(vars map[string]cty.Value, group config.DeploymentGroup, graph map[string][]config.ModConnection) map[string]cty.Value {
+	// labels must always be written as a variable as it is implicitly added
+	groupInputs := map[string]bool{
+		"labels": true,
+	}
+	for _, mod := range group.Modules {
+		if connections, ok := graph[mod.ID]; ok {
+			for _, conn := range connections {
+				if conn.IsDeploymentKind() {
+					for _, v := range conn.GetSharedVariables() {
+						groupInputs[v] = true
+					}
+				}
+			}
+		}
+	}
+
+	filteredVars := make(map[string]cty.Value)
+	for key, val := range vars {
+		if groupInputs[key] {
+			filteredVars[key] = val
+		}
+	}
+	return filteredVars
+}
+
+func getAllOutputs(group config.DeploymentGroup) []string {
+	outputs := make(map[string]bool)
+	for _, mod := range group.Modules {
+		for _, output := range mod.Outputs {
+			outputs[config.AutomaticOutputName(output.Name, mod.ID)] = true
+		}
+	}
+	return orderKeys(outputs)
 }

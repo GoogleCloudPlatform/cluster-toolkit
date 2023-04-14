@@ -18,6 +18,7 @@
 package modulewriter
 
 import (
+	"bytes"
 	"crypto/md5"
 	"embed"
 	"encoding/hex"
@@ -30,12 +31,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	hiddenGhpcDirName          = ".ghpc"
 	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
+	deploymentMetadataName     = "deployment_metadata.yaml"
 )
 
 // ModuleWriter interface for writing modules to a deployment
@@ -43,11 +47,21 @@ type ModuleWriter interface {
 	getNumModules() int
 	addNumModules(int)
 	writeDeploymentGroup(
-		depGroup config.DeploymentGroup,
-		globalVars map[string]interface{},
+		dc config.DeploymentConfig,
+		grpIdx int,
 		deployDir string,
-	) error
+	) (groupMetadata, error)
 	restoreState(deploymentDir string) error
+}
+
+type deploymentMetadata struct {
+	DeploymentMetadata []groupMetadata `yaml:"deployment_metadata"`
+}
+
+type groupMetadata struct {
+	Name    string
+	Inputs  []string
+	Outputs []string
 }
 
 var kinds = map[string]ModuleWriter{
@@ -70,37 +84,45 @@ func factory(kind string) ModuleWriter {
 
 // WriteDeployment writes a deployment directory using modules defined the
 // environment blueprint.
-func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFlag bool) error {
-	deploymentName, err := blueprint.DeploymentName()
+func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag bool) error {
+	deploymentName, err := dc.Config.DeploymentName()
 	if err != nil {
 		return err
 	}
 	deploymentDir := filepath.Join(outputDir, deploymentName)
 
-	overwrite := isOverwriteAllowed(deploymentDir, blueprint, overwriteFlag)
+	overwrite := isOverwriteAllowed(deploymentDir, &dc.Config, overwriteFlag)
 	if err := prepDepDir(deploymentDir, overwrite); err != nil {
 		return err
 	}
 
-	if err := copySource(deploymentDir, &blueprint.DeploymentGroups); err != nil {
+	if err := copySource(deploymentDir, &dc.Config.DeploymentGroups); err != nil {
 		return err
 	}
 
-	if err := createGroupDirs(deploymentDir, &blueprint.DeploymentGroups); err != nil {
+	if err := createGroupDirs(deploymentDir, &dc.Config.DeploymentGroups); err != nil {
 		return err
 	}
 
-	for _, grp := range blueprint.DeploymentGroups {
+	metadata := deploymentMetadata{
+		DeploymentMetadata: []groupMetadata{},
+	}
+	for grpIdx, grp := range dc.Config.DeploymentGroups {
 		writer, ok := kinds[grp.Kind]
 		if !ok {
 			return fmt.Errorf(
-				"Invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
+				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
 		}
 
-		err := writer.writeDeploymentGroup(grp, blueprint.Vars, deploymentDir)
+		gmd, err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir)
 		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
+		metadata.DeploymentMetadata = append(metadata.DeploymentMetadata, gmd)
+	}
+
+	if err := writeDeploymentMetadata(deploymentDir, metadata); err != nil {
+		return err
 	}
 
 	for _, writer := range kinds {
@@ -302,15 +324,15 @@ func prepDepDir(depDir string, overwrite bool) error {
 		// Confirm we have a previously written deployment dir before overwritting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 			return fmt.Errorf(
-				"While trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
+				"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
 		}
 	} else {
 		if err := deploymentio.CreateDirectory(ghpcDir); err != nil {
-			return fmt.Errorf("Failed to create directory at %s: err=%w", ghpcDir, err)
+			return fmt.Errorf("failed to create directory at %s: err=%w", ghpcDir, err)
 		}
 
 		if err := deploymentio.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile); err != nil {
-			return fmt.Errorf("Failed to copy template.gitignore file to %s: err=%w", gitignoreFile, err)
+			return fmt.Errorf("failed to copy template.gitignore file to %s: err=%w", gitignoreFile, err)
 		}
 	}
 
@@ -318,7 +340,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 	prevGroupDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
-		return fmt.Errorf("Failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
+		return fmt.Errorf("failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
 	}
 
 	// move deployment groups
@@ -336,5 +358,33 @@ func prepDepDir(depDir string, overwrite bool) error {
 			return fmt.Errorf("Error while moving previous deployment groups: failed on %s: %w", f.Name(), err)
 		}
 	}
+	return nil
+}
+
+func writeDeploymentMetadata(depDir string, metadata deploymentMetadata) error {
+	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
+		return fmt.Errorf(
+			"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
+	}
+
+	metadataFile := filepath.Join(ghpcDir, deploymentMetadataName)
+	f, err := os.OpenFile(metadataFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	defer encoder.Close()
+	encoder.SetIndent(2)
+	if err := encoder.Encode(metadata); err != nil {
+		return err
+	}
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		return err
+	}
+
 	return nil
 }

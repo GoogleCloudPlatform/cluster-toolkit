@@ -74,13 +74,23 @@ func teardown() {
 }
 
 // Test Data Producers
-func getBlueprintForTest() config.Blueprint {
+func getDeploymentConfigForTest() config.DeploymentConfig {
 	testModuleSource := filepath.Join(testDir, terraformModuleDir)
 	testModule := config.Module{
-		Source:   testModuleSource,
-		Kind:     "terraform",
-		ID:       "testModule",
-		Settings: make(map[string]interface{}),
+		Source: testModuleSource,
+		Kind:   "terraform",
+		ID:     "testModule",
+		Settings: map[string]interface{}{
+			"deployment_name": nil,
+			"project_id":      nil,
+		},
+		Outputs: []modulereader.OutputInfo{
+			{
+				Name:        "test-output",
+				Description: "",
+				Sensitive:   false,
+			},
+		},
 	}
 	testModuleSourceWithLabels := filepath.Join(testDir, terraformModuleDir)
 	testModuleWithLabels := config.Module{
@@ -98,13 +108,21 @@ func getBlueprintForTest() config.Blueprint {
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
-	testBlueprint := config.Blueprint{
-		BlueprintName:    "simple",
-		Vars:             map[string]interface{}{},
-		DeploymentGroups: testDeploymentGroups,
+	testDC := config.DeploymentConfig{
+		Config: config.Blueprint{
+			BlueprintName: "simple",
+			Vars: map[string]interface{}{
+				"deployment_name": "deployment_name",
+				"project_id":      "test-project",
+			},
+			DeploymentGroups: testDeploymentGroups,
+		},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
 	}
 
-	return testBlueprint
+	testDC.SetModuleConnections(make(map[string][]config.ModConnection))
+
+	return testDC
 }
 
 // Tests
@@ -149,12 +167,12 @@ func (s *MySuite) TestPrepDepDir(c *C) {
 
 func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
-	testBlueprint := getBlueprintForTest()
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
-	realDepDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string))
+	testDC := getDeploymentConfigForTest()
+	testDC.Config.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
+	realDepDir := filepath.Join(testDir, testDC.Config.Vars["deployment_name"].(string))
 
 	// writes a full deployment w/ actual resource groups
-	WriteDeployment(&testBlueprint, testDir, false /* overwrite */)
+	WriteDeployment(testDC, testDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
 	files, _ := ioutil.ReadDir(realDepDir)
@@ -165,7 +183,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(isDeploymentDirPrepped(realDepDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string), hiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(testDir, testDC.Config.Vars["deployment_name"].(string), hiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
@@ -222,15 +240,16 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	afero.WriteFile(aferoFS, "community/modules/green/lime/main.tf", []byte("lime"), 0644)
 	sourcereader.ModuleFS = afero.NewIOFS(aferoFS)
 
-	testBlueprint := getBlueprintForTest()
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
-	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	testDC := getDeploymentConfigForTest()
+
+	testDC.Config.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
+	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the deployment fails
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
 	// Overwriting the deployment succeeds with flag
-	err = WriteDeployment(&testBlueprint, testDir, true /* overwriteFlag */)
+	err = WriteDeployment(testDC, testDir, true /* overwriteFlag */)
 	c.Check(err, IsNil)
 }
 
@@ -293,23 +312,23 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 }
 
 func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
-	testBlueprint := getBlueprintForTest()
+	testDC := getDeploymentConfigForTest()
 	var e *config.InputValueError
 
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": 100}
-	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	testDC.Config.Vars = map[string]interface{}{"deployment_name": 100}
+	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": false}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	testDC.Config.Vars = map[string]interface{}{"deployment_name": false}
+	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": ""}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	testDC.Config.Vars = map[string]interface{}{"deployment_name": ""}
+	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 
-	testBlueprint.Vars = map[string]interface{}{}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	testDC.Config.Vars = map[string]interface{}{}
+	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 }
 
@@ -679,15 +698,29 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 		Name:    "packerGroup",
 		Modules: []config.Module{testPackerModule},
 	}
-	testWriter.writeDeploymentGroup(testDeploymentGroup, testVars, deploymentDir)
+
+	testDC := config.DeploymentConfig{
+		Config: config.Blueprint{
+			BlueprintName:   "",
+			Validators:      nil,
+			ValidationLevel: 0,
+			Vars:            testVars,
+			DeploymentGroups: []config.DeploymentGroup{
+				testDeploymentGroup,
+			},
+		},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
+	}
+
+	testWriter.writeDeploymentGroup(testDC, 0, deploymentDir)
 	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 
 func (s *MySuite) TestWritePackerAutoVars(c *C) {
-	testBlueprint := getBlueprintForTest()
-	testBlueprint.Vars["testkey"] = "testval"
-	ctyVars, _ := config.ConvertMapToCty(testBlueprint.Vars)
+	testDC := getDeploymentConfigForTest()
+	testDC.Config.Vars["testkey"] = "testval"
+	ctyVars, _ := config.ConvertMapToCty(testDC.Config.Vars)
 
 	// fail writing to a bad path
 	badDestPath := "not/a/real/path"

@@ -58,36 +58,47 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 // writeDeploymentGroup writes any needed files to the top and module levels
 // of the blueprint
 func (w PackerWriter) writeDeploymentGroup(
-	depGroup config.DeploymentGroup,
-	globalVars map[string]interface{},
+	dc config.DeploymentConfig,
+	grpIdx int,
 	deployDir string,
-) error {
-	ctyGlobals, err := config.ConvertMapToCty(globalVars)
+) (groupMetadata, error) {
+	ctyGlobals, err := config.ConvertMapToCty(dc.Config.Vars)
 	if err != nil {
-		return fmt.Errorf(
+		return groupMetadata{}, fmt.Errorf(
 			"error converting deployment vars to cty for writing: %w", err)
 	}
+
+	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, depGroup.Name)
+	allInputs := make(map[string]bool)
 	for _, mod := range depGroup.Modules {
 
 		ctySettings, err := config.ConvertMapToCty(mod.Settings)
+		for k := range ctySettings {
+			allInputs[k] = true
+		}
 
 		if err != nil {
-			return fmt.Errorf(
+			return groupMetadata{}, fmt.Errorf(
 				"error converting packer module settings to cty for writing: %w", err)
 		}
 		err = config.ResolveVariables(ctySettings, ctyGlobals)
 		if err != nil {
-			return err
+			return groupMetadata{}, err
 		}
 		modPath := filepath.Join(groupPath, mod.DeploymentSource)
 		err = writePackerAutovars(ctySettings, modPath)
 		if err != nil {
-			return err
+			return groupMetadata{}, err
 		}
 		printPackerInstructions(modPath, mod.ID)
 	}
-	return nil
+
+	return groupMetadata{
+		Name:    depGroup.Name,
+		Inputs:  orderKeys(allInputs),
+		Outputs: []string{},
+	}, nil
 }
 
 func (w PackerWriter) restoreState(deploymentDir string) error {
