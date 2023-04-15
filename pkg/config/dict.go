@@ -106,8 +106,27 @@ func (y *yamlValue) unmarshalScalar(n *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	y.v, err = gocty.ToCtyValue(s, ty)
-	return err
+	if y.v, err = gocty.ToCtyValue(s, ty); err != nil {
+		return err
+	}
+
+	if l, is := IsRawHclLiteral(y.v); is { // HCL literal
+		var e HclExpression
+		if e, err = ParseExpression(l); err != nil {
+			return err
+		}
+		y.v = e.AsValue()
+	} else if y.v.Type() == cty.String && hasVariable(y.v.AsString()) { // "simple" variable
+		e, gr, err := SimpleVarToHclExpression(y.v.AsString())
+		if err != nil {
+			return err
+		}
+		y.v = e.AsValue()
+		if gr != "" {
+			y.v = y.v.Mark(ExplicitGroupMark{Group: gr})
+		}
+	}
+	return nil
 }
 
 func (y *yamlValue) unmarshalObject(n *yaml.Node) error {
@@ -150,19 +169,22 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 
 // MarshalYAML implements custom YAML marshaling.
 func (d Dict) MarshalYAML() (interface{}, error) {
-	mi := map[string]interface{}{}
-	for k, v := range d.Items() {
-		j := ctyJson.SimpleJSONValue{Value: v}
-		b, err := j.MarshalJSON()
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal JSON: %v", err)
+	o, err := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
+		if e, is := IsHclValue(v); is {
+			return e.AsRawValue(), nil
 		}
-		var g interface{}
-		err = json.Unmarshal(b, &g)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
-		}
-		mi[k] = g
+		return v, nil
+	})
+
+	j := ctyJson.SimpleJSONValue{Value: o}
+	b, err := j.MarshalJSON()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal JSON: %v", err)
 	}
-	return mi, nil
+	var g interface{}
+	err = json.Unmarshal(b, &g)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
+	}
+	return g, nil
 }

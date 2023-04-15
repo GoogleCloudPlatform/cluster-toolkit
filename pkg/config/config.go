@@ -618,11 +618,19 @@ func checkUsedModuleNames(bp Blueprint) error {
 
 func checkBackend(b TerraformBackend) error {
 	const errMsg = "can not use variables in backend block, got '%s=%s'"
+	// TerraformBackend.Type is typed as string, "simple" variables and HCL literals stay "as is".
 	if hasVariable(b.Type) {
 		return fmt.Errorf(errMsg, "type", b.Type)
 	}
-	_, err := TransformSimpleToHcl(b.Configuration.AsObject(), DoNotAllowVariablesTranslator{})
-	return err
+	if _, is := IsRawHclLiteral(cty.StringVal(b.Type)); is {
+		return fmt.Errorf(errMsg, "type", b.Type)
+	}
+	return cty.Walk(b.Configuration.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
+		if _, is := IsHclValue(v); is {
+			return false, fmt.Errorf("can not use variables in backend block")
+		}
+		return true, nil
+	})
 }
 
 func checkBackends(bp Blueprint) error {
