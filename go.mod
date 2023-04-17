@@ -27,7 +27,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/googleapis/gax-go/v2 v2.8.0
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
-	google.golang.org/api v0.117.0
+	google.golang.org/api v0.118.0
 )
 
 require (
