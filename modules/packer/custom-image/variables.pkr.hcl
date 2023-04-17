@@ -131,7 +131,7 @@ variable "use_os_login" {
 variable "ssh_username" {
   description = "Username to use for SSH access to VM"
   type        = string
-  default     = "packer"
+  default     = "hpc-toolkit-packer"
 }
 
 variable "ansible_playbooks" {
