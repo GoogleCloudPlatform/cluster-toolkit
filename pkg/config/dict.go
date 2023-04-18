@@ -110,7 +110,7 @@ func (y *yamlValue) unmarshalScalar(n *yaml.Node) error {
 		return err
 	}
 
-	if l, is := IsRawHclLiteral(y.v); is { // HCL literal
+	if l, is := IsYamlHclLiteral(y.v); is { // HCL literal
 		var e HclExpression
 		if e, err = ParseExpression(l); err != nil {
 			return err
@@ -171,7 +171,7 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 func (d Dict) MarshalYAML() (interface{}, error) {
 	o, err := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
 		if e, is := IsHclValue(v); is {
-			return e.AsRawValue(), nil
+			return e.makeYamlLiteralValue(), nil
 		}
 		return v, nil
 	})

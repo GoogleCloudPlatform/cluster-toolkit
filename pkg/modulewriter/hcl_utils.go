@@ -69,7 +69,7 @@ func TokensForValue(val cty.Value) hclwrite.Tokens {
 	// We need to handle both cases, until `IsRawHclLiteral` is removed
 	if e, is := config.IsHclValue(val); is {
 		return e.Tokenize()
-	} else if s, is := config.IsRawHclLiteral(val); is { // return it "as is"
+	} else if s, is := config.IsYamlHclLiteral(val); is { // return it "as is"
 		return hclwrite.TokensForIdentifier(s)
 	}
 

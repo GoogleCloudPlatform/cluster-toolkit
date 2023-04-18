@@ -622,7 +622,7 @@ func checkBackend(b TerraformBackend) error {
 	if hasVariable(b.Type) {
 		return fmt.Errorf(errMsg, "type", b.Type)
 	}
-	if _, is := IsRawHclLiteral(cty.StringVal(b.Type)); is {
+	if _, is := IsYamlHclLiteral(cty.StringVal(b.Type)); is {
 		return fmt.Errorf(errMsg, "type", b.Type)
 	}
 	return cty.Walk(b.Configuration.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {

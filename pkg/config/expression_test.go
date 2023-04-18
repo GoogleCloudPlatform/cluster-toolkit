@@ -69,7 +69,7 @@ func TestTraversalToReference(t *testing.T) {
 	}
 }
 
-func TestIsRawHclLiteral(t *testing.T) {
+func TestIsYamlHclLiteral(t *testing.T) {
 	type test struct {
 		input string
 		want  string
@@ -86,7 +86,7 @@ func TestIsRawHclLiteral(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			got, check := IsRawHclLiteral(cty.StringVal(tc.input))
+			got, check := IsYamlHclLiteral(cty.StringVal(tc.input))
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}

@@ -141,10 +141,10 @@ func TraversalToReference(t hcl.Traversal) (Reference, error) {
 	}
 }
 
-// IsRawHclLiteral checks if passed value of type cty.String
+// IsYamlHclLiteral checks if passed value of type cty.String
 // and its content starts with "((" and ends with "))".
 // Returns trimmed string and result of test.
-func IsRawHclLiteral(v cty.Value) (string, bool) {
+func IsYamlHclLiteral(v cty.Value) (string, bool) {
 	if v.Type() != cty.String {
 		return "", false
 	}
@@ -204,11 +204,11 @@ func (e HclExpression) References() []Reference {
 	return c
 }
 
-// AsRawValue returns a cty.Value, that is rendered as
+// makeYamlLiteralValue returns a cty.Value, that is rendered as
 // HCL literal in Blueprint syntax. Returned value isn't functional,
 // as it doesn't reference HclExpression.
 // This method should only be used for marshaling Blueprint YAML.
-func (e HclExpression) AsRawValue() cty.Value {
+func (e HclExpression) makeYamlLiteralValue() cty.Value {
 	return cty.StringVal("((" + e.s + "))")
 }
 
@@ -240,7 +240,7 @@ func (e HclExpression) AsValue() cty.Value {
 	k := e.key()
 	// we don't care if ot overrides as expressions are identical
 	globalHclExpressions[k] = e
-	return e.AsRawValue().Mark(e.key())
+	return cty.DynamicVal.Mark(e.key())
 }
 
 // IsHclValue checks if the value is result of `HclExpression.AsValue()`.
