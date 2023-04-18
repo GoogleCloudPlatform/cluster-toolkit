@@ -21,6 +21,7 @@
     ansible.builtin.command: which nvidia-smi
     register: nvidiasmi_result
     ignore_errors: true
+    changed_when: false
 
   - name: Get kernel release
     ansible.builtin.command: uname -r

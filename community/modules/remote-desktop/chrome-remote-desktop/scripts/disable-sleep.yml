@@ -21,19 +21,19 @@
   - name: Mask sleep target
     ansible.builtin.systemd:
       name: sleep.target
-      masked: yes
+      masked: true
 
   - name: Mask suspend target
     ansible.builtin.systemd:
       name: suspend.target
-      masked: yes
+      masked: true
 
   - name: Mask hibernate target
     ansible.builtin.systemd:
       name: hibernate.target
-      masked: yes
+      masked: true
 
   - name: Mask hybrid-sleep target
     ansible.builtin.systemd:
       name: hybrid-sleep.target
-      masked: yes
+      masked: true
