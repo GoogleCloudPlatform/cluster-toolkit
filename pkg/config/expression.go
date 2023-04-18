@@ -53,6 +53,9 @@ func MakeStringInterpolationError(s string) error {
 // SimpleVarToReference takes a string `$(...)` and transforms it to `Reference`
 // Returns `Reference` and name of explicit group if one was set.
 func SimpleVarToReference(s string) (Reference, string, error) {
+	if !hasVariable(s) {
+		return Reference{}, "", fmt.Errorf("%#v is not a variable", s)
+	}
 	if !isSimpleVariable(s) {
 		return Reference{}, "", MakeStringInterpolationError(s)
 	}
@@ -154,6 +157,7 @@ func IsRawHclLiteral(v cty.Value) (string, bool) {
 
 // HclExpression is a representation of HCL literals in Blueprint
 type HclExpression struct {
+	// Those fields should be accessed by HclExpression methods ONLY.
 	e  hclsyntax.Expression
 	s  string
 	rs []Reference
