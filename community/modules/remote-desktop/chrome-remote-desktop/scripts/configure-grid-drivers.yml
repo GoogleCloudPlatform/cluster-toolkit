@@ -17,6 +17,12 @@
   hosts: localhost
   become: true
   tasks:
+  - name: Check if GRID driver installed
+    ansible.builtin.command: which nvidia-smi
+    register: nvidiasmi_result
+    ignore_errors: true
+    changed_when: false
+
   - name: Get kernel release
     ansible.builtin.command: uname -r
     register: uname_result
@@ -37,21 +43,24 @@
     delay: 10
     until: apt_result is success
 
-  - name: Download GPU driver
-    ansible.builtin.get_url:
-      url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
-      dest: /tmp/
-      mode: "0755"
+  - name: Install GRID driver if not existing
+    block:
+    - name: Download GPU driver
+      ansible.builtin.get_url:
+        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
+        dest: /tmp/
+        mode: "0755"
 
-  - name: Stop gdm service
-    ansible.builtin.systemd:
-      name: gdm
-      state: stopped
+    - name: Stop gdm service
+      ansible.builtin.systemd:
+        name: gdm
+        state: stopped
 
-  - name: Install GPU driver
-    ansible.builtin.command: /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run -silent
-    register: result
-    changed_when: result.rc == 0
+    - name: Install GPU driver
+      ansible.builtin.command: /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run -silent
+      register: result
+      changed_when: result.rc == 0
+    when: nvidiasmi_result is failed
 
   - name: Download VirtualGL driver
     ansible.builtin.get_url:
