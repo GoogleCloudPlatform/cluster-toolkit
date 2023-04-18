@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1317,4 +1318,69 @@ func (s *MySuite) TestModuleConnectionGetters(c *C) {
 	mc = ModConnection{}
 	c.Check(mc.IsUseKind(), Equals, false)
 	c.Check(mc.IsDeploymentKind(), Equals, false)
+}
+
+func (s *MySuite) TestResolveVariables(c *C) {
+	projectID := cty.StringVal("test-project")
+	deploymentName := cty.StringVal("test-deployment")
+	labels := cty.MapVal(map[string]cty.Value{
+		"ghpc_deployment": deploymentName,
+	})
+	customNumber := cty.NumberVal(big.NewFloat(2.0))
+	customBool := cty.BoolVal(true)
+	deploymentVars := map[string]cty.Value{
+		"project_id":      projectID,
+		"deployment_name": deploymentName,
+		"labels":          labels,
+		"custom_number":   customNumber,
+		"custom_bool":     customBool,
+	}
+
+	settings := map[string]cty.Value{
+		"project_id": cty.StringVal("((var.project_id))"),
+		"labels":     cty.StringVal("((var.labels))"),
+		"direct":     cty.StringVal("directly-set"),
+		"number-list": cty.TupleVal([]cty.Value{
+			cty.NumberVal(big.NewFloat(0.0)),
+			cty.StringVal("((var.custom_number))"),
+		}),
+		"bool-map": cty.ObjectVal(map[string]cty.Value{
+			"first":  cty.BoolVal(true),
+			"second": cty.StringVal("((var.custom_bool))"),
+		}),
+	}
+
+	expectedSettings := map[string]cty.Value{
+		"project_id": projectID,
+		"labels":     labels,
+		"direct":     cty.StringVal("directly-set"),
+		"number-list": cty.TupleVal([]cty.Value{
+			cty.NumberVal(big.NewFloat(0.0)),
+			customNumber,
+		}),
+		"bool-map": cty.ObjectVal(map[string]cty.Value{
+			"first":  cty.BoolVal(true),
+			"second": customBool,
+		}),
+	}
+
+	err := ResolveVariables(settings, deploymentVars)
+	c.Assert(err, IsNil)
+	c.Assert(settings, DeepEquals, expectedSettings)
+
+	settings["new-key"] = cty.StringVal("((var.not_a_variable))")
+	err = ResolveVariables(settings, deploymentVars)
+	c.Assert(err, NotNil)
+
+	settings["new-key"] = cty.ObjectVal(map[string]cty.Value{
+		"bad": cty.StringVal("((var.not_a_variable))"),
+	})
+	err = ResolveVariables(settings, deploymentVars)
+	c.Assert(err, NotNil)
+
+	settings["new-key"] = cty.TupleVal([]cty.Value{
+		cty.StringVal("((var.not_a_variable))"),
+	})
+	err = ResolveVariables(settings, deploymentVars)
+	c.Assert(err, NotNil)
 }

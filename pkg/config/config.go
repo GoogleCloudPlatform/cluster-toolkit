@@ -799,28 +799,67 @@ func ResolveVariables(
 		Variables: map[string]cty.Value{"var": cty.ObjectVal(origin)},
 	}
 	for key, val := range ctyMap {
-		if val.Type() == cty.String {
-			var valString string
-			if err := gocty.FromCtyValue(val, &valString); err != nil {
-				return err
-			}
-			ctx, varName, found := IdentifyLiteralVariable(valString)
-			// only attempt resolution on global literal variables
-			// leave all other strings alone (including non-global)
-			if found && ctx == "var" {
-				varTraversal := hcl.Traversal{
-					hcl.TraverseRoot{Name: ctx},
-					hcl.TraverseAttr{Name: varName},
-				}
-				newVal, diags := varTraversal.TraverseAbs(evalCtx)
-				if diags.HasErrors() {
-					return diags
-				}
-				ctyMap[key] = newVal
-			}
+		newVal, err := resolveValue(val, evalCtx)
+		if err != nil {
+			return err
 		}
+		ctyMap[key] = newVal
 	}
 	return nil
+}
+
+func resolveValue(val cty.Value, evalCtx *hcl.EvalContext) (cty.Value, error) {
+	t := val.Type()
+	if t == cty.String {
+		var valString string
+		if err := gocty.FromCtyValue(val, &valString); err != nil {
+			return cty.Value{}, err
+		}
+		ctx, varName, found := IdentifyLiteralVariable(valString)
+		// only attempt resolution on global literal variables
+		// leave all other strings alone (including non-global)
+		if found && ctx == "var" {
+			varTraversal := hcl.Traversal{
+				hcl.TraverseRoot{Name: ctx},
+				hcl.TraverseAttr{Name: varName},
+			}
+			newVal, diags := varTraversal.TraverseAbs(evalCtx)
+			if diags.HasErrors() {
+				return newVal, diags
+			}
+			return newVal, nil
+		}
+		return val, nil
+	}
+
+	if t.IsListType() || t.IsSetType() || t.IsTupleType() {
+		newList := []cty.Value{}
+		for it := val.ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			newV, err := resolveValue(v, evalCtx)
+			if err != nil {
+				return cty.Value{}, err
+			}
+			newList = append(newList, newV)
+		}
+		return cty.TupleVal(newList), nil
+
+	}
+
+	if t.IsMapType() || t.IsObjectType() {
+		newMap := map[string]cty.Value{}
+		for it := val.ElementIterator(); it.Next(); {
+			k, v := it.Element()
+			newV, err := resolveValue(v, evalCtx)
+			if err != nil {
+				return cty.Value{}, err
+			}
+			newMap[k.AsString()] = newV
+		}
+		return cty.ObjectVal(newMap), nil
+	}
+	// return all non-string primitive types without modification
+	return val, nil
 }
 
 // InputValueError signifies a problem with the blueprint name.
