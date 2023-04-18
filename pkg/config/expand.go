@@ -157,9 +157,8 @@ func (dc *DeploymentConfig) expandBackends() error {
 	return nil
 }
 
-// always use explicit group even for intragroup references
-func getModuleVarName(groupID string, modID string, varName string) string {
-	return fmt.Sprintf("$(%s.%s.%s)", groupID, modID, varName)
+func getModuleVarName(modID string, varName string) string {
+	return fmt.Sprintf("$(%s.%s)", modID, varName)
 }
 
 func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
@@ -207,7 +206,6 @@ func (mod *Module) addListValue(settingName string, value string) error {
 func useModule(
 	mod *Module,
 	useMod Module,
-	useModGroupID string,
 	modInputs []modulereader.VarInfo,
 	useOutputs []modulereader.OutputInfo,
 	settingsToIgnore []string,
@@ -236,7 +234,7 @@ func useModule(
 			continue
 		}
 
-		modVarName := getModuleVarName(useModGroupID, useMod.ID, settingName)
+		modVarName := getModuleVarName(useMod.ID, settingName)
 		if !isList {
 			mod.Settings[settingName] = modVarName
 			usedVars = append(usedVars, settingName)
@@ -298,7 +296,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				// tested but it our unit test infrastructure does not support
 				// running dc.setModulesInfo() on our test configurations
 				toModInfo := dc.ModulesInfo[toGroup.Name][toMod.Source]
-				usedVars, err := useModule(fromMod, toMod, modRef.toGroupID,
+				usedVars, err := useModule(fromMod, toMod,
 					fromModInfo.Inputs, toModInfo.Outputs, settingsInBlueprint)
 				if err != nil {
 					return err
@@ -466,7 +464,6 @@ func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 					fromModuleID: mod.ID,
 					toGroupID:    globalGroupID,
 					fromGroupID:  deploymentGroup.Name,
-					explicit:     false,
 				}
 				mod.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
 				dc.addModuleConnection(ref, deploymentConnection, []string{ref.name})
@@ -606,8 +603,6 @@ A variable reference has the following fields
   - fromModuleID: the source module ID
   - toGroupID: the deployment group in which the module is *expected* to be found
   - fromGroupID: the deployment group from which the reference is made
-  - explicit: a boolean value indicating whether the user made a reference that
-    explicitly identified toGroupID rather than inferring it using fromGroupID
 */
 type varReference struct {
 	name         string
@@ -615,11 +610,10 @@ type varReference struct {
 	fromModuleID string
 	toGroupID    string
 	fromGroupID  string
-	explicit     bool
 }
 
 func (ref varReference) String() string {
-	return ref.toGroupID + "." + ref.toModuleID + "." + ref.name
+	return ref.toModuleID + "." + ref.name
 }
 
 func (ref varReference) IsIntergroup() bool {
@@ -663,30 +657,48 @@ func (ref varReference) HclString() string {
 /*
 This function performs only the most rudimentary conversion of an input
 string into a varReference struct as defined above. An input string consists of
-2 or 3 fields separated by periods. An error will be returned if there are not
-2 or 3 fields, or if any field is the empty string. This function does not
+2 fields separated by periods. An error will be returned if there are not
+2 fields, or if any field is the empty string. This function does not
 ensure the existence of the reference!
 */
-func identifySimpleVariable(s string, dg DeploymentGroup, fromMod Module) (varReference, error) {
-	r, gr, err := SimpleVarToReference(s)
+func identifySimpleVariable(s string, bp Blueprint, fromMod string) (varReference, error) {
+	r, err := SimpleVarToReference(s)
+	if err != nil {
+		return varReference{}, err
+	}
+
+	findGroup := func(mod string) (string, error) {
+		for _, g := range bp.DeploymentGroups {
+			for _, m := range g.Modules {
+				if m.ID == mod {
+					return g.Name, nil
+				}
+			}
+		}
+		return "", fmt.Errorf("module %s was not found", mod)
+	}
+
+	fromG, err := findGroup(fromMod)
 	if err != nil {
 		return varReference{}, err
 	}
 
 	ref := varReference{
-		fromGroupID:  dg.Name,
-		fromModuleID: fromMod.ID,
-		toGroupID:    gr,
+		fromGroupID:  fromG,
+		fromModuleID: fromMod,
 		toModuleID:   r.Module,
 		name:         r.Name,
-		explicit:     gr != "",
 	}
 
 	if r.GlobalVar {
 		ref.toGroupID = globalGroupID
 		ref.toModuleID = "vars"
-	} else if gr == "" {
-		ref.toGroupID = dg.Name
+	} else {
+		g, err := findGroup(r.Module)
+		if err != nil {
+			return varReference{}, err
+		}
+		ref.toGroupID = g
 	}
 
 	// should consider more sophisticated definition of valid values here.
@@ -784,11 +796,6 @@ func (ref varReference) validate(bp Blueprint) error {
 			return fmt.Errorf("%s: %s is in the later group %s",
 				errorMessages["intergroupOrder"], ref.toModuleID, ref.toGroupID)
 		}
-
-		if !ref.explicit {
-			return fmt.Errorf("%s: %s must specify the group ID %s before the module ID",
-				errorMessages["intergroupImplicit"], ref.toModuleID, ref.toGroupID)
-		}
 	}
 
 	// at this point, the reference may be intergroup or intragroup. now we
@@ -825,7 +832,7 @@ func (ref varReference) validate(bp Blueprint) error {
 // Needs DeploymentGroups, variable string, current group,
 func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, error) {
 	callingGroup := context.dc.Config.DeploymentGroups[context.groupIndex]
-	varRef, err := identifySimpleVariable(context.varString, callingGroup, callingGroup.Modules[context.modIndex])
+	varRef, err := identifySimpleVariable(context.varString, context.dc.Config, callingGroup.Modules[context.modIndex].ID)
 	if err != nil {
 		return "", err
 	}

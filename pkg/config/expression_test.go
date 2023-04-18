@@ -101,28 +101,24 @@ func TestSimpleVarToReference(t *testing.T) {
 	type test struct {
 		input string
 		want  Reference
-		group string
 		err   bool
 	}
 	tests := []test{
-		{"$(vars.green)", Reference{GlobalVar: true, Name: "green"}, "", false},
-		{"$(var.green)", Reference{Module: "var", Name: "green"}, "", false},
-		{"$(sleeve.green)", Reference{Module: "sleeve", Name: "green"}, "", false},
-		{"$(box.sleeve.green)", Reference{Module: "sleeve", Name: "green"}, "box", false},
-		{"$(vars)", Reference{}, "", true},
-		{"$(az.buki.vedi.glagol)", Reference{}, "", true},
-		{"gold $(var.here)", Reference{}, "", true},
+		{"$(vars.green)", Reference{GlobalVar: true, Name: "green"}, false},
+		{"$(var.green)", Reference{Module: "var", Name: "green"}, false},
+		{"$(sleeve.green)", Reference{Module: "sleeve", Name: "green"}, false},
+		{"$(box.sleeve.green)", Reference{}, true},
+		{"$(vars)", Reference{}, true},
+		{"$(az.buki.vedi.glagol)", Reference{}, true},
+		{"gold $(var.here)", Reference{}, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			got, group, err := SimpleVarToReference(tc.input)
+			got, err := SimpleVarToReference(tc.input)
 			if tc.err != (err != nil) {
 				t.Errorf("got unexpected error: %s", err)
 			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-			if diff := cmp.Diff(tc.group, group); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
 		})
