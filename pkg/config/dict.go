@@ -30,6 +30,15 @@ type Dict struct {
 	m map[string]cty.Value
 }
 
+// NewDict constructor
+func NewDict(m map[string]cty.Value) Dict {
+	d := Dict{}
+	for k, v := range m {
+		d.Set(k, v)
+	}
+	return d
+}
+
 // Get returns stored value or cty.NilVal.
 func (d *Dict) Get(k string) cty.Value {
 	if d.m == nil {

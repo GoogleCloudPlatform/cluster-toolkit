@@ -256,7 +256,7 @@ type Blueprint struct {
 	BlueprintName            string `yaml:"blueprint_name"`
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
-	Vars                     map[string]interface{}
+	Vars                     Dict
 	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
@@ -403,7 +403,7 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 	}
 
 	unusedVars := []string{}
-	for k := range dc.Config.Vars {
+	for k := range dc.Config.Vars.Items() {
 		if _, ok := usedVars[k]; !ok {
 			unusedVars = append(unusedVars, k)
 		}
@@ -458,11 +458,6 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 	if err = decoder.Decode(&blueprint); err != nil {
 		return blueprint, fmt.Errorf(errorMessages["yamlUnmarshalError"],
 			blueprintFilename, err)
-	}
-
-	// Ensure Vars is not a nil map if not set by the user
-	if len(blueprint.Vars) == 0 {
-		blueprint.Vars = make(map[string]interface{})
 	}
 
 	// if the validation level has been explicitly set to an invalid value
@@ -655,6 +650,11 @@ func (dc *DeploymentConfig) validateConfig() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	if err = dc.validateVars(); err != nil {
+		log.Fatal(err)
+	}
+
 	if err = checkModuleAndGroupNames(dc.Config.DeploymentGroups); err != nil {
 		log.Fatal(err)
 	}
@@ -674,16 +674,13 @@ func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
 		if len(arr) != 2 {
 			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
 		}
-
 		// Convert the variable's string litteral to its equivalent default type.
-		var out interface{}
-		err := yaml.Unmarshal([]byte(arr[1]), &out)
-		if err != nil {
-			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", arr[0], arr[1])
+		key := arr[0]
+		var v yamlValue
+		if err := yaml.Unmarshal([]byte(arr[1]), &v); err != nil {
+			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", key, arr[1])
 		}
-
-		key, value := arr[0], out
-		dc.Config.Vars[key] = value
+		dc.Config.Vars.Set(key, v.v)
 	}
 
 	return nil
@@ -852,23 +849,23 @@ func isValidLabelValue(value string) bool {
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.
 func (b *Blueprint) DeploymentName() (string, error) {
-	nameInterface, found := b.Vars["deployment_name"]
-	if !found {
+	if !b.Vars.Has("deployment_name") {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["varNotFound"],
 		}
 	}
 
-	deploymentName, ok := nameInterface.(string)
-	if !ok {
+	v := b.Vars.Get("deployment_name")
+	if v.Type() != cty.String {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["valueNotString"],
 		}
 	}
 
-	if len(deploymentName) == 0 {
+	s := v.AsString()
+	if len(s) == 0 {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["valueEmptyString"],
@@ -876,14 +873,14 @@ func (b *Blueprint) DeploymentName() (string, error) {
 	}
 
 	// Check that deployment_name is a valid label
-	if !isValidLabelValue(deploymentName) {
+	if !isValidLabelValue(s) {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["labelReqs"],
 		}
 	}
 
-	return deploymentName, nil
+	return s, nil
 }
 
 // checkBlueprintName returns an error if blueprint_name does not comply with

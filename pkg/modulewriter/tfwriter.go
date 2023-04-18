@@ -345,15 +345,8 @@ func (w TFWriter) writeDeploymentGroup(
 	groupIndex int,
 	deploymentDir string,
 ) (groupMetadata, error) {
-
-	ctyVars, err := config.ConvertMapToCty(dc.Config.Vars)
-	if err != nil {
-		return groupMetadata{}, fmt.Errorf(
-			"error converting deployment vars to cty for writing: %v", err)
-	}
-
 	depGroup := dc.Config.DeploymentGroups[groupIndex]
-	filteredVars := filterVarsByGraph(ctyVars, depGroup, dc.GetModuleConnections())
+	filteredVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
 	gmd := groupMetadata{
 		Name:    depGroup.Name,
 		Inputs:  orderKeys(filteredVars),
