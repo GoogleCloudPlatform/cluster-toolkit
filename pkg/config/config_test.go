@@ -813,7 +813,8 @@ func (s *MySuite) TestCheckBlueprintName(c *C) {
 func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
-	dc.ExportBlueprint(outFile)
+	_, err := dc.ExportBlueprint(outFile)
+	c.Assert(err, IsNil)
 	newDC, err := NewDeploymentConfig(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(dc.Config, DeepEquals, newDC.Config)
@@ -1228,6 +1229,11 @@ func (s *MySuite) TestCheckBackends(c *C) {
 		c.Check(check(b), ErrorMatches, ".*type.*vars\\.type.*")
 	}
 
+	{ // FAIL. HCL literal
+		b := TerraformBackend{Type: "((var.zen))"}
+		c.Check(check(b), ErrorMatches, ".*type.*zen.*")
+	}
+
 	{ // OK. Not a variable
 		b := TerraformBackend{Type: "\\$(vartype)"}
 		c.Check(check(b), IsNil)
@@ -1240,19 +1246,19 @@ func (s *MySuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Variable in defaults configuration
 		b := TerraformBackend{Type: "gcs"}
-		b.Configuration.Set("bucket", cty.StringVal("$(trenta)"))
-		c.Check(check(b), ErrorMatches, ".*trenta.*")
+		b.Configuration.Set("bucket", MustParseExpression("((var.trenta))").AsValue())
+		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
 	}
 
 	{ // OK. handles nested configuration
 		b := TerraformBackend{Type: "gcs"}
 		b.Configuration.
 			Set("bucket", cty.StringVal("trenta")).
-			Set("complex", cty.MapVal(map[string]cty.Value{
+			Set("complex", cty.ObjectVal(map[string]cty.Value{
 				"alpha": cty.StringVal("a"),
-				"beta":  cty.StringVal("$(boba)"),
+				"beta":  MustParseExpression("((var.boba))").AsValue(),
 			}))
-		c.Check(check(b), ErrorMatches, ".*boba.*")
+		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
 	}
 }
 

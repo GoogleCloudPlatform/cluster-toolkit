@@ -668,7 +668,7 @@ string into a varReference struct as defined above. An input string consists of
 ensure the existence of the reference!
 */
 func identifySimpleVariable(s string, dg DeploymentGroup, fromMod Module) (varReference, error) {
-	r, err := SimpleVarToReference(s)
+	r, gr, err := SimpleVarToReference(s)
 	if err != nil {
 		return varReference{}, err
 	}
@@ -676,16 +676,16 @@ func identifySimpleVariable(s string, dg DeploymentGroup, fromMod Module) (varRe
 	ref := varReference{
 		fromGroupID:  dg.Name,
 		fromModuleID: fromMod.ID,
-		toGroupID:    r.Group,
+		toGroupID:    gr,
 		toModuleID:   r.Module,
 		name:         r.Name,
-		explicit:     r.Group != "",
+		explicit:     gr != "",
 	}
 
 	if r.GlobalVar {
 		ref.toGroupID = globalGroupID
 		ref.toModuleID = "vars"
-	} else if r.Group == "" {
+	} else if gr == "" {
 		ref.toGroupID = dg.Name
 	}
 
