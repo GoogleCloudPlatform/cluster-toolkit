@@ -42,7 +42,7 @@ deployment_groups:
     use: [network1]
     settings:
       install_nvidia_driver: true
-      instance_count: 0
+      instance_count: 0  # This will download the config scripts only, for re-use with slurm node provisioning
  
   - id: remote_desktop_startup
     source: modules/scripts/startup-script
