@@ -617,7 +617,7 @@ func checkUsedModuleNames(bp Blueprint) error {
 }
 
 func checkBackend(b TerraformBackend) error {
-	const errMsg = "can not use variables in backend block, got '%s=%s'"
+	const errMsg = "can not use variables in terraform_backend block, got '%s=%s'"
 	// TerraformBackend.Type is typed as string, "simple" variables and HCL literals stay "as is".
 	if hasVariable(b.Type) {
 		return fmt.Errorf(errMsg, "type", b.Type)
@@ -627,7 +627,7 @@ func checkBackend(b TerraformBackend) error {
 	}
 	return cty.Walk(b.Configuration.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
 		if _, is := IsHclValue(v); is {
-			return false, fmt.Errorf("can not use variables in backend block")
+			return false, fmt.Errorf("can not use variables in terraform_backend block")
 		}
 		return true, nil
 	})

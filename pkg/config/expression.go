@@ -235,7 +235,8 @@ func (e HclExpression) key() hclExpressionKey {
 }
 
 // AsValue returns a cty.Value that represents the expression.
-// This function should be the ONLY way to get HCL expression as a cty.Value.
+// This function is the ONLY way to get an HCL expression as a cty.Value,
+// do not attempt to build it by other means.
 func (e HclExpression) AsValue() cty.Value {
 	k := e.key()
 	// we don't care if ot overrides as expressions are identical
