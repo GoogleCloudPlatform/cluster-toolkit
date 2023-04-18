@@ -15,42 +15,13 @@
 package modulewriter
 
 import (
+	"hpc-toolkit/pkg/config"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 )
-
-func TestIsHclLiteral(t *testing.T) {
-	type test struct {
-		input string
-		want  string
-		check bool
-	}
-
-	tests := []test{
-		{"((var.green))", "var.green", true},
-		{"((${var.green}))", "${var.green}", true},
-		{"(( 7 + a }))", " 7 + a }", true},
-		{"(var.green)", "", false},
-		{"((var.green)", "", false},
-		{"$(var.green)", "", false},
-		{"${var.green}", "", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			got, check := IsHclLiteral(cty.StringVal(tc.input))
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-			if diff := cmp.Diff(tc.check, check); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-		})
-
-	}
-}
 
 func TestTokensForValueNoLiteral(t *testing.T) {
 	val := cty.ObjectVal(map[string]cty.Value{
@@ -76,10 +47,12 @@ func TestTokensForValueNoLiteral(t *testing.T) {
 func TestTokensForValueWithLiteral(t *testing.T) {
 	val := cty.ObjectVal(map[string]cty.Value{
 		"tan": cty.TupleVal([]cty.Value{
-			cty.StringVal("((var.kilo + 8))")})})
+			cty.StringVal("((var.kilo + 8))"),                    // HCL literal
+			config.MustParseExpression("var.tina + 4").AsValue(), // HclExpression value
+		})})
 	want := `
 {
-  tan = [var.kilo + 8]
+  tan = [var.kilo + 8, var.tina + 4]
 }`[1:]
 
 	got := hclwrite.NewEmptyFile()

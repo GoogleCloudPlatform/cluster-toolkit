@@ -90,6 +90,10 @@ m1: {}
 m2:
   m2f1: green
   m2f2: [1, 0.2, -3, false]
+  gv: $(vars.gold)
+  mv: $(lime.bloom)
+  igv: $(box.wet.shoe)
+  hl: ((3 + 9))
 `
 	want := Dict{}
 	want.
@@ -104,6 +108,10 @@ m2:
 				cty.NumberIntVal(-3),
 				cty.False,
 			}),
+			"gv":  MustParseExpression("var.gold").AsValue(),
+			"mv":  MustParseExpression("module.lime.bloom").AsValue(),
+			"igv": MustParseExpression("module.wet.shoe").AsValue().Mark(ExplicitGroupMark{"box"}),
+			"hl":  MustParseExpression("3 + 9").AsValue(),
 		}))
 	var got Dict
 	if err := yaml.Unmarshal([]byte(yml), &got); err != nil {
@@ -126,6 +134,7 @@ func TestMarshalYAML(t *testing.T) {
 				cty.NumberFloatVal(0.2),
 				cty.NumberIntVal(-3),
 				cty.False,
+				MustParseExpression("7 + 4").AsValue(),
 			}),
 		}))
 	want := map[string]interface{}{
@@ -133,7 +142,7 @@ func TestMarshalYAML(t *testing.T) {
 		"m1": map[string]interface{}{},
 		"m2": map[string]interface{}{
 			"m2f1": "green",
-			"m2f2": []interface{}{1.0, 0.2, -3.0, false},
+			"m2f2": []interface{}{1.0, 0.2, -3.0, false, "((7 + 4))"},
 		},
 	}
 	got, err := d.MarshalYAML()
