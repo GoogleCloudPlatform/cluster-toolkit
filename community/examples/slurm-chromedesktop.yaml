@@ -13,7 +13,7 @@
 # limitations under the License.
  
 ---
- 
+
 blueprint_name: slurm-crd
  
 vars:
@@ -48,15 +48,15 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-        - type: ansible-local
-          source: modules/chrome-remote-desktop/scripts/configure-grid-drivers.yml
-          destination: /tmp/configure-grid-drivers.yml
-        - type: ansible-local
-          source: modules/chrome-remote-desktop/scripts/configure-chrome-desktop.yml
-          destination: /tmp/configure-chrome-desktop.yml
-        - type: ansible-local
-          source: modules/chrome-remote-desktop/scripts/disable-sleep.yml
-          destination: /tmp/disable-sleep.yml
+      - type: ansible-local
+        source: modules/chrome-remote-desktop/scripts/configure-grid-drivers.yml
+        destination: /tmp/configure-grid-drivers.yml
+      - type: ansible-local
+        source: modules/chrome-remote-desktop/scripts/configure-chrome-desktop.yml
+        destination: /tmp/configure-chrome-desktop.yml
+      - type: ansible-local
+        source: modules/chrome-remote-desktop/scripts/disable-sleep.yml
+        destination: /tmp/disable-sleep.yml
  
   - id: crd_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
