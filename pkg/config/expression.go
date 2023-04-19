@@ -77,13 +77,13 @@ func SimpleVarToReference(s string) (Reference, error) {
 		Name:   components[1]}, nil
 }
 
-// SimpleVarToHclExpression takes a string `$(...)` and transforms it to `HclExpression`
-func SimpleVarToHclExpression(s string) (HclExpression, error) {
+// SimpleVarToExpression takes a string `$(...)` and transforms it to `Expression`
+func SimpleVarToExpression(s string) (Expression, error) {
 	ref, err := SimpleVarToReference(s)
 	if err != nil {
-		return HclExpression{}, err
+		return Expression{}, err
 	}
-	var ex HclExpression
+	var ex Expression
 	if ref.GlobalVar {
 		ex, err = ParseExpression(fmt.Sprintf("var.%s", ref.Name))
 	} else {
@@ -128,10 +128,10 @@ func TraversalToReference(t hcl.Traversal) (Reference, error) {
 	}
 }
 
-// IsYamlHclLiteral checks if passed value of type cty.String
+// IsYamlExpressionLiteral checks if passed value of type cty.String
 // and its content starts with "((" and ends with "))".
 // Returns trimmed string and result of test.
-func IsYamlHclLiteral(v cty.Value) (string, bool) {
+func IsYamlExpressionLiteral(v cty.Value) (string, bool) {
 	if v.Type() != cty.String {
 		return "", false
 	}
@@ -142,34 +142,34 @@ func IsYamlHclLiteral(v cty.Value) (string, bool) {
 	return s[2 : len(s)-2], true
 }
 
-// HclExpression is a representation of HCL literals in Blueprint
-type HclExpression struct {
-	// Those fields should be accessed by HclExpression methods ONLY.
+// Expression is a representation of expressions in Blueprint
+type Expression struct {
+	// Those fields should be accessed by Expression methods ONLY.
 	e  hclsyntax.Expression
 	s  string
 	rs []Reference
 }
 
-// ParseExpression returns HclExpression
-func ParseExpression(s string) (HclExpression, error) {
+// ParseExpression returns Expression
+func ParseExpression(s string) (Expression, error) {
 	e, diag := hclsyntax.ParseExpression([]byte(s), "", hcl.Pos{})
 	if diag.HasErrors() {
-		return HclExpression{}, diag
+		return Expression{}, diag
 	}
 	ts := e.Variables()
 	rs := make([]Reference, len(ts))
 	for i, t := range ts {
 		var err error
 		if rs[i], err = TraversalToReference(t); err != nil {
-			return HclExpression{}, err
+			return Expression{}, err
 		}
 	}
-	return HclExpression{e: e, s: s, rs: rs}, nil
+	return Expression{e: e, s: s, rs: rs}, nil
 }
 
 // MustParseExpression is "errorless" version of ParseExpression
 // NOTE: only use it if passed expression is guaranteed to be correct
-func MustParseExpression(s string) HclExpression {
+func MustParseExpression(s string) Expression {
 	if exp, err := ParseExpression(s); err != nil {
 		panic(fmt.Errorf("error while parsing %#v: %w", s, err))
 	} else {
@@ -178,12 +178,12 @@ func MustParseExpression(s string) HclExpression {
 }
 
 // Tokenize returns Tokens to be used for marshalling HCL
-func (e HclExpression) Tokenize() hclwrite.Tokens {
+func (e Expression) Tokenize() hclwrite.Tokens {
 	return hclwrite.TokensForIdentifier(e.s)
 }
 
 // References return Reference for all variables used in the expression
-func (e HclExpression) References() []Reference {
+func (e Expression) References() []Reference {
 	c := make([]Reference, len(e.rs))
 	for i, r := range e.rs {
 		c[i] = r
@@ -191,57 +191,57 @@ func (e HclExpression) References() []Reference {
 	return c
 }
 
-// makeYamlLiteralValue returns a cty.Value, that is rendered as
+// makeYamlExpressionValue returns a cty.Value, that is rendered as
 // HCL literal in Blueprint syntax. Returned value isn't functional,
-// as it doesn't reference HclExpression.
+// as it doesn't reference an Expression.
 // This method should only be used for marshaling Blueprint YAML.
-func (e HclExpression) makeYamlLiteralValue() cty.Value {
+func (e Expression) makeYamlExpressionValue() cty.Value {
 	return cty.StringVal("((" + e.s + "))")
 }
 
-// To associate cty.Value with HclExpression we use cty.Value.Mark
+// To associate cty.Value with Expression we use cty.Value.Mark
 // See: https://pkg.go.dev/github.com/zclconf/go-cty/cty#Value.Mark
-// "Marks" should be of hashable type, sadly HclExpression isn't one.
-// We work it around by using `hclExpressionKey` - unique identifier
-// of HclExpression and global map of used expressions `globalHclExpressions`.
+// "Marks" should be of hashable type, sadly Expression isn't one.
+// We work it around by using `expressionKey` - unique identifier
+// of Expression and global map of used expressions `globalExpressions`.
 // There are two guarantees to hold:
 // * `ex1.key() == ex2.key()` => `ex1` and `ex2` are identical.
 // It's achieved by using HCL literal as a key.
-// * Every "mark" is in agreement with `globalHclExpressions`.
-// Achieved by declaring `HclExpression.AsValue()` as the ONLY way to produce "marks".
-type hclExpressionKey struct {
+// * Every "mark" is in agreement with `globalExpressions`.
+// Achieved by declaring `Expression.AsValue()` as the ONLY way to produce "marks".
+type expressionKey struct {
 	k string
 }
 
-var globalHclExpressions = map[hclExpressionKey]HclExpression{}
+var globalExpressions = map[expressionKey]Expression{}
 
-// key returns unique identifier of this expression in universe of all possible HCL expressions.
+// key returns unique identifier of this expression in universe of all possible expressions.
 // `ex1.key() == ex2.key()` => `ex1` and `ex2` are identical.
-func (e HclExpression) key() hclExpressionKey {
-	return hclExpressionKey{k: e.s}
+func (e Expression) key() expressionKey {
+	return expressionKey{k: e.s}
 }
 
 // AsValue returns a cty.Value that represents the expression.
-// This function is the ONLY way to get an HCL expression as a cty.Value,
+// This function is the ONLY way to get an Expression as a cty.Value,
 // do not attempt to build it by other means.
-func (e HclExpression) AsValue() cty.Value {
+func (e Expression) AsValue() cty.Value {
 	k := e.key()
 	// we don't care if ot overrides as expressions are identical
-	globalHclExpressions[k] = e
+	globalExpressions[k] = e
 	return cty.DynamicVal.Mark(e.key())
 }
 
-// IsHclValue checks if the value is result of `HclExpression.AsValue()`.
+// IsExpressionValue checks if the value is result of `Expression.AsValue()`.
 // Returns original expression and result of check.
-// It will panic if the value is HCL-marked but not a result of `HclExpression.AsValue()`
-func IsHclValue(v cty.Value) (HclExpression, bool) {
-	key, ok := HasMark[hclExpressionKey](v)
+// It will panic if the value is expression-marked but not a result of `Expression.AsValue()`
+func IsExpressionValue(v cty.Value) (Expression, bool) {
+	key, ok := HasMark[expressionKey](v)
 	if !ok {
-		return HclExpression{}, false
+		return Expression{}, false
 	}
-	expr, stored := globalHclExpressions[key]
+	expr, stored := globalExpressions[key]
 	if !stored { // shouldn't happen
-		panic(fmt.Errorf("HclExpression isn't present in global state, while being referenced by value %#v", v))
+		panic(fmt.Errorf("Expression isn't present in global state, while being referenced by value %#v", v))
 	}
 	return expr, true
 }
