@@ -57,7 +57,6 @@ var errorMessages = map[string]string{
 	"invalidMod":           "invalid module reference",
 	"invalidDeploymentRef": "invalid deployment-wide reference (only \"vars\") is supported)",
 	"varNotFound":          "Could not find source of variable",
-	"varInAnotherGroup":    "References to other groups are not yet supported",
 	"intergroupImplicit":   "References to outputs from other groups must explicitly identify the group",
 	"intergroupOrder":      "References to outputs from other groups must be to earlier groups",
 	"referenceWrongGroup":  "Reference specified the wrong group for the module",
@@ -303,7 +302,23 @@ func (c ModConnection) IsUseKind() bool {
 
 // GetSharedVariables returns variables used in the connection (can be empty!)
 func (c ModConnection) GetSharedVariables() []string {
-	return c.sharedVariables
+	var vars []string
+	isIntergroup := c.ref.IsIntergroup()
+	for _, v := range c.sharedVariables {
+		var name string
+		if isIntergroup {
+			name = AutomaticOutputName(v, c.ref.ToModuleID())
+		} else {
+			name = v
+		}
+		vars = append(vars, name)
+	}
+	return vars
+}
+
+// IsIntergroup returns if underlying connection is across deployment groups
+func (c ModConnection) IsIntergroup() bool {
+	return c.ref.IsIntergroup()
 }
 
 // Returns true if a connection does not functionally link the outputs and
@@ -598,12 +613,6 @@ func checkUsedModuleNames(bp Blueprint) error {
 
 				if err = ref.validate(bp); err != nil {
 					return err
-				}
-
-				// TODO: remove this when support is added!
-				if ref.fromGroupID != ref.toGroupID {
-					return fmt.Errorf("%s: %s is an intergroup reference",
-						errorMessages["varInAnotherGroup"], usedMod)
 				}
 			}
 		}

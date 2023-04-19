@@ -17,7 +17,6 @@ package config
 import (
 	"fmt"
 	"hpc-toolkit/pkg/modulereader"
-	"regexp"
 
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
@@ -848,14 +847,15 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 		errorMessages["intergroupOrder"], testModule1.ID)
 	c.Assert(err, ErrorMatches, expectedErr)
 
-	// Intergroup variable: proper explicit reference to earlier group
-	// TODO: failure is temporary when support is added this should be a success!
+	// Intergroup variable
 	testVarInfoOutput = modulereader.OutputInfo{Name: existingOutput}
 	testModInfo = modulereader.ModuleInfo{
 		Outputs: []modulereader.OutputInfo{testVarInfoOutput},
 	}
 	reader.SetInfo(testModule0.Source, testModInfo)
-	testVarContext1.varString = fmt.Sprintf("$(%s.%s)", testModule0.ID, existingOutput)
-	_, err = expandSimpleVariable(testVarContext1, false)
-	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s .*", errorMessages["varInAnotherGroup"], regexp.QuoteMeta(testVarContext1.varString)))
+	testVarContext1.varString = fmt.Sprintf(
+		"$(%s.%s)", testModule0.ID, existingOutput)
+	got, err = expandSimpleVariable(testVarContext1, false)
+	c.Assert(err, IsNil)
+	c.Assert(got, Equals, fmt.Sprintf("((var.%s_%s))", existingOutput, testModule0.ID))
 }

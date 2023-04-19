@@ -568,7 +568,7 @@ func (s *MySuite) TestModuleConnections(c *C) {
 	c.Assert(err, IsNil)
 	err = dc.expandVariables()
 	// TODO: this will become nil once intergroup references are enabled
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 
 	// check that ModuleConnections has map keys for each module ID
 	c.Check(dc.GetModuleConnections(), DeepEquals, map[string][]ModConnection{
@@ -1273,7 +1273,13 @@ func (s *MySuite) TestSkipValidator(c *C) {
 func (s *MySuite) TestModuleConnectionGetters(c *C) {
 	sharedVariables := []string{"foo", "bar"}
 	mc := ModConnection{
-		ref:             nil,
+		ref: modReference{
+			toModuleID:   "fred",
+			fromModuleID: "waldo",
+			toGroupID:    "baz",
+			fromGroupID:  "baz",
+			explicit:     true,
+		},
 		kind:            useConnection,
 		sharedVariables: sharedVariables,
 	}
