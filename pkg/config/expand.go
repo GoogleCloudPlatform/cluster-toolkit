@@ -442,9 +442,15 @@ func combineModuleLabels(dc *DeploymentConfig, iGrp int, iMod int) error {
 	return nil
 }
 
-func mergeLabels[V interface{}](to map[string]V, from map[string]V) map[string]V {
-	r := maps.Clone(from)
-	maps.Copy(r, to)
+// mergeLabels returns a new map with the keys from both maps. If a key exists in both maps,
+// the value from the first map is used.
+func mergeLabels[V interface{}](a map[string]V, b map[string]V) map[string]V {
+	r := maps.Clone(a)
+	for k, v := range b {
+		if _, exists := a[k]; !exists {
+			r[k] = v
+		}
+	}
 	return r
 }
 
