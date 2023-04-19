@@ -26,6 +26,7 @@ import (
 	"hpc-toolkit/pkg/validators"
 
 	"github.com/pkg/errors"
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
@@ -51,10 +52,6 @@ func (err *InvalidSettingError) Error() string {
 func (dc DeploymentConfig) validate() {
 	// Drop the flags for log to improve readability only for running the validation suite
 	log.SetFlags(0)
-
-	if err := dc.validateVars(); err != nil {
-		log.Fatal(err)
-	}
 
 	// variables should be validated before running validators
 	if err := dc.executeValidators(); err != nil {
@@ -145,17 +142,34 @@ func (dc DeploymentConfig) validateVars() error {
 	nilErr := "deployment variable %s was not set"
 
 	// Check type of labels (if they are defined)
-	if labels, ok := vars["labels"]; ok {
-		if _, ok := labels.(map[string]interface{}); !ok {
-			return errors.New("vars.labels must be a map")
+	if vars.Has("labels") {
+		labels := vars.Get("labels")
+		ty := labels.Type()
+		if !ty.IsObjectType() && !ty.IsMapType() {
+			return errors.New("vars.labels must be a map of strings")
+		}
+		for _, v := range labels.AsValueMap() {
+			if v.Type() != cty.String {
+				return errors.New("vars.labels must be a map of strings")
+			}
 		}
 	}
 
 	// Check for any nil values
-	for key, val := range vars {
-		if val == nil {
+	for key, val := range vars.Items() {
+		if val.IsNull() {
 			return fmt.Errorf(nilErr, key)
 		}
+	}
+
+	err := cty.Walk(vars.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
+		if e, is := IsExpressionValue(v); is {
+			return false, fmt.Errorf("can not use expressions in vars block, got %#v", e.makeYamlExpressionValue().AsString())
+		}
+		return true, nil
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -507,10 +521,10 @@ func (dc *DeploymentConfig) getStringValue(inputReference interface{}) (string, 
 		// checked for existence. handle if user has explicitly passed
 		// ((var.does_not_exit)) or ((not_a_varsrc.not_a_var))
 		if varSrc == "var" {
-			if val, ok := dc.Config.Vars[varName]; ok {
-				valString, ok := val.(string)
-				if ok {
-					return valString, nil
+			if dc.Config.Vars.Has(varName) {
+				v := dc.Config.Vars.Get(varName)
+				if v.Type() == cty.String {
+					return v.AsString(), nil
 				}
 				return "", fmt.Errorf("the deployment variable %s is not a string", inputReference)
 			}

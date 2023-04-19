@@ -103,8 +103,7 @@ func (dc *DeploymentConfig) addMetadataToModules() error {
 	for iGrp, grp := range dc.Config.DeploymentGroups {
 		for iMod, mod := range grp.Modules {
 			if mod.RequiredApis == nil {
-				_, projectIDExists := dc.Config.Vars["project_id"].(string)
-				if !projectIDExists {
+				if dc.Config.Vars.Get("project_id").Type() != cty.String {
 					return fmt.Errorf("global variable project_id must be defined")
 				}
 
@@ -354,29 +353,29 @@ func toStringInterfaceMap(i interface{}) (map[string]interface{}, error) {
 // the global labels defined in Vars with module setting labels. It also
 // determines the role and sets it for each module independently.
 func (dc *DeploymentConfig) combineLabels() error {
-	defaultLabels := map[string]interface{}{
+	vars := &dc.Config.Vars
+	defaults := map[string]string{
 		blueprintLabel:  dc.Config.BlueprintName,
-		deploymentLabel: dc.Config.Vars["deployment_name"],
+		deploymentLabel: dc.Config.Vars.Get("deployment_name").AsString(),
 	}
 	labels := "labels"
-	var globalLabels map[string]interface{}
-
 	// Add defaults to global labels if they don't already exist
-	if _, exists := dc.Config.Vars[labels]; !exists {
-		dc.Config.Vars[labels] = defaultLabels
+	if !vars.Has(labels) {
+		mv := map[string]cty.Value{}
+		for k, v := range defaults {
+			mv[k] = cty.StringVal(v)
+		}
+		vars.Set(labels, cty.ObjectVal(mv))
 	}
 
 	// Cast global labels so we can index into them
-	globalLabels, err := toStringInterfaceMap(dc.Config.Vars[labels])
-	if err != nil {
-		return fmt.Errorf(
-			"%s: found %T",
-			errorMessages["globalLabelType"],
-			dc.Config.Vars[labels])
+	globals := map[string]string{}
+	for k, v := range vars.Get(labels).AsValueMap() {
+		globals[k] = v.AsString()
 	}
 
 	// Add both default labels if they don't already exist
-	mergeInLabels(globalLabels, defaultLabels)
+	globals = mergeLabels(globals, defaults)
 
 	for iGrp, grp := range dc.Config.DeploymentGroups {
 		for iMod := range grp.Modules {
@@ -385,7 +384,12 @@ func (dc *DeploymentConfig) combineLabels() error {
 			}
 		}
 	}
-	dc.Config.Vars[labels] = globalLabels
+
+	mv := map[string]cty.Value{}
+	for k, v := range globals {
+		mv[k] = cty.StringVal(v)
+	}
+	vars.Set(labels, cty.ObjectVal(mv))
 	return nil
 }
 
@@ -429,24 +433,30 @@ func combineModuleLabels(dc *DeploymentConfig, iGrp int, iMod int) error {
 		mod.WrapSettingsWith[labels] = []string{"merge(", ")"}
 		mod.Settings[labels] = []interface{}{"((var.labels))", modLabels}
 	} else if mod.Kind == "packer" {
-		mergeInLabels(modLabels, dc.Config.Vars[labels].(map[string]interface{}))
-		mod.Settings[labels] = modLabels
+		g := map[string]interface{}{}
+		for k, v := range dc.Config.Vars.Get(labels).AsValueMap() {
+			g[k] = v.AsString()
+		}
+		mod.Settings[labels] = mergeLabels(modLabels, g)
 	}
 	return nil
 }
 
-func mergeInLabels[V interface{}](to map[string]V, from map[string]V) {
-	for k, v := range from {
-		if _, exists := to[k]; !exists {
-			to[k] = v
+// mergeLabels returns a new map with the keys from both maps. If a key exists in both maps,
+// the value from the first map is used.
+func mergeLabels[V interface{}](a map[string]V, b map[string]V) map[string]V {
+	r := maps.Clone(a)
+	for k, v := range b {
+		if _, exists := a[k]; !exists {
+			r[k] = v
 		}
 	}
+	return r
 }
 
 func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 	deploymentGroup := dc.Config.DeploymentGroups[groupIndex]
 	modInfo := dc.ModulesInfo[deploymentGroup.Name]
-	globalVars := dc.Config.Vars
 
 	for _, mod := range deploymentGroup.Modules {
 		for _, input := range modInfo[mod.Source].Inputs {
@@ -457,7 +467,7 @@ func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 			}
 
 			// If it's not set, is there a global we can use?
-			if _, ok := globalVars[input.Name]; ok {
+			if dc.Config.Vars.Has(input.Name) {
 				ref := varReference{
 					name:         input.Name,
 					toModuleID:   "vars",
@@ -496,11 +506,6 @@ func updateGlobalVarTypes(vars map[string]interface{}) error {
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to module settings if not already set.
 func (dc *DeploymentConfig) applyGlobalVariables() error {
-	// Update global variable types to match
-	if err := updateGlobalVarTypes(dc.Config.Vars); err != nil {
-		return err
-	}
-
 	for groupIndex := range dc.Config.DeploymentGroups {
 		err := dc.applyGlobalVarsInGroup(groupIndex)
 		if err != nil {
@@ -764,7 +769,7 @@ func (ref varReference) validate(bp Blueprint) error {
 	// simplest case to evaluate is a deployment variable's existence
 	if ref.toGroupID == globalGroupID {
 		if ref.toModuleID == "vars" {
-			if _, ok := bp.Vars[ref.name]; !ok {
+			if !bp.Vars.Has(ref.name) {
 				return fmt.Errorf("%s: %s is not a deployment variable",
 					errorMessages["varNotFound"], ref.name)
 			}
@@ -1014,9 +1019,9 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 		dc.Config.Validators = []validatorConfig{}
 	}
 
-	_, projectIDExists := dc.Config.Vars["project_id"]
-	_, regionExists := dc.Config.Vars["region"]
-	_, zoneExists := dc.Config.Vars["zone"]
+	projectIDExists := dc.Config.Vars.Has("project_id")
+	regionExists := dc.Config.Vars.Has("region")
+	zoneExists := dc.Config.Vars.Has("zone")
 
 	defaults := []validatorConfig{}
 	defaults = append(defaults, validatorConfig{
