@@ -117,14 +117,11 @@ func (y *yamlValue) unmarshalScalar(n *yaml.Node) error {
 		}
 		y.v = e.AsValue()
 	} else if y.v.Type() == cty.String && hasVariable(y.v.AsString()) { // "simple" variable
-		e, gr, err := SimpleVarToHclExpression(y.v.AsString())
+		e, err := SimpleVarToHclExpression(y.v.AsString())
 		if err != nil {
 			return err
 		}
 		y.v = e.AsValue()
-		if gr != "" {
-			y.v = y.v.Mark(ExplicitGroupMark{Group: gr})
-		}
 	}
 	return nil
 }
