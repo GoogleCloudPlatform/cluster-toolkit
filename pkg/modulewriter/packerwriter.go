@@ -66,12 +66,7 @@ func (w PackerWriter) writeDeploymentGroup(
 	groupPath := filepath.Join(deployDir, depGroup.Name)
 	allInputs := make(map[string]bool)
 	for _, mod := range depGroup.Modules {
-
 		ctySettings, err := config.ConvertMapToCty(mod.Settings)
-		for k := range ctySettings {
-			allInputs[k] = true
-		}
-
 		if err != nil {
 			return groupMetadata{}, fmt.Errorf(
 				"error converting packer module settings to cty for writing: %w", err)
@@ -89,9 +84,10 @@ func (w PackerWriter) writeDeploymentGroup(
 	}
 
 	return groupMetadata{
-		Name:    depGroup.Name,
-		Inputs:  orderKeys(allInputs),
-		Outputs: []string{},
+		Name:             depGroup.Name,
+		DeploymentInputs: orderKeys(allInputs),
+		IntergroupInputs: orderKeys(allInputs),
+		Outputs:          []string{},
 	}, nil
 }
 

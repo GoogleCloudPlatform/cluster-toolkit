@@ -882,17 +882,13 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 		if toModIdx == -1 {
 			return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], varRef.toModuleID)
 		}
-		toMod := toGrp.Modules[toModIdx]
+		toMod := &toGrp.Modules[toModIdx]
 
 		// ensure that the target module outputs the value in the root module
 		// state and not just internally within its deployment group
 		if !slices.ContainsFunc(toMod.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == varRef.name }) {
 			toMod.Outputs = append(toMod.Outputs, modulereader.OutputInfo{Name: varRef.name})
 		}
-
-		// TODO: remove error
-		return "", fmt.Errorf("%s: %s is an intergroup reference",
-			errorMessages["varInAnotherGroup"], context.varString)
 	}
 	return fmt.Sprintf("((%s))", varRef.HclString()), nil
 }

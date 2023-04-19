@@ -27,8 +27,10 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/slices"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 )
 
 const (
@@ -144,33 +146,39 @@ func getTypeTokens(v cty.Value) hclwrite.Tokens {
 	return simpleTokens(getHclType(v.Type()))
 }
 
-func writeVariables(vars map[string]cty.Value, dst string) error {
+func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo, dst string) error {
 	// Create file
 	variablesPath := filepath.Join(dst, "variables.tf")
 	if err := createBaseFile(variablesPath); err != nil {
 		return fmt.Errorf("error creating variables.tf file: %v", err)
 	}
 
+	var inputs []modulereader.VarInfo
+	for k, v := range vars {
+		typeStr := getHclType(v.Type())
+		newInput := modulereader.VarInfo{
+			Name:        k,
+			Type:        typeStr,
+			Description: fmt.Sprintf("Toolkit deployment variable: %s", k),
+		}
+		inputs = append(inputs, newInput)
+	}
+	inputs = append(inputs, extraVars...)
+	slices.SortFunc(inputs, func(i, j modulereader.VarInfo) bool { return i.Name < j.Name })
+
 	// Create HCL Body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
 
-	// for each variable
-	for _, k := range orderKeys(vars) {
-		v := vars[k]
-		// Create variable block
-		hclBlock := hclBody.AppendNewBlock("variable", []string{k})
-		blockBody := hclBlock.Body()
-
-		// Add attributes (description, type, etc)
-		blockBody.SetAttributeValue("description", cty.StringVal(""))
-		typeTok := getTypeTokens(v)
-		if len(typeTok) == 0 {
-			return fmt.Errorf("error determining type of variable %s", k)
-		}
-		blockBody.SetAttributeRaw("type", typeTok)
+	// create variable block for each input
+	for _, k := range inputs {
 		hclBody.AppendNewline()
+		hclBlock := hclBody.AppendNewBlock("variable", []string{k.Name})
+		blockBody := hclBlock.Body()
+		blockBody.SetAttributeValue("description", cty.StringVal(k.Description))
+		blockBody.SetAttributeRaw("type", simpleTokens(k.Type))
 	}
+
 	// Write file
 	if err := appendHCLToFile(variablesPath, hclFile.Bytes()); err != nil {
 		return fmt.Errorf("error writing HCL to variables.tf file: %v", err)
@@ -346,11 +354,17 @@ func (w TFWriter) writeDeploymentGroup(
 	deploymentDir string,
 ) (groupMetadata, error) {
 	depGroup := dc.Config.DeploymentGroups[groupIndex]
-	filteredVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
+	deploymentVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
+	intergroupVars := findIntergroupVariables(depGroup, dc.GetModuleConnections())
+	intergroupInputs := make(map[string]bool)
+	for _, igVar := range intergroupVars {
+		intergroupInputs[igVar.Name] = true
+	}
 	gmd := groupMetadata{
-		Name:    depGroup.Name,
-		Inputs:  orderKeys(filteredVars),
-		Outputs: getAllOutputs(depGroup),
+		Name:             depGroup.Name,
+		DeploymentInputs: orderKeys(deploymentVars),
+		IntergroupInputs: orderKeys(intergroupInputs),
+		Outputs:          getAllOutputs(depGroup),
 	}
 
 	writePath := filepath.Join(deploymentDir, depGroup.Name)
@@ -364,7 +378,7 @@ func (w TFWriter) writeDeploymentGroup(
 	}
 
 	// Write variables.tf file
-	if err := writeVariables(filteredVars, writePath); err != nil {
+	if err := writeVariables(deploymentVars, intergroupVars, writePath); err != nil {
 		return groupMetadata{}, fmt.Errorf(
 			"error writing variables.tf file for deployment group %s: %v",
 			depGroup.Name, err)
@@ -378,14 +392,14 @@ func (w TFWriter) writeDeploymentGroup(
 	}
 
 	// Write terraform.tfvars file
-	if err := writeTfvars(filteredVars, writePath); err != nil {
+	if err := writeTfvars(deploymentVars, writePath); err != nil {
 		return groupMetadata{}, fmt.Errorf(
 			"error writing terraform.tfvars file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write providers.tf file
-	if err := writeProviders(filteredVars, writePath); err != nil {
+	if err := writeProviders(deploymentVars, writePath); err != nil {
 		return groupMetadata{}, fmt.Errorf(
 			"error writing providers.tf file for deployment group %s: %v",
 			depGroup.Name, err)
