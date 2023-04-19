@@ -374,16 +374,13 @@ func (dc *DeploymentConfig) testProjectExists(c validatorConfig) error {
 	if err := c.check(testProjectExistsName, []string{"project_id"}); err != nil {
 		return err
 	}
-
-	projectID, err := dc.getStringValue(c.Inputs["project_id"])
+	m, err := resolveValidatorInputs(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestProjectExists(projectID)
-	if err != nil {
+	if err = validators.TestProjectExists(m["project_id"]); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
 	}
@@ -397,20 +394,13 @@ func (dc *DeploymentConfig) testRegionExists(c validatorConfig) error {
 	if err := c.check(testRegionExistsName, []string{"project_id", "region"}); err != nil {
 		return err
 	}
-	projectID, err := dc.getStringValue(c.Inputs["project_id"])
-	if err != nil {
-		log.Print(funcErrorMsg)
-		return err
-	}
-	region, err := dc.getStringValue(c.Inputs["region"])
+	m, err := resolveValidatorInputs(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestRegionExists(projectID, region)
-	if err != nil {
+	if err = validators.TestRegionExists(m["project_id"], m["region"]); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
 	}
@@ -424,21 +414,13 @@ func (dc *DeploymentConfig) testZoneExists(c validatorConfig) error {
 	if err := c.check(testZoneExistsName, []string{"project_id", "zone"}); err != nil {
 		return err
 	}
-
-	projectID, err := dc.getStringValue(c.Inputs["project_id"])
-	if err != nil {
-		log.Print(funcErrorMsg)
-		return err
-	}
-	zone, err := dc.getStringValue(c.Inputs["zone"])
+	m, err := resolveValidatorInputs(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestZoneExists(projectID, zone)
-	if err != nil {
+	if err = validators.TestZoneExists(m["project_id"], m["zone"]); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
 	}
@@ -452,26 +434,13 @@ func (dc *DeploymentConfig) testZoneInRegion(c validatorConfig) error {
 	if err := c.check(testZoneInRegionName, []string{"project_id", "region", "zone"}); err != nil {
 		return err
 	}
-
-	projectID, err := dc.getStringValue(c.Inputs["project_id"])
-	if err != nil {
-		log.Print(funcErrorMsg)
-		return err
-	}
-	zone, err := dc.getStringValue(c.Inputs["zone"])
-	if err != nil {
-		log.Print(funcErrorMsg)
-		return err
-	}
-	region, err := dc.getStringValue(c.Inputs["region"])
+	m, err := resolveValidatorInputs(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestZoneInRegion(projectID, zone, region)
-	if err != nil {
+	if err = validators.TestZoneInRegion(m["project_id"], m["zone"], m["region"]); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
 	}
@@ -531,4 +500,19 @@ func (dc *DeploymentConfig) getStringValue(inputReference interface{}) (string, 
 		}
 	}
 	return "", fmt.Errorf("the value %s is not a deployment variable or was not defined", inputReference)
+}
+
+func resolveValidatorInputs(inputs Dict, bp Blueprint) (map[string]string, error) {
+	ev, err := inputs.Eval(bp)
+	if err != nil {
+		return nil, err
+	}
+	ms := map[string]string{}
+	for k, v := range ev.Items() {
+		if v.Type() != cty.String {
+			return nil, fmt.Errorf("validator inputs must be strings, %s is a %s", k, v.Type())
+		}
+		ms[k] = v.AsString()
+	}
+	return ms, nil
 }

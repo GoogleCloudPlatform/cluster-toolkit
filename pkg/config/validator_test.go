@@ -278,21 +278,13 @@ func (s *MySuite) TestMergeBlueprintRequirements(c *C) {
 func (s *MySuite) TestExecuteValidators(c *C) {
 	dc := getDeploymentConfigForTest()
 	dc.Config.Validators = []validatorConfig{
-		{
-			Validator: "unimplemented-validator",
-			Inputs:    map[string]interface{}{},
-		},
-	}
+		{Validator: "unimplemented-validator"}}
 
 	err := dc.executeValidators()
 	c.Assert(err, ErrorMatches, validationErrorMsg)
 
 	dc.Config.Validators = []validatorConfig{
-		{
-			Validator: testProjectExistsName.String(),
-			Inputs:    map[string]interface{}{},
-		},
-	}
+		{Validator: testProjectExistsName.String()}}
 
 	err = dc.executeValidators()
 	c.Assert(err, ErrorMatches, validationErrorMsg)
@@ -308,9 +300,7 @@ func (s *MySuite) TestApisEnabledValidator(c *C) {
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	apisEnabledValidator := validatorConfig{
-		Validator: testApisEnabledName.String(),
-		Inputs:    map[string]interface{}{},
-	}
+		Validator: testApisEnabledName.String()}
 
 	// this test succeeds because the list of required APIs for the test
 	// Deployment Config is empty; no actual API calls get made in this case.
@@ -320,7 +310,7 @@ func (s *MySuite) TestApisEnabledValidator(c *C) {
 	c.Assert(err, IsNil)
 
 	// this validator reads blueprint directly so 1 inputs should fail
-	apisEnabledValidator.Inputs["foo"] = "bar"
+	apisEnabledValidator.Inputs.Set("foo", cty.StringVal("bar"))
 	err = dc.testApisEnabled(apisEnabledValidator)
 	c.Assert(err, ErrorMatches, tooManyInputRegex)
 }
@@ -339,17 +329,13 @@ func (s *MySuite) TestProjectExistsValidator(c *C) {
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	// test validator fails for config without any inputs
-	projectValidator := validatorConfig{
-		Validator: testProjectExistsName.String(),
-		Inputs:    map[string]interface{}{},
-	}
+	projectValidator := validatorConfig{Validator: testProjectExistsName.String()}
 	err = dc.testProjectExists(projectValidator)
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
-	projectValidator.Inputs["project_id"] = "((var.undefined))"
-	err = dc.testProjectExists(projectValidator)
-	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
+	projectValidator.Inputs.Set("project_id", MustParseExpression("var.undefined").AsValue())
+	c.Assert(dc.testProjectExists(projectValidator), NotNil)
 
 	// TODO: implement a mock client to test success of test_project_exists
 }
@@ -364,21 +350,18 @@ func (s *MySuite) TestRegionExistsValidator(c *C) {
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	// test validator fails for config without any inputs
-	regionValidator := validatorConfig{
-		Validator: testRegionExistsName.String(),
-		Inputs:    map[string]interface{}{},
-	}
+	regionValidator := validatorConfig{Validator: testRegionExistsName.String()}
 	err = dc.testRegionExists(regionValidator)
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
-	regionValidator.Inputs["project_id"] = "((var.project_id))"
-	regionValidator.Inputs["region"] = "((var.region))"
-	err = dc.testRegionExists(regionValidator)
-	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
+	regionValidator.Inputs.
+		Set("project_id", MustParseExpression("var.project_id").AsValue()).
+		Set("region", MustParseExpression("var.region").AsValue())
+	c.Assert(dc.testRegionExists(regionValidator), NotNil)
+
 	dc.Config.Vars.Set("project_id", cty.StringVal("invalid-project"))
-	err = dc.testRegionExists(regionValidator)
-	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
+	c.Assert(dc.testRegionExists(regionValidator), NotNil)
 
 	// TODO: implement a mock client to test success of test_region_exists
 }
@@ -393,21 +376,18 @@ func (s *MySuite) TestZoneExistsValidator(c *C) {
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	// test validator fails for config without any inputs
-	zoneValidator := validatorConfig{
-		Validator: testZoneExistsName.String(),
-		Inputs:    map[string]interface{}{},
-	}
+	zoneValidator := validatorConfig{Validator: testZoneExistsName.String()}
 	err = dc.testZoneExists(zoneValidator)
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
-	zoneValidator.Inputs["project_id"] = "((var.project_id))"
-	zoneValidator.Inputs["zone"] = "((var.zone))"
-	err = dc.testZoneExists(zoneValidator)
-	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
+	zoneValidator.Inputs.
+		Set("project_id", MustParseExpression("var.project_id").AsValue()).
+		Set("zone", MustParseExpression("var.zone").AsValue())
+	c.Assert(dc.testZoneExists(zoneValidator), NotNil)
+
 	dc.Config.Vars.Set("project_id", cty.StringVal("invalid-project"))
-	err = dc.testZoneExists(zoneValidator)
-	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
+	c.Assert(dc.testZoneExists(zoneValidator), NotNil)
 
 	// TODO: implement a mock client to test success of test_zone_exists
 }
@@ -422,25 +402,22 @@ func (s *MySuite) TestZoneInRegionValidator(c *C) {
 	c.Assert(err, ErrorMatches, passedWrongValidatorRegex)
 
 	// test validator fails for config without any inputs
-	zoneInRegionValidator := validatorConfig{
-		Validator: testZoneInRegionName.String(),
-		Inputs:    map[string]interface{}{},
-	}
+	zoneInRegionValidator := validatorConfig{Validator: testZoneInRegionName.String()}
 	err = dc.testZoneInRegion(zoneInRegionValidator)
 	c.Assert(err, ErrorMatches, missingRequiredInputRegex)
 
 	// test validators fail when input global variables are undefined
-	zoneInRegionValidator.Inputs["project_id"] = "((var.project_id))"
-	zoneInRegionValidator.Inputs["region"] = "((var.region))"
-	zoneInRegionValidator.Inputs["zone"] = "((var.zone))"
-	err = dc.testZoneInRegion(zoneInRegionValidator)
-	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
+	zoneInRegionValidator.Inputs.
+		Set("project_id", MustParseExpression("var.project_id").AsValue()).
+		Set("region", MustParseExpression("var.region").AsValue()).
+		Set("zone", MustParseExpression("var.zone").AsValue())
+	c.Assert(dc.testZoneInRegion(zoneInRegionValidator), NotNil)
+
 	dc.Config.Vars.Set("project_id", cty.StringVal("invalid-project"))
-	err = dc.testZoneInRegion(zoneInRegionValidator)
-	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
+	c.Assert(dc.testZoneInRegion(zoneInRegionValidator), NotNil)
+
 	dc.Config.Vars.Set("zone", cty.StringVal("invalid-zone"))
-	err = dc.testZoneInRegion(zoneInRegionValidator)
-	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
+	c.Assert(dc.testZoneInRegion(zoneInRegionValidator), NotNil)
 
 	// TODO: implement a mock client to test success of test_zone_in_region
 }
