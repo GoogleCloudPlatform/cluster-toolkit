@@ -184,3 +184,28 @@ zebra: *passtime
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }
+
+func TestEval(t *testing.T) {
+	bp := Blueprint{
+		Vars: NewDict(map[string]cty.Value{
+			"zebra": cty.StringVal("stripes"),
+		}),
+	}
+	d := NewDict(map[string]cty.Value{
+		"abyss": cty.ObjectVal(map[string]cty.Value{
+			"white": Reference{GlobalVar: true, Name: "zebra"}.AsExpression().AsValue(),
+			"green": cty.StringVal("grass"),
+		})})
+	want := NewDict(map[string]cty.Value{
+		"abyss": cty.ObjectVal(map[string]cty.Value{
+			"white": cty.StringVal("stripes"),
+			"green": cty.StringVal("grass"),
+		})})
+	got, err := d.Eval(bp)
+	if err != nil {
+		t.Fatalf("failed to eval: %v", err)
+	}
+	if diff := cmp.Diff(want.Items(), got.Items(), ctydebug.CmpOptions); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
