@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -40,8 +41,11 @@ func (w *PackerWriter) addNumModules(value int) {
 	w.numModules += value
 }
 
-func printPackerInstructions(modPath string, moduleName string) {
+func printPackerInstructions(modPath string, moduleName string, printIntergroupWarning bool) {
 	printInstructionsPreamble("Packer", modPath, moduleName)
+	if printIntergroupWarning {
+		fmt.Print(intergroupWarning)
+	}
 	fmt.Printf("  cd %s\n", modPath)
 	fmt.Println("  packer init .")
 	fmt.Println("  packer validate .")
@@ -64,19 +68,17 @@ func (w PackerWriter) writeDeploymentGroup(
 ) (groupMetadata, error) {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, depGroup.Name)
-	allInputs := make(map[string]bool)
+	deploymentVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
+	intergroupVars := findIntergroupVariables(depGroup, dc.GetModuleConnections())
+	intergroupVarNames := modulereader.GetVarNames(intergroupVars)
+
 	for _, mod := range depGroup.Modules {
-
 		ctySettings, err := config.ConvertMapToCty(mod.Settings)
-		for k := range ctySettings {
-			allInputs[k] = true
-		}
-
 		if err != nil {
 			return groupMetadata{}, fmt.Errorf(
 				"error converting packer module settings to cty for writing: %w", err)
 		}
-		err = config.ResolveVariables(ctySettings, dc.Config.Vars.Items())
+		err = config.ResolveVariables(ctySettings, dc.Config.Vars.Items(), intergroupVarNames)
 		if err != nil {
 			return groupMetadata{}, err
 		}
@@ -85,13 +87,14 @@ func (w PackerWriter) writeDeploymentGroup(
 		if err != nil {
 			return groupMetadata{}, err
 		}
-		printPackerInstructions(modPath, mod.ID)
+		printPackerInstructions(modPath, mod.ID, len(intergroupVarNames) > 0)
 	}
 
 	return groupMetadata{
-		Name:    depGroup.Name,
-		Inputs:  orderKeys(allInputs),
-		Outputs: []string{},
+		Name:             depGroup.Name,
+		DeploymentInputs: orderKeys(deploymentVars),
+		IntergroupInputs: intergroupVarNames,
+		Outputs:          []string{},
 	}, nil
 }
 

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -329,7 +330,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 					matchingIntragroupName2: fmt.Sprintf("$(%s.%s)", modID0, matchingIntragroupName2),
 				},
 				Use: []string{
-					fmt.Sprintf("%s.%s", dg0Name, modID0),
+					modID0,
 				},
 			},
 		},
@@ -343,7 +344,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Source:   testModuleSource2,
 				Settings: map[string]interface{}{},
 				Use: []string{
-					fmt.Sprintf("%s.%s", testDeploymentGroup0.Name, testDeploymentGroup0.Modules[0].ID),
+					testDeploymentGroup0.Modules[0].ID,
 				},
 			},
 		},
@@ -470,7 +471,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef0, useConnection, []string{"var1"})
 	got = dc.listUnusedModules()
@@ -482,7 +482,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef1, useConnection, []string{})
 	got = dc.listUnusedModules()
@@ -494,7 +493,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef2, useConnection, []string{})
 	got = dc.listUnusedModules()
@@ -568,7 +566,7 @@ func (s *MySuite) TestModuleConnections(c *C) {
 	c.Assert(err, IsNil)
 	err = dc.expandVariables()
 	// TODO: this will become nil once intergroup references are enabled
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 
 	// check that ModuleConnections has map keys for each module ID
 	c.Check(dc.GetModuleConnections(), DeepEquals, map[string][]ModConnection{
@@ -603,7 +601,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					fromModuleID: "TestModule1",
 					toGroupID:    "primary",
 					fromGroupID:  "primary",
-					explicit:     true,
 				},
 				kind:            useConnection,
 				sharedVariables: []string{"test_intra_0"},
@@ -627,7 +624,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					fromModuleID: "TestModule2",
 					toGroupID:    "primary",
 					fromGroupID:  "secondary",
-					explicit:     true,
 				},
 				kind:            useConnection,
 				sharedVariables: []string{"test_inter_0"},
@@ -1273,7 +1269,12 @@ func (s *MySuite) TestSkipValidator(c *C) {
 func (s *MySuite) TestModuleConnectionGetters(c *C) {
 	sharedVariables := []string{"foo", "bar"}
 	mc := ModConnection{
-		ref:             nil,
+		ref: modReference{
+			toModuleID:   "fred",
+			fromModuleID: "waldo",
+			toGroupID:    "baz",
+			fromGroupID:  "baz",
+		},
 		kind:            useConnection,
 		sharedVariables: sharedVariables,
 	}
@@ -1284,4 +1285,85 @@ func (s *MySuite) TestModuleConnectionGetters(c *C) {
 	mc = ModConnection{}
 	c.Check(mc.IsUseKind(), Equals, false)
 	c.Check(mc.IsDeploymentKind(), Equals, false)
+}
+
+func (s *MySuite) TestResolveVariables(c *C) {
+	projectID := cty.StringVal("test-project")
+	deploymentName := cty.StringVal("test-deployment")
+	labels := cty.ObjectVal(map[string]cty.Value{
+		"ghpc_deployment": deploymentName,
+	})
+	customNumber := cty.NumberVal(big.NewFloat(2.0))
+	customBool := cty.BoolVal(true)
+	deploymentVars := map[string]cty.Value{
+		"project_id":      projectID,
+		"deployment_name": deploymentName,
+		"labels":          labels,
+		"custom_number":   customNumber,
+		"custom_bool":     customBool,
+	}
+
+	settings := map[string]cty.Value{
+		"project_id": cty.StringVal("((var.project_id))"),
+		"labels":     cty.StringVal("((var.labels))"),
+		"direct":     cty.StringVal("directly-set"),
+		"number-list": cty.TupleVal([]cty.Value{
+			cty.NumberVal(big.NewFloat(0.0)),
+			cty.StringVal("((var.custom_number))"),
+		}),
+		"bool-map": cty.ObjectVal(map[string]cty.Value{
+			"first":  cty.BoolVal(true),
+			"second": cty.StringVal("((var.custom_bool))"),
+		}),
+	}
+
+	expectedSettings := map[string]cty.Value{
+		"project_id": projectID,
+		"labels":     labels,
+		"direct":     cty.StringVal("directly-set"),
+		"number-list": cty.TupleVal([]cty.Value{
+			cty.NumberVal(big.NewFloat(0.0)),
+			customNumber,
+		}),
+		"bool-map": cty.ObjectVal(map[string]cty.Value{
+			"first":  cty.BoolVal(true),
+			"second": customBool,
+		}),
+	}
+
+	err := ResolveVariables(settings, deploymentVars, []string{})
+	c.Assert(err, IsNil)
+	c.Assert(settings, DeepEquals, expectedSettings)
+
+	settings["new-key"] = cty.StringVal("((var.not_a_variable))")
+	err = ResolveVariables(settings, deploymentVars, []string{})
+	c.Assert(err, NotNil)
+
+	settings["new-key"] = cty.ObjectVal(map[string]cty.Value{
+		"bad": cty.StringVal("((var.not_a_variable))"),
+	})
+	err = ResolveVariables(settings, deploymentVars, []string{})
+	c.Assert(err, NotNil)
+
+	settings["new-key"] = cty.TupleVal([]cty.Value{
+		cty.StringVal("((var.not_a_variable))"),
+	})
+	err = ResolveVariables(settings, deploymentVars, []string{})
+	c.Assert(err, NotNil)
+	err = ResolveVariables(settings, deploymentVars, []string{"not_a_variable"})
+	c.Assert(err, IsNil)
+	c.Assert(settings, DeepEquals, expectedSettings)
+}
+
+func (s *MySuite) TestModuleGroup(c *C) {
+	dc := getDeploymentConfigForTest()
+
+	group := dc.Config.DeploymentGroups[0]
+	modID := dc.Config.DeploymentGroups[0].Modules[0].ID
+
+	foundGroup := dc.Config.ModuleGroupOrDie(modID)
+	c.Assert(foundGroup, DeepEquals, group)
+
+	_, err := dc.Config.ModuleGroup("bad_module_id")
+	c.Assert(err, NotNil)
 }

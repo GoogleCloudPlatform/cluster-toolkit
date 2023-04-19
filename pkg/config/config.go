@@ -18,6 +18,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -27,7 +28,6 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
-	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
 	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
@@ -57,8 +57,6 @@ var errorMessages = map[string]string{
 	"invalidMod":           "invalid module reference",
 	"invalidDeploymentRef": "invalid deployment-wide reference (only \"vars\") is supported)",
 	"varNotFound":          "Could not find source of variable",
-	"varInAnotherGroup":    "References to other groups are not yet supported",
-	"intergroupImplicit":   "References to outputs from other groups must explicitly identify the group",
 	"intergroupOrder":      "References to outputs from other groups must be to earlier groups",
 	"referenceWrongGroup":  "Reference specified the wrong group for the module",
 	"noOutput":             "Output not found for a variable",
@@ -111,6 +109,27 @@ func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error)
 	}
 	group := dc.Config.DeploymentGroups[groupIndex]
 	return group, nil
+}
+
+// ModuleGroup returns the group containing the module
+func (b Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
+	for _, g := range b.DeploymentGroups {
+		for _, m := range g.Modules {
+			if m.ID == mod {
+				return g, nil
+			}
+		}
+	}
+	return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], mod)
+}
+
+// ModuleGroupOrDie returns the group containing the module; panics if unfound
+func (b Blueprint) ModuleGroupOrDie(mod string) DeploymentGroup {
+	g, err := b.ModuleGroup(mod)
+	if err != nil {
+		panic(fmt.Errorf("module %s not found in blueprint: %s", mod, err))
+	}
+	return g
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
@@ -303,7 +322,19 @@ func (c ModConnection) IsUseKind() bool {
 
 // GetSharedVariables returns variables used in the connection (can be empty!)
 func (c ModConnection) GetSharedVariables() []string {
-	return c.sharedVariables
+	if !c.IsIntergroup() {
+		return c.sharedVariables
+	}
+	vars := make([]string, len(c.sharedVariables))
+	for i, v := range c.sharedVariables {
+		vars[i] = AutomaticOutputName(v, c.ref.ToModuleID())
+	}
+	return vars
+}
+
+// IsIntergroup returns if underlying connection is across deployment groups
+func (c ModConnection) IsIntergroup() bool {
+	return c.ref.IsIntergroup()
 }
 
 // Returns true if a connection does not functionally link the outputs and
@@ -591,19 +622,13 @@ func checkUsedModuleNames(bp Blueprint) error {
 	for _, grp := range bp.DeploymentGroups {
 		for _, mod := range grp.Modules {
 			for _, usedMod := range mod.Use {
-				ref, err := identifyModuleByReference(usedMod, grp, mod)
+				ref, err := identifyModuleByReference(usedMod, bp, mod.ID)
 				if err != nil {
 					return err
 				}
 
 				if err = ref.validate(bp); err != nil {
 					return err
-				}
-
-				// TODO: remove this when support is added!
-				if ref.fromGroupID != ref.toGroupID {
-					return fmt.Errorf("%s: %s is an intergroup reference",
-						errorMessages["varInAnotherGroup"], usedMod)
 				}
 			}
 		}
@@ -799,33 +824,65 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 func ResolveVariables(
 	ctyMap map[string]cty.Value,
 	origin map[string]cty.Value,
+	allowedUnknownNames []string,
 ) error {
 	evalCtx := &hcl.EvalContext{
 		Variables: map[string]cty.Value{"var": cty.ObjectVal(origin)},
 	}
+	unknownMap := map[string]bool{}
+	for _, n := range allowedUnknownNames {
+		unknownMap[n] = true
+	}
 	for key, val := range ctyMap {
-		if val.Type() == cty.String {
-			var valString string
-			if err := gocty.FromCtyValue(val, &valString); err != nil {
-				return err
-			}
-			ctx, varName, found := IdentifyLiteralVariable(valString)
-			// only attempt resolution on global literal variables
-			// leave all other strings alone (including non-global)
-			if found && ctx == "var" {
-				varTraversal := hcl.Traversal{
-					hcl.TraverseRoot{Name: ctx},
-					hcl.TraverseAttr{Name: varName},
-				}
-				newVal, diags := varTraversal.TraverseAbs(evalCtx)
-				if diags.HasErrors() {
-					return diags
-				}
-				ctyMap[key] = newVal
-			}
+		newVal, err := cty.Transform(val, func(p cty.Path, v cty.Value) (cty.Value, error) {
+			return resolveValue(v, evalCtx, unknownMap)
+		})
+
+		var re *ResolutionError
+		if errors.As(err, &re) && re.allowed {
+			delete(ctyMap, key)
+			continue
+		} else if err != nil {
+			return err
 		}
+		ctyMap[key] = newVal
 	}
 	return nil
+}
+
+// ResolutionError reports all failures in resolveValue, some may be allowable
+type ResolutionError struct {
+	varName string
+	allowed bool
+}
+
+func (err *ResolutionError) Error() string {
+	return fmt.Sprintf("failed to resolve %s, failure is allowed: %v", err.varName, err.allowed)
+}
+
+// resolveValue will transform cty.Value string literals "((var.name))" into
+// cty.Value objects of any type from deployment variables
+func resolveValue(val cty.Value, evalCtx *hcl.EvalContext, allowedUnknown map[string]bool) (cty.Value, error) {
+	if val.Type() != cty.String || !IsLiteralVariable(val.AsString()) {
+		return val, nil
+	}
+
+	ctx, varName, found := IdentifyLiteralVariable(val.AsString())
+	if found && ctx == "var" && !allowedUnknown[varName] {
+		varTraversal := hcl.Traversal{
+			hcl.TraverseRoot{Name: ctx},
+			hcl.TraverseAttr{Name: varName},
+		}
+		newVal, diags := varTraversal.TraverseAbs(evalCtx)
+		if diags.HasErrors() {
+			return cty.Value{}, &ResolutionError{varName: varName, allowed: false}
+		}
+		return newVal, nil
+	}
+	if allowedUnknown[varName] {
+		return cty.Value{}, &ResolutionError{varName: varName, allowed: true}
+	}
+	return val, nil
 }
 
 // InputValueError signifies a problem with the blueprint name.

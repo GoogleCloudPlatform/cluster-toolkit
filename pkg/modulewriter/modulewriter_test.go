@@ -586,19 +586,21 @@ func (s *MySuite) TestWriteVariables(c *C) {
 		log.Fatal("Failed to create test directory for creating variables.tf file")
 	}
 
+	noIntergroupVars := []modulereader.VarInfo{}
+
 	// Simple success, empty vars
 	testVars := make(map[string]cty.Value)
-	err := writeVariables(testVars, testVarDir)
+	err := writeVariables(testVars, noIntergroupVars, testVarDir)
 	c.Assert(err, IsNil)
 
 	// Failure: Bad path
-	err = writeVariables(testVars, "not/a/real/path")
+	err = writeVariables(testVars, noIntergroupVars, "not/a/real/path")
 	c.Assert(err, ErrorMatches, "error creating variables.tf file: .*")
 
 	// Success, common vars
 	testVars["deployment_name"] = cty.StringVal("test_deployment")
 	testVars["project_id"] = cty.StringVal("test_project")
-	err = writeVariables(testVars, testVarDir)
+	err = writeVariables(testVars, noIntergroupVars, testVarDir)
 	c.Assert(err, IsNil)
 	exists, err := stringExistsInFile("\"deployment_name\"", varsFilePath)
 	c.Assert(err, IsNil)
@@ -607,7 +609,7 @@ func (s *MySuite) TestWriteVariables(c *C) {
 	// Success, "dynamic type"
 	testVars = make(map[string]cty.Value)
 	testVars["project_id"] = cty.NullVal(cty.DynamicPseudoType)
-	err = writeVariables(testVars, testVarDir)
+	err = writeVariables(testVars, noIntergroupVars, testVarDir)
 	c.Assert(err, IsNil)
 }
 
