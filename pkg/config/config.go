@@ -622,11 +622,11 @@ func checkBackend(b TerraformBackend) error {
 	if hasVariable(b.Type) {
 		return fmt.Errorf(errMsg, "type", b.Type)
 	}
-	if _, is := IsYamlHclLiteral(cty.StringVal(b.Type)); is {
+	if _, is := IsYamlExpressionLiteral(cty.StringVal(b.Type)); is {
 		return fmt.Errorf(errMsg, "type", b.Type)
 	}
 	return cty.Walk(b.Configuration.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
-		if _, is := IsHclValue(v); is {
+		if _, is := IsExpressionValue(v); is {
 			return false, fmt.Errorf("can not use variables in terraform_backend block")
 		}
 		return true, nil
