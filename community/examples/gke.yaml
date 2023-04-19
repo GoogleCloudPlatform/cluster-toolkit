@@ -38,3 +38,8 @@ deployment_groups:
   - id: gke_cluster
     source: community/modules/scheduler/gke-cluster
     use: [network1]
+    outputs: [instructions]
+
+  - id: compute_pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]

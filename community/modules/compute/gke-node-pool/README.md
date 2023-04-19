@@ -1,3 +1,26 @@
+## Description
+
+This module creates a Google Kubernetes Engine
+([GKE](https://cloud.google.com/kubernetes-engine)) node pool.
+
+> **_NOTE:_** This is an experimental module and the functionality and
+> documentation will likely be updated in the near future. This module has only
+> been tested in limited capacity.
+
+### Example
+
+The following example creates a GKE node group.
+
+```yaml
+  - id: compute_pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+```
+
+Also see a full [GKE example blueprint](../../../examples/gke.yaml).
+
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
 

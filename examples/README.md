@@ -753,9 +753,10 @@ walks through the use of this blueprint.
 
 ### [gke.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint provisions a Kubernetes cluster and a system node pool using GKE.
-It also creates a VPC configured to be used by a VPC native GKE cluster with
-subnet secondary IP ranges defined.
+This blueprint uses GKE to provision a Kubernetes cluster with a system node
+pool (included in gke-cluster module) and an autoscaling compute node pool. It
+also creates a VPC configured to be used by a VPC native GKE cluster with subnet
+secondary IP ranges defined.
 
 [gke.yaml]: ../community/examples/gke.yaml
 
