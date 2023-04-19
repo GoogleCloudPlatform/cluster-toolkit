@@ -25,6 +25,8 @@ steps:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder:latest'
   - '--build-arg'
   - 'TFLINT_VERSION=v0.46.0'
+  - '--build-arg'
+  - 'SHELLCHECK_VERSION=v0.9.0'
   - '-f'
   - 'tools/cloud-build/Dockerfile'
   - '.'
