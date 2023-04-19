@@ -1358,11 +1358,11 @@ func (s *MySuite) TestResolveVariables(c *C) {
 func (s *MySuite) TestModuleGroup(c *C) {
 	dc := getDeploymentConfigForTest()
 
-	groupID := dc.Config.DeploymentGroups[0].Name
+	group := dc.Config.DeploymentGroups[0]
 	modID := dc.Config.DeploymentGroups[0].Modules[0].ID
 
-	foundGroupID := dc.Config.ModuleGroupOrDie(modID)
-	c.Assert(foundGroupID, Equals, groupID)
+	foundGroup := dc.Config.ModuleGroupOrDie(modID)
+	c.Assert(foundGroup, DeepEquals, group)
 
 	_, err := dc.Config.ModuleGroup("bad_module_id")
 	c.Assert(err, NotNil)

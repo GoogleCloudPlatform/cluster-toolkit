@@ -578,13 +578,13 @@ func identifyModuleByReference(yamlReference string, bp Blueprint, fromMod strin
 	if err != nil {
 		return modReference{}, err
 	}
-	ref.fromGroupID = fromG
+	ref.fromGroupID = fromG.Name
 
 	toG, err := bp.ModuleGroup(ref.toModuleID)
 	if err != nil {
 		return modReference{}, err
 	}
-	ref.toGroupID = toG
+	ref.toGroupID = toG.Name
 
 	// should consider more sophisticated definition of valid values here.
 	// for now check that no fields are the empty string; due to the default
@@ -675,7 +675,7 @@ func identifySimpleVariable(s string, bp Blueprint, fromMod string) (varReferenc
 	}
 
 	ref := varReference{
-		fromGroupID:  fromG,
+		fromGroupID:  fromG.Name,
 		fromModuleID: fromMod,
 		toModuleID:   r.Module,
 		name:         r.Name,
@@ -689,7 +689,7 @@ func identifySimpleVariable(s string, bp Blueprint, fromMod string) (varReferenc
 		if err != nil {
 			return varReference{}, err
 		}
-		ref.toGroupID = g
+		ref.toGroupID = g.Name
 	}
 
 	// should consider more sophisticated definition of valid values here.

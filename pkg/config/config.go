@@ -111,25 +111,25 @@ func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error)
 	return group, nil
 }
 
-// ModuleGroup returns the group ID containing the module
-func (b Blueprint) ModuleGroup(mod string) (string, error) {
+// ModuleGroup returns the group containing the module
+func (b Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
 	for _, g := range b.DeploymentGroups {
 		for _, m := range g.Modules {
 			if m.ID == mod {
-				return g.Name, nil
+				return g, nil
 			}
 		}
 	}
-	return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], mod)
+	return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], mod)
 }
 
-// ModuleGroupOrDie returns the group ID containing the module; panics if unfound
-func (b Blueprint) ModuleGroupOrDie(mod string) string {
-	modID, err := b.ModuleGroup(mod)
+// ModuleGroupOrDie returns the group containing the module; panics if unfound
+func (b Blueprint) ModuleGroupOrDie(mod string) DeploymentGroup {
+	g, err := b.ModuleGroup(mod)
 	if err != nil {
 		panic(fmt.Errorf("module %s not found in blueprint: %s", mod, err))
 	}
-	return modID
+	return g
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
@@ -322,16 +322,12 @@ func (c ModConnection) IsUseKind() bool {
 
 // GetSharedVariables returns variables used in the connection (can be empty!)
 func (c ModConnection) GetSharedVariables() []string {
-	var vars []string
-	isIntergroup := c.ref.IsIntergroup()
-	for _, v := range c.sharedVariables {
-		var name string
-		if isIntergroup {
-			name = AutomaticOutputName(v, c.ref.ToModuleID())
-		} else {
-			name = v
-		}
-		vars = append(vars, name)
+	if !c.IsIntergroup() {
+		return c.sharedVariables
+	}
+	vars := make([]string, len(c.sharedVariables))
+	for i, v := range c.sharedVariables {
+		vars[i] = AutomaticOutputName(v, c.ref.ToModuleID())
 	}
 	return vars
 }
