@@ -51,47 +51,37 @@ func MakeStringInterpolationError(s string) error {
 }
 
 // SimpleVarToReference takes a string `$(...)` and transforms it to `Reference`
-// Returns `Reference` and name of explicit group if one was set.
-func SimpleVarToReference(s string) (Reference, string, error) {
+func SimpleVarToReference(s string) (Reference, error) {
 	if !hasVariable(s) {
-		return Reference{}, "", fmt.Errorf("%#v is not a variable", s)
+		return Reference{}, fmt.Errorf("%#v is not a variable", s)
 	}
 	if !isSimpleVariable(s) {
-		return Reference{}, "", MakeStringInterpolationError(s)
+		return Reference{}, MakeStringInterpolationError(s)
 	}
 	contents := simpleVariableExp.FindStringSubmatch(s)
 	if len(contents) != 2 { // Should always be (match, contents) here
-		return Reference{}, "", fmt.Errorf("%s %s, failed to extract contents: %v",
+		return Reference{}, fmt.Errorf("%s %s, failed to extract contents: %v",
 			errorMessages["invalidVar"], s, contents)
 	}
 	components := strings.Split(contents[1], ".")
-	switch len(components) {
-	case 2:
-		if components[0] == "vars" {
-			return Reference{
-				GlobalVar: true,
-				Name:      components[1]}, "", nil
-		}
-		return Reference{
-			Module: components[0],
-			Name:   components[1]}, "", nil
-
-	case 3:
-		return Reference{
-			Module: components[1],
-			Name:   components[2]}, components[0], nil
-	default:
-		return Reference{}, "", fmt.Errorf(
-			"expected either 2 or 3 components, got %d in %#v", len(components), s)
+	if len(components) != 2 {
+		return Reference{}, fmt.Errorf("%s %s, expected format: %s", errorMessages["invalidVar"], s, expectedVarFormat)
 	}
+	if components[0] == "vars" {
+		return Reference{
+			GlobalVar: true,
+			Name:      components[1]}, nil
+	}
+	return Reference{
+		Module: components[0],
+		Name:   components[1]}, nil
 }
 
 // SimpleVarToHclExpression takes a string `$(...)` and transforms it to `HclExpression`
-// Returns `HclExpression` and name of explicit group if one was set.
-func SimpleVarToHclExpression(s string) (HclExpression, string, error) {
-	ref, gr, err := SimpleVarToReference(s)
+func SimpleVarToHclExpression(s string) (HclExpression, error) {
+	ref, err := SimpleVarToReference(s)
 	if err != nil {
-		return HclExpression{}, "", err
+		return HclExpression{}, err
 	}
 	var ex HclExpression
 	if ref.GlobalVar {
@@ -99,10 +89,7 @@ func SimpleVarToHclExpression(s string) (HclExpression, string, error) {
 	} else {
 		ex, err = ParseExpression(fmt.Sprintf("module.%s.%s", ref.Module, ref.Name))
 	}
-	if err != nil {
-		return HclExpression{}, "", err
-	}
-	return ex, gr, nil
+	return ex, err
 }
 
 // TraversalToReference takes HCL traversal and returns `Reference`
@@ -257,14 +244,6 @@ func IsHclValue(v cty.Value) (HclExpression, bool) {
 		panic(fmt.Errorf("HclExpression isn't present in global state, while being referenced by value %#v", v))
 	}
 	return expr, true
-}
-
-// ExplicitGroupMark is mark attached to HclExpression if expression
-// was produced from "simple" variable and had group set explicitly.
-// This mark has no effect on expression and only may be used for validation of
-// original "simple" variable down the road.
-type ExplicitGroupMark struct {
-	Group string
 }
 
 // HasMark checks if cty.Value has mark of specified type T.

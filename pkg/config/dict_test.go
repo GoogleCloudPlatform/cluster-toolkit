@@ -92,7 +92,6 @@ m2:
   m2f2: [1, 0.2, -3, false]
   gv: $(vars.gold)
   mv: $(lime.bloom)
-  igv: $(box.wet.shoe)
   hl: ((3 + 9))
 `
 	want := Dict{}
@@ -108,10 +107,9 @@ m2:
 				cty.NumberIntVal(-3),
 				cty.False,
 			}),
-			"gv":  MustParseExpression("var.gold").AsValue(),
-			"mv":  MustParseExpression("module.lime.bloom").AsValue(),
-			"igv": MustParseExpression("module.wet.shoe").AsValue().Mark(ExplicitGroupMark{"box"}),
-			"hl":  MustParseExpression("3 + 9").AsValue(),
+			"gv": MustParseExpression("var.gold").AsValue(),
+			"mv": MustParseExpression("module.lime.bloom").AsValue(),
+			"hl": MustParseExpression("3 + 9").AsValue(),
 		}))
 	var got Dict
 	if err := yaml.Unmarshal([]byte(yml), &got); err != nil {
