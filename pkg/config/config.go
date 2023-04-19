@@ -57,7 +57,6 @@ var errorMessages = map[string]string{
 	"invalidMod":           "invalid module reference",
 	"invalidDeploymentRef": "invalid deployment-wide reference (only \"vars\") is supported)",
 	"varNotFound":          "Could not find source of variable",
-	"intergroupImplicit":   "References to outputs from other groups must explicitly identify the group",
 	"intergroupOrder":      "References to outputs from other groups must be to earlier groups",
 	"referenceWrongGroup":  "Reference specified the wrong group for the module",
 	"noOutput":             "Output not found for a variable",
@@ -110,6 +109,27 @@ func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error)
 	}
 	group := dc.Config.DeploymentGroups[groupIndex]
 	return group, nil
+}
+
+// ModuleGroup returns the group ID containing the module
+func (b Blueprint) ModuleGroup(mod string) (string, error) {
+	for _, g := range b.DeploymentGroups {
+		for _, m := range g.Modules {
+			if m.ID == mod {
+				return g.Name, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], mod)
+}
+
+// ModuleGroupOrDie returns the group ID containing the module; panics if unfound
+func (b Blueprint) ModuleGroupOrDie(mod string) string {
+	modID, err := b.ModuleGroup(mod)
+	if err != nil {
+		panic(fmt.Errorf("module %s not found in blueprint: %s", mod, err))
+	}
+	return modID
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
@@ -606,7 +626,7 @@ func checkUsedModuleNames(bp Blueprint) error {
 	for _, grp := range bp.DeploymentGroups {
 		for _, mod := range grp.Modules {
 			for _, usedMod := range mod.Use {
-				ref, err := identifyModuleByReference(usedMod, grp, mod)
+				ref, err := identifyModuleByReference(usedMod, bp, mod.ID)
 				if err != nil {
 					return err
 				}
