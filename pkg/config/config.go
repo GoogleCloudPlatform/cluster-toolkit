@@ -903,3 +903,17 @@ func (b *Blueprint) checkBlueprintName() error {
 
 	return nil
 }
+
+// WalkModules walks all modules in the blueprint and calls the walker function
+func (b *Blueprint) WalkModules(walker func(*Module) error) error {
+	for ig := range b.DeploymentGroups {
+		g := &b.DeploymentGroups[ig]
+		for im := range g.Modules {
+			m := &g.Modules[im]
+			if err := walker(m); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

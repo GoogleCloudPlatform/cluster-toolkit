@@ -448,36 +448,6 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestIsGlobalVariable(c *C) {
-	// True: Correct global variable
-	got := isDeploymentVariable("$(vars.name)")
-	c.Assert(got, Equals, true)
-	// False: Missing $
-	got = isDeploymentVariable("(vars.name)")
-	c.Assert(got, Equals, false)
-	// False: Missing (
-	got = isDeploymentVariable("$vars.name)")
-	c.Assert(got, Equals, false)
-	// False: Missing )
-	got = isDeploymentVariable("$(vars.name")
-	c.Assert(got, Equals, false)
-	// False: Contains Prefix
-	got = isDeploymentVariable("prefix-$(vars.name)")
-	c.Assert(got, Equals, false)
-	// False: Contains Suffix
-	got = isDeploymentVariable("$(vars.name)-suffix")
-	c.Assert(got, Equals, false)
-	// False: Contains prefix and suffix
-	got = isDeploymentVariable("prefix-$(vars.name)-suffix")
-	c.Assert(got, Equals, false)
-	// False: empty string
-	got = isDeploymentVariable("")
-	c.Assert(got, Equals, false)
-	// False: is a variable, but not global
-	got = isDeploymentVariable("$(moduleid.name)")
-	c.Assert(got, Equals, false)
-}
-
 func (s *MySuite) TestIsSimpleVariable(c *C) {
 	// True: Correct simple variable
 	got := isSimpleVariable("$(some_text)")

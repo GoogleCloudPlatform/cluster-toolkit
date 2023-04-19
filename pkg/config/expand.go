@@ -47,8 +47,7 @@ var (
 	// consume all whitespace at beginning and end
 	// consume only up to first period to get variable source
 	// consume only up to whitespace to get variable name
-	literalSplitExp       *regexp.Regexp = regexp.MustCompile(`^\(\([[:space:]]*(.*?)\.(.*?)[[:space:]]*\)\)$`)
-	deploymentVariableExp *regexp.Regexp = regexp.MustCompile(`^\$\(vars\.(.*)\)$`)
+	literalSplitExp *regexp.Regexp = regexp.MustCompile(`^\(\([[:space:]]*(.*?)\.(.*?)[[:space:]]*\)\)$`)
 )
 
 // expand expands variables and strings in the yaml config. Used directly by
@@ -85,6 +84,9 @@ func (dc *DeploymentConfig) expand() {
 	}
 	if err := dc.expandVariables(); err != nil {
 		log.Fatalf("failed to expand variables: %v", err)
+	}
+	if err := expandRequiredApis(&dc.Config); err != nil {
+		log.Fatalf("failed to expand required_apis: %v", err)
 	}
 }
 
@@ -897,11 +899,6 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 	return fmt.Sprintf("((%s))", varRef.HclString()), nil
 }
 
-// isDeploymentVariable checks if the entire string is just a single deployment variable
-func isDeploymentVariable(str string) bool {
-	return deploymentVariableExp.MatchString(str)
-}
-
 // isSimpleVariable checks if the entire string is just a single variable
 func isSimpleVariable(str string) bool {
 	return simpleVariableExp.MatchString(str)
@@ -995,21 +992,37 @@ func (dc *DeploymentConfig) expandVariables() error {
 			if err != nil {
 				return err
 			}
-
-			// ensure that variable references to projects in required APIs are expanded
-			for projectID, requiredAPIs := range mod.RequiredApis {
-				if isDeploymentVariable(projectID) {
-					s, err := handleVariable(projectID, context, false)
-					if err != nil {
-						return err
-					}
-					mod.RequiredApis[s.(string)] = slices.Clone(requiredAPIs)
-					delete(mod.RequiredApis, projectID)
-				}
-			}
 		}
 	}
 	return nil
+}
+
+func expandRequiredApis(bp *Blueprint) error {
+	return bp.WalkModules(func(m *Module) error {
+		for project, apis := range m.RequiredApis {
+			resolved := project
+			if hasVariable(project) {
+				exp, err := SimpleVarToExpression(project)
+				if err != nil {
+					return err
+				}
+				ev, err := exp.Eval(*bp)
+				if err != nil {
+					return err
+				}
+				if ev.Type() != cty.String {
+					ty := ev.Type().FriendlyName()
+					return fmt.Errorf("module %s required_api project_id must be a string, got %s", m.ID, ty)
+				}
+				resolved = ev.AsString()
+			}
+			if project != resolved {
+				m.RequiredApis[resolved] = slices.Clone(apis)
+				delete(m.RequiredApis, project)
+			}
+		}
+		return nil
+	})
 }
 
 // this function adds default validators to the blueprint.
