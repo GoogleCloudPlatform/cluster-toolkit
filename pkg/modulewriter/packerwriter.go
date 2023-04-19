@@ -62,12 +62,6 @@ func (w PackerWriter) writeDeploymentGroup(
 	grpIdx int,
 	deployDir string,
 ) (groupMetadata, error) {
-	ctyGlobals, err := config.ConvertMapToCty(dc.Config.Vars)
-	if err != nil {
-		return groupMetadata{}, fmt.Errorf(
-			"error converting deployment vars to cty for writing: %w", err)
-	}
-
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, depGroup.Name)
 	allInputs := make(map[string]bool)
@@ -82,7 +76,7 @@ func (w PackerWriter) writeDeploymentGroup(
 			return groupMetadata{}, fmt.Errorf(
 				"error converting packer module settings to cty for writing: %w", err)
 		}
-		err = config.ResolveVariables(ctySettings, ctyGlobals)
+		err = config.ResolveVariables(ctySettings, dc.Config.Vars.Items())
 		if err != nil {
 			return groupMetadata{}, err
 		}

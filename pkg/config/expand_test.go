@@ -33,6 +33,7 @@ func (s *MySuite) TestExpand(c *C) {
 
 func (s *MySuite) TestExpandBackends(c *C) {
 	dc := getDeploymentConfigForTest()
+	deplName := dc.Config.Vars.Get("deployment_name").AsString()
 
 	// Simple test: Does Nothing
 	err := dc.expandBackends()
@@ -44,8 +45,7 @@ func (s *MySuite) TestExpandBackends(c *C) {
 	grp := dc.Config.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix := grp.TerraformBackend.Configuration.Get("prefix")
-	expPrefix := fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName,
-		dc.Config.Vars["deployment_name"], grp.Name)
+	expPrefix := fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName, deplName, grp.Name)
 	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
 
 	// Add a new resource group, ensure each group name is included
@@ -58,8 +58,7 @@ func (s *MySuite) TestExpandBackends(c *C) {
 	newGrp := dc.Config.DeploymentGroups[1]
 	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix = newGrp.TerraformBackend.Configuration.Get("prefix")
-	expPrefix = fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName,
-		dc.Config.Vars["deployment_name"], newGrp.Name)
+	expPrefix = fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName, deplName, newGrp.Name)
 	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
 }
 
@@ -330,8 +329,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	dc := DeploymentConfig{
 		Config: Blueprint{
 			BlueprintName: "simple",
-			Vars: map[string]interface{}{
-				"deployment_name": "golden"},
+			Vars:          NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("golden")}),
 			DeploymentGroups: []DeploymentGroup{
 				{
 					Name: "lime",
@@ -377,10 +375,10 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	c.Check(dc.combineLabels(), IsNil)
 
 	// Were global labels created?
-	c.Check(dc.Config.Vars["labels"], DeepEquals, map[string]interface{}{
-		"ghpc_blueprint":  "simple",
-		"ghpc_deployment": "golden",
-	})
+	c.Check(dc.Config.Vars.Get("labels"), DeepEquals, cty.ObjectVal(map[string]cty.Value{
+		"ghpc_blueprint":  cty.StringVal("simple"),
+		"ghpc_deployment": cty.StringVal("golden"),
+	}))
 
 	lime := dc.Config.DeploymentGroups[0]
 	// Labels are set and override role
@@ -412,12 +410,6 @@ func (s *MySuite) TestCombineLabels(c *C) {
 		"ghpc_role":       "red",
 		"olive":           "teal",
 	})
-
-	// Test invalid labels
-	dc.Config.Vars["labels"] = "notAMap"
-	expectedErrorStr := fmt.Sprintf("%s: found %T",
-		errorMessages["globalLabelType"], dc.Config.Vars["labels"])
-	c.Check(dc.combineLabels(), ErrorMatches, expectedErrorStr)
 }
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {
@@ -438,7 +430,7 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	c.Assert(err, ErrorMatches, expectedErrorStr)
 
 	// Test no input, one required, exists in globals
-	dc.Config.Vars[requiredVar.Name] = "val"
+	dc.Config.Vars.Set(requiredVar.Name, cty.StringVal("val"))
 	err = dc.applyGlobalVariables()
 	c.Assert(err, IsNil)
 	c.Assert(
@@ -753,7 +745,6 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	}
 	testBlueprint := Blueprint{
 		BlueprintName: "test-blueprint",
-		Vars:          make(map[string]interface{}),
 		DeploymentGroups: []DeploymentGroup{
 			{
 				Name:             "zero",
@@ -797,7 +788,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Global variable: Success
-	testVarContext1.dc.Config.Vars["globalExists"] = "existsValue"
+	testVarContext1.dc.Config.Vars.Set("globalExists", cty.StringVal("existsValue"))
 	testVarContext1.varString = "$(vars.globalExists)"
 	got, err := expandSimpleVariable(testVarContext1, false)
 	c.Assert(err, IsNil)

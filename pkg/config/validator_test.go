@@ -22,6 +22,7 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/pkg/errors"
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	. "gopkg.in/check.v1"
@@ -46,14 +47,14 @@ func (s *MySuite) TestValidateVars(c *C) {
 	c.Assert(err, IsNil)
 
 	// Fail: Nil project_id
-	dc.Config.Vars["project_id"] = nil
+	dc.Config.Vars.Set("project_id", cty.NilVal)
 	err = dc.validateVars()
 	c.Assert(err, ErrorMatches, "deployment variable project_id was not set")
 
 	// Fail: labels not a map
-	dc.Config.Vars["labels"] = "a_string"
+	dc.Config.Vars.Set("labels", cty.StringVal("a_string"))
 	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, "vars.labels must be a map")
+	c.Assert(err, ErrorMatches, "vars.labels must be a map of strings")
 }
 
 func (s *MySuite) TestValidateModuleSettings(c *C) {
@@ -188,12 +189,12 @@ func (s *MySuite) TestAddDefaultValidators(c *C) {
 	c.Assert(dc.Config.Validators, HasLen, 4)
 
 	dc.Config.Validators = nil
-	dc.Config.Vars["region"] = "us-central1"
+	dc.Config.Vars.Set("region", cty.StringVal("us-central1"))
 	dc.addDefaultValidators()
 	c.Assert(dc.Config.Validators, HasLen, 5)
 
 	dc.Config.Validators = nil
-	dc.Config.Vars["zone"] = "us-central1-c"
+	dc.Config.Vars.Set("zone", cty.StringVal("us-central1-c"))
 	dc.addDefaultValidators()
 	c.Assert(dc.Config.Validators, HasLen, 7)
 }
@@ -204,8 +205,9 @@ func (s *MySuite) TestAddDefaultValidators(c *C) {
 // in all other cases, return empty string and error
 func (s *MySuite) TestGetStringValue(c *C) {
 	dc := getDeploymentConfigForTest()
-	dc.Config.Vars["goodvar"] = "testval"
-	dc.Config.Vars["badvar"] = 2
+	dc.Config.Vars.
+		Set("goodvar", cty.StringVal("testval")).
+		Set("badvar", cty.NumberIntVal(2))
 
 	// test non-string values return error
 	_, err := dc.getStringValue(2)
@@ -219,7 +221,7 @@ func (s *MySuite) TestGetStringValue(c *C) {
 	// test literal variables that refer to strings return their value
 	strVal, err = dc.getStringValue("(( var.goodvar ))")
 	c.Assert(err, IsNil)
-	c.Assert(strVal, Equals, dc.Config.Vars["goodvar"])
+	c.Assert(strVal, Equals, "testval")
 
 	// test literal variables that refer to non-strings return error
 	_, err = dc.getStringValue("(( var.badvar ))")
@@ -374,7 +376,7 @@ func (s *MySuite) TestRegionExistsValidator(c *C) {
 	regionValidator.Inputs["region"] = "((var.region))"
 	err = dc.testRegionExists(regionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
-	dc.Config.Vars["project_id"] = "invalid-project"
+	dc.Config.Vars.Set("project_id", cty.StringVal("invalid-project"))
 	err = dc.testRegionExists(regionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
@@ -403,7 +405,7 @@ func (s *MySuite) TestZoneExistsValidator(c *C) {
 	zoneValidator.Inputs["zone"] = "((var.zone))"
 	err = dc.testZoneExists(zoneValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
-	dc.Config.Vars["project_id"] = "invalid-project"
+	dc.Config.Vars.Set("project_id", cty.StringVal("invalid-project"))
 	err = dc.testZoneExists(zoneValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 
@@ -433,10 +435,10 @@ func (s *MySuite) TestZoneInRegionValidator(c *C) {
 	zoneInRegionValidator.Inputs["zone"] = "((var.zone))"
 	err = dc.testZoneInRegion(zoneInRegionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
-	dc.Config.Vars["project_id"] = "invalid-project"
+	dc.Config.Vars.Set("project_id", cty.StringVal("invalid-project"))
 	err = dc.testZoneInRegion(zoneInRegionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
-	dc.Config.Vars["zone"] = "invalid-zone"
+	dc.Config.Vars.Set("zone", cty.StringVal("invalid-zone"))
 	err = dc.testZoneInRegion(zoneInRegionValidator)
 	c.Assert(err, ErrorMatches, undefinedGlobalVariableRegex)
 

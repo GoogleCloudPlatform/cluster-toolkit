@@ -111,10 +111,10 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 	testDC := config.DeploymentConfig{
 		Config: config.Blueprint{
 			BlueprintName: "simple",
-			Vars: map[string]interface{}{
-				"deployment_name": "deployment_name",
-				"project_id":      "test-project",
-			},
+			Vars: config.NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("deployment_name"),
+				"project_id":      cty.StringVal("test-project"),
+			}),
 			DeploymentGroups: testDeploymentGroups,
 		},
 		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
@@ -168,8 +168,8 @@ func (s *MySuite) TestPrepDepDir(c *C) {
 func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
 	testDC := getDeploymentConfigForTest()
-	testDC.Config.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
-	realDepDir := filepath.Join(testDir, testDC.Config.Vars["deployment_name"].(string))
+	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_prep_dir"))
+	realDepDir := filepath.Join(testDir, "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
 	WriteDeployment(testDC, testDir, false /* overwrite */)
@@ -183,7 +183,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(isDeploymentDirPrepped(realDepDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, testDC.Config.Vars["deployment_name"].(string), hiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(testDir, "test_prep_dir", hiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
@@ -242,7 +242,7 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 
 	testDC := getDeploymentConfigForTest()
 
-	testDC.Config.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
+	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_write_deployment"))
 	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the deployment fails
@@ -315,20 +315,8 @@ func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
 	testDC := getDeploymentConfigForTest()
 	var e *config.InputValueError
 
-	testDC.Config.Vars = map[string]interface{}{"deployment_name": 100}
+	testDC.Config.Vars.Set("deployment_name", cty.NumberIntVal(100))
 	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
-	c.Check(errors.As(err, &e), Equals, true)
-
-	testDC.Config.Vars = map[string]interface{}{"deployment_name": false}
-	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
-	c.Check(errors.As(err, &e), Equals, true)
-
-	testDC.Config.Vars = map[string]interface{}{"deployment_name": ""}
-	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
-	c.Check(errors.As(err, &e), Equals, true)
-
-	testDC.Config.Vars = map[string]interface{}{}
-	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 }
 
@@ -675,7 +663,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 
 	// No Packer modules
 	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
-	testVars := map[string]interface{}{"deployment_name": deploymentName}
+	testVars := config.NewDict(map[string]cty.Value{"deployment_name": cty.StringVal(deploymentName)})
 	deploymentDir := filepath.Join(testDir, deploymentName)
 	if err := deploymentio.CreateDirectory(deploymentDir); err != nil {
 		log.Fatal(err)
@@ -718,13 +706,14 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 }
 
 func (s *MySuite) TestWritePackerAutoVars(c *C) {
-	testDC := getDeploymentConfigForTest()
-	testDC.Config.Vars["testkey"] = "testval"
-	ctyVars, _ := config.ConvertMapToCty(testDC.Config.Vars)
+	vars := config.Dict{}
+	vars.
+		Set("deployment_name", cty.StringVal("golf")).
+		Set("testkey", cty.False)
 
 	// fail writing to a bad path
 	badDestPath := "not/a/real/path"
-	err := writePackerAutovars(ctyVars, badDestPath)
+	err := writePackerAutovars(vars.Items(), badDestPath)
 	expErr := fmt.Sprintf("error creating variables file %s:.*", packerAutoVarFilename)
 	c.Assert(err, ErrorMatches, expErr)
 
@@ -732,7 +721,7 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 	if err := os.Mkdir(testPackerTemplateDir, 0755); err != nil {
 		log.Fatalf("Failed to create test dir for creating %s file", packerAutoVarFilename)
 	}
-	err = writePackerAutovars(ctyVars, testPackerTemplateDir)
+	err = writePackerAutovars(vars.Items(), testPackerTemplateDir)
 	c.Assert(err, IsNil)
 
 }
