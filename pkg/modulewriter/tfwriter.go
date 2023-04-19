@@ -103,8 +103,8 @@ func writeOutputs(
 				desc = fmt.Sprintf("Generated output from module '%s'", mod.ID)
 			}
 			blockBody.SetAttributeValue("description", cty.StringVal(desc))
-			value := fmt.Sprintf("((module.%s.%s))", mod.ID, output.Name)
-			blockBody.SetAttributeValue("value", cty.StringVal(value))
+			value := fmt.Sprintf("module.%s.%s", mod.ID, output.Name)
+			blockBody.SetAttributeRaw("value", simpleTokens(value))
 			if output.Sensitive {
 				blockBody.SetAttributeValue("sensitive", cty.BoolVal(output.Sensitive))
 			}
