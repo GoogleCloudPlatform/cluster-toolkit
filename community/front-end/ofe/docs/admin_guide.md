@@ -41,6 +41,8 @@ TKFE is deployed from a client machine using a script. The script will guide
 the admin through the setup process, prompting for input of required
 parameters, then deploy TKFE into the Google Cloud Platform.
 
+TKFE can also be deployed using a configuration file specified with the --config option. In this case, the script will read the required parameters from the YAML file instead of prompting the user for input. This allows for more streamlined and automated deployment processes. However, it is important to ensure that all required parameters are properly specified in the configuration file before deploying.
+
 ### Prerequisites
 
 #### Client Machine
@@ -140,6 +142,8 @@ If further help is needed, please refer to GCP documentation for:
 - [Granting and roles/permissions](https://cloud.google.com/iam/docs/creating-custom-roles)
 
 ### Deployment Process
+#### Manual deployment process
+
 TKFE uses a deployment script run on the client machine, prompting for required
 parameters, to configure TKFE.
 
@@ -174,6 +178,32 @@ parameters, to configure TKFE.
    - **Note: after the deploy script has completed, it will still take up to
      another 15 minutes to fully install the TKFE server with its full
      software stack.**
+
+#### Automated deployment process
+TKFE can also be deployed automatically using a YAML configuration file with all the required parameters. To deploy using this option, run ./deploy.sh --config <path-to-config-file>. All required parameters for deployment must be specified in the YAML file. If any required parameter is missing or invalid, the script will exit with an error. If all parameters are provided correctly, the deployment process will proceed automatically without any prompts for user input. Note that in case of any errors during deployment, the script will exit with an error and no resources will be created or modified.
+
+If the DJANGO_SUPERUSER_PASSWORD environment variable is set, the script will use it to set the Django superuser password instead of the value in the YAML file. This is a more secure way of handling passwords.
+
+To use this configuration file for automated deployment, follow these steps:
+
+1. Create a file called config.yaml.
+
+  ```yaml
+  deployment_name: MyDeployment
+  project_id: my-project-id
+  zone: us-west1-a
+  subnet_name: my-subnet # (optional)
+  dns_hostname: myhostname.com # (optional)
+  ip_address: 1.2.3.4 # (optional)
+  django_superuser_username: sysadm
+  django_superuser_password: Passw0rd! # (optional if DJANGO_SUPERUSER_PASSWORD is passed)
+  django_superuser_email: sysadmin@example.com
+  ```
+
+ 1. Save the file in the same directory as the deploy.sh script.
+ 1. Open a terminal and navigate to the directory where the files are located.
+ 1. Run the following command: ./deploy.sh --config config.yaml
+ 1. The script will read the parameters from the config file and proceed with the deployment process. If DJANGO_SUPERUSER_PASSWORD environment variable is set, the script will use it to set the Django superuser password instead of the value in the YAML file.
 
 <!--
 TODO:  Give instruction for a custom deployment.
@@ -449,6 +479,8 @@ destroying it. These resources will otherwise persist and accrue costs.**
 To tear down the web interface and its hosting infrastructure, run
 directory `./teardown.sh` on the original client machine
 in the same directory that was used to deploy TKFE.
+
+Note: If the -y flag is passed to the script, all user questions will be answered with "yes". This is intended for automated deployments where user input is not possible.
 
 ## Troubleshooting
 

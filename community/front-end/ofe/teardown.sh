@@ -125,15 +125,18 @@ fi
 if [[ ! -f tf/.tkfe.lock ]]; then
 	echo "  Warning: No lock file found"
 	echo "           It is likely there is no FrontEnd currently deployed"
-	read -r -p "           Proceed anyway? [y/N]: " ready
-	case "$ready" in
-	[Yy]*) ;;
-
-	*)
-		echo "Exiting."
-		exit 0
-		;;
-	esac
+	if [[ "$1" == "-y" ]]; then
+		echo "           -y flag passed. Proceeding anyway."
+	else
+		read -r -p "           Proceed anyway? [y/N]: " ready
+		case "$ready" in
+		[Yy]*) ;;
+		*)
+			echo "Exiting."
+			exit 0
+			;;
+		esac
+	fi
 	echo ""
 fi
 
@@ -169,15 +172,18 @@ fi
 echo "  This will destroy the running FrontEnd: ${dname}"
 echo "  Please ensure all resources deployed by the FrontEnd have been deleted."
 echo ""
-read -r -p "           Proceed? [y/N]: " ready
-case "$ready" in
-[Yy]*) ;;
-
-*)
-	echo "Exiting."
-	exit 0
-	;;
-esac
+if [[ "$1" == "-y" ]]; then
+	echo "           -y flag passed. Proceeding anyway."
+else
+	read -r -p "           Proceed? [y/N]: " ready
+	case "$ready" in
+	[Yy]*) ;;
+	*)
+		echo "Exiting."
+		exit 0
+		;;
+	esac
+fi
 echo ""
 
 # TODO: Spawn a shutdown script on FE server, via gcloud, which finds

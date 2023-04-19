@@ -105,6 +105,58 @@ HELP1
         (or Service Account Admin)
       - Project IAM Admin
 
+  Usage: ./deploy.sh [--config <path-to-config-file>] [--help]
+  
+    --config <path-to-config-file> : path to YAML configuration file containing deployment variables.
+                                     If not specified, script will prompt user for input.
+    --help                         : display this help message
+  
+  If --config option is used, all variables required for deployment must be specified in the YAML
+  file. The script will not prompt for any input in this case.
+  
+  The following deployment variables are required:
+  
+    deployment_name:             Name of the deployment
+    project_id:                  ID of the Google Cloud project
+    zone:                        Zone where the deployment will be created
+    django_superuser_username:   Username for the Django superuser
+    django_superuser_password:   Password for the Django superuser (optional if DJANGO_SUPERUSER_PASSWORD is set)
+    django_superuser_email:      Email for the Django superuser
+  
+  The following deployment variables are optional:
+  
+    subnet_name:                 Name of the subnet to use for the deployment
+    dns_hostname:                Hostname to assign to the deployment's IP address
+    ip_address:                  Static IP address to use for the deployment
+  
+  To set the Django superuser password securely, you can set the DJANGO_SUPERUSER_PASSWORD
+  environment variable with the password you want to use, like this:
+  
+    export DJANGO_SUPERUSER_PASSWORD=my_password
+  
+  Replace 'my_password' with the actual password you want to use. The script will automatically
+  read the password from the DJANGO_SUPERUSER_PASSWORD environment variable if it is set, and
+  will fall back to the YAML file if it is not set.
+  
+  If you are running the script as a different user, you may need to use 'sudo -E' to preserve
+  the environment variable when running the script, like this:
+  
+    sudo -E ./deploy.sh --config my-config.yaml
+  
+  This will run the script with elevated privileges (sudo) and preserve the environment variable (-E)
+  so that it can be used by the script.
+
+  Example YAML file:
+  deployment_name: MyDeployment
+  project_id: my-project-id
+  zone: us-west1-a
+  subnet_name: my-subnet (optional)
+  dns_hostname: myhostname.com (optional)
+  ip_address: 1.2.3.4 (optional)
+  django_superuser_username: sysadm
+  django_superuser_password: Passw0rd! (optional if DJANGO_SUPERUSER_PASSWORD is passed)
+  django_superuser_email: sysadmin@example.com
+
 HELP2
 }
 
@@ -527,13 +579,16 @@ TFVARS
 		# TODO - upload terraform files to the FE server, so that they can be recovered if ever
 		#        needed
 
-		case $(ask "    Proceed to deploy? [y/N] ") in
-		[Yy]*) ;;
-		*)
-			echo "Exiting."
-			exit 0
-			;;
-		esac
+		if [ -z "$config_file" ]; then
+			# Ask for user confirmation before deploying
+			case $(ask "    Proceed to deploy? [y/N] ") in
+			[Yy]*) ;;
+			*)
+				echo "Exiting."
+				exit 0
+				;;
+			esac
+		fi
 
 		# -- Start the deployment using Terraform.
 		#    Note: Extract $? for terraform using PIPESTATUS, as $? below is
@@ -855,6 +910,77 @@ SERVICEACC
 	echo ""
 }
 
+deploy_from_config() {
+	# Read the YAML file as an associative array
+	declare -A yaml_array
+	while IFS='=: ' read -r key value; do
+		[[ -n $key ]] && yaml_array[$key]=$value
+	done < <(grep -vE '^#|^\s*$' "$config_file" | sed -n '/:/p')
+
+	local required_params=("deployment_name" "project_id" "zone" "django_superuser_username" "django_superuser_email")
+	# Check that all required parameters are present in the YAML file
+	for param in "${required_params[@]}"; do
+		if [[ -z ${yaml_array[$param]} ]]; then
+			echo "Required parameter '$param' not found in YAML file"
+			exit 1
+		fi
+	done
+
+	# Set variables based on keys in the array
+	deployment_name=${yaml_array[deployment_name]}
+	project_id=${yaml_array[project_id]}
+	zone=${yaml_array[zone]}
+	subnet_name=${yaml_array[subnet_name]}
+	dns_hostname=${yaml_array[dns_hostname]}
+	ip_address=${yaml_array[ip_address]}
+	django_superuser_username=${yaml_array[django_superuser_username]}
+	django_superuser_email=${yaml_array[django_superuser_email]}
+
+	# Set password from environment variable if it exists, otherwise from YAML file
+	if [[ -n ${DJANGO_SUPERUSER_PASSWORD+x} ]]; then
+		echo "Django superuser password environment variable detected"
+		django_superuser_password=${DJANGO_SUPERUSER_PASSWORD}
+	else
+		if [[ -z ${yaml_array[django_superuser_password]} ]]; then
+			echo "Required parameter 'django_superuser_password' not found in YAML file"
+			echo "DJANGO_SUPERUSER_PASSWORD environment variable is not set"
+			exit 1
+		else
+			django_superuser_password=${yaml_array[django_superuser_password]}
+		fi
+	fi
+
+	# Print deployment summary
+	echo ""
+	echo "***  Deployment summary:  ***"
+	echo ""
+	echo "    Deployment name:  ${deployment_name}"
+	echo "    GCP project ID:   ${project_id}"
+	echo "    GCP zone:         ${zone}"
+	if [[ ${subnet_name} ]]; then
+		echo "    GCP subnet:       ${subnet_name}"
+	else
+		echo "    GCP subnet:       Automatically created"
+	fi
+	if [[ ${dns_hostname} ]]; then
+		echo "    DNS hostname:     ${dns_hostname}"
+	else
+		echo "    DNS hostname:     None - will use standard HTTP"
+	fi
+	if [[ ${ip_address} ]]; then
+		echo "    IP address:       ${ip_address}"
+	else
+		echo "    IP address:       Automatically created"
+	fi
+	echo ""
+	echo "    Admin username:   ${django_superuser_username}"
+	echo "    Admin email:      ${django_superuser_email}"
+	echo ""
+
+	deployment_mode="tarball"
+	deploy
+}
+
 ################################################################################
 #
 
@@ -877,8 +1003,25 @@ while [[ ${#} -gt 0 ]]; do
 		help
 		exit 0
 		;;
+	--config)
+		if [[ ${2} == "" ]]; then
+			echo "Error: --config option requires an argument - path to deployment config. "
+			exit 1
+		fi
+		if [[ ! -e ${2} ]]; then
+			echo "Error: ${2} is not a valid Unix path"
+			exit 1
+		fi
+		echo "Deploying OFE from the config file."
+		config_file=${2}
+		deploy_from_config
+		exit 0
+		;;
+	*)
+		echo "Error: Unknown option: ${1}"
+		exit 1
+		;;
 	esac
-	shift
 done
 
 setup
