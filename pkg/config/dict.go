@@ -110,14 +110,14 @@ func (y *yamlValue) unmarshalScalar(n *yaml.Node) error {
 		return err
 	}
 
-	if l, is := IsYamlHclLiteral(y.v); is { // HCL literal
-		var e HclExpression
+	if l, is := IsYamlExpressionLiteral(y.v); is { // HCL literal
+		var e Expression
 		if e, err = ParseExpression(l); err != nil {
 			return err
 		}
 		y.v = e.AsValue()
 	} else if y.v.Type() == cty.String && hasVariable(y.v.AsString()) { // "simple" variable
-		e, err := SimpleVarToHclExpression(y.v.AsString())
+		e, err := SimpleVarToExpression(y.v.AsString())
 		if err != nil {
 			return err
 		}
@@ -167,8 +167,8 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML implements custom YAML marshaling.
 func (d Dict) MarshalYAML() (interface{}, error) {
 	o, err := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
-		if e, is := IsHclValue(v); is {
-			return e.makeYamlLiteralValue(), nil
+		if e, is := IsExpressionValue(v); is {
+			return e.makeYamlExpressionValue(), nil
 		}
 		return v, nil
 	})

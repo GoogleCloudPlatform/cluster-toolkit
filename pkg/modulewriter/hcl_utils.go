@@ -66,10 +66,10 @@ func writeHclAttributes(vars map[string]cty.Value, dst string) error {
 // TokensForValue is a modification of hclwrite.TokensForValue.
 // The only difference in behavior is handling "HCL literal" strings.
 func TokensForValue(val cty.Value) hclwrite.Tokens {
-	// We need to handle both cases, until `IsRawHclLiteral` is removed
-	if e, is := config.IsHclValue(val); is {
+	// We need to handle both cases, until all "expression" users are moved to Expression
+	if e, is := config.IsExpressionValue(val); is {
 		return e.Tokenize()
-	} else if s, is := config.IsYamlHclLiteral(val); is { // return it "as is"
+	} else if s, is := config.IsYamlExpressionLiteral(val); is { // return it "as is"
 		return hclwrite.TokensForIdentifier(s)
 	}
 
