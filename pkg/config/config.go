@@ -18,6 +18,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -27,7 +28,6 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
-	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
 	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
@@ -808,33 +808,65 @@ func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) 
 func ResolveVariables(
 	ctyMap map[string]cty.Value,
 	origin map[string]cty.Value,
+	allowedUnknownNames []string,
 ) error {
 	evalCtx := &hcl.EvalContext{
 		Variables: map[string]cty.Value{"var": cty.ObjectVal(origin)},
 	}
+	unknownMap := map[string]bool{}
+	for _, n := range allowedUnknownNames {
+		unknownMap[n] = true
+	}
 	for key, val := range ctyMap {
-		if val.Type() == cty.String {
-			var valString string
-			if err := gocty.FromCtyValue(val, &valString); err != nil {
-				return err
-			}
-			ctx, varName, found := IdentifyLiteralVariable(valString)
-			// only attempt resolution on global literal variables
-			// leave all other strings alone (including non-global)
-			if found && ctx == "var" {
-				varTraversal := hcl.Traversal{
-					hcl.TraverseRoot{Name: ctx},
-					hcl.TraverseAttr{Name: varName},
-				}
-				newVal, diags := varTraversal.TraverseAbs(evalCtx)
-				if diags.HasErrors() {
-					return diags
-				}
-				ctyMap[key] = newVal
-			}
+		newVal, err := cty.Transform(val, func(p cty.Path, v cty.Value) (cty.Value, error) {
+			return resolveValue(v, evalCtx, unknownMap)
+		})
+
+		var re *ResolutionError
+		if errors.As(err, &re) && re.allowed {
+			delete(ctyMap, key)
+			continue
+		} else if err != nil {
+			return err
 		}
+		ctyMap[key] = newVal
 	}
 	return nil
+}
+
+// ResolutionError reports all failures in resolveValue, some may be allowable
+type ResolutionError struct {
+	varName string
+	allowed bool
+}
+
+func (err *ResolutionError) Error() string {
+	return fmt.Sprintf("failed to resolve %s, failure is allowed: %v", err.varName, err.allowed)
+}
+
+// resolveValue will transform cty.Value string literals "((var.name))" into
+// cty.Value objects of any type from deployment variables
+func resolveValue(val cty.Value, evalCtx *hcl.EvalContext, allowedUnknown map[string]bool) (cty.Value, error) {
+	if val.Type() != cty.String || !IsLiteralVariable(val.AsString()) {
+		return val, nil
+	}
+
+	ctx, varName, found := IdentifyLiteralVariable(val.AsString())
+	if found && ctx == "var" && !allowedUnknown[varName] {
+		varTraversal := hcl.Traversal{
+			hcl.TraverseRoot{Name: ctx},
+			hcl.TraverseAttr{Name: varName},
+		}
+		newVal, diags := varTraversal.TraverseAbs(evalCtx)
+		if diags.HasErrors() {
+			return cty.Value{}, &ResolutionError{varName: varName, allowed: false}
+		}
+		return newVal, nil
+	}
+	if allowedUnknown[varName] {
+		return cty.Value{}, &ResolutionError{varName: varName, allowed: true}
+	}
+	return val, nil
 }
 
 // InputValueError signifies a problem with the blueprint name.

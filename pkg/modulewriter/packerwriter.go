@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -67,14 +68,17 @@ func (w PackerWriter) writeDeploymentGroup(
 ) (groupMetadata, error) {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, depGroup.Name)
-	allInputs := make(map[string]bool)
+	deploymentVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
+	intergroupVars := findIntergroupVariables(depGroup, dc.GetModuleConnections())
+	intergroupVarNames := modulereader.GetVarNames(intergroupVars)
+
 	for _, mod := range depGroup.Modules {
 		ctySettings, err := config.ConvertMapToCty(mod.Settings)
 		if err != nil {
 			return groupMetadata{}, fmt.Errorf(
 				"error converting packer module settings to cty for writing: %w", err)
 		}
-		err = config.ResolveVariables(ctySettings, dc.Config.Vars.Items())
+		err = config.ResolveVariables(ctySettings, dc.Config.Vars.Items(), intergroupVarNames)
 		if err != nil {
 			return groupMetadata{}, err
 		}
@@ -88,8 +92,8 @@ func (w PackerWriter) writeDeploymentGroup(
 
 	return groupMetadata{
 		Name:             depGroup.Name,
-		DeploymentInputs: orderKeys(allInputs),
-		IntergroupInputs: orderKeys(allInputs),
+		DeploymentInputs: orderKeys(deploymentVars),
+		IntergroupInputs: intergroupVarNames,
 		Outputs:          []string{},
 	}, nil
 }

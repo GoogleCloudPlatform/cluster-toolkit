@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"log"
 	"path"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -113,6 +114,16 @@ func (i ModuleInfo) GetOutputsAsMap() map[string]OutputInfo {
 		outputsMap[output.Name] = output
 	}
 	return outputsMap
+}
+
+// GetVarNames returns all input variable names as a string slice
+func GetVarNames(vinfos []VarInfo) []string {
+	vnames := make([]string, len(vinfos))
+	for i, v := range vinfos {
+		vnames[i] = v.Name
+	}
+	sort.Strings(vnames)
+	return vnames
 }
 
 // GetModuleInfo gathers information about a module at a given source using the
