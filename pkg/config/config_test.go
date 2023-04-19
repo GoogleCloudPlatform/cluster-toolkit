@@ -330,7 +330,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 					matchingIntragroupName2: fmt.Sprintf("$(%s.%s)", modID0, matchingIntragroupName2),
 				},
 				Use: []string{
-					fmt.Sprintf("%s.%s", dg0Name, modID0),
+					modID0,
 				},
 			},
 		},
@@ -344,7 +344,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Source:   testModuleSource2,
 				Settings: map[string]interface{}{},
 				Use: []string{
-					fmt.Sprintf("%s.%s", testDeploymentGroup0.Name, testDeploymentGroup0.Modules[0].ID),
+					testDeploymentGroup0.Modules[0].ID,
 				},
 			},
 		},
@@ -471,7 +471,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef0, useConnection, []string{"var1"})
 	got = dc.listUnusedModules()
@@ -483,7 +482,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef1, useConnection, []string{})
 	got = dc.listUnusedModules()
@@ -495,7 +493,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef2, useConnection, []string{})
 	got = dc.listUnusedModules()
@@ -604,7 +601,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					fromModuleID: "TestModule1",
 					toGroupID:    "primary",
 					fromGroupID:  "primary",
-					explicit:     true,
 				},
 				kind:            useConnection,
 				sharedVariables: []string{"test_intra_0"},
@@ -628,7 +624,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					fromModuleID: "TestModule2",
 					toGroupID:    "primary",
 					fromGroupID:  "secondary",
-					explicit:     true,
 				},
 				kind:            useConnection,
 				sharedVariables: []string{"test_inter_0"},
@@ -1279,7 +1274,6 @@ func (s *MySuite) TestModuleConnectionGetters(c *C) {
 			fromModuleID: "waldo",
 			toGroupID:    "baz",
 			fromGroupID:  "baz",
-			explicit:     true,
 		},
 		kind:            useConnection,
 		sharedVariables: sharedVariables,
@@ -1359,4 +1353,17 @@ func (s *MySuite) TestResolveVariables(c *C) {
 	err = ResolveVariables(settings, deploymentVars, []string{"not_a_variable"})
 	c.Assert(err, IsNil)
 	c.Assert(settings, DeepEquals, expectedSettings)
+}
+
+func (s *MySuite) TestModuleGroup(c *C) {
+	dc := getDeploymentConfigForTest()
+
+	groupID := dc.Config.DeploymentGroups[0].Name
+	modID := dc.Config.DeploymentGroups[0].Modules[0].ID
+
+	foundGroupID := dc.Config.ModuleGroupOrDie(modID)
+	c.Assert(foundGroupID, Equals, groupID)
+
+	_, err := dc.Config.ModuleGroup("bad_module_id")
+	c.Assert(err, NotNil)
 }

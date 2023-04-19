@@ -263,7 +263,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				// this will enable us to get structs about the module being
 				// used and search it for outputs that match inputs in the
 				// current module (the iterator)
-				modRef, err := identifyModuleByReference(toModID, *group, *fromMod)
+				modRef, err := identifyModuleByReference(toModID, dc.Config, fromMod.ID)
 				if err != nil {
 					return err
 				}
@@ -545,11 +545,10 @@ type modReference struct {
 	fromModuleID string
 	toGroupID    string
 	fromGroupID  string
-	explicit     bool
 }
 
 func (ref modReference) String() string {
-	return ref.toGroupID + "." + ref.toModuleID
+	return ref.toModuleID
 }
 
 func (ref modReference) IsIntergroup() bool {
@@ -566,34 +565,32 @@ func (ref modReference) ToModuleID() string {
 
 /*
 This function performs only the most rudimentary conversion of an input
-string into a modReference struct as defined above. An input string consists of
-1 or 2 fields separated by periods. An error will be returned if there are not
-1 or 2 fields or if either field is the empty string. This function does not
+string into a modReference struct as defined above. This function does not
 ensure the existence of the module!
 */
-func identifyModuleByReference(yamlReference string, dg DeploymentGroup, fromMod Module) (modReference, error) {
+func identifyModuleByReference(yamlReference string, bp Blueprint, fromMod string) (modReference, error) {
 	// struct defaults: empty strings and false booleans
 	var ref modReference
-	// intra-group references length 1 and inter-group references length 2
-	modComponents := strings.Split(yamlReference, ".")
-	switch len(modComponents) {
-	case 1:
-		ref.toModuleID = modComponents[0]
-		ref.toGroupID = dg.Name
-		ref.fromGroupID = dg.Name
-	case 2:
-		ref.toGroupID = modComponents[0]
-		ref.toModuleID = modComponents[1]
-		ref.fromGroupID = dg.Name
-		ref.explicit = true
+	ref.fromModuleID = fromMod
+	ref.toModuleID = yamlReference
+
+	fromG, err := bp.ModuleGroup(fromMod)
+	if err != nil {
+		return modReference{}, err
 	}
-	ref.fromModuleID = fromMod.ID
+	ref.fromGroupID = fromG
+
+	toG, err := bp.ModuleGroup(ref.toModuleID)
+	if err != nil {
+		return modReference{}, err
+	}
+	ref.toGroupID = toG
 
 	// should consider more sophisticated definition of valid values here.
 	// for now check that no fields are the empty string; due to the default
 	// zero values for strings in the "ref" struct, this will also cover the
 	// case that modComponents has wrong # of fields
-	if ref.toModuleID == "" || ref.toGroupID == "" || ref.fromGroupID == "" {
+	if ref.fromModuleID == "" || ref.toModuleID == "" || ref.fromGroupID == "" || ref.toGroupID == "" {
 		return ref, fmt.Errorf("%s: %s, expected %s",
 			errorMessages["invalidMod"], yamlReference, expectedModFormat)
 	}
@@ -664,7 +661,7 @@ This function performs only the most rudimentary conversion of an input
 string into a varReference struct as defined above. An input string consists of
 2 fields separated by periods. An error will be returned if there are not
 2 fields, or if any field is the empty string. This function does not
-ensure the existence of the reference!
+ensure the existence of the variable name, though it checks for modules and groups!
 */
 func identifySimpleVariable(s string, bp Blueprint, fromMod string) (varReference, error) {
 	r, err := SimpleVarToReference(s)
@@ -672,18 +669,7 @@ func identifySimpleVariable(s string, bp Blueprint, fromMod string) (varReferenc
 		return varReference{}, err
 	}
 
-	findGroup := func(mod string) (string, error) {
-		for _, g := range bp.DeploymentGroups {
-			for _, m := range g.Modules {
-				if m.ID == mod {
-					return g.Name, nil
-				}
-			}
-		}
-		return "", fmt.Errorf("module %s was not found", mod)
-	}
-
-	fromG, err := findGroup(fromMod)
+	fromG, err := bp.ModuleGroup(fromMod)
 	if err != nil {
 		return varReference{}, err
 	}
@@ -699,7 +685,7 @@ func identifySimpleVariable(s string, bp Blueprint, fromMod string) (varReferenc
 		ref.toGroupID = globalGroupID
 		ref.toModuleID = "vars"
 	} else {
-		g, err := findGroup(r.Module)
+		g, err := bp.ModuleGroup(r.Module)
 		if err != nil {
 			return varReference{}, err
 		}
@@ -738,11 +724,6 @@ func (ref modReference) validate(bp Blueprint) error {
 		if isRefToLaterGroup {
 			return fmt.Errorf("%s: %s is in a later group",
 				errorMessages["intergroupOrder"], ref.toModuleID)
-		}
-
-		if !ref.explicit {
-			return fmt.Errorf("%s: %s must specify a group ID before the module ID",
-				errorMessages["intergroupImplicit"], ref.toModuleID)
 		}
 	}
 
