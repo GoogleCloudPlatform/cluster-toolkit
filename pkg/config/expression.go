@@ -33,6 +33,14 @@ type Reference struct {
 	Name      string // required
 }
 
+// AsExpression returns a expression that represents the reference
+func (r Reference) AsExpression() Expression {
+	if r.GlobalVar {
+		return MustParseExpression(fmt.Sprintf("var.%s", r.Name))
+	}
+	return MustParseExpression(fmt.Sprintf("module.%s.%s", r.Module, r.Name))
+}
+
 // MakeStringInterpolationError generates an error message guiding the user to proper escape syntax
 func MakeStringInterpolationError(s string) error {
 	matchall := anyVariableExp.FindAllString(s, -1)
@@ -175,6 +183,18 @@ func MustParseExpression(s string) Expression {
 	} else {
 		return exp
 	}
+}
+
+// Eval evaluates the expression in the context of Blueprint
+func (e Expression) Eval(bp Blueprint) (cty.Value, error) {
+	ctx := hcl.EvalContext{
+		Variables: map[string]cty.Value{"var": bp.Vars.AsObject()},
+	}
+	v, diag := e.e.Value(&ctx)
+	if diag.HasErrors() {
+		return cty.NilVal, diag
+	}
+	return v, nil
 }
 
 // Tokenize returns Tokens to be used for marshalling HCL
