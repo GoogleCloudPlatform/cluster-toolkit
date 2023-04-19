@@ -335,8 +335,11 @@ func writeVersions(dst string) error {
 	return nil
 }
 
-func printTerraformInstructions(grpPath string, moduleName string) {
+func printTerraformInstructions(grpPath string, moduleName string, printIntergroupWarning bool) {
 	printInstructionsPreamble("Terraform", grpPath, moduleName)
+	if printIntergroupWarning {
+		fmt.Print(intergroupWarning)
+	}
 	fmt.Printf("  terraform -chdir=%s init\n", grpPath)
 	fmt.Printf("  terraform -chdir=%s validate\n", grpPath)
 	fmt.Printf("  terraform -chdir=%s apply\n\n", grpPath)
@@ -412,7 +415,7 @@ func (w TFWriter) writeDeploymentGroup(
 			depGroup.Name, err)
 	}
 
-	printTerraformInstructions(writePath, depGroup.Name)
+	printTerraformInstructions(writePath, depGroup.Name, len(intergroupInputs) > 0)
 
 	return gmd, nil
 }

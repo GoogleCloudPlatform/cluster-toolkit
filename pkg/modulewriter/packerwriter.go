@@ -40,8 +40,11 @@ func (w *PackerWriter) addNumModules(value int) {
 	w.numModules += value
 }
 
-func printPackerInstructions(modPath string, moduleName string) {
+func printPackerInstructions(modPath string, moduleName string, printIntergroupWarning bool) {
 	printInstructionsPreamble("Packer", modPath, moduleName)
+	if printIntergroupWarning {
+		fmt.Print(intergroupWarning)
+	}
 	fmt.Printf("  cd %s\n", modPath)
 	fmt.Println("  packer init .")
 	fmt.Println("  packer validate .")
@@ -80,7 +83,7 @@ func (w PackerWriter) writeDeploymentGroup(
 		if err != nil {
 			return groupMetadata{}, err
 		}
-		printPackerInstructions(modPath, mod.ID)
+		printPackerInstructions(modPath, mod.ID, len(intergroupVarNames) > 0)
 	}
 
 	return groupMetadata{
