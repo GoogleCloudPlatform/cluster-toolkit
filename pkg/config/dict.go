@@ -194,3 +194,22 @@ func (d Dict) MarshalYAML() (interface{}, error) {
 	}
 	return g, nil
 }
+
+// Eval returns a copy of this Dict, where all Expressions
+// are evaluated and replaced by result of evaluation.
+func (d Dict) Eval(bp Blueprint) (Dict, error) {
+	var res Dict
+	for k, v := range d.Items() {
+		r, err := cty.Transform(v, func(p cty.Path, v cty.Value) (cty.Value, error) {
+			if e, is := IsExpressionValue(v); is {
+				return e.Eval(bp)
+			}
+			return v, nil
+		})
+		if err != nil {
+			return Dict{}, fmt.Errorf("error while trying to evaluate %#v: %w", k, err)
+		}
+		res.Set(k, r)
+	}
+	return res, nil
+}

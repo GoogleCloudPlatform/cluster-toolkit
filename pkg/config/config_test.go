@@ -1207,7 +1207,7 @@ func (s *MySuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Variable in defaults configuration
 		b := TerraformBackend{Type: "gcs"}
-		b.Configuration.Set("bucket", MustParseExpression("((var.trenta))").AsValue())
+		b.Configuration.Set("bucket", Reference{GlobalVar: true, Name: "trenta"}.AsExpression().AsValue())
 		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
 	}
 
@@ -1217,7 +1217,7 @@ func (s *MySuite) TestCheckBackends(c *C) {
 			Set("bucket", cty.StringVal("trenta")).
 			Set("complex", cty.ObjectVal(map[string]cty.Value{
 				"alpha": cty.StringVal("a"),
-				"beta":  MustParseExpression("((var.boba))").AsValue(),
+				"beta":  Reference{GlobalVar: true, Name: "boba"}.AsExpression().AsValue(),
 			}))
 		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
 	}
