@@ -1,0 +1,22 @@
+deployment_metadata:
+  - name: zero
+    deployment_inputs:
+      - deployment_name
+      - labels
+      - project_id
+      - region
+      - zone
+    intergroup_inputs: []
+    outputs:
+      - startup_script_script
+      - subnetwork_name_network0
+  - name: one
+    deployment_inputs:
+      - deployment_name
+      - labels
+      - project_id
+      - zone
+    intergroup_inputs:
+      - startup_script_script
+      - subnetwork_name_network0
+    outputs: []

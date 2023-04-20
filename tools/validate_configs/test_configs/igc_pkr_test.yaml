@@ -1,0 +1,56 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: igc
+
+vars:
+  project_id: #
+  deployment_name: igc-pkr-test
+  region: us-east4
+  zone: us-east4-c
+
+deployment_groups:
+- group: zero
+  modules:
+  - id: network0
+    source: modules/network/vpc
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network0]
+    settings:
+      local_mount: /home
+  - id: projectsfs
+    source: modules/file-system/filestore
+    use: [network0]
+    settings:
+      local_mount: /projects
+  - id: script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: hellow.sh
+        content: |
+          #!/bin/bash
+          echo "Hello, World!"
+
+- group: one
+  modules:
+  - id: image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - network0
+    - script
