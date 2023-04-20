@@ -31,7 +31,7 @@ repos:
     entry: tools/autodoc/terraform_docs.sh
     language: script
     types: [terraform]
-    exclude: \.terraform|pkg\/.*$
+    exclude: (\.terraform|pkg\/.*$)|(tools/validate_configs/golden_copies/.*)
     pass_filenames: true
     require_serial: true
   - id: packer-readme
@@ -103,3 +103,4 @@ repos:
   rev: v4.4.0
   hooks:
   - id: end-of-file-fixer
+exclude: tools/validate_configs/golden_copies/.*
