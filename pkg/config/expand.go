@@ -829,30 +829,19 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 		return "", err
 	}
 
-	switch varRef.toGroupID {
-	case globalGroupID:
-		if trackModuleGraph {
+	// if this connection is to a deployment variable, then it is new
+	// if this connection is to a module output, then it may have been via use
+	// only if new, should it be marked as an explicitConnection
+	if trackModuleGraph {
+		if varRef.toGroupID == globalGroupID {
 			context.dc.addModuleConnection(varRef, deploymentConnection, []string{varRef.name})
+		} else if !wasConnectionViaUse(context.dc.moduleConnections[varRef.fromModuleID], varRef.name) {
+			context.dc.addModuleConnection(varRef, explicitConnection, []string{varRef.name})
 		}
-	case varRef.fromGroupID:
-		// intragroup; track connection if it was made explicitly (not via use)
-		if trackModuleGraph {
-			var found bool
-			for _, conn := range context.dc.moduleConnections[varRef.fromModuleID] {
-				if conn.kind != useConnection {
-					continue
-				}
-				if slices.Contains(conn.sharedVariables, varRef.name) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				context.dc.addModuleConnection(varRef, explicitConnection, []string{varRef.name})
-			}
-		}
-	default:
-		// intergroup
+	}
+
+	// intergroup case must add outputs to earlier module
+	if varRef.toGroupID != varRef.fromGroupID && varRef.toGroupID != globalGroupID {
 		toGrpIdx := slices.IndexFunc(
 			context.dc.Config.DeploymentGroups,
 			func(g DeploymentGroup) bool { return g.Name == varRef.toGroupID })
@@ -874,6 +863,18 @@ func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, er
 		}
 	}
 	return fmt.Sprintf("((%s))", varRef.HclString()), nil
+}
+
+func wasConnectionViaUse(mc []ModConnection, sharedVar string) bool {
+	for _, conn := range mc {
+		if conn.kind != useConnection {
+			continue
+		}
+		if slices.Contains(conn.sharedVariables, sharedVar) {
+			return true
+		}
+	}
+	return false
 }
 
 // isSimpleVariable checks if the entire string is just a single variable
