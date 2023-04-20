@@ -347,13 +347,7 @@ func (dc *DeploymentConfig) testApisEnabled(c validatorConfig) error {
 	}
 
 	var errored bool
-	for pid, apis := range requiredApis {
-		var project string
-		if IsLiteralVariable(pid) {
-			project, _ = dc.getStringValue(pid)
-		} else {
-			project = pid
-		}
+	for project, apis := range requiredApis {
 		err := validators.TestApisEnabled(project, apis)
 		if err != nil {
 			log.Println(err)
@@ -469,37 +463,6 @@ func (dc *DeploymentConfig) testDeploymentVariableNotUsed(c validatorConfig) err
 		return fmt.Errorf(funcErrorMsgTemplate, testDeploymentVariableNotUsedName.String())
 	}
 	return nil
-}
-
-// return the actual value of a global variable specified by the literal
-// variable inputReference in form ((var.project_id))
-// if it is a literal global variable defined as a string, return value as string
-// in all other cases, return empty string and error
-func (dc *DeploymentConfig) getStringValue(inputReference interface{}) (string, error) {
-	varRef, ok := inputReference.(string)
-	if !ok {
-		return "", fmt.Errorf("the value %s cannot be cast to a string", inputReference)
-	}
-
-	if IsLiteralVariable(varRef) {
-		varSlice := strings.Split(HandleLiteralVariable(varRef), ".")
-		varSrc := varSlice[0]
-		varName := varSlice[1]
-
-		// because expand has already run, the global variable should have been
-		// checked for existence. handle if user has explicitly passed
-		// ((var.does_not_exit)) or ((not_a_varsrc.not_a_var))
-		if varSrc == "var" {
-			if dc.Config.Vars.Has(varName) {
-				v := dc.Config.Vars.Get(varName)
-				if v.Type() == cty.String {
-					return v.AsString(), nil
-				}
-				return "", fmt.Errorf("the deployment variable %s is not a string", inputReference)
-			}
-		}
-	}
-	return "", fmt.Errorf("the value %s is not a deployment variable or was not defined", inputReference)
 }
 
 func resolveValidatorInputs(inputs Dict, bp Blueprint) (map[string]string, error) {

@@ -199,35 +199,6 @@ func (s *MySuite) TestAddDefaultValidators(c *C) {
 	c.Assert(dc.Config.Validators, HasLen, 7)
 }
 
-// return the actual value of a global variable specified by the literal
-// variable inputReference in form ((var.project_id))
-// if it is a literal global variable defined as a string, return value as string
-// in all other cases, return empty string and error
-func (s *MySuite) TestGetStringValue(c *C) {
-	dc := getDeploymentConfigForTest()
-	dc.Config.Vars.
-		Set("goodvar", cty.StringVal("testval")).
-		Set("badvar", cty.NumberIntVal(2))
-
-	// test non-string values return error
-	_, err := dc.getStringValue(2)
-	c.Assert(err, Not(IsNil))
-
-	// test strings that are not literal variables return error and empty string
-	strVal, err := dc.getStringValue("hello")
-	c.Assert(err, Not(IsNil))
-	c.Assert(strVal, Equals, "")
-
-	// test literal variables that refer to strings return their value
-	strVal, err = dc.getStringValue("(( var.goodvar ))")
-	c.Assert(err, IsNil)
-	c.Assert(strVal, Equals, "testval")
-
-	// test literal variables that refer to non-strings return error
-	_, err = dc.getStringValue("(( var.badvar ))")
-	c.Assert(err, Not(IsNil))
-}
-
 func (s *MySuite) TestMergeBlueprintRequirements(c *C) {
 	map1 := make(map[string][]string)
 	map2 := make(map[string][]string)
