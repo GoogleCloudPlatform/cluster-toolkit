@@ -49,6 +49,13 @@ resource "google_container_cluster" "gke_cluster" {
   # Note: the existence of the "master_authorized_networks_config" block enables
   # the master authorized networks even if it's empty.
   master_authorized_networks_config {
+    dynamic "cidr_blocks" {
+      for_each = var.master_authorized_networks
+      content {
+        cidr_block   = cidr_blocks.value.cidr_block
+        display_name = cidr_blocks.value.display_name
+      }
+    }
   }
 
   private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : null
