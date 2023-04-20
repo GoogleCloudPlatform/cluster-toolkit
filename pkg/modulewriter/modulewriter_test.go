@@ -78,7 +78,7 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 	testModuleSource := filepath.Join(testDir, terraformModuleDir)
 	testModule := config.Module{
 		Source: testModuleSource,
-		Kind:   "terraform",
+		Kind:   config.TerraformKind,
 		ID:     "testModule",
 		Settings: map[string]interface{}{
 			"deployment_name": nil,
@@ -96,7 +96,7 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 	testModuleWithLabels := config.Module{
 		Source: testModuleSourceWithLabels,
 		ID:     "testModuleWithLabels",
-		Kind:   "terraform",
+		Kind:   config.TerraformKind,
 		Settings: map[string]interface{}{
 			"moduleLabel": "moduleLabelValue",
 		},
@@ -104,7 +104,7 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 	testDeploymentGroups := []config.DeploymentGroup{
 		{
 			Name:    "test_resource_group",
-			Kind:    "terraform",
+			Kind:    config.TerraformKind,
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
@@ -680,7 +680,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	}
 
 	testPackerModule := config.Module{
-		Kind:             "packer",
+		Kind:             config.PackerKind,
 		ID:               "testPackerModule",
 		DeploymentSource: "testPackerModule",
 	}
@@ -794,43 +794,43 @@ func TestMain(m *testing.M) {
 
 func (s *MySuite) TestDeploymentSource(c *C) {
 	{ // git
-		m := config.Module{Kind: "terraform", Source: "github.com/x/y.git"}
+		m := config.Module{Kind: config.TerraformKind, Source: "github.com/x/y.git"}
 		s, err := deploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "github.com/x/y.git")
 	}
 	{ // packer
-		m := config.Module{Kind: "packer", Source: "modules/packer/custom-image", ID: "custom-image"}
+		m := config.Module{Kind: config.PackerKind, Source: "modules/packer/custom-image", ID: "custom-image"}
 		s, err := deploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "custom-image")
 	}
 	{ // embedded core
-		m := config.Module{Kind: "terraform", Source: "modules/x/y"}
+		m := config.Module{Kind: config.TerraformKind, Source: "modules/x/y"}
 		s, err := deploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "./modules/embedded/modules/x/y")
 	}
 	{ // embedded community
-		m := config.Module{Kind: "terraform", Source: "community/modules/x/y"}
+		m := config.Module{Kind: config.TerraformKind, Source: "community/modules/x/y"}
 		s, err := deploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "./modules/embedded/community/modules/x/y")
 	}
 	{ // local rel in repo
-		m := config.Module{Kind: "terraform", Source: "./modules/x/y"}
+		m := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
 		s, err := deploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
 	{ // local rel
-		m := config.Module{Kind: "terraform", Source: "./../../../../x/y"}
+		m := config.Module{Kind: config.TerraformKind, Source: "./../../../../x/y"}
 		s, err := deploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
 	{ // local abs
-		m := config.Module{Kind: "terraform", Source: "/tmp/x/y"}
+		m := config.Module{Kind: config.TerraformKind, Source: "/tmp/x/y"}
 		s, err := deploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)

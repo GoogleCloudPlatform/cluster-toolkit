@@ -118,7 +118,7 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		DeploymentMetadata: []groupMetadata{},
 	}
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
-		writer, ok := kinds[grp.Kind]
+		writer, ok := kinds[grp.Kind.String()]
 		if !ok {
 			return fmt.Errorf(
 				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
@@ -173,10 +173,10 @@ func deploymentSource(mod config.Module) (string, error) {
 	if sourcereader.IsGitPath(mod.Source) {
 		return mod.Source, nil
 	}
-	if mod.Kind == "packer" {
+	if mod.Kind == config.PackerKind {
 		return mod.ID, nil
 	}
-	if mod.Kind != "terraform" {
+	if mod.Kind != config.TerraformKind {
 		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
 	}
 
@@ -233,8 +233,8 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 			if sourcereader.IsGitPath(mod.Source) {
 				continue // do not download
 			}
-			factory(mod.Kind).addNumModules(1)
-			if sourcereader.IsEmbeddedPath(mod.Source) && mod.Kind == "terraform" {
+			factory(mod.Kind.String()).addNumModules(1)
+			if sourcereader.IsEmbeddedPath(mod.Source) && mod.Kind == config.TerraformKind {
 				copyEmbedded = true
 				continue // all embedded terraform modules fill be copied at once
 			}

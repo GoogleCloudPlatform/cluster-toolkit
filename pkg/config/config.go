@@ -91,7 +91,7 @@ type DeploymentGroup struct {
 	Name             string           `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
 	Modules          []Module         `yaml:"modules"`
-	Kind             string
+	Kind             ModuleKind
 }
 
 func (g DeploymentGroup) getModuleByID(modID string) (Module, error) {
@@ -138,7 +138,49 @@ type TerraformBackend struct {
 	Configuration Dict
 }
 
-type validatorName int64
+// ModuleKind abstracts Toolkit module kinds (presently: packer/terraform)
+type ModuleKind struct {
+	kind string
+}
+
+// UnknownKind is the default value when the user has not specified module kind
+var UnknownKind = ModuleKind{kind: ""}
+
+// TerraformKind is the kind for Terraform modules (should be treated as const)
+var TerraformKind = ModuleKind{kind: "terraform"}
+
+// PackerKind is the kind for Packer modules (should be treated as const)
+var PackerKind = ModuleKind{kind: "packer"}
+
+// UnmarshalYAML implements a custom unmarshaler from YAML string to ModuleKind
+func (mk *ModuleKind) UnmarshalYAML(n *yaml.Node) error {
+	var kind string
+	const yamlErrorMsg string = "block beginning at line %d: %s"
+
+	err := n.Decode(&kind)
+	if err == nil && IsValidModuleKind(kind) {
+		mk.kind = kind
+		return nil
+	}
+	return fmt.Errorf(yamlErrorMsg, n.Line, "kind must be \"packer\" or \"terraform\" or removed from YAML")
+}
+
+// MarshalYAML implements a custom marshaler from ModuleKind to YAML string
+func (mk ModuleKind) MarshalYAML() (interface{}, error) {
+	return mk.String(), nil
+}
+
+// IsValidModuleKind ensures that the user has specified a supported kind
+func IsValidModuleKind(kind string) bool {
+	return kind == TerraformKind.String() || kind == PackerKind.String() ||
+		kind == UnknownKind.String()
+}
+
+func (mk ModuleKind) String() string {
+	return mk.kind
+}
+
+type validatorName uint8
 
 const (
 	// Undefined will be default and potentially throw errors if used
@@ -238,7 +280,7 @@ func (v *validatorConfig) check(name validatorName, requiredInputs []string) err
 // function is used in the validation step to ensure that is true.
 func (g DeploymentGroup) HasKind(kind string) bool {
 	for _, mod := range g.Modules {
-		if mod.Kind == kind {
+		if mod.Kind.String() == kind {
 			return true
 		}
 	}
@@ -250,7 +292,7 @@ type Module struct {
 	Source string
 	// DeploymentSource - is source to be used for this module in written deployment.
 	DeploymentSource string `yaml:"-"` // "-" prevents user from specifying it
-	Kind             string
+	Kind             ModuleKind
 	ID               string
 	Use              []string
 	WrapSettingsWith map[string][]string
@@ -530,7 +572,7 @@ func createModuleInfo(
 	modsInfo := make(map[string]modulereader.ModuleInfo)
 	for _, mod := range deploymentGroup.Modules {
 		if _, exists := modsInfo[mod.Source]; !exists {
-			ri, err := modulereader.GetModuleInfo(mod.Source, mod.Kind)
+			ri, err := modulereader.GetModuleInfo(mod.Source, mod.Kind.String())
 			if err != nil {
 				log.Fatalf(
 					"failed to get info for module at %s while setting dc.ModulesInfo: %e",
@@ -546,9 +588,9 @@ func createModuleInfo(
 func (dc *DeploymentConfig) addKindToModules() {
 	for iGrp, grp := range dc.Config.DeploymentGroups {
 		for iMod, mod := range grp.Modules {
-			if mod.Kind == "" {
+			if mod.Kind == UnknownKind {
 				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Kind =
-					"terraform"
+					TerraformKind
 			}
 		}
 	}
@@ -591,7 +633,7 @@ func checkModuleAndGroupNames(groups []DeploymentGroup) error {
 			seenMod[mod.ID] = true
 
 			// Verify Module Kind matches group Kind
-			if grp.Kind == "" {
+			if grp.Kind == UnknownKind {
 				grp.Kind = mod.Kind
 			}
 			if grp.Kind != mod.Kind {

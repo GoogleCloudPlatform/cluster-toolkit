@@ -178,8 +178,8 @@ var kinds = map[string]ModReader{
 	"packer":    NewPackerReader(),
 }
 
-// IsValidKind returns true if the kind input is valid
-func IsValidKind(input string) bool {
+// IsValidReaderKind returns true if the kind input is valid
+func IsValidReaderKind(input string) bool {
 	for k := range kinds {
 		if k == input {
 			return true

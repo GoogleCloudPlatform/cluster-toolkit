@@ -65,7 +65,7 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 	testDeploymentGroup := DeploymentGroup{
 		Name:             "",
 		TerraformBackend: TerraformBackend{},
-		Modules:          []Module{{Kind: "terraform", Source: testSource, Settings: testSettings}},
+		Modules:          []Module{{Kind: TerraformKind, Source: testSource, Settings: testSettings}},
 	}
 	dc := DeploymentConfig{
 		Config:      Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
@@ -141,14 +141,14 @@ func (s *MySuite) TestValidateModule(c *C) {
 
 	// Catch invalid kind
 	testModule.Source = "testSource"
-	testModule.Kind = "invalidKind"
+	testModule.Kind = ModuleKind{kind: "invalidKind"}
 	err = validateModule(testModule)
 	expectedErrorStr = fmt.Sprintf(
 		"%s\n%s", errorMessages["wrongKind"], module2String(testModule))
 	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
 	// Successful validation
-	testModule.Kind = "terraform"
+	testModule.Kind = TerraformKind
 	err = validateModule(testModule)
 	c.Assert(err, IsNil)
 }
