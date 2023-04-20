@@ -27,9 +27,15 @@ locals {
       One way to access this cluster is from a VM created in the GKE cluster subnet.
     EOT
   )
+  master_authorized_networks_message = length(var.master_authorized_networks) == 0 ? "" : trimspace(
+    <<-EOT
+    The following networks have been authorized to access this cluster:
+    ${join("\n", [for x in var.master_authorized_networks : "  ${x.display_name}: ${x.cidr_block}"])}"
+    EOT
+  )
   public_endpoint_message = trimspace(
     <<-EOT
-      To access this cluster from a public IP address you must allowlist your IP:
+      To add authorized networks you can allowlist your IP with this command:
         gcloud container clusters update ${google_container_cluster.gke_cluster.name} \
           --region ${google_container_cluster.gke_cluster.location} \
           --project ${var.project_id} \
@@ -44,6 +50,8 @@ output "instructions" {
   description = "Instructions on how to connect to the created cluster."
   value = trimspace(
     <<-EOT
+      ${local.master_authorized_networks_message}
+
       ${local.allowlist_your_ip_message}
 
       Use the following command to fetch credentials for the created cluster:
