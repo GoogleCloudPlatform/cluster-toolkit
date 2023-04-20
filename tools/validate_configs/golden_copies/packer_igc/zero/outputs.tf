@@ -13,13 +13,15 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+
 output "subnetwork_name_network0" {
-  description = "Generated output from module 'network0'"
+  description = "Automatically-generated output exported for use by later deployment groups"
   value       = module.network0.subnetwork_name
+  sensitive   = true
 }
 
 output "startup_script_script" {
-  description = "Generated output from module 'script'"
+  description = "Automatically-generated output exported for use by later deployment groups"
   value       = module.script.startup_script
+  sensitive   = true
 }
-
