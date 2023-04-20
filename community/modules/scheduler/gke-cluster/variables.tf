@@ -165,6 +165,15 @@ variable "enable_master_global_access" {
   default     = false
 }
 
+variable "master_authorized_networks" {
+  description = "External network that can access Kubernetes master through HTTPS. Must be specified in CIDR notation."
+  type = list(object({
+    cidr_block   = string
+    display_name = string
+  }))
+  default = []
+}
+
 variable "service_account" {
   description = "Service account to use with the system node pool"
   type = object({
