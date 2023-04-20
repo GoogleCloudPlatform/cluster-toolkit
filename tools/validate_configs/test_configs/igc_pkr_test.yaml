@@ -41,7 +41,7 @@ deployment_groups:
     settings:
       runners:
       - type: shell
-        destination: hellow.sh
+        destination: hello.sh
         content: |
           #!/bin/bash
           echo "Hello, World!"

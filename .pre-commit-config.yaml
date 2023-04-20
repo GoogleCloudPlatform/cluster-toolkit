@@ -18,15 +18,12 @@ repos:
   rev: v1.77.1
   hooks:
   - id: terraform_fmt
-    exclude: tools/validate_configs/golden_copies/.*
   - id: terraform_tflint
     args:
     - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
-    exclude: tools/validate_configs/golden_copies/.*
   - id: terraform_validate
     args:
     - --hook-config=--retry-once-with-cleanup=true
-    exclude: tools/validate_configs/golden_copies/.*
 - repo: local
   hooks:
   - id: terraform-readme
@@ -44,7 +41,6 @@ repos:
     files: ^.*\.pkr\.hcl$
     pass_filenames: true
     require_serial: true
-    exclude: tools/validate_configs/golden_copies/.*
   - id: duplicate-diff
     name: duplicate-diff
     entry: python3 tools/duplicate-diff.py
@@ -84,7 +80,6 @@ repos:
   hooks:
   - id: yamllint
     args: [-c=.yamllint]
-    exclude: tools/validate_configs/golden_copies/.*
 - repo: https://github.com/jackdewinter/pymarkdown
   rev: v0.9.9
   hooks:
@@ -108,4 +103,4 @@ repos:
   rev: v4.4.0
   hooks:
   - id: end-of-file-fixer
-    exclude: tools/validate_configs/golden_copies/.*
+exclude: tools/validate_configs/golden_copies/.*

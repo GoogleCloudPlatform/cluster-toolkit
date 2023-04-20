@@ -56,7 +56,7 @@ module "script" {
   region     = var.region
   runners = [{
     content     = "#!/bin/bash\necho \"Hello, World!\"\n"
-    destination = "hellow.sh"
+    destination = "hello.sh"
     type        = "shell"
   }]
 }

@@ -59,6 +59,8 @@ run_test() {
 		rm -rf "${folder}/modules"
 	done
 	find . -name "README.md" -exec rm {} \;
+	# Add license headers to yaml files
+	addlicense -c "Google LLC" -l apache .
 
 	# Compare the deployment folder with the golden copy
 	diff --recursive . "${cwd}/${gc}" || {
