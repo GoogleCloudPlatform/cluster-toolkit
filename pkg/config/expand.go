@@ -85,9 +85,6 @@ func (dc *DeploymentConfig) expand() {
 	if err := dc.expandVariables(); err != nil {
 		log.Fatalf("failed to expand variables: %v", err)
 	}
-	if err := expandRequiredApis(&dc.Config); err != nil {
-		log.Fatalf("failed to expand required_apis: %v", err)
-	}
 }
 
 func (dc *DeploymentConfig) addSettingsToModules() {
@@ -951,14 +948,6 @@ func updateVariables(context varContext, interfaceMap map[string]interface{}, tr
 // expandVariables recurses through the data structures in the yaml config and
 // expands all variables
 func (dc *DeploymentConfig) expandVariables() error {
-	for _, validator := range dc.Config.Validators {
-		err := updateVariables(varContext{dc: dc}, validator.Inputs, false)
-		if err != nil {
-			return err
-
-		}
-	}
-
 	for iGrp, grp := range dc.Config.DeploymentGroups {
 		for iMod, mod := range grp.Modules {
 			context := varContext{
@@ -975,34 +964,6 @@ func (dc *DeploymentConfig) expandVariables() error {
 	return nil
 }
 
-func expandRequiredApis(bp *Blueprint) error {
-	return bp.WalkModules(func(m *Module) error {
-		for project, apis := range m.RequiredApis {
-			resolved := project
-			if hasVariable(project) {
-				exp, err := SimpleVarToExpression(project)
-				if err != nil {
-					return err
-				}
-				ev, err := exp.Eval(*bp)
-				if err != nil {
-					return err
-				}
-				if ev.Type() != cty.String {
-					ty := ev.Type().FriendlyName()
-					return fmt.Errorf("module %s required_api project_id must be a string, got %s", m.ID, ty)
-				}
-				resolved = ev.AsString()
-			}
-			if project != resolved {
-				m.RequiredApis[resolved] = slices.Clone(apis)
-				delete(m.RequiredApis, project)
-			}
-		}
-		return nil
-	})
-}
-
 // this function adds default validators to the blueprint.
 // default validators are only added for global variables that exist
 func (dc *DeploymentConfig) addDefaultValidators() error {
@@ -1011,18 +972,17 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	}
 
 	projectIDExists := dc.Config.Vars.Has("project_id")
-	regionExists := dc.Config.Vars.Has("region")
-	zoneExists := dc.Config.Vars.Has("zone")
+	projectRef := Reference{GlobalVar: true, Name: "project_id"}.AsExpression().AsValue()
 
-	defaults := []validatorConfig{}
-	defaults = append(defaults, validatorConfig{
-		Validator: testModuleNotUsedName.String(),
-		Inputs:    map[string]interface{}{},
-	})
-	defaults = append(defaults, validatorConfig{
-		Validator: testDeploymentVariableNotUsedName.String(),
-		Inputs:    map[string]interface{}{},
-	})
+	regionExists := dc.Config.Vars.Has("region")
+	regionRef := Reference{GlobalVar: true, Name: "region"}.AsExpression().AsValue()
+
+	zoneExists := dc.Config.Vars.Has("zone")
+	zoneRef := Reference{GlobalVar: true, Name: "zone"}.AsExpression().AsValue()
+
+	defaults := []validatorConfig{
+		{Validator: testModuleNotUsedName.String()},
+		{Validator: testDeploymentVariableNotUsedName.String()}}
 
 	// always add the project ID validator before subsequent validators that can
 	// only succeed if credentials can access the project. If the project ID
@@ -1030,47 +990,43 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	if projectIDExists {
 		defaults = append(defaults, validatorConfig{
 			Validator: testProjectExistsName.String(),
-			Inputs: map[string]interface{}{
-				"project_id": "$(vars.project_id)",
-			},
+			Inputs:    NewDict(map[string]cty.Value{"project_id": projectRef}),
 		})
 	}
 
 	// it is safe to run this validator even if vars.project_id is undefined;
 	// it will likely fail but will do so helpfully to the user
-	defaults = append(defaults, validatorConfig{
-		Validator: "test_apis_enabled",
-		Inputs:    map[string]interface{}{},
-	})
+	defaults = append(defaults,
+		validatorConfig{Validator: "test_apis_enabled"})
 
 	if projectIDExists && regionExists {
 		defaults = append(defaults, validatorConfig{
 			Validator: testRegionExistsName.String(),
-			Inputs: map[string]interface{}{
-				"project_id": "$(vars.project_id)",
-				"region":     "$(vars.region)",
+			Inputs: NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"region":     regionRef,
 			},
-		})
+			)})
 	}
 
 	if projectIDExists && zoneExists {
 		defaults = append(defaults, validatorConfig{
 			Validator: testZoneExistsName.String(),
-			Inputs: map[string]interface{}{
-				"project_id": "$(vars.project_id)",
-				"zone":       "$(vars.zone)",
-			},
+			Inputs: NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
 		})
 	}
 
 	if projectIDExists && regionExists && zoneExists {
 		defaults = append(defaults, validatorConfig{
 			Validator: testZoneInRegionName.String(),
-			Inputs: map[string]interface{}{
-				"project_id": "$(vars.project_id)",
-				"region":     "$(vars.region)",
-				"zone":       "$(vars.zone)",
-			},
+			Inputs: NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"region":     regionRef,
+				"zone":       zoneRef,
+			}),
 		})
 	}
 

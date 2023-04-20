@@ -1088,52 +1088,55 @@ func (s *MySuite) TestValidatorConfigCheck(c *C) {
 	const vn = testProjectExistsName // some valid name
 
 	{ // FAIL: names mismatch
-		v := validatorConfig{"who_is_this", map[string]interface{}{}, false}
+		v := validatorConfig{Validator: "who_is_this"}
 		err := v.check(vn, []string{})
 		c.Check(err, ErrorMatches, "passed wrong validator to test_project_exists implementation")
 	}
 
 	{ // OK: names match
-		v := validatorConfig{vn.String(), map[string]interface{}{}, false}
+		v := validatorConfig{Validator: vn.String()}
 		c.Check(v.check(vn, []string{}), IsNil)
 	}
 
 	{ // OK: Inputs is equal to required inputs without regard to ordering
 		v := validatorConfig{
-			vn.String(),
-			map[string]interface{}{"in0": nil, "in1": nil},
-			false,
-		}
+			Validator: vn.String(),
+			Inputs: NewDict(map[string]cty.Value{
+				"in0": cty.NilVal,
+				"in1": cty.NilVal})}
 		c.Check(v.check(vn, []string{"in0", "in1"}), IsNil)
 		c.Check(v.check(vn, []string{"in1", "in0"}), IsNil)
 	}
 
 	{ // FAIL: inputs are a proper subset of required inputs
 		v := validatorConfig{
-			vn.String(),
-			map[string]interface{}{"in0": nil, "in1": nil},
-			false,
-		}
+			Validator: vn.String(),
+			Inputs: NewDict(map[string]cty.Value{
+				"in0": cty.NilVal,
+				"in1": cty.NilVal})}
 		err := v.check(vn, []string{"in0", "in1", "in2"})
 		c.Check(err, ErrorMatches, missingRequiredInputRegex)
 	}
 
 	{ // FAIL: inputs intersect with required inputs but are not a proper subset
 		v := validatorConfig{
-			vn.String(),
-			map[string]interface{}{"in0": nil, "in1": nil, "in3": nil},
-			false,
-		}
+			Validator: vn.String(),
+			Inputs: NewDict(map[string]cty.Value{
+				"in0": cty.NilVal,
+				"in1": cty.NilVal,
+				"in3": cty.NilVal})}
 		err := v.check(vn, []string{"in0", "in1", "in2"})
 		c.Check(err, ErrorMatches, missingRequiredInputRegex)
 	}
 
 	{ // FAIL inputs are a proper superset of required inputs
 		v := validatorConfig{
-			vn.String(),
-			map[string]interface{}{"in0": nil, "in1": nil, "in2": nil, "in3": nil},
-			false,
-		}
+			Validator: vn.String(),
+			Inputs: NewDict(map[string]cty.Value{
+				"in0": cty.NilVal,
+				"in1": cty.NilVal,
+				"in2": cty.NilVal,
+				"in3": cty.NilVal})}
 		err := v.check(vn, []string{"in0", "in1", "in2"})
 		c.Check(err, ErrorMatches, "only 3 inputs \\[in0 in1 in2\\] should be provided to test_project_exists")
 	}
