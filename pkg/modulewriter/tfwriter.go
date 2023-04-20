@@ -96,6 +96,7 @@ func writeOutputs(
 		for _, output := range mod.Outputs {
 			// Create output block
 			outputName := config.AutomaticOutputName(output.Name, mod.ID)
+			hclBody.AppendNewline()
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
@@ -110,7 +111,6 @@ func writeOutputs(
 			if output.Sensitive {
 				blockBody.SetAttributeValue("sensitive", cty.BoolVal(output.Sensitive))
 			}
-			hclBody.AppendNewline()
 		}
 	}
 
