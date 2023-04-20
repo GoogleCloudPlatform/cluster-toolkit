@@ -85,9 +85,6 @@ func (dc *DeploymentConfig) expand() {
 	if err := dc.expandVariables(); err != nil {
 		log.Fatalf("failed to expand variables: %v", err)
 	}
-	if err := expandRequiredApis(&dc.Config); err != nil {
-		log.Fatalf("failed to expand required_apis: %v", err)
-	}
 }
 
 func (dc *DeploymentConfig) addSettingsToModules() {
@@ -964,34 +961,6 @@ func (dc *DeploymentConfig) expandVariables() error {
 		}
 	}
 	return nil
-}
-
-func expandRequiredApis(bp *Blueprint) error {
-	return bp.WalkModules(func(m *Module) error {
-		for project, apis := range m.RequiredApis {
-			resolved := project
-			if hasVariable(project) {
-				exp, err := SimpleVarToExpression(project)
-				if err != nil {
-					return err
-				}
-				ev, err := exp.Eval(*bp)
-				if err != nil {
-					return err
-				}
-				if ev.Type() != cty.String {
-					ty := ev.Type().FriendlyName()
-					return fmt.Errorf("module %s required_api project_id must be a string, got %s", m.ID, ty)
-				}
-				resolved = ev.AsString()
-			}
-			if project != resolved {
-				m.RequiredApis[resolved] = slices.Clone(apis)
-				delete(m.RequiredApis, project)
-			}
-		}
-		return nil
-	})
 }
 
 // this function adds default validators to the blueprint.

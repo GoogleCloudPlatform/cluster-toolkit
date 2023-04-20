@@ -348,6 +348,20 @@ func (dc *DeploymentConfig) testApisEnabled(c validatorConfig) error {
 
 	var errored bool
 	for project, apis := range requiredApis {
+		if hasVariable(project) {
+			expr, err := SimpleVarToExpression(project)
+			if err != nil {
+				return err
+			}
+			v, err := expr.Eval(dc.Config)
+			if err != nil {
+				return err
+			}
+			if v.Type() != cty.String {
+				return fmt.Errorf("the deployment variable %s is not a string", project)
+			}
+			project = v.AsString()
+		}
 		err := validators.TestApisEnabled(project, apis)
 		if err != nil {
 			log.Println(err)
@@ -368,7 +382,7 @@ func (dc *DeploymentConfig) testProjectExists(c validatorConfig) error {
 	if err := c.check(testProjectExistsName, []string{"project_id"}); err != nil {
 		return err
 	}
-	m, err := resolveValidatorInputs(c.Inputs, dc.Config)
+	m, err := evalValidatorInputsAsStrings(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -388,7 +402,7 @@ func (dc *DeploymentConfig) testRegionExists(c validatorConfig) error {
 	if err := c.check(testRegionExistsName, []string{"project_id", "region"}); err != nil {
 		return err
 	}
-	m, err := resolveValidatorInputs(c.Inputs, dc.Config)
+	m, err := evalValidatorInputsAsStrings(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -408,7 +422,7 @@ func (dc *DeploymentConfig) testZoneExists(c validatorConfig) error {
 	if err := c.check(testZoneExistsName, []string{"project_id", "zone"}); err != nil {
 		return err
 	}
-	m, err := resolveValidatorInputs(c.Inputs, dc.Config)
+	m, err := evalValidatorInputsAsStrings(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -428,7 +442,7 @@ func (dc *DeploymentConfig) testZoneInRegion(c validatorConfig) error {
 	if err := c.check(testZoneInRegionName, []string{"project_id", "region", "zone"}); err != nil {
 		return err
 	}
-	m, err := resolveValidatorInputs(c.Inputs, dc.Config)
+	m, err := evalValidatorInputsAsStrings(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
@@ -465,7 +479,8 @@ func (dc *DeploymentConfig) testDeploymentVariableNotUsed(c validatorConfig) err
 	return nil
 }
 
-func resolveValidatorInputs(inputs Dict, bp Blueprint) (map[string]string, error) {
+// Helper function to evaluate validator inputs and make sure that all values are strings.
+func evalValidatorInputsAsStrings(inputs Dict, bp Blueprint) (map[string]string, error) {
 	ev, err := inputs.Eval(bp)
 	if err != nil {
 		return nil, err
