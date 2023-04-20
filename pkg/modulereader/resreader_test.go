@@ -73,12 +73,12 @@ func Test(t *testing.T) {
 
 // modulereader.go
 func (s *MySuite) TestIsValidKind(c *C) {
-	c.Assert(IsValidKind(pkrKindString), Equals, true)
-	c.Assert(IsValidKind(tfKindString), Equals, true)
-	c.Assert(IsValidKind("Packer"), Equals, false)
-	c.Assert(IsValidKind("Terraform"), Equals, false)
-	c.Assert(IsValidKind("META"), Equals, false)
-	c.Assert(IsValidKind(""), Equals, false)
+	c.Assert(IsValidReaderKind(pkrKindString), Equals, true)
+	c.Assert(IsValidReaderKind(tfKindString), Equals, true)
+	c.Assert(IsValidReaderKind("Packer"), Equals, false)
+	c.Assert(IsValidReaderKind("Terraform"), Equals, false)
+	c.Assert(IsValidReaderKind("META"), Equals, false)
+	c.Assert(IsValidReaderKind(""), Equals, false)
 }
 
 func (s *MySuite) TestGetOutputsAsMap(c *C) {
