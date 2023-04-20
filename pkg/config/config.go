@@ -203,7 +203,7 @@ func (v validatorName) String() string {
 
 type validatorConfig struct {
 	Validator string
-	Inputs    map[string]interface{}
+	Inputs    Dict
 	Skip      bool
 }
 
@@ -214,7 +214,7 @@ func (v *validatorConfig) check(name validatorName, requiredInputs []string) err
 
 	var errored bool
 	for _, inp := range requiredInputs {
-		if _, found := v.Inputs[inp]; !found {
+		if !v.Inputs.Has(inp) {
 			log.Printf("a required input %s was not provided to %s!", inp, v.Validator)
 			errored = true
 		}
@@ -225,7 +225,7 @@ func (v *validatorConfig) check(name validatorName, requiredInputs []string) err
 	}
 
 	// ensure that no extra inputs were provided by comparing length
-	if len(requiredInputs) != len(v.Inputs) {
+	if len(requiredInputs) != len(v.Inputs.Items()) {
 		errStr := "only %v inputs %s should be provided to %s"
 		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, v.Validator)
 	}
