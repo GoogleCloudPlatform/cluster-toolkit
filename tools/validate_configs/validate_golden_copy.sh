@@ -27,6 +27,17 @@ run_test() {
 	# Cover the three possible starting sequences for local sources: ./ ../ /
 	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
 
+	ls "${gc}" >/dev/null 2>&1 || {
+		echo "*** ERROR: ${gc} folder not found"
+		exit 1
+	}
+	untracked=$(find "${gc}" -type f -print | git check-ignore --stdin || true)
+	if [[ -n "${untracked}" ]]; then
+		echo "*** ERROR: ${gc} folder contains untracked files:"
+		echo "${untracked}"
+		exit 1
+	fi
+
 	echo "testing ${bp} in ${tmpdir} against ${gc}"
 	cp "${bp}" "${tmpdir}/"
 
@@ -63,7 +74,7 @@ run_test() {
 	addlicense -c "Google LLC" -l apache .
 
 	# Compare the deployment folder with the golden copy
-	diff --recursive . "${cwd}/${gc}" || {
+	diff --recursive --exclude="previous_deployment_groups" . "${cwd}/${gc}" || {
 		echo "*** ERROR: ${tmpdir}/${DEPLOYMENT} does not match ${gc}"
 		exit 1
 	}
