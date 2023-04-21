@@ -33,6 +33,16 @@ type Reference struct {
 	Name      string // required
 }
 
+// GlobalRef returns a reference to a global variable
+func GlobalRef(n string) Reference {
+	return Reference{GlobalVar: true, Name: n}
+}
+
+// ModuleRef returns a reference to a module output
+func ModuleRef(m string, n string) Reference {
+	return Reference{Module: m, Name: n}
+}
+
 // AsExpression returns a expression that represents the reference
 func (r Reference) AsExpression() Expression {
 	if r.GlobalVar {
@@ -120,7 +130,7 @@ func TraversalToReference(t hcl.Traversal) (Reference, error) {
 		if err != nil {
 			return Reference{}, fmt.Errorf("expected second component of global var reference to be a variable name, got %w", err)
 		}
-		return Reference{GlobalVar: true, Name: n}, nil
+		return GlobalRef(n), nil
 	case "module":
 		m, err := getAttrName(1)
 		if err != nil {
@@ -130,7 +140,7 @@ func TraversalToReference(t hcl.Traversal) (Reference, error) {
 		if err != nil {
 			return Reference{}, fmt.Errorf("expected third component of module var reference to be a variable name, got %w", err)
 		}
-		return Reference{Module: m, Name: n}, nil
+		return ModuleRef(m, n), nil
 	default:
 		return Reference{}, fmt.Errorf("unexpected first component of reference: %#v", root)
 	}
@@ -283,4 +293,10 @@ func HasMark[T any](val cty.Value) (T, bool) {
 		found, tgt = true, t
 	}
 	return tgt, found
+}
+
+// RenderHclAsString returns HCL representation of the expression
+// NOTE: this method is only used for workarounds in tfwriter and should be removed soon.
+func (e Expression) RenderHclAsString() string {
+	return e.s
 }

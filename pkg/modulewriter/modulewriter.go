@@ -26,14 +26,12 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
-	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
 )
 
@@ -401,29 +399,4 @@ func writeDeploymentMetadata(depDir string, metadata deploymentMetadata) error {
 	}
 
 	return nil
-}
-
-func findIntergroupVariables(group config.DeploymentGroup, graph map[string][]config.ModConnection) []modulereader.VarInfo {
-	// var integroupVars []modulereader.VarInfo
-	var intergroupVars []modulereader.VarInfo
-
-	for _, mod := range group.Modules {
-		if connections, ok := graph[mod.ID]; ok {
-			for _, conn := range connections {
-				if conn.IsIntergroup() {
-					for _, v := range conn.GetSharedVariables() {
-						vinfo := modulereader.VarInfo{
-							Name:        v,
-							Type:        getHclType(cty.DynamicPseudoType),
-							Description: fmt.Sprintf("Toolkit automatically generated variable: %s", v),
-							Default:     nil,
-							Required:    true,
-						}
-						intergroupVars = append(intergroupVars, vinfo)
-					}
-				}
-			}
-		}
-	}
-	return intergroupVars
 }

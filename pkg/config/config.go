@@ -17,8 +17,6 @@ package config
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -26,9 +24,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
-	ctyJson "github.com/zclconf/go-cty/cty/json"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
 
@@ -297,7 +294,7 @@ type Module struct {
 	Use              []string
 	WrapSettingsWith map[string][]string
 	Outputs          []modulereader.OutputInfo `yaml:"outputs,omitempty"`
-	Settings         map[string]interface{}
+	Settings         Dict
 	RequiredApis     map[string][]string `yaml:"required_apis"`
 }
 
@@ -322,77 +319,12 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
-// connectionKind defines tracks graph edges between modules and from modules to
-// deployment variables:
-//
-// use: created via module-module use keyword
-// deployment: created by a module setting equal to $(vars.name)
-// explicit: created by a module setting equal to $(mod_id.output)
-//
-// no attempt is made to track edges made via Toolkit literal strings presently
-// required when wanting to index a list or map "((mod_id.output[0]))"
-type connectionKind int
-
-const (
-	undefinedConnection connectionKind = iota
-	useConnection
-	deploymentConnection
-	explicitConnection
-)
-
-func (c connectionKind) IsValid() bool {
-	return c == useConnection || c == deploymentConnection || c == explicitConnection
-}
-
-// ModConnection defines details about connections between modules. Currently,
-// only modules connected with "use" are tracked.
-type ModConnection struct {
-	ref             reference
-	kind            connectionKind
-	sharedVariables []string
-}
-
-// IsDeploymentKind returns true if connection is to a deployment variable
-func (c ModConnection) IsDeploymentKind() bool {
-	return c.kind == deploymentConnection
-}
-
-// IsUseKind returns true if connection is module-to-module via use keyword
-func (c ModConnection) IsUseKind() bool {
-	return c.kind == useConnection
-}
-
-// GetSharedVariables returns variables used in the connection (can be empty!)
-func (c ModConnection) GetSharedVariables() []string {
-	if !c.IsIntergroup() {
-		return c.sharedVariables
-	}
-	vars := make([]string, len(c.sharedVariables))
-	for i, v := range c.sharedVariables {
-		vars[i] = AutomaticOutputName(v, c.ref.ToModuleID())
-	}
-	return vars
-}
-
-// IsIntergroup returns if underlying connection is across deployment groups
-func (c ModConnection) IsIntergroup() bool {
-	return c.ref.IsIntergroup()
-}
-
-// Returns true if a connection does not functionally link the outputs and
-// inputs of the modules. This can happen when a module is connected with "use"
-// but none of the outputs of fromID match the inputs of toID.
-func (c *ModConnection) isUnused() bool {
-	return c.kind == useConnection && len(c.sharedVariables) == 0
-}
-
 // DeploymentConfig is a container for the imported YAML data and supporting data for
 // creating the blueprint from it
 type DeploymentConfig struct {
 	Config Blueprint
 	// Indexed by Resource Group name and Module Source
-	ModulesInfo       map[string]map[string]modulereader.ModuleInfo
-	moduleConnections map[string][]ModConnection
+	ModulesInfo map[string]map[string]modulereader.ModuleInfo
 }
 
 // ExpandConfig expands the yaml config in place
@@ -400,6 +332,7 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	if err := dc.checkMovedModules(); err != nil {
 		return err
 	}
+	dc.Config.setGlobalLabels()
 	dc.addKindToModules()
 	dc.setModulesInfo()
 	dc.validateConfig()
@@ -408,51 +341,46 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	return nil
 }
 
-func (dc *DeploymentConfig) addModuleConnection(ref reference, kind connectionKind, sharedVariables []string) error {
-	if dc.moduleConnections == nil {
-		dc.moduleConnections = make(map[string][]ModConnection)
+func (b *Blueprint) setGlobalLabels() {
+	if !b.Vars.Has("labels") {
+		b.Vars.Set("labels", cty.EmptyObjectVal)
 	}
-
-	if !kind.IsValid() {
-		log.Fatal(unexpectedConnectionKind)
-	}
-
-	conn := ModConnection{
-		ref:             ref,
-		kind:            kind,
-		sharedVariables: sharedVariables,
-	}
-
-	fromModID := ref.FromModuleID()
-	dc.moduleConnections[fromModID] = append(dc.moduleConnections[fromModID], conn)
-	return nil
 }
 
-// GetModuleConnections returns the graph of connections between modules and
-// from modules to deployment variables
-func (dc *DeploymentConfig) GetModuleConnections() map[string][]ModConnection {
-	return dc.moduleConnections
-}
-
-// SetModuleConnections directly sets module connection graph (primarily for
-// unit testing where config expansion is not well-supported)
-func (dc *DeploymentConfig) SetModuleConnections(mc map[string][]ModConnection) {
-	dc.moduleConnections = mc
-}
-
-// listUnusedModules provides a mapping of modules to modules that are in the
+// listUnusedModules provides a list modules that are in the
 // "use" field, but not actually used.
-func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
-	unusedModules := make(map[string][]string)
-	for _, connections := range dc.moduleConnections {
-		for _, conn := range connections {
-			if conn.isUnused() {
-				fromMod := conn.ref.FromModuleID()
-				unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.ToModuleID())
-			}
+func (m Module) listUnusedModules() []string {
+	used := map[string]bool{}
+	cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
+		if mark, has := HasMark[ProductOfModuleUse](v); has {
+			used[mark.Module] = true
+		}
+		return true, nil
+	})
+
+	unused := []string{}
+	for _, w := range m.Use {
+		if !used[w] {
+			unused = append(unused, w)
 		}
 	}
-	return unusedModules
+	return unused
+}
+
+// GetUsedDeploymentVars returns a list of deployment vars used in the given value
+func GetUsedDeploymentVars(val cty.Value) []string {
+	res := map[string]bool{}
+	cty.Walk(val, func(path cty.Path, val cty.Value) (bool, error) {
+		if ex, is := IsExpressionValue(val); is {
+			for _, r := range ex.References() {
+				if r.GlobalVar {
+					res[r.Name] = true
+				}
+			}
+		}
+		return true, nil
+	})
+	return maps.Keys(res)
 }
 
 func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
@@ -463,15 +391,12 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 		"deployment_name": true,
 	}
 
-	for _, connections := range dc.moduleConnections {
-		for _, conn := range connections {
-			if conn.kind == deploymentConnection {
-				for _, v := range conn.sharedVariables {
-					usedVars[v] = true
-				}
-			}
+	dc.Config.WalkModules(func(m *Module) error {
+		for _, v := range GetUsedDeploymentVars(m.Settings.AsObject()) {
+			usedVars[v] = true
 		}
-	}
+		return nil
+	})
 
 	unusedVars := []string{}
 	for k := range dc.Config.Vars.Items() {
@@ -506,10 +431,7 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 		return newDeploymentConfig, err
 	}
 
-	newDeploymentConfig = DeploymentConfig{
-		Config:            blueprint,
-		moduleConnections: make(map[string][]ModConnection),
-	}
+	newDeploymentConfig = DeploymentConfig{Config: blueprint}
 	return newDeploymentConfig, nil
 }
 
@@ -730,6 +652,9 @@ func (dc *DeploymentConfig) validateConfig() {
 	if err = checkBackends(dc.Config); err != nil {
 		log.Fatal(err)
 	}
+	if err = checkModuleSettings(dc.Config); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // SetCLIVariables sets the variables at CLI
@@ -796,134 +721,6 @@ func (dc *DeploymentConfig) SkipValidator(name string) error {
 		dc.Config.Validators = append(dc.Config.Validators, validatorConfig{Validator: name, Skip: true})
 	}
 	return nil
-}
-
-// IsLiteralVariable returns true if string matches variable ((ctx.name))
-func IsLiteralVariable(str string) bool {
-	return literalExp.MatchString(str)
-}
-
-// IdentifyLiteralVariable returns
-// string: variable source (e.g. global "vars" or module "modname")
-// string: variable name (e.g. "project_id")
-// bool: true/false reflecting success
-func IdentifyLiteralVariable(str string) (string, string, bool) {
-	contents := literalSplitExp.FindStringSubmatch(str)
-	if len(contents) != 3 {
-		return "", "", false
-	}
-
-	return contents[1], contents[2], true
-}
-
-// HandleLiteralVariable is exported for use in modulewriter as well
-func HandleLiteralVariable(str string) string {
-	contents := literalExp.FindStringSubmatch(str)
-	if len(contents) != 2 {
-		log.Fatalf("Incorrectly formatted literal variable: %s", str)
-	}
-
-	return strings.TrimSpace(contents[1])
-}
-
-// ConvertToCty convert interface directly to a cty.Value
-func ConvertToCty(val interface{}) (cty.Value, error) {
-	// Convert to JSON bytes
-	jsonBytes, err := json.Marshal(val)
-	if err != nil {
-		return cty.Value{}, err
-	}
-
-	// Unmarshal JSON into cty
-	simpleJSON := ctyJson.SimpleJSONValue{}
-	simpleJSON.UnmarshalJSON(jsonBytes)
-	return simpleJSON.Value, nil
-}
-
-// ConvertMapToCty convert an interface map to a map of cty.Values
-func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) {
-	cMap := make(map[string]cty.Value)
-	for k, v := range iMap {
-		convertedVal, err := ConvertToCty(v)
-		if err != nil {
-			return cMap, err
-		}
-		cMap[k] = convertedVal
-	}
-	return cMap, nil
-}
-
-// ResolveVariables is given two maps of strings to cty.Value types, one
-// representing a list of settings or variables to resolve (ctyMap) and other
-// representing variables used to resolve (origin). This function will
-// examine all cty.Values that are of type cty.String. If they are literal
-// global variables, then they are replaced by the cty.Value of the
-// corresponding entry in the origin. All other cty.Values are unmodified.
-// ERROR: if (somehow) the cty.String cannot be converted to a Go string
-// ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global
-// variable being resolved does not exist in b.Vars
-func ResolveVariables(
-	ctyMap map[string]cty.Value,
-	origin map[string]cty.Value,
-	allowedUnknownNames []string,
-) error {
-	evalCtx := &hcl.EvalContext{
-		Variables: map[string]cty.Value{"var": cty.ObjectVal(origin)},
-	}
-	unknownMap := map[string]bool{}
-	for _, n := range allowedUnknownNames {
-		unknownMap[n] = true
-	}
-	for key, val := range ctyMap {
-		newVal, err := cty.Transform(val, func(p cty.Path, v cty.Value) (cty.Value, error) {
-			return resolveValue(v, evalCtx, unknownMap)
-		})
-
-		var re *ResolutionError
-		if errors.As(err, &re) && re.allowed {
-			delete(ctyMap, key)
-			continue
-		} else if err != nil {
-			return err
-		}
-		ctyMap[key] = newVal
-	}
-	return nil
-}
-
-// ResolutionError reports all failures in resolveValue, some may be allowable
-type ResolutionError struct {
-	varName string
-	allowed bool
-}
-
-func (err *ResolutionError) Error() string {
-	return fmt.Sprintf("failed to resolve %s, failure is allowed: %v", err.varName, err.allowed)
-}
-
-// resolveValue will transform cty.Value string literals "((var.name))" into
-// cty.Value objects of any type from deployment variables
-func resolveValue(val cty.Value, evalCtx *hcl.EvalContext, allowedUnknown map[string]bool) (cty.Value, error) {
-	if val.Type() != cty.String || !IsLiteralVariable(val.AsString()) {
-		return val, nil
-	}
-
-	ctx, varName, found := IdentifyLiteralVariable(val.AsString())
-	if found && ctx == "var" && !allowedUnknown[varName] {
-		varTraversal := hcl.Traversal{
-			hcl.TraverseRoot{Name: ctx},
-			hcl.TraverseAttr{Name: varName},
-		}
-		newVal, diags := varTraversal.TraverseAbs(evalCtx)
-		if diags.HasErrors() {
-			return cty.Value{}, &ResolutionError{varName: varName, allowed: false}
-		}
-		return newVal, nil
-	}
-	if allowedUnknown[varName] {
-		return cty.Value{}, &ResolutionError{varName: varName, allowed: true}
-	}
-	return val, nil
 }
 
 // InputValueError signifies a problem with the blueprint name.
@@ -1002,6 +799,12 @@ func (b *Blueprint) checkBlueprintName() error {
 	return nil
 }
 
+// ProductOfModuleUse is a "mark" applied to values in Module.Settings if
+// this value was modified as a result of applying `use`.
+type ProductOfModuleUse struct {
+	Module string
+}
+
 // WalkModules walks all modules in the blueprint and calls the walker function
 func (b *Blueprint) WalkModules(walker func(*Module) error) error {
 	for ig := range b.DeploymentGroups {
@@ -1014,4 +817,20 @@ func (b *Blueprint) WalkModules(walker func(*Module) error) error {
 		}
 	}
 	return nil
+}
+
+func checkModuleSettings(bp Blueprint) error {
+	return bp.WalkModules(func(m *Module) error {
+		return cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
+			if e, is := IsExpressionValue(v); is {
+				for _, r := range e.References() {
+					if err := validateModuleSettingReference(bp, *m, r); err != nil {
+						return false, err
+					}
+				}
+			}
+			return true, nil
+		})
+	})
+
 }
