@@ -265,7 +265,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 
 	// Use Packer module from group 0 (fail despite matching output/input)
 	dc = getMultiGroupDeploymentConfig()
-	dc.Config.DeploymentGroups[0].Modules[0].Kind = "packer"
+	dc.Config.DeploymentGroups[0].Modules[0].Kind = PackerKind
 	err = dc.applyUseModules()
 	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: %s", errorMessages["cannotUsePacker"], dc.Config.DeploymentGroups[0].Modules[0].ID))
 }
@@ -333,16 +333,16 @@ func (s *MySuite) TestCombineLabels(c *C) {
 				{
 					Name: "lime",
 					Modules: []Module{
-						{Source: "blue/salmon", Kind: "terraform", ID: "coral", Settings: map[string]interface{}{
+						{Source: "blue/salmon", Kind: TerraformKind, ID: "coral", Settings: map[string]interface{}{
 							"labels": map[string]interface{}{
 								"magenta":   "orchid",
 								"ghpc_role": "maroon",
 							},
 						}},
-						{Source: "brown/oak", Kind: "terraform", ID: "khaki", Settings: map[string]interface{}{
+						{Source: "brown/oak", Kind: TerraformKind, ID: "khaki", Settings: map[string]interface{}{
 							// has no labels set
 						}},
-						{Source: "ivory/black", Kind: "terraform", ID: "silver", Settings: map[string]interface{}{
+						{Source: "ivory/black", Kind: TerraformKind, ID: "silver", Settings: map[string]interface{}{
 							// has no labels set, also module has no labels input
 						}},
 					},
@@ -350,7 +350,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 				{
 					Name: "pink",
 					Modules: []Module{
-						{Source: "red/velvet", Kind: "packer", ID: "orange", Settings: map[string]interface{}{
+						{Source: "red/velvet", Kind: PackerKind, ID: "orange", Settings: map[string]interface{}{
 							"labels": map[string]interface{}{
 								"olive":           "teal",
 								"ghpc_deployment": "navy",
@@ -665,12 +665,12 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	// Setup
 	testModule0 := Module{
 		ID:     "module0",
-		Kind:   "terraform",
+		Kind:   TerraformKind,
 		Source: "./module/testpath",
 	}
 	testModule1 := Module{
 		ID:     "module1",
-		Kind:   "terraform",
+		Kind:   TerraformKind,
 		Source: "./module/testpath",
 	}
 	testBlueprint := Blueprint{
@@ -731,7 +731,7 @@ func (s *MySuite) TestExpandSimpleVariable(c *C) {
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Module variable: Invalid -> Output not found
-	reader := modulereader.Factory("terraform")
+	reader := modulereader.Factory(TerraformKind.String())
 	reader.SetInfo(testModule1.Source, modulereader.ModuleInfo{})
 	fakeOutput := "doesntExist"
 	testVarContext1.varString = fmt.Sprintf("$(%s.%s)", testModule1.ID, fakeOutput)

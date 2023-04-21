@@ -187,7 +187,7 @@ func validateModule(c Module) error {
 	if c.Source == "" {
 		return fmt.Errorf("%s\n%s", errorMessages["emptySource"], module2String(c))
 	}
-	if !modulereader.IsValidKind(c.Kind) {
+	if !IsValidModuleKind(c.Kind.String()) {
 		return fmt.Errorf("%s\n%s", errorMessages["wrongKind"], module2String(c))
 	}
 	return nil
@@ -282,7 +282,7 @@ func validateSettings(
 func (dc DeploymentConfig) validateModuleSettings() error {
 	for _, grp := range dc.Config.DeploymentGroups {
 		for _, mod := range grp.Modules {
-			info, err := modulereader.GetModuleInfo(mod.Source, mod.Kind)
+			info, err := modulereader.GetModuleInfo(mod.Source, mod.Kind.String())
 			if err != nil {
 				errStr := "failed to get info for module at %s while validating module settings"
 				return errors.Wrapf(err, errStr, mod.Source)

@@ -283,7 +283,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				// Packer modules cannot be used because they do not have a
 				// native concept of outputs. Without this, the validator
 				// that checks for matching inputs will always trigger
-				if toMod.Kind == "packer" {
+				if toMod.Kind == PackerKind {
 					return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], toMod.ID)
 				}
 
@@ -426,12 +426,12 @@ func combineModuleLabels(dc *DeploymentConfig, iGrp int, iMod int) error {
 		modLabels[roleLabel] = getRole(mod.Source)
 	}
 
-	if mod.Kind == "terraform" {
+	if mod.Kind == TerraformKind {
 		// Terraform module labels to be expressed as
 		// `merge(var.labels, { ghpc_role=..., **settings.labels })`
 		mod.WrapSettingsWith[labels] = []string{"merge(", ")"}
 		mod.Settings[labels] = []interface{}{"((var.labels))", modLabels}
-	} else if mod.Kind == "packer" {
+	} else if mod.Kind == PackerKind {
 		g := map[string]interface{}{}
 		for k, v := range dc.Config.Vars.Get(labels).AsValueMap() {
 			g[k] = v.AsString()
@@ -799,7 +799,7 @@ func (ref varReference) validate(bp Blueprint) error {
 		log.Fatalf("Could not find module %s", ref.toModuleID)
 	}
 	refMod := targetModuleGroup.Modules[refModIndex]
-	modInfo, err := modulereader.GetModuleInfo(refMod.Source, refMod.Kind)
+	modInfo, err := modulereader.GetModuleInfo(refMod.Source, refMod.Kind.String())
 	if err != nil {
 		log.Fatalf(
 			"failed to get info for module at %s while expanding variables: %e",

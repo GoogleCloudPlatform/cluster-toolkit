@@ -62,7 +62,7 @@ deployment_groups:
 	testModules = []Module{
 		{
 			Source:           "./modules/network/vpc",
-			Kind:             "terraform",
+			Kind:             TerraformKind,
 			ID:               "vpc",
 			WrapSettingsWith: make(map[string][]string),
 			Settings: map[string]interface{}{
@@ -163,7 +163,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testModuleSource := "testSource"
 	testModule := Module{
 		Source:           testModuleSource,
-		Kind:             "terraform",
+		Kind:             TerraformKind,
 		ID:               "testModule",
 		Use:              []string{},
 		WrapSettingsWith: make(map[string][]string),
@@ -173,7 +173,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testModuleWithLabels := Module{
 		Source:           testModuleSourceWithLabels,
 		ID:               "testModuleWithLabels",
-		Kind:             "terraform",
+		Kind:             TerraformKind,
 		Use:              []string{},
 		WrapSettingsWith: make(map[string][]string),
 		Settings: map[string]interface{}{
@@ -222,7 +222,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 		Modules: []Module{
 			{
 				ID:       "TestModule",
-				Kind:     "terraform",
+				Kind:     TerraformKind,
 				Source:   testModuleSource,
 				Settings: map[string]interface{}{"test_variable": "test_value"},
 			},
@@ -312,7 +312,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		Modules: []Module{
 			{
 				ID:     modID0,
-				Kind:   "terraform",
+				Kind:   TerraformKind,
 				Source: testModuleSource0,
 				Settings: map[string]interface{}{
 					altProjectIDSetting: "$(vars.project_id)",
@@ -323,7 +323,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 			},
 			{
 				ID:     "TestModule1",
-				Kind:   "terraform",
+				Kind:   TerraformKind,
 				Source: testModuleSource1,
 				Settings: map[string]interface{}{
 					matchingIntragroupName1: "explicit-intra-value",
@@ -340,7 +340,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		Modules: []Module{
 			{
 				ID:       "TestModule2",
-				Kind:     "terraform",
+				Kind:     TerraformKind,
 				Source:   testModuleSource2,
 				Settings: map[string]interface{}{},
 				Use: []string{
@@ -375,7 +375,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 	dc.addSettingsToModules()
 	dc.addMetadataToModules()
 	dc.addDefaultValidators()
-	reader := modulereader.Factory("terraform")
+	reader := modulereader.Factory(TerraformKind.String())
 	reader.SetInfo(testModuleSource0, testModuleInfo0)
 	reader.SetInfo(testModuleSource1, testModuleInfo1)
 	reader.SetInfo(testModuleSource2, testModuleInfo2)
@@ -395,7 +395,7 @@ func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 			},
 			{
 				ID:       "TestModule2",
-				Kind:     "",
+				Kind:     UnknownKind,
 				Source:   testModuleSource,
 				Settings: map[string]interface{}{"test_variable": "test_value"},
 			},
@@ -431,8 +431,8 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 	}
 	{ // Mixing module kinds
 		g := DeploymentGroup{Name: "ice", Modules: []Module{
-			{ID: "pony", Kind: "packer"},
-			{ID: "zebra", Kind: "terraform"},
+			{ID: "pony", Kind: PackerKind},
+			{ID: "zebra", Kind: TerraformKind},
 		}}
 		err := checkModuleAndGroupNames([]DeploymentGroup{g})
 		c.Check(err, ErrorMatches, "mixing modules of differing kinds in a deployment group is not supported: deployment group ice, got packer and terraform")
@@ -523,21 +523,21 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 
 	/* Test addKindToModules() works when kind is absent*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
-	expected = "terraform"
+	expected = TerraformKind
 	dc.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
 	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() works when kind is empty*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
-	expected = "terraform"
+	expected = TerraformKind
 	dc.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
 	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() does nothing to packer types*/
 	moduleID := "packerModule"
-	expected = "packer"
+	expected = PackerKind
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
@@ -546,7 +546,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 
 	/* Test addKindToModules() does nothing to invalid types*/
 	moduleID = "funnyModule"
-	expected = "funnyType"
+	expected = ModuleKind{kind: "funnyKind"}
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
@@ -689,33 +689,33 @@ func (s *MySuite) TestGetResouceByID(c *C) {
 func (s *MySuite) TestHasKind(c *C) {
 	// No Modules
 	rg := DeploymentGroup{}
-	c.Assert(rg.HasKind("terraform"), Equals, false)
-	c.Assert(rg.HasKind("packer"), Equals, false)
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, false)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One terraform module
-	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
-	c.Assert(rg.HasKind("terraform"), Equals, true)
-	c.Assert(rg.HasKind("packer"), Equals, false)
+	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// Multiple terraform modules
-	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
-	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
-	c.Assert(rg.HasKind("terraform"), Equals, true)
-	c.Assert(rg.HasKind("packer"), Equals, false)
+	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
+	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One packer kind
-	rg.Modules = []Module{{Kind: "packer"}}
-	c.Assert(rg.HasKind("terraform"), Equals, false)
-	c.Assert(rg.HasKind("packer"), Equals, true)
+	rg.Modules = []Module{{Kind: PackerKind}}
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, false)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, true)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One packer, one terraform
-	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
-	c.Assert(rg.HasKind("terraform"), Equals, true)
-	c.Assert(rg.HasKind("packer"), Equals, true)
+	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, true)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 }
