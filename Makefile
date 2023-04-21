@@ -47,7 +47,7 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_configs packer-check
+tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
@@ -158,7 +158,7 @@ validate_configs: ghpc
 	tools/validate_configs/validate_configs.sh
 
 validate_golden_copy: ghpc
-	$(info *********** running basic integration tests ***********)
+	$(info *********** running "Golden copy" tests ***********)
 	tools/validate_configs/validate_golden_copy.sh
 
 terraform-format:
