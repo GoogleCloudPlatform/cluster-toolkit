@@ -545,9 +545,10 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 // ExportBlueprint exports the internal representation of a blueprint config
 func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error) {
 	var buf bytes.Buffer
+	buf.WriteString(YamlLicense)
+	buf.WriteString("\n")
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
-
 	err := encoder.Encode(&dc.Config)
 	encoder.Close()
 	d := buf.Bytes()

@@ -386,6 +386,8 @@ func writeDeploymentMetadata(depDir string, metadata deploymentMetadata) error {
 	defer f.Close()
 
 	var buf bytes.Buffer
+	buf.WriteString(config.YamlLicense)
+	buf.WriteString("\n")
 	encoder := yaml.NewEncoder(&buf)
 	defer encoder.Close()
 	encoder.SetIndent(2)
