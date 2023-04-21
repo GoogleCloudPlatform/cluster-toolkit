@@ -70,7 +70,6 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 	dc := DeploymentConfig{
 		Config:      Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
 		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
-		expanded:    false,
 	}
 	dc.validateModuleSettings()
 }
