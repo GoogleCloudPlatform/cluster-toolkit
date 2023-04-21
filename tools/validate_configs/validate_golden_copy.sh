@@ -74,7 +74,8 @@ run_test() {
 	addlicense -c "Google LLC" -l apache .
 
 	# Compare the deployment folder with the golden copy
-	diff --recursive --exclude="previous_deployment_groups" . "${cwd}/${gc}" || {
+	diff --recursive --exclude="previous_deployment_groups" \
+		"$(pwd)" "${cwd}/${gc}" || {
 		echo "*** ERROR: ${tmpdir}/${DEPLOYMENT} does not match ${gc}"
 		exit 1
 	}
@@ -95,3 +96,4 @@ ls ${gcs} >/dev/null 2>&1 || {
 }
 # Tests:
 run_test "tools/validate_configs/test_configs/igc_pkr_test.yaml" "${gcs}/packer_igc"
+run_test "tools/validate_configs/test_configs/igc_tf_test.yaml" "${gcs}/terraform_igc"
