@@ -43,7 +43,7 @@ def list_builds():
     res = {}
     for b in builds:
         h, m = start_time // 60, start_time % 60
-        res[b] = f"{m} {h} * * *"
+        res[b] = f"{m} {h} * * MON-FRI"
         start_time += interval
     return res
 
