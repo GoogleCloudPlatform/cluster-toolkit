@@ -659,6 +659,13 @@ func (s *MySuite) TestNumModules_PackerWriter(c *C) {
 	c.Assert(testWriter.getNumModules(), Equals, 1)
 }
 
+func (s *MySuite) TestKind(c *C) {
+	tfw := TFWriter{}
+	c.Assert(tfw.kind(), Equals, config.TerraformKind)
+	pkrw := PackerWriter{}
+	c.Assert(pkrw.kind(), Equals, config.PackerKind)
+}
+
 func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	deploymentio := deploymentio.GetDeploymentioLocal()
 	testWriter := PackerWriter{}

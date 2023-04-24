@@ -92,6 +92,7 @@ func (w PackerWriter) writeDeploymentGroup(
 
 	return groupMetadata{
 		Name:             depGroup.Name,
+		Kind:             w.kind(),
 		DeploymentInputs: orderKeys(deploymentVars),
 		IntergroupInputs: intergroupVarNames,
 		Outputs:          []string{},
@@ -101,4 +102,8 @@ func (w PackerWriter) writeDeploymentGroup(
 func (w PackerWriter) restoreState(deploymentDir string) error {
 	// TODO: implement state restoration for Packer
 	return nil
+}
+
+func (w PackerWriter) kind() config.ModuleKind {
+	return config.PackerKind
 }

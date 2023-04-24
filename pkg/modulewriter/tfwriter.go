@@ -365,6 +365,7 @@ func (w TFWriter) writeDeploymentGroup(
 	}
 	gmd := groupMetadata{
 		Name:             depGroup.Name,
+		Kind:             w.kind(),
 		DeploymentInputs: orderKeys(deploymentVars),
 		IntergroupInputs: orderKeys(intergroupInputs),
 		Outputs:          getAllOutputs(depGroup),
@@ -492,4 +493,8 @@ func getAllOutputs(group config.DeploymentGroup) []string {
 		}
 	}
 	return orderKeys(outputs)
+}
+
+func (w TFWriter) kind() config.ModuleKind {
+	return config.TerraformKind
 }
