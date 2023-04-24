@@ -61,6 +61,7 @@ type ModuleWriter interface {
 		deployDir string,
 	) (groupMetadata, error)
 	restoreState(deploymentDir string) error
+	kind() config.ModuleKind
 }
 
 type deploymentMetadata struct {
@@ -69,14 +70,15 @@ type deploymentMetadata struct {
 
 type groupMetadata struct {
 	Name             string
+	Kind             config.ModuleKind
 	DeploymentInputs []string `yaml:"deployment_inputs"`
 	IntergroupInputs []string `yaml:"intergroup_inputs"`
 	Outputs          []string
 }
 
 var kinds = map[string]ModuleWriter{
-	"terraform": new(TFWriter),
-	"packer":    new(PackerWriter),
+	config.TerraformKind.String(): new(TFWriter),
+	config.PackerKind.String():    new(PackerWriter),
 }
 
 //go:embed *.tmpl

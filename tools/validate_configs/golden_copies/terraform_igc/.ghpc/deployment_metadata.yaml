@@ -14,6 +14,7 @@
 
 deployment_metadata:
   - name: zero
+    kind: terraform
     deployment_inputs:
       - deployment_name
       - labels
@@ -25,6 +26,7 @@ deployment_metadata:
       - network_id_network0
       - subnetwork_name_network0
   - name: one
+    kind: terraform
     deployment_inputs:
       - deployment_name
       - labels
