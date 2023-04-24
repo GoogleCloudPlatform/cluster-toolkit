@@ -50,6 +50,7 @@
         url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
         dest: /tmp/
         mode: "0755"
+        timeout: 30
 
     - name: Stop gdm service
       ansible.builtin.systemd:
@@ -67,6 +68,7 @@
       url: https://sourceforge.net/projects/virtualgl/files/3.0.2/virtualgl_3.0.2_amd64.deb/download
       dest: /tmp/virtualgl_3.0.2_amd64.deb
       mode: "0755"
+      timeout: 30
 
   - name: Install VirtualGL
     ansible.builtin.command: gdebi /tmp/virtualgl_3.0.2_amd64.deb --non-interactive
