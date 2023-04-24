@@ -392,7 +392,6 @@ type DeploymentConfig struct {
 	Config Blueprint
 	// Indexed by Resource Group name and Module Source
 	ModulesInfo       map[string]map[string]modulereader.ModuleInfo
-	expanded          bool
 	moduleConnections map[string][]ModConnection
 }
 
@@ -406,7 +405,6 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	dc.validateConfig()
 	dc.expand()
 	dc.validate()
-	dc.expanded = true
 	return nil
 }
 
