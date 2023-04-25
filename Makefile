@@ -117,8 +117,9 @@ else
 ## GO IS PRESENT
 warn-go-missing:
 
-GO_VERSION_CHECK=$(shell expr `go version | cut -f 3 -d ' ' | cut -f 1 -d '-' | cut -c 3-` \>= $(MIN_GOLANG_VERSION))
-ifneq ("$(GO_VERSION_CHECK)", "1")
+GO_VERSION=$(shell go version | cut -f 3 -d ' ' | cut -f 1 -d '-' | cut -c 3-)
+GO_VERSION_CHECK=$(shell ./tools/version_check.py $(GO_VERSION) $(MIN_GOLANG_VERSION))
+ifneq ("$(GO_VERSION_CHECK)", "yes")
 warn-go-version:
 	$(warning WARNING: Go version must be greater than $(MIN_GOLANG_VERSION), update at  https://go.dev/doc/install)
 else
@@ -145,8 +146,9 @@ else
 ## TERRAFORM IS PRESENT
 warn-terraform-missing:
 
-TF_VERSION_CHECK=$(shell expr `terraform version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= $(MIN_TERRAFORM_VERSION))
-ifneq ("$(TF_VERSION_CHECK)", "1")
+TF_VERSION=$(shell terraform version | cut -f 2- -d ' ' | head -n1)
+TF_VERSION_CHECK=$(shell ./tools/version_check.py $(TF_VERSION) $(MIN_TERRAFORM_VERSION))
+ifneq ("$(TF_VERSION_CHECK)", "yes")
 warn-terraform-version:
 	$(warning WARNING: terraform version must be greater than $(MIN_TERRAFORM_VERSION), update at https://learn.hashicorp.com/tutorials/terraform/install-cli)
 else
@@ -193,8 +195,9 @@ else
 ## PACKER IS PRESENT
 warn-packer-missing:
 
-PK_VERSION_CHECK=$(shell expr `packer version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= $(MIN_PACKER_VERSION))
-ifneq ("$(PK_VERSION_CHECK)", "1")
+PK_VERSION=$(shell packer version | cut -f 2- -d ' ' | head -n1)
+PK_VERSION_CHECK=$(shell ./tools/version_check.py $(PK_VERSION) $(MIN_PACKER_VERSION))
+ifneq ("$(PK_VERSION_CHECK)", "yes")
 ### WRONG PACKER VERSION, MAY ALSO MEAN THE USER HAS SOME OTHER PACKER TOOL
 warn-packer-version:
 	$(warning WARNING: packer version must be greater than $(MIN_PACKER_VERSION), update at https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
