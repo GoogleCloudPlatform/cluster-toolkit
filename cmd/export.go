@@ -26,10 +26,10 @@ import (
 )
 
 func init() {
-	metadataFlag := "metadata"
+	metadataFlag := "blueprint-metadata"
 	artifactsFlag := "artifacts"
 	exportCmd.Flags().StringVarP(&artifactsDir, artifactsFlag, "a", "", "Alternative artifacts output directory (automatically configured if unset)")
-	exportCmd.Flags().StringVarP(&metadataFile, metadataFlag, "m", "", "Deployment metadata YAML file (automatically configured if unset)")
+	exportCmd.Flags().StringVarP(&metadataFile, metadataFlag, "b", "", "Blueprint metadata YAML file (automatically configured if unset)")
 	exportCmd.MarkFlagDirname(artifactsFlag)
 	exportCmd.MarkFlagFilename(metadataFlag, "yaml", "yml")
 	rootCmd.AddCommand(exportCmd)
@@ -42,9 +42,8 @@ var (
 	metadataFile string
 	exportCmd    = &cobra.Command{
 		Use:               "export-outputs DEPLOYMENT_DIRECTORY",
-		Aliases:           []string{"output"},
 		Short:             "Export outputs from deployment group.",
-		Long:              "Export outputs from deployment group.",
+		Long:              "Export output values from deployment group to other deployment groups that depend upon them.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), isDir),
 		ValidArgsFunction: matchDirs,
 		Run:               runExportCmd,
