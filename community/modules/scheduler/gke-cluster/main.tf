@@ -69,9 +69,8 @@ resource "google_container_cluster" "gke_cluster" {
   enable_shielded_nodes = true
 
   cluster_autoscaling { # Auto provisioning of node-pools
-    enabled = false
-    # Recomended profile if we ever turn on
-    # autoscaling_profile = "OPTIMIZE_UTILIZATION"
+    enabled             = false
+    autoscaling_profile = "OPTIMIZE_UTILIZATION"
   }
 
   datapath_provider = var.enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
