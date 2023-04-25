@@ -529,7 +529,10 @@ func (ref modReference) validate(bp Blueprint) error {
 	return nil
 }
 
-// validateModuleSettingReference checks that a reference within module settings is valid
+// Validates that references in module settings are valid:
+// * referenced deployment variable does exist;
+// * referenced module output does exist;
+// * doesn't reference an output of module in a later group.
 func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error {
 	// simplest case to evaluate is a deployment variable's existence
 	if r.GlobalVar {
@@ -561,7 +564,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	}
 	refMod := targetModuleGroup.Modules[refModIndex]
 	if refMod.Kind == PackerKind {
-		return fmt.Errorf("module %s is a packer module and cannot be referenced", refMod.ID)
+		return fmt.Errorf("module %s cannot be referenced because packer modules have no outputs", refMod.ID)
 	}
 
 	modInfo, err := modulereader.GetModuleInfo(refMod.Source, refMod.Kind.String())
@@ -667,7 +670,7 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	return nil
 }
 
-// FindIntergroupReferences finds all references to other groups used it the given value
+// FindIntergroupReferences finds all references to other groups used in the given value
 func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference {
 	g := bp.ModuleGroupOrDie(mod.ID)
 	res := map[Reference]bool{}

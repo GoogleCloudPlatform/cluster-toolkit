@@ -351,6 +351,7 @@ func (b *Blueprint) setGlobalLabels() {
 // "use" field, but not actually used.
 func (m Module) listUnusedModules() []string {
 	used := map[string]bool{}
+	// Recurse through objects/maps/lists checking each element for having `ProductOfModuleUse` mark.
 	cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
 		if mark, has := HasMark[ProductOfModuleUse](v); has {
 			used[mark.Module] = true
@@ -370,6 +371,7 @@ func (m Module) listUnusedModules() []string {
 // GetUsedDeploymentVars returns a list of deployment vars used in the given value
 func GetUsedDeploymentVars(val cty.Value) []string {
 	res := map[string]bool{}
+	// Recurse through objects/maps/lists gathering used references to deployment variables.
 	cty.Walk(val, func(path cty.Path, val cty.Value) (bool, error) {
 		if ex, is := IsExpressionValue(val); is {
 			for _, r := range ex.References() {
@@ -819,6 +821,7 @@ func (b *Blueprint) WalkModules(walker func(*Module) error) error {
 	return nil
 }
 
+// validate every module setting in the blueprint containing a reference
 func checkModuleSettings(bp Blueprint) error {
 	return bp.WalkModules(func(m *Module) error {
 		return cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
