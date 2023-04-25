@@ -33,4 +33,8 @@ variable "timeout" {
   description = "Timeout in seconds"
   type        = number
   default     = 1200
+  validation {
+    condition     = var.timeout >= 0
+    error_message = "The timeout should be non-negative"
+  }
 }

@@ -26,8 +26,10 @@ if [ -z "${PROJECT_ID}" ]; then
 	exit 1
 fi
 
-tries=0
-until [ $tries -ge "${RETRIES}" ]; do
+now=$(date +%s)
+deadline=$(("${now}" + "${TIMEOUT}"))
+
+until [ "${now}" -gt "${deadline}" ]; do
 	GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
 	FINISH_LINE="startup-script exit status"
 	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep "${FINISH_LINE}")
@@ -35,7 +37,7 @@ until [ $tries -ge "${RETRIES}" ]; do
 	if [ -n "${STATUS}" ]; then break; fi
 	echo "could not detect end of startup script. Sleeping."
 	sleep 5
-	((tries++))
+	now=$(date +%s)
 done
 
 # This specific text is monitored for in tests, do not change.
@@ -45,7 +47,7 @@ if [ "${STATUS}" == 0 ]; then
 elif [ "${STATUS}" == 1 ]; then
 	echo "startup-script finished with errors, ${INSPECT_OUTPUT_TEXT}"
 	echo "${GCLOUD}"
-elif [ "$tries" -ge "${RETRIES}" ]; then
+elif [ "${now}" -ge "${deadline}" ]; then
 	echo "startup-script timed out after ${TIMEOUT} seconds"
 	echo "${INSPECT_OUTPUT_TEXT}"
 	echo "${GCLOUD}"
