@@ -25,3 +25,9 @@ variable "schedule" {
   description = "Describes the schedule on which the job will be executed."
   type        = string
 }
+
+variable "retry_count" {
+  description = "Number of times to retry a failed build"
+  type        = number
+  default     = 0
+}
