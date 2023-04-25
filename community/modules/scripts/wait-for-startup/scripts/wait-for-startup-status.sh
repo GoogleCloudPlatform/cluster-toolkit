@@ -28,11 +28,15 @@ fi
 
 now=$(date +%s)
 deadline=$(("${now}" + "${TIMEOUT}"))
+error_file=$(mktemp)
 
 until [ "${now}" -gt "${deadline}" ]; do
-	GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
+	ser_log=$(gcloud compute instances get-serial-port-output "${INSTANCE_NAME}" --port 1 --zone "${ZONE}" --project "${PROJECT_ID}" 2>"${error_file}") || {
+		cat "$error_file"
+		exit 1
+	}
 	FINISH_LINE="startup-script exit status"
-	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep "${FINISH_LINE}")
+	STATUS_LINE=$(grep "${FINISH_LINE}" <<<"$ser_log")
 	STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${STATUS_LINE}" | uniq)
 	if [ -n "${STATUS}" ]; then break; fi
 	echo "could not detect end of startup script. Sleeping."
