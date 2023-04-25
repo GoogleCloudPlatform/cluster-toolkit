@@ -29,7 +29,7 @@ fi
 now=$(date +%s)
 deadline=$(("${now}" + "${TIMEOUT}"))
 
-until [ "${now}" -ge "${deadline}" ]; do
+until [ "${now}" -gt "${deadline}" ]; do
 	GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
 	FINISH_LINE="startup-script exit status"
 	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep "${FINISH_LINE}")
