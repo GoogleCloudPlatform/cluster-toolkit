@@ -133,7 +133,7 @@ func writeOutputs(
 func writeTfvars(vars map[string]cty.Value, dst string) error {
 	// Create file
 	tfvarsPath := filepath.Join(dst, "terraform.tfvars")
-	err := writeHclAttributes(vars, tfvarsPath)
+	err := WriteHclAttributes(vars, tfvarsPath)
 	return err
 }
 
@@ -352,7 +352,7 @@ func (w TFWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	groupIndex int,
 	deploymentDir string,
-) (groupMetadata, error) {
+) (GroupMetadata, error) {
 	depGroup := dc.Config.DeploymentGroups[groupIndex]
 	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
 	intergroupVars := findIntergroupVariables(depGroup, dc.Config)
@@ -368,13 +368,13 @@ func (w TFWriter) writeDeploymentGroup(
 	if err := writeMain(
 		doctoredModules, depGroup.TerraformBackend, writePath,
 	); err != nil {
-		return groupMetadata{}, fmt.Errorf("error writing main.tf file for deployment group %s: %v",
+		return GroupMetadata{}, fmt.Errorf("error writing main.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write variables.tf file
 	if err := writeVariables(deploymentVars, maps.Values(intergroupVars), writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+		return GroupMetadata{}, fmt.Errorf(
 			"error writing variables.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
@@ -382,28 +382,28 @@ func (w TFWriter) writeDeploymentGroup(
 	// Write outputs.tf file
 	outputs, err := writeOutputs(depGroup.Modules, writePath)
 	if err != nil {
-		return groupMetadata{}, fmt.Errorf(
+		return GroupMetadata{}, fmt.Errorf(
 			"error writing outputs.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write terraform.tfvars file
 	if err := writeTfvars(deploymentVars, writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+		return GroupMetadata{}, fmt.Errorf(
 			"error writing terraform.tfvars file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write providers.tf file
 	if err := writeProviders(deploymentVars, writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+		return GroupMetadata{}, fmt.Errorf(
 			"error writing providers.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write versions.tf file
 	if err := writeVersions(writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+		return GroupMetadata{}, fmt.Errorf(
 			"error writing versions.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
@@ -411,7 +411,7 @@ func (w TFWriter) writeDeploymentGroup(
 	printTerraformInstructions(writePath, depGroup.Name, len(intergroupInputs) > 0)
 
 	slices.Sort(outputs)
-	return groupMetadata{
+	return GroupMetadata{
 		Name:             depGroup.Name,
 		Kind:             w.kind(),
 		DeploymentInputs: orderKeys(deploymentVars),

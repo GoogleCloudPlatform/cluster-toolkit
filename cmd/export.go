@@ -17,48 +17,42 @@ package cmd
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
-	"log"
-	"os"
 	"path"
 
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	metadataFlag := "blueprint-metadata"
 	artifactsFlag := "artifacts"
-	exportCmd.Flags().StringVarP(&artifactsDir, artifactsFlag, "a", "", "Alternative artifacts output directory (automatically configured if unset)")
-	exportCmd.Flags().StringVarP(&metadataFile, metadataFlag, "b", "", "Blueprint metadata YAML file (automatically configured if unset)")
+	exportCmd.Flags().StringVarP(&artifactsDir, artifactsFlag, "a", "", "Artifacts output directory (automatically configured if unset)")
 	exportCmd.MarkFlagDirname(artifactsFlag)
-	exportCmd.MarkFlagFilename(metadataFlag, "yaml", "yml")
 	rootCmd.AddCommand(exportCmd)
 }
 
-const defaultMetadataFile string = "../.ghpc/deployment_metadata.yaml"
+const defaultArtifactsDir string = ".ghpc"
 
 var (
 	artifactsDir string
-	metadataFile string
 	exportCmd    = &cobra.Command{
 		Use:               "export-outputs DEPLOYMENT_DIRECTORY",
 		Short:             "Export outputs from deployment group.",
 		Long:              "Export output values from deployment group to other deployment groups that depend upon them.",
-		Args:              cobra.MatchAll(cobra.ExactArgs(1), isDir),
+		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
-		Run:               runExportCmd,
+		PreRun:            setArtifactsDir,
+		RunE:              runExportCmd,
 	}
 )
 
-func isDir(cmd *cobra.Command, args []string) error {
+func checkDir(cmd *cobra.Command, args []string) error {
 	path := args[0]
-	p, err := os.Lstat(path)
-	if err != nil {
-		return fmt.Errorf("%s must be a directory but does not exist", path)
+	if path == "" {
+		return nil
 	}
-
-	if !p.Mode().IsDir() {
-		return fmt.Errorf("%s must be a directory but is a file or link", path)
+	if isDir, _ := shell.DirInfo(path); !(isDir) {
+		return fmt.Errorf("%s must be a directory", path)
 	}
 
 	return nil
@@ -68,18 +62,47 @@ func matchDirs(cmd *cobra.Command, args []string, toComplete string) ([]string, 
 	return nil, cobra.ShellCompDirectiveFilterDirs | cobra.ShellCompDirectiveNoFileComp
 }
 
-func runExportCmd(cmd *cobra.Command, args []string) {
+func setArtifactsDir(cmd *cobra.Command, args []string) {
 	workingDir := path.Clean(args[0])
+	deploymentRoot := path.Join(workingDir, "..")
 
-	// if user has not set metadata file, find it in hidden .ghpc directory
-	// use this approach rather than set default with Cobra because a relative
-	// path to working dir may cause user confusion
-	if metadataFile == "" {
-		metadataFile = path.Clean(path.Join(workingDir, defaultMetadataFile))
+	if artifactsDir == "" {
+		artifactsDir = path.Clean(path.Join(deploymentRoot, defaultArtifactsDir))
+	}
+}
+
+func runExportCmd(cmd *cobra.Command, args []string) error {
+	workingDir := path.Clean(args[0])
+	deploymentGroup := path.Base(workingDir)
+	deploymentRoot := path.Clean(path.Join(workingDir, ".."))
+
+	if err := shell.CheckWritableDir(artifactsDir); err != nil {
+		return err
 	}
 
-	_, err := shell.ConfigureTerraform(workingDir)
+	// only Terraform groups support outputs; fail on any other kind
+	metadataFile := path.Join(artifactsDir, "deployment_metadata.yaml")
+	groupKinds, err := shell.GetDeploymentKinds(metadataFile, deploymentRoot)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	groupKind, ok := groupKinds[deploymentGroup]
+	if !ok {
+		return fmt.Errorf("deployment group %s not found at %s", deploymentGroup, workingDir)
+	}
+	if groupKind == config.PackerKind {
+		return fmt.Errorf("export command is unsupported on Packer modules because they do not have outputs")
+	}
+	if groupKind != config.TerraformKind {
+		return fmt.Errorf("export command is not supported on deployment group: %s", deploymentGroup)
+	}
+
+	tf, err := shell.ConfigureTerraform(workingDir)
+	if err != nil {
+		return err
+	}
+	if err = shell.ExportOutputs(tf, metadataFile, artifactsDir); err != nil {
+		return err
+	}
+	return nil
 }

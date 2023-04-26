@@ -19,6 +19,7 @@ use warnings;
 # TODO: raise ./cmd min coverage to 80% after tests are written
 my $min = 80;
 my $cmdmin = 40;
+my $shellmin = 20;
 my $failed_coverage = 0;
 my $failed_tests = 0;
 
@@ -26,6 +27,8 @@ while (<>){
   print $_;
   if ( $_ =~ /hpc-toolkit\/cmd.*coverage: (\d+\.\d)%/) {
     $failed_coverage++ if ($1 < $cmdmin);
+  } elsif ( $_ =~ /hpc-toolkit\/pkg\/shell.*coverage: (\d+\.\d)%/) {
+    $failed_coverage++ if ($1 < $shellmin);
   } elsif ( $_ =~ /coverage: (\d+\.\d)%/ ) {
     $failed_coverage++ if ($1 < $min);
   }
