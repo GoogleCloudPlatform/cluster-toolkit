@@ -13,11 +13,15 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+
 deployment_name = "golden_copy_deployment"
+
 labels = {
   ghpc_blueprint  = "igc"
   ghpc_deployment = "golden_copy_deployment"
   ghpc_role       = "packer"
 }
+
 project_id = "invalid-project"
-zone       = "us-east4-c"
+
+zone = "us-east4-c"

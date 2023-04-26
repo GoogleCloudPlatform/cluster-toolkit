@@ -44,17 +44,13 @@ func WriteHclAttributes(vars map[string]cty.Value, dst string) error {
 		return fmt.Errorf("error creating variables file %v: %v", filepath.Base(dst), err)
 	}
 
-	// Create hcl body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
-
-	// for each variable
 	for _, k := range orderKeys(vars) {
-		// Write attribute
+		hclBody.AppendNewline()
 		hclBody.SetAttributeValue(k, vars[k])
 	}
 
-	// Write file
 	hclBytes := escapeLiteralVariables(hclFile.Bytes())
 	hclBytes = escapeBlueprintVariables(hclBytes)
 	err := appendHCLToFile(dst, hclBytes)
