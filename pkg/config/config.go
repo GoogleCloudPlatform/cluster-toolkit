@@ -312,6 +312,7 @@ func (m *Module) createWrapSettingsWith() {
 // integer is primarily for internal purposes even if it can be set in blueprint
 type Blueprint struct {
 	BlueprintName            string `yaml:"blueprint_name"`
+	GhpcVersion              string `yaml:"ghpc_version,omitempty"`
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     Dict

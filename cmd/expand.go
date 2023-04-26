@@ -78,6 +78,7 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 	if err := deploymentConfig.ExpandConfig(); err != nil {
 		log.Fatal(err)
 	}
+	deploymentConfig.Config.GhpcVersion = GitCommitInfo
 	deploymentConfig.ExportBlueprint(outputFilename)
 	fmt.Printf(
 		"Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)
