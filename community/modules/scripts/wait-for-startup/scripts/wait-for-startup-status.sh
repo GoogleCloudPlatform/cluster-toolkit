@@ -26,15 +26,21 @@ if [ -z "${PROJECT_ID}" ]; then
 	exit 1
 fi
 
+# Wrapepr arround grep that swallows the error status code 1
+c1grep() { grep "$@" || test $? = 1; }
+
 now=$(date +%s)
 deadline=$(("${now}" + "${TIMEOUT}"))
 error_file=$(mktemp)
 
 until [ "${now}" -gt "${deadline}" ]; do
 	FINISH_LINE="startup-script exit status"
-	ser_log=$(gcloud compute instances get-serial-port-output \
-		"${INSTANCE_NAME}" --port 1 --zone "${ZONE}" --project "${PROJECT_ID}" \
-		2>"${error_file}" | grep "${FINISH_LINE}") || {
+	ser_log=$(
+		set -o pipefail
+		gcloud compute instances get-serial-port-output \
+			"${INSTANCE_NAME}" --port 1 --zone "${ZONE}" --project "${PROJECT_ID}" \
+			2>"${error_file}" | c1grep "${FINISH_LINE}"
+	) || {
 		cat "$error_file"
 		exit 1
 	}
