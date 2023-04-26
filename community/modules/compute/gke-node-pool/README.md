@@ -19,6 +19,15 @@ The following example creates a GKE node group.
 
 Also see a full [GKE example blueprint](../../../examples/gke.yaml).
 
+### Taints and Tolerations
+
+By default node pools created with this module will be tainted with
+`user-workload=true:NoSchedule` to prevent system pods from being scheduled.
+User jobs targeting the node pool should include this toleration. This behavior
+can be overridden using the `taints` setting. See
+[docs](https://cloud.google.com/kubernetes-engine/docs/how-to/node-taints) for
+more info.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -82,7 +91,7 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to use with the system node pool | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/cloud-platform"<br>  ]<br>}</pre> | no |
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
-| <a name="input_taints"></a> [taints](#input\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br>    key    = string<br>    value  = any<br>    effect = string<br>  }))</pre> | `[]` | no |
+| <a name="input_taints"></a> [taints](#input\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br>    key    = string<br>    value  = any<br>    effect = string<br>  }))</pre> | <pre>[<br>  {<br>    "effect": "NO_SCHEDULE",<br>    "key": "user-workload",<br>    "value": true<br>  }<br>]</pre> | no |
 | <a name="input_threads_per_core"></a> [threads\_per\_core](#input\_threads\_per\_core) | Sets the number of threads per physical core. By setting threads\_per\_core<br>to 2, Simultaneous Multithreading (SMT) is enabled extending the total number<br>of virtual cores. For example, a machine of type c2-standard-60 will have 60<br>virtual cores with threads\_per\_core equal to 2. With threads\_per\_core equal<br>to 1 (SMT turned off), only the 30 physical cores will be available on the VM.<br><br>The default value of \"0\" will turn off SMT for supported machine types, and<br>will fall back to GCE defaults for unsupported machine types (t2d, shared-core<br>instances, or instances with less than 2 vCPU).<br><br>Disabling SMT can be more performant in many HPC workloads, therefore it is<br>disabled by default where compatible.<br><br>null = SMT configuration will use the GCE defaults for the machine type<br>0 = SMT will be disabled where compatible (default)<br>1 = SMT will always be disabled (will fail on incompatible machine types)<br>2 = SMT will always be enabled (will fail on incompatible machine types) | `number` | `0` | no |
 | <a name="input_total_max_nodes"></a> [total\_max\_nodes](#input\_total\_max\_nodes) | Total maximum number of nodes in the NodePool. | `number` | `1000` | no |
 | <a name="input_total_min_nodes"></a> [total\_min\_nodes](#input\_total\_min\_nodes) | Total minimum number of nodes in the NodePool. | `number` | `0` | no |
