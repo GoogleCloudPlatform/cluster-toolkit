@@ -36,7 +36,7 @@ const defaultArtifactsDir string = ".ghpc"
 var (
 	artifactsDir string
 	exportCmd    = &cobra.Command{
-		Use:               "export-outputs DEPLOYMENT_DIRECTORY",
+		Use:               "export-outputs DEPLOYMENT_GROUP_DIRECTORY",
 		Short:             "Export outputs from deployment group.",
 		Long:              "Export output values from deployment group to other deployment groups that depend upon them.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
