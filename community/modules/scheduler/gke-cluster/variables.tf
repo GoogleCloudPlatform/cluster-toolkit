@@ -204,18 +204,6 @@ variable "authenticator_security_group" {
   default     = null
 }
 
-variable "enable_istio" {
-  description = "(Beta) Enable Istio addon"
-  type        = bool
-  default     = true
-}
-
-variable "istio_auth" {
-  type        = string
-  description = "(Beta) The authentication type between services in Istio."
-  default     = "AUTH_MUTUAL_TLS"
-}
-
 variable "enable_dataplane_v2" {
   description = "Enables [Dataplane v2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2). This setting is immutable on clusters."
   type        = bool
