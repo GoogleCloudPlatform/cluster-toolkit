@@ -478,21 +478,21 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	dc := getBasicDeploymentConfigWithTestModule()
 	testMod, _ := dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
 	expected := testMod.Kind
-	dc.addKindToModules()
+	dc.Config.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
 	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() works when kind is absent*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = TerraformKind
-	dc.addKindToModules()
+	dc.Config.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
 	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() works when kind is empty*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	expected = TerraformKind
-	dc.addKindToModules()
+	dc.Config.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
 	c.Assert(testMod.Kind, Equals, expected)
 
@@ -501,7 +501,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	expected = PackerKind
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
-	dc.addKindToModules()
+	dc.Config.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID(moduleID)
 	c.Assert(testMod.Kind, Equals, expected)
 
@@ -510,7 +510,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	expected = ModuleKind{kind: "funnyKind"}
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
-	dc.addKindToModules()
+	dc.Config.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID(moduleID)
 	c.Assert(testMod.Kind, Equals, expected)
 }
@@ -858,26 +858,21 @@ func (s *MySuite) TestValidationLevels(c *C) {
 }
 
 func (s *MySuite) TestCheckMovedModules(c *C) {
-
-	dc := DeploymentConfig{
-		Config: Blueprint{
-			DeploymentGroups: []DeploymentGroup{
-				{Modules: []Module{
-					{Source: "some/module/that/has/not/moved"}}}}}}
+	bp := Blueprint{
+		DeploymentGroups: []DeploymentGroup{
+			{Modules: []Module{
+				{Source: "some/module/that/has/not/moved"}}}}}
 
 	// base case should not err
-	err := dc.checkMovedModules()
-	c.Assert(err, IsNil)
+	c.Assert(bp.checkMovedModules(), IsNil)
 
 	// embedded moved
-	dc.Config.DeploymentGroups[0].Modules[0].Source = "community/modules/scheduler/cloud-batch-job"
-	err = dc.checkMovedModules()
-	c.Assert(err, NotNil)
+	bp.DeploymentGroups[0].Modules[0].Source = "community/modules/scheduler/cloud-batch-job"
+	c.Assert(bp.checkMovedModules(), NotNil)
 
 	// local moved
-	dc.Config.DeploymentGroups[0].Modules[0].Source = "./community/modules/scheduler/cloud-batch-job"
-	err = dc.checkMovedModules()
-	c.Assert(err, NotNil)
+	bp.DeploymentGroups[0].Modules[0].Source = "./community/modules/scheduler/cloud-batch-job"
+	c.Assert(bp.checkMovedModules(), NotNil)
 }
 
 func (s *MySuite) TestValidatorConfigCheck(c *C) {

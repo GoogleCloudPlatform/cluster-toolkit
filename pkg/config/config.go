@@ -329,11 +329,11 @@ type DeploymentConfig struct {
 
 // ExpandConfig expands the yaml config in place
 func (dc *DeploymentConfig) ExpandConfig() error {
-	if err := dc.checkMovedModules(); err != nil {
+	if err := dc.Config.checkMovedModules(); err != nil {
 		return err
 	}
 	dc.Config.setGlobalLabels()
-	dc.addKindToModules()
+	dc.Config.addKindToModules()
 	dc.setModulesInfo()
 	dc.validateConfig()
 	dc.expand()
@@ -410,18 +410,17 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 	return unusedVars
 }
 
-func (dc *DeploymentConfig) checkMovedModules() error {
+func (b Blueprint) checkMovedModules() error {
 	var err error
-	for _, grp := range dc.Config.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			if replacingMod, ok := movedModules[strings.Trim(mod.Source, "./")]; ok {
-				err = fmt.Errorf("the blueprint references modules that have moved")
-				fmt.Printf(
-					"A module you are using has moved. %s has been replaced with %s. Please update the source in your blueprint and try again.\n",
-					mod.Source, replacingMod)
-			}
+	b.WalkModules(func(m *Module) error {
+		if replacement, ok := movedModules[strings.Trim(m.Source, "./")]; ok {
+			err = fmt.Errorf("the blueprint references modules that have moved")
+			fmt.Printf(
+				"A module you are using has moved. %s has been replaced with %s. Please update the source in your blueprint and try again.\n",
+				m.Source, replacement)
 		}
-	}
+		return nil
+	})
 	return err
 }
 
@@ -508,15 +507,13 @@ func createModuleInfo(
 }
 
 // addKindToModules sets the kind to 'terraform' when empty.
-func (dc *DeploymentConfig) addKindToModules() {
-	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod, mod := range grp.Modules {
-			if mod.Kind == UnknownKind {
-				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Kind =
-					TerraformKind
-			}
+func (b *Blueprint) addKindToModules() {
+	b.WalkModules(func(m *Module) error {
+		if m.Kind == UnknownKind {
+			m.Kind = TerraformKind
 		}
-	}
+		return nil
+	})
 }
 
 // setModulesInfo populates needed information from modules
@@ -584,21 +581,18 @@ func modToGrp(groups []DeploymentGroup, modID string) (int, error) {
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
 func checkUsedModuleNames(bp Blueprint) error {
-	for _, grp := range bp.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			for _, usedMod := range mod.Use {
-				ref, err := identifyModuleByReference(usedMod, bp, mod.ID)
-				if err != nil {
-					return err
-				}
-
-				if err = ref.validate(bp); err != nil {
-					return err
-				}
+	return bp.WalkModules(func(mod *Module) error {
+		for _, used := range mod.Use {
+			ref, err := identifyModuleByReference(used, bp, mod.ID)
+			if err != nil {
+				return err
+			}
+			if err := ref.validate(bp); err != nil {
+				return err
 			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func checkBackend(b TerraformBackend) error {
