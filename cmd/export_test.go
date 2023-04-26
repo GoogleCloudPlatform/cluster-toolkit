@@ -36,7 +36,11 @@ func (s *MySuite) TestIsDir(c *C) {
 	err = checkDir(nil, []string{dir})
 	c.Assert(err, NotNil)
 
-	f, _ := os.CreateTemp("", "test-*")
+	f, err := os.CreateTemp("", "test-*")
+	if err != nil {
+		c.Fatal(err)
+	}
+	defer os.Remove(f.Name())
 	err = checkDir(nil, []string{f.Name()})
 	c.Assert(err, NotNil)
 }
