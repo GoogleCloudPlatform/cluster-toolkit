@@ -197,8 +197,8 @@ func hasIllegalChars(name string) bool {
 	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
 }
 
-func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
-
+func validateOutputs(mod Module) error {
+	modInfo := mod.InfoOrDie()
 	// Only get the map if needed
 	var outputsMap map[string]modulereader.OutputInfo
 	if len(mod.Outputs) > 0 {
@@ -217,18 +217,12 @@ func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
 
 // validateModules ensures parameters set in modules are set correctly.
 func (dc DeploymentConfig) validateModules() error {
-	for _, grp := range dc.Config.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			if err := validateModule(mod); err != nil {
-				return err
-			}
-			modInfo := dc.ModulesInfo[grp.Name][mod.Source]
-			if err := validateOutputs(mod, modInfo); err != nil {
-				return err
-			}
+	return dc.Config.WalkModules(func(m *Module) error {
+		if err := validateModule(*m); err != nil {
+			return err
 		}
-	}
-	return nil
+		return validateOutputs(*m)
+	})
 }
 
 type moduleVariables struct {

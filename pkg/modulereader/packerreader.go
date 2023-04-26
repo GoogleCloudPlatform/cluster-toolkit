@@ -27,18 +27,11 @@ import (
 )
 
 // PackerReader implements Modulereader for packer modules
-type PackerReader struct {
-	allModInfo map[string]ModuleInfo
-}
+type PackerReader struct{}
 
 // NewPackerReader is a constructor for PackerReader
 func NewPackerReader() PackerReader {
-	return PackerReader{allModInfo: map[string]ModuleInfo{}}
-}
-
-// SetInfo sets the module info for a module key'd on the source
-func (r PackerReader) SetInfo(source string, modInfo ModuleInfo) {
-	r.allModInfo[source] = modInfo
+	return PackerReader{}
 }
 
 func addTfExtension(filename string) {
@@ -69,10 +62,6 @@ func getHCLFiles(dir string) []string {
 
 // GetInfo reads the ModuleInfo for a packer module
 func (r PackerReader) GetInfo(source string) (ModuleInfo, error) {
-	if modInfo, ok := r.allModInfo[source]; ok {
-		return modInfo, nil
-	}
-
 	tmpDir, err := ioutil.TempDir("", "pkwriter-*")
 	if err != nil {
 		return ModuleInfo{}, fmt.Errorf(
@@ -96,6 +85,5 @@ func (r PackerReader) GetInfo(source string) (ModuleInfo, error) {
 	if err != nil {
 		return modInfo, fmt.Errorf("PackerReader: %v", err)
 	}
-	r.allModInfo[source] = modInfo
 	return modInfo, nil
 }

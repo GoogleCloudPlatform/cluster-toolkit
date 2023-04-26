@@ -117,7 +117,6 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 			}),
 			DeploymentGroups: testDeploymentGroups,
 		},
-		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
 	}
 	return testDC
 }
@@ -709,7 +708,6 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 				testDeploymentGroup,
 			},
 		},
-		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
 	}
 
 	testWriter.writeDeploymentGroup(testDC, 0, deploymentDir)

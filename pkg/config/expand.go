@@ -85,27 +85,22 @@ func (dc *DeploymentConfig) expand() {
 }
 
 func (dc *DeploymentConfig) addMetadataToModules() error {
-	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod, mod := range grp.Modules {
-			if mod.RequiredApis == nil {
-				if dc.Config.Vars.Get("project_id").Type() != cty.String {
-					return fmt.Errorf("global variable project_id must be defined")
-				}
-
-				// handle possibility that ModulesInfo does not have this module in it
-				// this occurs in unit testing because they do not run dc.ExpandConfig()
-				// and dc.setModulesInfo()
-				requiredAPIs := dc.ModulesInfo[grp.Name][mod.Source].RequiredApis
-				if requiredAPIs == nil {
-					requiredAPIs = []string{}
-				}
-				dc.Config.DeploymentGroups[iGrp].Modules[iMod].RequiredApis = map[string][]string{
-					"$(vars.project_id)": requiredAPIs,
-				}
-			}
+	return dc.Config.WalkModules(func(mod *Module) error {
+		if mod.RequiredApis != nil {
+			return nil
 		}
-	}
-	return nil
+		if dc.Config.Vars.Get("project_id").Type() != cty.String {
+			return fmt.Errorf("global variable project_id must be defined")
+		}
+		requiredAPIs := mod.InfoOrDie().RequiredApis
+		if requiredAPIs == nil {
+			requiredAPIs = []string{}
+		}
+		mod.RequiredApis = map[string][]string{
+			"$(vars.project_id)": requiredAPIs,
+		}
+		return nil
+	})
 }
 
 func (dc *DeploymentConfig) expandBackends() error {
@@ -178,20 +173,15 @@ func (mod *Module) addListValue(settingName string, value cty.Value) error {
 //
 //	mod: "using" module as defined above
 //	useMod: "used" module as defined above
-//	useModGroupID: deployment group ID to which useMod belongs
-//	modInputs: input variables as defined by the using module code
-//	useOutputs: output values as defined by the used module code
 //	settingsToIgnore: a list of module settings not to modify for any reason;
 //	 typical usage will be to leave explicit blueprint settings unmodified
 func useModule(
 	mod *Module,
 	useMod Module,
-	modInputs []modulereader.VarInfo,
-	useOutputs []modulereader.OutputInfo,
 	settingsToIgnore []string,
 ) error {
-	modInputsMap := getModuleInputMap(modInputs)
-	for _, useOutput := range useOutputs {
+	modInputsMap := getModuleInputMap(mod.InfoOrDie().Inputs)
+	for _, useOutput := range useMod.InfoOrDie().Outputs {
 		settingName := useOutput.Name
 
 		// explicitly ignore these settings (typically those in blueprint)
@@ -234,10 +224,8 @@ func useModule(
 func (dc *DeploymentConfig) applyUseModules() error {
 	for iGrp := range dc.Config.DeploymentGroups {
 		group := &dc.Config.DeploymentGroups[iGrp]
-		grpModsInfo := dc.ModulesInfo[group.Name]
 		for iMod := range group.Modules {
 			fromMod := &group.Modules[iMod]
-			fromModInfo := grpModsInfo[fromMod.Source]
 			settingsInBlueprint := maps.Keys(fromMod.Settings.Items())
 			for _, toModID := range fromMod.Use {
 				// turn the raw string into a modReference struct
@@ -270,16 +258,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 					return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], toMod.ID)
 				}
 
-				// this struct contains the underlying module implementation,
-				// not just what the user specified in blueprint. e.g. module
-				// input variables and output values
-				// this line should probably be tested for success and unit
-				// tested but it our unit test infrastructure does not support
-				// running dc.setModulesInfo() on our test configurations
-				toModInfo := dc.ModulesInfo[toGroup.Name][toMod.Source]
-				err = useModule(fromMod, toMod,
-					fromModInfo.Inputs, toModInfo.Outputs, settingsInBlueprint)
-				if err != nil {
+				if err = useModule(fromMod, toMod, settingsInBlueprint); err != nil {
 					return err
 				}
 			}
@@ -288,10 +267,9 @@ func (dc *DeploymentConfig) applyUseModules() error {
 	return nil
 }
 
-func (dc DeploymentConfig) moduleHasInput(
-	depGroup string, source string, inputName string) bool {
-	for _, input := range dc.ModulesInfo[depGroup][source].Inputs {
-		if input.Name == inputName {
+func moduleHasInput(m Module, n string) bool {
+	for _, input := range m.InfoOrDie().Inputs {
+		if input.Name == n {
 			return true
 		}
 	}
@@ -333,7 +311,6 @@ func (dc *DeploymentConfig) combineLabels() error {
 }
 
 func combineModuleLabels(mod *Module, dc DeploymentConfig) error {
-	grp := dc.Config.ModuleGroupOrDie(mod.ID)
 	mod.createWrapSettingsWith()
 	labels := "labels"
 
@@ -343,7 +320,7 @@ func combineModuleLabels(mod *Module, dc DeploymentConfig) error {
 	}
 
 	// Check if labels are set for this module
-	if !dc.moduleHasInput(grp.Name, mod.Source, labels) {
+	if !moduleHasInput(*mod, labels) {
 		return nil
 	}
 
@@ -394,33 +371,28 @@ func mergeLabels(a map[string]cty.Value, b map[string]cty.Value) map[string]cty.
 	return r
 }
 
-func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
-	deploymentGroup := dc.Config.DeploymentGroups[groupIndex]
-	modInfo := dc.ModulesInfo[deploymentGroup.Name]
-
-	for im := range deploymentGroup.Modules {
-		mod := &deploymentGroup.Modules[im]
-		for _, input := range modInfo[mod.Source].Inputs {
-			// Module setting exists? Nothing more needs to be done.
-			if mod.Settings.Has(input.Name) {
-				continue
-			}
-
-			// If it's not set, is there a global we can use?
-			if dc.Config.Vars.Has(input.Name) {
-				ref := GlobalRef(input.Name)
-				mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
-				continue
-			}
-
-			if input.Required {
-				// It's not explicitly set, and not global is set
-				// Fail if no default has been set
-				return fmt.Errorf("%s: Module ID: %s Setting: %s",
-					errorMessages["missingSetting"], mod.ID, input.Name)
-			}
-			// Default exists, the module will handle it
+func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
+	mi := mod.InfoOrDie()
+	for _, input := range mi.Inputs {
+		// Module setting exists? Nothing more needs to be done.
+		if mod.Settings.Has(input.Name) {
+			continue
 		}
+
+		// If it's not set, is there a global we can use?
+		if bp.Vars.Has(input.Name) {
+			ref := GlobalRef(input.Name)
+			mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
+			continue
+		}
+
+		if input.Required {
+			// It's not explicitly set, and not global is set
+			// Fail if no default has been set
+			return fmt.Errorf("%s: Module ID: %s Setting: %s",
+				errorMessages["missingSetting"], mod.ID, input.Name)
+		}
+		// Default exists, the module will handle it
 	}
 	return nil
 }
@@ -428,13 +400,9 @@ func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to module settings if not already set.
 func (dc *DeploymentConfig) applyGlobalVariables() error {
-	for groupIndex := range dc.Config.DeploymentGroups {
-		err := dc.applyGlobalVarsInGroup(groupIndex)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return dc.Config.WalkModules(func(mod *Module) error {
+		return dc.Config.applyGlobalVarsInModule(mod)
+	})
 }
 
 /*

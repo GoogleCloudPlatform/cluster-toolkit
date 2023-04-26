@@ -158,18 +158,20 @@ func cleanErrorRegexp(errRegexp string) string {
 	return errRegexp
 }
 
+func setTestModuleInfo(mod Module, info modulereader.ModuleInfo) {
+	modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), info)
+}
+
 func getDeploymentConfigForTest() DeploymentConfig {
-	testModuleSource := "testSource"
 	testModule := Module{
-		Source:           testModuleSource,
+		Source:           "testSource",
 		Kind:             TerraformKind,
 		ID:               "testModule",
 		Use:              []string{},
 		WrapSettingsWith: make(map[string][]string),
 	}
-	testModuleSourceWithLabels := "./role/source"
 	testModuleWithLabels := Module{
-		Source:           testModuleSourceWithLabels,
+		Source:           "./role/source",
 		ID:               "testModuleWithLabels",
 		Kind:             TerraformKind,
 		Use:              []string{},
@@ -197,15 +199,10 @@ func getDeploymentConfigForTest() DeploymentConfig {
 		},
 	}
 
-	dc := DeploymentConfig{
-		Config: testBlueprint,
-		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
-			"group1": {
-				testModuleSource:           testModuleInfo,
-				testModuleSourceWithLabels: testModuleInfo,
-			},
-		},
-	}
+	dc := DeploymentConfig{Config: testBlueprint}
+	setTestModuleInfo(testModule, testModuleInfo)
+	setTestModuleInfo(testModuleWithLabels, testModuleInfo)
+
 	// the next two steps simulate relevant steps in ghpc expand
 	dc.addMetadataToModules()
 	dc.addDefaultValidators()
@@ -302,48 +299,47 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		Outputs: []modulereader.OutputInfo{},
 	}
 
-	dg0Name := "primary"
-	modID0 := "TestModule0"
-	testDeploymentGroup0 := DeploymentGroup{
-		Name: dg0Name,
-		Modules: []Module{
-			{
-				ID:     modID0,
-				Kind:   TerraformKind,
-				Source: testModuleSource0,
-				Settings: NewDict(map[string]cty.Value{
-					altProjectIDSetting: GlobalRef("project_id").AsExpression().AsValue(),
-				}),
-				Outputs: []modulereader.OutputInfo{
-					{Name: matchingIntergroupName},
-				},
-			},
-			{
-				ID:     "TestModule1",
-				Kind:   TerraformKind,
-				Source: testModuleSource1,
-				Settings: NewDict(map[string]cty.Value{
-					matchingIntragroupName1: cty.StringVal("explicit-intra-value"),
-					matchingIntragroupName2: ModuleRef(modID0, matchingIntragroupName2).AsExpression().AsValue(),
-				}),
-				Use: []string{
-					modID0,
-				},
-			},
+	mod0 := Module{
+		ID:     "TestModule0",
+		Kind:   TerraformKind,
+		Source: testModuleSource0,
+		Settings: NewDict(map[string]cty.Value{
+			altProjectIDSetting: GlobalRef("project_id").AsExpression().AsValue(),
+		}),
+		Outputs: []modulereader.OutputInfo{
+			{Name: matchingIntergroupName},
 		},
 	}
-	testDeploymentGroup1 := DeploymentGroup{
-		Name: "secondary",
-		Modules: []Module{
-			{
-				ID:     "TestModule2",
-				Kind:   TerraformKind,
-				Source: testModuleSource2,
-				Use: []string{
-					testDeploymentGroup0.Modules[0].ID,
-				},
-			},
-		},
+	setTestModuleInfo(mod0, testModuleInfo0)
+
+	mod1 := Module{
+		ID:     "TestModule1",
+		Kind:   TerraformKind,
+		Source: testModuleSource1,
+		Settings: NewDict(map[string]cty.Value{
+			matchingIntragroupName1: cty.StringVal("explicit-intra-value"),
+			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsExpression().AsValue(),
+		}),
+		Use: []string{mod0.ID},
+	}
+	setTestModuleInfo(mod1, testModuleInfo1)
+
+	grp0 := DeploymentGroup{
+		Name:    "primary",
+		Modules: []Module{mod0, mod1},
+	}
+
+	mod2 := Module{
+		ID:     "TestModule2",
+		Kind:   TerraformKind,
+		Source: testModuleSource2,
+		Use:    []string{mod0.ID},
+	}
+	setTestModuleInfo(mod2, testModuleInfo2)
+
+	grp1 := DeploymentGroup{
+		Name:    "secondary",
+		Modules: []Module{mod2},
 	}
 
 	dc := DeploymentConfig{
@@ -354,26 +350,12 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				"project_id":      cty.StringVal("test-project"),
 				"unused_key":      cty.StringVal("unused_value"),
 			}),
-			DeploymentGroups: []DeploymentGroup{testDeploymentGroup0, testDeploymentGroup1},
-		},
-		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
-			testDeploymentGroup0.Name: {
-				testModuleSource0: testModuleInfo0,
-				testModuleSource1: testModuleInfo1,
-			},
-			testDeploymentGroup1.Name: {
-				testModuleSource2: testModuleInfo2,
-			},
+			DeploymentGroups: []DeploymentGroup{grp0, grp1},
 		},
 	}
 
 	dc.addMetadataToModules()
 	dc.addDefaultValidators()
-	reader := modulereader.Factory(TerraformKind.String())
-	reader.SetInfo(testModuleSource0, testModuleInfo0)
-	reader.SetInfo(testModuleSource1, testModuleInfo1)
-	reader.SetInfo(testModuleSource2, testModuleInfo2)
-
 	return dc
 }
 
@@ -513,16 +495,6 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	dc.Config.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID(moduleID)
 	c.Assert(testMod.Kind, Equals, expected)
-}
-
-func (s *MySuite) TestSetModulesInfo(c *C) {
-	dc := getBasicDeploymentConfigWithTestModule()
-	dc.setModulesInfo()
-}
-
-func (s *MySuite) TestCreateModuleInfo(c *C) {
-	dc := getBasicDeploymentConfigWithTestModule()
-	createModuleInfo(dc.Config.DeploymentGroups[0])
 }
 
 func (s *MySuite) TestGetResouceByID(c *C) {
@@ -1090,13 +1062,10 @@ func (s *MySuite) TestValidateModuleSettingReference(c *C) {
 		},
 	}
 
-	tfReader := modulereader.Factory("terraform")
-	tfReader.SetInfo("./mod11", modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out11"}}})
-	tfReader.SetInfo("./mod21", modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out21"}}})
-	tfReader.SetInfo("./mod22", modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out22"}}})
-
-	pkrReader := modulereader.Factory("packer")
-	pkrReader.SetInfo("./pkr", modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "outPkr"}}})
+	setTestModuleInfo(mod11, modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out11"}}})
+	setTestModuleInfo(mod21, modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out21"}}})
+	setTestModuleInfo(mod22, modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out22"}}})
+	setTestModuleInfo(pkr, modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "outPkr"}}})
 
 	vld := validateModuleSettingReference
 	// OK. deployment var
