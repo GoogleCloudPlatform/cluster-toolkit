@@ -557,10 +557,6 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(outputs, DeepEquals, []string{})
 
-	// Failure: Bad path
-	_, err = writeOutputs(testModules, "not/a/real/path")
-	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
-
 	// Success: Outputs added
 	outputList := []modulereader.OutputInfo{
 		{Name: "output1"},
@@ -578,6 +574,11 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	exists, err = stringExistsInFile("output2", outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
+
+	// Failure: Bad path
+	_, err = writeOutputs(testModules, "not/a/real/path")
+	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
+
 }
 
 func (s *MySuite) TestWriteVariables(c *C) {
