@@ -59,9 +59,9 @@ func (s *MySuite) TestValidateVars(c *C) {
 
 func (s *MySuite) TestValidateModuleSettings(c *C) {
 	testSource := filepath.Join(tmpTestDir, "module")
-	testSettings := map[string]interface{}{
-		"test_variable": "test_value",
-	}
+	testSettings := NewDict(map[string]cty.Value{
+		"test_variable": cty.StringVal("test_value"),
+	})
 	testDeploymentGroup := DeploymentGroup{
 		Name:             "",
 		TerraformBackend: TerraformBackend{},
@@ -76,7 +76,7 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 
 func (s *MySuite) TestValidateSettings(c *C) {
 	testSettingName := "TestSetting"
-	testSettingValue := "TestValue"
+	testSettingValue := cty.StringVal("TestValue")
 	validSettingNames := []string{
 		"a", "A", "_", "-", testSettingName, "abc_123-ABC",
 	}
@@ -87,13 +87,12 @@ func (s *MySuite) TestValidateSettings(c *C) {
 
 	// Succeeds: No settings, no variables
 	mod := Module{}
-	mod.Settings = make(map[string]interface{})
 	info := modulereader.ModuleInfo{}
 	err := validateSettings(mod, info)
 	c.Assert(err, IsNil)
 
 	// Fails: One required variable, no settings
-	mod.Settings = map[string]interface{}{testSettingName: testSettingValue}
+	mod.Settings = NewDict(map[string]cty.Value{testSettingName: testSettingValue})
 	err = validateSettings(mod, info)
 	c.Check(errors.As(err, &e), Equals, true)
 
@@ -102,7 +101,7 @@ func (s *MySuite) TestValidateSettings(c *C) {
 		info.Inputs = []modulereader.VarInfo{
 			{Name: name, Required: true},
 		}
-		mod.Settings = map[string]interface{}{name: testSettingValue}
+		mod.Settings = NewDict(map[string]cty.Value{name: testSettingValue})
 		err = validateSettings(mod, info)
 		c.Check(errors.As(err, &e), Equals, true)
 	}
@@ -112,7 +111,7 @@ func (s *MySuite) TestValidateSettings(c *C) {
 		info.Inputs = []modulereader.VarInfo{
 			{Name: name, Required: true},
 		}
-		mod.Settings = map[string]interface{}{name: testSettingValue}
+		mod.Settings = NewDict(map[string]cty.Value{name: testSettingValue})
 		err = validateSettings(mod, info)
 		c.Assert(err, IsNil)
 	}

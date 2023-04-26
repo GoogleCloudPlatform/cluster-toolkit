@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -68,33 +67,40 @@ func (w PackerWriter) writeDeploymentGroup(
 ) (groupMetadata, error) {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, depGroup.Name)
-	deploymentVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
-	intergroupVars := findIntergroupVariables(depGroup, dc.GetModuleConnections())
-	intergroupVarNames := modulereader.GetVarNames(intergroupVars)
+	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
+	igcInputs := map[string]bool{}
 
 	for _, mod := range depGroup.Modules {
-		ctySettings, err := config.ConvertMapToCty(mod.Settings)
-		if err != nil {
-			return groupMetadata{}, fmt.Errorf(
-				"error converting packer module settings to cty for writing: %w", err)
+		pure := config.Dict{}
+		for setting, v := range mod.Settings.Items() {
+			igcRefs := config.FindIntergroupReferences(v, mod, dc.Config)
+			if len(igcRefs) == 0 {
+				pure.Set(setting, v)
+			}
+			for _, r := range igcRefs {
+				n := config.AutomaticOutputName(r.Name, r.Module)
+				igcInputs[n] = true
+			}
 		}
-		err = config.ResolveVariables(ctySettings, dc.Config.Vars.Items(), intergroupVarNames)
+
+		av, err := pure.Eval(dc.Config)
 		if err != nil {
 			return groupMetadata{}, err
 		}
+
 		modPath := filepath.Join(groupPath, mod.DeploymentSource)
-		err = writePackerAutovars(ctySettings, modPath)
-		if err != nil {
+		if err = writePackerAutovars(av.Items(), modPath); err != nil {
 			return groupMetadata{}, err
 		}
-		printPackerInstructions(modPath, mod.ID, len(intergroupVarNames) > 0)
+		hasIgc := len(pure.Items()) < len(mod.Settings.Items())
+		printPackerInstructions(modPath, mod.ID, hasIgc)
 	}
 
 	return groupMetadata{
 		Name:             depGroup.Name,
 		Kind:             w.kind(),
 		DeploymentInputs: orderKeys(deploymentVars),
-		IntergroupInputs: intergroupVarNames,
+		IntergroupInputs: orderKeys(igcInputs),
 		Outputs:          []string{},
 	}, nil
 }

@@ -249,7 +249,7 @@ func validateSettings(
 		cVars.Inputs[input.Name] = input.Required
 	}
 
-	for k := range mod.Settings {
+	for k := range mod.Settings.Items() {
 		errData := fmt.Sprintf("Module ID: %s Setting: %s", mod.ID, k)
 		// Setting name included a period
 		// The user was likely trying to set a subfield which is not supported.
@@ -460,7 +460,13 @@ func (dc *DeploymentConfig) testModuleNotUsed(c validatorConfig) error {
 		return err
 	}
 
-	if err := validators.TestModuleNotUsed(dc.listUnusedModules()); err != nil {
+	acc := map[string][]string{}
+	dc.Config.WalkModules(func(m *Module) error {
+		acc[m.ID] = m.listUnusedModules()
+		return nil
+	})
+
+	if err := validators.TestModuleNotUsed(acc); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsgTemplate, testModuleNotUsedName.String())
 	}

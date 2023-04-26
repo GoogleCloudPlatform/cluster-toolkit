@@ -33,7 +33,6 @@ const (
 	blueprintLabel  string = "ghpc_blueprint"
 	deploymentLabel string = "ghpc_deployment"
 	roleLabel       string = "ghpc_role"
-	globalGroupID   string = "deployment"
 )
 
 var (
@@ -53,7 +52,6 @@ var (
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() {
-	dc.addSettingsToModules()
 	if err := dc.addMetadataToModules(); err != nil {
 		log.Printf("could not determine required APIs: %v", err)
 	}
@@ -82,20 +80,8 @@ func (dc *DeploymentConfig) expand() {
 			"failed to apply deployment variables in modules when expanding the config: %v",
 			err)
 	}
-	if err := dc.expandVariables(); err != nil {
-		log.Fatalf("failed to expand variables: %v", err)
-	}
-}
 
-func (dc *DeploymentConfig) addSettingsToModules() {
-	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod, mod := range grp.Modules {
-			if mod.Settings == nil {
-				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Settings =
-					make(map[string]interface{})
-			}
-		}
-	}
+	dc.Config.populateOutputs()
 }
 
 func (dc *DeploymentConfig) addMetadataToModules() error {
@@ -155,10 +141,6 @@ func (dc *DeploymentConfig) expandBackends() error {
 	return nil
 }
 
-func getModuleVarName(modID string, varName string) string {
-	return fmt.Sprintf("$(%s.%s)", modID, varName)
-}
-
 func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
 	modInputs := make(map[string]string)
 	for _, input := range inputs {
@@ -169,20 +151,22 @@ func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
 
 // initialize a Toolkit setting that corresponds to a module input of type list
 // create new list if unset, append if already set, error if value not a list
-func (mod *Module) addListValue(settingName string, value string) error {
-	_, found := mod.Settings[settingName]
-	if !found {
-		mod.Settings[settingName] = []interface{}{}
+func (mod *Module) addListValue(settingName string, value cty.Value) error {
+	var cur []cty.Value
+	if !mod.Settings.Has(settingName) {
 		mod.createWrapSettingsWith()
 		mod.WrapSettingsWith[settingName] = []string{"flatten([", "])"}
+		cur = []cty.Value{}
+	} else {
+		v := mod.Settings.Get(settingName)
+		ty := v.Type()
+		if !ty.IsTupleType() && !ty.IsSetType() && !ty.IsSetType() {
+			return fmt.Errorf("%s: module %s, setting %s", errorMessages["appendToNonList"], mod.ID, settingName)
+		}
+		cur = mod.Settings.Get(settingName).AsValueSlice()
 	}
-	currentValue, ok := mod.Settings[settingName].([]interface{})
-	if ok {
-		mod.Settings[settingName] = append(currentValue, value)
-		return nil
-	}
-	return fmt.Errorf("%s: module %s, setting %s",
-		errorMessages["appendToNonList"], mod.ID, settingName)
+	mod.Settings.Set(settingName, cty.TupleVal(append(cur, value)))
+	return nil
 }
 
 // useModule matches input variables in a "using" module to output values
@@ -199,16 +183,13 @@ func (mod *Module) addListValue(settingName string, value string) error {
 //	useOutputs: output values as defined by the used module code
 //	settingsToIgnore: a list of module settings not to modify for any reason;
 //	 typical usage will be to leave explicit blueprint settings unmodified
-//
-// returns: a list of variable names that were used during this function call
 func useModule(
 	mod *Module,
 	useMod Module,
 	modInputs []modulereader.VarInfo,
 	useOutputs []modulereader.OutputInfo,
 	settingsToIgnore []string,
-) ([]string, error) {
-	usedVars := []string{}
+) error {
 	modInputsMap := getModuleInputMap(modInputs)
 	for _, useOutput := range useOutputs {
 		settingName := useOutput.Name
@@ -226,24 +207,26 @@ func useModule(
 
 		// skip settings that are not of list type, but already have a value
 		// these were probably added by a previous call to this function
-		_, alreadySet := mod.Settings[settingName]
+		alreadySet := mod.Settings.Has(settingName)
 		isList := strings.HasPrefix(inputType, "list")
 		if alreadySet && !isList {
 			continue
 		}
 
-		modVarName := getModuleVarName(useMod.ID, settingName)
+		v := ModuleRef(useMod.ID, settingName).
+			AsExpression().
+			AsValue().
+			Mark(ProductOfModuleUse{Module: useMod.ID})
+
 		if !isList {
-			mod.Settings[settingName] = modVarName
-			usedVars = append(usedVars, settingName)
+			mod.Settings.Set(settingName, v)
 		} else {
-			if err := mod.addListValue(settingName, modVarName); err != nil {
-				return nil, err
+			if err := mod.addListValue(settingName, v); err != nil {
+				return err
 			}
-			usedVars = append(usedVars, settingName)
 		}
 	}
-	return usedVars, nil
+	return nil
 }
 
 // applyUseModules applies variables from modules listed in the "use" field
@@ -255,7 +238,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 		for iMod := range group.Modules {
 			fromMod := &group.Modules[iMod]
 			fromModInfo := grpModsInfo[fromMod.Source]
-			settingsInBlueprint := maps.Keys(fromMod.Settings)
+			settingsInBlueprint := maps.Keys(fromMod.Settings.Items())
 			for _, toModID := range fromMod.Use {
 				// turn the raw string into a modReference struct
 				// which was previously validated by checkUsedModuleNames
@@ -294,12 +277,11 @@ func (dc *DeploymentConfig) applyUseModules() error {
 				// tested but it our unit test infrastructure does not support
 				// running dc.setModulesInfo() on our test configurations
 				toModInfo := dc.ModulesInfo[toGroup.Name][toMod.Source]
-				usedVars, err := useModule(fromMod, toMod,
+				err = useModule(fromMod, toMod,
 					fromModInfo.Inputs, toModInfo.Outputs, settingsInBlueprint)
 				if err != nil {
 					return err
 				}
-				dc.addModuleConnection(modRef, useConnection, usedVars)
 			}
 		}
 	}
@@ -329,72 +311,29 @@ func getRole(source string) string {
 	return role
 }
 
-func toStringInterfaceMap(i interface{}) (map[string]interface{}, error) {
-	var ret map[string]interface{}
-	switch val := i.(type) {
-	case map[string]interface{}:
-		ret = val
-	case map[interface{}]interface{}:
-		ret = make(map[string]interface{})
-		for k, v := range val {
-			ret[k.(string)] = v
-		}
-	default:
-		return ret, fmt.Errorf(
-			"invalid type of interface{}, expected a map with keys of string or interface{} got %T",
-			i,
-		)
-	}
-	return ret, nil
-}
-
 // combineLabels sets defaults for labels based on other variables and merges
 // the global labels defined in Vars with module setting labels. It also
 // determines the role and sets it for each module independently.
 func (dc *DeploymentConfig) combineLabels() error {
 	vars := &dc.Config.Vars
-	defaults := map[string]string{
-		blueprintLabel:  dc.Config.BlueprintName,
-		deploymentLabel: dc.Config.Vars.Get("deployment_name").AsString(),
+	defaults := map[string]cty.Value{
+		blueprintLabel:  cty.StringVal(dc.Config.BlueprintName),
+		deploymentLabel: vars.Get("deployment_name"),
 	}
 	labels := "labels"
-	// Add defaults to global labels if they don't already exist
-	if !vars.Has(labels) {
-		mv := map[string]cty.Value{}
-		for k, v := range defaults {
-			mv[k] = cty.StringVal(v)
-		}
-		vars.Set(labels, cty.ObjectVal(mv))
+	if !vars.Has(labels) { // Shouldn't happen if blueprint was properly constructed
+		vars.Set(labels, cty.EmptyObjectVal)
 	}
+	gl := mergeLabels(vars.Get(labels).AsValueMap(), defaults)
+	vars.Set(labels, cty.ObjectVal(gl))
 
-	// Cast global labels so we can index into them
-	globals := map[string]string{}
-	for k, v := range vars.Get(labels).AsValueMap() {
-		globals[k] = v.AsString()
-	}
-
-	// Add both default labels if they don't already exist
-	globals = mergeLabels(globals, defaults)
-
-	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod := range grp.Modules {
-			if err := combineModuleLabels(dc, iGrp, iMod); err != nil {
-				return err
-			}
-		}
-	}
-
-	mv := map[string]cty.Value{}
-	for k, v := range globals {
-		mv[k] = cty.StringVal(v)
-	}
-	vars.Set(labels, cty.ObjectVal(mv))
-	return nil
+	return dc.Config.WalkModules(func(mod *Module) error {
+		return combineModuleLabels(mod, *dc)
+	})
 }
 
-func combineModuleLabels(dc *DeploymentConfig, iGrp int, iMod int) error {
-	grp := &dc.Config.DeploymentGroups[iGrp]
-	mod := &grp.Modules[iMod]
+func combineModuleLabels(mod *Module, dc DeploymentConfig) error {
+	grp := dc.Config.ModuleGroupOrDie(mod.ID)
 	mod.createWrapSettingsWith()
 	labels := "labels"
 
@@ -408,43 +347,45 @@ func combineModuleLabels(dc *DeploymentConfig, iGrp int, iMod int) error {
 		return nil
 	}
 
-	var modLabels map[string]interface{}
-	var err error
-
-	if _, exists := mod.Settings[labels]; !exists {
-		modLabels = map[string]interface{}{}
-	} else {
+	modLabels := map[string]cty.Value{}
+	if mod.Settings.Has(labels) {
 		// Cast into map so we can index into them
-		modLabels, err = toStringInterfaceMap(mod.Settings[labels])
-		if err != nil {
-			return fmt.Errorf("%s, Module %s, labels type: %T",
-				errorMessages["settingsLabelType"], mod.ID, mod.Settings[labels])
+		v := mod.Settings.Get(labels)
+		ty := v.Type()
+		if !ty.IsObjectType() && !ty.IsMapType() {
+			return fmt.Errorf("%s, Module %s, labels type: %s",
+				errorMessages["settingsLabelType"], mod.ID, ty.FriendlyName())
+		}
+		if v.AsValueMap() != nil {
+			modLabels = v.AsValueMap()
 		}
 	}
 	// Add the role (e.g. compute, network, etc)
 	if _, exists := modLabels[roleLabel]; !exists {
-		modLabels[roleLabel] = getRole(mod.Source)
+		modLabels[roleLabel] = cty.StringVal(getRole(mod.Source))
 	}
 
 	if mod.Kind == TerraformKind {
 		// Terraform module labels to be expressed as
 		// `merge(var.labels, { ghpc_role=..., **settings.labels })`
 		mod.WrapSettingsWith[labels] = []string{"merge(", ")"}
-		mod.Settings[labels] = []interface{}{"((var.labels))", modLabels}
+		ref := GlobalRef(labels).AsExpression()
+		args := []cty.Value{ref.AsValue(), cty.ObjectVal(modLabels)}
+		mod.Settings.Set(labels, cty.TupleVal(args))
 	} else if mod.Kind == PackerKind {
-		g := map[string]interface{}{}
-		for k, v := range dc.Config.Vars.Get(labels).AsValueMap() {
-			g[k] = v.AsString()
-		}
-		mod.Settings[labels] = mergeLabels(modLabels, g)
+		g := dc.Config.Vars.Get(labels).AsValueMap()
+		mod.Settings.Set(labels, cty.ObjectVal(mergeLabels(modLabels, g)))
 	}
 	return nil
 }
 
 // mergeLabels returns a new map with the keys from both maps. If a key exists in both maps,
 // the value from the first map is used.
-func mergeLabels[V interface{}](a map[string]V, b map[string]V) map[string]V {
-	r := maps.Clone(a)
+func mergeLabels(a map[string]cty.Value, b map[string]cty.Value) map[string]cty.Value {
+	r := map[string]cty.Value{}
+	for k, v := range a {
+		r[k] = v
+	}
 	for k, v := range b {
 		if _, exists := a[k]; !exists {
 			r[k] = v
@@ -457,25 +398,18 @@ func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 	deploymentGroup := dc.Config.DeploymentGroups[groupIndex]
 	modInfo := dc.ModulesInfo[deploymentGroup.Name]
 
-	for _, mod := range deploymentGroup.Modules {
+	for im := range deploymentGroup.Modules {
+		mod := &deploymentGroup.Modules[im]
 		for _, input := range modInfo[mod.Source].Inputs {
-
 			// Module setting exists? Nothing more needs to be done.
-			if _, ok := mod.Settings[input.Name]; ok {
+			if mod.Settings.Has(input.Name) {
 				continue
 			}
 
 			// If it's not set, is there a global we can use?
 			if dc.Config.Vars.Has(input.Name) {
-				ref := varReference{
-					name:         input.Name,
-					toModuleID:   "vars",
-					fromModuleID: mod.ID,
-					toGroupID:    globalGroupID,
-					fromGroupID:  deploymentGroup.Name,
-				}
-				mod.Settings[input.Name] = fmt.Sprintf("((var.%s))", input.Name)
-				dc.addModuleConnection(ref, deploymentConnection, []string{ref.name})
+				ref := GlobalRef(input.Name)
+				mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
 				continue
 			}
 
@@ -491,17 +425,6 @@ func (dc *DeploymentConfig) applyGlobalVarsInGroup(groupIndex int) error {
 	return nil
 }
 
-func updateGlobalVarTypes(vars map[string]interface{}) error {
-	for k, v := range vars {
-		val, err := updateVariableType(v, varContext{}, false)
-		if err != nil {
-			return fmt.Errorf("error setting type for deployment variable %s: %v", k, err)
-		}
-		vars[k] = val
-	}
-	return nil
-}
-
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to module settings if not already set.
 func (dc *DeploymentConfig) applyGlobalVariables() error {
@@ -512,21 +435,6 @@ func (dc *DeploymentConfig) applyGlobalVariables() error {
 		}
 	}
 	return nil
-}
-
-type varContext struct {
-	varString  string
-	groupIndex int
-	modIndex   int
-	dc         *DeploymentConfig
-}
-
-type reference interface {
-	validate(Blueprint) error
-	IsIntergroup() bool
-	String() string
-	FromModuleID() string
-	ToModuleID() string
 }
 
 /*
@@ -544,22 +452,6 @@ type modReference struct {
 	fromModuleID string
 	toGroupID    string
 	fromGroupID  string
-}
-
-func (ref modReference) String() string {
-	return ref.toModuleID
-}
-
-func (ref modReference) IsIntergroup() bool {
-	return ref.toGroupID != ref.fromGroupID
-}
-
-func (ref modReference) FromModuleID() string {
-	return ref.fromModuleID
-}
-
-func (ref modReference) ToModuleID() string {
-	return ref.toModuleID
 }
 
 /*
@@ -597,109 +489,9 @@ func identifyModuleByReference(yamlReference string, bp Blueprint, fromMod strin
 	return ref, nil
 }
 
-/*
-A variable reference has the following fields
-  - Name: the name of the module output or deployment variable
-  - toModuleID: the target module ID or "vars" if referring to a deployment variable
-  - fromModuleID: the source module ID
-  - toGroupID: the deployment group in which the module is *expected* to be found
-  - fromGroupID: the deployment group from which the reference is made
-*/
-type varReference struct {
-	name         string
-	toModuleID   string
-	fromModuleID string
-	toGroupID    string
-	fromGroupID  string
-}
-
-func (ref varReference) String() string {
-	return ref.toModuleID + "." + ref.name
-}
-
-func (ref varReference) IsIntergroup() bool {
-	switch ref.toGroupID {
-	case globalGroupID:
-		return false
-	case ref.fromGroupID:
-		return false
-	default:
-		return true
-	}
-}
-
-func (ref varReference) FromModuleID() string {
-	return ref.fromModuleID
-}
-
-func (ref varReference) ToModuleID() string {
-	return ref.toModuleID
-}
-
 // AutomaticOutputName generates unique deployment-group-level output names
 func AutomaticOutputName(outputName string, moduleID string) string {
 	return outputName + "_" + moduleID
-}
-
-func (ref varReference) HclString() string {
-	switch ref.toGroupID {
-	case globalGroupID:
-		// deployment variable
-		return "var." + ref.name
-	case ref.fromGroupID:
-		// intragroup reference can make direct reference to module output
-		return "module." + ref.toModuleID + "." + ref.name
-	default:
-		// intergroup references to automatically created input variables
-		return "var." + AutomaticOutputName(ref.name, ref.toModuleID)
-	}
-}
-
-/*
-This function performs only the most rudimentary conversion of an input
-string into a varReference struct as defined above. An input string consists of
-2 fields separated by periods. An error will be returned if there are not
-2 fields, or if any field is the empty string. This function does not
-ensure the existence of the variable name, though it checks for modules and groups!
-*/
-func identifySimpleVariable(s string, bp Blueprint, fromMod string) (varReference, error) {
-	r, err := SimpleVarToReference(s)
-	if err != nil {
-		return varReference{}, err
-	}
-
-	fromG, err := bp.ModuleGroup(fromMod)
-	if err != nil {
-		return varReference{}, err
-	}
-
-	ref := varReference{
-		fromGroupID:  fromG.Name,
-		fromModuleID: fromMod,
-		toModuleID:   r.Module,
-		name:         r.Name,
-	}
-
-	if r.GlobalVar {
-		ref.toGroupID = globalGroupID
-		ref.toModuleID = "vars"
-	} else {
-		g, err := bp.ModuleGroup(r.Module)
-		if err != nil {
-			return varReference{}, err
-		}
-		ref.toGroupID = g.Name
-	}
-
-	// should consider more sophisticated definition of valid values here.
-	// for now check that source and name are not empty strings; due to the
-	// default zero values for strings in the "ref" struct, this will also
-	// cover the case that varComponents has wrong # of fields
-	if ref.fromGroupID == "" || ref.toGroupID == "" || ref.toModuleID == "" || ref.name == "" {
-		return varReference{}, fmt.Errorf("%s %s, expected format: %s",
-			errorMessages["invalidVar"], s, expectedVarFormat)
-	}
-	return ref, nil
 }
 
 func (ref modReference) validate(bp Blueprint) error {
@@ -737,145 +529,54 @@ func (ref modReference) validate(bp Blueprint) error {
 	return nil
 }
 
-// this function validates every field within a varReference struct and that
-// the reference must be to the same or earlier group.
-// ref.GroupID: this group must exist or be the value "deployment"
-// ref.ID: must be an existing module ID or "vars" (if groupID is "deployment")
-// ref.name: must match a module output name or deployment variable name
-// ref.explicitInterGroup: intergroup references must explicitly identify the
-// target group ID and intragroup references cannot have an incorrect explicit
-// group ID
-func (ref varReference) validate(bp Blueprint) error {
+// Validates that references in module settings are valid:
+// * referenced deployment variable does exist;
+// * referenced module output does exist;
+// * doesn't reference an output of module in a later group.
+func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error {
 	// simplest case to evaluate is a deployment variable's existence
-	if ref.toGroupID == globalGroupID {
-		if ref.toModuleID == "vars" {
-			if !bp.Vars.Has(ref.name) {
-				return fmt.Errorf("%s: %s is not a deployment variable",
-					errorMessages["varNotFound"], ref.name)
-			}
-			return nil
+	if r.GlobalVar {
+		if !bp.Vars.Has(r.Name) {
+			return fmt.Errorf("module %#v references unknown global variable %#v", mod.ID, r.Name)
 		}
-		return fmt.Errorf("%s: %s", errorMessages["invalidDeploymentRef"], ref)
+		return nil
 	}
+	g := bp.ModuleGroupOrDie(mod.ID)
+	callingModuleGroupIndex := slices.IndexFunc(bp.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == g.Name })
 
-	targetModuleGroupIndex, err := modToGrp(bp.DeploymentGroups, ref.toModuleID)
+	targetModuleGroupIndex, err := modToGrp(bp.DeploymentGroups, r.Module)
 	if err != nil {
 		return err
 	}
 	targetModuleGroup := bp.DeploymentGroups[targetModuleGroupIndex]
 
-	callingModuleGroupIndex := slices.IndexFunc(bp.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == ref.fromGroupID })
-	if callingModuleGroupIndex == -1 {
-		return fmt.Errorf("%s: %s", errorMessages["groupNotFound"], ref.fromGroupID)
-	}
-
-	// at this point, we know the target module exists. now record whether it
-	// is intergroup and whether it comes in a (disallowed) later group
-	isInterGroupReference := targetModuleGroupIndex != callingModuleGroupIndex
-	isRefToLaterGroup := targetModuleGroupIndex > callingModuleGroupIndex
-	isCorrectToGroup := ref.toGroupID == targetModuleGroup.Name
-
-	// intergroup references must be explicit about group and refer to an earlier group;
-	if isInterGroupReference {
-		if isRefToLaterGroup {
-			return fmt.Errorf("%s: %s is in the later group %s",
-				errorMessages["intergroupOrder"], ref.toModuleID, ref.toGroupID)
-		}
-	}
-
-	// at this point, the reference may be intergroup or intragroup. now we
-	// only care about correctness of target group ID. better to order this
-	// error after enforcing explicitness of intergroup references
-	if !isCorrectToGroup {
-		return fmt.Errorf("%s: %s.%s should be %s.%s",
-			errorMessages["referenceWrongGroup"], ref.toGroupID, ref.toModuleID, targetModuleGroup.Name, ref.toModuleID)
+	// references must refer to the same or an earlier group;
+	if targetModuleGroupIndex > callingModuleGroupIndex {
+		return fmt.Errorf("%s: %s is in the later group %s", errorMessages["intergroupOrder"], r.Module, targetModuleGroup.Name)
 	}
 
 	// at this point, we have a valid intragroup or intergroup references to a
 	// module. must now determine whether the output value actually exists in
 	// the module.
-	refModIndex := slices.IndexFunc(targetModuleGroup.Modules, func(m Module) bool { return m.ID == ref.toModuleID })
+	refModIndex := slices.IndexFunc(targetModuleGroup.Modules, func(m Module) bool { return m.ID == r.Module })
 	if refModIndex == -1 {
-		log.Fatalf("Could not find module %s", ref.toModuleID)
+		log.Fatalf("Could not find module %s", r.Module)
 	}
 	refMod := targetModuleGroup.Modules[refModIndex]
+	if refMod.Kind == PackerKind {
+		return fmt.Errorf("module %s cannot be referenced because packer modules have no outputs", refMod.ID)
+	}
+
 	modInfo, err := modulereader.GetModuleInfo(refMod.Source, refMod.Kind.String())
 	if err != nil {
-		log.Fatalf(
-			"failed to get info for module at %s while expanding variables: %e",
-			refMod.Source, err)
+		log.Fatalf("failed to get info for module at %s: %v", refMod.Source, err)
 	}
-	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == ref.name })
+	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
 	if !found {
 		return fmt.Errorf("%s: module %s did not have output %s",
-			errorMessages["noOutput"], refMod.ID, ref.name)
+			errorMessages["noOutput"], refMod.ID, r.Name)
 	}
-
 	return nil
-}
-
-// Needs DeploymentGroups, variable string, current group,
-func expandSimpleVariable(context varContext, trackModuleGraph bool) (string, error) {
-	callingGroup := context.dc.Config.DeploymentGroups[context.groupIndex]
-	varRef, err := identifySimpleVariable(context.varString, context.dc.Config, callingGroup.Modules[context.modIndex].ID)
-	if err != nil {
-		return "", err
-	}
-
-	if err := varRef.validate(context.dc.Config); err != nil {
-		return "", err
-	}
-
-	// if this connection is to a deployment variable, then it is new
-	// if this connection is to a module output, then it may have been via use
-	// only if new, should it be marked as an explicitConnection
-	if trackModuleGraph {
-		if varRef.toGroupID == globalGroupID {
-			context.dc.addModuleConnection(varRef, deploymentConnection, []string{varRef.name})
-		} else if !wasConnectionViaUse(context.dc.moduleConnections[varRef.fromModuleID], varRef.name) {
-			context.dc.addModuleConnection(varRef, explicitConnection, []string{varRef.name})
-		}
-	}
-
-	// intergroup case must add outputs to earlier module
-	if varRef.toGroupID != varRef.fromGroupID && varRef.toGroupID != globalGroupID {
-		toGrpIdx := slices.IndexFunc(
-			context.dc.Config.DeploymentGroups,
-			func(g DeploymentGroup) bool { return g.Name == varRef.toGroupID })
-
-		if toGrpIdx == -1 {
-			return "", fmt.Errorf("invalid group reference: %s", varRef.toGroupID)
-		}
-		toGrp := context.dc.Config.DeploymentGroups[toGrpIdx]
-		toModIdx := slices.IndexFunc(toGrp.Modules, func(m Module) bool { return m.ID == varRef.toModuleID })
-		if toModIdx == -1 {
-			return "", fmt.Errorf("%s: %s", errorMessages["invalidMod"], varRef.toModuleID)
-		}
-		toMod := &toGrp.Modules[toModIdx]
-
-		// ensure that the target module outputs the value in the root module
-		// state and not just internally within its deployment group
-		if !slices.ContainsFunc(toMod.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == varRef.name }) {
-			toMod.Outputs = append(toMod.Outputs, modulereader.OutputInfo{
-				Name:        varRef.name,
-				Description: "Automatically-generated output exported for use by later deployment groups",
-				Sensitive:   true,
-			})
-		}
-	}
-	return fmt.Sprintf("((%s))", varRef.HclString()), nil
-}
-
-func wasConnectionViaUse(mc []ModConnection, sharedVar string) bool {
-	for _, conn := range mc {
-		if conn.kind != useConnection {
-			continue
-		}
-		if slices.Contains(conn.sharedVariables, sharedVar) {
-			return true
-		}
-	}
-	return false
 }
 
 // isSimpleVariable checks if the entire string is just a single variable
@@ -888,86 +589,6 @@ func hasVariable(str string) bool {
 	return anyVariableExp.MatchString(str)
 }
 
-func handleVariable(prim interface{}, context varContext, trackModuleGraph bool) (interface{}, error) {
-	switch val := prim.(type) {
-	case string:
-		context.varString = val
-		if hasVariable(val) {
-			return expandSimpleVariable(context, trackModuleGraph)
-		}
-		return val, nil
-	default:
-		return val, nil
-	}
-}
-
-func updateVariableType(value interface{}, context varContext, trackModuleGraph bool) (interface{}, error) {
-	var err error
-	switch typedValue := value.(type) {
-	case []interface{}:
-		interfaceSlice := value.([]interface{})
-		{
-			for i := 0; i < len(interfaceSlice); i++ {
-				interfaceSlice[i], err = updateVariableType(interfaceSlice[i], context, trackModuleGraph)
-				if err != nil {
-					return interfaceSlice, err
-				}
-			}
-		}
-		return typedValue, err
-	case map[string]interface{}:
-		retMap := map[string]interface{}{}
-		for k, v := range typedValue {
-			retMap[k], err = updateVariableType(v, context, trackModuleGraph)
-			if err != nil {
-				return retMap, err
-			}
-		}
-		return retMap, err
-	case map[interface{}]interface{}:
-		retMap := map[string]interface{}{}
-		for k, v := range typedValue {
-			retMap[k.(string)], err = updateVariableType(v, context, trackModuleGraph)
-			if err != nil {
-				return retMap, err
-			}
-		}
-		return retMap, err
-	default:
-		return handleVariable(value, context, trackModuleGraph)
-	}
-}
-
-func updateVariables(context varContext, interfaceMap map[string]interface{}, trackModuleGraph bool) error {
-	for key, value := range interfaceMap {
-		updatedVal, err := updateVariableType(value, context, trackModuleGraph)
-		if err != nil {
-			return err
-		}
-		interfaceMap[key] = updatedVal
-	}
-	return nil
-}
-
-// expandVariables recurses through the data structures in the yaml config and
-// expands all variables
-func (dc *DeploymentConfig) expandVariables() error {
-	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod, mod := range grp.Modules {
-			context := varContext{
-				groupIndex: iGrp,
-				modIndex:   iMod,
-				dc:         dc,
-			}
-			err := updateVariables(context, mod.Settings, true)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // this function adds default validators to the blueprint.
 // default validators are only added for global variables that exist
 func (dc *DeploymentConfig) addDefaultValidators() error {
@@ -976,13 +597,13 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	}
 
 	projectIDExists := dc.Config.Vars.Has("project_id")
-	projectRef := Reference{GlobalVar: true, Name: "project_id"}.AsExpression().AsValue()
+	projectRef := GlobalRef("project_id").AsExpression().AsValue()
 
 	regionExists := dc.Config.Vars.Has("region")
-	regionRef := Reference{GlobalVar: true, Name: "region"}.AsExpression().AsValue()
+	regionRef := GlobalRef("region").AsExpression().AsValue()
 
 	zoneExists := dc.Config.Vars.Has("zone")
-	zoneRef := Reference{GlobalVar: true, Name: "zone"}.AsExpression().AsValue()
+	zoneRef := GlobalRef("zone").AsExpression().AsValue()
 
 	defaults := []validatorConfig{
 		{Validator: testModuleNotUsedName.String()},
@@ -1047,4 +668,53 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 	}
 
 	return nil
+}
+
+// FindIntergroupReferences finds all references to other groups used in the given value
+func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference {
+	g := bp.ModuleGroupOrDie(mod.ID)
+	res := map[Reference]bool{}
+	cty.Walk(v, func(p cty.Path, v cty.Value) (bool, error) {
+		e, is := IsExpressionValue(v)
+		if !is {
+			return true, nil
+		}
+		for _, r := range e.References() {
+			if !r.GlobalVar && bp.ModuleGroupOrDie(r.Module).Name != g.Name {
+				res[r] = true
+			}
+		}
+		return true, nil
+	})
+	return maps.Keys(res)
+}
+
+// find all intergroup references and add them to source Module.Outputs
+func (bp *Blueprint) populateOutputs() {
+	refs := map[Reference]bool{}
+	bp.WalkModules(func(m *Module) error {
+		rs := FindIntergroupReferences(m.Settings.AsObject(), *m, *bp)
+		for _, r := range rs {
+			refs[r] = true
+		}
+		return nil
+	})
+
+	bp.WalkModules(func(m *Module) error {
+		for r := range refs {
+			if r.Module != m.ID {
+				continue // find IGC references pointing to this module
+			}
+			if slices.ContainsFunc(m.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name }) {
+				continue // output is already registered
+			}
+			m.Outputs = append(m.Outputs, modulereader.OutputInfo{
+				Name:        r.Name,
+				Description: "Automatically-generated output exported for use by later deployment groups",
+				Sensitive:   true,
+			})
+
+		}
+		return nil
+	})
 }

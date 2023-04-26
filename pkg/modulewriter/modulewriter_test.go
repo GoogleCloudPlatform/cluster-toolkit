@@ -80,10 +80,10 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 		Source: testModuleSource,
 		Kind:   config.TerraformKind,
 		ID:     "testModule",
-		Settings: map[string]interface{}{
-			"deployment_name": nil,
-			"project_id":      nil,
-		},
+		Settings: config.NewDict(map[string]cty.Value{
+			"deployment_name": cty.NilVal,
+			"project_id":      cty.NilVal,
+		}),
 		Outputs: []modulereader.OutputInfo{
 			{
 				Name:        "test-output",
@@ -97,9 +97,9 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 		Source: testModuleSourceWithLabels,
 		ID:     "testModuleWithLabels",
 		Kind:   config.TerraformKind,
-		Settings: map[string]interface{}{
-			"moduleLabel": "moduleLabelValue",
-		},
+		Settings: config.NewDict(map[string]cty.Value{
+			"moduleLabel": cty.StringVal("moduleLabelValue"),
+		}),
 	}
 	testDeploymentGroups := []config.DeploymentGroup{
 		{
@@ -119,9 +119,6 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 		},
 		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
 	}
-
-	testDC.SetModuleConnections(make(map[string][]config.ModConnection))
-
 	return testDC
 }
 
@@ -496,10 +493,10 @@ func (s *MySuite) TestWriteMain(c *C) {
 	// Test with modules
 	testModule := config.Module{
 		ID: "test_module",
-		Settings: map[string]interface{}{
-			"testSetting": "testValue",
-			"passthrough": `(("${vars.deployment_name}-allow\"))`,
-		},
+		Settings: config.NewDict(map[string]cty.Value{
+			"testSetting": cty.StringVal("testValue"),
+			"passthrough": config.MustParseExpression(`"${var.deployment_name}-allow"`).AsValue(),
+		}),
 	}
 	testModules = append(testModules, testModule)
 	err = writeMain(testModules, testBackend, testMainDir)
@@ -508,11 +505,11 @@ func (s *MySuite) TestWriteMain(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
-	exists, err = stringExistsInFile(`"${vars.deployment_name}-allow\"`, mainFilePath)
+	exists, err = stringExistsInFile(`"${var.deployment_name}-allow"`, mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
-	exists, err = stringExistsInFile(`("${vars.deployment_name}-allow\")`, mainFilePath)
+	exists, err = stringExistsInFile(`("${var.deployment_name}-allow")`, mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, false)
 
@@ -532,9 +529,11 @@ func (s *MySuite) TestWriteMain(c *C) {
 		WrapSettingsWith: map[string][]string{
 			"wrappedSetting": {"list(flatten(", "))"},
 		},
-		Settings: map[string]interface{}{
-			"wrappedSetting": []interface{}{"val1", "val2"},
-		},
+		Settings: config.NewDict(map[string]cty.Value{
+			"wrappedSetting": cty.TupleVal([]cty.Value{
+				cty.StringVal("val1"),
+				cty.StringVal("val2")}),
+		}),
 	}
 	testModules = append(testModules, testModuleWithWrap)
 	err = writeMain(testModules, testBackend, testMainDir)
@@ -554,11 +553,12 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 
 	// Simple success, no modules
 	testModules := []config.Module{}
-	err := writeOutputs(testModules, testOutputsDir)
+	outputs, err := writeOutputs(testModules, testOutputsDir)
 	c.Assert(err, IsNil)
+	c.Check(outputs, DeepEquals, []string{})
 
 	// Failure: Bad path
-	err = writeOutputs(testModules, "not/a/real/path")
+	_, err = writeOutputs(testModules, "not/a/real/path")
 	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
 
 	// Success: Outputs added
@@ -568,12 +568,14 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	}
 	moduleWithOutputs := config.Module{Outputs: outputList, ID: "testMod"}
 	testModules = []config.Module{moduleWithOutputs}
-	err = writeOutputs(testModules, testOutputsDir)
+	outputs, err = writeOutputs(testModules, testOutputsDir)
 	c.Assert(err, IsNil)
-	exists, err := stringExistsInFile(outputList[0].Name, outputsFilePath)
+	c.Check(outputs, DeepEquals, []string{"output1_testMod", "output2_testMod"})
+
+	exists, err := stringExistsInFile("output1", outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
-	exists, err = stringExistsInFile(outputList[1].Name, outputsFilePath)
+	exists, err = stringExistsInFile("output2", outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 }
