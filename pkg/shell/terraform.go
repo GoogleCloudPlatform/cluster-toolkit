@@ -172,3 +172,10 @@ func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir strin
 
 	return nil
 }
+
+// ImportInputs will search artifactsDir for files produced by ExportOutputs and
+// combine/filter them for the input values needed by the group in the Terraform
+// working directory
+func ImportInputs(tf *tfexec.Terraform, metadataFile string, artifactsDir string) error {
+	return nil
+}
