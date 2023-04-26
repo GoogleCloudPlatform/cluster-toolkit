@@ -428,14 +428,16 @@ func (dc *DeploymentConfig) checkMovedModules() error {
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
 func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
-	var newDeploymentConfig DeploymentConfig
 	blueprint, err := importBlueprint(configFilename)
 	if err != nil {
-		return newDeploymentConfig, err
+		return DeploymentConfig{}, err
 	}
 
-	newDeploymentConfig = DeploymentConfig{Config: blueprint}
-	return newDeploymentConfig, nil
+	if blueprint.GhpcVersion != "" {
+		fmt.Printf("ghpc_version setting is ignored.")
+	}
+
+	return DeploymentConfig{Config: blueprint}, nil
 }
 
 // ImportBlueprint imports the blueprint configuration provided.
