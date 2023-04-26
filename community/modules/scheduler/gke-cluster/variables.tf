@@ -122,8 +122,8 @@ variable "system_node_pool_node_count" {
     total_max_nodes = number
   })
   default = {
-    total_min_nodes = 1
-    total_max_nodes = 2
+    total_min_nodes = 2
+    total_max_nodes = 10
   }
 }
 
