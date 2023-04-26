@@ -83,12 +83,6 @@ func writeOutputs(
 	modules []config.Module,
 	dst string,
 ) ([]string, error) {
-	// Create file
-	outputsPath := filepath.Join(dst, "outputs.tf")
-	if err := createBaseFile(outputsPath); err != nil {
-		return nil, fmt.Errorf("error creating outputs.tf file: %v", err)
-	}
-
 	// Create hcl body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
@@ -97,7 +91,6 @@ func writeOutputs(
 	// Add all outputs from each module
 	for _, mod := range modules {
 		for _, output := range mod.Outputs {
-			// Create output block
 			outputName := config.AutomaticOutputName(output.Name, mod.ID)
 			outputs = append(outputs, outputName)
 
@@ -105,7 +98,6 @@ func writeOutputs(
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
-			// Add attributes (description, value)
 			desc := output.Description
 			if desc == "" {
 				desc = fmt.Sprintf("Generated output from module '%s'", mod.ID)
@@ -119,10 +111,17 @@ func writeOutputs(
 		}
 	}
 
-	// Write file
+	if len(outputs) == 0 {
+		return []string{}, nil
+	}
 	hclBytes := hclFile.Bytes()
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
+
+	outputsPath := filepath.Join(dst, "outputs.tf")
+	if err := createBaseFile(outputsPath); err != nil {
+		return nil, fmt.Errorf("error creating outputs.tf file: %v", err)
+	}
 	err := appendHCLToFile(outputsPath, hclBytes)
 	if err != nil {
 		return nil, fmt.Errorf("error writing HCL to outputs.tf file: %v", err)
@@ -208,6 +207,7 @@ func writeMain(
 
 	// Write Terraform backend if needed
 	if tfBackend.Type != "" {
+		hclBody.AppendNewline()
 		tfBody := hclBody.AppendNewBlock("terraform", []string{}).Body()
 		backendBlock := tfBody.AppendNewBlock("backend", []string{tfBackend.Type})
 		backendBody := backendBlock.Body()
@@ -215,10 +215,10 @@ func writeMain(
 		for _, setting := range orderKeys(vals) {
 			backendBody.SetAttributeValue(setting, vals[setting])
 		}
-		hclBody.AppendNewline()
 	}
 
 	for _, mod := range modules {
+		hclBody.AppendNewline()
 		// Add block
 		moduleBlock := hclBody.AppendNewBlock("module", []string{mod.ID})
 		moduleBody := moduleBlock.Body()
@@ -244,7 +244,6 @@ func writeMain(
 				moduleBody.SetAttributeRaw(setting, TokensForValue(value))
 			}
 		}
-		hclBody.AppendNewline()
 	}
 	// Write file
 	hclBytes := hclFile.Bytes()
@@ -295,6 +294,7 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 	hclBody := hclFile.Body()
 
 	for _, prov := range []string{"google", "google-beta"} {
+		hclBody.AppendNewline()
 		provBlock := hclBody.AppendNewBlock("provider", []string{prov})
 		provBody := provBlock.Body()
 		if _, ok := vars["project_id"]; ok {
@@ -306,7 +306,6 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 		if _, ok := vars["region"]; ok {
 			provBody.SetAttributeRaw("region", simpleTokens("var.region"))
 		}
-		hclBody.AppendNewline()
 	}
 
 	// Write file

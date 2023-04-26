@@ -13,10 +13,10 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+
 module "network0" {
   source          = "./modules/embedded/modules/network/vpc"
   deployment_name = var.deployment_name
   project_id      = var.project_id
   region          = var.region
 }
-
