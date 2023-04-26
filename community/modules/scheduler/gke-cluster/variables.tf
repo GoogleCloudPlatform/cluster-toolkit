@@ -79,6 +79,12 @@ variable "release_channel" {
   default     = "UNSPECIFIED"
 }
 
+variable "min_master_version" {
+  description = "The minimum version of the master. If unset, the cluster's version will be set by GKE to the version of the most recent official release."
+  type        = string
+  default     = null
+}
+
 variable "maintenance_start_time" {
   description = "Start time for daily maintenance operations. Specified in GMT with `HH:MM` format."
   type        = string

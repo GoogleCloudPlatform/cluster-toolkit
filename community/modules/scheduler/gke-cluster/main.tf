@@ -117,6 +117,7 @@ resource "google_container_cluster" "gke_cluster" {
   release_channel {
     channel = var.release_channel
   }
+  min_master_version = var.min_master_version
 
   maintenance_policy {
     daily_maintenance_window {
