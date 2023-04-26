@@ -32,15 +32,14 @@ import (
 func GetDeploymentKinds(metadataFile string, deploymentRoot string) (map[string]config.ModuleKind, error) {
 	md, err := loadMetadata(metadataFile)
 	if err != nil {
-		return map[string]config.ModuleKind{}, err
+		return nil, err
 	}
 
 	groupKinds := make(map[string]config.ModuleKind)
 	for _, gm := range md {
 		groupPath := path.Join(deploymentRoot, gm.Name)
 		if isDir, _ := DirInfo(groupPath); !isDir {
-			return map[string]config.ModuleKind{},
-				fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, gm.Name)
+			return nil, fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, gm.Name)
 		}
 		groupKinds[gm.Name] = gm.Kind
 	}

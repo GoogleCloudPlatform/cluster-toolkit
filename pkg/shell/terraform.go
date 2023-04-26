@@ -157,6 +157,9 @@ func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir strin
 		return err
 	}
 
+	// TODO: confirm that outputValues has keys we would expect from the
+	// blueprint; edge case is that "terraform output" can be missing keys
+	// whose values are null
 	if len(outputValues) == 0 {
 		log.Printf("group %s contains no artifacts to export\n", thisGroup)
 		return nil
