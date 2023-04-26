@@ -22,6 +22,26 @@ import (
 	. "gopkg.in/check.v1"
 )
 
+func (s *MySuite) TestIntersection(c *C) {
+	is := intersection([]string{"A", "B", "C"}, []string{"A", "B", "C"})
+	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
+
+	is = intersection([]string{"A", "B", "C"}, []string{"C", "B", "A"})
+	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
+
+	is = intersection([]string{"C", "B", "A"}, []string{"A", "B", "C", "C"})
+	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
+
+	is = intersection([]string{"A", "B", "C"}, []string{"D", "C", "B", "A"})
+	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
+
+	is = intersection([]string{"A", "C"}, []string{"D", "C", "B", "A"})
+	c.Assert(is, DeepEquals, []string{"A", "C"})
+
+	is = intersection([]string{"A", "C"}, []string{})
+	c.Assert(is, DeepEquals, []string{})
+}
+
 func (s *MySuite) TestIntersectMapKeys(c *C) {
 	// test map whose keys completely overlap with slice
 	a := []string{"key0", "key1", "key2"}

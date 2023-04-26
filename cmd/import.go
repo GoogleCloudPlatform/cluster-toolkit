@@ -64,7 +64,12 @@ func runImportCmd(cmd *cobra.Command, args []string) error {
 	}
 	// TODO: support writing Packer inputs (complexity due to variable resolution)
 	if groupKind != config.TerraformKind {
-		return fmt.Errorf("import command is only supported for Terraform deployment groups")
+		return fmt.Errorf("import command is only supported (for now) on Terraform deployment groups")
 	}
+
+	if err = shell.ImportInputs(workingDir, metadataFile, artifactsDir); err != nil {
+		return err
+	}
+
 	return nil
 }

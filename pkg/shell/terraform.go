@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
 	"log"
 	"os/exec"
@@ -146,11 +147,15 @@ func getOutputs(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	return outputValues, nil
 }
 
+func outputsFile(artifactsDir string, groupName string) string {
+	return path.Join(artifactsDir, fmt.Sprintf("%s_outputs.tfvars", groupName))
+}
+
 // ExportOutputs will run terraform output and capture data needed for
 // subsequent deployment groups
 func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir string) error {
 	thisGroup := path.Base(tf.WorkingDir())
-	filepath := path.Join(artifactsDir, fmt.Sprintf("%s_outputs.tfvars", thisGroup))
+	filepath := outputsFile(artifactsDir, thisGroup)
 
 	outputValues, err := getOutputs(tf)
 	if err != nil {
@@ -176,6 +181,38 @@ func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir strin
 // ImportInputs will search artifactsDir for files produced by ExportOutputs and
 // combine/filter them for the input values needed by the group in the Terraform
 // working directory
-func ImportInputs(tf *tfexec.Terraform, metadataFile string, artifactsDir string) error {
+func ImportInputs(workingDir, metadataFile string, artifactsDir string) error {
+	deploymentRoot := path.Clean(path.Join(workingDir, ".."))
+	thisGroup := path.Base(workingDir)
+
+	outputsByGroup, err := getOutputsFromEarlierGroups(thisGroup, metadataFile)
+	if err != nil {
+		return err
+	}
+
+	if _, err = GetDeploymentKinds(metadataFile, deploymentRoot); err != nil {
+		return err
+	}
+
+	allAttributes := make(map[string]cty.Value)
+	for group, outputs := range outputsByGroup {
+		if len(outputs) == 0 {
+			continue
+		}
+		filepath := outputsFile(artifactsDir, group)
+		attrs, err := modulereader.ReadHclAttributes(filepath)
+		if err != nil {
+			return fmt.Errorf("could not load file %s; consider running \"ghpc export-outputs %s/%s\".\n%v", filepath, deploymentRoot, group, err)
+		}
+		requiredAttrs := intersectMapKeys(outputs, attrs)
+		mergeMapsWithoutLoss(allAttributes, requiredAttrs)
+	}
+
+	outfile := path.Join(workingDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
+	log.Printf("collecting outputs for group %s and writing to file %s\n", thisGroup, outfile)
+	if err := modulewriter.WriteHclAttributes(allAttributes, outfile); err != nil {
+		return err
+	}
+
 	return nil
 }
