@@ -38,7 +38,8 @@ func escapeLiteralVariables(hclBytes []byte) []byte {
 	return re.ReplaceAll(hclBytes, []byte(`((`))
 }
 
-func writeHclAttributes(vars map[string]cty.Value, dst string) error {
+// WriteHclAttributes writes tfvars/pkvars.hcl files
+func WriteHclAttributes(vars map[string]cty.Value, dst string) error {
 	if err := createBaseFile(dst); err != nil {
 		return fmt.Errorf("error creating variables file %v: %v", filepath.Base(dst), err)
 	}

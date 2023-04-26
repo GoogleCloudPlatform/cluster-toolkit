@@ -57,16 +57,18 @@ type ModuleWriter interface {
 		dc config.DeploymentConfig,
 		grpIdx int,
 		deployDir string,
-	) (groupMetadata, error)
+	) (GroupMetadata, error)
 	restoreState(deploymentDir string) error
 	kind() config.ModuleKind
 }
 
-type deploymentMetadata struct {
-	DeploymentMetadata []groupMetadata `yaml:"deployment_metadata"`
+// DeploymentMetadata captures input/outputs for all deployment groups
+type DeploymentMetadata struct {
+	DeploymentMetadata []GroupMetadata `yaml:"deployment_metadata"`
 }
 
-type groupMetadata struct {
+// GroupMetadata captures input/outputs for each deployment group
+type GroupMetadata struct {
 	Name             string
 	Kind             config.ModuleKind
 	DeploymentInputs []string `yaml:"deployment_inputs"`
@@ -114,8 +116,8 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		return err
 	}
 
-	metadata := deploymentMetadata{
-		DeploymentMetadata: []groupMetadata{},
+	metadata := DeploymentMetadata{
+		DeploymentMetadata: []GroupMetadata{},
 	}
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
 		writer, ok := kinds[grp.Kind.String()]
@@ -371,7 +373,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 	return nil
 }
 
-func writeDeploymentMetadata(depDir string, metadata deploymentMetadata) error {
+func writeDeploymentMetadata(depDir string, metadata DeploymentMetadata) error {
 	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
 	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 		return fmt.Errorf(

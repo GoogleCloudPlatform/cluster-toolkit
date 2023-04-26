@@ -54,7 +54,7 @@ func printPackerInstructions(modPath string, moduleName string, printIntergroupW
 
 func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 	packerAutovarsPath := filepath.Join(dst, packerAutoVarFilename)
-	err := writeHclAttributes(vars, packerAutovarsPath)
+	err := WriteHclAttributes(vars, packerAutovarsPath)
 	return err
 }
 
@@ -64,7 +64,7 @@ func (w PackerWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	grpIdx int,
 	deployDir string,
-) (groupMetadata, error) {
+) (GroupMetadata, error) {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, depGroup.Name)
 	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
@@ -85,18 +85,18 @@ func (w PackerWriter) writeDeploymentGroup(
 
 		av, err := pure.Eval(dc.Config)
 		if err != nil {
-			return groupMetadata{}, err
+			return GroupMetadata{}, err
 		}
 
 		modPath := filepath.Join(groupPath, mod.DeploymentSource)
 		if err = writePackerAutovars(av.Items(), modPath); err != nil {
-			return groupMetadata{}, err
+			return GroupMetadata{}, err
 		}
 		hasIgc := len(pure.Items()) < len(mod.Settings.Items())
 		printPackerInstructions(modPath, mod.ID, hasIgc)
 	}
 
-	return groupMetadata{
+	return GroupMetadata{
 		Name:             depGroup.Name,
 		Kind:             w.kind(),
 		DeploymentInputs: orderKeys(deploymentVars),
