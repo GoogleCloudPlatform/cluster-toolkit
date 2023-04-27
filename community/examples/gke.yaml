@@ -43,3 +43,12 @@ deployment_groups:
   - id: compute_pool
     source: community/modules/compute/gke-node-pool
     use: [gke_cluster]
+
+  - id: job-template
+    source: community/modules/compute/gke-job-template
+    use: [compute_pool]
+    settings:
+      image: busybox
+      command: [echo, Hello World]
+      node_count: 3
+    outputs: [instructions]

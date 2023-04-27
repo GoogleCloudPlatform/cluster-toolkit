@@ -755,8 +755,11 @@ walks through the use of this blueprint.
 
 This blueprint uses GKE to provision a Kubernetes cluster with a system node
 pool (included in gke-cluster module) and an autoscaling compute node pool. It
-also creates a VPC configured to be used by a VPC native GKE cluster with subnet
+creates a VPC configured to be used by a VPC native GKE cluster with subnet
 secondary IP ranges defined.
+
+The `gke-job-template` module is used to create a job file that can be submitted
+to the cluster using `kubectl` and will run on the specified node pool.
 
 [gke.yaml]: ../community/examples/gke.yaml
 
