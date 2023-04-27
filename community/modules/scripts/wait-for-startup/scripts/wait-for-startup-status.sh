@@ -26,14 +26,25 @@ if [ -z "${PROJECT_ID}" ]; then
 	exit 1
 fi
 
+# Wrapepr arround grep that swallows the error status code 1
+c1grep() { grep "$@" || test $? = 1; }
+
 now=$(date +%s)
 deadline=$(("${now}" + "${TIMEOUT}"))
+error_file=$(mktemp)
 
 until [ "${now}" -gt "${deadline}" ]; do
-	GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
 	FINISH_LINE="startup-script exit status"
-	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep "${FINISH_LINE}")
-	STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${STATUS_LINE}" | uniq)
+	ser_log=$(
+		set -o pipefail
+		gcloud compute instances get-serial-port-output \
+			"${INSTANCE_NAME}" --port 1 --zone "${ZONE}" --project "${PROJECT_ID}" \
+			2>"${error_file}" | c1grep "${FINISH_LINE}"
+	) || {
+		cat "$error_file"
+		exit 1
+	}
+	STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${ser_log}" | uniq)
 	if [ -n "${STATUS}" ]; then break; fi
 	echo "could not detect end of startup script. Sleeping."
 	sleep 5
