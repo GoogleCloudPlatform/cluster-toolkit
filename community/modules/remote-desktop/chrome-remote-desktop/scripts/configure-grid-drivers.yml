@@ -36,6 +36,9 @@
       - gdebi-core
       - mesa-utils
       - gdm3
+      - gcc-12
+      - pkg-config
+      - libglvnd-dev
       state: present
       update_cache: true
     register: apt_result
@@ -57,7 +60,8 @@
         state: stopped
 
     - name: Install GPU driver
-      ansible.builtin.command: /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run -silent
+      ansible.builtin.shell: |
+        CC=gcc-12 /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run --silent
       register: result
       changed_when: result.rc == 0
     when: nvidiasmi_result is failed
