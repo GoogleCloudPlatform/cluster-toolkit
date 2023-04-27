@@ -312,6 +312,7 @@ func (m *Module) createWrapSettingsWith() {
 // integer is primarily for internal purposes even if it can be set in blueprint
 type Blueprint struct {
 	BlueprintName            string `yaml:"blueprint_name"`
+	GhpcVersion              string `yaml:"ghpc_version,omitempty"`
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     Dict
@@ -426,14 +427,16 @@ func (b Blueprint) checkMovedModules() error {
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
 func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
-	var newDeploymentConfig DeploymentConfig
 	blueprint, err := importBlueprint(configFilename)
 	if err != nil {
-		return newDeploymentConfig, err
+		return DeploymentConfig{}, err
 	}
 
-	newDeploymentConfig = DeploymentConfig{Config: blueprint}
-	return newDeploymentConfig, nil
+	if blueprint.GhpcVersion != "" {
+		fmt.Printf("ghpc_version setting is ignored.")
+	}
+
+	return DeploymentConfig{Config: blueprint}, nil
 }
 
 // ImportBlueprint imports the blueprint configuration provided.
