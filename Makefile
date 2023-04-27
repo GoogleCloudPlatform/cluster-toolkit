@@ -178,7 +178,7 @@ endif
 # END OF TERRAFORM SECTION
 ###################################
 # PACKER SECTION
-ifeq (, $(shell which packer))
+ifneq (yes, $(shell  ./tools/detect_packer.sh ))
 ## PACKER IS NOT PRESENT
 warn-packer-missing:
 	$(warning WARNING: packer not installed, visit https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
