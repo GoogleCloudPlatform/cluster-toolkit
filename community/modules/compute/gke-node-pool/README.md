@@ -98,5 +98,9 @@ No modules.
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+|------|-------------|
+| <a name="output_cpu_per_node"></a> [cpu\_per\_node](#output\_cpu\_per\_node) | Number of CPUs available |
+| <a name="output_node_pool_name"></a> [node\_pool\_name](#output\_node\_pool\_name) | Name of the node pool. |
+| <a name="output_tolerations"></a> [tolerations](#output\_tolerations) | value |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
