@@ -20,6 +20,7 @@ resource "google_cloud_scheduler_job" "schedule" {
   attempt_deadline = "180s"
   retry_config {
     max_backoff_duration = "1200s"
+    max_retry_duration   = "3600s"
     max_doublings        = 2
     min_backoff_duration = "300s"
     retry_count          = var.retry_count
