@@ -32,14 +32,13 @@ c1grep() { grep "$@" || test $? = 1; }
 now=$(date +%s)
 deadline=$(("${now}" + "${TIMEOUT}"))
 error_file=$(mktemp)
+fetch_cmd="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
 
 until [ "${now}" -gt "${deadline}" ]; do
 	FINISH_LINE="startup-script exit status"
 	ser_log=$(
 		set -o pipefail
-		gcloud compute instances get-serial-port-output \
-			"${INSTANCE_NAME}" --port 1 --zone "${ZONE}" --project "${PROJECT_ID}" \
-			2>"${error_file}" | c1grep "${FINISH_LINE}"
+		${fetch_cmd} 2>"${error_file}" | c1grep "${FINISH_LINE}"
 	) || {
 		cat "$error_file"
 		exit 1
@@ -57,16 +56,16 @@ if [ "${STATUS}" == 0 ]; then
 	echo "startup-script finished successfully"
 elif [ "${STATUS}" == 1 ]; then
 	echo "startup-script finished with errors, ${INSPECT_OUTPUT_TEXT}"
-	echo "${GCLOUD}"
+	echo "${fetch_cmd}"
 elif [ "${now}" -ge "${deadline}" ]; then
 	echo "startup-script timed out after ${TIMEOUT} seconds"
 	echo "${INSPECT_OUTPUT_TEXT}"
-	echo "${GCLOUD}"
+	echo "${fetch_cmd}"
 	exit 1
 else
 	echo "invalid return status '${STATUS}'"
 	echo "${INSPECT_OUTPUT_TEXT}"
-	echo "${GCLOUD}"
+	echo "${fetch_cmd}"
 	exit 1
 fi
 
