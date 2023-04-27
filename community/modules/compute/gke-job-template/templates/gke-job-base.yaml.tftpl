@@ -1,0 +1,41 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${name}${suffix}
+spec:
+  parallelism: ${node_count}
+  completions: ${node_count}
+  template:
+    spec:
+      nodeSelector:
+      %{~ if machine_family != null ~}
+        cloud.google.com/machine-family: ${machine_family}
+      %{~ endif ~}
+      %{~ if node_pool_name != null ~}
+        cloud.google.com/gke-nodepool: ${node_pool_name}
+      %{~ endif ~}
+      %{~ for key, val in node_selectors ~}
+        ${key}: ${val}
+      %{~ endfor ~}
+      tolerations:
+      %{~ for toleration in tolerations ~}
+      - key: ${toleration.key}
+        operator: ${toleration.operator}
+        value: "${toleration.value}"
+        effect: ${toleration.effect}
+      %{~ endfor ~}
+      containers:
+      - name: ${name}-container
+        image: ${image}
+        command: [%{~ for s in command ~}"${s}",%{~ endfor ~}]
+        %{~ if should_set_resources ~}
+        # resource requirements: ~full node per pod
+        resources:
+          requests:
+            cpu: ${cpu_request}
+          limits:
+            cpu: ${cpu_limit}
+        %{~ endif ~}
+      restartPolicy: ${restart_policy}
+  backoffLimit: ${backoff_limit}
