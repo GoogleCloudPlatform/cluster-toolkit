@@ -1,5 +1,5 @@
 # PREAMBLE
-MIN_PACKER_VERSION=1.6 # for building images
+MIN_PACKER_VERSION=1.7.9 # for building images
 MIN_TERRAFORM_VERSION=1.2 # for deploying modules
 MIN_GOLANG_VERSION=1.18 # for building ghpc
 
