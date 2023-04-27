@@ -121,7 +121,11 @@ variable "taints" {
     value  = any
     effect = string
   }))
-  default = []
+  default = [{
+    key    = "user-workload"
+    value  = true
+    effect = "NO_SCHEDULE"
+  }]
 }
 
 variable "labels" {

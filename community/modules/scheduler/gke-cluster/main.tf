@@ -117,6 +117,7 @@ resource "google_container_cluster" "gke_cluster" {
   release_channel {
     channel = var.release_channel
   }
+  min_master_version = var.min_master_version
 
   maintenance_policy {
     daily_maintenance_window {
@@ -137,12 +138,6 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   addons_config {
-    # Istio is required if there is any pod-to-pod communication.
-    istio_config {
-      disabled = !var.enable_istio
-      auth     = var.istio_auth
-    }
-
     gce_persistent_disk_csi_driver_config {
       enabled = true
     }
