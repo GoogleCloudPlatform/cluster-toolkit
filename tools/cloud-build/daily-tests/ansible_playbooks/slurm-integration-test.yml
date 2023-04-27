@@ -155,12 +155,21 @@
 
     ## Cleanup and fail gracefully
     rescue:
+    - name: Gather logs
+      ansible.builtin.include_tasks:
+        file: tasks/gather_startup_script_logs.yml
+        apply:
+          delegate_to: localhost
+      vars:
+        terraform_apply_stderr: "{{ terraform_output.results.1.stderr }}"
     - name: Include rescue from terraform failure
-      ansible.builtin.include_tasks: "tasks/rescue_terraform_failure.yml"
+      ansible.builtin.include_tasks:
+        file: tasks/rescue_terraform_failure.yml
+        apply:
+          delegate_to: localhost
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
-        terraform_apply_stderr: "{{ terraform_output.results.1.stderr }}"
 
 - name: Run Integration Tests
   hosts: remote_host
