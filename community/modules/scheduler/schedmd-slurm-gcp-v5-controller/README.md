@@ -19,11 +19,11 @@ controller for optimal performance at different scales.
 > [SchedMD/slurm-gcp]. See the
 > [documentation below](#live-cluster-reconfiguration-enable_reconfigure).
 
-[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.6.3
-[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.6.3/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/5.6.3/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1
+[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.6.3/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.7.1/scripts/requirements.txt
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
 [enable\_reconfigure]: #input\_enable\_reconfigure
@@ -77,7 +77,7 @@ This option has some additional requirements:
   development environment deploying the cluster. One can use following commands:
 
   ```bash
-  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
+  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.1/scripts/requirements.txt
   pip3 install -r requirements.txt --user
   ```
   
@@ -99,7 +99,7 @@ This option has some additional requirements:
   TopicByProjectIdAndName(project_id=<incorrect project #>, topic_name=<topic name>)
   ```
 
-[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.6.3/terraform/slurm_cluster#optional
+[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster#optional
 
 ## Custom Images
 
@@ -163,8 +163,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.6.3 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.6.3 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.7.1 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.7.1 |
 
 ## Resources
 
@@ -216,7 +216,7 @@ limitations under the License.
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network to deploy to. Either network\_self\_link or subnetwork\_self\_link must be specified. | `string` | `null` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on all instances. | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy. | `string` | `"MIGRATE"` | no |
-| <a name="input_partition"></a> [partition](#input\_partition) | Cluster partitions as a list. | <pre>list(object({<br>    compute_list = list(string)<br>    partition = object({<br>      enable_job_exclusive    = bool<br>      enable_placement_groups = bool<br>      network_storage = list(object({<br>        server_ip     = string<br>        remote_mount  = string<br>        local_mount   = string<br>        fs_type       = string<br>        mount_options = string<br>      }))<br>      partition_conf = map(string)<br>      partition_name = string<br>      partition_nodes = map(object({<br>        access_config = list(object({<br>          network_tier = string<br>        }))<br>        bandwidth_tier         = string<br>        node_count_dynamic_max = number<br>        node_count_static      = number<br>        enable_spot_vm         = bool<br>        group_name             = string<br>        instance_template      = string<br>        node_conf              = map(string)<br>        spot_instance_config = object({<br>          termination_action = string<br>        })<br>      }))<br>      partition_startup_scripts_timeout = number<br>      subnetwork                        = string<br>      zone_policy_allow                 = list(string)<br>      zone_policy_deny                  = list(string)<br>      zone_target_shape                 = string<br>    })<br>  }))</pre> | `[]` | no |
+| <a name="input_partition"></a> [partition](#input\_partition) | Cluster partitions as a list. | <pre>list(object({<br>    compute_list = list(string)<br>    partition = object({<br>      enable_job_exclusive    = bool<br>      enable_placement_groups = bool<br>      network_storage = list(object({<br>        server_ip     = string<br>        remote_mount  = string<br>        local_mount   = string<br>        fs_type       = string<br>        mount_options = string<br>      }))<br>      partition_conf    = map(string)<br>      partition_feature = string<br>      partition_name    = string<br>      partition_nodes = map(object({<br>        access_config = list(object({<br>          network_tier = string<br>        }))<br>        bandwidth_tier         = string<br>        node_count_dynamic_max = number<br>        node_count_static      = number<br>        enable_spot_vm         = bool<br>        group_name             = string<br>        instance_template      = string<br>        node_conf              = map(string)<br>        spot_instance_config = object({<br>          termination_action = string<br>        })<br>      }))<br>      partition_startup_scripts_timeout = number<br>      subnetwork                        = string<br>      zone_policy_allow                 = list(string)<br>      zone_policy_deny                  = list(string)<br>      zone_target_shape                 = string<br>    })<br>  }))</pre> | `[]` | no |
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Allow the instance to be preempted. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_prolog_scripts"></a> [prolog\_scripts](#input\_prolog\_scripts) | List of scripts to be used for Prolog. Programs for the slurmd to execute<br>whenever it is asked to run a job step from a new job allocation.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
