@@ -17,7 +17,7 @@ using `kubectl` and will run on the specified node pool.
 
 ### Example
 
-The following example creates a GKE node group.
+The following example creates a GKE job template file.
 
 ```yaml
   - id: job-template
@@ -60,7 +60,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.2 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -88,17 +88,17 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#input\_allocatable\_cpu\_per\_node) | The allocatable cpu per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field. | `list(number)` | <pre>[<br>  -1<br>]</pre> | no |
 | <a name="input_backoff_limit"></a> [backoff\_limit](#input\_backoff\_limit) | Controls the number of retries before considering a Job as failed. | `number` | `3` | no |
-| <a name="input_command"></a> [command](#input\_command) | A list of strings that will be joined to create the job command. | `list(string)` | <pre>[<br>  "hostname"<br>]</pre> | no |
+| <a name="input_command"></a> [command](#input\_command) | The command and arguments for the container that run in the Pod. The command field corresponds to entrypoint in some container runtimes. | `list(string)` | <pre>[<br>  "hostname"<br>]</pre> | no |
 | <a name="input_image"></a> [image](#input\_image) | The container image the job should use. | `string` | `"debian"` | no |
 | <a name="input_machine_family"></a> [machine\_family](#input\_machine\_family) | The machine family to use in the node selector (example: `n2`). If null then machine family will not be used as selector criteria. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the job. | `string` | `"my-job"` | no |
 | <a name="input_node_count"></a> [node\_count](#input\_node\_count) | How many nodes the job should run in parallel. | `number` | `1` | no |
-| <a name="input_node_pool_name"></a> [node\_pool\_name](#input\_node\_pool\_name) | A list of node pool names on which to run the job. Can be populated via `use` feild. | `list(string)` | `null` | no |
+| <a name="input_node_pool_name"></a> [node\_pool\_name](#input\_node\_pool\_name) | A list of node pool names on which to run the job. Can be populated via `use` feild. | `list(string)` | `[]` | no |
 | <a name="input_node_selectors"></a> [node\_selectors](#input\_node\_selectors) | A list of node selectors to use to place the job. | <pre>list(object({<br>    key   = string<br>    value = string<br>  }))</pre> | `[]` | no |
-| <a name="input_random_name_sufix"></a> [random\_name\_sufix](#input\_random\_name\_sufix) | Appends a random suffix to the job name to avoid clashes. | `bool` | `false` | no |
+| <a name="input_random_name_sufix"></a> [random\_name\_sufix](#input\_random\_name\_sufix) | Appends a random suffix to the job name to avoid clashes. | `bool` | `true` | no |
 | <a name="input_requested_cpu_per_pod"></a> [requested\_cpu\_per\_pod](#input\_requested\_cpu\_per\_pod) | The requested cpu per pod. If null, allocatable\_cpu\_per\_node will be used to claim whole nodes. If provided will override allocatable\_cpu\_per\_node. | `number` | `-1` | no |
 | <a name="input_restart_policy"></a> [restart\_policy](#input\_restart\_policy) | Job restart policy. Only a RestartPolicy equal to `Never` or `OnFailure` is allowed. | `string` | `"Never"` | no |
-| <a name="input_tolerations"></a> [tolerations](#input\_tolerations) | value | <pre>list(object({<br>    key      = string<br>    operator = string<br>    value    = string<br>    effect   = string<br>  }))</pre> | <pre>[<br>  {<br>    "effect": "NoSchedule",<br>    "key": "user-workload",<br>    "operator": "Equal",<br>    "value": "true"<br>  }<br>]</pre> | no |
+| <a name="input_tolerations"></a> [tolerations](#input\_tolerations) | Tolerations allow the scheduler to schedule pods with matching taints. Generally populated from gke-node-pool via `use` field. | <pre>list(object({<br>    key      = string<br>    operator = string<br>    value    = string<br>    effect   = string<br>  }))</pre> | <pre>[<br>  {<br>    "effect": "NoSchedule",<br>    "key": "user-workload",<br>    "operator": "Equal",<br>    "value": "true"<br>  }<br>]</pre> | no |
 
 ## Outputs
 

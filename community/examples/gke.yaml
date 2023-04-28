@@ -49,6 +49,8 @@ deployment_groups:
     use: [compute_pool]
     settings:
       image: busybox
-      command: [echo, Hello World]
+      command:
+      - echo
+      - Hello World
       node_count: 3
     outputs: [instructions]

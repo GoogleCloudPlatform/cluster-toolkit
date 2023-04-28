@@ -58,7 +58,7 @@ locals {
     }
   )
 
-  job_template_output_path = "${path.root}/gke-job.yaml"
+  job_template_output_path = "${path.root}/${var.name}${local.suffix}.yaml"
 
 }
 

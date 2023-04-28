@@ -27,7 +27,7 @@ variable "node_count" {
 }
 
 variable "command" {
-  description = "A list of strings that will be joined to create the job command."
+  description = "The command and arguments for the container that run in the Pod. The command field corresponds to entrypoint in some container runtimes."
   type        = list(string)
   default     = ["hostname"]
 }
@@ -41,7 +41,7 @@ variable "image" {
 variable "node_pool_name" {
   description = "A list of node pool names on which to run the job. Can be populated via `use` feild."
   type        = list(string)
-  default     = null
+  default     = []
 }
 
 variable "allocatable_cpu_per_node" {
@@ -57,7 +57,7 @@ variable "requested_cpu_per_pod" {
 }
 
 variable "tolerations" {
-  description = "value"
+  description = "Tolerations allow the scheduler to schedule pods with matching taints. Generally populated from gke-node-pool via `use` field."
   type = list(object({
     key      = string
     operator = string
@@ -104,5 +104,5 @@ variable "backoff_limit" {
 variable "random_name_sufix" {
   description = "Appends a random suffix to the job name to avoid clashes."
   type        = bool
-  default     = false
+  default     = true
 }
