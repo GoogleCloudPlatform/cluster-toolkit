@@ -239,5 +239,6 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_cloud_logging_filter"></a> [cloud\_logging\_filter](#output\_cloud\_logging\_filter) | Cloud Logging filter to cluster errors. |
 | <a name="output_controller_instance_id"></a> [controller\_instance\_id](#output\_controller\_instance\_id) | The server-assigned unique identifier of the controller compute instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
