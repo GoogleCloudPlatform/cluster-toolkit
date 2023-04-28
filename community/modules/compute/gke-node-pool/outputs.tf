@@ -20,18 +20,24 @@ output "node_pool_name" {
 }
 
 locals {
-  is_single_shared_core = contains(["g1", "f1"], local.machine_family) # note GKE does not support f1 machines
-  is_double_shared_core = local.machine_family == "e2" && local.machine_shared_core
-  is_a_series           = local.machine_family == "a2"
-  last_digit            = try(local.machine_vals[2], 0)
+  is_a_series = local.machine_family == "a2"
+  last_digit  = try(local.machine_vals[2], 0)
 
-  vcpu        = local.is_single_shared_core ? 1 : local.is_double_shared_core ? 2 : local.is_a_series ? local.last_digit * 12 : local.last_digit
+  # Shared core machines only have 1 cpu allocatable, even if they have 2 cpu capacity
+  vcpu        = local.machine_shared_core ? 1 : local.is_a_series ? local.last_digit * 12 : local.last_digit
   useable_cpu = local.set_threads_per_core ? local.threads_per_core * local.vcpu / 2 : local.vcpu
+
+  # allocatable resource definition: https://cloud.google.com/kubernetes-engine/docs/concepts/plan-node-sizes#cpu_reservations
+  second_core       = local.useable_cpu > 1 ? 1 : 0
+  third_fourth_core = local.useable_cpu == 3 ? 1 : local.useable_cpu > 3 ? 2 : 0
+  cores_above_four  = local.useable_cpu > 4 ? local.useable_cpu - 4 : 0
+
+  allocatable_cpu = 0.94 + (0.99 * local.second_core) + (0.995 * local.third_fourth_core) + (0.9975 * local.cores_above_four)
 }
 
-output "cpu_per_node" {
-  description = "Number of CPUs available"
-  value       = local.useable_cpu
+output "allocatable_cpu_per_node" {
+  description = "Number of CPUs available for scheduling pods on each node."
+  value       = local.allocatable_cpu
 }
 
 locals {

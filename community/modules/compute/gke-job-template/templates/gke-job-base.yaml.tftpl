@@ -39,13 +39,13 @@ spec:
       - name: ${name}-container
         image: ${image}
         command: [%{~ for s in command ~}"${s}",%{~ endfor ~}]
-        %{~ if should_set_resources ~}
-        # resource requirements: ~full node per pod
+        %{~ if should_request_cpu ~}
         resources:
           requests:
-            cpu: ${cpu_request}
-          limits:
-            cpu: ${cpu_limit}
+            %{~ if full_node_request ~}
+            # cpu request attempts full node per pod
+            %{~ endif ~}
+            cpu: ${millicpu_request}
         %{~ endif ~}
       restartPolicy: ${restart_policy}
   backoffLimit: ${backoff_limit}

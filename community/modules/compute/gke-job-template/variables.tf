@@ -44,10 +44,16 @@ variable "node_pool_name" {
   default     = null
 }
 
-variable "cpu_per_node" {
-  description = "The number of CPUs per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field."
+variable "allocatable_cpu_per_node" {
+  description = "The allocatable cpu per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field."
+  type        = list(number)
+  default     = [-1]
+}
+
+variable "requested_cpu_per_pod" {
+  description = "The requested cpu per pod. If null, allocatable_cpu_per_node will be used to claim whole nodes. If provided will override allocatable_cpu_per_node."
   type        = number
-  default     = null
+  default     = -1
 }
 
 variable "tolerations" {

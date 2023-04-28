@@ -30,6 +30,15 @@ The following example creates a GKE node group.
 
 Also see a full [GKE example blueprint](../../../examples/gke.yaml).
 
+### Requested Resources
+
+When one or more `gke-node-pool` modules are referenced with the `use` field.
+The requested resources will be populated to achieve a 1 pod per node packing
+while still leaving some headroom for required system pods.
+
+This functionality can be overridden by specifying the desired cpu requirement
+using the `requested_cpu_per_pod` setting.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -77,9 +86,9 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#input\_allocatable\_cpu\_per\_node) | The allocatable cpu per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field. | `list(number)` | <pre>[<br>  -1<br>]</pre> | no |
 | <a name="input_backoff_limit"></a> [backoff\_limit](#input\_backoff\_limit) | Controls the number of retries before considering a Job as failed. | `number` | `3` | no |
 | <a name="input_command"></a> [command](#input\_command) | A list of strings that will be joined to create the job command. | `list(string)` | <pre>[<br>  "hostname"<br>]</pre> | no |
-| <a name="input_cpu_per_node"></a> [cpu\_per\_node](#input\_cpu\_per\_node) | The number of CPUs per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field. | `number` | `null` | no |
 | <a name="input_image"></a> [image](#input\_image) | The container image the job should use. | `string` | `"debian"` | no |
 | <a name="input_machine_family"></a> [machine\_family](#input\_machine\_family) | The machine family to use in the node selector (example: `n2`). If null then machine family will not be used as selector criteria. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the job. | `string` | `"my-job"` | no |
@@ -87,6 +96,7 @@ No modules.
 | <a name="input_node_pool_name"></a> [node\_pool\_name](#input\_node\_pool\_name) | A list of node pool names on which to run the job. Can be populated via `use` feild. | `list(string)` | `null` | no |
 | <a name="input_node_selectors"></a> [node\_selectors](#input\_node\_selectors) | A list of node selectors to use to place the job. | <pre>list(object({<br>    key   = string<br>    value = string<br>  }))</pre> | `[]` | no |
 | <a name="input_random_name_sufix"></a> [random\_name\_sufix](#input\_random\_name\_sufix) | Appends a random suffix to the job name to avoid clashes. | `bool` | `false` | no |
+| <a name="input_requested_cpu_per_pod"></a> [requested\_cpu\_per\_pod](#input\_requested\_cpu\_per\_pod) | The requested cpu per pod. If null, allocatable\_cpu\_per\_node will be used to claim whole nodes. If provided will override allocatable\_cpu\_per\_node. | `number` | `-1` | no |
 | <a name="input_restart_policy"></a> [restart\_policy](#input\_restart\_policy) | Job restart policy. Only a RestartPolicy equal to `Never` or `OnFailure` is allowed. | `string` | `"Never"` | no |
 | <a name="input_tolerations"></a> [tolerations](#input\_tolerations) | value | <pre>list(object({<br>    key      = string<br>    operator = string<br>    value    = string<br>    effect   = string<br>  }))</pre> | <pre>[<br>  {<br>    "effect": "NoSchedule",<br>    "key": "user-workload",<br>    "operator": "Equal",<br>    "value": "true"<br>  }<br>]</pre> | no |
 
