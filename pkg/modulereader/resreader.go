@@ -123,9 +123,9 @@ type sourceAndKind struct {
 var modInfoCache = map[sourceAndKind]ModuleInfo{}
 
 // GetModuleInfo gathers information about a module at a given source using the
-// tfconfig package. For applicable sources, this function also stages the
-// module contents in a local temp directory and will add required APIs to be
+// tfconfig package. It will add details about required APIs to be
 // enabled for that module.
+// There is a cache to avoid re-reading the module info for the same source and kind.
 func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	key := sourceAndKind{source, kind}
 	if mi, ok := modInfoCache[key]; ok {
