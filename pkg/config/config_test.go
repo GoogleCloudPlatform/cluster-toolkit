@@ -530,40 +530,6 @@ func (s *MySuite) TestGetResouceByID(c *C) {
 	c.Assert(err, NotNil)
 }
 
-func (s *MySuite) TestHasKind(c *C) {
-	// No Modules
-	rg := DeploymentGroup{}
-	c.Assert(rg.HasKind(TerraformKind.String()), Equals, false)
-	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
-	c.Assert(rg.HasKind("notAKind"), Equals, false)
-
-	// One terraform module
-	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
-	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
-	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
-	c.Assert(rg.HasKind("notAKind"), Equals, false)
-
-	// Multiple terraform modules
-	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
-	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
-	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
-	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
-	c.Assert(rg.HasKind("notAKind"), Equals, false)
-
-	// One packer kind
-	rg.Modules = []Module{{Kind: PackerKind}}
-	c.Assert(rg.HasKind(TerraformKind.String()), Equals, false)
-	c.Assert(rg.HasKind(PackerKind.String()), Equals, true)
-	c.Assert(rg.HasKind("notAKind"), Equals, false)
-
-	// One packer, one terraform
-	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
-	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
-	c.Assert(rg.HasKind(PackerKind.String()), Equals, true)
-	c.Assert(rg.HasKind("notAKind"), Equals, false)
-
-}
-
 func (s *MySuite) TestDeploymentName(c *C) {
 	bp := Blueprint{}
 	var e *InputValueError

@@ -272,18 +272,6 @@ func (v *validatorConfig) check(name validatorName, requiredInputs []string) err
 	return nil
 }
 
-// HasKind checks to see if a resource group contains any modules of the given
-// kind. Note that a DeploymentGroup should never have more than one kind, this
-// function is used in the validation step to ensure that is true.
-func (g DeploymentGroup) HasKind(kind string) bool {
-	for _, mod := range g.Modules {
-		if mod.Kind.String() == kind {
-			return true
-		}
-	}
-	return false
-}
-
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
 	Source string
