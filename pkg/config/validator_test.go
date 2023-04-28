@@ -68,8 +68,7 @@ func (s *MySuite) TestValidateModuleSettings(c *C) {
 		Modules:          []Module{{Kind: TerraformKind, Source: testSource, Settings: testSettings}},
 	}
 	dc := DeploymentConfig{
-		Config:      Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
-		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
+		Config: Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
 	}
 	dc.validateModuleSettings()
 }
@@ -153,32 +152,28 @@ func (s *MySuite) TestValidateModule(c *C) {
 
 func (s *MySuite) TestValidateOutputs(c *C) {
 	// Simple case, no outputs in either
-	testMod := Module{ID: "testMod"}
-	testInfo := modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{}}
-	err := validateOutputs(testMod, testInfo)
-	c.Assert(err, IsNil)
+	mod := Module{ID: "green", Source: "test::green", Kind: TerraformKind}
+	modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), modulereader.ModuleInfo{
+		Outputs: []modulereader.OutputInfo{}})
+	c.Assert(validateOutputs(mod), IsNil)
 
 	// Output in varInfo, nothing in module
-	matchingName := "match"
-	testVarInfo := modulereader.OutputInfo{Name: matchingName}
-	testInfo.Outputs = append(testInfo.Outputs, testVarInfo)
-	err = validateOutputs(testMod, testInfo)
-	c.Assert(err, IsNil)
+	modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), modulereader.ModuleInfo{
+		Outputs: []modulereader.OutputInfo{
+			{Name: "velvet"}}})
+	c.Assert(validateOutputs(mod), IsNil)
 
 	// Output matches between varInfo and module
-	testMod.Outputs = []modulereader.OutputInfo{
-		{Name: matchingName},
-	}
-	err = validateOutputs(testMod, testInfo)
-	c.Assert(err, IsNil)
+	mod.Outputs = []modulereader.OutputInfo{
+		{Name: "velvet"}}
+	c.Assert(validateOutputs(mod), IsNil)
 
 	// Addition output found in modules, not in varinfo
-	missingName := "missing"
-	testMod.Outputs = append(testMod.Outputs, modulereader.OutputInfo{Name: missingName})
-	err = validateOutputs(testMod, testInfo)
-	c.Assert(err, Not(IsNil))
+	mod.Outputs = []modulereader.OutputInfo{
+		{Name: "velvet"},
+		{Name: "waldo"}}
 	expErr := fmt.Sprintf("%s.*", errorMessages["invalidOutput"])
-	c.Assert(err, ErrorMatches, expErr)
+	c.Assert(validateOutputs(mod), ErrorMatches, expErr)
 }
 
 func (s *MySuite) TestAddDefaultValidators(c *C) {

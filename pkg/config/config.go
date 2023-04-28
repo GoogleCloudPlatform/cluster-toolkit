@@ -306,6 +306,15 @@ func (m *Module) createWrapSettingsWith() {
 	}
 }
 
+// InfoOrDie returns the ModuleInfo for the module or panics
+func (m Module) InfoOrDie() modulereader.ModuleInfo {
+	mi, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
+	if err != nil {
+		panic(err)
+	}
+	return mi
+}
+
 // Blueprint stores the contents on the User YAML
 // omitempty on validation_level ensures that expand will not expose the setting
 // unless it has been set to a non-default value; the implementation as an
@@ -324,8 +333,6 @@ type Blueprint struct {
 // creating the blueprint from it
 type DeploymentConfig struct {
 	Config Blueprint
-	// Indexed by Resource Group name and Module Source
-	ModulesInfo map[string]map[string]modulereader.ModuleInfo
 }
 
 // ExpandConfig expands the yaml config in place
@@ -335,7 +342,6 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	}
 	dc.Config.setGlobalLabels()
 	dc.Config.addKindToModules()
-	dc.setModulesInfo()
 	dc.validateConfig()
 	dc.expand()
 	dc.validate()
@@ -492,23 +498,6 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error
 	return nil, nil
 }
 
-func createModuleInfo(
-	deploymentGroup DeploymentGroup) map[string]modulereader.ModuleInfo {
-	modsInfo := make(map[string]modulereader.ModuleInfo)
-	for _, mod := range deploymentGroup.Modules {
-		if _, exists := modsInfo[mod.Source]; !exists {
-			ri, err := modulereader.GetModuleInfo(mod.Source, mod.Kind.String())
-			if err != nil {
-				log.Fatalf(
-					"failed to get info for module at %s while setting dc.ModulesInfo: %e",
-					mod.Source, err)
-			}
-			modsInfo[mod.Source] = ri
-		}
-	}
-	return modsInfo
-}
-
 // addKindToModules sets the kind to 'terraform' when empty.
 func (b *Blueprint) addKindToModules() {
 	b.WalkModules(func(m *Module) error {
@@ -520,11 +509,11 @@ func (b *Blueprint) addKindToModules() {
 }
 
 // setModulesInfo populates needed information from modules
-func (dc *DeploymentConfig) setModulesInfo() {
-	dc.ModulesInfo = make(map[string]map[string]modulereader.ModuleInfo)
-	for _, grp := range dc.Config.DeploymentGroups {
-		dc.ModulesInfo[grp.Name] = createModuleInfo(grp)
-	}
+func (b *Blueprint) checkModulesInfo() error {
+	return b.WalkModules(func(m *Module) error {
+		_, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
+		return err
+	})
 }
 
 func validateGroupName(name string, usedNames map[string]bool) {
@@ -642,6 +631,9 @@ func (dc *DeploymentConfig) validateConfig() {
 		log.Fatal(err)
 	}
 
+	if err = dc.Config.checkModulesInfo(); err != nil {
+		log.Fatal(err)
+	}
 	if err = checkModuleAndGroupNames(dc.Config.DeploymentGroups); err != nil {
 		log.Fatal(err)
 	}
