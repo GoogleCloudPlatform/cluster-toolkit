@@ -21,7 +21,7 @@ output "node_pool_name" {
 
 locals {
   is_single_shared_core = contains(["g1", "f1"], local.machine_family) # note GKE does not support f1 machines
-  is_double_shared_core = local.machine_family == "e2" && !local.machine_not_shared_core
+  is_double_shared_core = local.machine_family == "e2" && local.machine_shared_core
   is_a_series           = local.machine_family == "a2"
   last_digit            = try(local.machine_vals[2], 0)
 

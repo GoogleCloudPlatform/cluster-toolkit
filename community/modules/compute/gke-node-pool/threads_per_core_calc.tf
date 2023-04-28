@@ -28,15 +28,15 @@
 # local.threads_per_core: actual threads_per_core to be used.
 
 locals {
-  machine_vals            = split("-", var.machine_type)
-  machine_family          = local.machine_vals[0]
-  machine_not_shared_core = length(local.machine_vals) > 2
-  machine_vcpus           = try(parseint(local.machine_vals[2], 10), 1)
+  machine_vals        = split("-", var.machine_type)
+  machine_family      = local.machine_vals[0]
+  machine_shared_core = length(local.machine_vals) <= 2
+  machine_vcpus       = try(parseint(local.machine_vals[2], 10), 1)
 
   smt_capable_family = !contains(["t2d", "t2a"], local.machine_family)
   smt_capable_vcpu   = local.machine_vcpus >= 2
 
-  smt_capable          = local.smt_capable_family && local.smt_capable_vcpu && local.machine_not_shared_core
+  smt_capable          = local.smt_capable_family && local.smt_capable_vcpu && !local.machine_shared_core
   set_threads_per_core = var.threads_per_core != null && (var.threads_per_core == 0 && local.smt_capable || try(var.threads_per_core >= 1, false))
   threads_per_core     = var.threads_per_core == 2 ? 2 : 1
 }
