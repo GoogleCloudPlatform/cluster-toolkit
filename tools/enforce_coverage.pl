@@ -18,7 +18,7 @@ use warnings;
 
 # TODO: raise ./cmd min coverage to 80% after tests are written
 my $min = 80;
-my $cmdmin = 40;
+my $cmdmin = 50;
 my $shellmin = 15;
 my $failed_coverage = 0;
 my $failed_tests = 0;
