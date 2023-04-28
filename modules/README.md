@@ -39,6 +39,8 @@ Modules that are still in development and less stable are labeled with the
   Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
 * **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
+* **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
+  Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-configure].
@@ -47,6 +49,7 @@ Modules that are still in development and less stable are labeled with the
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
+[gke-job-template]: ../community/modules/compute/gke-job-template/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
