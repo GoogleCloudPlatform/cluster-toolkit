@@ -24,6 +24,12 @@ variable "cluster_id" {
   type        = string
 }
 
+variable "zones" {
+  description = "A list of zones to be used. Zones must be in region of cluster. If null, cluster zones will be inherited. Note `zones` not `zone`; does not work with `zone` deployment variable."
+  type        = list(string)
+  default     = null
+}
+
 variable "name" {
   description = "The name of the node pool. If left blank, will default to the machine type."
   type        = string

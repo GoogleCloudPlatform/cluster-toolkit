@@ -25,8 +25,9 @@ data "google_compute_default_service_account" "default_sa" {
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  name    = var.name == null ? var.machine_type : var.name
-  cluster = var.cluster_id
+  name           = var.name == null ? var.machine_type : var.name
+  cluster        = var.cluster_id
+  node_locations = var.zones
   autoscaling {
     total_min_node_count = var.total_min_nodes
     total_max_node_count = var.total_max_nodes
