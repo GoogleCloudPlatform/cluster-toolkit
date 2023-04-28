@@ -17,15 +17,12 @@ package cmd
 
 import (
 	"fmt"
-	"hpc-toolkit/pkg/config"
-	"log"
 
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	expandCmd.Flags().StringVarP(&bpFilename, "config", "c", "",
-		"HPC Environment Blueprint file to be expanded.")
+	expandCmd.Flags().StringVarP(&bpFilenameDeprecated, "config", "c", "", "")
 	cobra.CheckErr(expandCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
 
@@ -50,36 +47,7 @@ var (
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	if bpFilename == "" {
-		if len(args) == 0 {
-			fmt.Println(cmd.UsageString())
-			return
-		}
-
-		bpFilename = args[0]
-	}
-
-	deploymentConfig, err := config.NewDeploymentConfig(bpFilename)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := deploymentConfig.SetCLIVariables(cliVariables); err != nil {
-		log.Fatalf("Failed to set the variables at CLI: %v", err)
-	}
-	if err := deploymentConfig.SetBackendConfig(cliBEConfigVars); err != nil {
-		log.Fatalf("Failed to set the backend config at CLI: %v", err)
-	}
-	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
-		log.Fatal(err)
-	}
-	if err := skipValidators(&deploymentConfig); err != nil {
-		log.Fatal(err)
-	}
-	if err := deploymentConfig.ExpandConfig(); err != nil {
-		log.Fatal(err)
-	}
-	deploymentConfig.Config.GhpcVersion = GitCommitInfo
-	deploymentConfig.ExportBlueprint(outputFilename)
-	fmt.Printf(
-		"Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)
+	dc := expandOrDie(args[0])
+	dc.ExportBlueprint(outputFilename)
+	fmt.Printf("Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)
 }
