@@ -69,7 +69,7 @@ rsa==4.9
 semantic-version==2.10.0
 setuptools-rust==1.5.2
 six==1.16.0
-sqlparse==0.4.3
+sqlparse==0.4.4
 toml==0.10.2
 tomli==2.0.1
 tomlkit==0.11.7
