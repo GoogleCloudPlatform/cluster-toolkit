@@ -155,13 +155,14 @@
 
     ## Cleanup and fail gracefully
     rescue:
+    - name: Capture terraform stderr
+      ansible.builtin.set_fact:
+        terraform_apply_stderr_one_line: "{{ terraform_output.results.1.stderr | replace('\n',' ') }}"
     - name: Gather logs
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml
         apply:
           delegate_to: localhost
-      vars:
-        terraform_apply_stderr: "{{ terraform_output.results.1.stderr }}"
     - name: Include rescue from terraform failure
       ansible.builtin.include_tasks:
         file: tasks/rescue_terraform_failure.yml
@@ -170,6 +171,10 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
+    - name: Trigger failure (rescue blocks otherwise revert failures)
+      ansible.builtin.fail:
+        msg: "Failed while setting up test infrastructure"
+      when: true
 
 - name: Run Integration Tests
   hosts: remote_host
@@ -233,25 +238,11 @@
     - name: Print Slurm suspend.log
       ansible.builtin.debug:
         var: suspend_output.stdout_lines
-    - name: Delete Firewall Rule
-      register: fw_deleted
-      changed_when: fw_deleted.rc == 0
-      failed_when: false  # keep cleaning up
-      run_once: true
-      delegate_to: localhost
-      ansible.builtin.command:
-        argv:
-        - gcloud
-        - compute
-        - firewall-rules
-        - delete
-        - "{{ deployment_name }}"
-    - name: Tear Down Cluster
-      changed_when: true  # assume something destroyed
-      run_once: true
-      delegate_to: localhost
-      environment:
-        TF_IN_AUTOMATION: "TRUE"
-      ansible.builtin.command:
-        cmd: terraform destroy -auto-approve
-        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+    - name: Cleanup firewall and infrastructure
+      ansible.builtin.include_tasks:
+        file: tasks/rescue_terraform_failure.yml
+        apply:
+          delegate_to: localhost
+      vars:
+        deployment_name: "{{ deployment_name }}"
+        workspace: "{{ workspace }}"

@@ -11,20 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 ---
 - name: Assert variables are defined
   ansible.builtin.assert:
     that:
-    - terraform_apply_stderr is defined
-
-- name: Remove New Lines From Terraform Apply STDERR
-  ansible.builtin.set_fact:
-    terraform_apply_stderr_one_line: "{{ terraform_apply_stderr | replace('\n',' ') }}"
+    - terraform_apply_stderr_one_line is defined
 
 - name: Get Startup Script Logs
+  when: 'terraform_apply_stderr_one_line | regex_findall("please run: (.+)", "\\1") | list | length > 0'
   changed_when: false
   failed_when: false
-  ansible.builtin.command: "{{ terraform_apply_stderr_one_line | regex_search('please run: (.+)', '\\1') | first }}"
+  ansible.builtin.command: '{{ terraform_apply_stderr_one_line | regex_findall("please run: (.+)", "\\1") | first }}'
+  register: serial_port_1_output
 
 - name: Log Startup Script Failure
   changed_when: false

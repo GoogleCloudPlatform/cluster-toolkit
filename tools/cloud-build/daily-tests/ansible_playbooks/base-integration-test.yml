@@ -150,13 +150,14 @@
 
     ## Cleanup and fail gracefully
     rescue:
+    - name: Capture terraform stderr
+      ansible.builtin.set_fact:
+        terraform_apply_stderr_one_line: "{{ terraform_output.results.1.stderr | replace('\n',' ') }}"
     - name: Gather logs
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml
         apply:
           delegate_to: localhost
-      vars:
-        terraform_apply_stderr: "{{ terraform_output.results.1.stderr }}"
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
         file: tasks/rescue_terraform_failure.yml
