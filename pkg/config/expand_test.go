@@ -271,21 +271,6 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		c.Assert(dc.applyUseModules(), IsNil)
 		c.Assert(mod.Settings, DeepEquals, Dict{})
 	}
-
-	{ // Use Packer module from group 0 (fail despite matching output/input)
-		dc := getMultiGroupDeploymentConfig()
-		// substitute with a packer module
-		og := dc.Config.DeploymentGroups[0].Modules[0]
-		pkr := og
-		pkr.Kind = PackerKind
-		dc.Config.DeploymentGroups[0].Modules[0] = pkr
-		setTestModuleInfo(pkr, og.InfoOrDie())
-
-		err := dc.applyUseModules()
-		c.Assert(err, ErrorMatches,
-			fmt.Sprintf("%s: %s", errorMessages["cannotUsePacker"], dc.Config.DeploymentGroups[0].Modules[0].ID))
-	}
-
 }
 
 func (s *MySuite) TestCombineLabels(c *C) {
@@ -478,50 +463,16 @@ func (s *MySuite) TestHasVariable(c *C) {
 	c.Assert(got, Equals, false)
 }
 
-func (s *MySuite) TestIdentifyModuleByReference(c *C) {
-	var ref modReference
-	var err error
-
-	dc := getDeploymentConfigForTest()
-	dg := dc.Config.DeploymentGroups[0]
-	fromModID := dc.Config.DeploymentGroups[0].Modules[0].ID
-	toModID := dc.Config.DeploymentGroups[0].Modules[1].ID
-
-	ref, err = identifyModuleByReference(toModID, dc.Config, fromModID)
-	c.Assert(err, IsNil)
-	c.Assert(ref.toGroupID, Equals, dg.Name)
-	c.Assert(ref.fromGroupID, Equals, dg.Name)
-	c.Assert(ref.fromModuleID, Equals, fromModID)
-	c.Assert(ref.toModuleID, Equals, toModID)
-
-	ref, err = identifyModuleByReference("bad_module_id", dc.Config, fromModID)
-	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
-
-	ref, err = identifyModuleByReference(toModID, dc.Config, "bad_module_id")
-	c.Assert(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["invalidMod"]))
-}
-
 func (s *MySuite) TestValidateModuleReference(c *C) {
+	a := Module{ID: "moduleA"}
+	b := Module{ID: "moduleB"}
+	y := Module{ID: "moduleY"}
+	pkr := Module{ID: "modulePkr", Kind: PackerKind}
+
 	dg := []DeploymentGroup{
-		{
-			Name: "zero",
-			Modules: []Module{
-				{
-					ID: "moduleA",
-				},
-				{
-					ID: "moduleB",
-				},
-			},
-		},
-		{
-			Name: "one",
-			Modules: []Module{
-				{
-					ID: "module1",
-				},
-			},
-		},
+		{Name: "zero", Modules: []Module{a, b}},
+		{Name: "half", Modules: []Module{pkr}},
+		{Name: "one", Modules: []Module{y}},
 	}
 
 	bp := Blueprint{
@@ -529,56 +480,20 @@ func (s *MySuite) TestValidateModuleReference(c *C) {
 	}
 
 	// An intragroup reference from group 0 to module B in 0 (good)
-	ref0ToB0 := modReference{
-		toModuleID:   dg[0].Modules[1].ID,
-		fromModuleID: "",
-		toGroupID:    dg[0].Name,
-		fromGroupID:  dg[0].Name,
-	}
-	c.Assert(ref0ToB0.validate(bp), IsNil)
+	c.Check(validateModuleReference(bp, a, b.ID), IsNil)
 
-	// An explicit intergroup reference from group 1 to module A in 0 (good)
-	xRef1ToA0 := modReference{
-		toModuleID:   dg[0].Modules[0].ID,
-		fromModuleID: "",
-		toGroupID:    dg[0].Name,
-		fromGroupID:  dg[1].Name,
-	}
-	c.Assert(xRef1ToA0.validate(bp), IsNil)
+	// An intergroup reference from group 1 to module A in 0 (good)
+	c.Check(validateModuleReference(bp, y, a.ID), IsNil)
 
-	// An explicit intergroup reference from group 0 to module 1 in 1 (bad due to group ordering)
-	xRefA0To1 := modReference{
-		toModuleID:   dg[1].Modules[0].ID,
-		fromModuleID: "",
-		toGroupID:    dg[1].Name,
-		fromGroupID:  dg[0].Name,
+	{ // An intergroup reference from group 0 to module 1 in 1 (bad due to group ordering)
+		err := validateModuleReference(bp, a, y.ID)
+		c.Check(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupOrder"]))
 	}
-	c.Assert(xRefA0To1.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupOrder"]))
-
-	// An explicit intergroup reference from group 0 to B0 with a bad Group ID
-	badRef0ToB0 := modReference{
-		toModuleID:   dg[0].Modules[1].ID,
-		fromModuleID: "",
-		toGroupID:    dg[1].Name,
-		fromGroupID:  dg[0].Name,
-	}
-	c.Assert(badRef0ToB0.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["referenceWrongGroup"]))
 
 	// A target module that doesn't exist (bad)
-	badTargetMod := modReference{
-		toModuleID:   "bad-module",
-		fromModuleID: "",
-		toGroupID:    dg[0].Name,
-		fromGroupID:  dg[0].Name,
-	}
-	c.Assert(badTargetMod.validate(bp), ErrorMatches, "module bad-module was not found")
+	c.Check(validateModuleReference(bp, y, "bad-module"), NotNil)
 
-	// A source group ID that doesn't exist (bad)
-	badSourceGroup := modReference{
-		toModuleID:   dg[0].Modules[0].ID,
-		fromModuleID: "",
-		toGroupID:    dg[0].Name,
-		fromGroupID:  "bad-group",
-	}
-	c.Assert(badSourceGroup.validate(bp), ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["groupNotFound"]))
+	// Reference packer module (bad)
+	c.Check(validateModuleReference(bp, y, pkr.ID), NotNil)
+
 }

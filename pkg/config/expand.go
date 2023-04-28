@@ -222,49 +222,19 @@ func useModule(
 // applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
 func (dc *DeploymentConfig) applyUseModules() error {
-	for iGrp := range dc.Config.DeploymentGroups {
-		group := &dc.Config.DeploymentGroups[iGrp]
-		for iMod := range group.Modules {
-			fromMod := &group.Modules[iMod]
-			settingsInBlueprint := maps.Keys(fromMod.Settings.Items())
-			for _, toModID := range fromMod.Use {
-				// turn the raw string into a modReference struct
-				// which was previously validated by checkUsedModuleNames
-				// this will enable us to get structs about the module being
-				// used and search it for outputs that match inputs in the
-				// current module (the iterator)
-				modRef, err := identifyModuleByReference(toModID, dc.Config, fromMod.ID)
-				if err != nil {
-					return err
-				}
-
-				// to get the module struct, we first needs its group
-				toGroup, err := dc.getGroupByID(modRef.toGroupID)
-				if err != nil {
-					return err
-				}
-
-				// this module contains information about the target module that
-				// was specified by the user in the blueprint
-				toMod, err := toGroup.getModuleByID(modRef.toModuleID)
-				if err != nil {
-					return err
-				}
-
-				// Packer modules cannot be used because they do not have a
-				// native concept of outputs. Without this, the validator
-				// that checks for matching inputs will always trigger
-				if toMod.Kind == PackerKind {
-					return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], toMod.ID)
-				}
-
-				if err = useModule(fromMod, toMod, settingsInBlueprint); err != nil {
-					return err
-				}
+	return dc.Config.WalkModules(func(m *Module) error {
+		settingsInBlueprint := maps.Keys(m.Settings.Items())
+		for _, u := range m.Use {
+			used, err := dc.Config.Module(u)
+			if err != nil {
+				return err
+			}
+			if err := useModule(m, *used, settingsInBlueprint); err != nil {
+				return err
 			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func moduleHasInput(m Module, n string) bool {
@@ -405,95 +375,26 @@ func (dc *DeploymentConfig) applyGlobalVariables() error {
 	})
 }
 
-/*
-A module reference is made by the use keyword and is subject to IGC constraints
-of references (ordering, explicitness). It has the following fields:
-  - toModuleID: the target module ID
-  - fromModuleID: the source module ID
-  - toGroupID: the deployment group in which the module is *expected* to be found
-  - fromGroupID: the deployment group from which the reference is made
-  - explicit: a boolean value indicating whether the user made a reference that
-    explicitly identified toGroupID rather than inferring it using fromGroupID
-*/
-type modReference struct {
-	toModuleID   string
-	fromModuleID string
-	toGroupID    string
-	fromGroupID  string
-}
-
-/*
-This function performs only the most rudimentary conversion of an input
-string into a modReference struct as defined above. This function does not
-ensure the existence of the module!
-*/
-func identifyModuleByReference(yamlReference string, bp Blueprint, fromMod string) (modReference, error) {
-	// struct defaults: empty strings and false booleans
-	var ref modReference
-	ref.fromModuleID = fromMod
-	ref.toModuleID = yamlReference
-
-	fromG, err := bp.ModuleGroup(fromMod)
-	if err != nil {
-		return modReference{}, err
-	}
-	ref.fromGroupID = fromG.Name
-
-	toG, err := bp.ModuleGroup(ref.toModuleID)
-	if err != nil {
-		return modReference{}, err
-	}
-	ref.toGroupID = toG.Name
-
-	// should consider more sophisticated definition of valid values here.
-	// for now check that no fields are the empty string; due to the default
-	// zero values for strings in the "ref" struct, this will also cover the
-	// case that modComponents has wrong # of fields
-	if ref.fromModuleID == "" || ref.toModuleID == "" || ref.fromGroupID == "" || ref.toGroupID == "" {
-		return ref, fmt.Errorf("%s: %s, expected %s",
-			errorMessages["invalidMod"], yamlReference, expectedModFormat)
-	}
-
-	return ref, nil
-}
-
 // AutomaticOutputName generates unique deployment-group-level output names
 func AutomaticOutputName(outputName string, moduleID string) string {
 	return outputName + "_" + moduleID
 }
 
-func (ref modReference) validate(bp Blueprint) error {
-	callingModuleGroupIndex := slices.IndexFunc(bp.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == ref.fromGroupID })
-	if callingModuleGroupIndex == -1 {
-		return fmt.Errorf("%s: %s", errorMessages["groupNotFound"], ref.fromGroupID)
-	}
-
-	targetModuleGroupIndex, err := modToGrp(bp.DeploymentGroups, ref.toModuleID)
+func validateModuleReference(bp Blueprint, from Module, toID string) error {
+	to, err := bp.Module(toID)
 	if err != nil {
 		return err
 	}
-	targetModuleGroupName := bp.DeploymentGroups[targetModuleGroupIndex].Name
 
-	// Ensure module is from the correct group
-	isInterGroupReference := callingModuleGroupIndex != targetModuleGroupIndex
-	isRefToLaterGroup := targetModuleGroupIndex > callingModuleGroupIndex
-	isCorrectToGroup := ref.toGroupID == targetModuleGroupName
-
-	if isInterGroupReference {
-		if isRefToLaterGroup {
-			return fmt.Errorf("%s: %s is in a later group",
-				errorMessages["intergroupOrder"], ref.toModuleID)
-		}
+	if to.Kind == PackerKind {
+		return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], to.ID)
 	}
 
-	// at this point, the reference may be intergroup or intragroup. now we
-	// only care about correctness of target group ID. better to order this
-	// error after enforcing explicitness of intergroup references
-	if !isCorrectToGroup {
-		return fmt.Errorf("%s: %s.%s",
-			errorMessages["referenceWrongGroup"], ref.toGroupID, ref.toModuleID)
+	fg := bp.ModuleGroupOrDie(from.ID)
+	tg := bp.ModuleGroupOrDie(to.ID)
+	if bp.groupOrder(tg) > bp.groupOrder(fg) {
+		return fmt.Errorf("%s: %s is in a later group", errorMessages["intergroupOrder"], to.ID)
 	}
-
 	return nil
 }
 
@@ -510,39 +411,29 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 		return nil
 	}
 	g := bp.ModuleGroupOrDie(mod.ID)
-	callingModuleGroupIndex := slices.IndexFunc(bp.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == g.Name })
 
-	targetModuleGroupIndex, err := modToGrp(bp.DeploymentGroups, r.Module)
+	tm, err := bp.Module(r.Module)
 	if err != nil {
 		return err
 	}
-	targetModuleGroup := bp.DeploymentGroups[targetModuleGroupIndex]
+	tg := bp.ModuleGroupOrDie(tm.ID)
 
 	// references must refer to the same or an earlier group;
-	if targetModuleGroupIndex > callingModuleGroupIndex {
-		return fmt.Errorf("%s: %s is in the later group %s", errorMessages["intergroupOrder"], r.Module, targetModuleGroup.Name)
+	if bp.groupOrder(tg) > bp.groupOrder(g) {
+		return fmt.Errorf("%s: %s is in the later group %s", errorMessages["intergroupOrder"], r.Module, tg.Name)
 	}
 
 	// at this point, we have a valid intragroup or intergroup references to a
 	// module. must now determine whether the output value actually exists in
 	// the module.
-	refModIndex := slices.IndexFunc(targetModuleGroup.Modules, func(m Module) bool { return m.ID == r.Module })
-	if refModIndex == -1 {
-		log.Fatalf("Could not find module %s", r.Module)
-	}
-	refMod := targetModuleGroup.Modules[refModIndex]
-	if refMod.Kind == PackerKind {
-		return fmt.Errorf("module %s cannot be referenced because packer modules have no outputs", refMod.ID)
+	if tm.Kind == PackerKind {
+		return fmt.Errorf("module %s cannot be referenced because packer modules have no outputs", tm.ID)
 	}
 
-	modInfo, err := modulereader.GetModuleInfo(refMod.Source, refMod.Kind.String())
-	if err != nil {
-		log.Fatalf("failed to get info for module at %s: %v", refMod.Source, err)
-	}
-	found := slices.ContainsFunc(modInfo.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
+	mi := tm.InfoOrDie()
+	found := slices.ContainsFunc(mi.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
 	if !found {
-		return fmt.Errorf("%s: module %s did not have output %s",
-			errorMessages["noOutput"], refMod.ID, r.Name)
+		return fmt.Errorf("%s: module %s did not have output %s", errorMessages["noOutput"], tm.ID, r.Name)
 	}
 	return nil
 }
