@@ -30,14 +30,14 @@ locals {
       command              = var.command
       node_count           = var.node_count
       machine_family       = var.machine_family
-      node_pool_name       = var.node_pool_name
+      node_pool_names      = var.node_pool_name
       node_selectors       = var.node_selectors
       should_set_resources = local.should_set_resources
       cpu_request          = local.cpu_request
       cpu_limit            = local.cpu_limit
       restart_policy       = var.restart_policy
       backoff_limit        = var.backoff_limit
-      tolerations          = var.tolerations
+      tolerations          = distinct(var.tolerations)
     }
   )
 

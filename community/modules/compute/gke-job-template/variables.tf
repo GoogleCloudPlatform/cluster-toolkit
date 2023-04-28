@@ -39,8 +39,8 @@ variable "image" {
 }
 
 variable "node_pool_name" {
-  description = "The name of the node pool on which to run the job. Can be populated via `use` feild."
-  type        = string
+  description = "A list of node pool names on which to run the job. Can be populated via `use` feild."
+  type        = list(string)
   default     = null
 }
 

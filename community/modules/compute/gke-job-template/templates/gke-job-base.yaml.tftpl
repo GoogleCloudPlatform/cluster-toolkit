@@ -8,12 +8,22 @@ spec:
   completions: ${node_count}
   template:
     spec:
+      %{~ if length(node_pool_names) > 0 ~}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: cloud.google.com/gke-nodepool
+                operator: In
+                values:
+                %{~ for node_pool in node_pool_names ~}
+                - ${node_pool}
+                %{~ endfor ~}
+      %{~ endif ~}
       nodeSelector:
       %{~ if machine_family != null ~}
         cloud.google.com/machine-family: ${machine_family}
-      %{~ endif ~}
-      %{~ if node_pool_name != null ~}
-        cloud.google.com/gke-nodepool: ${node_pool_name}
       %{~ endif ~}
       %{~ for key, val in node_selectors ~}
         ${key}: ${val}
