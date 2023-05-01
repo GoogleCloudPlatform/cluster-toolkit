@@ -16,8 +16,6 @@
 # Set variables to default if not already set
 EXAMPLE_YAML=${EXAMPLE_YAML:-/workspace/examples/hpc-cluster-high-io.yaml}
 MAX_NODES=${MAX_NODES:-2}
-ALWAYS_RECOMPILE=${ALWAYS_RECOMPILE:-yes}
-GHPC_DEV_BUCKET=${GHPC_DEV_BUCKET:-daily-tests-tf-state}
 
 echo "Preping blueprint from ${EXAMPLE_YAML}"
 
@@ -27,12 +25,6 @@ cd "$ROOT_DIR" ||
 		echo "*** ERROR: failed to access root directory ${ROOT_DIR} when creating blueprint"
 		exit 1
 	}
-
-if [[ $ALWAYS_RECOMPILE != "no" || ! -f ghpc ]]; then
-	make
-else
-	echo "Skipping recompilation due to pre-existing ghpc binary and ALWAYS_RECOMPILE == 'no'"
-fi
 
 ## Customize config yaml
 sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/" "${EXAMPLE_YAML}" ||

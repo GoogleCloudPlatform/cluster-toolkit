@@ -28,7 +28,6 @@
     cmd: "{{ scripts_dir }}/prep_blueprint.sh"
     chdir: "{{ workspace }}"
   environment:
-    ALWAYS_RECOMPILE: "no"
     EXAMPLE_YAML: "{{ blueprint_yaml }}"
     ROOT_DIR: "{{ workspace }}"
   register: prep_output
