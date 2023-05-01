@@ -158,6 +158,10 @@ File systems:
   [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
   file system designed for high IO performance. The capacity is ~10TiB.
 
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+
 There are two partitions in this example: `low_cost` and `compute`. The
 `low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
 debugging and workloads that do not require high performance.
@@ -413,6 +417,10 @@ Creates a DDN EXAScaler lustre file-system that is mounted in two client instanc
 The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
 file system is designed for high IO performance. It has a default capacity of ~10TiB and is mounted at `/lustre`.
 
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+
 After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
 
 ```sh
@@ -518,6 +526,10 @@ This blueprint will create a cluster with the following storage tiers:
 * The scratchfs is mounted at `/scratch` and is a
   [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
   file system designed for high IO performance. The capacity is ~10TiB.
+
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
 
 The cluster will support 2 partitions:
 

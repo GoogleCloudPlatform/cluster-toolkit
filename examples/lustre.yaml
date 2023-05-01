@@ -30,6 +30,8 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
+  # This file system has an associated license cost.
+  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
   - id: lustre
     source: community/modules/file-system/DDN-EXAScaler
     use: [network1]

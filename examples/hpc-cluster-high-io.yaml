@@ -48,6 +48,8 @@ deployment_groups:
       size_gb: 10240
       local_mount: /projects
 
+  # This file system has an associated license cost.
+  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
   - id: scratchfs
     source: community/modules/file-system/DDN-EXAScaler
     use: [network1]
