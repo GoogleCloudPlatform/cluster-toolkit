@@ -21,6 +21,7 @@ vars:
   deployment_name: lustre-new-vpc
   region: us-west4
   zone: us-west4-c
+  network_name: lustre-new-vpc
 
 deployment_groups:
 - group: primary
@@ -30,8 +31,6 @@ deployment_groups:
   # Example - ./modules/network/pre-existing-vpc
   - id: network1
     source: modules/network/vpc
-    settings:
-      network_name: lustre-new-vpc
 
   - id: homefs
     source: modules/file-system/filestore

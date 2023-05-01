@@ -21,14 +21,13 @@ vars:
   deployment_name: monitoring
   region: us-central1
   zone: us-central1-c
+  network_name: monitoring-net
 
 deployment_groups:
 - group: primary
   modules:
   - id: network
     source: modules/network/vpc
-    settings:
-      network_name: monitoring-net
 
   - id: homefs
     source: community/modules/file-system/nfs-server

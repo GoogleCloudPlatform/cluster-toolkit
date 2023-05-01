@@ -20,3 +20,6 @@ zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/image-builder.yaml"
 network: "{{ deployment_name }}-net"
+cli_deployment_vars:
+  network_name: "{{ network }}"
+  subnetwork_name: "{{ network }}-sub"

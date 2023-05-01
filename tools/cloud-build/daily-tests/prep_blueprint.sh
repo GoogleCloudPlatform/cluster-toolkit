@@ -15,7 +15,6 @@
 
 # Set variables to default if not already set
 EXAMPLE_YAML=${EXAMPLE_YAML:-/workspace/examples/hpc-cluster-high-io.yaml}
-NETWORK=${NETWORK:-missing-network-name}
 MAX_NODES=${MAX_NODES:-2}
 ALWAYS_RECOMPILE=${ALWAYS_RECOMPILE:-yes}
 GHPC_DEV_BUCKET=${GHPC_DEV_BUCKET:-daily-tests-tf-state}
@@ -36,10 +35,6 @@ else
 fi
 
 ## Customize config yaml
-sed -i "s/network_name: .*/network_name: ${NETWORK}/" "${EXAMPLE_YAML}" ||
-	{
-		echo "could not set network_name, may be using pre-existing-vpc"
-	}
 sed -i "s/max_node_count: .*/max_node_count: ${MAX_NODES}/" "${EXAMPLE_YAML}" ||
 	{
 		echo "could not set max_node_count"

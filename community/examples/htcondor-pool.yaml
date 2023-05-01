@@ -20,6 +20,8 @@ vars:
   deployment_name: htcondor-001
   region: us-central1
   zone: us-central1-c
+  network_name: htcondor-pool
+  subnetwork_name: htcondor-pool-usc1
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -29,9 +31,6 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    settings:
-      network_name: htcondor-pool
-      subnetwork_name: htcondor-pool-usc1
     outputs:
     - network_name
 
