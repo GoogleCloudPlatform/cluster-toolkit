@@ -43,6 +43,7 @@ var (
 		ValidArgsFunction: matchDirs,
 		PreRun:            setArtifactsDir,
 		RunE:              runExportCmd,
+		SilenceUsage:      true,
 	}
 )
 
