@@ -1,0 +1,38 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - scripts_dir is defined
+    - blueprint_yaml is defined
+    - project is defined
+    - workspace is defined
+    - deployment_name is defined
+    - network is defined
+    - test_name is defined
+
+- name: Run Create Deployment Dir Script
+  ansible.builtin.command: "{{ scripts_dir }}/create_deployment.sh"
+  environment:
+    ALWAYS_RECOMPILE: "no"
+    EXAMPLE_YAML: "{{ blueprint_yaml }}"
+    PROJECT_ID: "{{ project }}"
+    ROOT_DIR: "{{ workspace }}"
+    DEPLOYMENT_NAME: "{{ deployment_name }}"
+    NETWORK: "{{ network }}"
+    TEST_NAME: "{{ test_name }}"
+  args:
+    creates: "{{ workspace }}/{{ deployment_name }}.tgz"
+  register: create_output

@@ -31,19 +31,8 @@
 
   ## Create cluster
   - name: Create Deployment Directory
-    ansible.builtin.command: "{{ scripts_dir }}/create_deployment.sh"
-    environment:
-      ALWAYS_RECOMPILE: "no"
-      MAX_NODES: "{{ max_nodes }}"
-      EXAMPLE_YAML: "{{ blueprint_yaml }}"
-      PROJECT_ID: "{{ project }}"
-      ROOT_DIR: "{{ workspace }}"
-      DEPLOYMENT_NAME: "{{ deployment_name }}"
-      NETWORK: "{{ network }}"
-      TEST_NAME: "{{ test_name }}"
-    args:
-      creates: "{{ workspace }}/{{ deployment_name }}.tgz"
-    register: create_output
+    ansible.builtin.include_tasks:
+      file: tasks/create_deployment_directory.yml
   - name: Print ghpc blueprint information
     ansible.builtin.debug:
       var: create_output.stdout_lines
