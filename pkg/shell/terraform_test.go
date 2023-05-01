@@ -19,6 +19,7 @@ package shell
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"testing"
 
 	. "gopkg.in/check.v1"
@@ -34,6 +35,10 @@ func Test(t *testing.T) {
 }
 
 func (s *MySuite) TestFindTerraform(c *C) {
+	if _, err := exec.LookPath("terraform"); err != nil {
+		c.Skip("terraform not found in PATH")
+	}
+
 	_, err := ConfigureTerraform(".")
 	c.Assert(err, IsNil)
 
