@@ -217,6 +217,10 @@ func ImportInputs(deploymentGroupDir string, metadataFile string, artifactsDir s
 		mergeMapsWithoutLoss(allInputValues, intergroupValues)
 	}
 
+	if len(allInputValues) == 0 {
+		return nil
+	}
+
 	outfile := path.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
 	log.Printf("writing outputs for group %s to file %s\n", thisGroup, outfile)
 	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
