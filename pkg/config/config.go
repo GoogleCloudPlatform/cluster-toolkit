@@ -126,15 +126,6 @@ func (bp Blueprint) ModuleGroupOrDie(mod string) DeploymentGroup {
 	return g
 }
 
-func (bp *Blueprint) groupOrder(g DeploymentGroup) int {
-	for i, og := range bp.DeploymentGroups {
-		if og.Name == g.Name {
-			return i
-		}
-	}
-	panic(fmt.Errorf("%s: %s", errorMessages["groupNotFound"], g.Name))
-}
-
 // TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string

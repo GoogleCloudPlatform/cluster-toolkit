@@ -392,7 +392,9 @@ func validateModuleReference(bp Blueprint, from Module, toID string) error {
 
 	fg := bp.ModuleGroupOrDie(from.ID)
 	tg := bp.ModuleGroupOrDie(to.ID)
-	if bp.groupOrder(tg) > bp.groupOrder(fg) {
+	fgi := slices.IndexFunc(bp.DeploymentGroups, func(g DeploymentGroup) bool { return g.Name == fg.Name })
+	tgi := slices.IndexFunc(bp.DeploymentGroups, func(g DeploymentGroup) bool { return g.Name == tg.Name })
+	if tgi > fgi {
 		return fmt.Errorf("%s: %s is in a later group", errorMessages["intergroupOrder"], to.ID)
 	}
 	return nil
@@ -410,26 +412,11 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 		}
 		return nil
 	}
-	g := bp.ModuleGroupOrDie(mod.ID)
 
-	tm, err := bp.Module(r.Module)
-	if err != nil {
+	if err := validateModuleReference(bp, mod, r.Module); err != nil {
 		return err
 	}
-	tg := bp.ModuleGroupOrDie(tm.ID)
-
-	// references must refer to the same or an earlier group;
-	if bp.groupOrder(tg) > bp.groupOrder(g) {
-		return fmt.Errorf("%s: %s is in the later group %s", errorMessages["intergroupOrder"], r.Module, tg.Name)
-	}
-
-	// at this point, we have a valid intragroup or intergroup references to a
-	// module. must now determine whether the output value actually exists in
-	// the module.
-	if tm.Kind == PackerKind {
-		return fmt.Errorf("module %s cannot be referenced because packer modules have no outputs", tm.ID)
-	}
-
+	tm, _ := bp.Module(r.Module)
 	mi := tm.InfoOrDie()
 	found := slices.ContainsFunc(mi.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
 	if !found {
