@@ -181,36 +181,45 @@ func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir strin
 // ImportInputs will search artifactsDir for files produced by ExportOutputs and
 // combine/filter them for the input values needed by the group in the Terraform
 // working directory
-func ImportInputs(workingDir, metadataFile string, artifactsDir string) error {
-	deploymentRoot := path.Clean(path.Join(workingDir, ".."))
-	thisGroup := path.Base(workingDir)
+func ImportInputs(deploymentGroupDir string, metadataFile string, artifactsDir string) error {
+	deploymentRoot := path.Clean(path.Join(deploymentGroupDir, ".."))
+	thisGroup := path.Base(deploymentGroupDir)
 
-	outputsByGroup, err := getOutputsFromEarlierGroups(thisGroup, metadataFile)
+	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, metadataFile)
 	if err != nil {
 		return err
 	}
 
+	// TODO: when support for writing Packer inputs (*.pkrvars.hcl) is added,
+	// group kind will matter for file naming; for now, use GetDeploymentKinds
+	// only to do a basic test of the deployment directory structure
 	if _, err = GetDeploymentKinds(metadataFile, deploymentRoot); err != nil {
 		return err
 	}
 
-	allAttributes := make(map[string]cty.Value)
-	for group, outputs := range outputsByGroup {
-		if len(outputs) == 0 {
+	// for each prior group, read all output values and filter for those needed
+	// as input values to this group; merge into a single map
+	allInputValues := make(map[string]cty.Value)
+	for group, intergroupOutputNames := range outputNamesByGroup {
+		if len(intergroupOutputNames) == 0 {
 			continue
 		}
+		log.Printf("collecting outputs for group %s from group %s\n", thisGroup, group)
 		filepath := outputsFile(artifactsDir, group)
-		attrs, err := modulereader.ReadHclAttributes(filepath)
+		groupOutputValues, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
-			return fmt.Errorf("could not load file %s; consider running \"ghpc export-outputs %s/%s\".\n%v", filepath, deploymentRoot, group, err)
+			return &TfError{
+				help: fmt.Sprintf("consider running \"ghpc export-outputs %s/%s\"", deploymentRoot, group),
+				err:  err,
+			}
 		}
-		requiredAttrs := intersectMapKeys(outputs, attrs)
-		mergeMapsWithoutLoss(allAttributes, requiredAttrs)
+		intergroupValues := intersectMapKeys(intergroupOutputNames, groupOutputValues)
+		mergeMapsWithoutLoss(allInputValues, intergroupValues)
 	}
 
-	outfile := path.Join(workingDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
-	log.Printf("collecting outputs for group %s and writing to file %s\n", thisGroup, outfile)
-	if err := modulewriter.WriteHclAttributes(allAttributes, outfile); err != nil {
+	outfile := path.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
+	log.Printf("writing outputs for group %s to file %s\n", thisGroup, outfile)
+	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
 		return err
 	}
 

@@ -29,8 +29,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// GetDeploymentKinds performs a basic sanity check of metadata file and returns
-// the module kinds for the deployment
+// GetDeploymentKinds returns the kind of each group in the deployment as a map;
+// additionally it provides a mechanism for validating the deployment directory
+// structure; for now, validation tests only existence of each directory
 func GetDeploymentKinds(metadataFile string, deploymentRoot string) (map[string]config.ModuleKind, error) {
 	md, err := loadMetadata(metadataFile)
 	if err != nil {
@@ -67,7 +68,7 @@ func loadMetadata(metadataFile string) ([]modulewriter.GroupMetadata, error) {
 }
 
 // return a map from group names to a list of outputs that are needed by this group
-func getOutputsFromEarlierGroups(thisGroup string, metadataFile string) (map[string][]string, error) {
+func getIntergroupOutputNamesByGroup(thisGroup string, metadataFile string) (map[string][]string, error) {
 	md, err := loadMetadata(metadataFile)
 	if err != nil {
 		return nil, err

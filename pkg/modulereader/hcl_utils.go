@@ -116,6 +116,11 @@ func NormalizeType(hclType string) string {
 func ReadHclAttributes(file string) (map[string]cty.Value, error) {
 	f, diags := hclparse.NewParser().ParseHCLFile(file)
 	if diags.HasErrors() {
+		// work around ugly <nil> in error message missing d.Subject
+		// https://github.com/hashicorp/hcl2/blob/fb75b3253c80b3bc7ca99c4bfa2ad6743841b1af/hcl/diagnostic.go#L76-L78
+		if len(diags) == 1 {
+			return nil, fmt.Errorf(diags[0].Detail)
+		}
 		return nil, diags
 	}
 	attrs, diags := f.Body.JustAttributes()
