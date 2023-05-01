@@ -93,13 +93,13 @@ func expandOrDie(path string) config.DeploymentConfig {
 		log.Fatal(err)
 	}
 	// Set properties from CLI
-	if err := setCLIVariables(&dc.Config); err != nil {
+	if err := setCLIVariables(&dc.Config, cliVariables); err != nil {
 		log.Fatalf("Failed to set the variables at CLI: %v", err)
 	}
-	if err := setBackendConfig(&dc.Config); err != nil {
+	if err := setBackendConfig(&dc.Config, cliBEConfigVars); err != nil {
 		log.Fatalf("Failed to set the backend config at CLI: %v", err)
 	}
-	if err := setValidationLevel(&dc.Config); err != nil {
+	if err := setValidationLevel(&dc.Config, validationLevel); err != nil {
 		log.Fatal(err)
 	}
 	if err := skipValidators(&dc); err != nil {
@@ -118,8 +118,8 @@ func expandOrDie(path string) config.DeploymentConfig {
 	return dc
 }
 
-func setCLIVariables(bp *config.Blueprint) error {
-	for _, cliVar := range cliVariables {
+func setCLIVariables(bp *config.Blueprint, s []string) error {
+	for _, cliVar := range s {
 		arr := strings.SplitN(cliVar, "=", 2)
 
 		if len(arr) != 2 {
@@ -136,12 +136,12 @@ func setCLIVariables(bp *config.Blueprint) error {
 	return nil
 }
 
-func setBackendConfig(bp *config.Blueprint) error {
-	if len(cliBEConfigVars) == 0 {
+func setBackendConfig(bp *config.Blueprint, s []string) error {
+	if len(s) == 0 {
 		return nil // no op
 	}
 	be := config.TerraformBackend{Type: "gcs"}
-	for _, config := range cliBEConfigVars {
+	for _, config := range s {
 		arr := strings.SplitN(config, "=", 2)
 
 		if len(arr) != 2 {
@@ -161,8 +161,8 @@ func setBackendConfig(bp *config.Blueprint) error {
 }
 
 // SetValidationLevel allows command-line tools to set the validation level
-func setValidationLevel(bp *config.Blueprint) error {
-	switch validationLevel {
+func setValidationLevel(bp *config.Blueprint, s string) error {
+	switch s {
 	case "ERROR":
 		bp.ValidationLevel = config.ValidationError
 	case "WARNING":

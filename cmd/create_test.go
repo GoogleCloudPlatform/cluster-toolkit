@@ -25,7 +25,7 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	bp := config.Blueprint{}
 	bp.Vars.Set("deployment_name", cty.StringVal("bush"))
 
-	cliVariables = []string{
+	vars := []string{
 		"project_id=cli_test_project_id",
 		"deployment_name=cli_deployment_name",
 		"region=cli_region",
@@ -39,7 +39,7 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 		"keyArrayOfMaps=[foo, {bar: baz, qux: 1}]",
 		"keyMapOfArrays={foo: [1, 2, 3], bar: [a, b, c]}",
 	}
-	c.Assert(setCLIVariables(&bp), IsNil)
+	c.Assert(setCLIVariables(&bp, vars), IsNil)
 	c.Check(
 		bp.Vars.Items(), DeepEquals, map[string]cty.Value{
 			"project_id":      cty.StringVal("cli_test_project_id"),
@@ -70,22 +70,22 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 
 	// Failure: Variable without '='
 	bp = config.Blueprint{}
-	cliVariables = []string{"project_idcli_test_project_id"}
+	inv := []string{"project_idcli_test_project_id"}
 
-	c.Assert(setCLIVariables(&bp), ErrorMatches, "invalid format: .*")
+	c.Assert(setCLIVariables(&bp, inv), ErrorMatches, "invalid format: .*")
 	c.Check(bp.Vars, DeepEquals, config.Dict{})
 }
 
 func (s *MySuite) TestSetBackendConfig(c *C) {
 	// Success
-	cliBEConfigVars = []string{
+	vars := []string{
 		"taste=sweet",
 		"type=green",
 		"odor=strong",
 	}
 
 	bp := config.Blueprint{}
-	c.Assert(setBackendConfig(&bp), IsNil)
+	c.Assert(setBackendConfig(&bp, vars), IsNil)
 
 	be := bp.TerraformBackendDefaults
 	c.Check(be.Type, Equals, "green")
@@ -97,20 +97,19 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 
 func (s *MySuite) TestSetBackendConfig_Invalid(c *C) {
 	// Failure: Variable without '='
-	cliBEConfigVars = []string{
+	vars := []string{
 		"typegreen",
 	}
 	bp := config.Blueprint{}
-	c.Assert(setBackendConfig(&bp), ErrorMatches, "invalid format: .*")
+	c.Assert(setBackendConfig(&bp, vars), ErrorMatches, "invalid format: .*")
 }
 
 func (s *MySuite) TestSetBackendConfig_NoOp(c *C) {
-	cliBEConfigVars = []string{}
 	bp := config.Blueprint{
 		TerraformBackendDefaults: config.TerraformBackend{
 			Type: "green"}}
 
-	c.Assert(setBackendConfig(&bp), IsNil)
+	c.Assert(setBackendConfig(&bp, []string{}), IsNil)
 	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
 		Type: "green"})
 }
@@ -118,18 +117,14 @@ func (s *MySuite) TestSetBackendConfig_NoOp(c *C) {
 func (s *MySuite) TestValidationLevels(c *C) {
 	bp := config.Blueprint{}
 
-	validationLevel = "ERROR"
-	c.Check(setValidationLevel(&bp), IsNil)
+	c.Check(setValidationLevel(&bp, "ERROR"), IsNil)
 	c.Check(bp.ValidationLevel, Equals, config.ValidationError)
 
-	validationLevel = "WARNING"
-	c.Check(setValidationLevel(&bp), IsNil)
+	c.Check(setValidationLevel(&bp, "WARNING"), IsNil)
 	c.Check(bp.ValidationLevel, Equals, config.ValidationWarning)
 
-	validationLevel = "IGNORE"
-	c.Check(setValidationLevel(&bp), IsNil)
+	c.Check(setValidationLevel(&bp, "IGNORE"), IsNil)
 	c.Check(bp.ValidationLevel, Equals, config.ValidationIgnore)
 
-	validationLevel = "INVALID"
-	c.Check(setValidationLevel(&bp), NotNil)
+	c.Check(setValidationLevel(&bp, "INVALID"), NotNil)
 }
