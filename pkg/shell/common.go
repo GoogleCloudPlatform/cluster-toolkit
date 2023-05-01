@@ -23,12 +23,15 @@ import (
 	"os"
 	"path"
 
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sys/unix"
 	"gopkg.in/yaml.v3"
 )
 
-// GetDeploymentKinds performs a basic sanity check of metadata file and returns
-// the module kinds for the deployment
+// GetDeploymentKinds returns the kind of each group in the deployment as a map;
+// additionally it provides a mechanism for validating the deployment directory
+// structure; for now, validation tests only existence of each directory
 func GetDeploymentKinds(metadataFile string, deploymentRoot string) (map[string]config.ModuleKind, error) {
 	md, err := loadMetadata(metadataFile)
 	if err != nil {
@@ -64,6 +67,48 @@ func loadMetadata(metadataFile string) ([]modulewriter.GroupMetadata, error) {
 	return md.DeploymentMetadata, nil
 }
 
+// return a map from group names to a list of outputs that are needed by this group
+func getIntergroupOutputNamesByGroup(thisGroup string, metadataFile string) (map[string][]string, error) {
+	md, err := loadMetadata(metadataFile)
+	if err != nil {
+		return nil, err
+	}
+
+	thisGroupIdx := slices.IndexFunc(md, func(g modulewriter.GroupMetadata) bool { return g.Name == thisGroup })
+	if thisGroupIdx == -1 {
+		return nil, fmt.Errorf("this group wasn't found in the deployment metadata")
+	}
+	if thisGroupIdx == 0 {
+		return nil, nil
+	}
+
+	thisIntergroupInputs := md[thisGroupIdx].IntergroupInputs
+	outputsByGroup := make(map[string][]string)
+	for _, v := range md[:thisGroupIdx] {
+		outputsByGroup[v.Name] = intersection(thisIntergroupInputs, v.Outputs)
+	}
+	return outputsByGroup, nil
+}
+
+// return sorted list of elements common to s1 and s2
+func intersection(s1 []string, s2 []string) []string {
+	count := make(map[string]int)
+
+	for _, v := range s1 {
+		count[v]++
+	}
+
+	foundInBoth := map[string]bool{}
+	for _, v := range s2 {
+		if count[v] > 0 {
+			foundInBoth[v] = true
+		}
+	}
+	is := maps.Keys(foundInBoth)
+	slices.Sort(is)
+	return is
+}
+
 func intersectMapKeys[K comparable, T any](s []K, m map[K]T) map[K]T {
 	intersection := make(map[K]T)
 	for _, e := range s {
@@ -72,6 +117,14 @@ func intersectMapKeys[K comparable, T any](s []K, m map[K]T) map[K]T {
 		}
 	}
 	return intersection
+}
+
+func mergeMapsWithoutLoss[K comparable, V any](m1 map[K]V, m2 map[K]V) {
+	expectedLength := len(m1) + len(m2)
+	maps.Copy(m1, m2)
+	if len(m1) != expectedLength {
+		panic(fmt.Errorf("unexpected key collision in maps"))
+	}
 }
 
 // DirInfo reports if path is a directory and new files can be written in it
