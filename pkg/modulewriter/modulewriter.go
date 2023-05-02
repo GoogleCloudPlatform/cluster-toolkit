@@ -30,6 +30,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
@@ -37,8 +38,10 @@ import (
 
 const (
 	hiddenGhpcDirName          = ".ghpc"
+	artifactsDirName           = "artifacts"
 	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
+	artifactsWarningTemplate   = "deployment.artifacts_warning.tmpl"
 	deploymentMetadataName     = "deployment_metadata.yaml"
 )
 
@@ -325,6 +328,7 @@ func (err *OverwriteDeniedError) Error() string {
 func prepDepDir(depDir string, overwrite bool) error {
 	deploymentio := deploymentio.GetDeploymentioLocal()
 	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	artifactsDir := filepath.Join(ghpcDir, artifactsDirName)
 	gitignoreFile := filepath.Join(depDir, ".gitignore")
 
 	// create deployment directory
@@ -333,10 +337,15 @@ func prepDepDir(depDir string, overwrite bool) error {
 			return &OverwriteDeniedError{err}
 		}
 
-		// Confirm we have a previously written deployment dir before overwritting.
+		// Confirm we have a previously written deployment dir before overwriting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 			return fmt.Errorf(
 				"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
+		}
+
+		if err := os.RemoveAll(artifactsDir); err != nil {
+			return fmt.Errorf(
+				"error while removing the artifacts directory at %s; %s", artifactsDir, err.Error())
 		}
 	} else {
 		if err := deploymentio.CreateDirectory(ghpcDir); err != nil {
@@ -353,6 +362,10 @@ func prepDepDir(depDir string, overwrite bool) error {
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
+	}
+
+	if err := prepArtifactsDir(deploymentio, artifactsDir); err != nil {
+		return err
 	}
 
 	// move deployment groups
@@ -373,6 +386,18 @@ func prepDepDir(depDir string, overwrite bool) error {
 	return nil
 }
 
+func prepArtifactsDir(deploymentio deploymentio.Deploymentio, artifactsDir string) error {
+	err := os.Mkdir(artifactsDir, 0700)
+	if err != nil && !os.IsExist(err) {
+		return err
+	}
+	artifactsWarningFile := path.Join(artifactsDir, "DO_NOT_MODIFY_THIS_DIRECTORY")
+	if err := deploymentio.CopyFromFS(templatesFS, artifactsWarningTemplate, artifactsWarningFile); err != nil {
+		return fmt.Errorf("failed to copy template warning file to %s: err=%w", artifactsWarningFile, err)
+	}
+	return nil
+}
+
 func writeDeploymentMetadata(depDir string, metadata DeploymentMetadata) error {
 	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
 	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
@@ -380,12 +405,7 @@ func writeDeploymentMetadata(depDir string, metadata DeploymentMetadata) error {
 			"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
 	}
 
-	artifactsDir := filepath.Join(ghpcDir, "artifacts")
-	err := os.Mkdir(artifactsDir, 0700)
-	if err != nil && !os.IsExist(err) {
-		return err
-	}
-	metadataFile := filepath.Join(artifactsDir, deploymentMetadataName)
+	metadataFile := filepath.Join(ghpcDir, artifactsDirName, deploymentMetadataName)
 	f, err := os.OpenFile(metadataFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
