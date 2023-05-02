@@ -16,8 +16,6 @@
 
 - name: "Setup Integration tests for HPC toolkit"
   hosts: localhost
-  vars:
-    scripts_dir: "{{ workspace }}/tools/cloud-build/daily-tests"
   tasks:
   ## Create SSH Keys
   - name: "Create .ssh folder"

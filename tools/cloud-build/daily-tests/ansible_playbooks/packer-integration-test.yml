@@ -16,8 +16,6 @@
 
 - name: "Packer Integration test for HPC toolkit"
   hosts: localhost
-  vars:
-    scripts_dir: "{{ workspace }}/tools/cloud-build/daily-tests"
   tasks:
   ## Create Deployment
   - name: Create Deployment Directory

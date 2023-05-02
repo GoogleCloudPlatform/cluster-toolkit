@@ -15,26 +15,11 @@
 - name: Assert variables are defined
   ansible.builtin.assert:
     that:
-    - scripts_dir is defined
     - blueprint_yaml is defined
     - project is defined
     - workspace is defined
     - deployment_name is defined
-    - network is defined
     - test_name is defined
-
-- name: Run Create Deployment Dir Script
-  ansible.builtin.command:
-    cmd: "{{ scripts_dir }}/prep_blueprint.sh"
-    chdir: "{{ workspace }}"
-  environment:
-    EXAMPLE_YAML: "{{ blueprint_yaml }}"
-    ROOT_DIR: "{{ workspace }}"
-  register: prep_output
-  changed_when: True
-- name: Print script output
-  ansible.builtin.debug:
-    var: prep_output.stdout_lines
 
 - name: Create cli flag for extra deployment variables
   ansible.builtin.set_fact:
