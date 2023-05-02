@@ -9,16 +9,16 @@ More information about the architecture can be found at
 For more information on this and other network storage options in the Cloud HPC
 Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
-> **_NOTE:_** By default security.public_key is set to `null`, therefore the
+> **Warning**: This file system has a license cost as described in the pricing
+> section of the [DDN EXAScaler Cloud Marketplace Solution][marketplace].
+>
+> **Note**: By default security.public_key is set to `null`, therefore the
 > admin user is not created. To ensure the admin user is created, provide a
 > public key via the security setting.
 >
-> **_NOTE:_** This module's instances require access to Google APIs and
+> **Note**: This module's instances require access to Google APIs and
 > therefore, instances must have public IP address or it must be used in a
 > subnetwork where [Private Google Access][private-google-access] is enabled.
->
-> **_WARNING:_** This file system has a license cost as described in the pricing
-> section of the [DDN EXAScaler Cloud Marketplace Solution][marketplace].
 
 [private-google-access]: https://cloud.google.com/vpc/docs/configure-private-google-access
 [marketplace]: https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
@@ -40,6 +40,8 @@ module outputs runners that can be used with the startup-script module to
 install the client and mount the file system. See the following example:
 
 ```yaml
+  # This file system has an associated license cost.
+  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
   - id: lustrefs
     source: community/modules/file-system/DDN-EXAScaler
     use: [network1]
