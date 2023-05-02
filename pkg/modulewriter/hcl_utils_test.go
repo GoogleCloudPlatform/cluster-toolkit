@@ -58,10 +58,11 @@ func TestTokensForValueWithLiteral(t *testing.T) {
   tan = [var.kilo + 8, var.tina + 4]
 }`[1:]
 
-	got := hclwrite.NewEmptyFile()
-	got.Body().AppendUnstructuredTokens(TokensForValue(val))
+	gotF := hclwrite.NewEmptyFile()
+	gotF.Body().AppendUnstructuredTokens(TokensForValue(val))
+	got := hclwrite.Format(gotF.Bytes()) // format to normalize whitespace
 
-	if diff := cmp.Diff(want, string(got.Bytes())); diff != "" {
+	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }

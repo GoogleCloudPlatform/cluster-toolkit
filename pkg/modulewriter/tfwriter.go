@@ -493,7 +493,7 @@ func substituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Refer
 		if !is {
 			return v, nil
 		}
-		ue := e.RenderHclAsString()
+		ue := string(e.Tokenize().Bytes())
 		for _, r := range e.References() {
 			oi, exists := igcRefs[r]
 			if !exists {
