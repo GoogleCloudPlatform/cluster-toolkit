@@ -31,9 +31,6 @@
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
       file: tasks/create_deployment_directory.yml
-  - name: Print ghpc blueprint information
-    ansible.builtin.debug:
-      var: create_output.stdout_lines
   - name: Create Infrastructure and test
     block:
     - name: Create Cluster with Terraform
