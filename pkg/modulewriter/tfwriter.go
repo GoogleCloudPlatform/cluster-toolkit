@@ -518,7 +518,7 @@ func findIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) 
 			res[r] = modulereader.VarInfo{
 				Name:        n,
 				Type:        getHclType(cty.DynamicPseudoType),
-				Description: fmt.Sprintf("Toolkit automatically generated variable: %s", n),
+				Description: "Automatically generated input from previous groups (ghpc import-inputs --help)",
 				Required:    true,
 			}
 		}
