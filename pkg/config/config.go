@@ -26,7 +26,6 @@ import (
 
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -91,26 +90,24 @@ type DeploymentGroup struct {
 	Kind             ModuleKind
 }
 
-func (g DeploymentGroup) getModuleByID(modID string) (Module, error) {
-	idx := slices.IndexFunc(g.Modules, func(m Module) bool { return m.ID == modID })
-	if idx == -1 {
-		return Module{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], modID)
+// Module return the module with the given ID
+func (bp *Blueprint) Module(id string) (*Module, error) {
+	var mod *Module
+	bp.WalkModules(func(m *Module) error {
+		if m.ID == id {
+			mod = m
+		}
+		return nil
+	})
+	if mod == nil {
+		return nil, fmt.Errorf("%s: %s", errorMessages["invalidMod"], id)
 	}
-	return g.Modules[idx], nil
-}
-
-func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error) {
-	groupIndex := slices.IndexFunc(dc.Config.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == groupID })
-	if groupIndex == -1 {
-		return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["groupNotFound"], groupID)
-	}
-	group := dc.Config.DeploymentGroups[groupIndex]
-	return group, nil
+	return mod, nil
 }
 
 // ModuleGroup returns the group containing the module
-func (b Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
-	for _, g := range b.DeploymentGroups {
+func (bp Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
+	for _, g := range bp.DeploymentGroups {
 		for _, m := range g.Modules {
 			if m.ID == mod {
 				return g, nil
@@ -121,8 +118,8 @@ func (b Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound
-func (b Blueprint) ModuleGroupOrDie(mod string) DeploymentGroup {
-	g, err := b.ModuleGroup(mod)
+func (bp Blueprint) ModuleGroupOrDie(mod string) DeploymentGroup {
+	g, err := bp.ModuleGroup(mod)
 	if err != nil {
 		panic(fmt.Errorf("module %s not found in blueprint: %s", mod, err))
 	}
@@ -320,9 +317,9 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	return nil
 }
 
-func (b *Blueprint) setGlobalLabels() {
-	if !b.Vars.Has("labels") {
-		b.Vars.Set("labels", cty.EmptyObjectVal)
+func (bp *Blueprint) setGlobalLabels() {
+	if !bp.Vars.Has("labels") {
+		bp.Vars.Set("labels", cty.EmptyObjectVal)
 	}
 }
 
@@ -389,9 +386,9 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 	return unusedVars
 }
 
-func (b Blueprint) checkMovedModules() error {
+func (bp Blueprint) checkMovedModules() error {
 	var err error
-	b.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(m *Module) error {
 		if replacement, ok := movedModules[strings.Trim(m.Source, "./")]; ok {
 			err = fmt.Errorf("the blueprint references modules that have moved")
 			fmt.Printf(
@@ -466,8 +463,8 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error
 }
 
 // addKindToModules sets the kind to 'terraform' when empty.
-func (b *Blueprint) addKindToModules() {
-	b.WalkModules(func(m *Module) error {
+func (bp *Blueprint) addKindToModules() {
+	bp.WalkModules(func(m *Module) error {
 		if m.Kind == UnknownKind {
 			m.Kind = TerraformKind
 		}
@@ -476,8 +473,8 @@ func (b *Blueprint) addKindToModules() {
 }
 
 // setModulesInfo populates needed information from modules
-func (b *Blueprint) checkModulesInfo() error {
-	return b.WalkModules(func(m *Module) error {
+func (bp *Blueprint) checkModulesInfo() error {
+	return bp.WalkModules(func(m *Module) error {
 		_, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
 		return err
 	})
@@ -525,28 +522,12 @@ func checkModuleAndGroupNames(groups []DeploymentGroup) error {
 	return nil
 }
 
-func modToGrp(groups []DeploymentGroup, modID string) (int, error) {
-	i := slices.IndexFunc(groups, func(g DeploymentGroup) bool {
-		return slices.ContainsFunc(g.Modules, func(m Module) bool {
-			return m.ID == modID
-		})
-	})
-	if i == -1 {
-		return -1, fmt.Errorf("module %s was not found", modID)
-	}
-	return i, nil
-}
-
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
 func checkUsedModuleNames(bp Blueprint) error {
 	return bp.WalkModules(func(mod *Module) error {
 		for _, used := range mod.Use {
-			ref, err := identifyModuleByReference(used, bp, mod.ID)
-			if err != nil {
-				return err
-			}
-			if err := ref.validate(bp); err != nil {
+			if err := validateModuleReference(bp, *mod, used); err != nil {
 				return err
 			}
 		}
@@ -654,15 +635,15 @@ func isValidLabelValue(value string) bool {
 }
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.
-func (b *Blueprint) DeploymentName() (string, error) {
-	if !b.Vars.Has("deployment_name") {
+func (bp *Blueprint) DeploymentName() (string, error) {
+	if !bp.Vars.Has("deployment_name") {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["varNotFound"],
 		}
 	}
 
-	v := b.Vars.Get("deployment_name")
+	v := bp.Vars.Get("deployment_name")
 	if v.Type() != cty.String {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
@@ -691,16 +672,16 @@ func (b *Blueprint) DeploymentName() (string, error) {
 
 // checkBlueprintName returns an error if blueprint_name does not comply with
 // requirements for correct GCP label values.
-func (b *Blueprint) checkBlueprintName() error {
+func (bp *Blueprint) checkBlueprintName() error {
 
-	if len(b.BlueprintName) == 0 {
+	if len(bp.BlueprintName) == 0 {
 		return &InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["valueEmptyString"],
 		}
 	}
 
-	if !isValidLabelValue(b.BlueprintName) {
+	if !isValidLabelValue(bp.BlueprintName) {
 		return &InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["labelReqs"],
@@ -717,9 +698,9 @@ type ProductOfModuleUse struct {
 }
 
 // WalkModules walks all modules in the blueprint and calls the walker function
-func (b *Blueprint) WalkModules(walker func(*Module) error) error {
-	for ig := range b.DeploymentGroups {
-		g := &b.DeploymentGroups[ig]
+func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
+	for ig := range bp.DeploymentGroups {
+		g := &bp.DeploymentGroups[ig]
 		for im := range g.Modules {
 			m := &g.Modules[im]
 			if err := walker(m); err != nil {
