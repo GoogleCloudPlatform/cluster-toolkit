@@ -32,6 +32,3 @@ custom_vars:
   mounts:
   - /home
   - /scratch
-cli_deployment_vars:
-  network_name: "{{ network }}"
-  subnetwork_name: "{{ network }}-sub"

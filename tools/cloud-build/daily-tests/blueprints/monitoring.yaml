@@ -21,7 +21,6 @@ vars:
   deployment_name: monitoring
   region: us-central1
   zone: us-central1-c
-  network_name: monitoring-net
 
 deployment_groups:
 - group: primary

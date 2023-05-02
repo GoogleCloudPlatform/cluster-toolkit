@@ -24,6 +24,3 @@ access_point: "access-point-0"
 central_manager: "central-manager-0"
 post_deploy_tests:
 - test-htcondor-access-point.yml
-cli_deployment_vars:
-  network_name: "{{ network }}"
-  subnetwork_name: "{{ network }}-sub"

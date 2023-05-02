@@ -21,7 +21,6 @@ vars:
   deployment_name: lustre-new-vpc
   region: us-west4
   zone: us-west4-c
-  network_name: lustre-new-vpc
 
 deployment_groups:
 - group: primary
