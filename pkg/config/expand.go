@@ -380,6 +380,10 @@ func AutomaticOutputName(outputName string, moduleID string) string {
 	return outputName + "_" + moduleID
 }
 
+// Checks validity of reference to a module:
+// * module exists;
+// * module is not a Packer module;
+// * module is not in a later deployment group.
 func validateModuleReference(bp Blueprint, from Module, toID string) error {
 	to, err := bp.Module(toID)
 	if err != nil {
@@ -400,10 +404,10 @@ func validateModuleReference(bp Blueprint, from Module, toID string) error {
 	return nil
 }
 
-// Validates that references in module settings are valid:
-// * referenced deployment variable does exist;
-// * referenced module output does exist;
-// * doesn't reference an output of module in a later group.
+// Checks validity of reference to a module output:
+// * reference to an existing global variable;
+// * reference to a module is valid;
+// * referenced module output exists.
 func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error {
 	// simplest case to evaluate is a deployment variable's existence
 	if r.GlobalVar {

@@ -92,17 +92,17 @@ type DeploymentGroup struct {
 
 // Module return the module with the given ID
 func (bp *Blueprint) Module(id string) (*Module, error) {
-	var found *Module
+	var mod *Module
 	bp.WalkModules(func(m *Module) error {
 		if m.ID == id {
-			found = m
+			mod = m
 		}
 		return nil
 	})
-	if found == nil {
+	if mod == nil {
 		return nil, fmt.Errorf("%s: %s", errorMessages["invalidMod"], id)
 	}
-	return found, nil
+	return mod, nil
 }
 
 // ModuleGroup returns the group containing the module
