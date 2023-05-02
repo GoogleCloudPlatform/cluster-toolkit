@@ -74,7 +74,7 @@ func (dc DeploymentConfig) executeValidators() error {
 	var errored, warned bool
 	implementedValidators := dc.getValidators()
 
-	if dc.Config.ValidationLevel == validationIgnore {
+	if dc.Config.ValidationLevel == ValidationIgnore {
 		return nil
 	}
 
@@ -93,7 +93,7 @@ func (dc DeploymentConfig) executeValidators() error {
 		if err := f(validator); err != nil {
 			var prefix string
 			switch dc.Config.ValidationLevel {
-			case validationWarning:
+			case ValidationWarning:
 				warned = true
 				prefix = "warning: "
 			default:

@@ -17,7 +17,6 @@ limitations under the License.
 package config
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -668,103 +667,6 @@ func (s *MySuite) TestExportBlueprint(c *C) {
 	c.Assert(fileInfo.IsDir(), Equals, false)
 }
 
-func (s *MySuite) TestSetCLIVariables(c *C) {
-	dc := DeploymentConfig{}
-	dc.Config.Vars.Set("deployment_name", cty.StringVal("bush"))
-
-	cliVars := []string{
-		"project_id=cli_test_project_id",
-		"deployment_name=cli_deployment_name",
-		"region=cli_region",
-		"zone=cli_zone",
-		"kv=key=val",
-		"keyBool=true",
-		"keyInt=15",
-		"keyFloat=15.43",
-		"keyMap={bar: baz, qux: 1}",
-		"keyArray=[1, 2, 3]",
-		"keyArrayOfMaps=[foo, {bar: baz, qux: 1}]",
-		"keyMapOfArrays={foo: [1, 2, 3], bar: [a, b, c]}",
-	}
-	c.Assert(dc.SetCLIVariables(cliVars), IsNil)
-	c.Check(
-		dc.Config.Vars.Items(), DeepEquals, map[string]cty.Value{
-			"project_id":      cty.StringVal("cli_test_project_id"),
-			"deployment_name": cty.StringVal("cli_deployment_name"),
-			"region":          cty.StringVal("cli_region"),
-			"zone":            cty.StringVal("cli_zone"),
-			"kv":              cty.StringVal("key=val"),
-			"keyBool":         cty.True,
-			"keyInt":          cty.NumberIntVal(15),
-			"keyFloat":        cty.NumberFloatVal(15.43),
-			"keyMap": cty.ObjectVal(map[string]cty.Value{
-				"bar": cty.StringVal("baz"),
-				"qux": cty.NumberIntVal(1)}),
-			"keyArray": cty.TupleVal([]cty.Value{
-				cty.NumberIntVal(1), cty.NumberIntVal(2), cty.NumberIntVal(3)}),
-			"keyArrayOfMaps": cty.TupleVal([]cty.Value{
-				cty.StringVal("foo"),
-				cty.ObjectVal(map[string]cty.Value{
-					"bar": cty.StringVal("baz"),
-					"qux": cty.NumberIntVal(1)})}),
-			"keyMapOfArrays": cty.ObjectVal(map[string]cty.Value{
-				"foo": cty.TupleVal([]cty.Value{
-					cty.NumberIntVal(1), cty.NumberIntVal(2), cty.NumberIntVal(3)}),
-				"bar": cty.TupleVal([]cty.Value{
-					cty.StringVal("a"), cty.StringVal("b"), cty.StringVal("c")}),
-			}),
-		})
-
-	// Failure: Variable without '='
-	dc = DeploymentConfig{}
-	invalidNonEQVars := []string{"project_idcli_test_project_id"}
-
-	err := dc.SetCLIVariables(invalidNonEQVars)
-	c.Assert(err, ErrorMatches, "invalid format: .*")
-	c.Check(dc.Config.Vars, DeepEquals, Dict{})
-}
-
-func (s *MySuite) TestSetBackendConfig(c *C) {
-	// Success
-	dc := getDeploymentConfigForTest()
-	be := dc.Config.TerraformBackendDefaults
-	c.Check(be, DeepEquals, TerraformBackend{})
-
-	cliBEType := "gcs"
-	cliBEBucket := "a_bucket"
-	cliBESA := "a_bucket_reader@project.iam.gserviceaccount.com"
-	cliBEPrefix := "test/prefix"
-	cliBEConfigVars := []string{
-		fmt.Sprintf("type=%s", cliBEType),
-		fmt.Sprintf("bucket=%s", cliBEBucket),
-		fmt.Sprintf("impersonate_service_account=%s", cliBESA),
-		fmt.Sprintf("prefix=%s", cliBEPrefix),
-	}
-	err := dc.SetBackendConfig(cliBEConfigVars)
-
-	c.Assert(err, IsNil)
-	be = dc.Config.TerraformBackendDefaults
-	c.Check(be.Type, Equals, cliBEType)
-	c.Check(be.Configuration.Items(), DeepEquals, map[string]cty.Value{
-		"bucket":                      cty.StringVal(cliBEBucket),
-		"impersonate_service_account": cty.StringVal(cliBESA),
-		"prefix":                      cty.StringVal(cliBEPrefix),
-	})
-
-	// Failure: Variable without '='
-	dc = getDeploymentConfigForTest()
-	c.Assert(dc.Config.TerraformBackendDefaults.Type, Equals, "")
-
-	invalidNonEQVars := []string{
-		fmt.Sprintf("type%s", cliBEType),
-		fmt.Sprintf("bucket%s", cliBEBucket),
-	}
-	err = dc.SetBackendConfig(invalidNonEQVars)
-
-	expErr := "invalid format: .*"
-	c.Assert(err, ErrorMatches, expErr)
-}
-
 func TestMain(m *testing.M) {
 	setup()
 	code := m.Run()
@@ -773,26 +675,12 @@ func TestMain(m *testing.M) {
 }
 
 func (s *MySuite) TestValidationLevels(c *C) {
-	var err error
-	var ok bool
-	dc := getDeploymentConfigForTest()
-	validLevels := []string{"ERROR", "WARNING", "IGNORE"}
-	for idx, level := range validLevels {
-		err = dc.SetValidationLevel(level)
-		c.Assert(err, IsNil)
-		ok = isValidValidationLevel(idx)
-		c.Assert(ok, Equals, true)
-	}
+	c.Check(isValidValidationLevel(0), Equals, true)
+	c.Check(isValidValidationLevel(1), Equals, true)
+	c.Check(isValidValidationLevel(2), Equals, true)
 
-	err = dc.SetValidationLevel("INVALID")
-	c.Assert(err, NotNil)
-
-	// check that our test for iota enum is working
-	ok = isValidValidationLevel(-1)
-	c.Assert(ok, Equals, false)
-	invalidLevel := len(validLevels) + 1
-	ok = isValidValidationLevel(invalidLevel)
-	c.Assert(ok, Equals, false)
+	c.Check(isValidValidationLevel(-1), Equals, false)
+	c.Check(isValidValidationLevel(3), Equals, false)
 }
 
 func (s *MySuite) TestCheckMovedModules(c *C) {

@@ -24,16 +24,18 @@ import (
 	"hpc-toolkit/pkg/modulewriter"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zclconf/go-cty/cty"
+	"gopkg.in/yaml.v3"
 )
 
 const msgCLIVars = "Comma-separated list of name=value variables to override YAML configuration. Can be used multiple times."
 const msgCLIBackendConfig = "Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times."
 
 func init() {
-	createCmd.Flags().StringVarP(&bpFilename, "config", "c", "",
-		"HPC Environment Blueprint file to be used to create an HPC deployment dir.")
+	createCmd.Flags().StringVarP(&bpFilenameDeprecated, "config", "c", "", "")
 	cobra.CheckErr(createCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
 
@@ -52,9 +54,9 @@ func init() {
 }
 
 var (
-	bpFilename   string
-	outputDir    string
-	cliVariables []string
+	bpFilenameDeprecated string
+	outputDir            string
+	cliVariables         []string
 
 	cliBEConfigVars     []string
 	overwriteDeployment bool
@@ -73,35 +75,8 @@ var (
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	if bpFilename == "" {
-		if len(args) == 0 {
-			fmt.Println(cmd.UsageString())
-			return
-		}
-
-		bpFilename = args[0]
-	}
-
-	deploymentConfig, err := config.NewDeploymentConfig(bpFilename)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := deploymentConfig.SetCLIVariables(cliVariables); err != nil {
-		log.Fatalf("Failed to set the variables at CLI: %v", err)
-	}
-	if err := deploymentConfig.SetBackendConfig(cliBEConfigVars); err != nil {
-		log.Fatalf("Failed to set the backend config at CLI: %v", err)
-	}
-	if err := deploymentConfig.SetValidationLevel(validationLevel); err != nil {
-		log.Fatal(err)
-	}
-	if err := skipValidators(&deploymentConfig); err != nil {
-		log.Fatal(err)
-	}
-	if err := deploymentConfig.ExpandConfig(); err != nil {
-		log.Fatal(err)
-	}
-	if err := modulewriter.WriteDeployment(deploymentConfig, outputDir, overwriteDeployment); err != nil {
+	dc := expandOrDie(args[0])
+	if err := modulewriter.WriteDeployment(dc, outputDir, overwriteDeployment); err != nil {
 		var target *modulewriter.OverwriteDeniedError
 		if errors.As(err, &target) {
 			fmt.Printf("\n%s\n", err.Error())
@@ -110,6 +85,94 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 			log.Fatal(err)
 		}
 	}
+}
+
+func expandOrDie(path string) config.DeploymentConfig {
+	dc, err := config.NewDeploymentConfig(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Set properties from CLI
+	if err := setCLIVariables(&dc.Config, cliVariables); err != nil {
+		log.Fatalf("Failed to set the variables at CLI: %v", err)
+	}
+	if err := setBackendConfig(&dc.Config, cliBEConfigVars); err != nil {
+		log.Fatalf("Failed to set the backend config at CLI: %v", err)
+	}
+	if err := setValidationLevel(&dc.Config, validationLevel); err != nil {
+		log.Fatal(err)
+	}
+	if err := skipValidators(&dc); err != nil {
+		log.Fatal(err)
+	}
+	if dc.Config.GhpcVersion != "" {
+		fmt.Printf("ghpc_version setting is ignored.")
+	}
+	dc.Config.GhpcVersion = GitCommitInfo
+
+	// Expand the blueprint
+	if err := dc.ExpandConfig(); err != nil {
+		log.Fatal(err)
+	}
+
+	return dc
+}
+
+func setCLIVariables(bp *config.Blueprint, s []string) error {
+	for _, cliVar := range s {
+		arr := strings.SplitN(cliVar, "=", 2)
+
+		if len(arr) != 2 {
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
+		}
+		// Convert the variable's string literal to its equivalent default type.
+		key := arr[0]
+		var v config.YamlValue
+		if err := yaml.Unmarshal([]byte(arr[1]), &v); err != nil {
+			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", key, arr[1])
+		}
+		bp.Vars.Set(key, v.Unwrap())
+	}
+	return nil
+}
+
+func setBackendConfig(bp *config.Blueprint, s []string) error {
+	if len(s) == 0 {
+		return nil // no op
+	}
+	be := config.TerraformBackend{Type: "gcs"}
+	for _, config := range s {
+		arr := strings.SplitN(config, "=", 2)
+
+		if len(arr) != 2 {
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", config)
+		}
+
+		key, value := arr[0], arr[1]
+		switch key {
+		case "type":
+			be.Type = value
+		default:
+			be.Configuration.Set(key, cty.StringVal(value))
+		}
+	}
+	bp.TerraformBackendDefaults = be
+	return nil
+}
+
+// SetValidationLevel allows command-line tools to set the validation level
+func setValidationLevel(bp *config.Blueprint, s string) error {
+	switch s {
+	case "ERROR":
+		bp.ValidationLevel = config.ValidationError
+	case "WARNING":
+		bp.ValidationLevel = config.ValidationWarning
+	case "IGNORE":
+		bp.ValidationLevel = config.ValidationIgnore
+	default:
+		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
+	}
+	return nil
 }
 
 func skipValidators(dc *config.DeploymentConfig) error {

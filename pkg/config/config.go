@@ -194,29 +194,13 @@ const (
 // this enum will be used to control how fatal validator failures will be
 // treated during blueprint creation
 const (
-	validationError int = iota
-	validationWarning
-	validationIgnore
+	ValidationError int = iota
+	ValidationWarning
+	ValidationIgnore
 )
 
 func isValidValidationLevel(level int) bool {
-	return !(level > validationIgnore || level < validationError)
-}
-
-// SetValidationLevel allows command-line tools to set the validation level
-func (dc *DeploymentConfig) SetValidationLevel(level string) error {
-	switch level {
-	case "ERROR":
-		dc.Config.ValidationLevel = validationError
-	case "WARNING":
-		dc.Config.ValidationLevel = validationWarning
-	case "IGNORE":
-		dc.Config.ValidationLevel = validationIgnore
-	default:
-		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
-	}
-
-	return nil
+	return !(level > ValidationIgnore || level < ValidationError)
 }
 
 func (v validatorName) String() string {
@@ -425,11 +409,6 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
 	if err != nil {
 		return DeploymentConfig{}, err
 	}
-
-	if blueprint.GhpcVersion != "" {
-		fmt.Printf("ghpc_version setting is ignored.")
-	}
-
 	return DeploymentConfig{Config: blueprint}, nil
 }
 
@@ -454,7 +433,7 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
 	if !isValidValidationLevel(blueprint.ValidationLevel) {
-		blueprint.ValidationLevel = validationError
+		blueprint.ValidationLevel = ValidationError
 	}
 
 	return blueprint, nil
@@ -634,53 +613,6 @@ func (dc *DeploymentConfig) validateConfig() {
 	if err = checkModuleSettings(dc.Config); err != nil {
 		log.Fatal(err)
 	}
-}
-
-// SetCLIVariables sets the variables at CLI
-func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
-	for _, cliVar := range cliVariables {
-		arr := strings.SplitN(cliVar, "=", 2)
-
-		if len(arr) != 2 {
-			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
-		}
-		// Convert the variable's string litteral to its equivalent default type.
-		key := arr[0]
-		var v yamlValue
-		if err := yaml.Unmarshal([]byte(arr[1]), &v); err != nil {
-			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", key, arr[1])
-		}
-		dc.Config.Vars.Set(key, v.v)
-	}
-
-	return nil
-}
-
-// SetBackendConfig sets the backend config variables at CLI
-func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
-	// Set "gcs" as default value when --backend-config is specified at CLI
-	if len(cliBEConfigVars) > 0 {
-		dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
-	}
-	be := &dc.Config.TerraformBackendDefaults
-	for _, config := range cliBEConfigVars {
-		arr := strings.SplitN(config, "=", 2)
-
-		if len(arr) != 2 {
-			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", config)
-		}
-
-		key, value := arr[0], arr[1]
-		switch key {
-		case "type":
-			be.Type = value
-		default:
-			be.Configuration.Set(key, cty.StringVal(value))
-		}
-
-	}
-
-	return nil
 }
 
 // SkipValidator marks validator(s) as skipped,
