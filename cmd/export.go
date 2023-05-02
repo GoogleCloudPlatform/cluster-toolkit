@@ -31,7 +31,7 @@ func init() {
 	rootCmd.AddCommand(exportCmd)
 }
 
-const defaultArtifactsDir string = ".ghpc"
+const defaultArtifactsDir string = ".ghpc/artifacts"
 
 var (
 	artifactsDir string

@@ -380,7 +380,12 @@ func writeDeploymentMetadata(depDir string, metadata DeploymentMetadata) error {
 			"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
 	}
 
-	metadataFile := filepath.Join(ghpcDir, deploymentMetadataName)
+	artifactsDir := filepath.Join(ghpcDir, "artifacts")
+	err := os.Mkdir(artifactsDir, 0700)
+	if err != nil && !os.IsExist(err) {
+		return err
+	}
+	metadataFile := filepath.Join(artifactsDir, deploymentMetadataName)
 	f, err := os.OpenFile(metadataFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
