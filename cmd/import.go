@@ -40,6 +40,7 @@ var (
 		ValidArgsFunction: matchDirs,
 		PreRun:            setArtifactsDir,
 		RunE:              runImportCmd,
+		SilenceUsage:      true,
 	}
 )
 
