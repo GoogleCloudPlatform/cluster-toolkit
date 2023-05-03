@@ -18,6 +18,7 @@ package cmd
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"path"
 
@@ -31,7 +32,7 @@ func init() {
 	rootCmd.AddCommand(exportCmd)
 }
 
-const defaultArtifactsDir string = ".ghpc/artifacts"
+const defaultArtifactsDir string = modulewriter.HiddenGhpcDirName + modulewriter.ArtifactsDirName
 
 var (
 	artifactsDir string

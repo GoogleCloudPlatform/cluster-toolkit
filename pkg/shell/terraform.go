@@ -92,7 +92,7 @@ func initModule(tf *tfexec.Terraform) error {
 }
 
 func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
-	log.Printf("collecting terraform outputs from %s\n", tf.WorkingDir())
+	log.Printf("collecting terraform outputs from %s", tf.WorkingDir())
 	output, err := tf.Output(context.Background())
 	if err != nil {
 		return map[string]cty.Value{}, &TfError{
@@ -126,7 +126,7 @@ func getOutputs(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 		return map[string]cty.Value{}, err
 	}
 
-	log.Printf("testing if terraform state of %s is in sync with cloud infrastructure\n", tf.WorkingDir())
+	log.Printf("testing if terraform state of %s is in sync with cloud infrastructure", tf.WorkingDir())
 	wantsChange, err := tf.Plan(context.Background())
 	if err != nil {
 		return map[string]cty.Value{}, &TfError{
@@ -166,11 +166,11 @@ func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir strin
 	// blueprint; edge case is that "terraform output" can be missing keys
 	// whose values are null
 	if len(outputValues) == 0 {
-		log.Printf("group %s contains no artifacts to export\n", thisGroup)
+		log.Printf("group %s contains no artifacts to export", thisGroup)
 		return nil
 	}
 
-	log.Printf("writing outputs artifact from group %s to file %s\n", thisGroup, filepath)
+	log.Printf("writing outputs artifact from group %s to file %s", thisGroup, filepath)
 	if err := modulewriter.WriteHclAttributes(outputValues, filepath); err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func ImportInputs(deploymentGroupDir string, metadataFile string, artifactsDir s
 		if len(intergroupOutputNames) == 0 {
 			continue
 		}
-		log.Printf("collecting outputs for group %s from group %s\n", thisGroup, group)
+		log.Printf("collecting outputs for group %s from group %s", thisGroup, group)
 		filepath := outputsFile(artifactsDir, group)
 		groupOutputValues, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
@@ -222,7 +222,7 @@ func ImportInputs(deploymentGroupDir string, metadataFile string, artifactsDir s
 	}
 
 	outfile := path.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
-	log.Printf("writing outputs for group %s to file %s\n", thisGroup, outfile)
+	log.Printf("writing outputs for group %s to file %s", thisGroup, outfile)
 	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
 		return err
 	}
