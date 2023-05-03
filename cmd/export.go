@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"path"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -32,7 +33,7 @@ func init() {
 	rootCmd.AddCommand(exportCmd)
 }
 
-const defaultArtifactsDir string = modulewriter.HiddenGhpcDirName + modulewriter.ArtifactsDirName
+var defaultArtifactsDir = filepath.Join(modulewriter.HiddenGhpcDirName, modulewriter.ArtifactsDirName)
 
 var (
 	artifactsDir string
