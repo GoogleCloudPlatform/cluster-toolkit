@@ -19,62 +19,54 @@ package shell
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulewriter"
 	"os"
-	"path"
+	"path/filepath"
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sys/unix"
-	"gopkg.in/yaml.v3"
 )
 
 // GetDeploymentKinds returns the kind of each group in the deployment as a map;
 // additionally it provides a mechanism for validating the deployment directory
 // structure; for now, validation tests only existence of each directory
-func GetDeploymentKinds(metadataFile string, deploymentRoot string) (map[string]config.ModuleKind, error) {
-	md, err := loadMetadata(metadataFile)
+func GetDeploymentKinds(expandedBlueprintFile string) (map[string]config.ModuleKind, error) {
+	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return nil, err
 	}
 
 	groupKinds := make(map[string]config.ModuleKind)
-	for _, gm := range md {
-		groupPath := path.Join(deploymentRoot, gm.Name)
-		if isDir, _ := DirInfo(groupPath); !isDir {
-			return nil, fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, gm.Name)
+	for _, g := range dc.Config.DeploymentGroups {
+		if g.Kind == config.UnknownKind {
+			return nil, fmt.Errorf("improper deployment: group %s is of unknown kind", g.Name)
 		}
-		groupKinds[gm.Name] = gm.Kind
+		groupKinds[g.Name] = g.Kind
 	}
-
 	return groupKinds, nil
 }
 
-func loadMetadata(metadataFile string) ([]modulewriter.GroupMetadata, error) {
-	reader, err := os.Open(metadataFile)
-	if err != nil {
-		return nil, err
+// ValidateDeploymentDirectory ensures that the deployment directory structure
+// appears valid given a mapping of group names to module kinds
+// TODO: verify kind fully by auto-detecting type from group directory
+func ValidateDeploymentDirectory(kinds map[string]config.ModuleKind, deploymentRoot string) error {
+	for group := range kinds {
+		groupPath := filepath.Join(deploymentRoot, group)
+		if isDir, _ := DirInfo(groupPath); !isDir {
+			return fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, group)
+		}
 	}
-	defer reader.Close()
-
-	decoder := yaml.NewDecoder(reader)
-	decoder.KnownFields(true)
-
-	var md modulewriter.DeploymentMetadata
-	if err := decoder.Decode(&md); err != nil {
-		return nil, err
-	}
-	return md.DeploymentMetadata, nil
+	return nil
 }
 
 // return a map from group names to a list of outputs that are needed by this group
-func getIntergroupOutputNamesByGroup(thisGroup string, metadataFile string) (map[string][]string, error) {
-	md, err := loadMetadata(metadataFile)
+func getIntergroupOutputNamesByGroup(thisGroup string, expandedBlueprintFile string) (map[string][]string, error) {
+	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return nil, err
 	}
 
-	thisGroupIdx := slices.IndexFunc(md, func(g modulewriter.GroupMetadata) bool { return g.Name == thisGroup })
+	thisGroupIdx := slices.IndexFunc(dc.Config.DeploymentGroups, func(g config.DeploymentGroup) bool { return g.Name == thisGroup })
 	if thisGroupIdx == -1 {
 		return nil, fmt.Errorf("this group wasn't found in the deployment metadata")
 	}
@@ -82,10 +74,14 @@ func getIntergroupOutputNamesByGroup(thisGroup string, metadataFile string) (map
 		return nil, nil
 	}
 
-	thisIntergroupInputs := md[thisGroupIdx].IntergroupInputs
+	thisIntergroupRefs := dc.Config.DeploymentGroups[thisGroupIdx].FindAllIntergroupReferences(dc.Config)
+	thisIntergroupInputNames := make([]string, len(thisIntergroupRefs))
+	for i, ref := range thisIntergroupRefs {
+		thisIntergroupInputNames[i] = config.AutomaticOutputName(ref.Name, ref.Module)
+	}
 	outputsByGroup := make(map[string][]string)
-	for _, v := range md[:thisGroupIdx] {
-		outputsByGroup[v.Name] = intersection(thisIntergroupInputs, v.Outputs)
+	for _, g := range dc.Config.DeploymentGroups[:thisGroupIdx] {
+		outputsByGroup[g.Name] = intersection(thisIntergroupInputNames, g.OutputNames())
 	}
 	return outputsByGroup, nil
 }

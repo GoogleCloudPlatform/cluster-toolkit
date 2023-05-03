@@ -70,6 +70,7 @@ run_test() {
 		rm -rf "${folder}/modules"
 	done
 	find . -name "README.md" -exec rm {} \;
+	sed -i -E 's/(ghpc_version: )(.*)/\1golden/' .ghpc/artifacts/expanded_blueprint.yaml
 
 	# Compare the deployment folder with the golden copy
 	diff --recursive --exclude="previous_deployment_groups" \

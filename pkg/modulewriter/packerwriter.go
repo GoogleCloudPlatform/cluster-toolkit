@@ -64,10 +64,9 @@ func (w PackerWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	grpIdx int,
 	deployDir string,
-) (GroupMetadata, error) {
+) error {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, depGroup.Name)
-	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
 	igcInputs := map[string]bool{}
 
 	for _, mod := range depGroup.Modules {
@@ -85,24 +84,18 @@ func (w PackerWriter) writeDeploymentGroup(
 
 		av, err := pure.Eval(dc.Config)
 		if err != nil {
-			return GroupMetadata{}, err
+			return err
 		}
 
 		modPath := filepath.Join(groupPath, mod.DeploymentSource)
 		if err = writePackerAutovars(av.Items(), modPath); err != nil {
-			return GroupMetadata{}, err
+			return err
 		}
 		hasIgc := len(pure.Items()) < len(mod.Settings.Items())
 		printPackerInstructions(modPath, mod.ID, hasIgc)
 	}
 
-	return GroupMetadata{
-		Name:             depGroup.Name,
-		Kind:             w.kind(),
-		DeploymentInputs: orderKeys(deploymentVars),
-		IntergroupInputs: orderKeys(igcInputs),
-		Outputs:          []string{},
-	}, nil
+	return nil
 }
 
 func (w PackerWriter) restoreState(deploymentDir string) error {

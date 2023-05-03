@@ -552,9 +552,8 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 
 	// Simple success, no modules
 	testModules := []config.Module{}
-	outputs, err := writeOutputs(testModules, testOutputsDir)
+	err := writeOutputs(testModules, testOutputsDir)
 	c.Assert(err, IsNil)
-	c.Check(outputs, DeepEquals, []string{})
 
 	// Success: Outputs added
 	outputList := []modulereader.OutputInfo{
@@ -563,9 +562,8 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	}
 	moduleWithOutputs := config.Module{Outputs: outputList, ID: "testMod"}
 	testModules = []config.Module{moduleWithOutputs}
-	outputs, err = writeOutputs(testModules, testOutputsDir)
+	err = writeOutputs(testModules, testOutputsDir)
 	c.Assert(err, IsNil)
-	c.Check(outputs, DeepEquals, []string{"output1_testMod", "output2_testMod"})
 
 	exists, err := stringExistsInFile("output1", outputsFilePath)
 	c.Assert(err, IsNil)
@@ -575,7 +573,7 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	c.Assert(exists, Equals, true)
 
 	// Failure: Bad path
-	_, err = writeOutputs(testModules, "not/a/real/path")
+	err = writeOutputs(testModules, "not/a/real/path")
 	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
 
 }

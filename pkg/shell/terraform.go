@@ -20,11 +20,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
 	"log"
 	"os/exec"
-	"path"
+	"path/filepath"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
@@ -148,13 +149,13 @@ func getOutputs(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 }
 
 func outputsFile(artifactsDir string, groupName string) string {
-	return path.Join(artifactsDir, fmt.Sprintf("%s_outputs.tfvars", groupName))
+	return filepath.Join(artifactsDir, fmt.Sprintf("%s_outputs.tfvars", groupName))
 }
 
 // ExportOutputs will run terraform output and capture data needed for
 // subsequent deployment groups
-func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir string) error {
-	thisGroup := path.Base(tf.WorkingDir())
+func ExportOutputs(tf *tfexec.Terraform, artifactsDir string) error {
+	thisGroup := filepath.Base(tf.WorkingDir())
 	filepath := outputsFile(artifactsDir, thisGroup)
 
 	outputValues, err := getOutputs(tf)
@@ -181,19 +182,17 @@ func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir strin
 // ImportInputs will search artifactsDir for files produced by ExportOutputs and
 // combine/filter them for the input values needed by the group in the Terraform
 // working directory
-func ImportInputs(deploymentGroupDir string, metadataFile string, artifactsDir string) error {
-	deploymentRoot := path.Clean(path.Join(deploymentGroupDir, ".."))
-	thisGroup := path.Base(deploymentGroupDir)
+func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
+	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
+	thisGroup := filepath.Base(deploymentGroupDir)
 
-	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, metadataFile)
+	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
 
-	// TODO: when support for writing Packer inputs (*.pkrvars.hcl) is added,
-	// group kind will matter for file naming; for now, use GetDeploymentKinds
-	// only to do a basic test of the deployment directory structure
-	if _, err = GetDeploymentKinds(metadataFile, deploymentRoot); err != nil {
+	kinds, err := GetDeploymentKinds(expandedBlueprintFile)
+	if err != nil {
 		return err
 	}
 
@@ -221,8 +220,17 @@ func ImportInputs(deploymentGroupDir string, metadataFile string, artifactsDir s
 		return nil
 	}
 
-	outfile := path.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
-	log.Printf("writing outputs for group %s to file %s", thisGroup, outfile)
+	var outfile string
+	switch kinds[thisGroup] {
+	case config.TerraformKind:
+		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
+	case config.PackerKind:
+		// outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.pkrvars.hcl", thisGroup))
+		return fmt.Errorf("import command is not yet supported for Packer deployment groups")
+	default:
+		return fmt.Errorf("unexpected error: unknown module kind for group %s", thisGroup)
+	}
+	log.Printf("writing outputs for group %s to file %s\n", thisGroup, outfile)
 	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
 		return err
 	}
