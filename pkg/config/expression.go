@@ -99,7 +99,7 @@ func SimpleVarToReference(s string) (Reference, error) {
 func SimpleVarToExpression(s string) (Expression, error) {
 	ref, err := SimpleVarToReference(s)
 	if err != nil {
-		return Expression{}, err
+		return nil, err
 	}
 	var ex Expression
 	if ref.GlobalVar {
@@ -161,28 +161,48 @@ func IsYamlExpressionLiteral(v cty.Value) (string, bool) {
 }
 
 // Expression is a representation of expressions in Blueprint
-type Expression struct {
-	// Those fields should be accessed by Expression methods ONLY.
-	e  hclsyntax.Expression
-	s  string
-	rs []Reference
+type Expression interface {
+	// Eval evaluates the expression in the context of Blueprint
+	Eval(bp Blueprint) (cty.Value, error)
+	// Tokenize returns Tokens to be used for marshalling HCL
+	Tokenize() hclwrite.Tokens
+	// References return Reference for all variables used in the expression
+	References() []Reference
+	// AsValue returns a cty.Value that represents the expression.
+	// This function is the ONLY way to get an Expression as a cty.Value,
+	// do not attempt to build it by other means.
+	AsValue() cty.Value
+	// makeYamlExpressionValue returns a cty.Value, that is rendered as
+	// HCL literal in Blueprint syntax. Returned value isn't functional,
+	// as it doesn't reference an Expression.
+	// This method should only be used for marshaling Blueprint YAML.
+	makeYamlExpressionValue() cty.Value
+	// key returns unique identifier of this expression in universe of all possible expressions.
+	// `ex1.key() == ex2.key()` => `ex1` and `ex2` are identical.
+	key() expressionKey
 }
 
 // ParseExpression returns Expression
 func ParseExpression(s string) (Expression, error) {
 	e, diag := hclsyntax.ParseExpression([]byte(s), "", hcl.Pos{})
 	if diag.HasErrors() {
-		return Expression{}, diag
+		return nil, diag
 	}
+	sToks, _ := hclsyntax.LexExpression([]byte(s), "", hcl.Pos{})
+	wToks := make(hclwrite.Tokens, len(sToks))
+	for i, st := range sToks {
+		wToks[i] = &hclwrite.Token{Type: st.Type, Bytes: st.Bytes}
+	}
+
 	ts := e.Variables()
 	rs := make([]Reference, len(ts))
 	for i, t := range ts {
 		var err error
 		if rs[i], err = TraversalToReference(t); err != nil {
-			return Expression{}, err
+			return nil, err
 		}
 	}
-	return Expression{e: e, s: s, rs: rs}, nil
+	return BaseExpression{e: e, toks: wToks, rs: rs}, nil
 }
 
 // MustParseExpression is "errorless" version of ParseExpression
@@ -195,8 +215,16 @@ func MustParseExpression(s string) Expression {
 	}
 }
 
+// BaseExpression is a base implementation of Expression interface
+type BaseExpression struct {
+	// Those fields should be accessed by Expression methods ONLY.
+	e    hclsyntax.Expression
+	toks hclwrite.Tokens
+	rs   []Reference
+}
+
 // Eval evaluates the expression in the context of Blueprint
-func (e Expression) Eval(bp Blueprint) (cty.Value, error) {
+func (e BaseExpression) Eval(bp Blueprint) (cty.Value, error) {
 	ctx := hcl.EvalContext{
 		Variables: map[string]cty.Value{"var": bp.Vars.AsObject()},
 	}
@@ -208,12 +236,12 @@ func (e Expression) Eval(bp Blueprint) (cty.Value, error) {
 }
 
 // Tokenize returns Tokens to be used for marshalling HCL
-func (e Expression) Tokenize() hclwrite.Tokens {
-	return hclwrite.TokensForIdentifier(e.s)
+func (e BaseExpression) Tokenize() hclwrite.Tokens {
+	return e.toks
 }
 
 // References return Reference for all variables used in the expression
-func (e Expression) References() []Reference {
+func (e BaseExpression) References() []Reference {
 	c := make([]Reference, len(e.rs))
 	for i, r := range e.rs {
 		c[i] = r
@@ -225,8 +253,26 @@ func (e Expression) References() []Reference {
 // HCL literal in Blueprint syntax. Returned value isn't functional,
 // as it doesn't reference an Expression.
 // This method should only be used for marshaling Blueprint YAML.
-func (e Expression) makeYamlExpressionValue() cty.Value {
-	return cty.StringVal("((" + e.s + "))")
+func (e BaseExpression) makeYamlExpressionValue() cty.Value {
+	s := string(hclwrite.Format(e.Tokenize().Bytes()))
+	return cty.StringVal("((" + s + "))")
+}
+
+// key returns unique identifier of this expression in universe of all possible expressions.
+// `ex1.key() == ex2.key()` => `ex1` and `ex2` are identical.
+func (e BaseExpression) key() expressionKey {
+	s := string(e.Tokenize().Bytes())
+	return expressionKey{k: s}
+}
+
+// AsValue returns a cty.Value that represents the expression.
+// This function is the ONLY way to get an Expression as a cty.Value,
+// do not attempt to build it by other means.
+func (e BaseExpression) AsValue() cty.Value {
+	k := e.key()
+	// we don't care if ot overrides as expressions are identical
+	globalExpressions[k] = e
+	return cty.DynamicVal.Mark(k)
 }
 
 // To associate cty.Value with Expression we use cty.Value.Mark
@@ -245,29 +291,13 @@ type expressionKey struct {
 
 var globalExpressions = map[expressionKey]Expression{}
 
-// key returns unique identifier of this expression in universe of all possible expressions.
-// `ex1.key() == ex2.key()` => `ex1` and `ex2` are identical.
-func (e Expression) key() expressionKey {
-	return expressionKey{k: e.s}
-}
-
-// AsValue returns a cty.Value that represents the expression.
-// This function is the ONLY way to get an Expression as a cty.Value,
-// do not attempt to build it by other means.
-func (e Expression) AsValue() cty.Value {
-	k := e.key()
-	// we don't care if ot overrides as expressions are identical
-	globalExpressions[k] = e
-	return cty.DynamicVal.Mark(e.key())
-}
-
 // IsExpressionValue checks if the value is result of `Expression.AsValue()`.
 // Returns original expression and result of check.
 // It will panic if the value is expression-marked but not a result of `Expression.AsValue()`
 func IsExpressionValue(v cty.Value) (Expression, bool) {
 	key, ok := HasMark[expressionKey](v)
 	if !ok {
-		return Expression{}, false
+		return nil, false
 	}
 	expr, stored := globalExpressions[key]
 	if !stored { // shouldn't happen
@@ -293,10 +323,4 @@ func HasMark[T any](val cty.Value) (T, bool) {
 		found, tgt = true, t
 	}
 	return tgt, found
-}
-
-// RenderHclAsString returns HCL representation of the expression
-// NOTE: this method is only used for workarounds in tfwriter and should be removed soon.
-func (e Expression) RenderHclAsString() string {
-	return e.s
 }
