@@ -30,13 +30,13 @@ import (
 // GetDeploymentKinds returns the kind of each group in the deployment as a map;
 // additionally it provides a mechanism for validating the deployment directory
 // structure; for now, validation tests only existence of each directory
-func GetDeploymentKinds(expandedBlueprintFile string) (map[string]config.ModuleKind, error) {
+func GetDeploymentKinds(expandedBlueprintFile string) (map[config.GroupName]config.ModuleKind, error) {
 	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return nil, err
 	}
 
-	groupKinds := make(map[string]config.ModuleKind)
+	groupKinds := make(map[config.GroupName]config.ModuleKind)
 	for _, g := range dc.Config.DeploymentGroups {
 		if g.Kind == config.UnknownKind {
 			return nil, fmt.Errorf("improper deployment: group %s is of unknown kind", g.Name)
@@ -49,9 +49,9 @@ func GetDeploymentKinds(expandedBlueprintFile string) (map[string]config.ModuleK
 // ValidateDeploymentDirectory ensures that the deployment directory structure
 // appears valid given a mapping of group names to module kinds
 // TODO: verify kind fully by auto-detecting type from group directory
-func ValidateDeploymentDirectory(kinds map[string]config.ModuleKind, deploymentRoot string) error {
+func ValidateDeploymentDirectory(kinds map[config.GroupName]config.ModuleKind, deploymentRoot string) error {
 	for group := range kinds {
-		groupPath := filepath.Join(deploymentRoot, group)
+		groupPath := filepath.Join(deploymentRoot, string(group))
 		if isDir, _ := DirInfo(groupPath); !isDir {
 			return fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, group)
 		}
@@ -60,7 +60,7 @@ func ValidateDeploymentDirectory(kinds map[string]config.ModuleKind, deploymentR
 }
 
 // return a map from group names to a list of outputs that are needed by this group
-func getIntergroupOutputNamesByGroup(thisGroup string, expandedBlueprintFile string) (map[string][]string, error) {
+func getIntergroupOutputNamesByGroup(thisGroup config.GroupName, expandedBlueprintFile string) (map[config.GroupName][]string, error) {
 	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func getIntergroupOutputNamesByGroup(thisGroup string, expandedBlueprintFile str
 	for i, ref := range thisIntergroupRefs {
 		thisIntergroupInputNames[i] = config.AutomaticOutputName(ref.Name, ref.Module)
 	}
-	outputsByGroup := make(map[string][]string)
+	outputsByGroup := make(map[config.GroupName][]string)
 	for _, g := range dc.Config.DeploymentGroups[:thisGroupIdx] {
 		outputsByGroup[g.Name] = intersection(thisIntergroupInputNames, g.OutputNames())
 	}

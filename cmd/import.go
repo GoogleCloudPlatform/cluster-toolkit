@@ -16,6 +16,7 @@
 package cmd
 
 import (
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"path/filepath"
 
@@ -44,7 +45,7 @@ var (
 
 func runImportCmd(cmd *cobra.Command, args []string) error {
 	workingDir := filepath.Clean(args[0])
-	deploymentGroup := filepath.Base(workingDir)
+	deploymentGroup := config.GroupName(filepath.Base(workingDir))
 	deploymentRoot := filepath.Clean(filepath.Join(workingDir, ".."))
 
 	if err := shell.CheckWritableDir(workingDir); err != nil {

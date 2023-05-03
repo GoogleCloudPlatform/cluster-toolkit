@@ -166,14 +166,14 @@ func getDeploymentConfigForTest() DeploymentConfig {
 		Source:           "testSource",
 		Kind:             TerraformKind,
 		ID:               "testModule",
-		Use:              []string{},
+		Use:              []ModuleID{},
 		WrapSettingsWith: make(map[string][]string),
 	}
 	testModuleWithLabels := Module{
 		Source:           "./role/source",
 		ID:               "testModuleWithLabels",
 		Kind:             TerraformKind,
-		Use:              []string{},
+		Use:              []ModuleID{},
 		WrapSettingsWith: make(map[string][]string),
 		Settings: NewDict(map[string]cty.Value{
 			"moduleLabel": cty.StringVal("moduleLabelValue"),
@@ -319,7 +319,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 			matchingIntragroupName1: cty.StringVal("explicit-intra-value"),
 			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsExpression().AsValue(),
 		}),
-		Use: []string{mod0.ID},
+		Use: []ModuleID{mod0.ID},
 	}
 	setTestModuleInfo(mod1, testModuleInfo1)
 
@@ -332,7 +332,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		ID:     "TestModule2",
 		Kind:   TerraformKind,
 		Source: testModuleSource2,
-		Use:    []string{mod0.ID},
+		Use:    []ModuleID{mod0.ID},
 	}
 	setTestModuleInfo(mod2, testModuleInfo2)
 
@@ -418,25 +418,25 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 func (s *MySuite) TestListUnusedModules(c *C) {
 	{ // No modules in "use"
 		m := Module{ID: "m"}
-		c.Check(m.listUnusedModules(), DeepEquals, []string{})
+		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{})
 	}
 
 	{ // Useful
 		m := Module{
 			ID:  "m",
-			Use: []string{"w"},
+			Use: []ModuleID{"w"},
 			Settings: NewDict(map[string]cty.Value{
 				"x": cty.True.Mark(ProductOfModuleUse{"w"})})}
-		c.Check(m.listUnusedModules(), DeepEquals, []string{})
+		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{})
 	}
 
 	{ // Unused
 		m := Module{
 			ID:  "m",
-			Use: []string{"w", "u"},
+			Use: []ModuleID{"w", "u"},
 			Settings: NewDict(map[string]cty.Value{
 				"x": cty.True.Mark(ProductOfModuleUse{"w"})})}
-		c.Check(m.listUnusedModules(), DeepEquals, []string{"u"})
+		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{"u"})
 	}
 }
 
@@ -478,7 +478,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() does nothing to packer types*/
-	moduleID := "packerModule"
+	moduleID := ModuleID("packerModule")
 	expected = PackerKind
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})

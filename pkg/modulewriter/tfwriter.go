@@ -220,7 +220,7 @@ func writeMain(
 	for _, mod := range modules {
 		hclBody.AppendNewline()
 		// Add block
-		moduleBlock := hclBody.AppendNewBlock("module", []string{mod.ID})
+		moduleBlock := hclBody.AppendNewBlock("module", []string{string(mod.ID)})
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
@@ -331,8 +331,8 @@ func writeVersions(dst string) error {
 	return nil
 }
 
-func printTerraformInstructions(grpPath string, moduleName string, printIntergroupWarning bool) {
-	printInstructionsPreamble("Terraform", grpPath, moduleName)
+func printTerraformInstructions(grpPath string, group config.GroupName, printIntergroupWarning bool) {
+	printInstructionsPreamble("Terraform", grpPath, string(group))
 	if printIntergroupWarning {
 		fmt.Print(intergroupWarning)
 	}
@@ -360,7 +360,7 @@ func (w TFWriter) writeDeploymentGroup(
 		intergroupInputs[igVar.Name] = true
 	}
 
-	writePath := filepath.Join(deploymentDir, depGroup.Name)
+	writePath := filepath.Join(deploymentDir, string(depGroup.Name))
 
 	// Write main.tf file
 	doctoredModules := substituteIgcReferences(depGroup.Modules, intergroupVars)

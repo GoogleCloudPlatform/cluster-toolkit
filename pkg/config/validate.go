@@ -456,7 +456,12 @@ func (dc *DeploymentConfig) testModuleNotUsed(c validatorConfig) error {
 
 	acc := map[string][]string{}
 	dc.Config.WalkModules(func(m *Module) error {
-		acc[m.ID] = m.listUnusedModules()
+		ids := m.listUnusedModules()
+		sids := make([]string, len(ids))
+		for i, id := range ids {
+			sids[i] = string(id)
+		}
+		acc[string(m.ID)] = sids
 		return nil
 	})
 
