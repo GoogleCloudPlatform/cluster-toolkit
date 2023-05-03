@@ -20,7 +20,6 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
-	"path"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -34,6 +33,8 @@ func init() {
 }
 
 var defaultArtifactsDir = filepath.Join(modulewriter.HiddenGhpcDirName, modulewriter.ArtifactsDirName)
+
+const expandedBlueprintFilename string = "expanded_blueprint.yaml"
 
 var (
 	artifactsDir string
@@ -66,45 +67,54 @@ func matchDirs(cmd *cobra.Command, args []string, toComplete string) ([]string, 
 }
 
 func setArtifactsDir(cmd *cobra.Command, args []string) {
-	workingDir := path.Clean(args[0])
-	deploymentRoot := path.Join(workingDir, "..")
+	workingDir := filepath.Clean(args[0])
+	deploymentRoot := filepath.Join(workingDir, "..")
 
 	if artifactsDir == "" {
-		artifactsDir = path.Clean(path.Join(deploymentRoot, defaultArtifactsDir))
+		artifactsDir = filepath.Clean(filepath.Join(deploymentRoot, defaultArtifactsDir))
 	}
 }
 
+func verifyDeploymentAgainstBlueprint(expandedBlueprintFile string, group string, deploymentRoot string) (config.ModuleKind, error) {
+	groupKinds, err := shell.GetDeploymentKinds(expandedBlueprintFile)
+	if err != nil {
+		return config.UnknownKind, err
+	}
+
+	kind, ok := groupKinds[group]
+	if !ok {
+		return config.UnknownKind, fmt.Errorf("deployment group %s not found in expanded blueprint", group)
+	}
+
+	if err := shell.ValidateDeploymentDirectory(groupKinds, deploymentRoot); err != nil {
+		return config.UnknownKind, err
+	}
+	return kind, nil
+}
+
 func runExportCmd(cmd *cobra.Command, args []string) error {
-	workingDir := path.Clean(args[0])
-	deploymentGroup := path.Base(workingDir)
-	deploymentRoot := path.Clean(path.Join(workingDir, ".."))
+	workingDir := filepath.Clean(args[0])
+	deploymentGroup := filepath.Base(workingDir)
+	deploymentRoot := filepath.Clean(filepath.Join(workingDir, ".."))
 
 	if err := shell.CheckWritableDir(artifactsDir); err != nil {
 		return err
 	}
 
-	// only Terraform groups support outputs; fail on any other kind
-	metadataFile := path.Join(artifactsDir, "deployment_metadata.yaml")
-	groupKinds, err := shell.GetDeploymentKinds(metadataFile, deploymentRoot)
+	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
+	kind, err := verifyDeploymentAgainstBlueprint(expandedBlueprintFile, deploymentGroup, deploymentRoot)
 	if err != nil {
 		return err
 	}
-	groupKind, ok := groupKinds[deploymentGroup]
-	if !ok {
-		return fmt.Errorf("deployment group %s not found at %s", deploymentGroup, workingDir)
-	}
-	if groupKind == config.PackerKind {
+	if kind == config.PackerKind {
 		return fmt.Errorf("export command is unsupported on Packer modules because they do not have outputs")
-	}
-	if groupKind != config.TerraformKind {
-		return fmt.Errorf("export command is not supported on deployment group: %s", deploymentGroup)
 	}
 
 	tf, err := shell.ConfigureTerraform(workingDir)
 	if err != nil {
 		return err
 	}
-	if err = shell.ExportOutputs(tf, metadataFile, artifactsDir); err != nil {
+	if err = shell.ExportOutputs(tf, artifactsDir); err != nil {
 		return err
 	}
 	return nil

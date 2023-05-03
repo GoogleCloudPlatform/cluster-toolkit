@@ -18,7 +18,6 @@
 package modulewriter
 
 import (
-	"bytes"
 	"crypto/md5"
 	"embed"
 	"encoding/hex"
@@ -32,8 +31,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-
-	"gopkg.in/yaml.v3"
 )
 
 // strings that get re-used throughout this package and others
@@ -43,7 +40,7 @@ const (
 	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
 	artifactsWarningFilename   = "DO_NOT_MODIFY_THIS_DIRECTORY"
-	deploymentMetadataName     = "deployment_metadata.yaml"
+	expandedBlueprintName      = "expanded_blueprint.yaml"
 )
 
 const intergroupWarning string = `
@@ -61,23 +58,9 @@ type ModuleWriter interface {
 		dc config.DeploymentConfig,
 		grpIdx int,
 		deployDir string,
-	) (GroupMetadata, error)
+	) error
 	restoreState(deploymentDir string) error
 	kind() config.ModuleKind
-}
-
-// DeploymentMetadata captures input/outputs for all deployment groups
-type DeploymentMetadata struct {
-	DeploymentMetadata []GroupMetadata `yaml:"deployment_metadata"`
-}
-
-// GroupMetadata captures input/outputs for each deployment group
-type GroupMetadata struct {
-	Name             string
-	Kind             config.ModuleKind
-	DeploymentInputs []string `yaml:"deployment_inputs"`
-	IntergroupInputs []string `yaml:"intergroup_inputs"`
-	Outputs          []string
 }
 
 var kinds = map[string]ModuleWriter{
@@ -120,9 +103,6 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		return err
 	}
 
-	metadata := DeploymentMetadata{
-		DeploymentMetadata: []GroupMetadata{},
-	}
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
 		writer, ok := kinds[grp.Kind.String()]
 		if !ok {
@@ -130,14 +110,13 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
 		}
 
-		gmd, err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir)
+		err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir)
 		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
-		metadata.DeploymentMetadata = append(metadata.DeploymentMetadata, gmd)
 	}
 
-	if err := writeDeploymentMetadata(deploymentDir, metadata); err != nil {
+	if err := writeExpandedBlueprint(deploymentDir, dc); err != nil {
 		return err
 	}
 
@@ -407,30 +386,12 @@ func prepArtifactsDir(artifactsDir string) error {
 	return nil
 }
 
-func writeDeploymentMetadata(depDir string, metadata DeploymentMetadata) error {
-	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
-	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
-		return fmt.Errorf(
-			"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
-	}
+func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
+	artifactsDir := filepath.Join(depDir, HiddenGhpcDirName, ArtifactsDirName)
+	blueprintFile := filepath.Join(artifactsDir, expandedBlueprintName)
 
-	metadataFile := filepath.Join(ghpcDir, ArtifactsDirName, deploymentMetadataName)
-	f, err := os.OpenFile(metadataFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	_, err := dc.ExportBlueprint(blueprintFile)
 	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	var buf bytes.Buffer
-	buf.WriteString(config.YamlLicense)
-	buf.WriteString("\n")
-	encoder := yaml.NewEncoder(&buf)
-	defer encoder.Close()
-	encoder.SetIndent(2)
-	if err := encoder.Encode(metadata); err != nil {
-		return err
-	}
-	if _, err := f.Write(buf.Bytes()); err != nil {
 		return err
 	}
 

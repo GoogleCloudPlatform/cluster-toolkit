@@ -82,7 +82,7 @@ func appendHCLToFile(path string, hclBytes []byte) error {
 func writeOutputs(
 	modules []config.Module,
 	dst string,
-) ([]string, error) {
+) error {
 	// Create hcl body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
@@ -112,7 +112,7 @@ func writeOutputs(
 	}
 
 	if len(outputs) == 0 {
-		return []string{}, nil
+		return nil
 	}
 	hclBytes := hclFile.Bytes()
 	hclBytes = escapeLiteralVariables(hclBytes)
@@ -120,13 +120,13 @@ func writeOutputs(
 
 	outputsPath := filepath.Join(dst, "outputs.tf")
 	if err := createBaseFile(outputsPath); err != nil {
-		return nil, fmt.Errorf("error creating outputs.tf file: %v", err)
+		return fmt.Errorf("error creating outputs.tf file: %v", err)
 	}
 	err := appendHCLToFile(outputsPath, hclBytes)
 	if err != nil {
-		return nil, fmt.Errorf("error writing HCL to outputs.tf file: %v", err)
+		return fmt.Errorf("error writing HCL to outputs.tf file: %v", err)
 	}
-	return outputs, nil
+	return nil
 }
 
 func writeTfvars(vars map[string]cty.Value, dst string) error {
@@ -351,7 +351,7 @@ func (w TFWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	groupIndex int,
 	deploymentDir string,
-) (GroupMetadata, error) {
+) error {
 	depGroup := dc.Config.DeploymentGroups[groupIndex]
 	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
 	intergroupVars := findIntergroupVariables(depGroup, dc.Config)
@@ -367,56 +367,48 @@ func (w TFWriter) writeDeploymentGroup(
 	if err := writeMain(
 		doctoredModules, depGroup.TerraformBackend, writePath,
 	); err != nil {
-		return GroupMetadata{}, fmt.Errorf("error writing main.tf file for deployment group %s: %v",
+		return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write variables.tf file
 	if err := writeVariables(deploymentVars, maps.Values(intergroupVars), writePath); err != nil {
-		return GroupMetadata{}, fmt.Errorf(
+		return fmt.Errorf(
 			"error writing variables.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write outputs.tf file
-	outputs, err := writeOutputs(depGroup.Modules, writePath)
-	if err != nil {
-		return GroupMetadata{}, fmt.Errorf(
+	if err := writeOutputs(depGroup.Modules, writePath); err != nil {
+		return fmt.Errorf(
 			"error writing outputs.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write terraform.tfvars file
 	if err := writeTfvars(deploymentVars, writePath); err != nil {
-		return GroupMetadata{}, fmt.Errorf(
+		return fmt.Errorf(
 			"error writing terraform.tfvars file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write providers.tf file
 	if err := writeProviders(deploymentVars, writePath); err != nil {
-		return GroupMetadata{}, fmt.Errorf(
+		return fmt.Errorf(
 			"error writing providers.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write versions.tf file
 	if err := writeVersions(writePath); err != nil {
-		return GroupMetadata{}, fmt.Errorf(
+		return fmt.Errorf(
 			"error writing versions.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	printTerraformInstructions(writePath, depGroup.Name, len(intergroupInputs) > 0)
 
-	slices.Sort(outputs)
-	return GroupMetadata{
-		Name:             depGroup.Name,
-		Kind:             w.kind(),
-		DeploymentInputs: orderKeys(deploymentVars),
-		IntergroupInputs: orderKeys(intergroupInputs),
-		Outputs:          outputs,
-	}, nil
+	return nil
 }
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
@@ -511,16 +503,14 @@ func substituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Refer
 
 func findIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) map[config.Reference]modulereader.VarInfo {
 	res := map[config.Reference]modulereader.VarInfo{}
-	for _, mod := range group.Modules {
-		igcRefs := config.FindIntergroupReferences(mod.Settings.AsObject(), mod, bp)
-		for _, r := range igcRefs {
-			n := config.AutomaticOutputName(r.Name, r.Module)
-			res[r] = modulereader.VarInfo{
-				Name:        n,
-				Type:        getHclType(cty.DynamicPseudoType),
-				Description: "Automatically generated input from previous groups (ghpc import-inputs --help)",
-				Required:    true,
-			}
+	igcRefs := group.FindAllIntergroupReferences(bp)
+	for _, r := range igcRefs {
+		n := config.AutomaticOutputName(r.Name, r.Module)
+		res[r] = modulereader.VarInfo{
+			Name:        n,
+			Type:        getHclType(cty.DynamicPseudoType),
+			Description: "Automatically generated input from previous groups (ghpc import-inputs --help)",
+			Required:    true,
 		}
 	}
 	return res

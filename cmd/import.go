@@ -16,10 +16,8 @@
 package cmd
 
 import (
-	"fmt"
-	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
-	"path"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -45,30 +43,18 @@ var (
 )
 
 func runImportCmd(cmd *cobra.Command, args []string) error {
-	workingDir := path.Clean(args[0])
-	deploymentGroup := path.Base(workingDir)
-	deploymentRoot := path.Clean(path.Join(workingDir, ".."))
+	workingDir := filepath.Clean(args[0])
+	deploymentGroup := filepath.Base(workingDir)
+	deploymentRoot := filepath.Clean(filepath.Join(workingDir, ".."))
 
 	if err := shell.CheckWritableDir(workingDir); err != nil {
 		return err
 	}
 
-	// only Terraform groups support outputs; fail on any other kind
-	metadataFile := path.Join(artifactsDir, "deployment_metadata.yaml")
-	groupKinds, err := shell.GetDeploymentKinds(metadataFile, deploymentRoot)
-	if err != nil {
-		return err
-	}
-	groupKind, ok := groupKinds[deploymentGroup]
-	if !ok {
-		return fmt.Errorf("deployment group %s not found at %s", deploymentGroup, workingDir)
-	}
-	// TODO: support writing Packer inputs (complexity due to variable resolution)
-	if groupKind != config.TerraformKind {
-		return fmt.Errorf("import command is only supported (for now) on Terraform deployment groups")
-	}
+	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
+	_, err := verifyDeploymentAgainstBlueprint(expandedBlueprintFile, deploymentGroup, deploymentRoot)
 
-	if err = shell.ImportInputs(workingDir, metadataFile, artifactsDir); err != nil {
+	if err = shell.ImportInputs(workingDir, artifactsDir, expandedBlueprintFile); err != nil {
 		return err
 	}
 
