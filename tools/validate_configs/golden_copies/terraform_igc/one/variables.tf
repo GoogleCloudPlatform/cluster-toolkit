@@ -25,7 +25,7 @@ variable "labels" {
 }
 
 variable "network_id_network0" {
-  description = "Toolkit automatically generated variable: network_id_network0"
+  description = "Automatically generated input from previous groups (ghpc import-inputs --help)"
   type        = any
 }
 
@@ -40,7 +40,7 @@ variable "region" {
 }
 
 variable "subnetwork_name_network0" {
-  description = "Toolkit automatically generated variable: subnetwork_name_network0"
+  description = "Automatically generated input from previous groups (ghpc import-inputs --help)"
   type        = any
 }
 

@@ -30,15 +30,19 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
 
+// strings that get re-used throughout this package and others
 const (
-	hiddenGhpcDirName          = ".ghpc"
+	HiddenGhpcDirName          = ".ghpc"
+	ArtifactsDirName           = "artifacts"
 	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
+	artifactsWarningFilename   = "DO_NOT_MODIFY_THIS_DIRECTORY"
 	deploymentMetadataName     = "deployment_metadata.yaml"
 )
 
@@ -279,7 +283,7 @@ func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, over
 	// build list of previous and current deployment groups
 	var prevGroups []string
 	for _, f := range files {
-		if f.IsDir() && f.Name() != hiddenGhpcDirName {
+		if f.IsDir() && f.Name() != HiddenGhpcDirName {
 			prevGroups = append(prevGroups, f.Name())
 		}
 	}
@@ -324,7 +328,8 @@ func (err *OverwriteDeniedError) Error() string {
 // Prepares a deployment directory to be written to.
 func prepDepDir(depDir string, overwrite bool) error {
 	deploymentio := deploymentio.GetDeploymentioLocal()
-	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
+	artifactsDir := filepath.Join(ghpcDir, ArtifactsDirName)
 	gitignoreFile := filepath.Join(depDir, ".gitignore")
 
 	// create deployment directory
@@ -333,7 +338,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 			return &OverwriteDeniedError{err}
 		}
 
-		// Confirm we have a previously written deployment dir before overwritting.
+		// Confirm we have a previously written deployment dir before overwriting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 			return fmt.Errorf(
 				"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
@@ -348,20 +353,24 @@ func prepDepDir(depDir string, overwrite bool) error {
 		}
 	}
 
-	// clean up old dirs
+	if err := prepArtifactsDir(artifactsDir); err != nil {
+		return err
+	}
+
+	// remove any existing backups of deployment group
 	prevGroupDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
 	}
 
-	// move deployment groups
+	// create new backup of deployment group directory
 	files, err := ioutil.ReadDir(depDir)
 	if err != nil {
 		return fmt.Errorf("Error trying to read directories in %s, %w", depDir, err)
 	}
 	for _, f := range files {
-		if !f.IsDir() || f.Name() == hiddenGhpcDirName {
+		if !f.IsDir() || f.Name() == HiddenGhpcDirName {
 			continue
 		}
 		src := filepath.Join(depDir, f.Name())
@@ -373,14 +382,39 @@ func prepDepDir(depDir string, overwrite bool) error {
 	return nil
 }
 
+func prepArtifactsDir(artifactsDir string) error {
+	// cleanup previous artifacts on every write
+	if err := os.RemoveAll(artifactsDir); err != nil {
+		return fmt.Errorf(
+			"error while removing the artifacts directory at %s; %s", artifactsDir, err.Error())
+	}
+
+	if err := os.MkdirAll(artifactsDir, 0700); err != nil {
+		return err
+	}
+
+	artifactsWarningFile := path.Join(artifactsDir, artifactsWarningFilename)
+	f, err := os.Create(artifactsWarningFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.WriteString(artifactsWarning)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func writeDeploymentMetadata(depDir string, metadata DeploymentMetadata) error {
-	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
 	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 		return fmt.Errorf(
 			"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
 	}
 
-	metadataFile := filepath.Join(ghpcDir, deploymentMetadataName)
+	metadataFile := filepath.Join(ghpcDir, ArtifactsDirName, deploymentMetadataName)
 	f, err := os.OpenFile(metadataFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err

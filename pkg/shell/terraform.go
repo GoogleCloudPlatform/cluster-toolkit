@@ -76,14 +76,14 @@ func needsInit(tf *tfexec.Terraform) bool {
 
 func initModule(tf *tfexec.Terraform) error {
 	var err error
-	log.Printf("executing \"terraform -chdir=%s init\"\n", tf.WorkingDir())
 	if needsInit(tf) {
+		log.Printf("initializing terraform directory %s", tf.WorkingDir())
 		err = tf.Init(context.Background())
 	}
 
 	if err != nil {
 		return &TfError{
-			help: fmt.Sprintf("\"terraform -chdir=%s init\" failed; manually resolve errors below", tf.WorkingDir()),
+			help: fmt.Sprintf("initialization of %s failed; manually resolve errors below", tf.WorkingDir()),
 			err:  err,
 		}
 	}
@@ -92,11 +92,11 @@ func initModule(tf *tfexec.Terraform) error {
 }
 
 func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
-	log.Printf("executing \"terraform -chdir=%s output\"\n", tf.WorkingDir())
+	log.Printf("collecting terraform outputs from %s", tf.WorkingDir())
 	output, err := tf.Output(context.Background())
 	if err != nil {
 		return map[string]cty.Value{}, &TfError{
-			help: fmt.Sprintf("\"terraform -chdir=%s output\" failed; manually resolve errors below", tf.WorkingDir()),
+			help: fmt.Sprintf("collecting terraform outputs from %s failed; manually resolve errors below", tf.WorkingDir()),
 			err:  err,
 		}
 	}
@@ -126,11 +126,11 @@ func getOutputs(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 		return map[string]cty.Value{}, err
 	}
 
-	log.Printf("executing \"terraform -chdir=%s plan\"\n", tf.WorkingDir())
+	log.Printf("testing if terraform state of %s is in sync with cloud infrastructure", tf.WorkingDir())
 	wantsChange, err := tf.Plan(context.Background())
 	if err != nil {
 		return map[string]cty.Value{}, &TfError{
-			help: fmt.Sprintf("\"terraform -chdir=%s init\" failed; most likely need to run \"ghpc export-outputs\" on previous deployment groups to define inputs", tf.WorkingDir()),
+			help: fmt.Sprintf("terraform plan for %s failed; suggest running \"ghpc export-outputs\" on previous deployment groups to define inputs", tf.WorkingDir()),
 			err:  err,
 		}
 	}
@@ -166,11 +166,11 @@ func ExportOutputs(tf *tfexec.Terraform, metadataFile string, artifactsDir strin
 	// blueprint; edge case is that "terraform output" can be missing keys
 	// whose values are null
 	if len(outputValues) == 0 {
-		log.Printf("group %s contains no artifacts to export\n", thisGroup)
+		log.Printf("group %s contains no artifacts to export", thisGroup)
 		return nil
 	}
 
-	log.Printf("writing outputs artifact from group %s to file %s\n", thisGroup, filepath)
+	log.Printf("writing outputs artifact from group %s to file %s", thisGroup, filepath)
 	if err := modulewriter.WriteHclAttributes(outputValues, filepath); err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func ImportInputs(deploymentGroupDir string, metadataFile string, artifactsDir s
 		if len(intergroupOutputNames) == 0 {
 			continue
 		}
-		log.Printf("collecting outputs for group %s from group %s\n", thisGroup, group)
+		log.Printf("collecting outputs for group %s from group %s", thisGroup, group)
 		filepath := outputsFile(artifactsDir, group)
 		groupOutputValues, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
@@ -217,8 +217,12 @@ func ImportInputs(deploymentGroupDir string, metadataFile string, artifactsDir s
 		mergeMapsWithoutLoss(allInputValues, intergroupValues)
 	}
 
+	if len(allInputValues) == 0 {
+		return nil
+	}
+
 	outfile := path.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
-	log.Printf("writing outputs for group %s to file %s\n", thisGroup, outfile)
+	log.Printf("writing outputs for group %s to file %s", thisGroup, outfile)
 	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
 		return err
 	}

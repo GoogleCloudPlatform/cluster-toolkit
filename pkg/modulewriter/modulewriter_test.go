@@ -128,7 +128,7 @@ func isDeploymentDirPrepped(depDirectoryPath string) error {
 		return fmt.Errorf("deloyment dir does not exist: %s: %w", depDirectoryPath, err)
 	}
 
-	ghpcDir := filepath.Join(depDirectoryPath, hiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDirectoryPath, HiddenGhpcDirName)
 	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 		return fmt.Errorf(".ghpc working dir does not exist: %s: %w", ghpcDir, err)
 	}
@@ -179,7 +179,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(isDeploymentDirPrepped(realDepDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, "test_prep_dir", hiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(testDir, "test_prep_dir", HiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
@@ -198,7 +198,7 @@ func (s *MySuite) TestIsSubset(c *C) {
 
 func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 	depDir := filepath.Join(testDir, "overwrite_test")
-	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
 	module1 := filepath.Join(depDir, "group1")
 	module2 := filepath.Join(depDir, "group2")
 	os.MkdirAll(ghpcDir, 0755)
@@ -330,7 +330,7 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	deploymentGroupName := "fake_resource_group"
 
 	prevDeploymentGroup := filepath.Join(
-		depDir, hiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
+		depDir, HiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
 	curDeploymentGroup := filepath.Join(depDir, deploymentGroupName)
 	prevStateFile := filepath.Join(prevDeploymentGroup, tfStateFileName)
 	prevBuStateFile := filepath.Join(prevDeploymentGroup, tfStateBackupFileName)

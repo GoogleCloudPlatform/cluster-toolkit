@@ -422,7 +422,7 @@ func (w TFWriter) writeDeploymentGroup(
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
 func (w TFWriter) restoreState(deploymentDir string) error {
 	prevDeploymentGroupPath := filepath.Join(
-		deploymentDir, hiddenGhpcDirName, prevDeploymentGroupDirName)
+		deploymentDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
 	files, err := ioutil.ReadDir(prevDeploymentGroupPath)
 	if err != nil {
 		return fmt.Errorf(
@@ -518,7 +518,7 @@ func findIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) 
 			res[r] = modulereader.VarInfo{
 				Name:        n,
 				Type:        getHclType(cty.DynamicPseudoType),
-				Description: fmt.Sprintf("Toolkit automatically generated variable: %s", n),
+				Description: "Automatically generated input from previous groups (ghpc import-inputs --help)",
 				Required:    true,
 			}
 		}
