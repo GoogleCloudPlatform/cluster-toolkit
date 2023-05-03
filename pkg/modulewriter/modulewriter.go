@@ -132,7 +132,7 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 
 func createGroupDirs(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 	for _, grp := range *deploymentGroups {
-		groupPath := filepath.Join(deploymentPath, grp.Name)
+		groupPath := filepath.Join(deploymentPath, string(grp.Name))
 		// Create the deployment group directory if not already created.
 		if _, err := os.Stat(groupPath); errors.Is(err, os.ErrNotExist) {
 			if err := os.Mkdir(groupPath, 0755); err != nil {
@@ -159,7 +159,7 @@ func deploymentSource(mod config.Module) (string, error) {
 		return mod.Source, nil
 	}
 	if mod.Kind == config.PackerKind {
-		return mod.ID, nil
+		return string(mod.ID), nil
 	}
 	if mod.Kind != config.TerraformKind {
 		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
@@ -204,7 +204,7 @@ func copyEmbeddedModules(base string) error {
 func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 	for iGrp := range *deploymentGroups {
 		grp := &(*deploymentGroups)[iGrp]
-		basePath := filepath.Join(deploymentPath, grp.Name)
+		basePath := filepath.Join(deploymentPath, string(grp.Name))
 
 		var copyEmbedded = false
 		for iMod := range grp.Modules {
@@ -269,7 +269,7 @@ func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, over
 
 	var curGroups []string
 	for _, group := range overwritingConfig.DeploymentGroups {
-		curGroups = append(curGroups, group.Name)
+		curGroups = append(curGroups, string(group.Name))
 	}
 
 	return isSubset(prevGroups, curGroups)

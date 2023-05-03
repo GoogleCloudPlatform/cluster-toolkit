@@ -40,8 +40,8 @@ func (w *PackerWriter) addNumModules(value int) {
 	w.numModules += value
 }
 
-func printPackerInstructions(modPath string, moduleName string, printIntergroupWarning bool) {
-	printInstructionsPreamble("Packer", modPath, moduleName)
+func printPackerInstructions(modPath string, mod config.ModuleID, printIntergroupWarning bool) {
+	printInstructionsPreamble("Packer", modPath, string(mod))
 	if printIntergroupWarning {
 		fmt.Print(intergroupWarning)
 	}
@@ -66,7 +66,7 @@ func (w PackerWriter) writeDeploymentGroup(
 	deployDir string,
 ) error {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
-	groupPath := filepath.Join(deployDir, depGroup.Name)
+	groupPath := filepath.Join(deployDir, string(depGroup.Name))
 	igcInputs := map[string]bool{}
 
 	for _, mod := range depGroup.Modules {

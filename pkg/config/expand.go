@@ -128,7 +128,7 @@ func (dc *DeploymentConfig) expandBackends() error {
 				if deployment, err := blueprint.DeploymentName(); err == nil {
 					prefix += "/" + deployment
 				}
-				prefix += "/" + grp.Name
+				prefix += "/" + string(grp.Name)
 				be.Configuration.Set("prefix", cty.StringVal(prefix))
 			}
 		}
@@ -376,15 +376,15 @@ func (dc *DeploymentConfig) applyGlobalVariables() error {
 }
 
 // AutomaticOutputName generates unique deployment-group-level output names
-func AutomaticOutputName(outputName string, moduleID string) string {
-	return outputName + "_" + moduleID
+func AutomaticOutputName(outputName string, moduleID ModuleID) string {
+	return outputName + "_" + string(moduleID)
 }
 
 // Checks validity of reference to a module:
 // * module exists;
 // * module is not a Packer module;
 // * module is not in a later deployment group.
-func validateModuleReference(bp Blueprint, from Module, toID string) error {
+func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	to, err := bp.Module(toID)
 	if err != nil {
 		return err

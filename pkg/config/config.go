@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
@@ -82,16 +83,30 @@ var movedModules = map[string]string{
 	"community/modules/scheduler/cloud-batch-login-node": "modules/scheduler/batch-login-node",
 }
 
+// GroupName is the name of a deployment group
+type GroupName string
+
+// Validate checks that the group name is valid
+func (n GroupName) Validate() error {
+	if n == "" {
+		return errors.New(errorMessages["emptyGroupName"])
+	}
+	if hasIllegalChars(string(n)) {
+		return fmt.Errorf("%s %s", errorMessages["illegalChars"], n)
+	}
+	return nil
+}
+
 // DeploymentGroup defines a group of Modules that are all executed together
 type DeploymentGroup struct {
-	Name             string           `yaml:"group"`
+	Name             GroupName        `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
 	Modules          []Module         `yaml:"modules"`
 	Kind             ModuleKind
 }
 
 // Module return the module with the given ID
-func (bp *Blueprint) Module(id string) (*Module, error) {
+func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	var mod *Module
 	bp.WalkModules(func(m *Module) error {
 		if m.ID == id {
@@ -106,7 +121,7 @@ func (bp *Blueprint) Module(id string) (*Module, error) {
 }
 
 // ModuleGroup returns the group containing the module
-func (bp Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
+func (bp Blueprint) ModuleGroup(mod ModuleID) (DeploymentGroup, error) {
 	for _, g := range bp.DeploymentGroups {
 		for _, m := range g.Modules {
 			if m.ID == mod {
@@ -118,7 +133,7 @@ func (bp Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound
-func (bp Blueprint) ModuleGroupOrDie(mod string) DeploymentGroup {
+func (bp Blueprint) ModuleGroupOrDie(mod ModuleID) DeploymentGroup {
 	g, err := bp.ModuleGroup(mod)
 	if err != nil {
 		panic(fmt.Errorf("module %s not found in blueprint: %s", mod, err))
@@ -253,14 +268,17 @@ func (v *validatorConfig) check(name validatorName, requiredInputs []string) err
 	return nil
 }
 
+// ModuleID is a unique identifier for a module in a blueprint
+type ModuleID string
+
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
 	Source string
 	// DeploymentSource - is source to be used for this module in written deployment.
 	DeploymentSource string `yaml:"-"` // "-" prevents user from specifying it
 	Kind             ModuleKind
-	ID               string
-	Use              []string
+	ID               ModuleID
+	Use              []ModuleID
 	WrapSettingsWith map[string][]string
 	Outputs          []modulereader.OutputInfo `yaml:"outputs,omitempty"`
 	Settings         Dict
@@ -325,8 +343,8 @@ func (bp *Blueprint) setGlobalLabels() {
 
 // listUnusedModules provides a list modules that are in the
 // "use" field, but not actually used.
-func (m Module) listUnusedModules() []string {
-	used := map[string]bool{}
+func (m Module) listUnusedModules() []ModuleID {
+	used := map[ModuleID]bool{}
 	// Recurse through objects/maps/lists checking each element for having `ProductOfModuleUse` mark.
 	cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
 		if mark, has := HasMark[ProductOfModuleUse](v); has {
@@ -335,7 +353,7 @@ func (m Module) listUnusedModules() []string {
 		return true, nil
 	})
 
-	unused := []string{}
+	unused := []ModuleID{}
 	for _, w := range m.Use {
 		if !used[w] {
 			unused = append(unused, w)
@@ -480,28 +498,21 @@ func (bp *Blueprint) checkModulesInfo() error {
 	})
 }
 
-func validateGroupName(name string, usedNames map[string]bool) {
-	if name == "" {
-		log.Fatal(errorMessages["emptyGroupName"])
-	}
-	if hasIllegalChars(name) {
-		log.Fatalf("%s %s", errorMessages["illegalChars"], name)
-	}
-	if _, ok := usedNames[name]; ok {
-		log.Fatalf(
-			"%s: %s used more than once", errorMessages["duplicateGroup"], name)
-	}
-	usedNames[name] = true
-}
-
 // checkModuleAndGroupNames checks and imports module and resource group IDs
 // and names respectively.
 func checkModuleAndGroupNames(groups []DeploymentGroup) error {
-	seenMod := map[string]bool{}
-	groupNames := make(map[string]bool)
+	seenMod := map[ModuleID]bool{}
+	seenGroups := map[GroupName]bool{}
 	for ig := range groups {
 		grp := &groups[ig]
-		validateGroupName(grp.Name, groupNames)
+		if err := grp.Name.Validate(); err != nil {
+			return err
+		}
+		if seenGroups[grp.Name] {
+			return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name)
+		}
+		seenGroups[grp.Name] = true
+
 		for _, mod := range grp.Modules {
 			if seenMod[mod.ID] {
 				return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
@@ -694,7 +705,7 @@ func (bp *Blueprint) checkBlueprintName() error {
 // ProductOfModuleUse is a "mark" applied to values in Module.Settings if
 // this value was modified as a result of applying `use`.
 type ProductOfModuleUse struct {
-	Module string
+	Module ModuleID
 }
 
 // WalkModules walks all modules in the blueprint and calls the walker function

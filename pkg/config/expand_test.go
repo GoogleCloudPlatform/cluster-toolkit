@@ -227,7 +227,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		using := Module{
 			ID:     "usingModule",
 			Source: "path/using",
-			Use:    []string{"usedModule"},
+			Use:    []ModuleID{"usedModule"},
 		}
 		used := Module{ID: "usedModule", Source: "path/used"}
 

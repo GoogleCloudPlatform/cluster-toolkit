@@ -148,14 +148,14 @@ func getOutputs(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	return outputValues, nil
 }
 
-func outputsFile(artifactsDir string, groupName string) string {
-	return filepath.Join(artifactsDir, fmt.Sprintf("%s_outputs.tfvars", groupName))
+func outputsFile(artifactsDir string, group config.GroupName) string {
+	return filepath.Join(artifactsDir, fmt.Sprintf("%s_outputs.tfvars", string(group)))
 }
 
 // ExportOutputs will run terraform output and capture data needed for
 // subsequent deployment groups
 func ExportOutputs(tf *tfexec.Terraform, artifactsDir string) error {
-	thisGroup := filepath.Base(tf.WorkingDir())
+	thisGroup := config.GroupName(filepath.Base(tf.WorkingDir()))
 	filepath := outputsFile(artifactsDir, thisGroup)
 
 	outputValues, err := getOutputs(tf)
@@ -184,7 +184,7 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string) error {
 // working directory
 func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
 	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
-	thisGroup := filepath.Base(deploymentGroupDir)
+	thisGroup := config.GroupName(filepath.Base(deploymentGroupDir))
 
 	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, expandedBlueprintFile)
 	if err != nil {

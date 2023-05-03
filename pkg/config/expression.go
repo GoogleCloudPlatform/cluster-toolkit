@@ -29,8 +29,8 @@ import (
 // representation of a reference text
 type Reference struct {
 	GlobalVar bool
-	Module    string // should be empty if GlobalVar. otherwise required
-	Name      string // required
+	Module    ModuleID // should be empty if GlobalVar. otherwise required
+	Name      string   // required
 }
 
 // GlobalRef returns a reference to a global variable
@@ -39,7 +39,7 @@ func GlobalRef(n string) Reference {
 }
 
 // ModuleRef returns a reference to a module output
-func ModuleRef(m string, n string) Reference {
+func ModuleRef(m ModuleID, n string) Reference {
 	return Reference{Module: m, Name: n}
 }
 
@@ -91,7 +91,7 @@ func SimpleVarToReference(s string) (Reference, error) {
 			Name:      components[1]}, nil
 	}
 	return Reference{
-		Module: components[0],
+		Module: ModuleID(components[0]),
 		Name:   components[1]}, nil
 }
 
@@ -140,7 +140,7 @@ func TraversalToReference(t hcl.Traversal) (Reference, error) {
 		if err != nil {
 			return Reference{}, fmt.Errorf("expected third component of module var reference to be a variable name, got %w", err)
 		}
-		return ModuleRef(m, n), nil
+		return ModuleRef(ModuleID(m), n), nil
 	default:
 		return Reference{}, fmt.Errorf("unexpected first component of reference: %#v", root)
 	}
