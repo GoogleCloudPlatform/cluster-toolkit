@@ -30,8 +30,6 @@ deployment_groups:
   # Example - ./modules/network/pre-existing-vpc
   - id: network1
     source: modules/network/vpc
-    settings:
-      network_name: lustre-new-vpc
 
   - id: homefs
     source: modules/file-system/filestore

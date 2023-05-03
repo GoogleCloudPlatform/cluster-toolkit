@@ -27,8 +27,6 @@ deployment_groups:
   modules:
   - id: network
     source: modules/network/vpc
-    settings:
-      network_name: monitoring-net
 
   - id: homefs
     source: community/modules/file-system/nfs-server
