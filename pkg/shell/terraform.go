@@ -186,12 +186,17 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
 	thisGroup := config.GroupName(filepath.Base(deploymentGroupDir))
 
-	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, expandedBlueprintFile)
+	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
 
-	kinds, err := GetDeploymentKinds(expandedBlueprintFile)
+	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, dc)
+	if err != nil {
+		return err
+	}
+
+	kinds, err := GetDeploymentKinds(dc)
 	if err != nil {
 		return err
 	}
@@ -225,8 +230,23 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	case config.TerraformKind:
 		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
 	case config.PackerKind:
-		// outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.pkrvars.hcl", thisGroup))
-		return fmt.Errorf("import command is not yet supported for Packer deployment groups")
+		thisGroupIdx := dc.Config.GroupIndex(thisGroup)
+		packerGroup := dc.Config.DeploymentGroups[thisGroupIdx]
+		// Packer groups are enforced to have length 1
+		packerModule := packerGroup.Modules[0]
+		moduleID := string(packerModule.ID)
+		outfile = filepath.Join(deploymentGroupDir, moduleID, fmt.Sprintf("%s_inputs.auto.pkrvars.hcl", moduleID))
+
+		// evaluate Packer settings that contain intergroup references in the
+		// context of deployment variables and intergroup output values
+		packerSettings := getIntergroupPackerSettings(dc, packerModule)
+		varsValues := dc.Config.Vars.Items()
+		mergeMapsWithoutLoss(allInputValues, varsValues)
+		evaluatedSettings, err := packerSettings.Eval(config.Blueprint{Vars: config.NewDict(allInputValues)})
+		if err != nil {
+			return err
+		}
+		allInputValues = evaluatedSettings.Items()
 	default:
 		return fmt.Errorf("unexpected error: unknown module kind for group %s", thisGroup)
 	}

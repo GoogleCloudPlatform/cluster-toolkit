@@ -354,7 +354,7 @@ func (w TFWriter) writeDeploymentGroup(
 ) error {
 	depGroup := dc.Config.DeploymentGroups[groupIndex]
 	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
-	intergroupVars := findIntergroupVariables(depGroup, dc.Config)
+	intergroupVars := FindIntergroupVariables(depGroup, dc.Config)
 	intergroupInputs := make(map[string]bool)
 	for _, igVar := range intergroupVars {
 		intergroupInputs[igVar.Name] = true
@@ -473,13 +473,14 @@ func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) ma
 func substituteIgcReferences(mods []config.Module, igcRefs map[config.Reference]modulereader.VarInfo) []config.Module {
 	doctoredMods := make([]config.Module, len(mods))
 	for i, mod := range mods {
-		doctoredMods[i] = substituteIgcReferencesInModule(mod, igcRefs)
+		doctoredMods[i] = SubstituteIgcReferencesInModule(mod, igcRefs)
 	}
 	return doctoredMods
 }
 
-// Updates expressions in Module settings to use special IGC var name instead of the module reference
-func substituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Reference]modulereader.VarInfo) config.Module {
+// SubstituteIgcReferencesInModule updates expressions in Module settings to use
+// special IGC var name instead of the module reference
+func SubstituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Reference]modulereader.VarInfo) config.Module {
 	v, _ := cty.Transform(mod.Settings.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
 		e, is := config.IsExpressionValue(v)
 		if !is {
@@ -501,7 +502,9 @@ func substituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Refer
 	return mod
 }
 
-func findIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) map[config.Reference]modulereader.VarInfo {
+// FindIntergroupVariables returns all unique intergroup references made by
+// each module settings in a group
+func FindIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) map[config.Reference]modulereader.VarInfo {
 	res := map[config.Reference]modulereader.VarInfo{}
 	igcRefs := group.FindAllIntergroupReferences(bp)
 	for _, r := range igcRefs {
