@@ -161,7 +161,7 @@ validate_configs: ghpc
 
 validate_golden_copy: ghpc
 	$(info *********** running "Golden copy" tests ***********)
-	tools/validate_configs/validate_golden_copy.sh
+	tools/validate_configs/golden_copies/validate.sh
 
 terraform-format:
 	$(info *********** cleaning terraform files syntax and generating terraform documentation ***********)

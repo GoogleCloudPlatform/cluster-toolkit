@@ -37,8 +37,6 @@ run_test() {
 		echo "${untracked}"
 		exit 1
 	fi
-
-	echo "testing ${bp} in ${tmpdir} against ${gc}"
 	cp "${bp}" "${tmpdir}/"
 
 	# Only run from the repo directory if there are local modules, otherwise
@@ -93,6 +91,11 @@ ls ${gcs} >/dev/null 2>&1 || {
 	echo "*** ERROR: ${gcs} folder not found try running from the root of the repo"
 	exit 1
 }
-# Tests:
-run_test "tools/validate_configs/test_configs/igc_pkr_test.yaml" "${gcs}/packer_igc"
-run_test "tools/validate_configs/test_configs/igc_tf_test.yaml" "${gcs}/terraform_igc"
+
+# Run tests:
+for cfg_path in "${gcs}"/configs/*.yaml; do
+	cfg_file=$(basename "$cfg_path")
+	name="${cfg_file%.*}" # remove yaml extension
+	echo "Testing ${name}"
+	run_test "${cfg_path}" "${gcs}/expectations/${name}"
+done
