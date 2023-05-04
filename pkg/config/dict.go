@@ -180,7 +180,7 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 
 // MarshalYAML implements custom YAML marshaling.
 func (d Dict) MarshalYAML() (interface{}, error) {
-	o, err := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
+	o, _ := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
 		if e, is := IsExpressionValue(v); is {
 			return e.makeYamlExpressionValue(), nil
 		}
