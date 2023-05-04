@@ -73,7 +73,7 @@ deployment_groups:
           clck -D ${FWD}.db -F ${FWD} -l debug
     outputs:
     - startup_script
-- group: packer
+- group: build1
   modules:
   - id: controller-image
     source: modules/packer/custom-image
@@ -83,6 +83,8 @@ deployment_groups:
       source_image_project_id: [schedmd-slurm-public]
       source_image_family: schedmd-slurm-21-08-8-hpc-centos-7
       image_family: $(vars.controller_image_family)
+- group: build2
+  modules:
   - id: compute-image
     source: modules/packer/custom-image
     kind: packer

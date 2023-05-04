@@ -490,7 +490,8 @@ func (bp *Blueprint) addKindToModules() {
 	})
 }
 
-// setModulesInfo populates needed information from modules
+// checkModulesInfo ensures each module in the blueprint has known detailed
+// metadata (inputs, outputs)
 func (bp *Blueprint) checkModulesInfo() error {
 	return bp.WalkModules(func(m *Module) error {
 		_, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
@@ -498,9 +499,15 @@ func (bp *Blueprint) checkModulesInfo() error {
 	})
 }
 
-// checkModuleAndGroupNames checks and imports module and resource group IDs
-// and names respectively.
-func checkModuleAndGroupNames(groups []DeploymentGroup) error {
+// checkModulesAndGroups ensures:
+// - all module IDs are unique across all groups
+// - if deployment group kind is unknown (not explicit in blueprint), then it is
+//   set to th kind of the first module that has a known kind (a prior func sets
+//   module kind to Terraform if unset)
+// - all modules must be of the same kind and all modules must be of the same
+//   kind as the group
+// - all group names are unique and do not have illegal characters
+func checkModulesAndGroups(groups []DeploymentGroup) error {
 	seenMod := map[ModuleID]bool{}
 	seenGroups := map[GroupName]bool{}
 	for ig := range groups {
@@ -593,15 +600,25 @@ func (dc *DeploymentConfig) validateConfig() {
 	if err = dc.Config.checkModulesInfo(); err != nil {
 		log.Fatal(err)
 	}
-	if err = checkModuleAndGroupNames(dc.Config.DeploymentGroups); err != nil {
+
+	if err = checkModulesAndGroups(dc.Config.DeploymentGroups); err != nil {
 		log.Fatal(err)
 	}
+
+	// checkPackerGroups must come after checkModulesAndGroups, in which group
+	// Kind is set and aligned with module Kinds
+	if err = checkPackerGroups(dc.Config.DeploymentGroups); err != nil {
+		log.Fatal(err)
+	}
+
 	if err = checkUsedModuleNames(dc.Config); err != nil {
 		log.Fatal(err)
 	}
+
 	if err = checkBackends(dc.Config); err != nil {
 		log.Fatal(err)
 	}
+
 	if err = checkModuleSettings(dc.Config); err != nil {
 		log.Fatal(err)
 	}
@@ -736,5 +753,13 @@ func checkModuleSettings(bp Blueprint) error {
 			return true, nil
 		})
 	})
+}
 
+func checkPackerGroups(groups []DeploymentGroup) error {
+	for _, group := range groups {
+		if group.Kind == PackerKind && len(group.Modules) != 1 {
+			return fmt.Errorf("group %s is \"kind: packer\" but has more than 1 module; separate each packer module into its own deployment group", group.Name)
+		}
+	}
+	return nil
 }

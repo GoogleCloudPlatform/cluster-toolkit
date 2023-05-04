@@ -393,16 +393,16 @@ func (s *MySuite) TestExpandConfig(c *C) {
 	dc.ExpandConfig()
 }
 
-func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
+func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 	{ // Duplicate module name same group
 		g := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}, {ID: "pony"}}}
-		err := checkModuleAndGroupNames([]DeploymentGroup{g})
+		err := checkModulesAndGroups([]DeploymentGroup{g})
 		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
 	}
 	{ // Duplicate module name different groups
 		ice := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}}}
 		fire := DeploymentGroup{Name: "fire", Modules: []Module{{ID: "pony"}}}
-		err := checkModuleAndGroupNames([]DeploymentGroup{ice, fire})
+		err := checkModulesAndGroups([]DeploymentGroup{ice, fire})
 		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
 	}
 	{ // Mixing module kinds
@@ -410,7 +410,7 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 			{ID: "pony", Kind: PackerKind},
 			{ID: "zebra", Kind: TerraformKind},
 		}}
-		err := checkModuleAndGroupNames([]DeploymentGroup{g})
+		err := checkModulesAndGroups([]DeploymentGroup{g})
 		c.Check(err, ErrorMatches, "mixing modules of differing kinds in a deployment group is not supported: deployment group ice, got packer and terraform")
 	}
 }

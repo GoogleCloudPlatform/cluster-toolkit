@@ -95,18 +95,18 @@ templates. **Please ignore the printed instructions** in favor of the following:
     ```shell
     terraform -chdir=hpc-intel-select/primary output \
       -raw startup_script_startup_controller > \
-      hpc-intel-select/packer/controller-image/startup_script.sh
+      hpc-intel-select/build1/controller-image/startup_script.sh
 
     terraform -chdir=hpc-intel-select/primary output \
       -raw startup_script_startup_compute > \
-      hpc-intel-select/packer/compute-image/startup_script.sh
+      hpc-intel-select/build2/compute-image/startup_script.sh
     ```
 
 3. Build the custom Slurm controller image. While this step is executing, you
    may begin the next step in parallel.
 
     ```shell
-    cd hpc-intel-select/packer/controller-image
+    cd hpc-intel-select/build1/controller-image
     packer init .
     packer validate .
     packer build -var startup_script_file=startup_script.sh .
@@ -116,7 +116,7 @@ templates. **Please ignore the printed instructions** in favor of the following:
 
     ```shell
     cd -
-    cd hpc-intel-select/packer/compute-image
+    cd hpc-intel-select/build2/compute-image
     packer init .
     packer validate .
     packer build -var startup_script_file=startup_script.sh .
