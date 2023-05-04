@@ -118,7 +118,7 @@
         --inventory inventory \
         --user "{{ username }}" --become \
         --e "ansible_python_interpreter={{ venv }}/bin/python3" \
-        --skip-tags "kubernetes,nfs_client"
+        --skip-tags "kubernetes,nfs_client" | cut -c -2048
     args:
       chdir: "{{ omnia_dir }}"
     environment:
@@ -130,7 +130,7 @@
         --private-key /home/{{ username }}/.ssh/id_rsa \
         --inventory inventory \
         --user "{{ username }}" --become \
-        --skip-tags "kubernetes,nfs_client"
+        --skip-tags "kubernetes,nfs_client" | cut -c -2048
     args:
       chdir: "{{ omnia_dir }}"
     environment:

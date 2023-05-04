@@ -26,6 +26,7 @@ import (
 	"hpc-toolkit/pkg/validators"
 
 	"github.com/pkg/errors"
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
@@ -51,10 +52,6 @@ func (err *InvalidSettingError) Error() string {
 func (dc DeploymentConfig) validate() {
 	// Drop the flags for log to improve readability only for running the validation suite
 	log.SetFlags(0)
-
-	if err := dc.validateVars(); err != nil {
-		log.Fatal(err)
-	}
 
 	// variables should be validated before running validators
 	if err := dc.executeValidators(); err != nil {
@@ -145,17 +142,34 @@ func (dc DeploymentConfig) validateVars() error {
 	nilErr := "deployment variable %s was not set"
 
 	// Check type of labels (if they are defined)
-	if labels, ok := vars["labels"]; ok {
-		if _, ok := labels.(map[string]interface{}); !ok {
-			return errors.New("vars.labels must be a map")
+	if vars.Has("labels") {
+		labels := vars.Get("labels")
+		ty := labels.Type()
+		if !ty.IsObjectType() && !ty.IsMapType() {
+			return errors.New("vars.labels must be a map of strings")
+		}
+		for _, v := range labels.AsValueMap() {
+			if v.Type() != cty.String {
+				return errors.New("vars.labels must be a map of strings")
+			}
 		}
 	}
 
 	// Check for any nil values
-	for key, val := range vars {
-		if val == nil {
+	for key, val := range vars.Items() {
+		if val.IsNull() {
 			return fmt.Errorf(nilErr, key)
 		}
+	}
+
+	err := cty.Walk(vars.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
+		if e, is := IsExpressionValue(v); is {
+			return false, fmt.Errorf("can not use expressions in vars block, got %#v", e.makeYamlExpressionValue().AsString())
+		}
+		return true, nil
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -173,7 +187,7 @@ func validateModule(c Module) error {
 	if c.Source == "" {
 		return fmt.Errorf("%s\n%s", errorMessages["emptySource"], module2String(c))
 	}
-	if !modulereader.IsValidKind(c.Kind) {
+	if !IsValidModuleKind(c.Kind.String()) {
 		return fmt.Errorf("%s\n%s", errorMessages["wrongKind"], module2String(c))
 	}
 	return nil
@@ -186,16 +200,16 @@ func hasIllegalChars(name string) bool {
 func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
 
 	// Only get the map if needed
-	var outputsMap map[string]modulereader.VarInfo
+	var outputsMap map[string]modulereader.OutputInfo
 	if len(mod.Outputs) > 0 {
 		outputsMap = modInfo.GetOutputsAsMap()
 	}
 
 	// Ensure output exists in the underlying modules
 	for _, output := range mod.Outputs {
-		if _, ok := outputsMap[output]; !ok {
+		if _, ok := outputsMap[output.Name]; !ok {
 			return fmt.Errorf("%s, module: %s output: %s",
-				errorMessages["invalidOutput"], mod.ID, output)
+				errorMessages["invalidOutput"], mod.ID, output.Name)
 		}
 	}
 	return nil
@@ -268,7 +282,7 @@ func validateSettings(
 func (dc DeploymentConfig) validateModuleSettings() error {
 	for _, grp := range dc.Config.DeploymentGroups {
 		for _, mod := range grp.Modules {
-			info, err := modulereader.GetModuleInfo(mod.Source, mod.Kind)
+			info, err := modulereader.GetModuleInfo(mod.Source, mod.Kind.String())
 			if err != nil {
 				errStr := "failed to get info for module at %s while validating module settings"
 				return errors.Wrapf(err, errStr, mod.Source)
@@ -333,12 +347,20 @@ func (dc *DeploymentConfig) testApisEnabled(c validatorConfig) error {
 	}
 
 	var errored bool
-	for pid, apis := range requiredApis {
-		var project string
-		if IsLiteralVariable(pid) {
-			project, _ = dc.getStringValue(pid)
-		} else {
-			project = pid
+	for project, apis := range requiredApis {
+		if hasVariable(project) {
+			expr, err := SimpleVarToExpression(project)
+			if err != nil {
+				return err
+			}
+			v, err := expr.Eval(dc.Config)
+			if err != nil {
+				return err
+			}
+			if v.Type() != cty.String {
+				return fmt.Errorf("the deployment variable %s is not a string", project)
+			}
+			project = v.AsString()
 		}
 		err := validators.TestApisEnabled(project, apis)
 		if err != nil {
@@ -360,16 +382,13 @@ func (dc *DeploymentConfig) testProjectExists(c validatorConfig) error {
 	if err := c.check(testProjectExistsName, []string{"project_id"}); err != nil {
 		return err
 	}
-
-	projectID, err := dc.getStringValue(c.Inputs["project_id"])
+	m, err := evalValidatorInputsAsStrings(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestProjectExists(projectID)
-	if err != nil {
+	if err = validators.TestProjectExists(m["project_id"]); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
 	}
@@ -383,20 +402,13 @@ func (dc *DeploymentConfig) testRegionExists(c validatorConfig) error {
 	if err := c.check(testRegionExistsName, []string{"project_id", "region"}); err != nil {
 		return err
 	}
-	projectID, err := dc.getStringValue(c.Inputs["project_id"])
-	if err != nil {
-		log.Print(funcErrorMsg)
-		return err
-	}
-	region, err := dc.getStringValue(c.Inputs["region"])
+	m, err := evalValidatorInputsAsStrings(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestRegionExists(projectID, region)
-	if err != nil {
+	if err = validators.TestRegionExists(m["project_id"], m["region"]); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
 	}
@@ -410,21 +422,13 @@ func (dc *DeploymentConfig) testZoneExists(c validatorConfig) error {
 	if err := c.check(testZoneExistsName, []string{"project_id", "zone"}); err != nil {
 		return err
 	}
-
-	projectID, err := dc.getStringValue(c.Inputs["project_id"])
-	if err != nil {
-		log.Print(funcErrorMsg)
-		return err
-	}
-	zone, err := dc.getStringValue(c.Inputs["zone"])
+	m, err := evalValidatorInputsAsStrings(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestZoneExists(projectID, zone)
-	if err != nil {
+	if err = validators.TestZoneExists(m["project_id"], m["zone"]); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
 	}
@@ -438,26 +442,13 @@ func (dc *DeploymentConfig) testZoneInRegion(c validatorConfig) error {
 	if err := c.check(testZoneInRegionName, []string{"project_id", "region", "zone"}); err != nil {
 		return err
 	}
-
-	projectID, err := dc.getStringValue(c.Inputs["project_id"])
-	if err != nil {
-		log.Print(funcErrorMsg)
-		return err
-	}
-	zone, err := dc.getStringValue(c.Inputs["zone"])
-	if err != nil {
-		log.Print(funcErrorMsg)
-		return err
-	}
-	region, err := dc.getStringValue(c.Inputs["region"])
+	m, err := evalValidatorInputsAsStrings(c.Inputs, dc.Config)
 	if err != nil {
 		log.Print(funcErrorMsg)
 		return err
 	}
 
-	// err is nil or an error
-	err = validators.TestZoneInRegion(projectID, zone, region)
-	if err != nil {
+	if err = validators.TestZoneInRegion(m["project_id"], m["zone"], m["region"]); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsg)
 	}
@@ -488,33 +479,18 @@ func (dc *DeploymentConfig) testDeploymentVariableNotUsed(c validatorConfig) err
 	return nil
 }
 
-// return the actual value of a global variable specified by the literal
-// variable inputReference in form ((var.project_id))
-// if it is a literal global variable defined as a string, return value as string
-// in all other cases, return empty string and error
-func (dc *DeploymentConfig) getStringValue(inputReference interface{}) (string, error) {
-	varRef, ok := inputReference.(string)
-	if !ok {
-		return "", fmt.Errorf("the value %s cannot be cast to a string", inputReference)
+// Helper function to evaluate validator inputs and make sure that all values are strings.
+func evalValidatorInputsAsStrings(inputs Dict, bp Blueprint) (map[string]string, error) {
+	ev, err := inputs.Eval(bp)
+	if err != nil {
+		return nil, err
 	}
-
-	if IsLiteralVariable(varRef) {
-		varSlice := strings.Split(HandleLiteralVariable(varRef), ".")
-		varSrc := varSlice[0]
-		varName := varSlice[1]
-
-		// because expand has already run, the global variable should have been
-		// checked for existence. handle if user has explicitly passed
-		// ((var.does_not_exit)) or ((not_a_varsrc.not_a_var))
-		if varSrc == "var" {
-			if val, ok := dc.Config.Vars[varName]; ok {
-				valString, ok := val.(string)
-				if ok {
-					return valString, nil
-				}
-				return "", fmt.Errorf("the deployment variable %s is not a string", inputReference)
-			}
+	ms := map[string]string{}
+	for k, v := range ev.Items() {
+		if v.Type() != cty.String {
+			return nil, fmt.Errorf("validator inputs must be strings, %s is a %s", k, v.Type())
 		}
+		ms[k] = v.AsString()
 	}
-	return "", fmt.Errorf("the value %s is not a deployment variable or was not defined", inputReference)
+	return ms, nil
 }

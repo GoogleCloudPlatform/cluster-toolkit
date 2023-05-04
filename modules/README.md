@@ -37,6 +37,8 @@ Modules that are still in development and less stable are labeled with the
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
 * **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] ![experimental-badge] :
   Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
+* **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
+  Kubernetes node pool using GKE.
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-configure].
@@ -44,6 +46,7 @@ Modules that are still in development and less stable are labeled with the
   Creates execution hosts for use in a PBS Professional cluster.
 
 [vm-instance]: compute/vm-instance/README.md
+[gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
@@ -133,6 +136,8 @@ Modules that are still in development and less stable are labeled with the
   template that works with other Toolkit modules.
 * **[batch-login-node]** ![core-badge] : Creates a VM that can be used for
   submission of Google Cloud Batch jobs.
+* **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
+  Kubernetes cluster using GKE.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![experimental-badge] :
@@ -152,6 +157,7 @@ Modules that are still in development and less stable are labeled with the
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
+[gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
 [htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
@@ -362,12 +368,45 @@ value is in the following priority order:
 
 ### Outputs (Optional)
 
-The `outputs` field allows a module-level output to be made available at the
-deployment group level and therefore will be available via `terraform output` in
-terraform-based deployment groups. This can useful for displaying the IP of a
-login node or simply displaying instructions on how to use a module, as we
-have in the
+The `outputs` field adds the output of individual Terraform modules to the
+output of its deployment group. This enables the value to be available via
+`terraform output`. This can useful for displaying the IP of a login node or
+priting instructions on how to use a module, as we have in the
 [monitoring dashboard module](monitoring/dashboard/README.md#Outputs).
+
+The outputs field is a lists that it can be in either of two formats: a string
+equal to the name of the module output, or a map specifying the `name`,
+`description`, and whether the value is `sensitive` and should be suppressed
+from the standard output of Terraform commands. An example is shown below
+that displays the internal and public IP addresses of a VM created by the
+vm-instance module:
+
+```yaml
+  - id: vm
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    settings:
+      machine_type: e2-medium
+    outputs:
+    - internal_ip
+    - name: external_ip
+      description: "External IP of VM"
+      sensitive: true
+```
+
+The outputs shown after running Terraform apply will resemble:
+
+```text
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+external_ip_simplevm = <sensitive>
+internal_ip_simplevm = [
+  "10.128.0.19",
+]
+```
 
 ### Required Services (APIs) (optional)
 

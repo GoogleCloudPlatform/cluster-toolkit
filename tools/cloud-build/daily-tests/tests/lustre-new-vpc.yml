@@ -16,7 +16,7 @@
 
 test_name: lustre-new-vpc
 deployment_name: "lustre-new-vpc-{{ build }}"
-zone: us-central1-c
+zone: us-west4-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-with-new-vpc.yaml"
 network: "{{deployment_name}}"

@@ -30,6 +30,31 @@ images to internal projects.
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
+## Example blueprints
+
+A recommended pattern for building images with this module is to use the terraform
+based [startup-script] module along with this packer custom-image module. Below you
+can find links to several examples of this pattern, including usage instructions.
+
+### [Image Builder]
+The [Image Builder] blueprint demonstrates a solution that builds an image using:
+
+* The [HPC VM Image][hpcimage] as a base upon which to customize
+* A VPC network with firewall rules that allow IAP-based SSH tunnels
+* A Toolkit runner that installs a custom script
+
+Please review the [examples README] for usage instructions.
+
+### Intel-Optimized Slurm Cluster
+
+The [Intel-Optimized] Slurm Cluster [blueprint](../../../community/examples/intel/hpc-cluster-intel-select.yaml)
+adds the Intel compliance software on top of a Slurm on GCP image.
+
+[Image Builder]: ../../../examples/image-builder.yaml
+[startup-script]: ../../../modules/scripts/startup-script
+[examples README]: ../../../examples/README.md#image-builderyaml-
+[Intel-Optimized]: ../../../community/examples/intel/README.md#intel-optimized-slurm-cluster
+
 ## Order of execution
 
 The startup script specified in metadata executes in parallel with the other
@@ -173,18 +198,6 @@ Linux utility `tac`.
 [logging-console]: https://console.cloud.google.com/logs/
 [logging-read-docs]: https://cloud.google.com/sdk/gcloud/reference/logging/read
 
-## Example
-
-The [included blueprint](../../../examples/image-builder.yaml) demonstrates a
-solution that builds an image using:
-
-* The [HPC VM Image][hpcimage] as a base upon which to customize
-* A VPC network with firewall rules that allow IAP-based SSH tunnels
-* A Toolkit runner that installs a custom script
-
-Please review the [examples README](../../../examples/README.md#image-builderyaml)
-for usage instructions.
-
 ## License
 
 Copyright 2022 Google LLC
@@ -230,6 +243,7 @@ No resources.
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | The family name of the image to be built. Defaults to `deployment_name` | `string` | `null` | no |
 | <a name="input_image_name"></a> [image\_name](#input\_image\_name) | The name of the image to be built. If not supplied, it will be set to image\_family-$ISO\_TIMESTAMP | `string` | `null` | no |
+| <a name="input_image_storage_locations"></a> [image\_storage\_locations](#input\_image\_storage\_locations) | Storage location, either regional or multi-regional, where snapshot content is to be stored and only accepts 1 value.<br>See https://developer.hashicorp.com/packer/plugins/builders/googlecompute#image_storage_locations | `list(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the short-lived VM | `map(string)` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2-standard-4"` | no |
 | <a name="input_manifest_file"></a> [manifest\_file](#input\_manifest\_file) | File to which to write Packer build manifest | `string` | `"packer-manifest.json"` | no |
@@ -244,7 +258,7 @@ No resources.
 | <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Source OS image to build from | `string` | `null` | no |
 | <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternative to source\_image. Specify image family to build from latest image in family | `string` | `"hpc-centos-7"` | no |
 | <a name="input_source_image_project_id"></a> [source\_image\_project\_id](#input\_source\_image\_project\_id) | A list of project IDs to search for the source image. Packer will search the<br>first project ID in the list first, and fall back to the next in the list,<br>until it finds the source image. | `list(string)` | `null` | no |
-| <a name="input_ssh_username"></a> [ssh\_username](#input\_ssh\_username) | Username to use for SSH access to VM | `string` | `"packer"` | no |
+| <a name="input_ssh_username"></a> [ssh\_username](#input\_ssh\_username) | Username to use for SSH access to VM | `string` | `"hpc-toolkit-packer"` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script (as raw string) used to build the custom Linux VM image (overridden by var.startup\_script\_file if both are set) | `string` | `null` | no |
 | <a name="input_startup_script_file"></a> [startup\_script\_file](#input\_startup\_script\_file) | File path to local shell script that will be used to customize the Linux VM image (overrides var.startup\_script) | `string` | `null` | no |
 | <a name="input_state_timeout"></a> [state\_timeout](#input\_state\_timeout) | The time to wait for instance state changes, including image creation | `string` | `"10m"` | no |

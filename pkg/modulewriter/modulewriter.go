@@ -18,34 +18,60 @@
 package modulewriter
 
 import (
+	"bytes"
+	"crypto/md5"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/zclconf/go-cty/cty"
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	hiddenGhpcDirName          = ".ghpc"
 	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
+	deploymentMetadataName     = "deployment_metadata.yaml"
 )
+
+const intergroupWarning string = `
+WARNING: this deployment group requires outputs from previous groups!
+This is an advanced feature under active development. The automatically generated
+instructions for executing terraform or packer below will not work as shown.
+
+`
 
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
 	getNumModules() int
 	addNumModules(int)
 	writeDeploymentGroup(
-		depGroup config.DeploymentGroup,
-		globalVars map[string]interface{},
+		dc config.DeploymentConfig,
+		grpIdx int,
 		deployDir string,
-	) error
+	) (groupMetadata, error)
 	restoreState(deploymentDir string) error
+}
+
+type deploymentMetadata struct {
+	DeploymentMetadata []groupMetadata `yaml:"deployment_metadata"`
+}
+
+type groupMetadata struct {
+	Name             string
+	DeploymentInputs []string `yaml:"deployment_inputs"`
+	IntergroupInputs []string `yaml:"intergroup_inputs"`
+	Outputs          []string
 }
 
 var kinds = map[string]ModuleWriter{
@@ -68,45 +94,45 @@ func factory(kind string) ModuleWriter {
 
 // WriteDeployment writes a deployment directory using modules defined the
 // environment blueprint.
-func WriteDeployment(blueprint *config.Blueprint, outputDir string, overwriteFlag bool) error {
-	deploymentName, err := blueprint.DeploymentName()
+func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag bool) error {
+	deploymentName, err := dc.Config.DeploymentName()
 	if err != nil {
 		return err
 	}
 	deploymentDir := filepath.Join(outputDir, deploymentName)
 
-	overwrite := isOverwriteAllowed(deploymentDir, blueprint, overwriteFlag)
+	overwrite := isOverwriteAllowed(deploymentDir, &dc.Config, overwriteFlag)
 	if err := prepDepDir(deploymentDir, overwrite); err != nil {
 		return err
 	}
 
-	if err := copySource(deploymentDir, &blueprint.DeploymentGroups); err != nil {
+	if err := copySource(deploymentDir, &dc.Config.DeploymentGroups); err != nil {
 		return err
 	}
 
-	if err := createGroupDirs(deploymentDir, &blueprint.DeploymentGroups); err != nil {
+	if err := createGroupDirs(deploymentDir, &dc.Config.DeploymentGroups); err != nil {
 		return err
 	}
 
-	for _, grp := range blueprint.DeploymentGroups {
-
-		deploymentName, err := blueprint.DeploymentName()
-		if err != nil {
-			return err
-		}
-
-		deploymentPath := filepath.Join(outputDir, deploymentName)
-		writer, ok := kinds[grp.Kind]
+	metadata := deploymentMetadata{
+		DeploymentMetadata: []groupMetadata{},
+	}
+	for grpIdx, grp := range dc.Config.DeploymentGroups {
+		writer, ok := kinds[grp.Kind.String()]
 		if !ok {
 			return fmt.Errorf(
-				"Invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
+				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
 		}
 
-		if err := writer.writeDeploymentGroup(
-			grp, blueprint.Vars, deploymentPath,
-		); err != nil {
+		gmd, err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir)
+		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
+		metadata.DeploymentMetadata = append(metadata.DeploymentMetadata, gmd)
+	}
+
+	if err := writeDeploymentMetadata(deploymentDir, metadata); err != nil {
+		return err
 	}
 
 	for _, writer := range kinds {
@@ -133,42 +159,101 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 	return nil
 }
 
-func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
+// Get module source within deployment group
+// Rules are following:
+//   - git source
+//     => keep the same source
+//   - packer
+//     => <mod.ID>
+//   - embedded (source starts with "modules" or "comunity/modules")
+//     => ./modules/embedded/<source>
+//   - other
+//     => ./modules/<basename(source)>-<hash(abs(source))>
+func deploymentSource(mod config.Module) (string, error) {
+	if sourcereader.IsGitPath(mod.Source) {
+		return mod.Source, nil
+	}
+	if mod.Kind == config.PackerKind {
+		return mod.ID, nil
+	}
+	if mod.Kind != config.TerraformKind {
+		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
+	}
 
+	if sourcereader.IsEmbeddedPath(mod.Source) {
+		return "./modules/" + filepath.Join("embedded", mod.Source), nil
+	}
+	if !sourcereader.IsLocalPath(mod.Source) {
+		return "", fmt.Errorf("unuexpected module source %s", mod.Source)
+	}
+
+	abs, err := filepath.Abs(mod.Source)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for %#v: %v", mod.Source, err)
+	}
+	base := filepath.Base(mod.Source)
+	return fmt.Sprintf("./modules/%s-%s", base, shortHash(abs)), nil
+}
+
+// Returns first 4 characters of md5 sum in hex form
+func shortHash(s string) string {
+	h := md5.Sum([]byte(s))
+	return hex.EncodeToString(h[:])[:4]
+}
+
+func copyEmbeddedModules(base string) error {
+	r := sourcereader.EmbeddedSourceReader{}
+	for _, src := range []string{"modules", "community/modules"} {
+		dst := filepath.Join(base, "modules/embedded", src)
+		if err := os.MkdirAll(dst, 0755); err != nil {
+			return err
+		}
+		if err := r.CopyDir(src, dst); err != nil {
+			return err
+		}
+
+	}
+	return nil
+}
+
+func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 	for iGrp := range *deploymentGroups {
 		grp := &(*deploymentGroups)[iGrp]
 		basePath := filepath.Join(deploymentPath, grp.Name)
+
+		var copyEmbedded = false
 		for iMod := range grp.Modules {
 			mod := &grp.Modules[iMod]
+			ds, err := deploymentSource(*mod)
+			if err != nil {
+				return err
+			}
+			mod.DeploymentSource = ds
+
 			if sourcereader.IsGitPath(mod.Source) {
-				mod.DeploymentSource = mod.Source
-				continue
+				continue // do not download
 			}
-
+			factory(mod.Kind.String()).addNumModules(1)
+			if sourcereader.IsEmbeddedPath(mod.Source) && mod.Kind == config.TerraformKind {
+				copyEmbedded = true
+				continue // all embedded terraform modules fill be copied at once
+			}
 			/* Copy source files */
-			moduleName := filepath.Base(mod.Source)
-			var deplSource string
-			switch mod.Kind {
-			case "terraform":
-				deplSource = "./" + filepath.Join("modules", moduleName)
-			case "packer":
-				deplSource = mod.ID
-			}
-			mod.DeploymentSource = deplSource
-			fullPath := filepath.Join(basePath, deplSource)
-			if _, err := os.Stat(fullPath); err == nil {
+			dst := filepath.Join(basePath, mod.DeploymentSource)
+			if _, err := os.Stat(dst); err == nil {
 				continue
 			}
-
 			reader := sourcereader.Factory(mod.Source)
-			if err := reader.GetModule(mod.Source, fullPath); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, fullPath, err)
+			if err := reader.GetModule(mod.Source, dst); err != nil {
+				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, dst, err)
 			}
-
-			/* Create module level files */
-			writer := factory(mod.Kind)
-			writer.addNumModules(1)
 		}
+		if copyEmbedded {
+			if err := copyEmbeddedModules(basePath); err != nil {
+				return fmt.Errorf("failed to copy embedded modules: %v", err)
+			}
+		}
+
 	}
 	return nil
 }
@@ -249,15 +334,15 @@ func prepDepDir(depDir string, overwrite bool) error {
 		// Confirm we have a previously written deployment dir before overwritting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 			return fmt.Errorf(
-				"While trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
+				"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
 		}
 	} else {
 		if err := deploymentio.CreateDirectory(ghpcDir); err != nil {
-			return fmt.Errorf("Failed to create directory at %s: err=%w", ghpcDir, err)
+			return fmt.Errorf("failed to create directory at %s: err=%w", ghpcDir, err)
 		}
 
 		if err := deploymentio.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile); err != nil {
-			return fmt.Errorf("Failed to copy template.gitignore file to %s: err=%w", gitignoreFile, err)
+			return fmt.Errorf("failed to copy template.gitignore file to %s: err=%w", gitignoreFile, err)
 		}
 	}
 
@@ -265,7 +350,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 	prevGroupDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
-		return fmt.Errorf("Failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
+		return fmt.Errorf("failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
 	}
 
 	// move deployment groups
@@ -284,4 +369,59 @@ func prepDepDir(depDir string, overwrite bool) error {
 		}
 	}
 	return nil
+}
+
+func writeDeploymentMetadata(depDir string, metadata deploymentMetadata) error {
+	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
+		return fmt.Errorf(
+			"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
+	}
+
+	metadataFile := filepath.Join(ghpcDir, deploymentMetadataName)
+	f, err := os.OpenFile(metadataFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	buf.WriteString(config.YamlLicense)
+	buf.WriteString("\n")
+	encoder := yaml.NewEncoder(&buf)
+	defer encoder.Close()
+	encoder.SetIndent(2)
+	if err := encoder.Encode(metadata); err != nil {
+		return err
+	}
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func findIntergroupVariables(group config.DeploymentGroup, graph map[string][]config.ModConnection) []modulereader.VarInfo {
+	// var integroupVars []modulereader.VarInfo
+	var intergroupVars []modulereader.VarInfo
+
+	for _, mod := range group.Modules {
+		if connections, ok := graph[mod.ID]; ok {
+			for _, conn := range connections {
+				if conn.IsIntergroup() {
+					for _, v := range conn.GetSharedVariables() {
+						vinfo := modulereader.VarInfo{
+							Name:        v,
+							Type:        getHclType(cty.DynamicPseudoType),
+							Description: fmt.Sprintf("Toolkit automatically generated variable: %s", v),
+							Default:     nil,
+							Required:    true,
+						}
+						intergroupVars = append(intergroupVars, vinfo)
+					}
+				}
+			}
+		}
+	}
+	return intergroupVars
 }

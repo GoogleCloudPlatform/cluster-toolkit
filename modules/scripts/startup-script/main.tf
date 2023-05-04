@@ -15,15 +15,21 @@
  */
 
 locals {
-  ansible_installer = {
+  ops_agent_installer = var.install_cloud_ops_agent ? [{
     type        = "shell"
-    source      = "${path.module}/examples/install_ansible.sh"
-    destination = "install_ansible_automatic.sh"
-  }
+    source      = "${path.module}/files/install_cloud_ops_agent.sh"
+    destination = "install_cloud_ops_agent_automatic.sh"
+  }] : []
 
-  ansible_local_runners     = [for r in var.runners : r if r.type == "ansible-local"]
-  prepend_ansible_installer = length(local.ansible_local_runners) > 0 && var.prepend_ansible_installer
-  runners                   = local.prepend_ansible_installer ? concat([local.ansible_installer], var.runners) : var.runners
+  has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"])
+  install_ansible     = var.install_ansible == null ? local.has_ansible_runners : var.install_ansible
+  ansible_installer = local.install_ansible ? [{
+    type        = "shell"
+    source      = "${path.module}/files/install_ansible.sh"
+    destination = "install_ansible_automatic.sh"
+  }] : []
+
+  runners = concat(local.ops_agent_installer, local.ansible_installer, var.runners)
 
   bucket_regex               = "^gs://([^/]*)/*(.*)"
   gcs_bucket_path_trimmed    = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")

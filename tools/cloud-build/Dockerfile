@@ -15,6 +15,7 @@
 # Getting Terraform and Packer
 FROM golang:bullseye
 ARG TFLINT_VERSION
+ARG SHELLCHECK_VERSION
 
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get -y update && apt-get -y install \
@@ -33,6 +34,9 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
 
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
+RUN wget -qO- "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION?}.linux.x86_64.tar.xz" | tar -xJv && \
+    cp "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/bin/
+
 RUN go install github.com/terraform-docs/terraform-docs@latest      && \
     go install golang.org/x/lint/golint@latest                      && \
     go install github.com/fzipp/gocyclo/cmd/gocyclo@latest          && \
@@ -46,7 +50,7 @@ WORKDIR /ghpc-tmp
 COPY ./ ./
 
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.2/scripts/requirements.txt && \
+    pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt && \
     pip install --no-cache-dir -r tools/cloud-build/requirements.txt && \
     rm -rf ~/.cache/pip/*
 

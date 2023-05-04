@@ -38,6 +38,22 @@ type BaseFS interface {
 // EmbeddedSourceReader reads modules from a local directory
 type EmbeddedSourceReader struct{}
 
+func copyFileOut(fs BaseFS, src string, dst string) error {
+	content, err := fs.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("failed to read embedded %#v: %v", src, err)
+	}
+	f, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create %#v: %v", dst, err)
+	}
+	defer f.Close()
+	if _, err = f.Write(content); err != nil {
+		return fmt.Errorf("failed to write %#v: %v", dst, err)
+	}
+	return nil
+}
+
 // copyDirFromModules copies an FS directory to a local path
 func copyDirFromModules(fs BaseFS, source string, dest string) error {
 	dirEntries, err := fs.ReadDir(source)
@@ -59,17 +75,10 @@ func copyDirFromModules(fs BaseFS, source string, dest string) error {
 				return err
 			}
 		} else {
-			fileBytes, err := fs.ReadFile(entrySource)
-			if err != nil {
+			if err := copyFileOut(fs, entrySource, entryDest); err != nil {
 				return err
 			}
-			copyFile, err := os.Create(entryDest)
-			if err != nil {
-				return err
-			}
-			if _, err = copyFile.Write(fileBytes); err != nil {
-				return err
-			}
+
 		}
 	}
 	return nil
@@ -89,6 +98,9 @@ func copyFSToTempDir(fs BaseFS, modulePath string) (string, error) {
 
 // GetModule copies the embedded source to a provided destination (the deployment directory)
 func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
+	if ModuleFS == nil {
+		return fmt.Errorf("embedded file system is not initialized")
+	}
 	if !IsEmbeddedPath(modPath) {
 		return fmt.Errorf("Source is not valid: %s", modPath)
 	}
@@ -102,4 +114,12 @@ func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
 	}
 
 	return copyFromPath(modDir, copyPath)
+}
+
+// CopyDir copies embedded directory to destination path
+func (r EmbeddedSourceReader) CopyDir(src string, dst string) error {
+	if ModuleFS == nil {
+		return fmt.Errorf("embedded file system is not initialized")
+	}
+	return copyDirFromModules(ModuleFS, src, dst)
 }

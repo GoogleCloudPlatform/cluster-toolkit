@@ -20,9 +20,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -62,7 +62,7 @@ deployment_groups:
 	testModules = []Module{
 		{
 			Source:           "./modules/network/vpc",
-			Kind:             "terraform",
+			Kind:             TerraformKind,
 			ID:               "vpc",
 			WrapSettingsWith: make(map[string][]string),
 			Settings: map[string]interface{}{
@@ -71,20 +71,15 @@ deployment_groups:
 			},
 		},
 	}
-	defaultLabels = map[string]interface{}{
-		"ghpc_blueprint":  "simple",
-		"deployment_name": "deployment_name",
-	}
 	expectedSimpleBlueprint Blueprint = Blueprint{
 		BlueprintName: "simple",
-		Vars: map[string]interface{}{
-			"project_id": "test-project",
-			"labels":     defaultLabels},
-		DeploymentGroups: []DeploymentGroup{{Name: "DeploymentGroup1", TerraformBackend: TerraformBackend{}, Modules: testModules}},
-		TerraformBackendDefaults: TerraformBackend{
-			Type:          "",
-			Configuration: map[string]interface{}{},
-		},
+		Vars: NewDict(map[string]cty.Value{
+			"project_id": cty.StringVal("test-project"),
+			"labels": cty.ObjectVal(map[string]cty.Value{
+				"ghpc_blueprint":  cty.StringVal("simple"),
+				"deployment_name": cty.StringVal("deployment_name"),
+			})}),
+		DeploymentGroups: []DeploymentGroup{{Name: "DeploymentGroup1", Modules: testModules}},
 	}
 	// For expand.go
 	requiredVar = modulereader.VarInfo{
@@ -168,7 +163,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testModuleSource := "testSource"
 	testModule := Module{
 		Source:           testModuleSource,
-		Kind:             "terraform",
+		Kind:             TerraformKind,
 		ID:               "testModule",
 		Use:              []string{},
 		WrapSettingsWith: make(map[string][]string),
@@ -178,7 +173,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testModuleWithLabels := Module{
 		Source:           testModuleSourceWithLabels,
 		ID:               "testModuleWithLabels",
-		Kind:             "terraform",
+		Kind:             TerraformKind,
 		Use:              []string{},
 		WrapSettingsWith: make(map[string][]string),
 		Settings: map[string]interface{}{
@@ -192,21 +187,13 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	testBlueprint := Blueprint{
 		BlueprintName: "simple",
 		Validators:    nil,
-		Vars: map[string]interface{}{
-			"deployment_name": "deployment_name",
-			"project_id":      "test-project",
-		},
-		TerraformBackendDefaults: TerraformBackend{
-			Type:          "",
-			Configuration: map[string]interface{}{},
-		},
+		Vars: NewDict(map[string]cty.Value{
+			"deployment_name": cty.StringVal("deployment_name"),
+			"project_id":      cty.StringVal("test-project"),
+		}),
 		DeploymentGroups: []DeploymentGroup{
 			{
-				Name: "group1",
-				TerraformBackend: TerraformBackend{
-					Type:          "",
-					Configuration: map[string]interface{}{},
-				},
+				Name:    "group1",
 				Modules: []Module{testModule, testModuleWithLabels},
 			},
 		},
@@ -235,7 +222,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 		Modules: []Module{
 			{
 				ID:       "TestModule",
-				Kind:     "terraform",
+				Kind:     TerraformKind,
 				Source:   testModuleSource,
 				Settings: map[string]interface{}{"test_variable": "test_value"},
 			},
@@ -244,7 +231,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 	return DeploymentConfig{
 		Config: Blueprint{
 			BlueprintName:    "simple",
-			Vars:             map[string]interface{}{"deployment_name": "deployment_name"},
+			Vars:             NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("deployment_name")}),
 			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
 		},
 	}
@@ -275,7 +262,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Type: "string",
 			},
 		},
-		Outputs: []modulereader.VarInfo{
+		Outputs: []modulereader.OutputInfo{
 			{
 				Name: matchingIntergroupName,
 			},
@@ -302,7 +289,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Name: matchingIntragroupName2,
 			},
 		},
-		Outputs: []modulereader.VarInfo{},
+		Outputs: []modulereader.OutputInfo{},
 	}
 
 	testModuleInfo2 := modulereader.ModuleInfo{
@@ -315,7 +302,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 				Name: matchingIntergroupName,
 			},
 		},
-		Outputs: []modulereader.VarInfo{},
+		Outputs: []modulereader.OutputInfo{},
 	}
 
 	dg0Name := "primary"
@@ -325,23 +312,25 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		Modules: []Module{
 			{
 				ID:     modID0,
-				Kind:   "terraform",
+				Kind:   TerraformKind,
 				Source: testModuleSource0,
 				Settings: map[string]interface{}{
 					altProjectIDSetting: "$(vars.project_id)",
 				},
-				Outputs: []string{matchingIntergroupName},
+				Outputs: []modulereader.OutputInfo{
+					{Name: matchingIntergroupName},
+				},
 			},
 			{
 				ID:     "TestModule1",
-				Kind:   "terraform",
+				Kind:   TerraformKind,
 				Source: testModuleSource1,
 				Settings: map[string]interface{}{
 					matchingIntragroupName1: "explicit-intra-value",
 					matchingIntragroupName2: fmt.Sprintf("$(%s.%s)", modID0, matchingIntragroupName2),
 				},
 				Use: []string{
-					fmt.Sprintf("%s.%s", dg0Name, modID0),
+					modID0,
 				},
 			},
 		},
@@ -351,11 +340,11 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		Modules: []Module{
 			{
 				ID:       "TestModule2",
-				Kind:     "terraform",
+				Kind:     TerraformKind,
 				Source:   testModuleSource2,
 				Settings: map[string]interface{}{},
 				Use: []string{
-					fmt.Sprintf("%s.%s", testDeploymentGroup0.Name, testDeploymentGroup0.Modules[0].ID),
+					testDeploymentGroup0.Modules[0].ID,
 				},
 			},
 		},
@@ -364,11 +353,11 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 	dc := DeploymentConfig{
 		Config: Blueprint{
 			BlueprintName: "simple",
-			Vars: map[string]interface{}{
-				"deployment_name": "deployment_name",
-				"project_id":      "test-project",
-				"unused_key":      "unused_value",
-			},
+			Vars: NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("deployment_name"),
+				"project_id":      cty.StringVal("test-project"),
+				"unused_key":      cty.StringVal("unused_value"),
+			}),
 			DeploymentGroups: []DeploymentGroup{testDeploymentGroup0, testDeploymentGroup1},
 		},
 		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{
@@ -386,7 +375,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 	dc.addSettingsToModules()
 	dc.addMetadataToModules()
 	dc.addDefaultValidators()
-	reader := modulereader.Factory("terraform")
+	reader := modulereader.Factory(TerraformKind.String())
 	reader.SetInfo(testModuleSource0, testModuleInfo0)
 	reader.SetInfo(testModuleSource1, testModuleInfo1)
 	reader.SetInfo(testModuleSource2, testModuleInfo2)
@@ -406,7 +395,7 @@ func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 			},
 			{
 				ID:       "TestModule2",
-				Kind:     "",
+				Kind:     UnknownKind,
 				Source:   testModuleSource,
 				Settings: map[string]interface{}{"test_variable": "test_value"},
 			},
@@ -415,7 +404,7 @@ func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 	return DeploymentConfig{
 		Config: Blueprint{
 			BlueprintName:    "simple",
-			Vars:             map[string]interface{}{"deployment_name": "deployment_name"},
+			Vars:             NewDict(map[string]cty.Value{"test_variable": cty.StringVal("test_value")}),
 			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
 		},
 	}
@@ -439,6 +428,14 @@ func (s *MySuite) TestCheckModuleAndGroupNames(c *C) {
 		fire := DeploymentGroup{Name: "fire", Modules: []Module{{ID: "pony"}}}
 		err := checkModuleAndGroupNames([]DeploymentGroup{ice, fire})
 		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
+	}
+	{ // Mixing module kinds
+		g := DeploymentGroup{Name: "ice", Modules: []Module{
+			{ID: "pony", Kind: PackerKind},
+			{ID: "zebra", Kind: TerraformKind},
+		}}
+		err := checkModuleAndGroupNames([]DeploymentGroup{g})
+		c.Check(err, ErrorMatches, "mixing modules of differing kinds in a deployment group is not supported: deployment group ice, got packer and terraform")
 	}
 }
 
@@ -474,7 +471,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef0, useConnection, []string{"var1"})
 	got = dc.listUnusedModules()
@@ -486,7 +482,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef1, useConnection, []string{})
 	got = dc.listUnusedModules()
@@ -498,7 +493,6 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 		fromModuleID: "usingModule",
 		toGroupID:    "group1",
 		fromGroupID:  "group1",
-		explicit:     true,
 	}
 	dc.addModuleConnection(modRef2, useConnection, []string{})
 	got = dc.listUnusedModules()
@@ -529,21 +523,21 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 
 	/* Test addKindToModules() works when kind is absent*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
-	expected = "terraform"
+	expected = TerraformKind
 	dc.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
 	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() works when kind is empty*/
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
-	expected = "terraform"
+	expected = TerraformKind
 	dc.addKindToModules()
 	testMod, _ = dc.Config.DeploymentGroups[0].getModuleByID("TestModule1")
 	c.Assert(testMod.Kind, Equals, expected)
 
 	/* Test addKindToModules() does nothing to packer types*/
 	moduleID := "packerModule"
-	expected = "packer"
+	expected = PackerKind
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
@@ -552,7 +546,7 @@ func (s *MySuite) TestAddKindToModules(c *C) {
 
 	/* Test addKindToModules() does nothing to invalid types*/
 	moduleID = "funnyModule"
-	expected = "funnyType"
+	expected = ModuleKind{kind: "funnyKind"}
 	dc = getDeploymentConfigWithTestModuleEmptyKind()
 	dc.Config.DeploymentGroups[0].Modules = append(dc.Config.DeploymentGroups[0].Modules, Module{ID: moduleID, Kind: expected})
 	dc.addKindToModules()
@@ -572,19 +566,18 @@ func (s *MySuite) TestModuleConnections(c *C) {
 	c.Assert(err, IsNil)
 	err = dc.expandVariables()
 	// TODO: this will become nil once intergroup references are enabled
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 
 	// check that ModuleConnections has map keys for each module ID
-	c.Check(dc.moduleConnections, DeepEquals, map[string][]ModConnection{
+	c.Check(dc.GetModuleConnections(), DeepEquals, map[string][]ModConnection{
 		modID0: {
 			{
 				ref: varReference{
 					name:         "deployment_name",
 					toModuleID:   "vars",
 					fromModuleID: "TestModule0",
-					toGroupID:    "deployment",
+					toGroupID:    globalGroupID,
 					fromGroupID:  "primary",
-					explicit:     false,
 				},
 				kind:            deploymentConnection,
 				sharedVariables: []string{"deployment_name"},
@@ -594,9 +587,8 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					name:         "project_id",
 					toModuleID:   "vars",
 					fromModuleID: "TestModule0",
-					toGroupID:    "deployment",
+					toGroupID:    globalGroupID,
 					fromGroupID:  "primary",
-					explicit:     false,
 				},
 				kind:            deploymentConnection,
 				sharedVariables: []string{"project_id"},
@@ -609,7 +601,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					fromModuleID: "TestModule1",
 					toGroupID:    "primary",
 					fromGroupID:  "primary",
-					explicit:     true,
 				},
 				kind:            useConnection,
 				sharedVariables: []string{"test_intra_0"},
@@ -621,7 +612,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					fromModuleID: "TestModule1",
 					toGroupID:    "primary",
 					fromGroupID:  "primary",
-					explicit:     false,
 				},
 				kind:            explicitConnection,
 				sharedVariables: []string{"test_intra_2"},
@@ -634,7 +624,6 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					fromModuleID: "TestModule2",
 					toGroupID:    "primary",
 					fromGroupID:  "secondary",
-					explicit:     true,
 				},
 				kind:            useConnection,
 				sharedVariables: []string{"test_inter_0"},
@@ -644,9 +633,8 @@ func (s *MySuite) TestModuleConnections(c *C) {
 					name:         "deployment_name",
 					toModuleID:   "vars",
 					fromModuleID: "TestModule2",
-					toGroupID:    "deployment",
+					toGroupID:    globalGroupID,
 					fromGroupID:  "secondary",
-					explicit:     false,
 				},
 				kind:            deploymentConnection,
 				sharedVariables: []string{"deployment_name"},
@@ -701,80 +689,81 @@ func (s *MySuite) TestGetResouceByID(c *C) {
 func (s *MySuite) TestHasKind(c *C) {
 	// No Modules
 	rg := DeploymentGroup{}
-	c.Assert(rg.HasKind("terraform"), Equals, false)
-	c.Assert(rg.HasKind("packer"), Equals, false)
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, false)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One terraform module
-	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
-	c.Assert(rg.HasKind("terraform"), Equals, true)
-	c.Assert(rg.HasKind("packer"), Equals, false)
+	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// Multiple terraform modules
-	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
-	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
-	c.Assert(rg.HasKind("terraform"), Equals, true)
-	c.Assert(rg.HasKind("packer"), Equals, false)
+	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
+	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, false)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One packer kind
-	rg.Modules = []Module{{Kind: "packer"}}
-	c.Assert(rg.HasKind("terraform"), Equals, false)
-	c.Assert(rg.HasKind("packer"), Equals, true)
+	rg.Modules = []Module{{Kind: PackerKind}}
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, false)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, true)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 	// One packer, one terraform
-	rg.Modules = append(rg.Modules, Module{Kind: "terraform"})
-	c.Assert(rg.HasKind("terraform"), Equals, true)
-	c.Assert(rg.HasKind("packer"), Equals, true)
+	rg.Modules = append(rg.Modules, Module{Kind: TerraformKind})
+	c.Assert(rg.HasKind(TerraformKind.String()), Equals, true)
+	c.Assert(rg.HasKind(PackerKind.String()), Equals, true)
 	c.Assert(rg.HasKind("notAKind"), Equals, false)
 
 }
 
 func (s *MySuite) TestDeploymentName(c *C) {
-	dc := getDeploymentConfigForTest()
+	bp := Blueprint{}
 	var e *InputValueError
 
 	// Is deployment_name a valid string?
-	deploymentName, err := dc.Config.DeploymentName()
-	c.Assert(deploymentName, Equals, "deployment_name")
+	bp.Vars.Set("deployment_name", cty.StringVal("yellow"))
+	dn, err := bp.DeploymentName()
+	c.Assert(dn, Equals, "yellow")
 	c.Assert(err, IsNil)
 
 	// Is deployment_name an empty string?
-	dc.Config.Vars["deployment_name"] = ""
-	deploymentName, err = dc.Config.DeploymentName()
-	c.Assert(deploymentName, Equals, "")
+	bp.Vars.Set("deployment_name", cty.StringVal(""))
+	dn, err = bp.DeploymentName()
+	c.Assert(dn, Equals, "")
 	c.Check(errors.As(err, &e), Equals, true)
 
 	// Is deployment_name not a string?
-	dc.Config.Vars["deployment_name"] = 100
-	deploymentName, err = dc.Config.DeploymentName()
-	c.Assert(deploymentName, Equals, "")
+	bp.Vars.Set("deployment_name", cty.NumberIntVal(100))
+	dn, err = bp.DeploymentName()
+	c.Assert(dn, Equals, "")
 	c.Check(errors.As(err, &e), Equals, true)
 
 	// Is deployment_names longer than 63 characters?
-	dc.Config.Vars["deployment_name"] = "deployment_name-deployment_name-deployment_name-deployment_name-0123"
-	deploymentName, err = dc.Config.DeploymentName()
-	c.Assert(deploymentName, Equals, "")
+	bp.Vars.Set("deployment_name", cty.StringVal("deployment_name-deployment_name-deployment_name-deployment_name-0123"))
+	dn, err = bp.DeploymentName()
+	c.Assert(dn, Equals, "")
 	c.Check(errors.As(err, &e), Equals, true)
 
 	// Does deployment_name contain special characters other than dashes or underscores?
-	dc.Config.Vars["deployment_name"] = "deployment.name"
-	deploymentName, err = dc.Config.DeploymentName()
-	c.Assert(deploymentName, Equals, "")
+	bp.Vars.Set("deployment_name", cty.StringVal("deployment.name"))
+	dn, err = bp.DeploymentName()
+	c.Assert(dn, Equals, "")
 	c.Check(errors.As(err, &e), Equals, true)
 
 	// Does deployment_name contain capital letters?
-	dc.Config.Vars["deployment_name"] = "Deployment_name"
-	deploymentName, err = dc.Config.DeploymentName()
-	c.Assert(deploymentName, Equals, "")
+	bp.Vars.Set("deployment_name", cty.StringVal("Deployment_name"))
+	dn, err = bp.DeploymentName()
+	c.Assert(dn, Equals, "")
 	c.Check(errors.As(err, &e), Equals, true)
 
 	// Is deployment_name not set?
-	delete(dc.Config.Vars, "deployment_name")
-	deploymentName, err = dc.Config.DeploymentName()
-	c.Assert(deploymentName, Equals, "")
+	bp.Vars = Dict{}
+	dn, err = bp.DeploymentName()
+	c.Assert(dn, Equals, "")
 	c.Check(errors.As(err, &e), Equals, true)
 }
 
@@ -815,7 +804,8 @@ func (s *MySuite) TestCheckBlueprintName(c *C) {
 func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
-	dc.ExportBlueprint(outFile)
+	_, err := dc.ExportBlueprint(outFile)
+	c.Assert(err, IsNil)
 	newDC, err := NewDeploymentConfig(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(dc.Config, DeepEquals, newDC.Config)
@@ -827,10 +817,9 @@ func (s *MySuite) TestImportBlueprint(c *C) {
 	c.Assert(obtainedBlueprint.BlueprintName,
 		Equals, expectedSimpleBlueprint.BlueprintName)
 	c.Assert(
-		len(obtainedBlueprint.Vars["labels"].(map[string]interface{})),
-		Equals,
-		len(expectedSimpleBlueprint.Vars["labels"].(map[string]interface{})),
-	)
+		obtainedBlueprint.Vars.Get("labels"),
+		DeepEquals,
+		expectedSimpleBlueprint.Vars.Get("labels"))
 	c.Assert(obtainedBlueprint.DeploymentGroups[0].Modules[0].ID,
 		Equals, expectedSimpleBlueprint.DeploymentGroups[0].Modules[0].ID)
 }
@@ -870,101 +859,66 @@ func (s *MySuite) TestExportBlueprint(c *C) {
 }
 
 func (s *MySuite) TestSetCLIVariables(c *C) {
-	// Success
-	dc := getBasicDeploymentConfigWithTestModule()
-	c.Assert(dc.Config.Vars["project_id"], IsNil)
-	c.Assert(dc.Config.Vars["deployment_name"], Equals, "deployment_name")
-	c.Assert(dc.Config.Vars["region"], IsNil)
-	c.Assert(dc.Config.Vars["zone"], IsNil)
+	dc := DeploymentConfig{}
+	dc.Config.Vars.Set("deployment_name", cty.StringVal("bush"))
 
-	cliProjectID := "cli_test_project_id"
-	cliDeploymentName := "cli_deployment_name"
-	cliRegion := "cli_region"
-	cliZone := "cli_zone"
-	cliKeyVal := "key=val"
-	cliKeyBool := "true"
-	cliKeyInt := "15"
-	cliKeyFloat := "15.43"
-	cliKeyArray := "[1, 2, 3]"
-	cliKeyMap := "{bar: baz, qux: 1}"
-	cliKeyArrayOfMaps := "[foo, {bar: baz, qux: 1}]"
-	cliKeyMapOfArrays := "{foo: [1, 2, 3], bar: [a, b, c]}"
 	cliVars := []string{
-		fmt.Sprintf("project_id=%s", cliProjectID),
-		fmt.Sprintf("deployment_name=%s", cliDeploymentName),
-		fmt.Sprintf("region=%s", cliRegion),
-		fmt.Sprintf("zone=%s", cliZone),
-		fmt.Sprintf("kv=%s", cliKeyVal),
-		fmt.Sprintf("keyBool=%s", cliKeyBool),
-		fmt.Sprintf("keyInt=%s", cliKeyInt),
-		fmt.Sprintf("keyFloat=%s", cliKeyFloat),
-		fmt.Sprintf("keyMap=%s", cliKeyMap),
-		fmt.Sprintf("keyArray=%s", cliKeyArray),
-		fmt.Sprintf("keyArrayOfMaps=%s", cliKeyArrayOfMaps),
-		fmt.Sprintf("keyMapOfArrays=%s", cliKeyMapOfArrays),
+		"project_id=cli_test_project_id",
+		"deployment_name=cli_deployment_name",
+		"region=cli_region",
+		"zone=cli_zone",
+		"kv=key=val",
+		"keyBool=true",
+		"keyInt=15",
+		"keyFloat=15.43",
+		"keyMap={bar: baz, qux: 1}",
+		"keyArray=[1, 2, 3]",
+		"keyArrayOfMaps=[foo, {bar: baz, qux: 1}]",
+		"keyMapOfArrays={foo: [1, 2, 3], bar: [a, b, c]}",
 	}
-	err := dc.SetCLIVariables(cliVars)
-
-	c.Assert(err, IsNil)
-	c.Assert(dc.Config.Vars["project_id"], Equals, cliProjectID)
-	c.Assert(dc.Config.Vars["deployment_name"], Equals, cliDeploymentName)
-	c.Assert(dc.Config.Vars["region"], Equals, cliRegion)
-	c.Assert(dc.Config.Vars["zone"], Equals, cliZone)
-	c.Assert(dc.Config.Vars["kv"], Equals, cliKeyVal)
-
-	// Bool in string is converted to bool
-	boolValue, _ := strconv.ParseBool(cliKeyBool)
-	c.Assert(dc.Config.Vars["keyBool"], Equals, boolValue)
-
-	// Int in string is converted to int
-	intValue, _ := strconv.Atoi(cliKeyInt)
-	c.Assert(dc.Config.Vars["keyInt"], Equals, intValue)
-
-	// Float in string is converted to float
-	floatValue, _ := strconv.ParseFloat(cliKeyFloat, 64)
-	c.Assert(dc.Config.Vars["keyFloat"], Equals, floatValue)
-
-	// Map in string is converted to map
-	mapValue := make(map[string]interface{})
-	mapValue["bar"] = "baz"
-	mapValue["qux"] = 1
-	c.Assert(dc.Config.Vars["keyMap"], DeepEquals, mapValue)
-
-	// Array in string is converted to array
-	arrayValue := []interface{}{1, 2, 3}
-	c.Assert(dc.Config.Vars["keyArray"], DeepEquals, arrayValue)
-
-	// Array of maps in string is converted to array
-	arrayOfMapsValue := []interface{}{"foo", mapValue}
-	c.Assert(dc.Config.Vars["keyArrayOfMaps"], DeepEquals, arrayOfMapsValue)
-
-	// Map of arrays in string is converted to array
-	mapOfArraysValue := make(map[string]interface{})
-	mapOfArraysValue["foo"] = []interface{}{1, 2, 3}
-	mapOfArraysValue["bar"] = []interface{}{"a", "b", "c"}
-	c.Assert(dc.Config.Vars["keyMapOfArrays"], DeepEquals, mapOfArraysValue)
+	c.Assert(dc.SetCLIVariables(cliVars), IsNil)
+	c.Check(
+		dc.Config.Vars.Items(), DeepEquals, map[string]cty.Value{
+			"project_id":      cty.StringVal("cli_test_project_id"),
+			"deployment_name": cty.StringVal("cli_deployment_name"),
+			"region":          cty.StringVal("cli_region"),
+			"zone":            cty.StringVal("cli_zone"),
+			"kv":              cty.StringVal("key=val"),
+			"keyBool":         cty.True,
+			"keyInt":          cty.NumberIntVal(15),
+			"keyFloat":        cty.NumberFloatVal(15.43),
+			"keyMap": cty.ObjectVal(map[string]cty.Value{
+				"bar": cty.StringVal("baz"),
+				"qux": cty.NumberIntVal(1)}),
+			"keyArray": cty.TupleVal([]cty.Value{
+				cty.NumberIntVal(1), cty.NumberIntVal(2), cty.NumberIntVal(3)}),
+			"keyArrayOfMaps": cty.TupleVal([]cty.Value{
+				cty.StringVal("foo"),
+				cty.ObjectVal(map[string]cty.Value{
+					"bar": cty.StringVal("baz"),
+					"qux": cty.NumberIntVal(1)})}),
+			"keyMapOfArrays": cty.ObjectVal(map[string]cty.Value{
+				"foo": cty.TupleVal([]cty.Value{
+					cty.NumberIntVal(1), cty.NumberIntVal(2), cty.NumberIntVal(3)}),
+				"bar": cty.TupleVal([]cty.Value{
+					cty.StringVal("a"), cty.StringVal("b"), cty.StringVal("c")}),
+			}),
+		})
 
 	// Failure: Variable without '='
-	dc = getBasicDeploymentConfigWithTestModule()
-	c.Assert(dc.Config.Vars["project_id"], IsNil)
+	dc = DeploymentConfig{}
+	invalidNonEQVars := []string{"project_idcli_test_project_id"}
 
-	invalidNonEQVars := []string{
-		fmt.Sprintf("project_id%s", cliProjectID),
-	}
-	err = dc.SetCLIVariables(invalidNonEQVars)
-
-	expErr := "invalid format: .*"
-	c.Assert(err, ErrorMatches, expErr)
-	c.Assert(dc.Config.Vars["project_id"], IsNil)
+	err := dc.SetCLIVariables(invalidNonEQVars)
+	c.Assert(err, ErrorMatches, "invalid format: .*")
+	c.Check(dc.Config.Vars, DeepEquals, Dict{})
 }
 
 func (s *MySuite) TestSetBackendConfig(c *C) {
 	// Success
 	dc := getDeploymentConfigForTest()
-	c.Assert(dc.Config.TerraformBackendDefaults.Type, Equals, "")
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["bucket"], IsNil)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], IsNil)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["prefix"], IsNil)
+	be := dc.Config.TerraformBackendDefaults
+	c.Check(be, DeepEquals, TerraformBackend{})
 
 	cliBEType := "gcs"
 	cliBEBucket := "a_bucket"
@@ -979,10 +933,13 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 	err := dc.SetBackendConfig(cliBEConfigVars)
 
 	c.Assert(err, IsNil)
-	c.Assert(dc.Config.TerraformBackendDefaults.Type, Equals, cliBEType)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["bucket"], Equals, cliBEBucket)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["impersonate_service_account"], Equals, cliBESA)
-	c.Assert(dc.Config.TerraformBackendDefaults.Configuration["prefix"], Equals, cliBEPrefix)
+	be = dc.Config.TerraformBackendDefaults
+	c.Check(be.Type, Equals, cliBEType)
+	c.Check(be.Configuration.Items(), DeepEquals, map[string]cty.Value{
+		"bucket":                      cty.StringVal(cliBEBucket),
+		"impersonate_service_account": cty.StringVal(cliBESA),
+		"prefix":                      cty.StringVal(cliBEPrefix),
+	})
 
 	// Failure: Variable without '='
 	dc = getDeploymentConfigForTest()
@@ -1131,52 +1088,55 @@ func (s *MySuite) TestValidatorConfigCheck(c *C) {
 	const vn = testProjectExistsName // some valid name
 
 	{ // FAIL: names mismatch
-		v := validatorConfig{"who_is_this", map[string]interface{}{}, false}
+		v := validatorConfig{Validator: "who_is_this"}
 		err := v.check(vn, []string{})
 		c.Check(err, ErrorMatches, "passed wrong validator to test_project_exists implementation")
 	}
 
 	{ // OK: names match
-		v := validatorConfig{vn.String(), map[string]interface{}{}, false}
+		v := validatorConfig{Validator: vn.String()}
 		c.Check(v.check(vn, []string{}), IsNil)
 	}
 
 	{ // OK: Inputs is equal to required inputs without regard to ordering
 		v := validatorConfig{
-			vn.String(),
-			map[string]interface{}{"in0": nil, "in1": nil},
-			false,
-		}
+			Validator: vn.String(),
+			Inputs: NewDict(map[string]cty.Value{
+				"in0": cty.NilVal,
+				"in1": cty.NilVal})}
 		c.Check(v.check(vn, []string{"in0", "in1"}), IsNil)
 		c.Check(v.check(vn, []string{"in1", "in0"}), IsNil)
 	}
 
 	{ // FAIL: inputs are a proper subset of required inputs
 		v := validatorConfig{
-			vn.String(),
-			map[string]interface{}{"in0": nil, "in1": nil},
-			false,
-		}
+			Validator: vn.String(),
+			Inputs: NewDict(map[string]cty.Value{
+				"in0": cty.NilVal,
+				"in1": cty.NilVal})}
 		err := v.check(vn, []string{"in0", "in1", "in2"})
 		c.Check(err, ErrorMatches, missingRequiredInputRegex)
 	}
 
 	{ // FAIL: inputs intersect with required inputs but are not a proper subset
 		v := validatorConfig{
-			vn.String(),
-			map[string]interface{}{"in0": nil, "in1": nil, "in3": nil},
-			false,
-		}
+			Validator: vn.String(),
+			Inputs: NewDict(map[string]cty.Value{
+				"in0": cty.NilVal,
+				"in1": cty.NilVal,
+				"in3": cty.NilVal})}
 		err := v.check(vn, []string{"in0", "in1", "in2"})
 		c.Check(err, ErrorMatches, missingRequiredInputRegex)
 	}
 
 	{ // FAIL inputs are a proper superset of required inputs
 		v := validatorConfig{
-			vn.String(),
-			map[string]interface{}{"in0": nil, "in1": nil, "in2": nil, "in3": nil},
-			false,
-		}
+			Validator: vn.String(),
+			Inputs: NewDict(map[string]cty.Value{
+				"in0": cty.NilVal,
+				"in1": cty.NilVal,
+				"in2": cty.NilVal,
+				"in3": cty.NilVal})}
 		err := v.check(vn, []string{"in0", "in1", "in2"})
 		c.Check(err, ErrorMatches, "only 3 inputs \\[in0 in1 in2\\] should be provided to test_project_exists")
 	}
@@ -1207,13 +1167,10 @@ func (s *MySuite) TestCheckBackends(c *C) {
 	}
 
 	{ // OK. No variables used
-		b := TerraformBackend{
-			Type: "gcs",
-			Configuration: map[string]interface{}{
-				"bucket":                      "trenta",
-				"impersonate_service_account": "who",
-			},
-		}
+		b := TerraformBackend{Type: "gcs"}
+		b.Configuration.
+			Set("bucket", cty.StringVal("trenta")).
+			Set("impersonate_service_account", cty.StringVal("who"))
 		c.Check(check(b), IsNil)
 	}
 
@@ -1232,6 +1189,11 @@ func (s *MySuite) TestCheckBackends(c *C) {
 		c.Check(check(b), ErrorMatches, ".*type.*vars\\.type.*")
 	}
 
+	{ // FAIL. HCL literal
+		b := TerraformBackend{Type: "((var.zen))"}
+		c.Check(check(b), ErrorMatches, ".*type.*zen.*")
+	}
+
 	{ // OK. Not a variable
 		b := TerraformBackend{Type: "\\$(vartype)"}
 		c.Check(check(b), IsNil)
@@ -1243,22 +1205,20 @@ func (s *MySuite) TestCheckBackends(c *C) {
 	}
 
 	{ // FAIL. Variable in defaults configuration
-		b := TerraformBackend{
-			Type:          "gcs",
-			Configuration: map[string]interface{}{"bucket": "$(trenta)"},
-		}
-		c.Check(check(b), ErrorMatches, ".*bucket.*trenta.*")
+		b := TerraformBackend{Type: "gcs"}
+		b.Configuration.Set("bucket", Reference{GlobalVar: true, Name: "trenta"}.AsExpression().AsValue())
+		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
 	}
 
 	{ // OK. handles nested configuration
-		b := TerraformBackend{
-			Type: "gcs",
-			Configuration: map[string]interface{}{
-				"bucket":  "trenta",
-				"complex": map[string]string{"alpha": "a", "beta": "b"},
-			},
-		}
-		c.Check(check(b), IsNil)
+		b := TerraformBackend{Type: "gcs"}
+		b.Configuration.
+			Set("bucket", cty.StringVal("trenta")).
+			Set("complex", cty.ObjectVal(map[string]cty.Value{
+				"alpha": cty.StringVal("a"),
+				"beta":  Reference{GlobalVar: true, Name: "boba"}.AsExpression().AsValue(),
+			}))
+		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
 	}
 }
 
@@ -1307,4 +1267,106 @@ func (s *MySuite) TestSkipValidator(c *C) {
 			{Validator: "zebra", Skip: true}})
 	}
 
+}
+
+func (s *MySuite) TestModuleConnectionGetters(c *C) {
+	sharedVariables := []string{"foo", "bar"}
+	mc := ModConnection{
+		ref: modReference{
+			toModuleID:   "fred",
+			fromModuleID: "waldo",
+			toGroupID:    "baz",
+			fromGroupID:  "baz",
+		},
+		kind:            useConnection,
+		sharedVariables: sharedVariables,
+	}
+	c.Check(mc.IsUseKind(), Equals, true)
+	c.Check(mc.IsDeploymentKind(), Equals, false)
+	c.Check(mc.GetSharedVariables(), DeepEquals, sharedVariables)
+
+	mc = ModConnection{}
+	c.Check(mc.IsUseKind(), Equals, false)
+	c.Check(mc.IsDeploymentKind(), Equals, false)
+}
+
+func (s *MySuite) TestResolveVariables(c *C) {
+	projectID := cty.StringVal("test-project")
+	deploymentName := cty.StringVal("test-deployment")
+	labels := cty.ObjectVal(map[string]cty.Value{
+		"ghpc_deployment": deploymentName,
+	})
+	customNumber := cty.NumberVal(big.NewFloat(2.0))
+	customBool := cty.BoolVal(true)
+	deploymentVars := map[string]cty.Value{
+		"project_id":      projectID,
+		"deployment_name": deploymentName,
+		"labels":          labels,
+		"custom_number":   customNumber,
+		"custom_bool":     customBool,
+	}
+
+	settings := map[string]cty.Value{
+		"project_id": cty.StringVal("((var.project_id))"),
+		"labels":     cty.StringVal("((var.labels))"),
+		"direct":     cty.StringVal("directly-set"),
+		"number-list": cty.TupleVal([]cty.Value{
+			cty.NumberVal(big.NewFloat(0.0)),
+			cty.StringVal("((var.custom_number))"),
+		}),
+		"bool-map": cty.ObjectVal(map[string]cty.Value{
+			"first":  cty.BoolVal(true),
+			"second": cty.StringVal("((var.custom_bool))"),
+		}),
+	}
+
+	expectedSettings := map[string]cty.Value{
+		"project_id": projectID,
+		"labels":     labels,
+		"direct":     cty.StringVal("directly-set"),
+		"number-list": cty.TupleVal([]cty.Value{
+			cty.NumberVal(big.NewFloat(0.0)),
+			customNumber,
+		}),
+		"bool-map": cty.ObjectVal(map[string]cty.Value{
+			"first":  cty.BoolVal(true),
+			"second": customBool,
+		}),
+	}
+
+	err := ResolveVariables(settings, deploymentVars, []string{})
+	c.Assert(err, IsNil)
+	c.Assert(settings, DeepEquals, expectedSettings)
+
+	settings["new-key"] = cty.StringVal("((var.not_a_variable))")
+	err = ResolveVariables(settings, deploymentVars, []string{})
+	c.Assert(err, NotNil)
+
+	settings["new-key"] = cty.ObjectVal(map[string]cty.Value{
+		"bad": cty.StringVal("((var.not_a_variable))"),
+	})
+	err = ResolveVariables(settings, deploymentVars, []string{})
+	c.Assert(err, NotNil)
+
+	settings["new-key"] = cty.TupleVal([]cty.Value{
+		cty.StringVal("((var.not_a_variable))"),
+	})
+	err = ResolveVariables(settings, deploymentVars, []string{})
+	c.Assert(err, NotNil)
+	err = ResolveVariables(settings, deploymentVars, []string{"not_a_variable"})
+	c.Assert(err, IsNil)
+	c.Assert(settings, DeepEquals, expectedSettings)
+}
+
+func (s *MySuite) TestModuleGroup(c *C) {
+	dc := getDeploymentConfigForTest()
+
+	group := dc.Config.DeploymentGroups[0]
+	modID := dc.Config.DeploymentGroups[0].Modules[0].ID
+
+	foundGroup := dc.Config.ModuleGroupOrDie(modID)
+	c.Assert(foundGroup, DeepEquals, group)
+
+	_, err := dc.Config.ModuleGroup("bad_module_id")
+	c.Assert(err, NotNil)
 }

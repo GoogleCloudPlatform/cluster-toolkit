@@ -16,20 +16,46 @@
 - name: Ensure nvidia grid drivers and other binaries are installed
   hosts: localhost
   become: true
+  vars:
+    packages:
+      bullseye:
+      - build-essential
+      - gdebi-core
+      - mesa-utils
+      - gdm3
+      jammy:
+      - build-essential
+      - gdebi-core
+      - mesa-utils
+      - gdm3
+      - gcc-12 # must match compiler used to build kernel on latest Ubuntu 22
+      - pkg-config # observed to be necessary for GRID driver installation on latest Ubuntu 22
+      - libglvnd-dev # observed to be necessary for GRID driver installation on latest Ubuntu 22
   tasks:
+  - name: Fail if using wrong OS
+    ansible.builtin.assert:
+      that:
+      - ansible_os_family in ["Debian", "Ubuntu"]
+      - ansible_distribution_release in ["bullseye", "jammy"]
+
+  - name: Check if GRID driver installed
+    ansible.builtin.command: which nvidia-smi
+    register: nvidiasmi_result
+    ignore_errors: true
+    changed_when: false
+
   - name: Get kernel release
     ansible.builtin.command: uname -r
     register: uname_result
     changed_when: false
 
+  - name: Set all packages
+    ansible.builtin.set_fact:
+      all_packages: '{{ packages[ansible_distribution_release] + ["linux-headers-" + uname_result.stdout] }}'
+
   - name: Install binaries for GRID drivers
     ansible.builtin.apt:
-      name:
-      - linux-headers-{{ uname_result.stdout }}
-      - build-essential
-      - gdebi-core
-      - mesa-utils
-      - gdm3
+      name: "{{ all_packages }}"
       state: present
       update_cache: true
     register: apt_result
@@ -37,21 +63,30 @@
     delay: 10
     until: apt_result is success
 
-  - name: Download GPU driver
-    ansible.builtin.get_url:
-      url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
-      dest: /tmp/
-      mode: "0755"
+  - name: Install GRID driver if not existing
+    when: nvidiasmi_result is failed
+    block:
+    - name: Download GPU driver
+      ansible.builtin.get_url:
+        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
+        dest: /tmp/
+        mode: "0755"
 
-  - name: Stop gdm service
-    ansible.builtin.systemd:
-      name: gdm
-      state: stopped
+    - name: Stop gdm service
+      ansible.builtin.systemd:
+        name: gdm
+        state: stopped
 
-  - name: Install GPU driver
-    ansible.builtin.command: /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run -silent
-    register: result
-    changed_when: result.rc == 0
+    - name: Install GPU driver
+      ansible.builtin.shell: |
+        #jinja2: trim_blocks: "True"
+        {% if ansible_distribution_release == "jammy" %}
+        CC=gcc-12 /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run --silent
+        {% else %}
+        /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run --silent
+        {% endif %}
+      register: result
+      changed_when: result.rc == 0
 
   - name: Download VirtualGL driver
     ansible.builtin.get_url:
@@ -73,7 +108,11 @@
       changed_when: false
 
     - name: Extract PCI ID
-      ansible.builtin.shell: echo "{{ gpu_info.stdout }}" | grep "PCI BusID " | head -n 1 | cut -d':' -f2-99 | xargs
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo "{{ gpu_info.stdout }}" | grep "PCI BusID " | head -n 1 | cut -d':' -f2-99 | xargs
+      args:
+        executable: /bin/bash
       register: pci_id
       changed_when: false
 

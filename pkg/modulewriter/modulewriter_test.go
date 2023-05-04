@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
+	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
 	"os"
@@ -29,8 +31,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
 	. "gopkg.in/check.v1"
@@ -72,19 +74,29 @@ func teardown() {
 }
 
 // Test Data Producers
-func getBlueprintForTest() config.Blueprint {
+func getDeploymentConfigForTest() config.DeploymentConfig {
 	testModuleSource := filepath.Join(testDir, terraformModuleDir)
 	testModule := config.Module{
-		Source:   testModuleSource,
-		Kind:     "terraform",
-		ID:       "testModule",
-		Settings: make(map[string]interface{}),
+		Source: testModuleSource,
+		Kind:   config.TerraformKind,
+		ID:     "testModule",
+		Settings: map[string]interface{}{
+			"deployment_name": nil,
+			"project_id":      nil,
+		},
+		Outputs: []modulereader.OutputInfo{
+			{
+				Name:        "test-output",
+				Description: "",
+				Sensitive:   false,
+			},
+		},
 	}
 	testModuleSourceWithLabels := filepath.Join(testDir, terraformModuleDir)
 	testModuleWithLabels := config.Module{
 		Source: testModuleSourceWithLabels,
 		ID:     "testModuleWithLabels",
-		Kind:   "terraform",
+		Kind:   config.TerraformKind,
 		Settings: map[string]interface{}{
 			"moduleLabel": "moduleLabelValue",
 		},
@@ -92,17 +104,25 @@ func getBlueprintForTest() config.Blueprint {
 	testDeploymentGroups := []config.DeploymentGroup{
 		{
 			Name:    "test_resource_group",
-			Kind:    "terraform",
+			Kind:    config.TerraformKind,
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
-	testBlueprint := config.Blueprint{
-		BlueprintName:    "simple",
-		Vars:             map[string]interface{}{},
-		DeploymentGroups: testDeploymentGroups,
+	testDC := config.DeploymentConfig{
+		Config: config.Blueprint{
+			BlueprintName: "simple",
+			Vars: config.NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("deployment_name"),
+				"project_id":      cty.StringVal("test-project"),
+			}),
+			DeploymentGroups: testDeploymentGroups,
+		},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
 	}
 
-	return testBlueprint
+	testDC.SetModuleConnections(make(map[string][]config.ModConnection))
+
+	return testDC
 }
 
 // Tests
@@ -147,12 +167,12 @@ func (s *MySuite) TestPrepDepDir(c *C) {
 
 func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
-	testBlueprint := getBlueprintForTest()
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_prep_dir"}
-	realDepDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string))
+	testDC := getDeploymentConfigForTest()
+	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_prep_dir"))
+	realDepDir := filepath.Join(testDir, "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
-	WriteDeployment(&testBlueprint, testDir, false /* overwrite */)
+	WriteDeployment(testDC, testDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
 	files, _ := ioutil.ReadDir(realDepDir)
@@ -163,7 +183,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(isDeploymentDirPrepped(realDepDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, testBlueprint.Vars["deployment_name"].(string), hiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(testDir, "test_prep_dir", hiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
@@ -213,15 +233,23 @@ func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 
 // modulewriter.go
 func (s *MySuite) TestWriteDeployment(c *C) {
-	testBlueprint := getBlueprintForTest()
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": "test_write_deployment"}
-	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	aferoFS := afero.NewMemMapFs()
+	aferoFS.MkdirAll("modules/red/pink", 0755)
+	afero.WriteFile(aferoFS, "modules/red/pink/main.tf", []byte("pink"), 0644)
+	aferoFS.MkdirAll("community/modules/green/lime", 0755)
+	afero.WriteFile(aferoFS, "community/modules/green/lime/main.tf", []byte("lime"), 0644)
+	sourcereader.ModuleFS = afero.NewIOFS(aferoFS)
+
+	testDC := getDeploymentConfigForTest()
+
+	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_write_deployment"))
+	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the deployment fails
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
 	// Overwriting the deployment succeeds with flag
-	err = WriteDeployment(&testBlueprint, testDir, true /* overwriteFlag */)
+	err = WriteDeployment(testDC, testDir, true /* overwriteFlag */)
 	c.Check(err, IsNil)
 }
 
@@ -284,23 +312,11 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 }
 
 func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
-	testBlueprint := getBlueprintForTest()
+	testDC := getDeploymentConfigForTest()
 	var e *config.InputValueError
 
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": 100}
-	err := WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
-	c.Check(errors.As(err, &e), Equals, true)
-
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": false}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
-	c.Check(errors.As(err, &e), Equals, true)
-
-	testBlueprint.Vars = map[string]interface{}{"deployment_name": ""}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
-	c.Check(errors.As(err, &e), Equals, true)
-
-	testBlueprint.Vars = map[string]interface{}{}
-	err = WriteDeployment(&testBlueprint, testDir, false /* overwriteFlag */)
+	testDC.Config.Vars.Set("deployment_name", cty.NumberIntVal(100))
+	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
 	c.Check(errors.As(err, &e), Equals, true)
 }
 
@@ -399,31 +415,24 @@ func (s *MySuite) TestGetTypeTokens(c *C) {
 	// Success object
 	tok = getTypeTokens(cty.ObjectVal(map[string]cty.Value{}))
 	c.Assert(len(tok), Equals, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
 	val := cty.ObjectVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
 	tok = getTypeTokens(val)
 	c.Assert(len(tok), Equals, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
 	// Success Map
 	val = cty.MapVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
 	tok = getTypeTokens(val)
 	c.Assert(len(tok), Equals, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("map")))
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
-	// Failure
+	// Success any
 	tok = getTypeTokens(cty.NullVal(cty.DynamicPseudoType))
 	c.Assert(len(tok), Equals, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
-}
-
-func (s *MySuite) TestSimpleTokenFromString(c *C) {
-	inputString := "Lorem"
-	tok := simpleTokenFromString("Lorem")
-	c.Assert(tok.Type, Equals, hclsyntax.TokenIdent)
-	c.Assert(len(tok.Bytes), Equals, len(inputString))
-	c.Assert(string(tok.Bytes), Equals, inputString)
 }
 
 func (s *MySuite) TestCreateBaseFile(c *C) {
@@ -489,6 +498,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 		ID: "test_module",
 		Settings: map[string]interface{}{
 			"testSetting": "testValue",
+			"passthrough": `(("${vars.deployment_name}-allow\"))`,
 		},
 	}
 	testModules = append(testModules, testModule)
@@ -498,11 +508,18 @@ func (s *MySuite) TestWriteMain(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
+	exists, err = stringExistsInFile(`"${vars.deployment_name}-allow\"`, mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, true)
+
+	exists, err = stringExistsInFile(`("${vars.deployment_name}-allow\")`, mainFilePath)
+	c.Assert(err, IsNil)
+	c.Assert(exists, Equals, false)
+
 	// Test with Backend
 	testBackend.Type = "gcs"
-	testBackend.Configuration = map[string]interface{}{
-		"bucket": "a_bucket",
-	}
+	testBackend.Configuration.Set("bucket", cty.StringVal("a_bucket"))
+
 	err = writeMain(testModules, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("a_bucket", mainFilePath)
@@ -545,15 +562,18 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
 
 	// Success: Outputs added
-	outputList := []string{"output1", "output2"}
+	outputList := []modulereader.OutputInfo{
+		{Name: "output1"},
+		{Name: "output2"},
+	}
 	moduleWithOutputs := config.Module{Outputs: outputList, ID: "testMod"}
 	testModules = []config.Module{moduleWithOutputs}
 	err = writeOutputs(testModules, testOutputsDir)
 	c.Assert(err, IsNil)
-	exists, err := stringExistsInFile(outputList[0], outputsFilePath)
+	exists, err := stringExistsInFile(outputList[0].Name, outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
-	exists, err = stringExistsInFile(outputList[1], outputsFilePath)
+	exists, err = stringExistsInFile(outputList[1].Name, outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 }
@@ -566,19 +586,21 @@ func (s *MySuite) TestWriteVariables(c *C) {
 		log.Fatal("Failed to create test directory for creating variables.tf file")
 	}
 
+	noIntergroupVars := []modulereader.VarInfo{}
+
 	// Simple success, empty vars
 	testVars := make(map[string]cty.Value)
-	err := writeVariables(testVars, testVarDir)
+	err := writeVariables(testVars, noIntergroupVars, testVarDir)
 	c.Assert(err, IsNil)
 
 	// Failure: Bad path
-	err = writeVariables(testVars, "not/a/real/path")
+	err = writeVariables(testVars, noIntergroupVars, "not/a/real/path")
 	c.Assert(err, ErrorMatches, "error creating variables.tf file: .*")
 
 	// Success, common vars
 	testVars["deployment_name"] = cty.StringVal("test_deployment")
 	testVars["project_id"] = cty.StringVal("test_project")
-	err = writeVariables(testVars, testVarDir)
+	err = writeVariables(testVars, noIntergroupVars, testVarDir)
 	c.Assert(err, IsNil)
 	exists, err := stringExistsInFile("\"deployment_name\"", varsFilePath)
 	c.Assert(err, IsNil)
@@ -587,7 +609,7 @@ func (s *MySuite) TestWriteVariables(c *C) {
 	// Success, "dynamic type"
 	testVars = make(map[string]cty.Value)
 	testVars["project_id"] = cty.NullVal(cty.DynamicPseudoType)
-	err = writeVariables(testVars, testVarDir)
+	err = writeVariables(testVars, noIntergroupVars, testVarDir)
 	c.Assert(err, IsNil)
 }
 
@@ -625,22 +647,6 @@ func (s *MySuite) TestWriteProviders(c *C) {
 	c.Assert(exists, Equals, true)
 }
 
-func (s *MySuite) TestHandleLiteralVariables(c *C) {
-	// Setup
-	hclFile := hclwrite.NewEmptyFile()
-	hclBody := hclFile.Body()
-
-	// Set literal var value
-	hclBody.SetAttributeValue("dummyAttributeName1", cty.StringVal("((var.literal))"))
-	hclBody.AppendNewline()
-	hclBytes := handleLiteralVariables(hclFile.Bytes())
-	hclString := string(hclBytes)
-
-	// Sucess
-	exists := strings.Contains(hclString, "dummyAttributeName1 = var.literal")
-	c.Assert(exists, Equals, true)
-}
-
 // packerwriter.go
 func (s *MySuite) TestNumModules_PackerWriter(c *C) {
 	testWriter := PackerWriter{}
@@ -659,7 +665,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 
 	// No Packer modules
 	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
-	testVars := map[string]interface{}{"deployment_name": deploymentName}
+	testVars := config.NewDict(map[string]cty.Value{"deployment_name": cty.StringVal(deploymentName)})
 	deploymentDir := filepath.Join(testDir, deploymentName)
 	if err := deploymentio.CreateDirectory(deploymentDir); err != nil {
 		log.Fatal(err)
@@ -674,7 +680,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	}
 
 	testPackerModule := config.Module{
-		Kind:             "packer",
+		Kind:             config.PackerKind,
 		ID:               "testPackerModule",
 		DeploymentSource: "testPackerModule",
 	}
@@ -682,19 +688,34 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 		Name:    "packerGroup",
 		Modules: []config.Module{testPackerModule},
 	}
-	testWriter.writeDeploymentGroup(testDeploymentGroup, testVars, deploymentDir)
+
+	testDC := config.DeploymentConfig{
+		Config: config.Blueprint{
+			BlueprintName:   "",
+			Validators:      nil,
+			ValidationLevel: 0,
+			Vars:            testVars,
+			DeploymentGroups: []config.DeploymentGroup{
+				testDeploymentGroup,
+			},
+		},
+		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
+	}
+
+	testWriter.writeDeploymentGroup(testDC, 0, deploymentDir)
 	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 
 func (s *MySuite) TestWritePackerAutoVars(c *C) {
-	testBlueprint := getBlueprintForTest()
-	testBlueprint.Vars["testkey"] = "testval"
-	ctyVars, _ := config.ConvertMapToCty(testBlueprint.Vars)
+	vars := config.Dict{}
+	vars.
+		Set("deployment_name", cty.StringVal("golf")).
+		Set("testkey", cty.False)
 
 	// fail writing to a bad path
 	badDestPath := "not/a/real/path"
-	err := writePackerAutovars(ctyVars, badDestPath)
+	err := writePackerAutovars(vars.Items(), badDestPath)
 	expErr := fmt.Sprintf("error creating variables file %s:.*", packerAutoVarFilename)
 	c.Assert(err, ErrorMatches, expErr)
 
@@ -702,7 +723,7 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 	if err := os.Mkdir(testPackerTemplateDir, 0755); err != nil {
 		log.Fatalf("Failed to create test dir for creating %s file", packerAutoVarFilename)
 	}
-	err = writePackerAutovars(ctyVars, testPackerTemplateDir)
+	err = writePackerAutovars(vars.Items(), testPackerTemplateDir)
 	c.Assert(err, IsNil)
 
 }
@@ -769,4 +790,49 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	teardown()
 	os.Exit(code)
+}
+
+func (s *MySuite) TestDeploymentSource(c *C) {
+	{ // git
+		m := config.Module{Kind: config.TerraformKind, Source: "github.com/x/y.git"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "github.com/x/y.git")
+	}
+	{ // packer
+		m := config.Module{Kind: config.PackerKind, Source: "modules/packer/custom-image", ID: "custom-image"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "custom-image")
+	}
+	{ // embedded core
+		m := config.Module{Kind: config.TerraformKind, Source: "modules/x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "./modules/embedded/modules/x/y")
+	}
+	{ // embedded community
+		m := config.Module{Kind: config.TerraformKind, Source: "community/modules/x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "./modules/embedded/community/modules/x/y")
+	}
+	{ // local rel in repo
+		m := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
+	}
+	{ // local rel
+		m := config.Module{Kind: config.TerraformKind, Source: "./../../../../x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
+	}
+	{ // local abs
+		m := config.Module{Kind: config.TerraformKind, Source: "/tmp/x/y"}
+		s, err := deploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
+	}
 }

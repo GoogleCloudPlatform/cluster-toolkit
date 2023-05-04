@@ -46,20 +46,9 @@ deployment_groups:
       labels:
         ghpc_role: storage-apps
 
-  - id: startup
-    source: ./modules/scripts/startup-script
-    settings:
-      runners:
-      - type: shell
-        content: $(homefs.install_nfs_client)
-        destination: "install-nfs.sh"
-      - type: "ansible-local"
-        source: "modules/startup-script/examples/mount.yaml"
-        destination: "mount.yaml"
-
   - id: license-server-1
     source: ./modules/compute/vm-instance
-    use: [network]
+    use: [network, homefs]
     settings:
       name_prefix: ls1
       machine_type: e2-standard-4
@@ -68,7 +57,7 @@ deployment_groups:
 
   - id: license-server-2
     source: modules/compute/vm-instance
-    use: [network]
+    use: [network, homefs]
     settings:
       name_prefix: ls2
       machine_type: e2-standard-4
@@ -86,8 +75,6 @@ deployment_groups:
       machine_type: c2-standard-30
       labels:
         ghpc_role: head-node
-      metadata:
-        startup-script: $(startup.startup_script)
 
   - id: compute
     source: modules/compute/vm-instance
@@ -95,7 +82,6 @@ deployment_groups:
     - network
     - homefs
     - apps
-    - startup
     settings:
       name_prefix: compute
       machine_type: c2-standard-60

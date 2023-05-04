@@ -19,8 +19,8 @@ blueprint_name: hpc-cluster-slurm-v5
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-small-v5
-  region: us-central1
-  zone: us-central1-c
+  region: us-west4
+  zone: us-west4-c
 
 deployment_groups:
 - group: primary

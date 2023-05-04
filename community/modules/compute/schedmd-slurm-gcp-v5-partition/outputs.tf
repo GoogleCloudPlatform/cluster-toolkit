@@ -20,4 +20,16 @@ output "partition" {
     compute_list = module.slurm_partition.compute_list
     partition    = module.slurm_partition.partition
   }
+  precondition {
+    condition     = var.enable_placement == false || (var.exclusive == var.enable_placement)
+    error_message = "If var.enable_placement is true, var.exclusive must be as well."
+  }
+  precondition {
+    condition     = var.enable_placement == false || contains(["NO", "Exclusive"], lookup(var.partition_conf, "Oversubscribe", "NO"))
+    error_message = "If var.enable_placement is true, var.partition_conf[\"Oversubscribe\"] should be either undefined, \"NO\", or \"Exclusive\"."
+  }
+  precondition {
+    condition     = var.enable_placement == false || (lookup(var.partition_conf, "SuspendTime", null) == null)
+    error_message = "If var.enable_placement is true, var.partition_conf[\"SuspendTime\"] should be undefined."
+  }
 }

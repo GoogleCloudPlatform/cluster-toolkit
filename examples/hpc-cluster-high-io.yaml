@@ -19,8 +19,8 @@ blueprint_name: hpc-cluster-high-io
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-high-io
-  region: us-central1
-  zone: us-central1-c
+  region: us-west4
+  zone: us-west4-c
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

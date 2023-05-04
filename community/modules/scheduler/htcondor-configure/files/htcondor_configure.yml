@@ -86,7 +86,6 @@
       ansible.builtin.set_fact:
         central_manager_list: "{{ htcondor_central_manager_ips | split(',') }}"
     - name: Create Central Manager standard configuration file
-      when: central_manager_list | length > 1
       ansible.builtin.copy:
         dest: "{{ condor_config_root }}/config.d/{{ cm_config_file }}"
         mode: 0644
@@ -201,8 +200,10 @@
             SCHEDD_NAME=had-schedd@
         notify:
         - Restart HTCondor
-      # the need for this SystemD override will be eliminated in HTCondor 10.0.3
-      # (LTS) and 10.4 (feature release) by resolving HTCONDOR-1594
+      # although HTCondor is guaranteed to start after mounting remote
+      # filesystems is *attempted*, it does not guarantee successful mounts;
+      # this additional SystemD setting will refuse to start HTCondor if the
+      # spool shared filesystem has not been mounted
       - name: Create SystemD override directory for HTCondor
         ansible.builtin.file:
           path: /etc/systemd/system/condor.service.d

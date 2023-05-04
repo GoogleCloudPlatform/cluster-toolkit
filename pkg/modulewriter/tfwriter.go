@@ -21,15 +21,16 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strings"
 
+	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/slices"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 )
 
 const (
@@ -64,11 +65,6 @@ func createBaseFile(path string) error {
 	return err
 }
 
-func handleLiteralVariables(hclBytes []byte) []byte {
-	re := regexp.MustCompile(`"\(\((.*?)\)\)"`)
-	return re.ReplaceAll(hclBytes, []byte(`${1}`))
-}
-
 func appendHCLToFile(path string, hclBytes []byte) error {
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -99,21 +95,27 @@ func writeOutputs(
 	for _, mod := range modules {
 		for _, output := range mod.Outputs {
 			// Create output block
-			outputName := fmt.Sprintf("%s_%s", output, mod.ID)
+			outputName := config.AutomaticOutputName(output.Name, mod.ID)
+			hclBody.AppendNewline()
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
 			// Add attributes (description, value)
-			desc := fmt.Sprintf("Generated output from module '%s'", mod.ID)
+			desc := output.Description
+			if desc == "" {
+				desc = fmt.Sprintf("Generated output from module '%s'", mod.ID)
+			}
 			blockBody.SetAttributeValue("description", cty.StringVal(desc))
-			value := fmt.Sprintf("((module.%s.%s))", mod.ID, output)
-			blockBody.SetAttributeValue("value", cty.StringVal(value))
-			hclBody.AppendNewline()
+			value := fmt.Sprintf("module.%s.%s", mod.ID, output.Name)
+			blockBody.SetAttributeRaw("value", simpleTokens(value))
+			if output.Sensitive {
+				blockBody.SetAttributeValue("sensitive", cty.BoolVal(output.Sensitive))
+			}
 		}
 	}
 
 	// Write file
-	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes := hclFile.Bytes()
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
 	err := appendHCLToFile(outputsPath, hclBytes)
@@ -130,62 +132,53 @@ func writeTfvars(vars map[string]cty.Value, dst string) error {
 	return err
 }
 
-func getTypeTokens(ctyVal cty.Value) hclwrite.Tokens {
-	typeToken := hclwrite.Token{
-		Type: hclsyntax.TokenIdent,
+func getHclType(t cty.Type) string {
+	if t.IsPrimitiveType() {
+		return typeexpr.TypeString(t)
 	}
-
-	typeName := ctyVal.Type().FriendlyName()
-	if strings.HasPrefix(typeName, "list of") {
-		typeToken.Bytes = []byte("list")
-		return []*hclwrite.Token{&typeToken}
+	if t.IsListType() || t.IsTupleType() || t.IsSetType() {
+		return "list"
 	}
-	if strings.HasPrefix(typeName, "map of") {
-		typeToken.Bytes = []byte("map")
-		return []*hclwrite.Token{&typeToken}
-	}
-	switch typeName {
-	case "number", "string", "bool":
-		typeToken.Bytes = []byte(typeName)
-	case "tuple", "list":
-		typeToken.Bytes = []byte("list")
-	case "object", "map":
-		typeToken.Bytes = []byte("map")
-	case "dynamic":
-		typeToken.Bytes = []byte("any")
-	default:
-		return hclwrite.Tokens{}
-	}
-	return []*hclwrite.Token{&typeToken}
+	return typeexpr.TypeString(cty.DynamicPseudoType) // any
 }
 
-func writeVariables(vars map[string]cty.Value, dst string) error {
+func getTypeTokens(v cty.Value) hclwrite.Tokens {
+	return simpleTokens(getHclType(v.Type()))
+}
+
+func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo, dst string) error {
 	// Create file
 	variablesPath := filepath.Join(dst, "variables.tf")
 	if err := createBaseFile(variablesPath); err != nil {
 		return fmt.Errorf("error creating variables.tf file: %v", err)
 	}
 
+	var inputs []modulereader.VarInfo
+	for k, v := range vars {
+		typeStr := getHclType(v.Type())
+		newInput := modulereader.VarInfo{
+			Name:        k,
+			Type:        typeStr,
+			Description: fmt.Sprintf("Toolkit deployment variable: %s", k),
+		}
+		inputs = append(inputs, newInput)
+	}
+	inputs = append(inputs, extraVars...)
+	slices.SortFunc(inputs, func(i, j modulereader.VarInfo) bool { return i.Name < j.Name })
+
 	// Create HCL Body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
 
-	// for each variable
-	for _, k := range orderKeys(vars) {
-		v, _ := vars[k]
-		// Create variable block
-		hclBlock := hclBody.AppendNewBlock("variable", []string{k})
-		blockBody := hclBlock.Body()
-
-		// Add attributes (description, type, etc)
-		blockBody.SetAttributeValue("description", cty.StringVal(""))
-		typeTok := getTypeTokens(v)
-		if len(typeTok) == 0 {
-			return fmt.Errorf("error determining type of variable %s", k)
-		}
-		blockBody.SetAttributeRaw("type", typeTok)
+	// create variable block for each input
+	for _, k := range inputs {
 		hclBody.AppendNewline()
+		hclBlock := hclBody.AppendNewBlock("variable", []string{k.Name})
+		blockBody := hclBlock.Body()
+		blockBody.SetAttributeValue("description", cty.StringVal(k.Description))
+		blockBody.SetAttributeRaw("type", simpleTokens(k.Type))
 	}
+
 	// Write file
 	if err := appendHCLToFile(variablesPath, hclFile.Bytes()); err != nil {
 		return fmt.Errorf("error writing HCL to variables.tf file: %v", err)
@@ -210,16 +203,12 @@ func writeMain(
 
 	// Write Terraform backend if needed
 	if tfBackend.Type != "" {
-		tfConfig, err := config.ConvertMapToCty(tfBackend.Configuration)
-		if err != nil {
-			errString := "error converting terraform backend configuration to cty when writing main.tf: %v"
-			return fmt.Errorf(errString, err)
-		}
 		tfBody := hclBody.AppendNewBlock("terraform", []string{}).Body()
 		backendBlock := tfBody.AppendNewBlock("backend", []string{tfBackend.Type})
 		backendBody := backendBlock.Body()
-		for _, setting := range orderKeys(tfConfig) {
-			backendBody.SetAttributeValue(setting, tfConfig[setting])
+		vals := tfBackend.Configuration.Items()
+		for _, setting := range orderKeys(vals) {
+			backendBody.SetAttributeValue(setting, vals[setting])
 		}
 		hclBody.AppendNewline()
 	}
@@ -242,7 +231,7 @@ func writeMain(
 
 		// For each Setting
 		for _, setting := range orderKeys(ctySettings) {
-			value, _ := ctySettings[setting]
+			value := ctySettings[setting]
 			if wrap, ok := mod.WrapSettingsWith[setting]; ok {
 				if len(wrap) != 2 {
 					return fmt.Errorf(
@@ -255,14 +244,13 @@ func writeMain(
 				}
 				moduleBody.SetAttributeRaw(setting, toks)
 			} else {
-				// Add attributes
-				moduleBody.SetAttributeValue(setting, value)
+				moduleBody.SetAttributeRaw(setting, TokensForValue(value))
 			}
 		}
 		hclBody.AppendNewline()
 	}
 	// Write file
-	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes := hclFile.Bytes()
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
 	hclBytes = hclwrite.Format(hclBytes)
@@ -278,8 +266,7 @@ func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, 
 		return toks, fmt.Errorf(
 			"invalid value for wrapped setting, expected sequence, got %#v", val.Type())
 	}
-	prefTok := simpleTokenFromString(pref)
-	toks = append(toks, &prefTok)
+	toks = append(toks, simpleTokens(pref)...)
 
 	it, first := val.ElementIterator(), true
 	for it.Next() {
@@ -289,36 +276,15 @@ func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, 
 				Bytes: []byte{','}})
 		}
 		_, el := it.Element()
-		toks = append(toks, tokensForValue(el)...)
+		toks = append(toks, TokensForValue(el)...)
 		first = false
 	}
-
-	sufTok := simpleTokenFromString(suf)
-	toks = append(toks, &sufTok)
+	toks = append(toks, simpleTokens(suf)...)
 
 	return toks, nil
 }
 
-// Attempts to create an compact map/object,
-// returns input as is if length of compacted string exceeds 80.
-func maybeCompactMapToken(toks hclwrite.Tokens) hclwrite.Tokens {
-	s := string(toks.Bytes())
-	s = strings.ReplaceAll(s, "\"\n", "\",")
-	s = strings.ReplaceAll(s, "\n", "")
-	s = strings.Join(strings.Fields(s), " ")
-	if len(s) > 80 {
-		return toks
-	}
-	t := simpleTokenFromString(s)
-	return hclwrite.Tokens{&t}
-}
-
-func simpleTokenFromString(str string) hclwrite.Token {
-	return hclwrite.Token{
-		Type:  hclsyntax.TokenIdent,
-		Bytes: []byte(str),
-	}
-}
+var simpleTokens = hclwrite.TokensForIdentifier
 
 func writeProviders(vars map[string]cty.Value, dst string) error {
 	// Create file
@@ -335,25 +301,19 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 		provBlock := hclBody.AppendNewBlock("provider", []string{prov})
 		provBody := provBlock.Body()
 		if _, ok := vars["project_id"]; ok {
-			pidToken := simpleTokenFromString("var.project_id")
-			pidTokens := []*hclwrite.Token{&pidToken}
-			provBody.SetAttributeRaw("project", pidTokens)
+			provBody.SetAttributeRaw("project", simpleTokens("var.project_id"))
 		}
 		if _, ok := vars["zone"]; ok {
-			zoneToken := simpleTokenFromString("var.zone")
-			zoneTokens := []*hclwrite.Token{&zoneToken}
-			provBody.SetAttributeRaw("zone", zoneTokens)
+			provBody.SetAttributeRaw("zone", simpleTokens("var.zone"))
 		}
 		if _, ok := vars["region"]; ok {
-			regToken := simpleTokenFromString("var.region")
-			regTokens := []*hclwrite.Token{&regToken}
-			provBody.SetAttributeRaw("region", regTokens)
+			provBody.SetAttributeRaw("region", simpleTokens("var.region"))
 		}
 		hclBody.AppendNewline()
 	}
 
 	// Write file
-	hclBytes := handleLiteralVariables(hclFile.Bytes())
+	hclBytes := hclFile.Bytes()
 	hclBytes = escapeLiteralVariables(hclBytes)
 	hclBytes = escapeBlueprintVariables(hclBytes)
 	if err := appendHCLToFile(providersPath, hclBytes); err != nil {
@@ -375,8 +335,11 @@ func writeVersions(dst string) error {
 	return nil
 }
 
-func printTerraformInstructions(grpPath string, moduleName string) {
+func printTerraformInstructions(grpPath string, moduleName string, printIntergroupWarning bool) {
 	printInstructionsPreamble("Terraform", grpPath, moduleName)
+	if printIntergroupWarning {
+		fmt.Print(intergroupWarning)
+	}
 	fmt.Printf("  terraform -chdir=%s init\n", grpPath)
 	fmt.Printf("  terraform -chdir=%s validate\n", grpPath)
 	fmt.Printf("  terraform -chdir=%s apply\n\n", grpPath)
@@ -389,15 +352,22 @@ func printTerraformInstructions(grpPath string, moduleName string) {
 // variables.tf
 // groupDir: The path to the directory the resource group will be created in
 func (w TFWriter) writeDeploymentGroup(
-	depGroup config.DeploymentGroup,
-	globalVars map[string]interface{},
+	dc config.DeploymentConfig,
+	groupIndex int,
 	deploymentDir string,
-) error {
-
-	ctyVars, err := config.ConvertMapToCty(globalVars)
-	if err != nil {
-		return fmt.Errorf(
-			"error converting deployment vars to cty for writing: %v", err)
+) (groupMetadata, error) {
+	depGroup := dc.Config.DeploymentGroups[groupIndex]
+	deploymentVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
+	intergroupVars := findIntergroupVariables(depGroup, dc.GetModuleConnections())
+	intergroupInputs := make(map[string]bool)
+	for _, igVar := range intergroupVars {
+		intergroupInputs[igVar.Name] = true
+	}
+	gmd := groupMetadata{
+		Name:             depGroup.Name,
+		DeploymentInputs: orderKeys(deploymentVars),
+		IntergroupInputs: orderKeys(intergroupInputs),
+		Outputs:          getAllOutputs(depGroup),
 	}
 
 	writePath := filepath.Join(deploymentDir, depGroup.Name)
@@ -406,48 +376,48 @@ func (w TFWriter) writeDeploymentGroup(
 	if err := writeMain(
 		depGroup.Modules, depGroup.TerraformBackend, writePath,
 	); err != nil {
-		return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
+		return groupMetadata{}, fmt.Errorf("error writing main.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write variables.tf file
-	if err := writeVariables(ctyVars, writePath); err != nil {
-		return fmt.Errorf(
+	if err := writeVariables(deploymentVars, intergroupVars, writePath); err != nil {
+		return groupMetadata{}, fmt.Errorf(
 			"error writing variables.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write outputs.tf file
 	if err := writeOutputs(depGroup.Modules, writePath); err != nil {
-		return fmt.Errorf(
+		return groupMetadata{}, fmt.Errorf(
 			"error writing outputs.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write terraform.tfvars file
-	if err := writeTfvars(ctyVars, writePath); err != nil {
-		return fmt.Errorf(
+	if err := writeTfvars(deploymentVars, writePath); err != nil {
+		return groupMetadata{}, fmt.Errorf(
 			"error writing terraform.tfvars file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write providers.tf file
-	if err := writeProviders(ctyVars, writePath); err != nil {
-		return fmt.Errorf(
+	if err := writeProviders(deploymentVars, writePath); err != nil {
+		return groupMetadata{}, fmt.Errorf(
 			"error writing providers.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write versions.tf file
 	if err := writeVersions(writePath); err != nil {
-		return fmt.Errorf(
+		return groupMetadata{}, fmt.Errorf(
 			"error writing versions.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
-	printTerraformInstructions(writePath, depGroup.Name)
+	printTerraformInstructions(writePath, depGroup.Name, len(intergroupInputs) > 0)
 
-	return nil
+	return gmd, nil
 }
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
@@ -470,7 +440,7 @@ func (w TFWriter) restoreState(deploymentDir string) error {
 			if bytesRead, err := ioutil.ReadFile(src); err == nil {
 				err = ioutil.WriteFile(dest, bytesRead, 0644)
 				if err != nil {
-					return fmt.Errorf("Failed to write previous state file %s, %w", dest, err)
+					return fmt.Errorf("failed to write previous state file %s, %w", dest, err)
 				}
 			}
 		}
@@ -488,10 +458,38 @@ func orderKeys[T any](settings map[string]T) []string {
 	return keys
 }
 
-func tokensForValue(val cty.Value) hclwrite.Tokens {
-	toks := hclwrite.TokensForValue(val)
-	if val.Type().IsMapType() || val.Type().IsObjectType() {
-		toks = maybeCompactMapToken(toks)
+func filterVarsByGraph(vars map[string]cty.Value, group config.DeploymentGroup, graph map[string][]config.ModConnection) map[string]cty.Value {
+	// labels must always be written as a variable as it is implicitly added
+	groupInputs := map[string]bool{
+		"labels": true,
 	}
-	return toks
+	for _, mod := range group.Modules {
+		if connections, ok := graph[mod.ID]; ok {
+			for _, conn := range connections {
+				if conn.IsDeploymentKind() {
+					for _, v := range conn.GetSharedVariables() {
+						groupInputs[v] = true
+					}
+				}
+			}
+		}
+	}
+
+	filteredVars := make(map[string]cty.Value)
+	for key, val := range vars {
+		if groupInputs[key] {
+			filteredVars[key] = val
+		}
+	}
+	return filteredVars
+}
+
+func getAllOutputs(group config.DeploymentGroup) []string {
+	outputs := make(map[string]bool)
+	for _, mod := range group.Modules {
+		for _, output := range mod.Outputs {
+			outputs[config.AutomaticOutputName(output.Name, mod.ID)] = true
+		}
+	}
+	return orderKeys(outputs)
 }

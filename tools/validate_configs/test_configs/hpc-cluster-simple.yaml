@@ -43,9 +43,6 @@ deployment_groups:
       - type: shell
         content: $(homefs.install_nfs_client)
         destination: install-nfs.sh
-      - type: "ansible-local"
-        source: "modules/startup-script/examples/mount.yaml"
-        destination: mount.yaml
 
   - id: workstation
     source: modules/compute/vm-instance

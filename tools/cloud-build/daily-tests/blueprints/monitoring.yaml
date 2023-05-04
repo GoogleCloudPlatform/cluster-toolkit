@@ -41,13 +41,10 @@ deployment_groups:
     source: community/modules/file-system/cloud-storage-bucket
 
   - id: startup
-    source: ./modules/scripts/startup-script
+    source: modules/scripts/startup-script
     use: [bucket-for-startup-script]
     settings:
-      runners:
-      - type: shell
-        source: modules/startup-script/examples/install_cloud_ops_agent.sh
-        destination: install_cloud_ops_agent.sh
+      install_cloud_ops_agent: true
 
   - id: workstation
     source: ./modules/compute/vm-instance

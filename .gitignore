@@ -57,3 +57,7 @@ terraform.rc
 #### PACKER
 packer-manifest.json
 *.auto.pkrvars.hcl
+
+#### Exclude from gitingore
+!tools/validate_configs/golden_copies/*/*/*/defaults.auto.pkrvars.hcl
+!tools/validate_configs/golden_copies/*/*/terraform.tfvars

@@ -1,10 +1,10 @@
-# Copyright 2022 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,17 +13,12 @@
 # limitations under the License.
 
 ---
-# Current parallel execution tree, built to minimize total execution time and faster tests first.
-# ├── build_ghpc
-# └── fetch_builder
-#    └── spack-gromacs (group 2)
-#        └── slurm-gcp-v5-hpc-centos7
-
 timeout: 14400s  # 4hr
 availableSecrets:
   secretManager:
   - versionName: projects/$PROJECT_ID/secrets/spack_cache_url/versions/2
     env: SPACK_CACHE
+
 steps:
 ## Test simple golang build
 - id: build_ghpc
@@ -43,14 +38,10 @@ steps:
   args:
   - -c
   - echo "done fetching builder"
-
 ## Test Spack Gromacs Example
 - id: spack-gromacs
-  waitFor:
-  - fetch_builder
-  - build_ghpc
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  waitFor: ["fetch_builder", "build_ghpc"]
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
@@ -71,45 +62,3 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/spack-gromacs.yml"
-
-## Test Slurm v5 HPC Centos7 Example
-- id: slurm-gcp-v5-hpc-centos7
-  waitFor:
-  - spack-gromacs
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  env:
-  - "ANSIBLE_HOST_KEY_CHECKING=false"
-  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  args:
-  - -c
-  - |
-    set -x -e
-    BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v5-hpc-centos7.yml"
-
-## Test Slurm on GCP v5 with Startup Scripts
-- id: slurm-gcp-v5-startup-scripts
-  waitFor:
-  - slurm-gcp-v5-hpc-centos7
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  env:
-  - "ANSIBLE_HOST_KEY_CHECKING=false"
-  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  args:
-  - -c
-  - |
-    set -x -e
-    BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v5-startup-scripts.yml"

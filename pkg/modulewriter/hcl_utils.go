@@ -19,6 +19,9 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"hpc-toolkit/pkg/config"
+
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -58,4 +61,40 @@ func writeHclAttributes(vars map[string]cty.Value, dst string) error {
 		return fmt.Errorf("error writing HCL to %v: %v", filepath.Base(dst), err)
 	}
 	return err
+}
+
+// TokensForValue is a modification of hclwrite.TokensForValue.
+// The only difference in behavior is handling "HCL literal" strings.
+func TokensForValue(val cty.Value) hclwrite.Tokens {
+	// We need to handle both cases, until all "expression" users are moved to Expression
+	if e, is := config.IsExpressionValue(val); is {
+		return e.Tokenize()
+	} else if s, is := config.IsYamlExpressionLiteral(val); is { // return it "as is"
+		return hclwrite.TokensForIdentifier(s)
+	}
+
+	ty := val.Type()
+	if ty.IsListType() || ty.IsSetType() || ty.IsTupleType() {
+		tl := []hclwrite.Tokens{}
+		for it := val.ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			tl = append(tl, TokensForValue(v))
+		}
+		return hclwrite.TokensForTuple(tl)
+	}
+	if ty.IsMapType() || ty.IsObjectType() {
+		tl := []hclwrite.ObjectAttrTokens{}
+		for it := val.ElementIterator(); it.Next(); {
+			k, v := it.Element()
+			kt := hclwrite.TokensForIdentifier(k.AsString())
+			if !hclsyntax.ValidIdentifier(k.AsString()) {
+				kt = TokensForValue(k)
+			}
+			vt := TokensForValue(v)
+			tl = append(tl, hclwrite.ObjectAttrTokens{Name: kt, Value: vt})
+		}
+		return hclwrite.TokensForObject(tl)
+
+	}
+	return hclwrite.TokensForValue(val) // rely on hclwrite implementation
 }
