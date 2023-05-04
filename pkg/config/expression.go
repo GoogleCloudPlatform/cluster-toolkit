@@ -70,20 +70,20 @@ func MakeStringInterpolationError(s string) error {
 
 // SimpleVarToReference takes a string `$(...)` and transforms it to `Reference`
 func SimpleVarToReference(s string) (Reference, error) {
+	fmtErr := VarFormatError{s}
 	if !hasVariable(s) {
-		return Reference{}, fmt.Errorf("%#v is not a variable", s)
+		return Reference{}, fmtErr
 	}
 	if !isSimpleVariable(s) {
 		return Reference{}, MakeStringInterpolationError(s)
 	}
 	contents := simpleVariableExp.FindStringSubmatch(s)
 	if len(contents) != 2 { // Should always be (match, contents) here
-		return Reference{}, fmt.Errorf("%s %s, failed to extract contents: %v",
-			errorMessages["invalidVar"], s, contents)
+		return Reference{}, fmtErr
 	}
 	components := strings.Split(contents[1], ".")
 	if len(components) != 2 {
-		return Reference{}, fmt.Errorf("%s %s, expected format: %s", errorMessages["invalidVar"], s, expectedVarFormat)
+		return Reference{}, fmtErr
 	}
 	if components[0] == "vars" {
 		return Reference{
@@ -103,11 +103,11 @@ func SimpleVarToExpression(s string) (Expression, error) {
 	}
 	var ex Expression
 	if ref.GlobalVar {
-		ex, err = ParseExpression(fmt.Sprintf("var.%s", ref.Name))
+		ex = MustParseExpression(fmt.Sprintf("var.%s", ref.Name))
 	} else {
-		ex, err = ParseExpression(fmt.Sprintf("module.%s.%s", ref.Module, ref.Name))
+		ex = MustParseExpression(fmt.Sprintf("module.%s.%s", ref.Module, ref.Name))
 	}
-	return ex, err
+	return ex, nil
 }
 
 // TraversalToReference takes HCL traversal and returns `Reference`
@@ -184,7 +184,8 @@ type Expression interface {
 
 // ParseExpression returns Expression
 func ParseExpression(s string) (Expression, error) {
-	e, diag := hclsyntax.ParseExpression([]byte(s), "", hcl.Pos{})
+	pos := hcl.Pos{Column: 2} // set offset to 2 to account for "((" in literal expressions
+	e, diag := hclsyntax.ParseExpression([]byte(s), "", pos)
 	if diag.HasErrors() {
 		return nil, diag
 	}

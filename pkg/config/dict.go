@@ -106,9 +106,12 @@ func (y *YamlValue) UnmarshalYAML(n *yaml.Node) error {
 	case yaml.SequenceNode:
 		err = y.unmarshalTuple(n)
 	default:
-		err = fmt.Errorf("line %d: cannot decode node with unknown kind %d", n.Line, n.Kind)
+		err = fmt.Errorf("cannot decode node with unknown kind %d", n.Kind)
 	}
-	return err
+	if err != nil {
+		return YamlError(n, err)
+	}
+	return nil
 }
 
 func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {

@@ -15,6 +15,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -207,5 +208,33 @@ func TestEval(t *testing.T) {
 	}
 	if diff := cmp.Diff(want.Items(), got.Items(), ctydebug.CmpOptions); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestYamlValueDecodeErrors(t *testing.T) {
+	type test struct {
+		yml  string
+		pref string
+	}
+	tests := []test{
+		{`crab: $(goo)`, `line 1, col 7: invalid variable format`},
+		{`crab: $(go)o`, `line 1, col 7: variables "$(...)" within strings`},
+		{`crab: (("barbacoa" +@+ 9))`, `line 1, col 21: Invalid character;`},
+		{`[
+  $(goo) ]`, `line 2, col 3: invalid variable format`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.yml, func(t *testing.T) {
+			gotE := yaml.Unmarshal([]byte(tc.yml), &YamlValue{})
+			var got string
+			if gotE != nil {
+				got = gotE.Error()
+			} else {
+				got = "(no error)"
+			}
+			if !strings.HasPrefix(got, tc.pref) {
+				t.Errorf("want:%s...\ngot:%s", tc.pref, got)
+			}
+		})
 	}
 }

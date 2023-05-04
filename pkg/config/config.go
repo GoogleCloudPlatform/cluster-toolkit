@@ -32,12 +32,6 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 )
 
-const (
-	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
-	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
-	unexpectedConnectionKind string = "connectionKind must be useConnection or deploymentConnection"
-)
-
 var errorMessages = map[string]string{
 	// general
 	"appendToNonList": "cannot append to a setting whose type is not a list",
@@ -50,7 +44,6 @@ var errorMessages = map[string]string{
 	"missingSetting":       "a required setting is missing from a module",
 	"globalLabelType":      "deployment variable 'labels' are not a map",
 	"settingsLabelType":    "labels in module settings are not a map",
-	"invalidVar":           "invalid variable definition in",
 	"invalidMod":           "invalid module reference",
 	"invalidDeploymentRef": "invalid deployment-wide reference (only \"vars\") is supported)",
 	"varNotFound":          "Could not find source of variable",
@@ -62,7 +55,6 @@ var errorMessages = map[string]string{
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
-	"wrongKind":          "a module kind is invalid",
 	"extraSetting":       "a setting was added that is not found in the module",
 	"settingWithPeriod":  "a setting name contains a period, which is not supported; variable subfields cannot be set independently in a blueprint.",
 	"settingInvalidChar": "a setting name must begin with a non-numeric character and all characters must be either letters, numbers, dashes ('-') or underscores ('_').",
@@ -85,6 +77,19 @@ var movedModules = map[string]string{
 
 // GroupName is the name of a deployment group
 type GroupName string
+
+// UnmarshalYAML implements a custom unmarshaler from YAML string to GroupName
+func (n *GroupName) UnmarshalYAML(y *yaml.Node) error {
+	var s string
+	if err := y.Decode(&s); err != nil {
+		return YamlError(y, err)
+	}
+	*n = GroupName(s)
+	if err := n.Validate(); err != nil {
+		return YamlError(y, err)
+	}
+	return nil
+}
 
 // Validate checks that the group name is valid
 func (n GroupName) Validate() error {
@@ -164,14 +169,12 @@ var PackerKind = ModuleKind{kind: "packer"}
 // UnmarshalYAML implements a custom unmarshaler from YAML string to ModuleKind
 func (mk *ModuleKind) UnmarshalYAML(n *yaml.Node) error {
 	var kind string
-	const yamlErrorMsg string = "block beginning at line %d: %s"
-
 	err := n.Decode(&kind)
 	if err == nil && IsValidModuleKind(kind) {
 		mk.kind = kind
 		return nil
 	}
-	return fmt.Errorf(yamlErrorMsg, n.Line, "kind must be \"packer\" or \"terraform\" or removed from YAML")
+	return YamlError(n, errors.New(`kind must be "packer" or "terraform" or absent`))
 }
 
 // MarshalYAML implements a custom marshaler from ModuleKind to YAML string
@@ -505,9 +508,6 @@ func checkModuleAndGroupNames(groups []DeploymentGroup) error {
 	seenGroups := map[GroupName]bool{}
 	for ig := range groups {
 		grp := &groups[ig]
-		if err := grp.Name.Validate(); err != nil {
-			return err
-		}
 		if seenGroups[grp.Name] {
 			return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name)
 		}
