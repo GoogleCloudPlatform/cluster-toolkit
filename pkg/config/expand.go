@@ -40,13 +40,7 @@ var (
 	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
 	// Doesn't match: "\$(vars.example)", "no variable in this string"
 	anyVariableExp    *regexp.Regexp = regexp.MustCompile(`(^|[^\\])\$\((.*?)\)`)
-	literalExp        *regexp.Regexp = regexp.MustCompile(`^\(\((.*)\)\)$`)
 	simpleVariableExp *regexp.Regexp = regexp.MustCompile(`^\$\((.*)\)$`)
-	// the greediness and non-greediness of expression below is important
-	// consume all whitespace at beginning and end
-	// consume only up to first period to get variable source
-	// consume only up to whitespace to get variable name
-	literalSplitExp *regexp.Regexp = regexp.MustCompile(`^\(\([[:space:]]*(.*?)\.(.*?)[[:space:]]*\)\)$`)
 )
 
 // expand expands variables and strings in the yaml config. Used directly by

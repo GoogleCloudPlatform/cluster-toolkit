@@ -243,9 +243,7 @@ func (e BaseExpression) Tokenize() hclwrite.Tokens {
 // References return Reference for all variables used in the expression
 func (e BaseExpression) References() []Reference {
 	c := make([]Reference, len(e.rs))
-	for i, r := range e.rs {
-		c[i] = r
-	}
+	copy(c, e.rs)
 	return c
 }
 
