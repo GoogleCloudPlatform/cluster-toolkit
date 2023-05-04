@@ -19,6 +19,7 @@ package shell
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"os"
 	"path/filepath"
 
@@ -30,12 +31,7 @@ import (
 // GetDeploymentKinds returns the kind of each group in the deployment as a map;
 // additionally it provides a mechanism for validating the deployment directory
 // structure; for now, validation tests only existence of each directory
-func GetDeploymentKinds(expandedBlueprintFile string) (map[config.GroupName]config.ModuleKind, error) {
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return nil, err
-	}
-
+func GetDeploymentKinds(dc config.DeploymentConfig) (map[config.GroupName]config.ModuleKind, error) {
 	groupKinds := make(map[config.GroupName]config.ModuleKind)
 	for _, g := range dc.Config.DeploymentGroups {
 		if g.Kind == config.UnknownKind {
@@ -60,13 +56,8 @@ func ValidateDeploymentDirectory(kinds map[config.GroupName]config.ModuleKind, d
 }
 
 // return a map from group names to a list of outputs that are needed by this group
-func getIntergroupOutputNamesByGroup(thisGroup config.GroupName, expandedBlueprintFile string) (map[config.GroupName][]string, error) {
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return nil, err
-	}
-
-	thisGroupIdx := slices.IndexFunc(dc.Config.DeploymentGroups, func(g config.DeploymentGroup) bool { return g.Name == thisGroup })
+func getIntergroupOutputNamesByGroup(thisGroup config.GroupName, dc config.DeploymentConfig) (map[config.GroupName][]string, error) {
+	thisGroupIdx := dc.Config.GroupIndex(thisGroup)
 	if thisGroupIdx == -1 {
 		return nil, fmt.Errorf("this group wasn't found in the deployment metadata")
 	}
@@ -145,4 +136,23 @@ func CheckWritableDir(path string) error {
 		return fmt.Errorf("%s must be a writable directory", path)
 	}
 	return nil
+}
+
+func getIntergroupPackerSettings(dc config.DeploymentConfig, packerModule config.Module) config.Dict {
+	nonIntergroupSettings := map[string]bool{}
+	for setting, v := range packerModule.Settings.Items() {
+		igcRefs := config.FindIntergroupReferences(v, packerModule, dc.Config)
+		if len(igcRefs) == 0 {
+			nonIntergroupSettings[setting] = true
+		}
+	}
+
+	packerGroup := dc.Config.ModuleGroupOrDie(packerModule.ID)
+	igcRefs := modulewriter.FindIntergroupVariables(packerGroup, dc.Config)
+	packerModule = modulewriter.SubstituteIgcReferencesInModule(packerModule, igcRefs)
+	packerSettings := packerModule.Settings
+	for setting := range nonIntergroupSettings {
+		packerSettings.Unset(setting)
+	}
+	return packerSettings
 }

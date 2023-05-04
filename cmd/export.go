@@ -76,7 +76,12 @@ func setArtifactsDir(cmd *cobra.Command, args []string) {
 }
 
 func verifyDeploymentAgainstBlueprint(expandedBlueprintFile string, group config.GroupName, deploymentRoot string) (config.ModuleKind, error) {
-	groupKinds, err := shell.GetDeploymentKinds(expandedBlueprintFile)
+	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	if err != nil {
+		return config.UnknownKind, err
+	}
+
+	groupKinds, err := shell.GetDeploymentKinds(dc)
 	if err != nil {
 		return config.UnknownKind, err
 	}

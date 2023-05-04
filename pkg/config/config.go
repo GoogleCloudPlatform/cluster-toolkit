@@ -141,6 +141,17 @@ func (bp Blueprint) ModuleGroupOrDie(mod ModuleID) DeploymentGroup {
 	return g
 }
 
+// GroupIndex returns the index of the input group in the blueprint
+// return -1 if not found
+func (bp Blueprint) GroupIndex(groupName GroupName) int {
+	for i, g := range bp.DeploymentGroups {
+		if g.Name == groupName {
+			return i
+		}
+	}
+	return -1
+}
+
 // TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string
@@ -500,13 +511,13 @@ func (bp *Blueprint) checkModulesInfo() error {
 }
 
 // checkModulesAndGroups ensures:
-// - all module IDs are unique across all groups
-// - if deployment group kind is unknown (not explicit in blueprint), then it is
-//   set to th kind of the first module that has a known kind (a prior func sets
-//   module kind to Terraform if unset)
-// - all modules must be of the same kind and all modules must be of the same
-//   kind as the group
-// - all group names are unique and do not have illegal characters
+//   - all module IDs are unique across all groups
+//   - if deployment group kind is unknown (not explicit in blueprint), then it is
+//     set to th kind of the first module that has a known kind (a prior func sets
+//     module kind to Terraform if unset)
+//   - all modules must be of the same kind and all modules must be of the same
+//     kind as the group
+//   - all group names are unique and do not have illegal characters
 func checkModulesAndGroups(groups []DeploymentGroup) error {
 	seenMod := map[ModuleID]bool{}
 	seenGroups := map[GroupName]bool{}
