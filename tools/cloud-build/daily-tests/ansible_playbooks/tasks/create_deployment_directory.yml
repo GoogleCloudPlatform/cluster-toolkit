@@ -54,3 +54,7 @@
     cmd: gsutil cp "{{ deployment_name }}.tgz" "gs://{{ state_bucket }}/{{ test_name }}/"
     chdir: "{{ workspace }}"
   changed_when: True
+
+- name: Print download command
+  ansible.builtin.debug:
+    msg: gcloud storage cp gs://{{ state_bucket }}/{{ test_name }}/{{ deployment_name }}.tgz .
