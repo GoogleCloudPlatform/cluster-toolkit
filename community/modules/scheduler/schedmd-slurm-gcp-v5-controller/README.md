@@ -13,8 +13,7 @@ controller for optimal performance at different scales.
 
 > **Warning**: The variables `enable_reconfigure`,
 > `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
-> `true`, require additional dependencies **to be installed on the system running
-> `terraform apply`**.
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
 >
 > ```shell
 > # Install Python3 and run
