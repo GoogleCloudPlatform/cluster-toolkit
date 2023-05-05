@@ -24,7 +24,7 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     dnsutils \
     shellcheck && \
     apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
-    apt-get -y update && apt-get install -y unzip python3-pip python3-venv terraform packer jq && \
+    apt-get -y update && apt-get install -y unzip python3-pip python3-venv python3-netaddr terraform packer jq && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
       | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \

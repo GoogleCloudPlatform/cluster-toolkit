@@ -58,6 +58,7 @@
       ansible.builtin.add_host:
         hostname: "{{ access_ip.stdout }}"
         groups: [remote_host]
+      when: access_ip.stdout | ansible.utils.ipaddr
     ## Setup firewall for cloud build
     - name: Get Builder IP
       register: build_ip

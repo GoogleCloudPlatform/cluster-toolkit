@@ -3,20 +3,20 @@ skip_list:
 - jinja[invalid]
 
 exclude_paths:
-  - .cache/ # implicit unless exclude_paths is defined in config
-  - .github/
-  - cmd/
-  - docs/
-  - examples/
-  - community/examples/
-  - pkg/
+- .cache/ # implicit unless exclude_paths is defined in config
+- .github/
+- cmd/
+- docs/
+- examples/
+- community/examples/
+- pkg/
 
 mock_roles:
 - googlecloudplatform.google_cloud_ops_agents
 
 kinds:
-  - playbook: "**/ansible_playbooks/*test.{yml,yaml}"
-  - playbook: "**/files/*.{yml,yaml}"
-  - playbook: "**/scripts/*.{yml,yaml}"
-  - tasks: "**/ansible_playbooks/test*.{yml,yaml}"
-  - tasks: "**/tasks/*"
+- playbook: "**/ansible_playbooks/*test.{yml,yaml}"
+- playbook: "**/files/*.{yml,yaml}"
+- playbook: "**/scripts/*.{yml,yaml}"
+- tasks: "**/ansible_playbooks/test*.{yml,yaml}"
+- tasks: "**/tasks/*"
