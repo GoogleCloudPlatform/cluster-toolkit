@@ -130,6 +130,7 @@
       ansible.builtin.add_host:
         hostname: "{{ remote_ip }}"
         groups: [remote_host]
+      when: remote_ip | ansible.utils.ipaddr
     - name: Wait for cluster
       ansible.builtin.wait_for_connection:
 

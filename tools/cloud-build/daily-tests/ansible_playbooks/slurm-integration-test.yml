@@ -136,6 +136,7 @@
       ansible.builtin.add_host:
         hostname: "{{ login_ip }}"
         groups: [remote_host]
+      when: login_ip | ansible.utils.ipaddr
 
     ## Cleanup and fail gracefully
     rescue:
