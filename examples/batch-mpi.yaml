@@ -132,6 +132,7 @@ deployment_groups:
     use: [network1, sharefs, spack-build-startup]
     settings:
       name_prefix: spack-builder
+      add_deployment_name_before_prefix: true
       machine_type: c2-standard-30
 
   ### Batch Modules ###

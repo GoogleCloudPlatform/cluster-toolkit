@@ -43,5 +43,6 @@ deployment_groups:
     use: [network1, lustre]
     settings:
       name_prefix: client-vm
+      add_deployment_name_before_prefix: true
       instance_count: 2
       machine_type: n2-standard-2

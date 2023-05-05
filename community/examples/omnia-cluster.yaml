@@ -74,6 +74,7 @@ deployment_groups:
     - startup-manager
     settings:
       name_prefix: omnia-manager
+      add_deployment_name_before_prefix: true
       machine_type: n2-standard-4
 
   - id: compute
@@ -84,6 +85,7 @@ deployment_groups:
     - startup-compute
     settings:
       name_prefix: omnia-compute
+      add_deployment_name_before_prefix: true
       instance_count: 2
 
   # This module simply makes terraform wait until the startup script is complete
