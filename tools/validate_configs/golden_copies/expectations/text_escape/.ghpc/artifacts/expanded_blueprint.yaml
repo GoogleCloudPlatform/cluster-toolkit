@@ -1,0 +1,78 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: text_escape
+ghpc_version: golden
+validators:
+  - validator: test_project_exists
+    inputs: {}
+    skip: true
+  - validator: test_apis_enabled
+    inputs: {}
+    skip: true
+  - validator: test_region_exists
+    inputs: {}
+    skip: true
+  - validator: test_zone_exists
+    inputs: {}
+    skip: true
+  - validator: test_zone_in_region
+    inputs: {}
+    skip: true
+  - validator: test_module_not_used
+    inputs: {}
+    skip: false
+  - validator: test_deployment_variable_not_used
+    inputs: {}
+    skip: false
+vars:
+  deployment_name: golden_copy_deployment
+  labels:
+    ghpc_blueprint: text_escape
+    ghpc_deployment: golden_copy_deployment
+    red: \((blue))
+  project_id: invalid-project
+  zone: us-east4-c
+deployment_groups:
+  - group: zero
+    terraform_backend:
+      type: ""
+      configuration: {}
+    modules:
+      - source: modules/packer/custom-image
+        kind: packer
+        id: lime
+        use: []
+        wrapsettingswith: {}
+        settings:
+          deployment_name: ((var.deployment_name))
+          image_family: \$(zebra/to(ad
+          image_name: \((cat /dog))
+          labels:
+            brown: \$(fox)
+            ghpc_blueprint: text_escape
+            ghpc_deployment: golden_copy_deployment
+            ghpc_role: packer
+            red: \((blue))
+          project_id: ((var.project_id))
+          subnetwork_name: \$(purple
+          zone: ((var.zone))
+        required_apis:
+          $(vars.project_id):
+            - compute.googleapis.com
+            - storage.googleapis.com
+    kind: packer
+terraform_backend_defaults:
+  type: ""
+  configuration: {}
