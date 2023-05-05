@@ -39,13 +39,19 @@ spec:
       - name: ${name}-container
         image: ${image}
         command: [%{~ for s in command ~}"${s}",%{~ endfor ~}]
-        %{~ if should_request_cpu ~}
+        %{~ if should_request_cpu || should_request_gpu ~}
         resources:
+          %{~ if should_request_gpu ~}
+          limits:
+            nvidia.com/gpu: ${gpu_limit}
+          %{~ endif ~}
+          %{~ if should_request_cpu ~}
           requests:
             %{~ if full_node_request ~}
             # cpu request attempts full node per pod
             %{~ endif ~}
             cpu: ${millicpu_request}
+          %{~ endif ~}
         %{~ endif ~}
       restartPolicy: ${restart_policy}
   backoffLimit: ${backoff_limit}

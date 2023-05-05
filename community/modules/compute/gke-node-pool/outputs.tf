@@ -40,6 +40,11 @@ output "allocatable_cpu_per_node" {
   value       = local.allocatable_cpu
 }
 
+output "gpu_per_node" {
+  description = "How many gpus does each node have. TODO: make accurate."
+  value       = local.has_gpu ? 1 : 0
+}
+
 locals {
   translate_toleration = {
     PREFER_NO_SCHEDULE = "PreferNoSchedule"

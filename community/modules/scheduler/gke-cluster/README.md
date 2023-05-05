@@ -76,6 +76,8 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.51.0, < 5.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.51.0, < 5.0 |
+| <a name="requirement_http"></a> [http](#requirement\_http) | >= 3.3 |
+| <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | ~> 2.10 |
 
 ## Providers
 
@@ -83,6 +85,8 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.51.0, < 5.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.51.0, < 5.0 |
+| <a name="provider_http"></a> [http](#provider\_http) | >= 3.3 |
+| <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | ~> 2.10 |
 
 ## Modules
 
@@ -100,7 +104,10 @@ No modules.
 | [google_project_iam_member.node_service_account_metric_writer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_project_iam_member.node_service_account_monitoring_viewer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_project_iam_member.node_service_account_resource_metadata_writer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
+| [kubernetes_manifest.nvidia_driver_installer](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/manifest) | resource |
+| [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_compute_default_service_account.default_sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
+| [http_http.nvidia_driver_installer_manifest](https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http) | data source |
 
 ## Inputs
 

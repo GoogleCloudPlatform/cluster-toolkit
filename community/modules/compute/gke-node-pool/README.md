@@ -105,6 +105,7 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
+| <a name="output_gpu_per_node"></a> [gpu\_per\_node](#output\_gpu\_per\_node) | How many gpus does each node have. TODO: make accurate. |
 | <a name="output_node_pool_name"></a> [node\_pool\_name](#output\_node\_pool\_name) | Name of the node pool. |
 | <a name="output_tolerations"></a> [tolerations](#output\_tolerations) | Tolerations needed for a pod to be scheduled on this node pool. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -27,6 +27,22 @@ locals {
   sa_email = var.service_account.email != null ? var.service_account.email : data.google_compute_default_service_account.default_sa.email
 }
 
+data "google_client_config" "default" {}
+
+provider "kubernetes" {
+  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+}
+
+data "http" "nvidia_driver_installer_manifest" {
+  url = "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/nvidia-driver-installer/cos/daemonset-preloaded.yaml"
+}
+
+resource "kubernetes_manifest" "nvidia_driver_installer" {
+  manifest = yamldecode(data.http.nvidia_driver_installer_manifest.response_body)
+}
+
 data "google_compute_default_service_account" "default_sa" {
   project = var.project_id
 }
