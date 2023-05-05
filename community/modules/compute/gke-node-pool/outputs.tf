@@ -21,7 +21,7 @@ output "node_pool_name" {
 
 locals {
   is_a_series = local.machine_family == "a2"
-  last_digit  = try(local.machine_vals[2], 0)
+  last_digit  = trimsuffix(try(local.machine_vals[2], 0), "g")
 
   # Shared core machines only have 1 cpu allocatable, even if they have 2 cpu capacity
   vcpu        = local.machine_shared_core ? 1 : local.is_a_series ? local.last_digit * 12 : local.last_digit
@@ -56,6 +56,6 @@ locals {
 }
 
 output "tolerations" {
-  description = "value"
+  description = "Tolerations needed for a pod to be scheduled on this node pool."
   value       = local.tolerations
 }

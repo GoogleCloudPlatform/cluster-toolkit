@@ -42,6 +42,32 @@ variable "machine_type" {
   default     = "c2-standard-60"
 }
 
+variable "disk_size_gb" {
+  description = "Size of disk for each node."
+  type        = number
+  default     = 100
+}
+
+variable "disk_type" {
+  description = "Disk type for each node."
+  type        = string
+  default     = "pd-standard"
+}
+
+variable "guest_accelerator" {
+  description = "List of the type and count of accelerator cards attached to the instance."
+  type = list(object({
+    type               = string
+    count              = number
+    gpu_partition_size = string
+    gpu_sharing_config = list(object({
+      gpu_sharing_strategy       = string
+      max_shared_clients_per_gpu = number
+    }))
+  }))
+  default = null
+}
+
 variable "image_type" {
   description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD."
   type        = string
