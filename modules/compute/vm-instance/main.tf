@@ -89,7 +89,7 @@ resource "google_compute_disk" "boot_disk" {
   image  = data.google_compute_image.compute_image.self_link
   type   = var.disk_type
   size   = var.disk_size_gb
-  labels = var.labels
+  #labels = var.labels
   zone   = var.zone
 }
 
@@ -120,7 +120,7 @@ resource "google_compute_instance" "compute_vm" {
   resource_policies = google_compute_resource_policy.placement_policy[*].self_link
 
   tags   = var.tags
-  labels = var.labels
+  #labels = var.labels
 
   boot_disk {
     source      = google_compute_disk.boot_disk[count.index].self_link
