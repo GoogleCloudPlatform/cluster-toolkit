@@ -66,11 +66,12 @@ var (
 	skipValidatorsDesc  = "Validators to skip"
 
 	createCmd = &cobra.Command{
-		Use:   "create BLUEPRINT_NAME",
-		Short: "Create a new deployment.",
-		Long:  "Create a new deployment based on a provided blueprint.",
-		Run:   runCreateCmd,
-		Args:  cobra.ExactArgs(1),
+		Use:               "create BLUEPRINT_NAME",
+		Short:             "Create a new deployment.",
+		Long:              "Create a new deployment based on a provided blueprint.",
+		Run:               runCreateCmd,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: filterYaml,
 	}
 )
 
@@ -185,4 +186,11 @@ func skipValidators(dc *config.DeploymentConfig) error {
 		}
 	}
 	return nil
+}
+
+func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
 }
