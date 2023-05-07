@@ -196,6 +196,10 @@ Modules that are still in development and less stable are labeled with the
 * **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install [Spack](https://github.com/spack/spack) on an
   instance or a slurm login or controller.
+* **[ramble-setup]** ![community-badge] ![experimental-badge] : Creates a
+  startup script to install
+  [Ramble](https://github.com/GoogleCloudPlatform/ramble) on an instance or a
+  slurm login or controller.
 * **[wait-for-startup]** ![community-badge] ![experimental-badge] : Waits for
   successful completion of a startup script on a compute VM.
 
@@ -203,6 +207,7 @@ Modules that are still in development and less stable are labeled with the
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
 [spack-install]: ../community/modules/scripts/spack-install/README.md
+[ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 [pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
 [pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md

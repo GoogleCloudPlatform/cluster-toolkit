@@ -710,6 +710,15 @@ bucket:
 > manually mount as the user using the bucket
 > ([Read more](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/mounting.md#access-permissions)).
 
+### [ramble.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions a single VM, installs spack using the
+[spack-install module](../community/modules/scripts/spack-install/README.md),
+and then installs ramble using the
+[ramble-setup module](../community/modules/scripts/ramble-setup/README.md).
+
+[ramble.yaml]: ../community/examples/ramble.yaml
+
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Spack is an HPC software package manager. This example creates a small Slurm
