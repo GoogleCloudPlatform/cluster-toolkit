@@ -658,8 +658,10 @@ bucket:
 
 This blueprint provisions a single VM, installs spack using the
 [spack-install module](../community/modules/scripts/spack-install/README.md),
-and then installs ramble using the
-[ramble-setup module](../community/modules/scripts/ramble-setup/README.md).
+installs ramble using the
+[ramble-setup module](../community/modules/scripts/ramble-setup/README.md),
+and executes ramble commands using the
+[ramble-execute module](../community/modules/scripts/ramble-execute/README.md).
 
 [ramble.yaml]: ../community/examples/ramble.yaml
 
