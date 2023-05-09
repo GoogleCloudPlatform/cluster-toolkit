@@ -26,8 +26,6 @@ vars:
   region: us-central1
   zone: us-central1-c
   new_image_family: my-slurm-image
-  network_name: image-builder
-  subnetwork_name: image-builder-us-central1
   disk_size: 32
 
 # Documentation for each of the modules used below can be found at
@@ -48,13 +46,15 @@ deployment_groups:
         content: |
           #!/bin/sh
           echo "Hello World" > /home/hello.txt
-    outputs: [startup_script]
 
 - group: packer
   modules:
   - id: custom-image
     source: modules/packer/custom-image
     kind: packer
+    use:
+    - network1
+    - scripts_for_image
     settings:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
@@ -67,9 +67,6 @@ deployment_groups:
 
 - group: cluster
   modules:
-  - id: cluster-network
-    source: modules/network/pre-existing-vpc
-
   - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
@@ -82,7 +79,7 @@ deployment_groups:
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - cluster-network
+    - network1
     - compute_node_group
     settings:
       partition_name: compute
@@ -90,7 +87,9 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    use: [cluster-network, compute_partition]
+    use:
+    - network1
+    - compute_partition
     settings:
       disable_controller_public_ips: false
       disk_size_gb: $(vars.disk_size)
@@ -100,7 +99,9 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    use: [cluster-network, slurm_controller]
+    use:
+    - network1
+    - slurm_controller
     settings:
       disable_login_public_ips: false
       disk_size_gb: $(vars.disk_size)

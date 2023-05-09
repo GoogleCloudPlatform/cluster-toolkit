@@ -193,64 +193,57 @@ For this example the following is needed in the selected region:
 ### [image-builder.yaml] ![core-badge]
 
 This Blueprint uses the [Packer template module][pkr] to create custom VM images
-by applying software and configurations to existing images.
+by applying software and configurations to existing images. This example takes
+the following steps:
 
-This example performs the following:
+1. Creates a network with outbound internet access in which to build the image (see
+[Custom Network](#custom-network-deployment-group-1)).
+2. Creates a script that will be used to customize the image (see
+[Toolkit Runners](#toolkit-runners-deployment-group-1)).
+3. Builds a custom Slurm image by executing the script on a standard Slurm image
+(see [Packer Template](#packer-template-deployment-group-2)).
+4. Deploys a Slurm cluster using the custom image (see
+[Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
 
-1. Creates a network needed to build the image (see
-   [Custom Network](#custom-network-deployment-group-1)).
-2. Sets up a script that will be used to configure the image (see
-   [Toolkit Runners](#toolkit-runners-deployment-group-1)).
-3. Builds a new image by modifying the Slurm image (see
-   [Packer Template](#packer-template-deployment-group-2)).
-4. Deploys a Slurm cluster using the newly built image (see
-   [Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
+Create the deployment folder from the blueprint:
 
-> **Note**: this example relies on the default behavior of the Toolkit to derive
-> naming convention for networks and other modules from the `deployment_name`.
-
-The commands needed to run through this example would look like:
-
-```bash
-# Create a deployment from the blueprint
+```shell
 ./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
 
-# Deploy the network for packer (1) and generate the startup script (2)
-terraform -chdir=image-builder-001/builder-env init
-terraform -chdir=image-builder-001/builder-env validate
-terraform -chdir=image-builder-001/builder-env apply
+Follow the on-screen commands that direct you to execute `terraform`, `packer`,
+and `ghpc` using the `export-outputs` / `import-inputs` sub-commands.
+The `export-outputs` / `import-inputs` sub-commands propagate dynamically
+created values from early steps in the build process to later steps. For
+example, the network is created in the first deployment group and its name
+must be supplied to both the Packer and Slurm cluster deployment groups. These
+sub-commands automate steps that might otherwise require manual copying.
 
-# Provide startup script to Packer
-terraform -chdir=image-builder-001/builder-env output \
-  -raw startup_script_scripts_for_image > \
-  image-builder-001/packer/custom-image/startup_script.sh
+When you are done, clean up the resources in reverse order of creation
 
-# Build image (3)
-cd image-builder-001/packer/custom-image
-packer init .
-packer validate -var startup_script_file=startup_script.sh .
-packer build -var startup_script_file=startup_script.sh .
-
-# Deploy Slurm cluster (4)
-cd -
-terraform -chdir=image-builder-001/cluster init
-terraform -chdir=image-builder-001/cluster validate
-terraform -chdir=image-builder-001/cluster apply
-
-# When you are done you can clean up the resources in reverse order of creation
+```shell
 terraform -chdir=image-builder-001/cluster destroy --auto-approve
 terraform -chdir=image-builder-001/builder-env destroy --auto-approve
 ```
 
-Using a custom VM image can be more scalable than installing software using
-boot-time startup scripts because:
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `my-slurm-image` followed by a date and
+timestamp for uniqueness.
+
+[console-images]: https://console.cloud.google.com/compute/images
+
+#### Why use a custom image?
+
+Using a custom VM image can be more scalable and reliable than installing
+software using boot-time startup scripts because:
 
 * it avoids reliance on continued availability of package repositories
 * VMs will join an HPC cluster and execute workloads more rapidly due to reduced
   boot-time configuration
-* machines are guaranteed to boot with a static set of packages available when
-  the custom image was created. No potential for some machines to be upgraded
-  relative to other based upon their creation time!
+* machines are guaranteed to boot with a static software configuration chosen
+  when the custom image was created. No potential for some machines to have
+  different software versions installed due to `apt`/`yum`/`pip` installations
+  executed after remote repositories have been updated.
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [pkr]: ../modules/packer/custom-image/README.md
@@ -260,15 +253,11 @@ boot-time startup scripts because:
 
 A tool called [Packer](https://packer.io) builds custom VM images by creating
 short-lived VMs, executing scripts on them, and saving the boot disk as an
-image that can be used by future VMs. The short-lived VM must operate in a
-network that
+image that can be used by future VMs. The short-lived VM typically operates in a
+network that has outbound access to the internet for downloading software.
 
-* has outbound access to the internet for downloading software
-* has SSH access from the machine running Packer so that local files/scripts
-  can be copied to the VM
-
-This deployment group creates such a network, while using [Cloud Nat][cloudnat]
-and [Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
+This deployment group creates a network using [Cloud Nat][cloudnat] and
+[Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
 connections without exposing the machine to the internet on a public IP address.
 
 [cloudnat]: https://cloud.google.com/nat/docs/overview
@@ -282,32 +271,31 @@ configured as a series of scripts uploaded to Cloud Storage. A simple, standard
 [VM startup script][vmstartup] runs at boot-time, downloads the scripts from
 Cloud Storage and executes them in sequence.
 
-The standard bash startup script is exported as a string by the startup-script
-module.
-
-The script in this example is performing the trivial task of creating a file in
-the image's home directory just to demonstrate the capability. You can expand
-the startup-script module to install more complex dependencies.
+The script in this example performs the trivial task of creating a file as a
+simple demonstration of functionality. You can use the startup-script module
+to address more complex scenarios.
 
 [vmstartup]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
 #### Packer Template (deployment group 2)
 
-The Packer template in this deployment group accepts [several methods for
-executing custom scripts][pkr]. To pass the exported startup string to it, you
-must collect it from the Terraform module and provide it to the Packer template.
-After running `terraform -chdir=image-builder-001/builder-env apply` as
-instructed by `ghpc`, execute the following:
+The Packer module uses the startup-script module from the first deployment group
+and executes the script to produce a custom image.
 
-```shell
-terraform -chdir=image-builder-001/builder-env \
-  output -raw startup_script_install_ansible > \
-  image-builder-001/packer/custom-image/startup_script.sh
-cd image-builder-001/packer/custom-image
-packer init .
-packer validate -var startup_script_file=startup_script.sh .
-packer build -var startup_script_file=startup_script.sh .
-```
+#### Slurm Cluster Based on Custom Image (deployment group 3)
+
+Once the Slurm cluster has been deployed we can test that our Slurm compute
+partition is using the custom image. Each compute node should contain the
+`hello.txt` file added by the startup-script.
+
+1. SSH into the login node `slurm-image-builder-001-login0`.
+2. Run a job that prints the contents of the added file:
+
+  ```bash
+  $ srun -N 2 cat /home/hello.txt
+  Hello World
+  Hello World
+  ```
 
 #### Quota Requirements for image-builder.yaml
 
@@ -324,21 +312,6 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
-
-#### Slurm Cluster Based on Custom Image (deployment group 3)
-
-Once the Slurm cluster has been deployed we can test that our Slurm compute
-partition is now using the image we built. It should contain the `hello.txt`
-file that was added during image build:
-
-1. SSH into the login node `slurm-image-builder-001-login0`.
-2. Run a job that prints the contents of the added file:
-
-  ```bash
-  $ srun -N 2 cat /home/hello.txt
-  Hello World
-  Hello World
-  ```
 
 ### [cloud-batch.yaml] ![core-badge]
 
