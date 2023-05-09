@@ -1,9 +1,5 @@
 ## Description
 
-> **_WARNING:_** This module is in active development and is therefore not
-> guaranteed to work consistently. Expect the interface to change rapidly while
-> warning exists.
-
 This module creates a node group data structure intended to be input to the
 [schedmd-slurm-gcp-v5-partition](../schedmd-slurm-gcp-v5-partition/) module.
 
