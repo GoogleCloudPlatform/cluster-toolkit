@@ -192,9 +192,11 @@ For this example the following is needed in the selected region:
 
 ### [image-builder.yaml] ![core-badge]
 
-This Blueprint uses the [Packer template module][pkr] to create custom VM images
-by applying software and configurations to existing images. This example takes
-the following steps:
+This blueprint uses the [Packer template module][pkr] to create a custom VM
+image and uses it to provision an HPC cluster using the Slurm scheduler. By
+using a custom image, the cluster is able to begin running jobs sooner and more
+reliably because there is no need to install applications as VMs boot. This
+example takes the following steps:
 
 1. Creates a network with outbound internet access in which to build the image (see
 [Custom Network](#custom-network-deployment-group-1)).
@@ -205,9 +207,11 @@ the following steps:
 4. Deploys a Slurm cluster using the custom image (see
 [Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
 
+#### Building and using the custom image
+
 Create the deployment folder from the blueprint:
 
-```shell
+```text
 ./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ```
 
@@ -219,9 +223,9 @@ example, the network is created in the first deployment group and its name
 must be supplied to both the Packer and Slurm cluster deployment groups. These
 sub-commands automate steps that might otherwise require manual copying.
 
-When you are done, clean up the resources in reverse order of creation
+When you are done, clean up the resources in reverse order of creation:
 
-```shell
+```text
 terraform -chdir=image-builder-001/cluster destroy --auto-approve
 terraform -chdir=image-builder-001/builder-env destroy --auto-approve
 ```
