@@ -331,14 +331,19 @@ func writeVersions(dst string) error {
 	return nil
 }
 
-func printTerraformInstructions(grpPath string, group config.GroupName, printIntergroupWarning bool) {
+func printTerraformInstructions(grpPath string, group config.GroupName, printExportOutputs bool, printImportInputs bool) {
 	printInstructionsPreamble("Terraform", grpPath, string(group))
-	if printIntergroupWarning {
-		fmt.Print(intergroupWarning)
+	fmt.Println()
+	if printImportInputs {
+		fmt.Printf("ghpc import-inputs %s\n", grpPath)
 	}
-	fmt.Printf("  terraform -chdir=%s init\n", grpPath)
-	fmt.Printf("  terraform -chdir=%s validate\n", grpPath)
-	fmt.Printf("  terraform -chdir=%s apply\n\n", grpPath)
+	fmt.Printf("terraform -chdir=%s init\n", grpPath)
+	fmt.Printf("terraform -chdir=%s validate\n", grpPath)
+	fmt.Printf("terraform -chdir=%s apply\n", grpPath)
+	if printExportOutputs {
+		fmt.Printf("ghpc export-outputs %s\n", grpPath)
+	}
+	fmt.Println()
 }
 
 // writeDeploymentGroup creates and sets up the provided terraform deployment
@@ -406,7 +411,11 @@ func (w TFWriter) writeDeploymentGroup(
 			depGroup.Name, err)
 	}
 
-	printTerraformInstructions(writePath, depGroup.Name, len(intergroupInputs) > 0)
+	multiGroupDeployment := len(dc.Config.DeploymentGroups) > 1
+	printImportInputs := multiGroupDeployment && groupIndex > 0
+	printExportOutputs := multiGroupDeployment && groupIndex < len(dc.Config.DeploymentGroups)-1
+
+	printTerraformInstructions(writePath, depGroup.Name, printExportOutputs, printImportInputs)
 
 	return nil
 }

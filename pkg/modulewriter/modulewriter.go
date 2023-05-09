@@ -43,13 +43,6 @@ const (
 	expandedBlueprintName      = "expanded_blueprint.yaml"
 )
 
-const intergroupWarning string = `
-WARNING: this deployment group requires outputs from previous groups!
-This is an advanced feature under active development. The automatically generated
-instructions for executing terraform or packer below will not work as shown.
-
-`
-
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
 	getNumModules() int
