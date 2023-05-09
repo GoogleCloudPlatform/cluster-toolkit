@@ -25,7 +25,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [daos-slurm.yaml](#daos-slurmyaml-) ![community-badge]
   * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-) ![community-badge]
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
-  * [google-cloud-storage.yaml](#google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
+  * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [spack-gromacs.yaml](#spack-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
@@ -643,9 +643,9 @@ python /var/tmp/qsim-example.py
 [cqsdk]: https://developer.nvidia.com/cuquantum-sdk
 [cudatk]: https://developer.nvidia.com/cuda-toolkit
 
-### [google-cloud-storage.yaml] ![community-badge] ![experimental-badge]
+### [client-google-cloud-storage.yaml] ![community-badge] ![experimental-badge]
 
-[google-cloud-storage.yaml]: ../community/examples/google-cloud-storage.yaml
+[client-google-cloud-storage.yaml]: ../community/examples/client-google-cloud-storage.yaml
 
 This example demonstrates several different ways to use Google Cloud Storage
 (GCS) buckets in the HPC Toolkit. There are two buckets referenced in the
@@ -667,7 +667,7 @@ To use the blueprint you must supply the project id and the name of an existing
 bucket:
 
 ```shell
-./ghpc create community/examples/google-cloud-storage.yaml \
+./ghpc create community/examples/client-google-cloud-storage.yaml \
   --vars project_id=<project_id> \
   --vars existing_bucket_name=<name_of_existing_bucket>
 ```
