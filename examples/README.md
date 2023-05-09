@@ -25,6 +25,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [daos-slurm.yaml](#daos-slurmyaml-) ![community-badge]
   * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-) ![community-badge]
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
+  * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [spack-gromacs.yaml](#spack-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
@@ -641,6 +642,46 @@ python /var/tmp/qsim-example.py
 [qsim]: https://quantumai.google/qsim
 [cqsdk]: https://developer.nvidia.com/cuquantum-sdk
 [cudatk]: https://developer.nvidia.com/cuda-toolkit
+
+### [client-google-cloud-storage.yaml] ![community-badge] ![experimental-badge]
+
+[client-google-cloud-storage.yaml]: ../community/examples/client-google-cloud-storage.yaml
+
+This example demonstrates several different ways to use Google Cloud Storage
+(GCS) buckets in the HPC Toolkit. There are two buckets referenced in the
+example:
+
+1. A GCS bucket that is created by the HPC Toolkit (`id: new-bucket`).
+1. A GCS bucket that is created externally from the HPC Toolkit but referenced
+   by the blueprint (`id: existing-bucket`).
+
+The created VM (`id: workstation`) references these GCS buckets with the `use`
+field. On VM startup gcsfuse will be installed, if not already on the image, and
+both buckets will be mounted under the directory specified by the `local_mount`
+option.
+
+The `wait-for-startup` module (`id: wait`) makes sure that terraform does not
+exit before the buckets have been mounted.
+
+To use the blueprint you must supply the project id and the name of an existing
+bucket:
+
+```shell
+./ghpc create community/examples/client-google-cloud-storage.yaml \
+  --vars project_id=<project_id> \
+  --vars existing_bucket_name=<name_of_existing_bucket>
+```
+
+> **Note**: The service account used by the VM must have access to the buckets
+> (`roles/storage.objectAdmin`). In this example the service account will
+> default to the default compute service account.
+>
+> **Warning**: In this example the bucket is mounted by root during startup. Due
+> to the way permissions are handled by gcsfuse this means that read or
+> read/write permissions must be granted indiscriminantly for all users which
+> could be a security concern depending on usage. To avoid this, you can
+> manually mount as the user using the bucket
+> ([Read more](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/mounting.md#access-permissions)).
 
 ### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
 

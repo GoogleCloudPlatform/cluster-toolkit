@@ -1,0 +1,64 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: cloud-storage-example
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: gcs-01
+  region: us-central1
+  zone: us-central1-a
+
+  existing_bucket_name: replace-with-name-of-existing-bucket
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: network1
+    source: modules/network/vpc
+
+  - id: new-bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      name_prefix: new-bucket
+      random_suffix: true
+      local_mount: /new_bucket
+      # Bucket will be read/write.
+      mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
+
+  - id: existing-bucket
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(vars.existing_bucket_name)
+      fs_type: gcsfuse
+      local_mount: /existing_bucket
+      # Bucket will be read only.
+      mount_options: defaults,_netdev,implicit_dirs,allow_other
+
+  - id: workstation
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - new-bucket
+    - existing-bucket
+    settings:
+      name_prefix: workstation
+      machine_type: e2-standard-2
+
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.workstation.name[0]))
