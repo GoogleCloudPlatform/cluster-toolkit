@@ -50,6 +50,12 @@ variable "allocatable_cpu_per_node" {
   default     = [-1]
 }
 
+variable "has_gpu" {
+  description = "Do nodes have GPUs attached. Generally populated from gke-node-pool via `use` field."
+  type        = list(bool)
+  default     = [false]
+}
+
 variable "requested_cpu_per_pod" {
   description = "The requested cpu per pod. If null, allocatable_cpu_per_node will be used to claim whole nodes. If provided will override allocatable_cpu_per_node."
   type        = number

@@ -40,6 +40,11 @@ output "allocatable_cpu_per_node" {
   value       = local.allocatable_cpu
 }
 
+output "has_gpu" {
+  description = "Do nodes in this node pool have GPUs attached."
+  value       = local.has_gpu
+}
+
 locals {
   translate_toleration = {
     PREFER_NO_SCHEDULE = "PreferNoSchedule"
