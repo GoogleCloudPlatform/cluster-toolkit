@@ -96,9 +96,9 @@ variable "restart_policy" {
 }
 
 variable "backoff_limit" {
-  description = "Controls the number of retries before considering a Job as failed."
+  description = "Controls the number of retries before considering a Job as failed. Set to zero for shared fate."
   type        = number
-  default     = 3
+  default     = 0
 }
 
 variable "random_name_sufix" {
