@@ -40,16 +40,20 @@ func (w *PackerWriter) addNumModules(value int) {
 	w.numModules += value
 }
 
-func printPackerInstructions(modPath string, mod config.ModuleID, printIntergroupWarning bool) {
+func printPackerInstructions(modPath string, mod config.ModuleID, printImportInputs bool) {
 	printInstructionsPreamble("Packer", modPath, string(mod))
-	if printIntergroupWarning {
-		fmt.Print(intergroupWarning)
+
+	fmt.Println()
+	grpPath := filepath.Clean(filepath.Join(modPath, ".."))
+	if printImportInputs {
+		fmt.Printf("ghpc import-inputs %s\n", grpPath)
 	}
-	fmt.Printf("  cd %s\n", modPath)
-	fmt.Println("  packer init .")
-	fmt.Println("  packer validate .")
-	fmt.Println("  packer build .")
-	fmt.Printf("  cd -\n\n")
+	fmt.Printf("cd %s\n", modPath)
+	fmt.Println("packer init .")
+	fmt.Println("packer validate .")
+	fmt.Println("packer build .")
+	fmt.Println("cd -")
+	fmt.Println()
 }
 
 func writePackerAutovars(vars map[string]cty.Value, dst string) error {
