@@ -21,7 +21,7 @@ vars:
   region: us-central1
   zone: us-central1-a
 
-  existing_bucket_name:  ## Set Name of Existing Bucket ##
+  existing_bucket_name: replace-with-name-of-existing-bucket
 
 deployment_groups:
 - group: primary
