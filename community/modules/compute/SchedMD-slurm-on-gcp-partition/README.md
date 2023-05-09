@@ -1,7 +1,8 @@
 ## Description
 
 > **Warning**: this module is now deprecated. We recommend using the Slurm on GCP V5
-> [schedmd-slurm-gcp-v5-partition](../schedmd-slurm-gcp-v5-partition/README.md) instead.
+> [schedmd-slurm-gcp-v5-partition](../schedmd-slurm-gcp-v5-partition/README.md) and
+> [schedmd-slurm-gcp-v5-node-group](../schedmd-slurm-gcp-v5-node-group/README.md) instead.
 
 This module creates a compute partition that be can used as input to
 [SchedMD-slurm-on-gcp-controller](../../scheduler/SchedMD-slurm-on-gcp-controller/README.md).
