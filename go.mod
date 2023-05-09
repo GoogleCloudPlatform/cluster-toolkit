@@ -28,7 +28,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.8.0
 	github.com/hashicorp/terraform-exec v0.18.1
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
-	google.golang.org/api v0.120.0
+	google.golang.org/api v0.121.0
 )
 
 require github.com/hashicorp/terraform-json v0.15.0 // indirect
@@ -50,7 +50,7 @@ require (
 	github.com/go-git/gcfg v1.5.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/s2a-go v0.1.2 // indirect
+	github.com/google/s2a-go v0.1.3 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
