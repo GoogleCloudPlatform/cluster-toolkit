@@ -24,44 +24,55 @@
   - name: Create Infrastructure and test
     block:
     - name: Create Network with Terraform
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"
+      register: network
+      changed_when: network.changed
+      ansible.builtin.command: "{{ item }}"
       args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"
         creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      with_items:
+      loop:
       - terraform init
       - terraform validate
       - terraform apply -auto-approve -no-color
+    - name: Apply terraform startup-script to packer module
+      register: export_import
+      changed_when: export_import.changed
+      ansible.builtin.command: "{{ item }}"
+      args:
+        chdir: "{{ workspace }}"
+      loop:
+      - ./ghpc export-outputs {{ deployment_name }}/builder-env
+      - ./ghpc import-inputs {{ deployment_name }}/packer
     - name: Create VM image with Packer
-      register: image_created
-      changed_when: image_created.rc == 0
-      ansible.builtin.shell: |
-        set -e -o pipefail
-        packer init .
-        packer validate .
-        packer build .
+      register: image_creation
+      changed_when: image_creation.changed
+      ansible.builtin.command: "{{ item }}"
       args:
         chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
-        executable: /bin/bash
-    - name: Delete VM Image
-      register: image_deleted
-      changed_when: image_deleted.rc == 0
-      when: image_created.rc == 0
-      ansible.builtin.shell: |
-        gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
-      args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
-    ## Always cleanup network
+      loop:
+      - packer init .
+      - packer validate .
+      - packer build .
+      notify:
+      - Delete VM Image
     always:
     - name: Tear Down Network
-      changed_when: true # assume something destroyed
-      run_once: true
-      delegate_to: localhost
+      register: terraform_destroy
+      changed_when: terraform_destroy.changed
+      ansible.builtin.command: terraform destroy -auto-approve -no-color
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      ansible.builtin.command:
-        cmd: terraform destroy -auto-approve -no-color
-        chdir: "{{ workspace }}/{{ deployment_name }}/builder-env"
+  handlers:
+  - name: Delete VM Image
+    register: image_deletion
+    changed_when: image_deletion.changed
+    ansible.builtin.shell: |
+      set -e -o pipefail
+      gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
+    args:
+      chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+      executable: /bin/bash
