@@ -89,6 +89,8 @@ deployment_groups:
     - compute_node_group_c2s30
     settings:
       partition_name: compute
+      enable_placement: false
+      exclusive: false
 
   # The lowcost partition is designed to run at a lower cost and without additional quota
   # Use:
