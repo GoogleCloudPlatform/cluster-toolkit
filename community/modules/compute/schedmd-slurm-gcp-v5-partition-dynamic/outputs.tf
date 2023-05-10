@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-output "controller_instance_id" {
-  description = "The server-assigned unique identifier of the controller compute instance."
-  value       = one(module.slurm_controller_instance.slurm_controller_instance.instances_details[*].id)
-}
-
-output "cloud_logging_filter" {
-  description = "Cloud Logging filter to cluster errors."
-  value       = module.slurm_controller_instance.cloud_logging_filter
+output "partition" {
+  description = "Details of a slurm partition"
+  value = {
+    compute_list = module.slurm_partition.compute_list
+    partition    = module.slurm_partition.partition
+  }
 }
