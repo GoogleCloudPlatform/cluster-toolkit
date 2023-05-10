@@ -20,6 +20,9 @@ Modules labeled with the ![community-badge] badge are contributed by
 the community (including the HPC Toolkit team, partners, etc.). Community modules
 are located in the [community folder](../community/modules/README.md).
 
+Modules labeled with the ![deprecated-badge] badge are now deprecated and may be
+removed in the future. Customers are advised to transition to alternatives.
+
 Modules that are still in development and less stable are labeled with the
 ![experimental-badge] badge.
 
@@ -27,15 +30,14 @@ Modules that are still in development and less stable are labeled with the
 [community-badge]: https://img.shields.io/badge/-community-%23b8def4?style=plastic
 [stable-badge]: https://img.shields.io/badge/-stable-lightgrey?style=plastic
 [experimental-badge]: https://img.shields.io/badge/-experimental-%23febfa2?style=plastic
+[deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic
 
 ### Compute
 
 * **[vm-instance]** ![core-badge] : Creates one or more VM instances.
-* **[SchedMD-slurm-on-gcp-partition]** ![community-badge] : Creates a partition
-  to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
-* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
-* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] :
   Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
 * **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
@@ -46,6 +48,8 @@ Modules that are still in development and less stable are labeled with the
   pool][htcondor-configure].
 * **[pbspro-execution]** ![community-badge] ![experimental-badge] :
   Creates execution hosts for use in a PBS Professional cluster.
+* **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
+  to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
@@ -141,22 +145,22 @@ Modules that are still in development and less stable are labeled with the
   submission of Google Cloud Batch jobs.
 * **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
-* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
   Creates a Slurm login node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
-* **[SchedMD-slurm-on-gcp-controller]** ![community-badge] : Creates a Slurm
-  controller node using [slurm-gcp].
-* **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
-  login node using [slurm-gcp].
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor pool.
 * **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
   a client host for submitting jobs to a PBS Professional cluster.
 * **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
   a server host for operating a PBS Professional cluster.
+* **[SchedMD-slurm-on-gcp-controller]** ![community-badge] ![deprecated-badge] : Creates a Slurm
+  controller node using [slurm-gcp].
+* **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] ![deprecated-badge] : Creates a Slurm
+  login node using [slurm-gcp].
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md

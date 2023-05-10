@@ -1,5 +1,8 @@
 ## Description
 
+> **Warning**: this module is now deprecated. We recommend using the Slurm on GCP V5
+> [schedmd-slurm-gcp-v5-controller](../schedmd-slurm-gcp-v5-controller/README.md) instead.
+
 This module creates a slurm controller node via the SchedMD/slurm-gcp
 [controller] module.
 

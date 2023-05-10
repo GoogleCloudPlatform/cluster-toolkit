@@ -1,5 +1,8 @@
 ## Description
 
+> **Warning**: this module is now deprecated. We recommend using the Slurm on GCP V5
+> [schedmd-slurm-gcp-v5-login](../schedmd-slurm-gcp-v5-login/README.md) instead.
+
 This module creates a login node for a Slurm cluster based on the
 [Slurm on GCP][slurm-on-gcp] terraform [login module][login-module]. The login
 node is used in conjunction with the
