@@ -417,6 +417,15 @@ For this example the following is needed in the selected region:
 
 ### [slurm-gcp-v5-hpc-centos7.yaml] ![community-badge]
 
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
+> ```
+
 This example creates an HPC cluster similar to the one created by
 [hpc-cluster-small.yaml], but uses modules built from version 5 of
 [slurm-gcp].
@@ -448,6 +457,15 @@ For this example the following is needed in the selected region:
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
 
 ### [slurm-gcp-v5-ubuntu2004.yaml] ![community-badge]
+
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
+> ```
 
 Similar to the previous example, but using Ubuntu 20.04 instead of CentOS 7.
 [Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
@@ -483,6 +501,15 @@ For this example the following is needed in the selected region:
   _only needed for `compute` partition_
 
 ### [slurm-gcp-v5-high-io.yaml] ![community-badge]
+
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
+> ```
 
 This example uses [Slurm on GCP][slurm-gcp] version 5.x modules to replicate the
 [hpc-cluster-high-io.yaml] core example. With version 5, additional features are

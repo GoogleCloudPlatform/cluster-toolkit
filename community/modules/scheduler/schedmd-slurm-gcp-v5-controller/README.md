@@ -11,13 +11,14 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
-> **_WARNING:_** The variables [enable\_reconfigure],
-> [enable\_cleanup\_compute] and [enable\_cleanup\_subscriptions], if set to
-> true, require additional dependencies **to be installed on the system running
-> `terraform apply`**. Python3 (>=3.6.0, <4.0.0) must be installed along with
-> the pip packages listed in the [requirements.txt] file of
-> [SchedMD/slurm-gcp]. See the
-> [documentation below](#live-cluster-reconfiguration-enable_reconfigure).
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
+> ```
 
 [SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.6.3
 [slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.6.3/terraform/slurm_cluster/modules/slurm_controller_instance
