@@ -28,6 +28,98 @@ can be overridden using the `taints` setting. See
 [docs](https://cloud.google.com/kubernetes-engine/docs/how-to/node-taints) for
 more info.
 
+### Considerations with GPUs
+
+When a GPU is attached to a node an additional taint is automatically added:
+`nvidia.com/gpu=present:NoSchedule`. For jobs to get placed on these nodes, the
+equivalent toleration is required. The `gke-job-template` module will
+automatically apply this toleration when using a node pool with GPUs.
+
+Nvidia GPU drivers must be installed by applying a DaemonSet to the cluster. See
+[these instructions](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus#cos).
+
+### GPUs Examples
+
+There are several ways to add GPUs to a GKE node pool. See
+[docs](https://cloud.google.com/compute/docs/gpus) for more info on GPUs.
+
+The following is a node pool that uses `a2` or `g2` machine types which has a
+fixed number of attached GPUs:
+
+```yaml
+  - id: simple-a2-pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      machine_type: a2-highgpu-1g
+```
+
+> **Note**: It is not necessary to define the [`guest_accelerator`] setting when
+> using `a2` or `g2` machines as information about GPUs, such as type and count,
+> is automatically inferred from the machine type.
+
+The following scenarios require the [`guest_accelerator`] block is specified:
+
+- To partition an A100 GPU into multiple GPUs on an A2 family machine.
+- To specify a time sharing configuration on a GPUs.
+- To attach a GPU to an N1 family machine.
+
+The following is an example of
+[partitioning](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus-multi)
+an A100 GPU:
+
+```yaml
+  - id: multi-instance-gpu-pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      machine_type: a2-highgpu-1g
+      guest_accelerator:
+      - type: nvidia-tesla-a100
+        count: 1
+        gpu_partition_size: 1g.5gb
+        gpu_sharing_config: null
+```
+
+> **Note**: Once we define the [`guest_accelerator`] block, all fields must be
+> defined. Use `null` for optional fields.
+
+[`guest_accelerator`]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#nested_guest_accelerator
+
+The following is an example of
+[GPU time sharing](https://cloud.google.com/kubernetes-engine/docs/concepts/timesharing-gpus)
+(with partitioned GPUs):
+
+```yaml
+  - id: time-sharing-gpu-pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      machine_type: a2-highgpu-1g
+      guest_accelerator:
+      - type: nvidia-tesla-a100
+        count: 1
+        gpu_partition_size: 1g.5gb
+        gpu_sharing_config:
+        - gpu_sharing_strategy: TIME_SHARING
+          max_shared_clients_per_gpu: 3
+```
+
+Finally, the following is an example of using a GPU attached to an `n1` machine:
+
+```yaml
+  - id: t4-pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      machine_type: n1-standard-16
+      guest_accelerator:
+      - type: nvidia-tesla-t4
+        count: 2
+        gpu_partition_size: null
+        gpu_sharing_config: null
+```
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
