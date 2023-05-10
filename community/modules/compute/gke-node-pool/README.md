@@ -30,10 +30,10 @@ more info.
 
 ### Considerations with GPUs
 
-When a GPU is attached to a node an additinal taint is automatically added:
-`nvidia.com/gpu=present:NoSchedule`. For jobs to get placed on these nodes the
-equivalent toleration is required. When using the `gke-job-template` module this
-toleration will automatically be applied when using a node pool with GPUs.
+When a GPU is attached to a node an additional taint is automatically added:
+`nvidia.com/gpu=present:NoSchedule`. For jobs to get placed on these nodes, the
+equivalent toleration is required. The `gke-job-template` module will
+automatically apply this toleration when using a node pool with GPUs.
 
 Nvidia GPU drivers must be installed by applying a DaemonSet to the cluster. See
 [these instructions](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus#cos).
@@ -54,8 +54,15 @@ fixed number of attached GPUs:
       machine_type: a2-highgpu-1g
 ```
 
-> **Note**: It is not necessary to define the [`guest_accelerator`] setting as
-> it is automatically inferred from the machine type.
+> **Note**: It is not necessary to define the [`guest_accelerator`] setting when
+> using `a2` or `g2` machines as information about GPUs, such as type and count,
+> is automatically inferred from the machine type.
+
+The following scenarios require the [`guest_accelerator`] block is specified:
+
+- To partition an A100 GPU into multiple GPUs on an A2 family machine.
+- To specify a time sharing configuration on a GPUs.
+- To attach a GPU to an N1 family machine.
 
 The following is an example of
 [partitioning](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus-multi)
