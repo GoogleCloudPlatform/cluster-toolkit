@@ -344,40 +344,6 @@ variable "bandwidth_tier" {
   }
 }
 
-variable "zone_policy_allow" {
-  description = <<-EOD
-    Partition nodes will prefer to be created in the listed zones. If a zone appears
-    in both zone_policy_allow and zone_policy_deny, then zone_policy_deny will take
-    priority for that zone.
-    EOD
-  type        = set(string)
-  default     = []
-
-  validation {
-    condition = alltrue([
-      for x in var.zone_policy_allow : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
-    ])
-    error_message = "A provided zone in zone_policy_allow is not a valid zone (Regexp: '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
-  }
-}
-
-variable "zone_policy_deny" {
-  description = <<-EOD
-    Partition nodes will not be created in the listed zones. If a zone appears in
-    both zone_policy_allow and zone_policy_deny, then zone_policy_deny will take
-    priority for that zone.
-    EOD
-  type        = set(string)
-  default     = []
-
-  validation {
-    condition = alltrue([
-      for x in var.zone_policy_deny : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
-    ])
-    error_message = "A provided zone in zone_policy_deny is not a valid zone (Regexp '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
-  }
-}
-
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the node group instances can be accessed via the internet."
   type = list(object({
