@@ -87,7 +87,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#input\_allocatable\_cpu\_per\_node) | The allocatable cpu per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field. | `list(number)` | <pre>[<br>  -1<br>]</pre> | no |
-| <a name="input_backoff_limit"></a> [backoff\_limit](#input\_backoff\_limit) | Controls the number of retries before considering a Job as failed. | `number` | `3` | no |
+| <a name="input_backoff_limit"></a> [backoff\_limit](#input\_backoff\_limit) | Controls the number of retries before considering a Job as failed. Set to zero for shared fate. | `number` | `0` | no |
 | <a name="input_command"></a> [command](#input\_command) | The command and arguments for the container that run in the Pod. The command field corresponds to entrypoint in some container runtimes. | `list(string)` | <pre>[<br>  "hostname"<br>]</pre> | no |
 | <a name="input_image"></a> [image](#input\_image) | The container image the job should use. | `string` | `"debian"` | no |
 | <a name="input_machine_family"></a> [machine\_family](#input\_machine\_family) | The machine family to use in the node selector (example: `n2`). If null then machine family will not be used as selector criteria. | `string` | `null` | no |
