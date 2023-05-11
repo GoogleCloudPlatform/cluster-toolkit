@@ -21,8 +21,8 @@ import (
 	"os/exec"
 )
 
-// TestPacker errors if packer is not in the user PATH
-func TestPacker() error {
+// ConfigurePacker errors if packer is not in the user PATH
+func ConfigurePacker() error {
 	_, err := exec.LookPath("packer")
 	if err != nil {
 		return &TfError{

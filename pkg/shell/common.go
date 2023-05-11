@@ -145,10 +145,12 @@ func getIntergroupPackerSettings(dc config.DeploymentConfig, packerModule config
 	return packerSettings
 }
 
-// AskForConfirmation prompts the user with a question; it returns true if and
+// ApplyChangesChoice prompts the user to decide whether they want to approve
+// changes to cloud configuration, to stop execution of ghpc entirely, or to
+// skip making the proposed changes and continue execution (in deploy command)
 // only if the user responds with "y" or "yes" (case-insensitive)
-func AskForConfirmation(prompt string) bool {
-	fmt.Printf("%s [y/n]: ", prompt)
+func ApplyChangesChoice(proposedChanges string) bool {
+	fmt.Print("Display proposed changes, Apply proposed changes, Stop and exit, Continue without applying? [d,a,s,c]: ")
 
 	var userResponse string
 	_, err := fmt.Scanln(&userResponse)
@@ -157,11 +159,14 @@ func AskForConfirmation(prompt string) bool {
 	}
 
 	switch strings.ToLower(strings.TrimSpace(userResponse)) {
-	case "y":
+	case "a":
 		return true
-	case "yes":
-		return true
-	default:
+	case "c":
 		return false
+	case "d":
+		fmt.Println(proposedChanges)
+	case "s":
+		log.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
 	}
+	return ApplyChangesChoice(proposedChanges)
 }

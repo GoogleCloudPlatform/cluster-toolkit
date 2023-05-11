@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -134,18 +135,40 @@ func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	return outputValues, nil
 }
 
-func getOutputs(tf *tfexec.Terraform, applyBehavior ApplyBehavior) (map[string]cty.Value, error) {
-	if err := initModule(tf); err != nil {
-		return map[string]cty.Value{}, err
-	}
-
-	log.Printf("testing if terraform state of %s is in sync with cloud infrastructure", tf.WorkingDir())
+// note planned deprecration of Plan in favor of JSON-only format
+// may need to determine future-proof way of getting human-readable plan
+// https://github.com/hashicorp/terraform-exec/blob/1b7714111a94813e92936051fb3014fec81218d5/tfexec/plan.go#L128-L129
+func planModule(tf *tfexec.Terraform, w io.Writer) (bool, error) {
+	tf.SetStdout(w)
+	tf.SetStderr(w)
 	wantsChange, err := tf.Plan(context.Background())
+	tf.SetStdout(nil)
+	tf.SetStderr(nil)
 	if err != nil {
-		return map[string]cty.Value{}, &TfError{
+		return false, &TfError{
 			help: fmt.Sprintf("terraform plan for %s failed; suggest running \"ghpc export-outputs\" on previous deployment groups to define inputs", tf.WorkingDir()),
 			err:  err,
 		}
+	}
+
+	return wantsChange, nil
+}
+
+func getOutputs(tf *tfexec.Terraform, applyBehavior ApplyBehavior) (map[string]cty.Value, error) {
+	if err := initModule(tf); err != nil {
+		return nil, err
+	}
+
+	log.Printf("testing if terraform state of %s is in sync with cloud infrastructure", tf.WorkingDir())
+	// capture Terraform plan in a file
+	f, err := os.CreateTemp("", "plan-)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	wantsChange, err := planModule(tf, f)
+	if err != nil {
+		return nil, err
 	}
 
 	var apply bool
@@ -155,9 +178,13 @@ func getOutputs(tf *tfexec.Terraform, applyBehavior ApplyBehavior) (map[string]c
 		case AutomaticApply:
 			apply = true
 		case PromptBeforeApply:
-			apply = AskForConfirmation(fmt.Sprintf("Do you want to deploy group %s", tf.WorkingDir()))
+			plan, err := os.ReadFile(f.Name())
+			if err != nil {
+				return nil, err
+			}
+			apply = ApplyChangesChoice(string(plan))
 		default:
-			return map[string]cty.Value{},
+			return nil,
 				fmt.Errorf("cloud infrastructure requires changes; please run \"terraform -chdir=%s apply\"", tf.WorkingDir())
 		}
 	} else {
@@ -175,7 +202,7 @@ func getOutputs(tf *tfexec.Terraform, applyBehavior ApplyBehavior) (map[string]c
 
 	outputValues, err := outputModule(tf)
 	if err != nil {
-		return map[string]cty.Value{}, err
+		return nil, err
 	}
 	return outputValues, nil
 }
@@ -223,30 +250,29 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		return err
 	}
 
+	group, err := dc.Config.Group(thisGroup)
+	if err != nil {
+		return fmt.Errorf("group %s not found in deployment blueprint", thisGroup)
+	}
+
 	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, dc)
 	if err != nil {
 		return err
 	}
 
-	groupIdx := dc.Config.GroupIndex(thisGroup)
-	if groupIdx == -1 {
-		return fmt.Errorf("group %s not found in deployment blueprint", thisGroup)
-	}
-	groupKind := dc.Config.DeploymentGroups[groupIdx].Kind
-
 	// for each prior group, read all output values and filter for those needed
 	// as input values to this group; merge into a single map
 	allInputValues := make(map[string]cty.Value)
-	for group, intergroupOutputNames := range outputNamesByGroup {
+	for groupName, intergroupOutputNames := range outputNamesByGroup {
 		if len(intergroupOutputNames) == 0 {
 			continue
 		}
-		log.Printf("collecting outputs for group %s from group %s", thisGroup, group)
-		filepath := outputsFile(artifactsDir, group)
+		log.Printf("collecting outputs for group %s from group %s", thisGroup, groupName)
+		filepath := outputsFile(artifactsDir, groupName)
 		groupOutputValues, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
 			return &TfError{
-				help: fmt.Sprintf("consider running \"ghpc export-outputs %s/%s\"", deploymentRoot, group),
+				help: fmt.Sprintf("consider running \"ghpc export-outputs %s/%s\"", deploymentRoot, groupName),
 				err:  err,
 			}
 		}
@@ -259,7 +285,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	}
 
 	var outfile string
-	switch groupKind {
+	switch group.Kind {
 	case config.TerraformKind:
 		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
 	case config.PackerKind:

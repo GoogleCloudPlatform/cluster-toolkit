@@ -34,11 +34,6 @@ func init() {
 	autoApproveFlag := "auto-approve"
 	deployCmd.Flags().BoolVarP(&autoApprove, autoApproveFlag, "", false, "Automatically approve proposed changes")
 
-	// anticipate mutually exclusive flags from-directory, from-group, from-blueprint
-	deploymentFlag := "from-directory"
-	deployCmd.Flags().StringVarP(&deploymentRoot, deploymentFlag, "d", "", "Deployment root directory")
-	deployCmd.MarkFlagDirname(deploymentFlag)
-	deployCmd.MarkFlagRequired(deploymentFlag)
 	rootCmd.AddCommand(deployCmd)
 }
 
@@ -47,22 +42,25 @@ var (
 	autoApprove    bool
 	applyBehavior  shell.ApplyBehavior
 	deployCmd      = &cobra.Command{
-		Use:          "deploy -d DEPLOYMENT_DIRECTORY",
-		Short:        "deploy all resources in a Toolkit deployment directory.",
-		Long:         "deploy all resources in a Toolkit deployment directory.",
-		Args:         cobra.ExactArgs(0),
-		PreRun:       setApplyBehavior,
-		RunE:         runDeployCmd,
-		SilenceUsage: true,
+		Use:               "deploy DEPLOYMENT_DIRECTORY",
+		Short:             "deploy all resources in a Toolkit deployment directory.",
+		Long:              "deploy all resources in a Toolkit deployment directory.",
+		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
+		ValidArgsFunction: matchDirs,
+		PreRun:            parseArgs,
+		RunE:              runDeployCmd,
+		SilenceUsage:      true,
 	}
 )
 
-func setApplyBehavior(cmd *cobra.Command, args []string) {
+func parseArgs(cmd *cobra.Command, args []string) {
 	if autoApprove {
 		applyBehavior = shell.AutomaticApply
 	} else {
 		applyBehavior = shell.PromptBeforeApply
 	}
+
+	deploymentRoot = args[0]
 }
 
 func runDeployCmd(cmd *cobra.Command, args []string) error {
@@ -110,10 +108,11 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 }
 
 func deployPackerGroup(moduleDir string) error {
-	if err := shell.TestPacker(); err != nil {
+	if err := shell.ConfigurePacker(); err != nil {
 		return err
 	}
-	buildImage := applyBehavior == shell.AutomaticApply || shell.AskForConfirmation("Build Packer image?")
+	proposedChange := fmt.Sprintf("Proposed change: use packer to build image in %s", moduleDir)
+	buildImage := applyBehavior == shell.AutomaticApply || shell.ApplyChangesChoice(proposedChange)
 	if buildImage {
 		log.Printf("initializing packer module at %s", moduleDir)
 		if err := shell.ExecPackerCmd(moduleDir, false, "init", "."); err != nil {
