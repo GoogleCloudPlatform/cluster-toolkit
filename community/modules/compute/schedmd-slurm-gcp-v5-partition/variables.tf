@@ -39,42 +39,23 @@ variable "region" {
 }
 
 variable "zone" {
-  description = "Zone in which to create all compute VMs. If `zone_policy_deny` or `zone_policy_allow` are set, the `zone` variable will be ignored."
+  description = "Zone in which to create compute VMs. Additional zones in the same region can be specified in var.zones."
   type        = string
-  default     = null
 }
 
-variable "zone_policy_allow" {
+variable "zones" {
   description = <<-EOD
-    Partition nodes will prefer to be created in the listed zones. If a zone appears
-    in both zone_policy_allow and zone_policy_deny, then zone_policy_deny will take
-    priority for that zone.
+    Additional nodes in which to allow creation of partition nodes. Google Cloud
+    will find zone based on availability, quota and reservations.
     EOD
   type        = set(string)
   default     = []
 
   validation {
     condition = alltrue([
-      for x in var.zone_policy_allow : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
+      for x in var.zones : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
     ])
-    error_message = "A provided zone in zone_policy_allow is not a valid zone (Regexp: '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
-  }
-}
-
-variable "zone_policy_deny" {
-  description = <<-EOD
-    Partition nodes will not be created in the listed zones. If a zone appears in
-    both zone_policy_allow and zone_policy_deny, then zone_policy_deny will take
-    priority for that zone.
-    EOD
-  type        = set(string)
-  default     = []
-
-  validation {
-    condition = alltrue([
-      for x in var.zone_policy_deny : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
-    ])
-    error_message = "A provided zone in zone_policy_deny is not a valid zone (Regexp '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
+    error_message = "A value in var.zones is not a valid zone (example: us-central1-f)."
   }
 }
 

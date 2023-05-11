@@ -56,67 +56,56 @@ For a complete example using this module, see
 
 ### Compute VM Zone Policies
 
-> **_WARNING:_** Lenient zone policies can lead to additional egress costs when
-> moving data between Google Cloud resources in different zones in the same
-> region, such as between filestore and other VM instances. For more information
-> on egress fees, see the [Network Pricing][networkpricing] Google Cloud
-> documentation.
->
-> To avoid egress charges, ensure your compute nodes are created in the same
-> zone as the other resources that share data with them by setting
-> `zone_policy_deny` to all other zones in the region.
+The Slurm on GCP partition module allows you to specify additional zones in
+which to create VMs through [bulk creation][bulk]. This is valuable when
+configuring partitions with popular VM families and you desire access to
+more compute resources across zones.
 
-The Slurm on GCP partition modules provide the option to set policies regarding
-which zone the compute VM instances will be created in through the
-`zone_policy_allow` and `zone_policy_deny` variables.
-
-As an example, see the the following module:
-
-```yaml
-- id: partition-with-zone-policy
-  source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-  settings:
-    zone_policy_allow:
-    - us-central1-a
-    - us-central1-b
-    zone_policy_deny: [us-central1-f]
-```
-
-In this module, the following is defined:
-
-* `us-central1-a` and `us-central1-b` zones have been explicitly allowed.
-* `us-central1-f` has been explicitly denied, therefore no nodes in this
-  partition will be created in that zone.
-* Since `us-central1-c` was not included in the zone policy, it will default to
-  "Allow", which means the partition has the same likelihood of creating a node in
-  that zone as the zones explicitly listed under `zone_policy_allow`.
-
-> **_NOTE:_** `zone_policy_allow` does not guarantee the use of specified zones
-> because zones are allowed by default. Configure `zone_policy_deny` to ensure
-> that zones outside the allowed list are not used.
-
-#### Setting a Single Zone
-
-The `zone` variable is another option for setting the zone policy. If `zone` is
-set and neither `zone_policy_deny` nor `zone_policy_allow` are set, the
-policy will be configured as follows:
-
-* All _currently active_ zones in the region **at deploy time** will be set in the
- `zone_policy_deny` list, with the exception of the provided `zone`.
-* The provided `zone` will be set as the only value in the `zone_policy_allow`
-  list.
-
-`zone_policy_allow` and `zone_policy_deny` take precedence over `zone` if both
-are set.
-
-> **_NOTE:_** If a new zone is added to the region while the cluster is active,
-> nodes in the partition may be created in that zone as well. In this case, the
-> partition may need to be redeployed (possible via `enable_reconfigure` if set)
-> to ensure the newly added zone is set to "Deny".
-
+[bulk]: https://cloud.google.com/compute/docs/instances/multiple/about-bulk-creation
 [networkpricing]: https://cloud.google.com/vpc/network-pricing
 
+> **_WARNING:_** Lenient zone policies can lead to additional egress costs when
+> moving large amounts of data between zones in the same region. For example,
+> traffic between VMs and traffic from VMs to shared filesystems such as
+> Filestore. For more information on egress fees, see the
+> [Network Pricing][networkpricing] Google Cloud documentation.
+>
+> To avoid egress charges, ensure your compute nodes are created in a single
+> zone by setting var.zone and leaving var.zones to its default value of the
+> empty list.
+>
+> **_NOTE:_** If a new zone is added to the region while the cluster is active,
+> nodes in the partition may be created in that zone. In this case, the
+> partition may need to be redeployed (possible via `enable_reconfigure` if set)
+> to ensure the newly added zone is denied.
+
+In the zonal example below, the partition's zone implicitly defaults to the
+deployment variable `vars.zone`:
+
+```yaml
+vars:
+  zone: us-central1-f
+
+- id: zonal-partition
+  source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+```
+
+In the example below, we enable creation in additional zones:
+
+```yaml
+vars:
+  zone: us-central1-f
+
+- id: multi-zonal-partition
+  source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+  settings:
+    zones:
+    - us-central1-a
+    - us-central1-b
+```
+
 ## Support
+
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
@@ -185,10 +174,9 @@ limitations under the License.
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script that will be used by the partition VMs. | `string` | `""` | no |
 | <a name="input_subnetwork_project"></a> [subnetwork\_project](#input\_subnetwork\_project) | The project the subnetwork belongs to. | `string` | `""` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. | `string` | `null` | no |
-| <a name="input_zone"></a> [zone](#input\_zone) | Zone in which to create all compute VMs. If `zone_policy_deny` or `zone_policy_allow` are set, the `zone` variable will be ignored. | `string` | `null` | no |
-| <a name="input_zone_policy_allow"></a> [zone\_policy\_allow](#input\_zone\_policy\_allow) | Partition nodes will prefer to be created in the listed zones. If a zone appears<br>in both zone\_policy\_allow and zone\_policy\_deny, then zone\_policy\_deny will take<br>priority for that zone. | `set(string)` | `[]` | no |
-| <a name="input_zone_policy_deny"></a> [zone\_policy\_deny](#input\_zone\_policy\_deny) | Partition nodes will not be created in the listed zones. If a zone appears in<br>both zone\_policy\_allow and zone\_policy\_deny, then zone\_policy\_deny will take<br>priority for that zone. | `set(string)` | `[]` | no |
+| <a name="input_zone"></a> [zone](#input\_zone) | Zone in which to create compute VMs. Additional zones in the same region can be specified in var.zones. | `string` | n/a | yes |
 | <a name="input_zone_target_shape"></a> [zone\_target\_shape](#input\_zone\_target\_shape) | Strategy for distributing VMs across zones in a region.<br>ANY<br>  GCE picks zones for creating VM instances to fulfill the requested number of VMs<br>  within present resource constraints and to maximize utilization of unused zonal<br>  reservations.<br>ANY\_SINGLE\_ZONE (default)<br>  GCE always selects a single zone for all the VMs, optimizing for resource quotas,<br>  available reservations and general capacity.<br>BALANCED<br>  GCE prioritizes acquisition of resources, scheduling VMs in zones where resources<br>  are available while distributing VMs as evenly as possible across allowed zones<br>  to minimize the impact of zonal failure. | `string` | `"ANY_SINGLE_ZONE"` | no |
+| <a name="input_zones"></a> [zones](#input\_zones) | Additional nodes in which to allow creation of partition nodes. Google Cloud<br>will find zone based on availability, quota and reservations. | `set(string)` | `[]` | no |
 
 ## Outputs
 
