@@ -21,6 +21,9 @@ vars:
   deployment_name: slurm-gcp-v5
   region: us-central1
   zone: us-central1-c
+  additional_zones:
+  - us-central1-a
+  - us-central1-b
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -40,109 +43,47 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  - id: debug_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
-
-  - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
-    - debug_node_group
-    settings:
-      partition_name: debug
-      enable_placement: false
-      is_default: true
-
   # Partition which permits a specific zone
-  - id: allow_node_group
+  - id: zonal_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       disable_public_ips: false
-  - id: allow
+  - id: zonal_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
-    - allow_node_group
+    - zonal_node_group
     settings:
-      partition_name: allow
+      partition_name: zonal
       enable_placement: false
-      zone_policy_allow:
-      - $(vars.zone)
 
-  # Partition which denies deployment in 3 zones
-  - id: deny_node_group
+  # Partition which allows a total of 3 zones
+  - id: multizonal_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-  - id: deny
+  - id: multizonal_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
-    - deny_node_group
+    - multizonal_node_group
     settings:
-      partition_name: deny
+      partition_name: multiz
       enable_placement: false
-      zone_policy_deny:
-      - us-central1-a
-      - us-central1-b
-      - us-central1-f
-
-  # Partition which explicitly permits deployment in 1 zone and denies deployment
-  # in 3 zones.
-  - id: both_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
-  - id: both
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
-    - both_node_group
-    settings:
-      partition_name: both
-      enable_placement: false
-      zone_policy_deny:
-      - us-central1-a
-      - us-central1-b
-      - us-central1-f
-      zone_policy_allow:
-      - $(vars.zone)
-
-  - id: compute_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings:
-      node_count_dynamic_max: 20
-
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
-    - compute_node_group
-    settings:
-      partition_name: compute
+      zones: $(vars.additional_zones)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
-    - debug_partition
-    - compute_partition
     - homefs
-    - allow
-    - deny
-    - both
+    - zonal_partition
+    - multizonal_partition
     settings:
       disable_controller_public_ips: false
 

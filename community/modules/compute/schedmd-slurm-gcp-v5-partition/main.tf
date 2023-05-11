@@ -28,10 +28,8 @@ locals {
   tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 10)
   slurm_cluster_name = var.slurm_cluster_name != null ? var.slurm_cluster_name : local.tmp_cluster_name
 
-  uses_zone_policies = length(var.zone_policy_allow) + length(var.zone_policy_deny) > 0
-  excluded_zones     = var.zone == null ? [] : [for z in data.google_compute_zones.available.names : z if z != var.zone]
-  zone_policy_deny   = local.uses_zone_policies ? var.zone_policy_deny : local.excluded_zones
-  zone_policy_allow  = local.uses_zone_policies || var.zone == null ? var.zone_policy_allow : [var.zone]
+  all_zones      = toset(concat([var.zone], tolist(var.zones)))
+  excluded_zones = [for z in data.google_compute_zones.available.names : z if !contains(local.all_zones, z)]
 }
 
 data "google_compute_zones" "available" {
@@ -51,8 +49,8 @@ module "slurm_partition" {
   partition_name                    = var.partition_name
   project_id                        = var.project_id
   region                            = var.region
-  zone_policy_allow                 = local.zone_policy_allow
-  zone_policy_deny                  = local.zone_policy_deny
+  zone_policy_allow                 = [] # this setting is effectively useless because allow is implied default
+  zone_policy_deny                  = local.excluded_zones
   zone_target_shape                 = var.zone_target_shape
   subnetwork                        = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   subnetwork_project                = var.subnetwork_project
