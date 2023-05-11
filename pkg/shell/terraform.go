@@ -23,11 +23,11 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
@@ -138,12 +138,9 @@ func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 // note planned deprecration of Plan in favor of JSON-only format
 // may need to determine future-proof way of getting human-readable plan
 // https://github.com/hashicorp/terraform-exec/blob/1b7714111a94813e92936051fb3014fec81218d5/tfexec/plan.go#L128-L129
-func planModule(tf *tfexec.Terraform, w io.Writer) (bool, error) {
-	tf.SetStdout(w)
-	tf.SetStderr(w)
-	wantsChange, err := tf.Plan(context.Background())
-	tf.SetStdout(nil)
-	tf.SetStderr(nil)
+func planModule(tf *tfexec.Terraform, f *os.File) (bool, error) {
+	outOpt := tfexec.Out(f.Name())
+	wantsChange, err := tf.Plan(context.Background(), outOpt)
 	if err != nil {
 		return false, &TfError{
 			help: fmt.Sprintf("terraform plan for %s failed; suggest running \"ghpc export-outputs\" on previous deployment groups to define inputs", tf.WorkingDir()),
@@ -178,24 +175,38 @@ func getOutputs(tf *tfexec.Terraform, applyBehavior ApplyBehavior) (map[string]c
 		case AutomaticApply:
 			apply = true
 		case PromptBeforeApply:
-			plan, err := os.ReadFile(f.Name())
+			plan, err := tf.ShowPlanFileRaw(context.Background(), f.Name())
+
+			re := regexp.MustCompile(`Plan: .*\n`)
+			summary := re.FindString(plan)
+
+			if summary == "" {
+				summary = fmt.Sprintf("Please review full proposed changes for %s", tf.WorkingDir())
+			}
+
+			changes := ProposedChanges{
+				Summary: summary,
+				Full:    plan,
+			}
+
 			if err != nil {
 				return nil, err
 			}
-			apply = ApplyChangesChoice(string(plan))
+			apply = ApplyChangesChoice(changes)
 		default:
 			return nil,
 				fmt.Errorf("cloud infrastructure requires changes; please run \"terraform -chdir=%s apply\"", tf.WorkingDir())
 		}
 	} else {
-		log.Println("cloud infrastructure requires no changes")
+		log.Printf("cloud infrastructure in %s requires no changes", tf.WorkingDir())
 	}
 
 	if apply {
+		planFileOpt := tfexec.DirOrPlan(f.Name())
 		log.Printf("running terraform apply on group %s", tf.WorkingDir())
 		tf.SetStdout(os.Stdout)
 		tf.SetStderr(os.Stderr)
-		tf.Apply(context.Background())
+		tf.Apply(context.Background(), planFileOpt)
 		tf.SetStdout(nil)
 		tf.SetStderr(nil)
 	}

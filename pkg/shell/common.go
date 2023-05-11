@@ -30,6 +30,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// ProposedChanges provides summary and full description of proposed changes
+// to cloud infrastructure
+type ProposedChanges struct {
+	Summary string
+	Full    string
+}
+
 // ValidateDeploymentDirectory ensures that the deployment directory structure
 // appears valid given a mapping of group names to module kinds
 // TODO: verify kind fully by auto-detecting type from group directory
@@ -149,24 +156,27 @@ func getIntergroupPackerSettings(dc config.DeploymentConfig, packerModule config
 // changes to cloud configuration, to stop execution of ghpc entirely, or to
 // skip making the proposed changes and continue execution (in deploy command)
 // only if the user responds with "y" or "yes" (case-insensitive)
-func ApplyChangesChoice(proposedChanges string) bool {
-	fmt.Print("Display proposed changes, Apply proposed changes, Stop and exit, Continue without applying? [d,a,s,c]: ")
-
+func ApplyChangesChoice(c ProposedChanges) bool {
+	log.Printf("Summary of proposed changes: %s", strings.TrimSpace(c.Summary))
 	var userResponse string
-	_, err := fmt.Scanln(&userResponse)
-	if err != nil {
-		log.Fatal(err)
-	}
 
-	switch strings.ToLower(strings.TrimSpace(userResponse)) {
-	case "a":
-		return true
-	case "c":
-		return false
-	case "d":
-		fmt.Println(proposedChanges)
-	case "s":
-		log.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
+	for {
+		fmt.Print("Display full proposed changes, Apply proposed changes, Stop and exit, Continue without applying? [d,a,s,c]: ")
+
+		_, err := fmt.Scanln(&userResponse)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		switch strings.ToLower(strings.TrimSpace(userResponse)) {
+		case "a":
+			return true
+		case "c":
+			return false
+		case "d":
+			fmt.Println(c.Full)
+		case "s":
+			log.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
+		}
 	}
-	return ApplyChangesChoice(proposedChanges)
 }

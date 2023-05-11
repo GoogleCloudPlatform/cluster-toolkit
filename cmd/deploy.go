@@ -111,8 +111,11 @@ func deployPackerGroup(moduleDir string) error {
 	if err := shell.ConfigurePacker(); err != nil {
 		return err
 	}
-	proposedChange := fmt.Sprintf("Proposed change: use packer to build image in %s", moduleDir)
-	buildImage := applyBehavior == shell.AutomaticApply || shell.ApplyChangesChoice(proposedChange)
+	c := shell.ProposedChanges{
+		Summary: fmt.Sprintf("Proposed change: use packer to build image in %s", moduleDir),
+		Full:    fmt.Sprintf("Proposed change: use packer to build image in %s", moduleDir),
+	}
+	buildImage := applyBehavior == shell.AutomaticApply || shell.ApplyChangesChoice(c)
 	if buildImage {
 		log.Printf("initializing packer module at %s", moduleDir)
 		if err := shell.ExecPackerCmd(moduleDir, false, "init", "."); err != nil {
