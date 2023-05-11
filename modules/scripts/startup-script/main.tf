@@ -15,6 +15,11 @@
  */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "startup-script" })
+}
+
+locals {
   ops_agent_installer = var.install_cloud_ops_agent ? [{
     type        = "shell"
     source      = "${path.module}/files/install_cloud_ops_agent.sh"
@@ -88,7 +93,7 @@ resource "google_storage_bucket" "configs_bucket" {
   uniform_bucket_level_access = true
   location                    = var.region
   storage_class               = "REGIONAL"
-  labels                      = var.labels
+  labels                      = local.labels
 }
 
 resource "google_storage_bucket_object" "scripts" {

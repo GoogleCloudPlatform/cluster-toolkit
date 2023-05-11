@@ -15,6 +15,11 @@
   */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "gke-node-pool" })
+}
+
+locals {
   sa_email = var.service_account.email != null ? var.service_account.email : data.google_compute_default_service_account.default_sa.email
 
   has_gpu = var.guest_accelerator != null || contains(["g2", "a2"], local.machine_family)
@@ -62,7 +67,7 @@ resource "google_container_node_pool" "node_pool" {
   node_config {
     disk_size_gb      = var.disk_size_gb
     disk_type         = var.disk_type
-    resource_labels   = var.labels
+    resource_labels   = local.labels
     service_account   = var.service_account.email
     oauth_scopes      = var.service_account.scopes
     machine_type      = var.machine_type

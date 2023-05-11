@@ -13,6 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
+
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "SchedMD-slurm-on-gcp-controller" })
+}
+
 locals {
   controller_startup_script = var.controller_startup_script != null ? var.controller_startup_script : var.startup_script
   compute_startup_script    = var.compute_startup_script != null ? var.compute_startup_script : var.startup_script
@@ -38,7 +44,7 @@ module "slurm_cluster_controller" {
   compute_node_service_account  = var.compute_node_service_account
   disable_compute_public_ips    = var.disable_compute_public_ips
   disable_controller_public_ips = var.disable_controller_public_ips
-  labels                        = var.labels
+  labels                        = local.labels
   login_network_storage         = var.network_storage
   login_node_count              = var.login_node_count
   machine_type                  = var.controller_machine_type

@@ -14,6 +14,11 @@
 # limitations under the License.
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "SchedMD-slurm-on-gcp-partition" })
+}
+
+locals {
   instance_name   = lookup(var.instance_image, "name", null)
   instance_family = lookup(var.instance_image, "family", null)
   instance_image = (
@@ -36,7 +41,7 @@ output "partition" {
     image_hyperthreads : var.image_hyperthreads
     compute_disk_type : var.compute_disk_type
     compute_disk_size_gb : var.compute_disk_size_gb
-    compute_labels : var.labels
+    compute_labels : local.labels
     cpu_platform : var.cpu_platform
     gpu_count : var.gpu_count
     gpu_type : var.gpu_type
