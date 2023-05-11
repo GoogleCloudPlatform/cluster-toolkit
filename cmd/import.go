@@ -45,7 +45,6 @@ var (
 
 func runImportCmd(cmd *cobra.Command, args []string) error {
 	workingDir := filepath.Clean(args[0])
-	deploymentGroup := config.GroupName(filepath.Base(workingDir))
 	deploymentRoot := filepath.Clean(filepath.Join(workingDir, ".."))
 
 	if err := shell.CheckWritableDir(workingDir); err != nil {
@@ -53,9 +52,16 @@ func runImportCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
-	_, err := verifyDeploymentAgainstBlueprint(expandedBlueprintFile, deploymentGroup, deploymentRoot)
+	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	if err != nil {
+		return err
+	}
 
-	if err = shell.ImportInputs(workingDir, artifactsDir, expandedBlueprintFile); err != nil {
+	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
+		return err
+	}
+
+	if err := shell.ImportInputs(workingDir, artifactsDir, expandedBlueprintFile); err != nil {
 		return err
 	}
 

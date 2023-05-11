@@ -152,6 +152,15 @@ func (bp Blueprint) GroupIndex(groupName GroupName) int {
 	return -1
 }
 
+// Group returns the deployment group with a given name
+func (bp Blueprint) Group(groupName GroupName) (DeploymentGroup, error) {
+	idx := bp.GroupIndex(groupName)
+	if idx == -1 {
+		return DeploymentGroup{}, fmt.Errorf("could not find group %s in blueprint", groupName)
+	}
+	return bp.DeploymentGroups[idx], nil
+}
+
 // TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string

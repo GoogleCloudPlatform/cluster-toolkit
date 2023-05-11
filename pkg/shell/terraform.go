@@ -24,12 +24,24 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
+)
+
+// ApplyBehavior abstracts behaviors for making changes to cloud infrastructure
+// when ghpc believes that they may be necessary
+type ApplyBehavior uint
+
+// 3 behaviors making changes: never, automatic, and explicit approval
+const (
+	NeverApply ApplyBehavior = iota
+	AutomaticApply
+	PromptBeforeApply
 )
 
 // TfError captures Terraform errors while improving helpfulness of message
@@ -122,7 +134,7 @@ func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	return outputValues, nil
 }
 
-func getOutputs(tf *tfexec.Terraform) (map[string]cty.Value, error) {
+func getOutputs(tf *tfexec.Terraform, applyBehavior ApplyBehavior) (map[string]cty.Value, error) {
 	if err := initModule(tf); err != nil {
 		return map[string]cty.Value{}, err
 	}
@@ -136,9 +148,29 @@ func getOutputs(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 		}
 	}
 
+	var apply bool
 	if wantsChange {
-		return map[string]cty.Value{},
-			fmt.Errorf("cloud infrastructure requires changes; please run \"terraform -chdir=%s apply\"", tf.WorkingDir())
+		log.Println("cloud infrastructure requires changes")
+		switch applyBehavior {
+		case AutomaticApply:
+			apply = true
+		case PromptBeforeApply:
+			apply = AskForConfirmation(fmt.Sprintf("Do you want to deploy group %s", tf.WorkingDir()))
+		default:
+			return map[string]cty.Value{},
+				fmt.Errorf("cloud infrastructure requires changes; please run \"terraform -chdir=%s apply\"", tf.WorkingDir())
+		}
+	} else {
+		log.Println("cloud infrastructure requires no changes")
+	}
+
+	if apply {
+		log.Printf("running terraform apply on group %s", tf.WorkingDir())
+		tf.SetStdout(os.Stdout)
+		tf.SetStderr(os.Stderr)
+		tf.Apply(context.Background())
+		tf.SetStdout(nil)
+		tf.SetStderr(nil)
 	}
 
 	outputValues, err := outputModule(tf)
@@ -154,11 +186,11 @@ func outputsFile(artifactsDir string, group config.GroupName) string {
 
 // ExportOutputs will run terraform output and capture data needed for
 // subsequent deployment groups
-func ExportOutputs(tf *tfexec.Terraform, artifactsDir string) error {
+func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior ApplyBehavior) error {
 	thisGroup := config.GroupName(filepath.Base(tf.WorkingDir()))
 	filepath := outputsFile(artifactsDir, thisGroup)
 
-	outputValues, err := getOutputs(tf)
+	outputValues, err := getOutputs(tf, applyBehavior)
 	if err != nil {
 		return err
 	}
@@ -196,10 +228,11 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		return err
 	}
 
-	kinds, err := GetDeploymentKinds(dc)
-	if err != nil {
-		return err
+	groupIdx := dc.Config.GroupIndex(thisGroup)
+	if groupIdx == -1 {
+		return fmt.Errorf("group %s not found in deployment blueprint", thisGroup)
 	}
+	groupKind := dc.Config.DeploymentGroups[groupIdx].Kind
 
 	// for each prior group, read all output values and filter for those needed
 	// as input values to this group; merge into a single map
@@ -226,7 +259,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	}
 
 	var outfile string
-	switch kinds[thisGroup] {
+	switch groupKind {
 	case config.TerraformKind:
 		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
 	case config.PackerKind:

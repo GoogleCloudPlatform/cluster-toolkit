@@ -20,36 +20,24 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sys/unix"
 )
 
-// GetDeploymentKinds returns the kind of each group in the deployment as a map;
-// additionally it provides a mechanism for validating the deployment directory
-// structure; for now, validation tests only existence of each directory
-func GetDeploymentKinds(dc config.DeploymentConfig) (map[config.GroupName]config.ModuleKind, error) {
-	groupKinds := make(map[config.GroupName]config.ModuleKind)
-	for _, g := range dc.Config.DeploymentGroups {
-		if g.Kind == config.UnknownKind {
-			return nil, fmt.Errorf("improper deployment: group %s is of unknown kind", g.Name)
-		}
-		groupKinds[g.Name] = g.Kind
-	}
-	return groupKinds, nil
-}
-
 // ValidateDeploymentDirectory ensures that the deployment directory structure
 // appears valid given a mapping of group names to module kinds
 // TODO: verify kind fully by auto-detecting type from group directory
-func ValidateDeploymentDirectory(kinds map[config.GroupName]config.ModuleKind, deploymentRoot string) error {
-	for group := range kinds {
-		groupPath := filepath.Join(deploymentRoot, string(group))
+func ValidateDeploymentDirectory(groups []config.DeploymentGroup, deploymentRoot string) error {
+	for _, group := range groups {
+		groupPath := filepath.Join(deploymentRoot, string(group.Name))
 		if isDir, _ := DirInfo(groupPath); !isDir {
-			return fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, group)
+			return fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, group.Name)
 		}
 	}
 	return nil
@@ -155,4 +143,25 @@ func getIntergroupPackerSettings(dc config.DeploymentConfig, packerModule config
 		packerSettings.Unset(setting)
 	}
 	return packerSettings
+}
+
+// AskForConfirmation prompts the user with a question; it returns true if and
+// only if the user responds with "y" or "yes" (case-insensitive)
+func AskForConfirmation(prompt string) bool {
+	fmt.Printf("%s [y/n]: ", prompt)
+
+	var userResponse string
+	_, err := fmt.Scanln(&userResponse)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(userResponse)) {
+	case "y":
+		return true
+	case "yes":
+		return true
+	default:
+		return false
+	}
 }
