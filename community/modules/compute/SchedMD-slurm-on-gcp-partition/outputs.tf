@@ -15,7 +15,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "SchedMD-slurm-on-gcp-partition" })
+  labels = merge(var.labels, { ghpc_module = "schedmd-slurm-on-gcp-partition" })
 }
 
 locals {
