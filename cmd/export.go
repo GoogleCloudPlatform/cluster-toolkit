@@ -75,28 +75,6 @@ func setArtifactsDir(cmd *cobra.Command, args []string) {
 	}
 }
 
-func verifyDeploymentAgainstBlueprint(expandedBlueprintFile string, group config.GroupName, deploymentRoot string) (config.ModuleKind, error) {
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return config.UnknownKind, err
-	}
-
-	groupKinds, err := shell.GetDeploymentKinds(dc)
-	if err != nil {
-		return config.UnknownKind, err
-	}
-
-	kind, ok := groupKinds[group]
-	if !ok {
-		return config.UnknownKind, fmt.Errorf("deployment group %s not found in expanded blueprint", group)
-	}
-
-	if err := shell.ValidateDeploymentDirectory(groupKinds, deploymentRoot); err != nil {
-		return config.UnknownKind, err
-	}
-	return kind, nil
-}
-
 func runExportCmd(cmd *cobra.Command, args []string) error {
 	workingDir := filepath.Clean(args[0])
 	deploymentGroup := config.GroupName(filepath.Base(workingDir))
@@ -107,11 +85,20 @@ func runExportCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
-	kind, err := verifyDeploymentAgainstBlueprint(expandedBlueprintFile, deploymentGroup, deploymentRoot)
+	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
-	if kind == config.PackerKind {
+
+	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
+		return err
+	}
+
+	group, err := dc.Config.Group(deploymentGroup)
+	if err != nil {
+		return err
+	}
+	if group.Kind == config.PackerKind {
 		return fmt.Errorf("export command is unsupported on Packer modules because they do not have outputs")
 	}
 
@@ -119,7 +106,7 @@ func runExportCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err = shell.ExportOutputs(tf, artifactsDir); err != nil {
+	if err = shell.ExportOutputs(tf, artifactsDir, shell.NeverApply); err != nil {
 		return err
 	}
 	return nil

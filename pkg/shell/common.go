@@ -20,36 +20,31 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sys/unix"
 )
 
-// GetDeploymentKinds returns the kind of each group in the deployment as a map;
-// additionally it provides a mechanism for validating the deployment directory
-// structure; for now, validation tests only existence of each directory
-func GetDeploymentKinds(dc config.DeploymentConfig) (map[config.GroupName]config.ModuleKind, error) {
-	groupKinds := make(map[config.GroupName]config.ModuleKind)
-	for _, g := range dc.Config.DeploymentGroups {
-		if g.Kind == config.UnknownKind {
-			return nil, fmt.Errorf("improper deployment: group %s is of unknown kind", g.Name)
-		}
-		groupKinds[g.Name] = g.Kind
-	}
-	return groupKinds, nil
+// ProposedChanges provides summary and full description of proposed changes
+// to cloud infrastructure
+type ProposedChanges struct {
+	Summary string
+	Full    string
 }
 
 // ValidateDeploymentDirectory ensures that the deployment directory structure
 // appears valid given a mapping of group names to module kinds
 // TODO: verify kind fully by auto-detecting type from group directory
-func ValidateDeploymentDirectory(kinds map[config.GroupName]config.ModuleKind, deploymentRoot string) error {
-	for group := range kinds {
-		groupPath := filepath.Join(deploymentRoot, string(group))
+func ValidateDeploymentDirectory(groups []config.DeploymentGroup, deploymentRoot string) error {
+	for _, group := range groups {
+		groupPath := filepath.Join(deploymentRoot, string(group.Name))
 		if isDir, _ := DirInfo(groupPath); !isDir {
-			return fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, group)
+			return fmt.Errorf("improper deployment: %s is not a directory for group %s", groupPath, group.Name)
 		}
 	}
 	return nil
@@ -155,4 +150,33 @@ func getIntergroupPackerSettings(dc config.DeploymentConfig, packerModule config
 		packerSettings.Unset(setting)
 	}
 	return packerSettings
+}
+
+// ApplyChangesChoice prompts the user to decide whether they want to approve
+// changes to cloud configuration, to stop execution of ghpc entirely, or to
+// skip making the proposed changes and continue execution (in deploy command)
+// only if the user responds with "y" or "yes" (case-insensitive)
+func ApplyChangesChoice(c ProposedChanges) bool {
+	log.Printf("Summary of proposed changes: %s", strings.TrimSpace(c.Summary))
+	var userResponse string
+
+	for {
+		fmt.Print("Display full proposed changes, Apply proposed changes, Stop and exit, Continue without applying? [d,a,s,c]: ")
+
+		_, err := fmt.Scanln(&userResponse)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		switch strings.ToLower(strings.TrimSpace(userResponse)) {
+		case "a":
+			return true
+		case "c":
+			return false
+		case "d":
+			fmt.Println(c.Full)
+		case "s":
+			log.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
+		}
+	}
 }

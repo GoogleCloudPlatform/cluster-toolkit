@@ -143,13 +143,22 @@ func (bp Blueprint) ModuleGroupOrDie(mod ModuleID) DeploymentGroup {
 
 // GroupIndex returns the index of the input group in the blueprint
 // return -1 if not found
-func (bp Blueprint) GroupIndex(groupName GroupName) int {
+func (bp Blueprint) GroupIndex(n GroupName) int {
 	for i, g := range bp.DeploymentGroups {
-		if g.Name == groupName {
+		if g.Name == n {
 			return i
 		}
 	}
 	return -1
+}
+
+// Group returns the deployment group with a given name
+func (bp Blueprint) Group(n GroupName) (DeploymentGroup, error) {
+	idx := bp.GroupIndex(n)
+	if idx == -1 {
+		return DeploymentGroup{}, fmt.Errorf("could not find group %s in blueprint", n)
+	}
+	return bp.DeploymentGroups[idx], nil
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
