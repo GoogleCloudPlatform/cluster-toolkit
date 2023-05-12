@@ -1,0 +1,68 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: "Multigroup integration test for ghpc deploy command"
+  hosts: localhost
+  force_handlers: true
+  tasks:
+  - name: Create Deployment Directory
+    ansible.builtin.include_tasks:
+      file: tasks/create_deployment_directory.yml
+  - name: Deploy from deployment directory
+    block:
+    - name: Execute ghpc deploy
+      register: deployment
+      changed_when: deployment.changed
+      ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
+      args:
+        chdir: "{{ workspace }}"
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+    always:
+    - name: Destroy cluster deployment group
+      register: terraform_destroy_cluster
+      changed_when: terraform_destroy_cluster.changed
+      ignore_errors: true
+      ansible.builtin.command: "{{ item }}"
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/cluster"
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+      loop:
+      - terraform init
+      - terraform destroy -auto-approve -no-color
+    - name: Delete VM Image
+      register: image_deletion
+      changed_when: image_deletion.changed
+      ignore_errors: true
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+        executable: /bin/bash
+    - name: Destroy primary deployment group
+      register: terraform_destroy_primary
+      changed_when: terraform_destroy_primary.changed
+      ignore_errors: true
+      ansible.builtin.command: "{{ item }}"
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+      environment:
+        TF_IN_AUTOMATION: "TRUE"
+      loop:
+      - terraform init
+      - terraform destroy -auto-approve -no-color
