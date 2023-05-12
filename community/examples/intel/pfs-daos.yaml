@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: daos-cluster
+blueprint_name: pfs-daos
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: daos-cluster
+  deployment_name: pfs-daos
   region: us-central1
   zone: us-central1-c
 

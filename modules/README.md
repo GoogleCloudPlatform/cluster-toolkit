@@ -296,7 +296,7 @@ the location of the Terraform module.
 
 Additionally, [specific revisions of a remote module][tfrev] can be selected by
 any valid [git reference][gitref]. Typically, these are a git branch, commit
-hash or tag. The [Intel DAOS blueprint][daos-cluster.yaml] makes extensive use
+hash or tag. The [Intel DAOS blueprint][pfs-daos.yaml] makes extensive use
 of this feature. For example, to temporarily point to a development copy of the
 Toolkit vpc module, use:
 
@@ -308,7 +308,7 @@ Toolkit vpc module, use:
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
 [gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
-[daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
+[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
 
 #### Generic Git Modules
 To use a Terraform module available in a non-GitHub git repository such as

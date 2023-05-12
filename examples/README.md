@@ -20,7 +20,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
   * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-) ![community-badge]
-  * [daos-cluster.yaml](#daos-clusteryaml-) ![community-badge]
+  * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [daos-slurm.yaml](#daos-slurmyaml-) ![community-badge]
   * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-) ![community-badge]
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
@@ -587,12 +587,12 @@ examples][intel-examples-readme].
 [intel-examples-readme]: ../community/examples/intel/README.md
 [intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
 
-### [daos-cluster.yaml] ![community-badge]
+### [pfs-daos.yaml] ![community-badge]
 
 This example provisions a DAOS cluster with [managed instance groups][migs] for the servers and for clients. It is more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
-[daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
+[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
 [migs]: https://cloud.google.com/compute/docs/instance-groups
 
 ### [daos-slurm.yaml] ![community-badge]
