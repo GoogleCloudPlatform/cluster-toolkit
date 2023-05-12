@@ -32,6 +32,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--) ![community-badge] ![experimental-badge]
   * [htcondor-pool.yaml](#htcondor-poolyaml--) ![community-badge] ![experimental-badge]
   * [gke.yaml](#gkeyaml--) ![community-badge] ![experimental-badge]
+  * [ml-gke](#mlgkeyaml--) ![community-badge] ![experimental-badge]
   * [starccm-tutorial.yaml](#starccm-tutorialyaml--) ![community-badge] ![experimental-badge]
   * [fluent-tutorial.yaml](#fluent-tutorialyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
@@ -819,6 +820,32 @@ The `gke-job-template` module is used to create a job file that can be submitted
 to the cluster using `kubectl` and will run on the specified node pool.
 
 [gke.yaml]: ../community/examples/gke.yaml
+
+### [ml-gke.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates how to set up a GPU GKE cluster using the HPC
+Toolkit. It includes:
+
+* Creation of a regional GKE cluster.
+* Creation of an autoscaling GKE node pool with `a2` machines each with 8
+  attached A100 GPUs.
+* Configuration of the cluster using the `kubernetes-operations` module to
+  install nvidia drivers.
+* Creation of a job template yaml file that can be used to submit jobs to the
+  GPU node pool.
+
+> **Note**: The Kubernetes API server will only allow requests from authorized
+> networks. Nvidia drivers are installed on GPU nodes by a DaemonSet created by
+> the `kubernetes-operations` Terraform module. **You must use the
+> `authorized_cidr` variable to supply an authorized network which contains the
+> IP address of the machine deploying the blueprint, for example
+> `--vars authorized_cidr=<your-ip-address>/32`.** This will allow Terraform to
+> create the necessary DaemonSet on the cluster.
+
+Once you have deployed the blueprint, follow output instructions to _fetch
+credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
+
+[ml-gke.yaml]: ../community/examples/ml-gke.yaml
 
 ### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
 

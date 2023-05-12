@@ -139,6 +139,7 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | an identifier for the resource with format projects/<project\_id>/locations/<region>/clusters/<name>. |
+| <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the resource with format projects/<project\_id>/locations/<region>/clusters/<name>. |
+| <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
