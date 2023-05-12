@@ -184,7 +184,7 @@ terraform -chdir=hpc-intel-select/primary destroy
 
 ## DAOS Cluster
 
-The [daos-cluster.yaml](daos-cluster.yaml) blueprint describes an environment with
+The [pfs-daos.yaml](pfs-daos.yaml) blueprint describes an environment with
 - A [managed instance group][mig] with four DAOS server instances
 - A [managed instance group][mig] with two DAOS client instances
 
@@ -223,7 +223,7 @@ The following available quota is required in the region used by the cluster:
 Use `ghpc` to provision the blueprint
 
 ```text
-ghpc create community/examples/intel/daos-cluster.yaml  \
+ghpc create community/examples/intel/pfs-daos.yaml  \
   --vars project_id=<<PROJECT_ID>> \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
@@ -236,9 +236,9 @@ The `--backend-config` option is not required but recommended. It will save the 
 Follow `ghpc` instructions to deploy the environment
 
   ```shell
-  terraform -chdir=daos-cluster/primary init
-  terraform -chdir=daos-cluster/primary validate
-  terraform -chdir=daos-cluster/primary apply
+  terraform -chdir=pfs-daos/primary init
+  terraform -chdir=pfs-daos/primary validate
+  terraform -chdir=pfs-daos/primary apply
   ```
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
@@ -259,7 +259,7 @@ Follow `ghpc` instructions to deploy the environment
 
 ### Verify the DAOS storage system
 
-The `community/examples/intel/daos-cluster.yaml` blueprint does not contain configuration for DAOS pools and containers. Therefore, pools and containers will need to be created manually.
+The `community/examples/intel/pfs-daos.yaml` blueprint does not contain configuration for DAOS pools and containers. Therefore, pools and containers will need to be created manually.
 
 Before pools and containers can be created the storage system must be formatted. Formatting the storage is done automatically by the startup script that runs on the *daos-server-0001* instance. The startup script will run the [dmg storage format](https://docs.daos.io/v2.2/admin/deployment/?h=dmg+storage#storage-formatting) command. It may take a few minutes for all daos server instances to join.
 
@@ -396,7 +396,7 @@ See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.2/user/filesystem/?h=dfuse#d
 Delete the remaining infrastructure
 
 ```shell
-terraform -chdir=daos-cluster/primary destroy
+terraform -chdir=pfs-daos/primary destroy
 ```
 
 ## DAOS Server with Slurm cluster
@@ -612,5 +612,5 @@ have been shutdown and deleted by the Slurm autoscaler. Delete the remaining
 infrastructure with `terraform`:
 
 ```shell
-terraform -chdir=daos-cluster/primary destroy
+terraform -chdir=pfs-daos/primary destroy
 ```
