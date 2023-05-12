@@ -36,6 +36,11 @@ locals {
   should_request_cpu = local.millicpu >= 0
   full_node_request  = local.min_allocatable_cpu >= 0 && var.requested_cpu_per_pod < 0
 
+  should_request_gpu = alltrue(var.has_gpu)
+  # arbitrarily, user can edit in template.
+  # May come from node pool in future.
+  gpu_limit = 1
+
   suffix = var.random_name_sufix ? "-${random_id.resource_name_suffix.hex}" : ""
 
   job_template_contents = templatefile(
@@ -52,6 +57,8 @@ locals {
       should_request_cpu = local.should_request_cpu
       full_node_request  = local.full_node_request
       millicpu_request   = "${local.millicpu}m"
+      should_request_gpu = local.should_request_gpu
+      gpu_limit          = local.gpu_limit
       restart_policy     = var.restart_policy
       backoff_limit      = var.backoff_limit
       tolerations        = distinct(var.tolerations)

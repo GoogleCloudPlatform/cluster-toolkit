@@ -11,15 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 ---
 
-blueprint_name: small-gke
+blueprint_name: ml-gke
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: cluster-01
+  deployment_name: ml-01
   region: us-central1
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <your-ip-address>/32
 
 deployment_groups:
 - group: primary
@@ -40,19 +43,30 @@ deployment_groups:
     use: [network1]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: $(vars.authorized_cidr)
     outputs: [instructions]
 
-  - id: compute_pool
+  # Docs at https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/kubernetes-operations
+  - id: install-nvidia-drivers
+    source: github.com/GoogleCloudPlatform/ai-infra-cluster-provisioning//aiinfra-cluster/modules/kubernetes-operations?ref=v0.6.0
+    use: [gke_cluster]
+    settings:
+      install_nvidia_driver: true
+
+  - id: a2-pool
     source: community/modules/compute/gke-node-pool
     use: [gke_cluster]
+    settings:
+      machine_type: a2-highgpu-8g
 
   - id: job-template
     source: community/modules/compute/gke-job-template
-    use: [compute_pool]
+    use: [a2-pool]
     settings:
-      image: busybox
+      image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
       command:
-      - echo
-      - Hello World
-      node_count: 3
+      - nvidia-smi
+      node_count: 1
     outputs: [instructions]
