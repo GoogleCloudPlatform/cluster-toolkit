@@ -41,7 +41,7 @@ output "allocatable_cpu_per_node" {
 }
 
 output "has_gpu" {
-  description = "Do nodes in this node pool have GPUs attached."
+  description = "Boolean value indicating whether nodes in the pool are configured with GPUs."
   value       = local.has_gpu
 }
 

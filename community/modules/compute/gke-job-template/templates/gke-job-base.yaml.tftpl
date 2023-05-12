@@ -43,6 +43,8 @@ spec:
         resources:
           %{~ if should_request_gpu ~}
           limits:
+            # GPUs should only be specified as limits
+            # https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
             nvidia.com/gpu: ${gpu_limit}
           %{~ endif ~}
           %{~ if should_request_cpu ~}

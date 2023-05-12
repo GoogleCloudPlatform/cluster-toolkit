@@ -13,14 +13,16 @@
 # limitations under the License.
 ---
 
-blueprint_name: gke-ml
+blueprint_name: ml-gke
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: ml-01
   region: us-central1
 
-  authorized_cidr:  ## Cidr block containing the IP of the machine calling terraform. Ex: <your-ip-address>/32
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <your-ip-address>/32
 
 deployment_groups:
 - group: primary
@@ -46,6 +48,7 @@ deployment_groups:
         cidr_block: $(vars.authorized_cidr)
     outputs: [instructions]
 
+  # Docs at https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/kubernetes-operations
   - id: install-nvidia-drivers
     source: github.com/GoogleCloudPlatform/ai-infra-cluster-provisioning//aiinfra-cluster/modules/kubernetes-operations?ref=v0.6.0
     use: [gke_cluster]

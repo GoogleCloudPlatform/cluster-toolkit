@@ -826,26 +826,31 @@ to the cluster using `kubectl` and will run on the specified node pool.
 This blueprint demonstrates how to set up a GPU GKE cluster using the HPC
 Toolkit. It includes:
 
+> **Warning**: `authorized_cidr` variable must be entered for this example to
+> work. See note below.
+
 * Creation of a regional GKE cluster.
 * Creation of an autoscaling GKE node pool with `a2` machines each with 8
   attached A100 GPUs.
-* Configuration of the cluster using the `kubernetes-operations` module to
+* Configuration of the cluster using the [`kubernetes-operations`] module to
   install nvidia drivers.
 * Creation of a job template yaml file that can be used to submit jobs to the
   GPU node pool.
 
 > **Note**: The Kubernetes API server will only allow requests from authorized
 > networks. Nvidia drivers are installed on GPU nodes by a DaemonSet created by
-> the `kubernetes-operations` Terraform module. **You must use the
+> the [`kubernetes-operations`] Terraform module. **You must use the
 > `authorized_cidr` variable to supply an authorized network which contains the
 > IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** This will allow Terraform to
-> create the necessary DaemonSet on the cluster.
+> create the necessary DaemonSet on the cluster. You can use a service like
+> [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
 Once you have deployed the blueprint, follow output instructions to _fetch
 credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 [ml-gke.yaml]: ../community/examples/ml-gke.yaml
+[`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
 ### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
 

@@ -36,7 +36,7 @@ locals {
   should_request_cpu = local.millicpu >= 0
   full_node_request  = local.min_allocatable_cpu >= 0 && var.requested_cpu_per_pod < 0
 
-  should_request_gpu = anytrue(var.has_gpu)
+  should_request_gpu = alltrue(var.has_gpu)
   # arbitrarily, user can edit in template.
   # May come from node pool in future.
   gpu_limit = 1

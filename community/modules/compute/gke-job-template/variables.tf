@@ -51,7 +51,7 @@ variable "allocatable_cpu_per_node" {
 }
 
 variable "has_gpu" {
-  description = "Do nodes have GPUs attached. Generally populated from gke-node-pool via `use` field."
+  description = "Indicates that the job should request nodes with GPUs. Typically supplied by a gke-node-pool module."
   type        = list(bool)
   default     = [false]
 }
