@@ -18,6 +18,7 @@ package modulewriter
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"hpc-toolkit/pkg/config"
@@ -40,20 +41,20 @@ func (w *PackerWriter) addNumModules(value int) {
 	w.numModules += value
 }
 
-func printPackerInstructions(modPath string, mod config.ModuleID, printImportInputs bool) {
-	printInstructionsPreamble("Packer", modPath, string(mod))
-
-	fmt.Println()
+func printPackerInstructions(f *os.File, modPath string, modID config.ModuleID, printImportInputs bool) {
+	fmt.Fprintln(f)
+	fmt.Fprintf(f, "Packer group '%s' was successfully created in directory %s\n", modID, modPath)
+	fmt.Fprintln(f, "To deploy, run the following commands:")
+	fmt.Fprintln(f)
 	grpPath := filepath.Clean(filepath.Join(modPath, ".."))
 	if printImportInputs {
-		fmt.Printf("ghpc import-inputs %s\n", grpPath)
+		fmt.Fprintf(f, "ghpc import-inputs %s\n", grpPath)
 	}
-	fmt.Printf("cd %s\n", modPath)
-	fmt.Println("packer init .")
-	fmt.Println("packer validate .")
-	fmt.Println("packer build .")
-	fmt.Println("cd -")
-	fmt.Println()
+	fmt.Fprintf(f, "cd %s\n", modPath)
+	fmt.Fprintln(f, "packer init .")
+	fmt.Fprintln(f, "packer validate .")
+	fmt.Fprintln(f, "packer build .")
+	fmt.Fprintln(f, "cd -")
 }
 
 func writePackerAutovars(vars map[string]cty.Value, dst string) error {
@@ -68,6 +69,7 @@ func (w PackerWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	grpIdx int,
 	deployDir string,
+	instructionsFile *os.File,
 ) error {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, string(depGroup.Name))
@@ -96,7 +98,7 @@ func (w PackerWriter) writeDeploymentGroup(
 			return err
 		}
 		hasIgc := len(pure.Items()) < len(mod.Settings.Items())
-		printPackerInstructions(modPath, mod.ID, hasIgc)
+		printPackerInstructions(instructionsFile, modPath, mod.ID, hasIgc)
 	}
 
 	return nil

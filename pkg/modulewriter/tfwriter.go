@@ -324,19 +324,20 @@ func writeVersions(dst string) error {
 	return nil
 }
 
-func printTerraformInstructions(grpPath string, group config.GroupName, printExportOutputs bool, printImportInputs bool) {
-	printInstructionsPreamble("Terraform", grpPath, string(group))
-	fmt.Println()
+func writeTerraformInstructions(f *os.File, grpPath string, n config.GroupName, printExportOutputs bool, printImportInputs bool) {
+	fmt.Fprintln(f)
+	fmt.Fprintf(f, "Terraform group '%s' was successfully created in directory %s\n", n, grpPath)
+	fmt.Fprintln(f, "To deploy, run the following commands:")
+	fmt.Fprintln(f)
 	if printImportInputs {
-		fmt.Printf("ghpc import-inputs %s\n", grpPath)
+		fmt.Fprintf(f, "ghpc import-inputs %s\n", grpPath)
 	}
-	fmt.Printf("terraform -chdir=%s init\n", grpPath)
-	fmt.Printf("terraform -chdir=%s validate\n", grpPath)
-	fmt.Printf("terraform -chdir=%s apply\n", grpPath)
+	fmt.Fprintf(f, "terraform -chdir=%s init\n", grpPath)
+	fmt.Fprintf(f, "terraform -chdir=%s validate\n", grpPath)
+	fmt.Fprintf(f, "terraform -chdir=%s apply\n", grpPath)
 	if printExportOutputs {
-		fmt.Printf("ghpc export-outputs %s\n", grpPath)
+		fmt.Fprintf(f, "ghpc export-outputs %s\n", grpPath)
 	}
-	fmt.Println()
 }
 
 // writeDeploymentGroup creates and sets up the provided terraform deployment
@@ -349,6 +350,7 @@ func (w TFWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	groupIndex int,
 	deploymentDir string,
+	instructionsFile *os.File,
 ) error {
 	depGroup := dc.Config.DeploymentGroups[groupIndex]
 	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
@@ -358,47 +360,47 @@ func (w TFWriter) writeDeploymentGroup(
 		intergroupInputs[igVar.Name] = true
 	}
 
-	writePath := filepath.Join(deploymentDir, string(depGroup.Name))
+	groupPath := filepath.Join(deploymentDir, string(depGroup.Name))
 
 	// Write main.tf file
 	doctoredModules := substituteIgcReferences(depGroup.Modules, intergroupVars)
 	if err := writeMain(
-		doctoredModules, depGroup.TerraformBackend, writePath,
+		doctoredModules, depGroup.TerraformBackend, groupPath,
 	); err != nil {
 		return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write variables.tf file
-	if err := writeVariables(deploymentVars, maps.Values(intergroupVars), writePath); err != nil {
+	if err := writeVariables(deploymentVars, maps.Values(intergroupVars), groupPath); err != nil {
 		return fmt.Errorf(
 			"error writing variables.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write outputs.tf file
-	if err := writeOutputs(depGroup.Modules, writePath); err != nil {
+	if err := writeOutputs(depGroup.Modules, groupPath); err != nil {
 		return fmt.Errorf(
 			"error writing outputs.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write terraform.tfvars file
-	if err := writeTfvars(deploymentVars, writePath); err != nil {
+	if err := writeTfvars(deploymentVars, groupPath); err != nil {
 		return fmt.Errorf(
 			"error writing terraform.tfvars file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write providers.tf file
-	if err := writeProviders(deploymentVars, writePath); err != nil {
+	if err := writeProviders(deploymentVars, groupPath); err != nil {
 		return fmt.Errorf(
 			"error writing providers.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write versions.tf file
-	if err := writeVersions(writePath); err != nil {
+	if err := writeVersions(groupPath); err != nil {
 		return fmt.Errorf(
 			"error writing versions.tf file for deployment group %s: %v",
 			depGroup.Name, err)
@@ -408,7 +410,7 @@ func (w TFWriter) writeDeploymentGroup(
 	printImportInputs := multiGroupDeployment && groupIndex > 0
 	printExportOutputs := multiGroupDeployment && groupIndex < len(dc.Config.DeploymentGroups)-1
 
-	printTerraformInstructions(writePath, depGroup.Name, printExportOutputs, printImportInputs)
+	writeTerraformInstructions(instructionsFile, groupPath, depGroup.Name, printExportOutputs, printImportInputs)
 
 	return nil
 }
