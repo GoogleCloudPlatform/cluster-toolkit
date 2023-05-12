@@ -20,11 +20,11 @@ controller for optimal performance at different scales.
 > pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
 > ```
 
-[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1
-[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2
+[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.7.1/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.7.2/scripts/requirements.txt
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
 [enable\_reconfigure]: #input\_enable\_reconfigure
@@ -78,7 +78,7 @@ This option has some additional requirements:
   development environment deploying the cluster. One can use following commands:
 
   ```bash
-  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.1/scripts/requirements.txt
+  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
   pip3 install -r requirements.txt --user
   ```
   
@@ -100,7 +100,7 @@ This option has some additional requirements:
   TopicByProjectIdAndName(project_id=<incorrect project #>, topic_name=<topic name>)
   ```
 
-[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster#optional
+[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2/terraform/slurm_cluster#optional
 
 ## Custom Images
 
@@ -164,8 +164,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.7.1 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.7.1 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.7.2 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.7.2 |
 
 ## Resources
 
@@ -206,7 +206,7 @@ limitations under the License.
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br>on every node when a user's job completes.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
 | <a name="input_gpu"></a> [gpu](#input\_gpu) | GPU information. Type and count of GPU to attach to the instance template. See<br>https://cloud.google.com/compute/docs/gpus more details.<br>- type : the GPU type, e.g. nvidia-tesla-t4, nvidia-a100-80gb, nvidia-tesla-a100, etc<br>- count : number of GPUs<br><br>If both 'var.gpu' and 'var.guest\_accelerator' are set, 'var.gpu' will be used. | <pre>object({<br>    type  = string<br>    count = number<br>  })</pre> | `null` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | Alternative method of providing 'var.gpu' with a consistent naming scheme to<br>other HPC Toolkit modules.<br><br>If both 'var.gpu' and 'var.guest\_accelerator' are set, 'var.gpu' will be used. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `null` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Defines the image that will be used in the Slurm controller VM instance. This<br>value is overridden if any of `source_image`, `source_image_family` or<br>`source_image_project` are set.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted.<br><br>For more information on creating custom images that comply with Slurm on GCP<br>see the "Slurm on GCP Custom Images" section in docs/vm-images.md. | `map(string)` | <pre>{<br>  "family": "schedmd-v5-slurm-22-05-8-hpc-centos-7",<br>  "project": "projects/schedmd-slurm-public/global/images/family"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Defines the image that will be used in the Slurm controller VM instance. This<br>value is overridden if any of `source_image`, `source_image_family` or<br>`source_image_project` are set.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted.<br><br>For more information on creating custom images that comply with Slurm on GCP<br>see the "Slurm on GCP Custom Images" section in docs/vm-images.md. | `map(string)` | <pre>{<br>  "family": "schedmd-v5-slurm-22-05-9-hpc-centos-7",<br>  "project": "projects/schedmd-slurm-public/global/images/family"<br>}</pre> | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Self link to a custom instance template. If set, other VM definition<br>variables such as machine\_type and instance\_image will be ignored in favor<br>of the provided instance template.<br><br>For more information on creating custom images for the instance template<br>that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section<br>in docs/vm-images.md. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_login_startup_scripts_timeout"></a> [login\_startup\_scripts\_timeout](#input\_login\_startup\_scripts\_timeout) | The timeout (seconds) applied to the login startup script. If<br>any script exceeds this timeout, then the instance setup process is considered<br>failed and handled accordingly.<br><br>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |

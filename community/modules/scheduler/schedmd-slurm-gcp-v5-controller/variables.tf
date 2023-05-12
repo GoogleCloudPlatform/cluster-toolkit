@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.1
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.2
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -535,7 +535,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "schedmd-v5-slurm-22-05-8-hpc-centos-7"
+    family  = "schedmd-v5-slurm-22-05-9-hpc-centos-7"
     project = "projects/schedmd-slurm-public/global/images/family"
   }
 
