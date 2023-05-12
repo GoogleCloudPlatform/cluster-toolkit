@@ -14,13 +14,13 @@
 
 ---
 
-blueprint_name: hpc-cluster-small
+blueprint_name: hpc-slurm
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-small
-  region: us-central1
-  zone: us-central1-c
+  region: us-west4
+  zone: us-west4-c
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -28,9 +28,9 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
-  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
-  # Example - ./modules/network/vpc
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
   - id: network1
     source: modules/network/vpc
 
@@ -40,43 +40,52 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  # This debug_partition will work out of the box without requesting additional GCP quota.
-  - id: debug_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
-    - homefs
+  - id: debug_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
-      partition_name: debug
-      max_node_count: 4
-      enable_placement: false
-      exclusive: false
+      node_count_dynamic_max: 4
       machine_type: n2-standard-2
 
-  # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
-  - id: compute_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
+    - debug_node_group
+    settings:
+      partition_name: debug
+      enable_placement: false
+      is_default: true
+
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 20
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    - compute_node_group
     settings:
       partition_name: compute
-      max_node_count: 20
 
   - id: slurm_controller
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
-    - homefs
-    - debug_partition  # debug partition will be default as it is listed first
+    - debug_partition
     - compute_partition
+    - homefs
     settings:
-      login_node_count: 1
-      suspend_time: 60
+      disable_controller_public_ips: false
 
   - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use:
     - network1
-    - homefs
     - slurm_controller
+    settings:
+      machine_type: n2-standard-4
+      disable_login_public_ips: false
