@@ -15,6 +15,11 @@
  */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "htcondor-configure" })
+}
+
+locals {
   execute_point_display_name   = "HTCondor Execute Point (${var.deployment_name})"
   execute_point_roles          = [for role in var.execute_point_roles : "${var.project_id}=>${role}"]
   access_point_display_name    = "HTCondor Access Point (${var.deployment_name})"
@@ -108,7 +113,7 @@ resource "random_password" "pool" {
 resource "google_secret_manager_secret" "pool_password" {
   secret_id = "${var.deployment_name}-pool-password"
 
-  labels = var.labels
+  labels = local.labels
 
   replication {
     automatic = true

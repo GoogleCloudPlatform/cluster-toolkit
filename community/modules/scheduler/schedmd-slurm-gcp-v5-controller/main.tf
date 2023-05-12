@@ -15,6 +15,11 @@
 */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v5-controller" })
+}
+
+locals {
   ghpc_startup_script_controller = [{
     filename = "ghpc_startup.sh"
     content  = var.controller_startup_script
@@ -44,7 +49,7 @@ locals {
       device_name  = ad.device_name
       disk_type    = ad.disk_type
       disk_size_gb = ad.disk_size_gb
-      disk_labels  = merge(ad.disk_labels, var.labels)
+      disk_labels  = merge(ad.disk_labels, local.labels)
       auto_delete  = ad.auto_delete
       boot         = ad.boot
     }
@@ -99,14 +104,14 @@ module "slurm_controller_template" {
   slurm_cluster_name       = local.slurm_cluster_name
   disable_smt              = var.disable_smt
   disk_auto_delete         = var.disk_auto_delete
-  disk_labels              = merge(var.disk_labels, var.labels)
+  disk_labels              = merge(var.disk_labels, local.labels)
   disk_size_gb             = var.disk_size_gb
   disk_type                = var.disk_type
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
   enable_shielded_vm       = var.enable_shielded_vm
   gpu                      = var.gpu != null ? var.gpu : one(local.guest_accelerator)
-  labels                   = var.labels
+  labels                   = local.labels
   machine_type             = var.machine_type
   metadata                 = var.metadata
   min_cpu_platform         = var.min_cpu_platform

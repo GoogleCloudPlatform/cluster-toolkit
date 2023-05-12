@@ -15,6 +15,11 @@
 */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "new-project" })
+}
+
+locals {
   name = var.name != null ? var.name : var.project_id
 }
 
@@ -41,7 +46,7 @@ module "project_factory" {
   usage_bucket_name                       = var.usage_bucket_name
   usage_bucket_prefix                     = var.usage_bucket_prefix
   shared_vpc_subnets                      = var.shared_vpc_subnets
-  labels                                  = var.labels
+  labels                                  = local.labels
   bucket_project                          = var.bucket_project
   bucket_name                             = var.bucket_name
   bucket_location                         = var.bucket_location

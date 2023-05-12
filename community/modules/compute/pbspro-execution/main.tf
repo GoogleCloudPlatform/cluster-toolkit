@@ -15,6 +15,11 @@
  */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "pbspro-execution" })
+}
+
+locals {
   resource_prefix = var.name_prefix != null ? var.name_prefix : "${var.deployment_name}-exec"
   # PBS Pro Big Book 2021.3 Sec. 15.6.2.1 says that mountpoints in $usecp
   # configuration need trailing slashes
@@ -73,7 +78,7 @@ module "pbs_execution" {
   project_id      = var.project_id
   region          = var.region
   zone            = var.zone
-  labels          = var.labels
+  labels          = local.labels
 
   machine_type    = var.machine_type
   service_account = var.service_account

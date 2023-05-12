@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "chrome-remote-desktop" })
+}
 
 locals {
 
@@ -56,7 +60,7 @@ module "client_startup_script" {
   deployment_name = var.deployment_name
   project_id      = var.project_id
   region          = var.region
-  labels          = var.labels
+  labels          = local.labels
 
   runners = flatten([
     local.user_startup_script_runners,
@@ -77,7 +81,7 @@ module "instances" {
   project_id      = var.project_id
   region          = var.region
   zone            = var.zone
-  labels          = var.labels
+  labels          = local.labels
 
   machine_type    = var.machine_type
   service_account = var.service_account

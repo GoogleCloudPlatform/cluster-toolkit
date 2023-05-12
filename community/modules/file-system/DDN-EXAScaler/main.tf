@@ -13,6 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "ddn-exascaler" })
+}
+
 locals {
 
   network_id = var.network_self_link != null ? regex("https://www.googleapis.com/compute/v\\d/(.*)", var.network_self_link)[0] : null
@@ -41,7 +47,7 @@ module "ddn_exascaler" {
   zone            = var.zone
   project         = var.project_id
   prefix          = var.prefix
-  labels          = var.labels
+  labels          = local.labels
   security        = var.security
   service_account = var.service_account
   waiter          = var.waiter

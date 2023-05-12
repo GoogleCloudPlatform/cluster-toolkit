@@ -15,6 +15,11 @@
  */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "batch-job-template" })
+}
+
+locals {
   instance_template = var.instance_template != null ? var.instance_template : module.instance_template.self_link
 
   tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
@@ -74,7 +79,7 @@ module "instance_template" {
   subnetwork_project = local.subnetwork_project
   service_account    = var.service_account
   access_config      = var.enable_public_ips ? [{ nat_ip = null, network_tier = null }] : []
-  labels             = var.labels
+  labels             = local.labels
 
   machine_type         = var.machine_type
   startup_script       = local.startup_from_network_storage

@@ -14,6 +14,11 @@
  * limitations under the License.
 */
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "slurm-cloudsql-federation" })
+}
+
 resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
@@ -37,7 +42,7 @@ resource "google_sql_database_instance" "instance" {
   database_version    = "MYSQL_5_7"
 
   settings {
-    user_labels = var.labels
+    user_labels = local.labels
     tier        = var.tier
     ip_configuration {
 

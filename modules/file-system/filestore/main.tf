@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "filestore" })
+}
+
 resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
@@ -56,7 +61,7 @@ resource "google_filestore_instance" "filestore_instance" {
     name        = var.filestore_share_name
   }
 
-  labels = var.labels
+  labels = local.labels
 
   networks {
     network      = local.shared_vpc ? var.network_id : local.network_name

@@ -15,6 +15,11 @@
   */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "gke-cluster" })
+}
+
+locals {
   dash             = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
   prefix           = var.prefix_with_deployment_name ? var.deployment_name : ""
   name_maybe_empty = "${local.prefix}${local.dash}${var.name_suffix}"
@@ -37,7 +42,7 @@ resource "google_container_cluster" "gke_cluster" {
   project         = var.project_id
   name            = local.name
   location        = var.region
-  resource_labels = var.labels
+  resource_labels = local.labels
 
   # decouple node pool lifecyle from cluster life cycle
   remove_default_node_pool = true
@@ -178,7 +183,7 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 
   node_config {
-    resource_labels = var.labels
+    resource_labels = local.labels
     service_account = var.service_account.email
     oauth_scopes    = var.service_account.scopes
     machine_type    = var.system_node_pool_machine_type
