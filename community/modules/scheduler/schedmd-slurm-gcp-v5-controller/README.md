@@ -20,11 +20,11 @@ controller for optimal performance at different scales.
 > pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
 > ```
 
-[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1
-[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2
+[slurm\_controller\_instance]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.7.1/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.7.2/scripts/requirements.txt
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
 [enable\_reconfigure]: #input\_enable\_reconfigure
@@ -78,7 +78,7 @@ This option has some additional requirements:
   development environment deploying the cluster. One can use following commands:
 
   ```bash
-  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.1/scripts/requirements.txt
+  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
   pip3 install -r requirements.txt --user
   ```
   
@@ -100,7 +100,7 @@ This option has some additional requirements:
   TopicByProjectIdAndName(project_id=<incorrect project #>, topic_name=<topic name>)
   ```
 
-[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.7.1/terraform/slurm_cluster#optional
+[optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2/terraform/slurm_cluster#optional
 
 ## Custom Images
 
@@ -164,8 +164,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.7.1 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.7.1 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.7.2 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.7.2 |
 
 ## Resources
 
