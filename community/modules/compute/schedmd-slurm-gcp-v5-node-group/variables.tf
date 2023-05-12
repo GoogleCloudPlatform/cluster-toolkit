@@ -97,7 +97,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "schedmd-v5-slurm-22-05-8-hpc-centos-7"
+    family  = "schedmd-v5-slurm-22-05-9-hpc-centos-7"
     project = "projects/schedmd-slurm-public/global/images/family"
   }
 
