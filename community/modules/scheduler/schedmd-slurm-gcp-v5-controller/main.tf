@@ -115,7 +115,6 @@ module "slurm_controller_template" {
   machine_type             = var.machine_type
   metadata                 = var.metadata
   min_cpu_platform         = var.min_cpu_platform
-  network_ip               = var.network_ip != null ? var.network_ip : ""
   on_host_maintenance      = var.on_host_maintenance
   preemptible              = var.preemptible
   project_id               = var.project_id
