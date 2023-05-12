@@ -29,7 +29,7 @@ This creates a Slurm login node which is:
 * of VM machine type `n2-standard-4`
 
 For a complete example using this module, see
-[slurm-gcp-v5-hpc-centos7.yaml](../../../examples/slurm-gcp-v5-hpc-centos7.yaml).
+[hpc-slurm.yaml](../../../../examples/hpc-slurm.yaml).
 
 ## Custom Images
 

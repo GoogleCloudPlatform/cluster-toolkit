@@ -11,13 +11,12 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-) ![core-badge]
+  * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [cloud-batch.yaml](#cloud-batchyaml-) ![core-badge]
   * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
   * [lustre.yaml](#lustreyaml-) ![core-badge]
-  * [slurm-gcp-v5-hpc-centos7.yaml](#slurm-gcp-v5-hpc-centos7yaml-) ![community-badge]
   * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
   * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-) ![community-badge]
@@ -76,7 +75,7 @@ You can set the configuration using the CLI in the `create` and `expand`
 subcommands as well:
 
 ```shell
-./ghpc create examples/hpc-cluster-small.yaml \
+./ghpc create examples/hpc-slurm.yaml \
   --vars "project_id=${GOOGLE_CLOUD_PROJECT}" \
   --backend-config "bucket=${GCS_BUCKET}"
 ```
@@ -93,6 +92,7 @@ subcommands as well:
 [community-badge]: https://img.shields.io/badge/-community-%23b8def4?style=plastic
 [stable-badge]: https://img.shields.io/badge/-stable-lightgrey?style=plastic
 [experimental-badge]: https://img.shields.io/badge/-experimental-%23febfa2?style=plastic
+[deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic
 
 The example blueprints listed below labeled with the core badge
 (![core-badge]) are located in this folder and are developed and tested by the
@@ -106,7 +106,16 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
 
-### [hpc-cluster-small.yaml] ![core-badge]
+### [hpc-slurm.yaml] ![core-badge]
+
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
+> ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
@@ -118,7 +127,7 @@ needing to request additional quota. The purpose of the `debug` partition is to
 make sure that first time users are not immediately blocked by quota
 limitations.
 
-[hpc-cluster-small.yaml]: ./hpc-cluster-small.yaml
+[hpc-slurm.yaml]: ./hpc-slurm.yaml
 
 #### Compute Partition
 
@@ -128,15 +137,15 @@ uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `-p compute` argument when running `srun`.
 
-#### Quota Requirements for hpc-cluster-small.yaml
+#### Quota Requirements for hpc-slurm.yaml
 
 For this example the following is needed in the selected region:
 
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
-  GB/node** up to 500 GB
-* Compute Engine API: N2 CPUs: **10**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **12**
 * Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
   in `compute` partition up to 1,204
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
@@ -416,47 +425,6 @@ For this example the following is needed in the selected region:
 
 [lustre.yaml]: ./lustre.yaml
 
-### [slurm-gcp-v5-hpc-centos7.yaml] ![community-badge]
-
-> **Warning**: The variables `enable_reconfigure`,
-> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
-> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
-> ```
-
-This example creates an HPC cluster similar to the one created by
-[hpc-cluster-small.yaml], but uses modules built from version 5 of
-[slurm-gcp].
-
-The cluster will support 2 partitions named `debug` and `compute`.
-The `debug` partition is the default partition and runs on smaller
-`n2-standard-2` nodes. The `compute` partition is not default and requires
-specifying in the `srun` command via the `--partition` flag. The `compute`
-partition runs on compute optimized nodes of type `cs-standard-60`. The
-`compute` partition may require additional quota before using.
-
-#### Quota Requirements for slurm-gcp-v5-hpc-centos7.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
-* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
-  GB/node** up to 1,250 GB
-* Compute Engine API: N2 CPUs: **12**
-* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
-  in `compute` partition up to 1,204
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-[slurm-gcp-v5-hpc-centos7.yaml]: ../community/examples/slurm-gcp-v5-hpc-centos7.yaml
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
-
 ### [slurm-gcp-v5-ubuntu2004.yaml] ![community-badge]
 
 > **Warning**: The variables `enable_reconfigure`,
@@ -468,12 +436,8 @@ For this example the following is needed in the selected region:
 > pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
 > ```
 
-Similar to the previous example, but using Ubuntu 20.04 instead of CentOS 7.
+Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
 [Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
-
-This example creates an HPC cluster similar to the one created by
-[hpc-cluster-small.yaml], but uses modules built from version 5 of
-[slurm-gcp] and Ubuntu.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller
@@ -484,6 +448,7 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 
 [Other operating systems]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
 [slurm-gcp-v5-ubuntu2004.yaml]: ../community/examples/slurm-gcp-v5-ubuntu2004.yaml
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
 
 #### Quota Requirements for slurm-gcp-v5-ubuntu2004.yaml
 

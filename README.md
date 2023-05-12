@@ -247,22 +247,19 @@ the same as the source module, for example the
 A hidden directory containing meta information and backups is also created and
 named `.ghpc`.
 
-From the [hpc-cluster-small.yaml example](./examples/hpc-cluster-small.yaml), we
+From the [hpc-slurm.yaml example](./examples/hpc-slurm.yaml), we
 get the following deployment directory:
 
 ```text
-hpc-small/
+hpc-slurm/
   primary/
     main.tf
-    variables.tf
-    terraform.tfvars
     modules/
-      filestore/
-      SchedMD-slurm-on-gcp-controller/
-      SchedMD-slurm-on-gcp-login-node/
-      SchedMD-slurm-on-gcp-partition/
-      vpc/
-    .ghpc/
+    providers.tf
+    terraform.tfvars
+    variables.tf
+    versions.tf
+  .ghpc/
 ```
 
 ## Dependencies

@@ -35,9 +35,6 @@ This creates a Slurm login node which is:
   `use`
 * of VM machine type `n2-standard-4`
 
-For more context see the
-[hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml)
-
 ## GPU Support
 
 More information on GPU support in Slurm on GCP and other HPC Toolkit modules

@@ -76,7 +76,7 @@ This file describes the cluster you will deploy. It contains:
   * a Slurm controller
   * several auto-scaling Slurm partitions
 
-Do you notice the difference between this blueprint and the hpc-cluster-small example?
+Do you notice the difference between this blueprint and the hpc-slurm example?
 
 After you have inspected the file, use the ghpc binary to create a deployment folder by running:
 
