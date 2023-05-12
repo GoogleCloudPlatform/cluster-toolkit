@@ -229,7 +229,7 @@ When you are done, clean up the resources in reverse order of creation:
 
 ```text
 terraform -chdir=image-builder-001/cluster destroy --auto-approve
-terraform -chdir=image-builder-001/builder-env destroy --auto-approve
+terraform -chdir=image-builder-001/primary destroy --auto-approve
 ```
 
 Finally, browse to the [Cloud Console][console-images] to delete your custom
