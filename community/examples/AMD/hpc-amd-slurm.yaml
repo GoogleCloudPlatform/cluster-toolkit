@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-blueprint_name: hpc-cluster-amd
+blueprint_name: hpc-amd-slurm
 
 vars:
   project_id:  ## Set GCP Project ID Here ##

@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: daos-slurm
+blueprint_name: hpc-slurm-daos
 
 vars:
   project_id:  ## Set GCP Project ID Here ##

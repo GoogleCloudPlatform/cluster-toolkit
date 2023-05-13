@@ -27,7 +27,7 @@ share a software stack.
 ## Example
 
 As an example, the below is a possible definition of a spack installation. To
-see this module used in a full blueprint, see the [spack-gromacs.yaml] example.
+see this module used in a full blueprint, see the [hpc-slurm-gromacs.yaml] example.
 
 ```yaml
   - id: spack
@@ -115,7 +115,7 @@ Alternatively, it can be added as a startup script via:
       - $(spack.install_spack_runner)
 ```
 
-[spack-gromacs.yaml]: ../../../examples/spack-gromacs.yaml
+[hpc-slurm-gromacs.yaml]: ../../../examples/hpc-slurm-gromacs.yaml
 
 ## Environment Setup
 
