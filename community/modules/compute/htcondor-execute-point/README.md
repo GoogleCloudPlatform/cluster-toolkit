@@ -58,7 +58,7 @@ queue
 
 A full example can be found in the [examples README][htc-example].
 
-[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
+[htc-example]: ../../../../examples/README.md#hpc-htcondoryaml--
 
 The following code snippet creates a pool with 2 sets of HTCondor execute
 points, one using On-demand pricing and the other using Spot pricing. They use
