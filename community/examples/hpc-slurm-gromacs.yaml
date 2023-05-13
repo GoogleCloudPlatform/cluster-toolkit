@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: spack-gromacs
+blueprint_name: hpc-slurm-gromacs
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: spack-gromacs
+  deployment_name: hpc-slurm-gromacs
   region: us-central1
   zone: us-central1-c
 

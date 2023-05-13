@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: hpc-cluster-intel-select
+blueprint_name: hpc-intel-select-slurm
 
 vars:
   deployment_name: hpc-intel-select

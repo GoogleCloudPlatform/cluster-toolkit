@@ -75,7 +75,7 @@ And the following available quota is required in the region used by the cluster:
 Use `ghpc` to provision the blueprint, supplying your project ID
 
 ```text
-ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/hpc-cluster-intel-select.yaml
+ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/hpc-intel-select-slurm.yaml
 ```
 
 This will create a set of directories containing Terraform modules and Packer
@@ -401,7 +401,7 @@ terraform -chdir=pfs-daos/primary destroy
 
 ## DAOS Server with Slurm cluster
 
-The [daos-slurm.yaml](daos-slurm.yaml) blueprint describes an environment with a Slurm cluster and four DAOS server instances. The compute nodes are configured as DAOS clients and have the ability to use the DAOS filesystem on the DAOS server instances.
+The [hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) blueprint describes an environment with a Slurm cluster and four DAOS server instances. The compute nodes are configured as DAOS clients and have the ability to use the DAOS filesystem on the DAOS server instances.
 
 The blueprint uses modules from
 - [google-cloud-daos][google-cloud-daos]
@@ -453,7 +453,7 @@ For Slurm:
 Use `ghpc` to provision the blueprint, supplying your project ID
 
 ```text
-ghpc create community/examples/intel/daos-slurm.yaml \
+ghpc create community/examples/intel/hpc-slurm-daos.yaml \
   --vars project_id=<<PROJECT_ID>> \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
@@ -494,7 +494,7 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 
 ### Create and Mount a DAOS Container
 
-The [community/examples/intel/daos-slurm.yaml](daos-slurm.yaml) blueprint defines a single DAOS pool named `pool1`. The pool will be created when the *daos-server* instances are provisioned.
+The [community/examples/intel/hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) blueprint defines a single DAOS pool named `pool1`. The pool will be created when the *daos-server* instances are provisioned.
 
 You will need to create your own DAOS container in the pool that can be used by your Slurm jobs.
 

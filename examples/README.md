@@ -19,13 +19,13 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
   * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
-  * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-) ![community-badge]
+  * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
-  * [daos-slurm.yaml](#daos-slurmyaml-) ![community-badge]
-  * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-) ![community-badge]
+  * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
+  * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
-  * [spack-gromacs.yaml](#spack-gromacsyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--) ![community-badge] ![experimental-badge]
@@ -576,14 +576,14 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [hpc-cluster-intel-select.yaml] ![community-badge]
+### [hpc-intel-select-slurm.yaml] ![community-badge]
 
 This example provisions a Slurm cluster automating the [steps to comply to the
 Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
 more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
-[hpc-cluster-intel-select.yaml]: ../community/examples/intel/hpc-cluster-intel-select.yaml
+[hpc-intel-select-slurm.yaml]: ../community/examples/intel/hpc-intel-select-slurm.yaml
 [intel-examples-readme]: ../community/examples/intel/README.md
 [intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
 
@@ -595,15 +595,15 @@ examples][intel-examples-readme].
 [pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
 [migs]: https://cloud.google.com/compute/docs/instance-groups
 
-### [daos-slurm.yaml] ![community-badge]
+### [hpc-slurm-daos.yaml] ![community-badge]
 
 This example provisions DAOS servers and a Slurm cluster. It is
 more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
-[daos-slurm.yaml]: ../community/examples/intel/daos-slurm.yaml
+[hpc-slurm-daos.yaml]: ../community/examples/intel/hpc-slurm-daos.yaml
 
-### [hpc-cluster-amd-slurmv5.yaml] ![community-badge]
+### [hpc-amd-slurm.yaml] ![community-badge]
 
 This example provisions a Slurm cluster using AMD VM machine types. It
 automates the initial setup of Spack, including a script that can be used to
@@ -611,7 +611,7 @@ install the AMD Optimizing C/C++ Compiler ([AOCC]) and compile OpenMPI with
 AOCC. It is more extensively discussed in a dedicated [README for AMD
 examples][amd-examples-readme].
 
-[hpc-cluster-amd-slurmv5.yaml]: ../community/examples/AMD/hpc-cluster-amd-slurmv5.yaml
+[hpc-amd-slurm.yaml]: ../community/examples/AMD/hpc-amd-slurm.yaml
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
@@ -685,7 +685,7 @@ and then installs ramble using the
 
 [ramble.yaml]: ../community/examples/ramble.yaml
 
-### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Spack is an HPC software package manager. This example creates a small Slurm
 cluster with software installed using the
@@ -731,7 +731,7 @@ spack load gromacs
 > hours to run on startup. To decrease this time in future deployments, consider
 > including a spack build cache as described in the comments of the example.
 
-[spack-gromacs.yaml]: ../community/examples/spack-gromacs.yaml
+[hpc-slurm-gromacs.yaml]: ../community/examples/hpc-slurm-gromacs.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
