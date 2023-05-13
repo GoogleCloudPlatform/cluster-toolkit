@@ -57,7 +57,7 @@ To create a deployment, an input blueprint file needs to be written or adapted
 from one of the examples found in the `examples/` or `community/examples`
 directories.
 
-This tutorial will use community/examples/htcondor-pool.yaml, which provisions
+This tutorial will use `community/examples/hpc-htcondor.yaml`, which provisions
 a basic auto-scaling HTCondor pool.
 
 * a new VPC network secured from the public internet
@@ -66,14 +66,14 @@ a basic auto-scaling HTCondor pool.
 * a Managed Instance Group to scale a pool of HTCondor Execute Points to serve
   new jobs as they are submitted
 
-The blueprint community/examples/htcondor-pool.yaml should be open in the Cloud
+The blueprint `community/examples/hpc-htcondor.yaml` should be open in the Cloud
 Shell Editor (on the left).
 
 This file describes the cluster you will deploy. After you have inspected the
 file, use the ghpc binary to create a deployment directory by running:
 
 ```bash
-./ghpc create community/examples/htcondor-pool.yaml --vars "project_id=<walkthrough-project-id/>"
+./ghpc create community/examples/hpc-htcondor.yaml --vars "project_id=<walkthrough-project-id/>"
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the

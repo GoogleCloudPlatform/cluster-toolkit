@@ -29,7 +29,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--) ![community-badge] ![experimental-badge]
-  * [htcondor-pool.yaml](#htcondor-poolyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-htcondor.yaml](#hpc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [gke.yaml](#gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#mlgkeyaml--) ![community-badge] ![experimental-badge]
   * [starccm-tutorial.yaml](#starccm-tutorialyaml--) ![community-badge] ![experimental-badge]
@@ -771,7 +771,7 @@ nodes)
 
 [hpc-cluster-localssd.yaml]: ../community/examples/hpc-cluster-localssd.yaml
 
-### [htcondor-pool.yaml] ![community-badge] ![experimental-badge]
+### [hpc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
 the [HPC VM Image][hpcvmimage].
@@ -780,7 +780,7 @@ Also see the [tutorial](../docs/tutorials/README.md#htcondor-tutorial), which
 walks through the use of this blueprint.
 
 [htcondor]: https://htcondor.org/
-[htcondor-pool.yaml]: ../community/examples/htcondor-pool.yaml
+[hpc-htcondor.yaml]: ../community/examples/hpc-htcondor.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
 ### [gke.yaml] ![community-badge] ![experimental-badge]
