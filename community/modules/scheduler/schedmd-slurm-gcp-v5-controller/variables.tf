@@ -345,8 +345,12 @@ EOD
 
 variable "network_ip" {
   type        = string
-  description = "Private IP address to assign to the instance if desired."
-  default     = ""
+  description = "DEPRECATED: Use `static_ips` variable to assign an internal static ip address."
+  default     = null
+  validation {
+    condition     = var.network_ip == null
+    error_message = "network_ip is deprecated. Use static_ips to assign an internal static ip address."
+  }
 }
 
 variable "network_storage" {
