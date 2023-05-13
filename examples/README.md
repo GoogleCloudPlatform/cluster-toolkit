@@ -16,7 +16,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [cloud-batch.yaml](#cloud-batchyaml-) ![core-badge]
   * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
-  * [lustre.yaml](#lustreyaml-) ![core-badge]
+  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
   * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
   * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-) ![community-badge]
@@ -398,7 +398,7 @@ The blueprint contains the following:
 
 [batch-mpi.yaml]: ../examples/batch-mpi.yaml
 
-### [lustre.yaml] ![core-badge]
+### [pfs-lustre.yaml] ![core-badge]
 
 Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
 
@@ -415,7 +415,7 @@ After the creation of the file-system and the client instances, the lustre drive
 watch mount -t lustre
 ```
 
-#### Quota Requirements for lustre.yaml
+#### Quota Requirements for pfs-lustre.yaml
 
 For this example the following is needed in the selected region:
 
@@ -423,7 +423,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Persistent Disk Standard (GB): **~756GB: 20GB MDS, 276GB MGS, 3x20GB OSS, 2x200GB client-vms**
 * Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
 
-[lustre.yaml]: ./lustre.yaml
+[pfs-lustre.yaml]: ./pfs-lustre.yaml
 
 ### [slurm-gcp-v5-ubuntu2004.yaml] ![community-badge]
 
