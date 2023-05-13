@@ -37,7 +37,7 @@ information about the Ubuntu Google Cloud images, see the Canonical
 [documentation](https://ubuntu.com/server/docs/cloud-images/google-cloud-engine).
 
 To use the Ubuntu images with the `schedmd-slurm-gcp-v5` modules, follow
-the pattern used in the [slurm-gcp-v5-ubuntu2004.yaml] example.
+the pattern used in the [hpc-slurm-ubuntu2004.yaml] example.
 
 In most other modules that provide the option to set a VM image, you can set it
 to use the Ubuntu image with the following:
@@ -55,7 +55,7 @@ settings:
 [DDN-EXAScaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [exascalerimages]: https://github.com/DDNStorage/exascaler-cloud-terraform/blob/master/gcp/README.md#boot-image-options
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
-[slurm-gcp-v5-ubuntu2004.yaml]: ../community/examples/slurm-gcp-v5-ubuntu2004.yaml
+[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 
 ## Other Images
 

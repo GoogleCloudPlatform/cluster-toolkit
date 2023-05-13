@@ -12,13 +12,11 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
-  * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
-  * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
-  * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
+  * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
@@ -27,7 +25,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
-  * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml-) ![community-badge]
+  * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hpc-htcondor.yaml](#hpc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
@@ -152,54 +151,6 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
-
-### [hpc-cluster-high-io.yaml] ![core-badge]
-
-Creates a Slurm cluster with tiered file systems for higher performance. It
-connects to the default VPC of the project and creates two partitions and a
-login node.
-
-File systems:
-
-* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
-  1 TiB of capacity
-* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-  instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
-
-There are two partitions in this example: `low_cost` and `compute`. The
-`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
-debugging and workloads that do not require high performance.
-
-Similar to the small example, there is a
-[compute partition](#compute-partition) that should be used for any performance
-analysis.
-
-#### Quota Requirements for hpc-cluster-high-io.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
-  quota request is 61,440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
-  GB/node** up to 4596 GB
-* Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
-  in `compute` partition up to 12,008
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-[hpc-cluster-high-io.yaml]: ./hpc-cluster-high-io.yaml
 
 ### [image-builder.yaml] ![core-badge]
 
@@ -425,7 +376,7 @@ For this example the following is needed in the selected region:
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
 
-### [slurm-gcp-v5-ubuntu2004.yaml] ![community-badge]
+### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
 > **Warning**: The variables `enable_reconfigure`,
 > `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
@@ -447,10 +398,10 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 `compute` partition may require additional quota before using.
 
 [Other operating systems]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-[slurm-gcp-v5-ubuntu2004.yaml]: ../community/examples/slurm-gcp-v5-ubuntu2004.yaml
+[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
 
-#### Quota Requirements for slurm-gcp-v5-ubuntu2004.yaml
+#### Quota Requirements for hpc-slurm-ubuntu2004.yaml
 
 For this example the following is needed in the selected region:
 
@@ -461,116 +412,6 @@ For this example the following is needed in the selected region:
 * Compute Engine API: N2 CPUs: **12**
 * Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
   in `compute` partition up to 1,204
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-### [slurm-gcp-v5-high-io.yaml] ![community-badge]
-
-> **Warning**: The variables `enable_reconfigure`,
-> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
-> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
-> ```
-
-This example uses [Slurm on GCP][slurm-gcp] version 5.x modules to replicate the
-[hpc-cluster-high-io.yaml] core example. With version 5, additional features are
-available and utilized in this example:
-
-* node groups are used to allow multiple machine types in a single partition,
-  differentiated by node names.
-* Active cluster reconfiguration is on by default. When updating a partition or
-  cluster configuration, the overwrite option (`-w`) can be used and upon
-  re-applying the deployment, the changes will become active without having to
-  destroy and recreate the cluster.
-
-This blueprint will create a cluster with the following storage tiers:
-
-* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
-  1 TiB of capacity
-* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-  instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
-
-The cluster will support 2 partitions:
-
-* `lowcost`
-  * Includes two node groups, `n2s2` of machine type `n2-standard-2` and `n2s4`
-    of machine type `n2-standard-4`.
-  * Default partition.
-  * Designed to run with lower cost nodes and within a typical project's default
-    quota.
-* `compute`
-  * Includes two node groups, `c2s60` of machine type `c2-standard-60` and
-    `c2s30` of machine type `c2-standard-30`.
-  * Can be used by setting the `--partition` option in `srun` to `compute`.
-  * Designed for performance, but may require additional quota before using.
-
-[slurm-gcp-v5-high-io.yaml]: ../community/examples/slurm-gcp-v5-high-io.yaml
-
-#### Usage of Node Groups
-This example defines partitions with more than one node group each. For more
-information on node groups and why they are used, see the documentation in the
-[schedmd-slurm-gcp-v5-node-group] module documentation. Some reference commands
-are listed here for specifying not only the partition, but also the correct node
-group when executing a Slurm command on a cluster generated by this blueprint.
-
-Partition: compute; Node Group: c2s30; Machine Type: c2-standard-30
-
-```bash
-srun -N 4 -p compute -w highioslur-compute-c2s30-[0-3] hostname
-```
-
-Partition: compute; Node Group: c2s60; Machine Type: c2-standard-60
-
-```bash
-srun -N 4 -p compute --mincpus=30 hostname
-```
-
-Partition: lowcost; Node Group: n2s2; Machine Type: n2-standard-2
-
-```bash
-srun -N 4 -w highioslur-lowcost-n2s2-[0-3] hostname
-```
-
-Partition: lowcost; Node Group: n2s4; Machine Type: n2-standard-4
-
-```bash
-srun -N 4 --mincpus=2 hostname
-```
-
-[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
-
-#### Quota Requirements for slurm-gcp-v5-high-io.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
-  quota request is 61,440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
-  GB/node** up to 4596 GB
-* Compute Engine API: N2 CPUs:
-  * **4** for the login node
-  * **2** per node for active nodes in the `n2s2` group, maximum 20.
-  * **4** per node for active nodes in the `n2s4` group, maximum 40.
-  * Maximum possible: **64**
-* Compute Engine API: C2 CPUs:
-  * **8** for controller node
-  * **60** per node for active nodes in the `c2s60` group, maximum 12,000.
-  * **30** per node for active nodes in the `c2s30` group, maximum 6,000.
-  * Maximum possible: **18,008**
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
@@ -750,14 +591,62 @@ the nodes are provisioned. All nodes mount a filestore instance on `/home`.
 [omnia-github]: https://github.com/dellhpc/omnia
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
-### [hpc-cluster-small-sharedvpc.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-legacy.yaml] ![core-badge]
+
+Creates a Slurm cluster with tiered file systems for higher performance. It
+connects to the default VPC of the project and creates two partitions and a
+login node.
+
+File systems:
+
+* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
+  1 TiB of capacity
+* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
+  instance with 10TiB of capacity.
+* The scratchfs is mounted at `/scratch` and is a
+  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+  file system designed for high IO performance. The capacity is ~10TiB.
+
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+
+There are two partitions in this example: `low_cost` and `compute`. The
+`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
+debugging and workloads that do not require high performance.
+
+Similar to the small example, there is a
+[compute partition](#compute-partition) that should be used for any performance
+analysis.
+
+#### Quota Requirements for hpc-slurm-legacy.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
+  quota request is 61,440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
+  GB/node** up to 4596 GB
+* Compute Engine API: N2 CPUs: **158**
+* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
+  in `compute` partition up to 12,008
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+[hpc-slurm-legacy.yaml]: ../community/examples/hpc-slurm-legacy.yaml
+
+### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of the Slurm and Filestore modules in
 the service project of an existing Shared VPC.  Before attempting to deploy the
 blueprint, one must first complete [initial setup for provisioning Filestore in
 a Shared VPC service project][fs-shared-vpc].
 
-[hpc-cluster-small-sharedvpc.yaml]: ../community/examples/hpc-cluster-small-sharedvpc.yaml
+[hpc-slurm-legacy-sharedvpc.yaml]: ../community/examples/hpc-slurm-legacy-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
 ### [hpc-slurm-local-ssd.yaml] ![community-badge] ![experimental-badge]

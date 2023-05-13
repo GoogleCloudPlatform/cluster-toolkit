@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,26 +14,13 @@
 
 ---
 
-blueprint_name: hpc-cluster-small-sharedvpc
-
-# IMPORTANT NOTES
-#
-# 1. This blueprint expects a Shared VPC to exist and has already been shared
-#    from a Host project to a Service project.
-# 2. It also anticipates that the custom steps for provisioning a Filestore
-#    instance in a Shared VPC in a service project have been completed:
-#
-#    https://cloud.google.com/filestore/docs/shared-vpc
-#
-# 3. Replace project_id, host_project_id, network_name, subnetwork_name with
-#    valid values in your environment
+blueprint_name: hpc-slurm-legacy
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  host_project_id: your-host-project
-  deployment_name: hpc-small-shared-vpc
-  region: us-central1
-  zone: us-central1-c
+  deployment_name: hpc-high-io
+  region: us-west4
+  zone: us-west4-c
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -41,59 +28,84 @@ vars:
 deployment_groups:
 - group: primary
   modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/pre-existing-vpc
   - id: network1
     source: modules/network/pre-existing-vpc
-    settings:
-      project_id: $(vars.host_project_id)
-      network_name: your-shared-network
-      subnetwork_name: your-shared-subnetwork
 
   - id: homefs
     source: modules/file-system/filestore
     use: [network1]
     settings:
       local_mount: /home
-      connect_mode: PRIVATE_SERVICE_ACCESS
 
-  # This debug_partition will work out of the box without requesting additional GCP quota.
-  - id: debug_partition
+  - id: projectsfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240
+      local_mount: /projects
+
+  # This file system has an associated license cost.
+  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
+  - id: scratchfs
+    source: community/modules/file-system/DDN-EXAScaler
+    use: [network1]
+    settings:
+      local_mount: /scratch
+
+  - id: low_cost_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     use:
     - network1
     - homefs
+    - scratchfs
+    - projectsfs
     settings:
-      partition_name: debug
-      max_node_count: 4
+      partition_name: low_cost
+      max_node_count: 10
       enable_placement: false
       exclusive: false
-      machine_type: n2-standard-2
+      machine_type: n2-standard-4
 
-  # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
+  # This compute_partition is far more performant than low_cost_partition.
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     use:
     - network1
     - homefs
+    - scratchfs
+    - projectsfs
     settings:
+      max_node_count: 200
       partition_name: compute
-      max_node_count: 20
 
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     use:
     - network1
     - homefs
-    - debug_partition  # debug partition will be default as it is listed first
+    - scratchfs
+    - projectsfs
+    - low_cost_partition  # low cost partition will be default as it is listed first
     - compute_partition
     settings:
-      login_node_count: 1
-      shared_vpc_host_project: $(vars.host_project_id)
+      controller_machine_type: c2-standard-8
+      suspend_time: 60
 
   - id: slurm_login
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     use:
     - network1
     - homefs
+    - scratchfs
+    - projectsfs
     - slurm_controller
     settings:
-      shared_vpc_host_project: $(vars.host_project_id)
+      login_machine_type: n2-standard-4
+
+  - id: hpc_dashboard
+    source: modules/monitoring/dashboard
+    outputs: [instructions]

@@ -18,7 +18,7 @@ test_name: hpc-high-io
 deployment_name: "hpc-high-io-{{ build }}"
 zone: us-west4-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/hpc-cluster-high-io.yaml"
+blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-legacy.yaml"
 network: "default"
 max_nodes: 5
 login_node: "slurm-{{ deployment_name }}-login0"

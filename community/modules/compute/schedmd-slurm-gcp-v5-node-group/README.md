@@ -5,9 +5,7 @@ This module creates a node group data structure intended to be input to the
 
 Node groups allow adding heterogeneous node types to a partition, and hence
 running jobs that mix multiple node characteristics. See the [heterogeneous jobs
-section][hetjobs] of the SchedMD documentation for more information. An example
-of multiple node groups being used can be found in the
-[slurm-gcp-v5-high-io.yaml] blueprint.
+section][hetjobs] of the SchedMD documentation for more information.
 
 To specify nodes from a specific node group in a partition, the [`--nodelist`]
 (or `-w`) flag can be used, for example:
@@ -23,7 +21,6 @@ Additionally, depending on how the nodes differ, a constraint can be added via
 the [`--constraint`] (or `-C`) flag or other flags such as `--mincpus` can be
 used to specify nodes with the desired characteristics.
 
-[slurm-gcp-v5-high-io.yaml]: ../../../examples/slurm-gcp-v5-high-io.yaml
 [`--nodelist`]: https://slurm.schedmd.com/srun.html#OPT_nodelist
 [`--constraint`]: https://slurm.schedmd.com/srun.html#OPT_constraint
 [hetjobs]: https://slurm.schedmd.com/heterogeneous_jobs.html
