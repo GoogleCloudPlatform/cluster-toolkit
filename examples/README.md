@@ -14,8 +14,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
-  * [cloud-batch.yaml](#cloud-batchyaml-) ![core-badge]
-  * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
+  * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
+  * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
   * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
@@ -28,12 +28,12 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hpc-htcondor.yaml](#hpc-htcondoryaml--) ![community-badge] ![experimental-badge]
-  * [gke.yaml](#gkeyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#mlgkeyaml--) ![community-badge] ![experimental-badge]
-  * [starccm-tutorial.yaml](#starccm-tutorialyaml--) ![community-badge] ![experimental-badge]
-  * [fluent-tutorial.yaml](#fluent-tutorialyaml--) ![community-badge] ![experimental-badge]
+  * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
+  * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -328,7 +328,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [cloud-batch.yaml] ![core-badge]
+### [serverless-batch.yaml] ![core-badge]
 
 This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
 that mounts a Filestore instance and runs startup scripts.
@@ -340,9 +340,9 @@ renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
-[cloud-batch.yaml]: ../examples/cloud-batch.yaml
+[serverless-batch.yaml]: ../examples/serverless-batch.yaml
 
-### [batch-mpi.yaml] ![core-badge]
+### [serverless-batch-mpi.yaml] ![core-badge]
 
 This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
 
@@ -396,7 +396,7 @@ The blueprint contains the following:
     job has finished this folder will contain the results of the job. You can
     inspect the `rsl.out.0000` file for a summary of the job.
 
-[batch-mpi.yaml]: ../examples/batch-mpi.yaml
+[serverless-batch-mpi.yaml]: ../examples/serverless-batch-mpi.yaml
 
 ### [pfs-lustre.yaml] ![core-badge]
 
@@ -760,7 +760,7 @@ a Shared VPC service project][fs-shared-vpc].
 [hpc-cluster-small-sharedvpc.yaml]: ../community/examples/hpc-cluster-small-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
-### [hpc-cluster-localssd.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-local-ssd.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of Slurm and Filestore, with the definition
 of a partition which deploys compute nodes that have local ssd drives deployed.
@@ -769,7 +769,7 @@ properly configured (allowing Internet access and allowing inter virtual
 machine communications, for NFS and also for communications between the Slurm
 nodes)
 
-[hpc-cluster-localssd.yaml]: ../community/examples/hpc-cluster-localssd.yaml
+[hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
 
 ### [hpc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
@@ -783,7 +783,7 @@ walks through the use of this blueprint.
 [hpc-htcondor.yaml]: ../community/examples/hpc-htcondor.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
-### [gke.yaml] ![community-badge] ![experimental-badge]
+### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint uses GKE to provision a Kubernetes cluster with a system node
 pool (included in gke-cluster module) and an autoscaling compute node pool. It
@@ -793,7 +793,7 @@ secondary IP ranges defined.
 The `gke-job-template` module is used to create a job file that can be submitted
 to the cluster using `kubectl` and will run on the specified node pool.
 
-[gke.yaml]: ../community/examples/gke.yaml
+[hpc-gke.yaml]: ../community/examples/hpc-gke.yaml
 
 ### [ml-gke.yaml] ![community-badge] ![experimental-badge]
 
@@ -826,23 +826,23 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 [ml-gke.yaml]: ../community/examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
-### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
+### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
 tutorial.
 
 > The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-star-ccm/run-workload).
 
-[starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
+[tutorial-starccm.yaml]: ../community/examples/tutorial-starccm.yaml
 
-### [fluent-tutorial.yaml] ![community-badge] ![experimental-badge]
+### [tutorial-fluent.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a simple cluster for use with an Ansys Fluent
 tutorial.
 
 > The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/tutorials/ansys-fluent).
 
-[fluent-tutorial.yaml]: ../community/examples/fluent-tutorial.yaml
+[tutorial-fluent.yaml]: ../community/examples/tutorial-fluent.yaml
 
 ## Blueprint Schema
 
