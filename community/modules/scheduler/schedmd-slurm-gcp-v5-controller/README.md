@@ -67,6 +67,18 @@ activated through the `enable_reconfigure` setting:
     enable_reconfigure: true
 ```
 
+To reconfigure a running cluster:
+
+1. Edit the blueprint with the desired configuration changes
+1. Call `ghpc create <blueprint> -w` to overwrite the deployment directory
+1. Follow instructions in terminal to deploy
+
+The following are examples of updates that can be made to a running cluster:
+
+* Add or remove a partition to the cluster
+* Resize an existing partition
+* Attach new network storage to an existing partition
+
 This option has some additional requirements:
 
 * The Pub/Sub API must be activated in the target project:
@@ -78,27 +90,10 @@ This option has some additional requirements:
   development environment deploying the cluster. One can use following commands:
 
   ```bash
-  wget https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
-  pip3 install -r requirements.txt --user
+  pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt --user
   ```
   
   For more information, see the [description][optdeps] of this module.
-* The project in your gcloud config must match the project the cluster is being
-  deployed onto due to a known issue with the reconfigure scripts. To set your
-  default config project, run the following command:
-
-  ```bash
-  gcloud config set core/project <<PROJECT ID>>
-  ```
-
-  If the gcloud project ID is not properly set you may see an error during
-  terraform deployment similar to the following:
-
-  ```text
-  google.api_core.exceptions.NotFound: 404 Resource not found
-  Could not find in SpannerConfigStore:
-  TopicByProjectIdAndName(project_id=<incorrect project #>, topic_name=<topic name>)
-  ```
 
 [optdeps]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2/terraform/slurm_cluster#optional
 
