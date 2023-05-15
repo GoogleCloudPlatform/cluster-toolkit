@@ -114,7 +114,7 @@ compact set of subnetworks possible.
 
 [cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/subnets
 
-## SSH Access
+### SSH Access
 
 By default a firewall rule is created to allow inbound SSH access from
 [Identity-Aware Proxy][iap]. A user must have the `IAP-Secured Tunnel User`
