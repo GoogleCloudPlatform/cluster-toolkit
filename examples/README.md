@@ -12,6 +12,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
+  * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
@@ -151,6 +152,92 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
+
+### [hpc-enterprise-slurm.yaml] ![core-badge]
+
+This advanced blueprint creates a cluster with Slurm with several performance
+tunings enabled, along with tiered file systems for higher performance. Some of
+these features come with additional cost and required additional quotas.
+
+The Slurm system deployed here connects to the default VPC of the project and
+creates a  login node and the following six partitions:
+
+* `n2` with general-purpose [`n2-stardard-2` nodes][n2]. Placement policies and
+exclusive usage are disabled, which means the nodes can be used for multiple jobs.
+Nodes will remain idle for 5 minutes before Slurm deletes them. This partition can
+be used for debugging and workloads that do not require high performance.
+* `c2` with compute-optimized [`c2-standard-60` nodes][c2] based on Intel 3.9 GHz
+Cascade Lake processors.
+* `c2d` with compute optimized [`c2d-standard-112` nodes][c2d] base on the third
+generation AMD EPYC Milan.
+* `c3` with compute-optimized [`c3-highcpu-176` nodes][c3] based on Intel Sapphire
+Rapids processors. When configured with Tier_1 networking, C3 nodes feature 200 Gbps
+low-latency networking.
+* `a208` with [`a2-ultragpu-8g` nodes][a2] with 8 of the NVIDIA A100 GPU accelerators
+with 80GB of GPU memory each.
+* `a216` with [`a2-megagpu-16g` nodes][a2] with 16 of the NVIDIA A100 GPU accelerators
+with 40GB of GPU memory each.
+
+For all partions other than `n2`, [compact placement] policies are enabled by default
+and nodes are created and destroyed on a per-job basis. Furthermore, these partitions
+are configured with:
+
+* Faster networking: Google Virtual NIC ([GVNIC]) is used for the GPU partitions and
+[Tier_1] is selected when available. Selecting Tier_1 automatically enables GVNIC.
+* SSD PDs disks for compute nodes. See the [Storage options] page for more details.
+
+[n2]: https://cloud.google.com/compute/docs/general-purpose-machines#n2_series
+[c2]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2_machine_types
+[c2d]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2d_machine_types
+[c3]: https://cloud.google.com/blog/products/compute/introducing-c3-machines-with-googles-custom-intel-ipu
+[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
+[compact placement]: https://cloud.google.com/compute/docs/instances/define-instance-placement
+[GVNIC]: https://cloud.google.com/compute/docs/networking/using-gvnic
+[Tier_1]: https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration
+[Storage options]: https://cloud.google.com/compute/docs/disks
+
+File systems:
+
+* The homefs mounted at `/home` uses the "BASIC_SSD" tier filestore with
+  2.5 TiB of capacity
+* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
+  instance with 10TiB of capacity.
+* The scratchfs is mounted at `/scratch` and is a
+  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+  file system designed for high IO performance. The capacity is ~10TiB.
+
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+
+#### Quota Requirements for hpc-enterprise-slurm.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic SSD capacity (GB) per region: **2,560 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** -
+  _min quota request is 61,440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB** static +
+  **100 GB/node** up to 23,250 GB
+* Compute Engine API: Persistent Disk Standard (GB): **~396 GB** static +
+  **50 GB/node** up to 596 GB
+* Compute Engine API: N2 CPUs: **116** for login and lustre and **2/node** active
+ in `n2` partition up to 124.
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `c2` partition up to 1,204
+* Compute Engine API: C2D CPUs: **112/node** active in `c2d` partition up to 2,240
+* Compute Engine API: C3 CPUs: **176/node** active in `c3` partition up to 3,520
+* Compute Engine API: A2 CPUs: **96/node** active in `a208` and `a216` partitions
+up to 3,072
+* Compute Engine API: NVIDIA A100 80GB GPUs: **8/node** active in `a208` partition
+ up to 128
+* Compute Engine API: NVIDIA A100 GPUs: **8/node** active in `a216` partition up
+to 256
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _not needed for `n2` partition_
+
+[hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
 
 ### [image-builder.yaml] ![core-badge]
 
