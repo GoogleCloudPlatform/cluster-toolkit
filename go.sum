@@ -165,8 +165,8 @@ cloud.google.com/go/securitycenter v1.13.0/go.mod h1:cv5qNAqjY84FCN6Y9z28WlkKXyW
 cloud.google.com/go/securitycenter v1.14.0/go.mod h1:gZLAhtyKv85n52XYWt6RmeBdydyxfPeTrpToDPw4Auc=
 cloud.google.com/go/servicedirectory v1.4.0/go.mod h1:gH1MUaZCgtP7qQiI+F+A+OpeKF/HQWgtAddhTbhL2bs=
 cloud.google.com/go/servicedirectory v1.5.0/go.mod h1:QMKFL0NUySbpZJ1UZs3oFAmdvVxhhxB6eJ/Vlp73dfg=
-cloud.google.com/go/serviceusage v1.6.0 h1:rXyq+0+RSIm3HFypctp7WoXxIA563rn206CfMWdqXX4=
-cloud.google.com/go/serviceusage v1.6.0/go.mod h1:R5wwQcbOWsyuOfbP9tGdAnCAc6B9DRwPG1xtWMDeuPA=
+cloud.google.com/go/serviceusage v1.6.1 h1:QQ6EBoMtnQ1bFl4tMB9LYQND/rvImPeB+UscWf3KEao=
+cloud.google.com/go/serviceusage v1.6.1/go.mod h1:XAQuutPnN0SIp7LT0ZRkyeTZDRrW3cMKDgyRDnB64PI=
 cloud.google.com/go/speech v1.6.0/go.mod h1:79tcr4FHCimOp56lwC01xnt/WPJZc4v3gzyT7FoBkCM=
 cloud.google.com/go/speech v1.7.0/go.mod h1:KptqL+BAQIhMsj1kOP2la5DSEEerPDuOP/2mmkhHhZQ=
 cloud.google.com/go/storage v1.0.0/go.mod h1:IhtSnM/ZTZV8YYJWCY8RULGVqBDmpoyjwiyrjsg+URw=
@@ -1018,8 +1018,8 @@ google.golang.org/grpc v1.48.0/go.mod h1:vN9eftEi1UMyUsIF80+uQXhHjbXYbm0uXoFCACu
 google.golang.org/grpc v1.49.0/go.mod h1:ZgQEeidpAuNRZ8iRrlBKXZQP1ghovWIVhdJRyCDK+GI=
 google.golang.org/grpc v1.50.0/go.mod h1:ZgQEeidpAuNRZ8iRrlBKXZQP1ghovWIVhdJRyCDK+GI=
 google.golang.org/grpc v1.50.1/go.mod h1:ZgQEeidpAuNRZ8iRrlBKXZQP1ghovWIVhdJRyCDK+GI=
-google.golang.org/grpc v1.54.0 h1:EhTqbhiYeixwWQtAEZAxmV9MGqcjEU2mFx52xCzNyag=
-google.golang.org/grpc v1.54.0/go.mod h1:PUSEXI6iWghWaB6lXM4knEgpJNu2qUcKfDtNci3EC2g=
+google.golang.org/grpc v1.55.0 h1:3Oj82/tFSCeUrRTg/5E/7d/W5A1tj6Ky1ABAuZuv5ag=
+google.golang.org/grpc v1.55.0/go.mod h1:iYEXKGkEBhg1PjZQvoYEVPTDkHo1/bjTnfwTeGONTY8=
 google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0/go.mod h1:6Kw0yEErY5E/yWrBtf03jp27GLLJujG4z/JK95pnjjw=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=

@@ -22,7 +22,7 @@ require (
 )
 
 require (
-	cloud.google.com/go/serviceusage v1.6.0
+	cloud.google.com/go/serviceusage v1.6.1
 	github.com/go-git/go-billy/v5 v5.4.1
 	github.com/google/go-cmp v0.5.9
 	github.com/googleapis/gax-go/v2 v2.8.0
@@ -82,7 +82,7 @@ require (
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/grpc v1.54.0 // indirect
+	google.golang.org/grpc v1.55.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
