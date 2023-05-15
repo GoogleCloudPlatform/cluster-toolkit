@@ -24,7 +24,7 @@ vars:
   instance_image:
     # Please refer to the following link for the latest images:
     # https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-    family: schedmd-v5-slurm-22-05-8-ubuntu-2004-lts
+    family: schedmd-v5-slurm-22-05-9-ubuntu-2004-lts
     project: projects/schedmd-slurm-public/global/images/family
 
 
