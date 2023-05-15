@@ -30,7 +30,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml-) ![community-badge]
   * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-htcondor.yaml](#hpc-htcondoryaml--) ![community-badge] ![experimental-badge]
+  * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#mlgkeyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
@@ -746,7 +746,7 @@ nodes)
 
 [hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
 
-### [hpc-htcondor.yaml] ![community-badge] ![experimental-badge]
+### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
 the [HPC VM Image][hpcvmimage].
@@ -755,7 +755,7 @@ Also see the [tutorial](../docs/tutorials/README.md#htcondor-tutorial), which
 walks through the use of this blueprint.
 
 [htcondor]: https://htcondor.org/
-[hpc-htcondor.yaml]: ../community/examples/hpc-htcondor.yaml
+[htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
 ### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
