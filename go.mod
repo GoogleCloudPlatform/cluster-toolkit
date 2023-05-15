@@ -28,7 +28,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.8.0
 	github.com/hashicorp/terraform-exec v0.18.1
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
-	google.golang.org/api v0.121.0
+	google.golang.org/api v0.122.0
 )
 
 require github.com/hashicorp/terraform-json v0.15.0 // indirect
