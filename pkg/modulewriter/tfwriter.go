@@ -18,6 +18,7 @@ package modulewriter
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -324,19 +325,19 @@ func writeVersions(dst string) error {
 	return nil
 }
 
-func writeTerraformInstructions(f *os.File, grpPath string, n config.GroupName, printExportOutputs bool, printImportInputs bool) {
-	fmt.Fprintln(f)
-	fmt.Fprintf(f, "Terraform group '%s' was successfully created in directory %s\n", n, grpPath)
-	fmt.Fprintln(f, "To deploy, run the following commands:")
-	fmt.Fprintln(f)
+func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName, printExportOutputs bool, printImportInputs bool) {
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Terraform group '%s' was successfully created in directory %s\n", n, grpPath)
+	fmt.Fprintln(w, "To deploy, run the following commands:")
+	fmt.Fprintln(w)
 	if printImportInputs {
-		fmt.Fprintf(f, "ghpc import-inputs %s\n", grpPath)
+		fmt.Fprintf(w, "ghpc import-inputs %s\n", grpPath)
 	}
-	fmt.Fprintf(f, "terraform -chdir=%s init\n", grpPath)
-	fmt.Fprintf(f, "terraform -chdir=%s validate\n", grpPath)
-	fmt.Fprintf(f, "terraform -chdir=%s apply\n", grpPath)
+	fmt.Fprintf(w, "terraform -chdir=%s init\n", grpPath)
+	fmt.Fprintf(w, "terraform -chdir=%s validate\n", grpPath)
+	fmt.Fprintf(w, "terraform -chdir=%s apply\n", grpPath)
 	if printExportOutputs {
-		fmt.Fprintf(f, "ghpc export-outputs %s\n", grpPath)
+		fmt.Fprintf(w, "ghpc export-outputs %s\n", grpPath)
 	}
 }
 
@@ -350,7 +351,7 @@ func (w TFWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	groupIndex int,
 	deploymentDir string,
-	instructionsFile *os.File,
+	instructionsFile io.Writer,
 ) error {
 	depGroup := dc.Config.DeploymentGroups[groupIndex]
 	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)

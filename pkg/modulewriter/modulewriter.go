@@ -26,6 +26,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/sourcereader"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -51,7 +52,7 @@ type ModuleWriter interface {
 		dc config.DeploymentConfig,
 		grpIdx int,
 		deployDir string,
-		instructionsFile *os.File,
+		instructionsFile io.Writer,
 	) error
 	restoreState(deploymentDir string) error
 	kind() config.ModuleKind
@@ -103,7 +104,8 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		return err
 	}
 	defer f.Close()
-	fmt.Fprintln(f, "# Advanced Deployment Instructions")
+	fmt.Fprintln(f, "Advanced Deployment Instructions")
+	fmt.Fprintln(f, "================================")
 
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
 		writer, ok := kinds[grp.Kind.String()]
@@ -407,36 +409,35 @@ func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
 	return nil
 }
 
-func writeDestroyInstructions(f *os.File, dc config.DeploymentConfig, deploymentDir string) {
-	var printPackerCleanup bool
+func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymentDir string) {
 	packerManifests := []string{}
-	fmt.Fprintln(f)
-	fmt.Fprintln(f, "# Destroying infrastructure when no longer needed")
-	fmt.Fprintln(f)
-	fmt.Fprintln(f, "Infrastructure should be destroyed in reverse order of creation:")
-	fmt.Fprintln(f)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Destroying infrastructure when no longer needed")
+	fmt.Fprintln(w, "===============================================")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Infrastructure should be destroyed in reverse order of creation:")
+	fmt.Fprintln(w)
 	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
 		grp := dc.Config.DeploymentGroups[grpIdx]
 		grpPath := filepath.Join(deploymentDir, string(grp.Name))
 		if grp.Kind == config.TerraformKind {
-			fmt.Fprintf(f, "terraform -chdir=%s destroy\n", grpPath)
+			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)
 		}
 		if grp.Kind == config.PackerKind {
-			printPackerCleanup = true
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
 
 		}
 	}
 
-	if printPackerCleanup {
-		fmt.Fprintln(f)
-		fmt.Fprintf(f, "Please browse to the Cloud Console to remove VM images produced by Packer.\n")
-		fmt.Fprintln(f, "By default, the names of images can be found in these files:")
-		fmt.Fprintln(f)
+	if len(packerManifests) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "Please browse to the Cloud Console to remove VM images produced by Packer.\n")
+		fmt.Fprintln(w, "By default, the names of images can be found in these files:")
+		fmt.Fprintln(w)
 		for _, manifest := range packerManifests {
-			fmt.Fprintln(f, manifest)
+			fmt.Fprintln(w, manifest)
 		}
-		fmt.Fprintln(f)
-		fmt.Fprintln(f, "https://console.cloud.google.com/compute/images")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "https://console.cloud.google.com/compute/images")
 	}
 }
