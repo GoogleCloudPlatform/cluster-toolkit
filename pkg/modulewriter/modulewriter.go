@@ -26,6 +26,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/sourcereader"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -51,6 +52,7 @@ type ModuleWriter interface {
 		dc config.DeploymentConfig,
 		grpIdx int,
 		deployDir string,
+		instructionsFile io.Writer,
 	) error
 	restoreState(deploymentDir string) error
 	kind() config.ModuleKind
@@ -96,6 +98,15 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		return err
 	}
 
+	advancedDeployInstructions := filepath.Join(deploymentDir, "instructions.txt")
+	f, err := os.Create(advancedDeployInstructions)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	fmt.Fprintln(f, "Advanced Deployment Instructions")
+	fmt.Fprintln(f, "================================")
+
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
 		writer, ok := kinds[grp.Kind.String()]
 		if !ok {
@@ -103,11 +114,13 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
 		}
 
-		err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir)
+		err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir, f)
 		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
 	}
+
+	writeDestroyInstructions(f, dc, deploymentDir)
 
 	if err := writeExpandedBlueprint(deploymentDir, dc); err != nil {
 		return err
@@ -120,6 +133,16 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 			}
 		}
 	}
+
+	fmt.Println("To deploy your infrastructure please run:")
+	fmt.Println()
+	fmt.Printf("./ghpc deploy %s\n", deploymentDir)
+	fmt.Println()
+	fmt.Println("Please find instructions for cleanly destroying infrastructure and advanced")
+	fmt.Println("advanced manual deployment instructions at:")
+	fmt.Println()
+	fmt.Printf("%s\n", f.Name())
+
 	return nil
 }
 
@@ -234,11 +257,6 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 
 	}
 	return nil
-}
-
-func printInstructionsPreamble(kind string, path string, name string) {
-	fmt.Printf("%s group '%s' was successfully created in directory %s\n", kind, name, path)
-	fmt.Println("To deploy, run the following commands:")
 }
 
 // Determines if overwrite is allowed
@@ -389,4 +407,37 @@ func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
 	}
 
 	return nil
+}
+
+func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymentDir string) {
+	packerManifests := []string{}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Destroying infrastructure when no longer needed")
+	fmt.Fprintln(w, "===============================================")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Infrastructure should be destroyed in reverse order of creation:")
+	fmt.Fprintln(w)
+	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
+		grp := dc.Config.DeploymentGroups[grpIdx]
+		grpPath := filepath.Join(deploymentDir, string(grp.Name))
+		if grp.Kind == config.TerraformKind {
+			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)
+		}
+		if grp.Kind == config.PackerKind {
+			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
+
+		}
+	}
+
+	if len(packerManifests) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "Please browse to the Cloud Console to remove VM images produced by Packer.\n")
+		fmt.Fprintln(w, "By default, the names of images can be found in these files:")
+		fmt.Fprintln(w)
+		for _, manifest := range packerManifests {
+			fmt.Fprintln(w, manifest)
+		}
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "https://console.cloud.google.com/compute/images")
+	}
 }

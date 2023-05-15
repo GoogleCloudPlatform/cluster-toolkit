@@ -184,7 +184,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(len(files1) > 0, Equals, true)
 
 	files2, _ := ioutil.ReadDir(realDepDir)
-	c.Check(len(files2), Equals, 2) // .ghpc and .gitignore
+	c.Check(len(files2), Equals, 3) // .ghpc, .gitignore, and instructions file
 }
 
 func (s *MySuite) TestIsSubset(c *C) {
@@ -707,9 +707,13 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 			},
 		},
 	}
-
-	testWriter.writeDeploymentGroup(testDC, 0, deploymentDir)
-	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
+	f, err := os.CreateTemp("", "tmpf")
+	if err != nil {
+		c.Fatal()
+	}
+	defer os.Remove(f.Name())
+	testWriter.writeDeploymentGroup(testDC, 0, deploymentDir, f)
+	_, err = os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 
