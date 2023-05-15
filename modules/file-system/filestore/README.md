@@ -84,7 +84,7 @@ been installed and then call the proper `mount` command.
 Both of these steps are automatically handled with the use of the `use` command
 in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
-See the [hpc-slurm-legacy](../../../community/examples/hpc-slurm-legacy.yaml) for
+See the [hpc-slurm](../../../examples/hpc-slurm.yaml) for
 an example of using this module with Slurm.
 
 If mounting is not automatically handled as described above, the `filestore`
