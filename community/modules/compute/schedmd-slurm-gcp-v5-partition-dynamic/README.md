@@ -10,6 +10,25 @@ into their corresponding partition based on node feature.
 > the slurm controller to update its own configurations (`slurm.conf`) unless
 > `enable_reconfigure` is set to true in the partition and controller modules.
 
+## Example
+
+The following example creates a dynamic partition, which is then used by a slurm
+controller. This partition will register nodes that have the partition feature
+of "dyn".
+
+```yaml
+  - id: dynamic_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition-dynamic
+    use: [network1]
+    settings:
+      partition_name: dynamic
+      partition_feature: dyn
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    use: [network1, dynamic_partition]
+```
+
 ## Support
 
 The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
