@@ -23,6 +23,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
+  * [htc-slurm-gcp-v5.yaml](#htc-slurm-gcp-v5yaml--) ![community-badge]
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
@@ -30,9 +31,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml-) ![community-badge]
   * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
-  * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#mlgkeyaml--) ![community-badge] ![experimental-badge]
+  * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
@@ -746,18 +747,6 @@ nodes)
 
 [hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
 
-### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
-
-This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
-the [HPC VM Image][hpcvmimage].
-
-Also see the [tutorial](../docs/tutorials/README.md#htcondor-tutorial), which
-walks through the use of this blueprint.
-
-[htcondor]: https://htcondor.org/
-[htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
-[hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-
 ### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint uses GKE to provision a Kubernetes cluster with a system node
@@ -850,6 +839,30 @@ image. It will be named beginning with `ml-slurm` followed by a date and
 timestamp for uniqueness.
 
 [ml-cluster.yaml]: ../examples/ml-cluster.yaml
+
+### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
+the [HPC VM Image][hpcvmimage].
+
+Also see the [tutorial](../docs/tutorials/README.md#htcondor-tutorial), which
+walks through the use of this blueprint.
+
+[htcondor]: https://htcondor.org/
+[htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
+[hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+
+### [htc-slurm-gcp-v5.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions a cluster using the Slurm scheduler in a configuration
+tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs.
+
+For more information see:
+
+* [Slurm on Google Cloud High Throughput documentation](https://github.com/SchedMD/slurm-gcp/blob/master/docs/htc.md)
+* [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
+
+[htc-slurm-gcp-v5.yaml]: ../community/examples/htc-slurm-gcp-v5.yaml
 
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 
