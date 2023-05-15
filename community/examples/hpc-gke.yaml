@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: small-gke
+blueprint_name: hpc-gke
 
 vars:
   project_id:  ## Set GCP Project ID Here ##

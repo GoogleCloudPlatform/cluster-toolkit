@@ -17,7 +17,7 @@ The following example creates a GKE node group.
     use: [gke_cluster]
 ```
 
-Also see a full [GKE example blueprint](../../../examples/gke.yaml).
+Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
 ### Taints and Tolerations
 

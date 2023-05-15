@@ -16,7 +16,7 @@ test_name: batch-mpi
 deployment_name: batch-mpi-{{ build }}
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/batch-mpi.yaml"
+blueprint_yaml: "{{ workspace }}/examples/serverless-batch-mpi.yaml"
 network: "default"
 remote_node: "{{ deployment_name }}-batch-login"
 post_deploy_tests:

@@ -26,7 +26,7 @@ The following example creates a GKE job template file.
     outputs: [instructions]
 ```
 
-Also see a full [GKE example blueprint](../../../examples/gke.yaml).
+Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
 ### Requested Resources
 

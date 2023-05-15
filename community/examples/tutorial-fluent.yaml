@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: ansys-fluent
+blueprint_name: tutorial-fluent
 
 vars:
   project_id:  ## Set GCP Project ID Here ##

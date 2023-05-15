@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-blueprint_name: cloud-batch
+blueprint_name: serverless-batch
 
 vars:
   project_id:  ## Set GCP Project ID Here ##

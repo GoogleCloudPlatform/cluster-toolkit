@@ -49,7 +49,7 @@ steps:
     set -x -e
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=community/examples/gke.yaml
+    SG_EXAMPLE=community/examples/hpc-gke.yaml
 
     # adding vm to act as remote node
     echo '  - id: remote-node'                     >> $${SG_EXAMPLE}

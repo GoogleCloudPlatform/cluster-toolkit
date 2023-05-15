@@ -30,7 +30,7 @@ requirements.
     use: [network1]
 ```
 
-Also see a full [GKE example blueprint](../../../examples/gke.yaml).
+Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
 ### VPC Network
 
