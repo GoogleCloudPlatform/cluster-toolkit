@@ -125,7 +125,7 @@ deployment_groups:
       omit_external_ip: false
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: schedmd-v5-slurm-22-05-8-debian-11
+      source_image_family: schedmd-v5-slurm-22-05-9-debian-11
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size_gb)
