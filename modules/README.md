@@ -195,8 +195,8 @@ Modules that are still in development and less stable are labeled with the
   runner to run common `qmgr` commands when configuring a PBS Pro cluster.
 * **[ramble-execute]** ![community-badge] ![experimental-badge] : Creates a
   startup script to execute
-  [Ramble](https://github.com/GoogleCloudPlatform/ramble) commands on an
-  instance or a slurm login or controller.
+  [Ramble](https://github.com/GoogleCloudPlatform/ramble) commands on a target
+  VM
 * **[ramble-setup]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install
   [Ramble](https://github.com/GoogleCloudPlatform/ramble) on an instance or a

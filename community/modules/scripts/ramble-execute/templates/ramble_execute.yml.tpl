@@ -21,14 +21,13 @@
   tasks:
   - name: Execute ramble commands
     ansible.builtin.shell: |
+      set -e
       . {{ spack_path }}/share/spack/setup-env.sh
       . {{ ramble_path }}/share/ramble/setup-env.sh
-      echo "" >> {{ log_file }}
-      echo " === Starting ramble commands ===" >> {{ log_file }}
-%{if length(COMMANDS) > 0 ~}
+      echo "" | tee -a {{ log_file }}
+      echo " === Starting ramble commands ===" | tee -a {{ log_file }}
 %{for c in COMMANDS ~}
-      echo " === Executing command: ${c} === " >> {{ log_file }}
-      ${c} >> {{ log_file }}
+      echo " === Executing command: ${c} === " | tee -a {{ log_file }}
+      ${c} | tee -a {{ log_file }}
 %{endfor ~}
-%{endif ~}
-      echo " === Finished ramble commands ===" >> {{ log_file }}
+      echo " === Finished ramble commands ===" | tee -a {{ log_file }}

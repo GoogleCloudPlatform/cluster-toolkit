@@ -15,14 +15,13 @@
  */
 
 locals {
-  execute_file = templatefile(
-    "${path.module}/templates/ramble_execute.tpl",
+  execute_contents = templatefile(
+    "${path.module}/templates/ramble_execute.yml.tpl",
     {
-      spack_path     = var.spack_path
-      ramble_path    = var.ramble_path
-      log_file       = var.log_file
-      COMMANDS       = var.commands
-      command_prefix = ""
+      spack_path  = var.spack_path
+      ramble_path = var.ramble_path
+      log_file    = var.log_file
+      COMMANDS    = var.commands
     }
   )
 
@@ -30,12 +29,14 @@ locals {
 
   runner_content = <<-EOT
     ${local.previous_ramble_runner_content}
-    ${local.execute_file}
+    ${local.execute_contents}
   EOT
+
+  execute_md5 = md5(local.execute_contents)
 
   ramble_execute_runner = {
     "type"        = "ansible-local"
     "content"     = local.runner_content
-    "destination" = "ramble_execute.yml"
+    "destination" = join(".", [join("_", ["ramble_execute", local.execute_md5]), "yml"])
   }
 }
