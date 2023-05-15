@@ -36,6 +36,17 @@ public IP addresses or Cloud NAT is disabled.
 [gpa]: https://cloud.google.com/vpc/docs/private-google-access
 [gcs]: https://cloud.google.com/storage
 
+### Example
+
+This creates a new VPC network named `cluster-net`.
+
+```yaml
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      network_name: cluster-net
+```
+
 ### Deprecation warning
 
 The variables listed below have been deprecated and will be removed in a future
@@ -103,16 +114,31 @@ compact set of subnetworks possible.
 
 [cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/subnets
 
-### Example
+## SSH Access
+
+By default a firewall rule is created to allow inbound SSH access from
+[Identity-Aware Proxy][iap]. A user must have the `IAP-Secured Tunnel User`
+(`roles/iap.tunnelResourceAccessor`) IAM role to be able to SSH over IAP.
+
+To allow regular SSH access from a known IP address you can add the following
+`firewall_rules` setting to the `vpc` module:
 
 ```yaml
-- id: network1
-  source: modules/network/vpc
-  settings:
-    network_name: cluster-net
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      firewall_rules:
+      - name: ssh-my-machine
+        direction: INGRESS
+        ranges: [<your-ip-address>/32]
+        allow:
+        - protocol: tcp
+          ports: [22]
 ```
 
-This creates a new VPC network named `cluster-net`.
+> **Note**: You must populate the above example with the source IP address from
+> which you plan to SSH from. You can use a service like
+> [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
 ## License
 
