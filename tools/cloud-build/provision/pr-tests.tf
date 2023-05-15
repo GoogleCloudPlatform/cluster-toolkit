@@ -13,7 +13,7 @@
 # limitations under the License.
 
 resource "google_cloudbuild_trigger" "pr_test" {
-  for_each    = data.external.list_tests_py.result
+  for_each    = data.external.list_tests_midnight.result
   name        = "PR-test-${each.key}"
   description = "Runs the '${each.key}' integration test against a PR"
 
