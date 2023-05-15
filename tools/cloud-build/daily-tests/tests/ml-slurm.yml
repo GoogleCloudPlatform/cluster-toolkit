@@ -14,7 +14,7 @@
 
 ---
 
-test_name: ml-cluster
-deployment_name: ml-cluster-{{ build }}
+test_name: ml-slurm
+deployment_name: ml-slurm-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/ml-cluster.yaml"
+blueprint_yaml: "{{ workspace }}/examples/ml-slurm.yaml"

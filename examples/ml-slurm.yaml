@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-blueprint_name: ml-cluster
+blueprint_name: ml-slurm
 
 vars:
   project_id:  ## Set project id here

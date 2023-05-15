@@ -13,7 +13,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
-  * [ml-cluster.yaml](#ml-clusteryaml--) ![core-badge]
+  * [ml-slurm.yaml](#ml-slurmyaml--) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
@@ -801,7 +801,7 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 [ml-gke.yaml]: ../community/examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
-### [ml-cluster.yaml] ![community-badge] ![experimental-badge]
+### [ml-slurm.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the
 machine learning frameworks [PyTorch] and [TensorFlow] pre-installed on every
@@ -816,7 +816,7 @@ VM. The cluster has 2 partitions:
 To provision the cluster, please run:
 
 ```text
-./ghpc create examples/ml-cluster.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./ghpc deploy ml-example"
 ```
 
@@ -849,7 +849,7 @@ Finally, browse to the [Cloud Console][console-images] to delete your custom
 image. It will be named beginning with `ml-slurm` followed by a date and
 timestamp for uniqueness.
 
-[ml-cluster.yaml]: ../examples/ml-cluster.yaml
+[ml-slurm.yaml]: ../examples/ml-slurm.yaml
 
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 
