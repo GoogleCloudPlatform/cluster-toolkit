@@ -79,6 +79,10 @@ The following are examples of updates that can be made to a running cluster:
 * Resize an existing partition
 * Attach new network storage to an existing partition
 
+> **NOTE**: Changing the VM `machine_type` of a partition may not work with
+> `enable_reconfigure`. It is better to create a new partition and delete the
+> old one.
+
 This option has some additional requirements:
 
 * The Pub/Sub API must be activated in the target project:
@@ -90,7 +94,7 @@ This option has some additional requirements:
   development environment deploying the cluster. One can use following commands:
 
   ```bash
-  pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt --user
+  pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
   ```
   
   For more information, see the [description][optdeps] of this module.
