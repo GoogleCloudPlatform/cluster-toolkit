@@ -19,7 +19,7 @@ deployment_name: "io-v5-{{ build }}"
 slurm_cluster_name: "iov5{{ build[0:6] }}"
 zone: us-west4-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}tools/cloud-build/daily-tests/blueprints/slurm-gcp-v5-high-io.yaml"
+blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/slurm-gcp-v5-high-io.yaml"
 network: "{{ deployment_name }}-net"
 max_nodes: 5
 login_node: "{{ slurm_cluster_name }}-login-*"
