@@ -12,22 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "google_cloudbuild_trigger" "daily_test" {
+resource "google_cloudbuild_trigger" "release_test" {
   for_each    = data.external.list_tests_midnight.result
-  name        = "DAILY-test-${each.key}"
-  description = "Runs the '${each.key}' integration test against `develop`"
+  name        = "RELEASE-test-${each.key}"
+  description = "Runs the '${each.key}' integration test against `release-candidate`"
   tags        = [local.notify_chat_tag]
 
   git_file_source {
     path      = "tools/cloud-build/daily-tests/builds/${each.key}.yaml"
-    revision  = local.ref_develop
+    revision  = local.ref_release_canidate
     uri       = var.repo_uri
     repo_type = "GITHUB"
   }
 
   source_to_build {
     uri       = var.repo_uri
-    ref       = local.ref_develop
+    ref       = local.ref_release_canidate
     repo_type = "GITHUB"
   }
   # Following fields will be auto-set by CloudBuild after creation
@@ -37,9 +37,9 @@ resource "google_cloudbuild_trigger" "daily_test" {
   substitutions  = {}
 }
 
-module "daily_test_schedule" {
+module "release_test_schedule" {
   source   = "./trigger-schedule"
-  for_each = data.external.list_tests_midnight.result
-  trigger  = google_cloudbuild_trigger.daily_test[each.key]
+  for_each = data.external.list_tests_morning.result
+  trigger  = google_cloudbuild_trigger.release_test[each.key]
   schedule = each.value
 }
