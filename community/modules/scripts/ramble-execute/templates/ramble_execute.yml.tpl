@@ -31,3 +31,6 @@
       ${c} | tee -a {{ log_file }}
 %{endfor ~}
       echo " === Finished ramble commands ===" | tee -a {{ log_file }}
+    register: output
+  - debug:
+      var: output
