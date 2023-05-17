@@ -13,7 +13,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
-  * [ml-slurm.yaml](#ml-slurmyaml--) ![core-badge]
+  * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
@@ -23,19 +23,19 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
-  * [htc-slurm-gcp-v5.yaml](#htc-slurm-gcp-v5yaml--) ![community-badge]
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml-) ![community-badge]
-  * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
+  * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
+  * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -240,6 +240,56 @@ to 256
   _not needed for `n2` partition_
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
+
+### [ml-slurm.yaml] ![core-badge]
+
+This blueprint provisions an HPC cluster running the Slurm scheduler with the
+machine learning frameworks [PyTorch] and [TensorFlow] pre-installed on every
+VM. The cluster has 2 partitions:
+
+* [A2 family VMs][a2] with the NVIDIA A100 GPU accelerator
+* [G2 family VMs][g2] with the NVIDIA L4 GPU accelerator
+
+[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
+
+To provision the cluster, please run:
+
+```text
+./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc deploy ml-example"
+```
+
+After accessing the login node, you can activate the conda environment for each
+library with:
+
+```shell
+source /etc/profile.d/conda.sh
+# to activate PyTorch
+conda activate pytorch
+# to activate TensorFlow
+conda activate tf
+```
+
+An example benchmarking job for PyTorch can be run under Slurm:
+
+```shell
+cp /var/tmp/torch_test.* .
+sbatch -N 1 torch_test.sh
+```
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+terraform -chdir=ml-example/cluster destroy
+terraform -chdir=ml-example/primary destroy
+```
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `ml-slurm` followed by a date and
+timestamp for uniqueness.
+
+[ml-slurm.yaml]: ../examples/ml-slurm.yaml
 
 ### [image-builder.yaml] ![core-badge]
 
@@ -678,64 +728,6 @@ the nodes are provisioned. All nodes mount a filestore instance on `/home`.
 [omnia-github]: https://github.com/dellhpc/omnia
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
-### [hpc-slurm-legacy.yaml] ![core-badge]
-
-Creates a Slurm cluster with tiered file systems for higher performance. It
-connects to the default VPC of the project and creates two partitions and a
-login node.
-
-File systems:
-
-* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
-  1 TiB of capacity
-* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-  instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
-
-There are two partitions in this example: `low_cost` and `compute`. The
-`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
-debugging and workloads that do not require high performance.
-
-Similar to the small example, there is a
-[compute partition](#compute-partition) that should be used for any performance
-analysis.
-
-#### Quota Requirements for hpc-slurm-legacy.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
-  quota request is 61,440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
-  GB/node** up to 4596 GB
-* Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
-  in `compute` partition up to 12,008
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-[hpc-slurm-legacy.yaml]: ../community/examples/hpc-slurm-legacy.yaml
-
-### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge] ![experimental-badge]
-
-This blueprint demonstrates the use of the Slurm and Filestore modules in
-the service project of an existing Shared VPC.  Before attempting to deploy the
-blueprint, one must first complete [initial setup for provisioning Filestore in
-a Shared VPC service project][fs-shared-vpc].
-
-[hpc-slurm-legacy-sharedvpc.yaml]: ../community/examples/hpc-slurm-legacy-sharedvpc.yaml
-[fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
-
 ### [hpc-slurm-local-ssd.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of Slurm and Filestore, with the definition
@@ -790,56 +782,6 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 [ml-gke.yaml]: ../community/examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
-### [ml-slurm.yaml] ![community-badge] ![experimental-badge]
-
-This blueprint provisions an HPC cluster running the Slurm scheduler with the
-machine learning frameworks [PyTorch] and [TensorFlow] pre-installed on every
-VM. The cluster has 2 partitions:
-
-* [A2 family VMs][a2] with the NVIDIA A100 GPU accelerator
-* [G2 family VMs][g2] with the NVIDIA L4 GPU accelerator
-
-[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
-[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
-
-To provision the cluster, please run:
-
-```text
-./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy ml-example"
-```
-
-After accessing the login node, you can activate the conda environment for each
-library with:
-
-```shell
-source /etc/profile.d/conda.sh
-# to activate PyTorch
-conda activate pytorch
-# to activate TensorFlow
-conda activate tf
-```
-
-An example benchmarking job for PyTorch can be run under Slurm:
-
-```shell
-cp /var/tmp/torch_test.* .
-sbatch -N 1 torch_test.sh
-```
-
-When you are done, clean up the resources in reverse order of creation:
-
-```text
-terraform -chdir=ml-example/cluster destroy
-terraform -chdir=ml-example/primary destroy
-```
-
-Finally, browse to the [Cloud Console][console-images] to delete your custom
-image. It will be named beginning with `ml-slurm` followed by a date and
-timestamp for uniqueness.
-
-[ml-slurm.yaml]: ../examples/ml-slurm.yaml
-
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
@@ -852,7 +794,7 @@ walks through the use of this blueprint.
 [htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
-### [htc-slurm-gcp-v5.yaml] ![community-badge] ![experimental-badge]
+### [htc-slurm.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a cluster using the Slurm scheduler in a configuration
 tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs.
@@ -862,7 +804,7 @@ For more information see:
 * [Slurm on Google Cloud High Throughput documentation](https://github.com/SchedMD/slurm-gcp/blob/master/docs/htc.md)
 * [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
 
-[htc-slurm-gcp-v5.yaml]: ../community/examples/htc-slurm-gcp-v5.yaml
+[htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
 
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 
@@ -881,6 +823,64 @@ tutorial.
 > The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/tutorials/ansys-fluent).
 
 [tutorial-fluent.yaml]: ../community/examples/tutorial-fluent.yaml
+
+### [hpc-slurm-legacy.yaml] ![community-badge] ![deprecated-badge]
+
+Creates a Slurm cluster with tiered file systems for higher performance. It
+connects to the default VPC of the project and creates two partitions and a
+login node.
+
+File systems:
+
+* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
+  1 TiB of capacity
+* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
+  instance with 10TiB of capacity.
+* The scratchfs is mounted at `/scratch` and is a
+  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+  file system designed for high IO performance. The capacity is ~10TiB.
+
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+
+There are two partitions in this example: `low_cost` and `compute`. The
+`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
+debugging and workloads that do not require high performance.
+
+Similar to the small example, there is a
+[compute partition](#compute-partition) that should be used for any performance
+analysis.
+
+#### Quota Requirements for hpc-slurm-legacy.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
+  quota request is 61,440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
+  GB/node** up to 4596 GB
+* Compute Engine API: N2 CPUs: **158**
+* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
+  in `compute` partition up to 12,008
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+[hpc-slurm-legacy.yaml]: ../community/examples/hpc-slurm-legacy.yaml
+
+### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge] ![deprecated-badge]
+
+This blueprint demonstrates the use of the Slurm and Filestore modules in
+the service project of an existing Shared VPC.  Before attempting to deploy the
+blueprint, one must first complete [initial setup for provisioning Filestore in
+a Shared VPC service project][fs-shared-vpc].
+
+[hpc-slurm-legacy-sharedvpc.yaml]: ../community/examples/hpc-slurm-legacy-sharedvpc.yaml
+[fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
 ## Blueprint Schema
 
