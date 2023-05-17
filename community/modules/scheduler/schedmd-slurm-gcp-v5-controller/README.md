@@ -17,7 +17,7 @@ controller for optimal performance at different scales.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.6.3/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
 > ```
 
 [SchedMD/slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.2
