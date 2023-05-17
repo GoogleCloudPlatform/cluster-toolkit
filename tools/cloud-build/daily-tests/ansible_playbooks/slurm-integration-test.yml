@@ -45,20 +45,9 @@
       with_items:
       - "terraform init"
       - "terraform apply -auto-approve -no-color"
-    - name: Gather instance information
-      changed_when: false
-      delegate_to: localhost
-      register: instances_list
-      retries: 2
-      delay: 60
-      until: instances_list.rc == 0
-      ansible.builtin.command: >-
-        gcloud compute instances list
-        --filter="labels.ghpc_deployment={{ deployment_name }}"
-        --format='table(name,zone,id,status)'
-    - name: Print instance information
-      ansible.builtin.debug:
-        var: instances_list.stdout_lines
+    - name: Print instance IDs of VMs
+      ansible.builtin.include_tasks:
+        file: tasks/get_instance_ids.yml
     - name: Get IP of a login node - Exact name provided
       changed_when: false
       register: get_login_ip
