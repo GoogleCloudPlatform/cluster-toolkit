@@ -45,6 +45,9 @@
       - terraform init
       - terraform validate
       - terraform apply -auto-approve -no-color
+    - name: Print instance IDs of VMs
+      ansible.builtin.include_tasks:
+        file: tasks/get_instance_ids.yml
     - name: Get Access Point public IP address
       register: access_ip
       changed_when: false
