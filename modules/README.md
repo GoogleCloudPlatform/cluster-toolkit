@@ -182,6 +182,8 @@ Modules that are still in development and less stable are labeled with the
   that can be fed into compute VMs.
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
+* **[kubernetes-operations]** ![community-badge] ![experimental-badge] :
+  Performs pre-defined operations on Kubernetes resources.
 * **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
   via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of VMs
   instances.
@@ -193,26 +195,27 @@ Modules that are still in development and less stable are labeled with the
 * **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a
   Toolkit runner to run common `qmgr` commands when configuring a PBS
   Professional cluster.
-* **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
-  startup script to install [Spack](https://github.com/spack/spack) on an
-  instance or a slurm login or controller.
 * **[ramble-setup]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install
   [Ramble](https://github.com/GoogleCloudPlatform/ramble) on an instance or a
   slurm login or controller.
+* **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
+  startup script to install [Spack](https://github.com/spack/spack) on an
+  instance or a slurm login or controller.
 * **[wait-for-startup]** ![community-badge] ![experimental-badge] : Waits for
   successful completion of a startup script on a compute VM.
 
 [startup-script]: scripts/startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
+[kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
-[spack-install]: ../community/modules/scripts/spack-install/README.md
-[ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
-[wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 [pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
 [pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
 [pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
 [pbspro]: https://www.altair.com/pbs-professional
+[ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
+[spack-install]: ../community/modules/scripts/spack-install/README.md
+[wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 
 ## Module Fields
 
