@@ -15,13 +15,15 @@
  */
 
 locals {
+  commands_content = indent(6, yamlencode(var.commands))
+
   execute_contents = templatefile(
     "${path.module}/templates/ramble_execute.yml.tpl",
     {
       spack_path  = var.spack_path
       ramble_path = var.ramble_path
       log_file    = var.log_file
-      COMMANDS    = var.commands
+      commands    = local.commands_content
     }
   )
 

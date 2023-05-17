@@ -18,19 +18,22 @@
     spack_path: ${spack_path}
     ramble_path: ${ramble_path}
     log_file: ${log_file}
+    commands: ${commands}
   tasks:
   - name: Execute ramble commands
     ansible.builtin.shell: |
       set -e
       . {{ spack_path }}/share/spack/setup-env.sh
       . {{ ramble_path }}/share/ramble/setup-env.sh
-      echo "" | tee -a {{ log_file }}
-      echo " === Starting ramble commands ===" | tee -a {{ log_file }}
-%{for c in COMMANDS ~}
-      echo " === Executing command: ${c} === " | tee -a {{ log_file }}
-      ${c} | tee -a {{ log_file }}
-%{endfor ~}
-      echo " === Finished ramble commands ===" | tee -a {{ log_file }}
-    register: output
-  - debug:
-      var: output
+      echo ""
+      echo " === Starting ramble commands ==="
+      {{ commands }}
+      echo " === Finished ramble commands ==="
+    register: ramble_output
+
+  - name: Commands output to log file
+    local_action: ansible.builtin.copy content={{ ramble_output }} dest ={{ log_file }}
+
+  - name: Print commands output to stdout
+    ansible.builtin.debug:
+      var: ramble_output
