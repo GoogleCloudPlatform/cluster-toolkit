@@ -1,0 +1,54 @@
+blueprint_name: flux-fw-cluster
+
+vars:
+  project_id: ## set GCP Project ID Here ##
+  deployment_name: flux-fw-cluster
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: flux-net
+    source: modules/network/vpc
+    settings:
+      network_name: flux-net-01
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [flux-net]
+    settings:
+      local_mount: /home
+  - id: fluxfw-gcp
+    source: github.com/GoogleCloudPlatform/scientific-computing-examples.git/fluxfw-gcp/tf
+    settings:
+      compute_node_specs:
+        - name_prefix: gfluxfw-compute
+          machine_arch: x86-64
+          machine_type: c2-standard-16
+          gpu_type: null
+          gpu_count: 0
+          compact: true
+          instances: 4
+          properties: ["c2"]
+          boot_script: null
+      login_node_specs:
+      - name_prefix: gfluxfw-login
+        machine_arch: x86-64
+        machine_type: e2-standard-4
+        instances: 1
+        properties: []
+        boot_script: null
+      manager_name_prefix: gfluxfw
+      manager_machine_type: e2-standard-8
+
+      subnetwork: $(flux-net.subnetwork_self_link)
+
+      service_account_emails:
+        manager: null
+        login: null
+        compute: null
+ 
+      cluster_storage:
+        mountpoint: ((module.homefs.network_storage.local_mount))
+        share_ip: ((module.homefs.network_storage.server_ip))
+        share_name: ((module.homefs.network_storage.remote_mount))
