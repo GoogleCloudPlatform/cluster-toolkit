@@ -57,7 +57,8 @@ deployment_groups:
     - debug_node_group
     settings:
       partition_name: debug
-      enable_placement: false
+      exclusive: false # allows nodes to stay up after jobs are done
+      enable_placement: false # the default is: true
       is_default: true
 
   - id: compute_node_group
