@@ -673,13 +673,13 @@ func (err *InputValueError) Error() string {
 	return fmt.Sprintf("%v input error, cause: %v", err.inputKey, err.cause)
 }
 
-var matchLabelExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`)
+var matchLabelValueExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{0,63}$`)
 
 // isValidLabelValue checks if a string is a valid value for a GCP label.
 // For more information on valid label values, see the docs at:
 // https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
 func isValidLabelValue(value string) bool {
-	return matchLabelExp.MatchString(value)
+	return matchLabelValueExp.MatchString(value)
 }
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.
