@@ -16,6 +16,7 @@ import os
 import glob
 import sys
 
+from typing import List
 
 LOCALS_TEMPLATE = '''
 locals {{
@@ -27,34 +28,33 @@ locals {{
 
 class ModulePath:
     """Convenience class to get various path related information about a module"""
-    MAIN_FILENAME = "main.tf"
-    VARS_FILENAME = "variables.tf"
-    VERSIONS_FILENAME = "versions.tf"
-    OUTPUT_FILENAME = "outputs.tf"
 
     def __init__(self, module_path: str):
         self.module_path = module_path
 
-    def has_main(self) -> str:
-        return os.path.isfile(os.path.join(self.module_path, self.MAIN_FILENAME))
+    def has_main(self) -> bool:
+        return os.path.isfile(self.main())
 
-    def has_vars(self) -> str:
-        return os.path.isfile(os.path.join(self.module_path, self.VARS_FILENAME))
+    def has_vars(self) -> bool:
+        return os.path.isfile(self.vars())
 
-    def has_outputs(self) -> str:
-        return os.path.isfile(os.path.join(self.module_path, self.OUTPUT_FILENAME))
+    def has_versions(self) -> bool:
+        return os.path.isfile(self.versions())
+
+    def has_outputs(self) -> bool:
+        return os.path.isfile(self.outputs())
 
     def main(self) -> str:
-        return self._filepath(self.MAIN_FILENAME)
+        return self._filepath("main.tf")
 
     def vars(self) -> str:
-        return self._filepath(self.VARS_FILENAME)
+        return self._filepath("variables.tf")
 
     def versions(self) -> str:
-        return self._filepath(self.VERSIONS_FILENAME)
+        return self._filepath("versions.tf")
 
     def outputs(self) -> str:
-        return self._filepath(self.OUTPUT_FILENAME)
+        return self._filepath("outputs.tf")
 
     def primary_file(self) -> str:
         """The file that should contain the labels definition"""
@@ -70,19 +70,19 @@ class ModulePath:
         return os.path.join(self.module_path, name)
 
 
-def get_module_paths(root_dir="./") -> list[str]:
+def get_module_paths(root_dir:str="./") -> List[ModulePath]:
     community_modules_glob = os.path.join(
         root_dir, "community/modules", "*", "*")
     community_modules = glob.glob(community_modules_glob)
     core_modules_glob = os.path.join(root_dir, "modules", "*", "*")
     core_modules = glob.glob(core_modules_glob)
-    return community_modules + core_modules
+    return [ModulePath(path) for path in community_modules + core_modules]
 
 
 def has_labels_variable(module_path: ModulePath) -> bool:
     if not module_path.has_vars():
         return False
-    with open(module_path.vars()) as var_file:
+    with open(module_path.vars(), encoding="utf-8") as var_file:
         return 'variable "labels"' in var_file.read()
 
 
@@ -90,13 +90,13 @@ def check_for_labels_local_block(module_path: ModulePath) -> bool:
     check_string = LOCALS_TEMPLATE.format(
         module_label=module_path.name_label())
     file_to_check = module_path.primary_file()
-    with open(file_to_check) as file:
+    with open(file_to_check, encoding="utf-8") as file:
         return check_string in file.read()
 
 
 def add_labels_local_block(module_path: ModulePath):
     file_to_write = module_path.primary_file()
-    with open(file_to_write, 'r') as main_file:
+    with open(file_to_write, 'r', encoding="utf-8") as main_file:
         insert_at = -1
         lines = main_file.readlines()
         for num, line in enumerate(lines):
@@ -110,20 +110,20 @@ def add_labels_local_block(module_path: ModulePath):
     lines.insert(insert_at, LOCALS_TEMPLATE.format(
         module_label=module_path.name_label()))
 
-    with open(file_to_write, 'w') as main_file:
+    with open(file_to_write, 'w', encoding="utf-8") as main_file:
         main_file.writelines(lines)
 
 
 def check_label_usage(module_path: ModulePath) -> bool:
     passed = True
-    with open(module_path.primary_file()) as file:
+    with open(module_path.primary_file(), encoding="utf-8") as file:
         if file.read().count('var.labels') > 1:  # there will be one reference in local block
             print("{} contains references to var.labels instead of local.labels".format(
                 module_path.primary_file()))
             passed = False
 
     if module_path.primary_file() != module_path.outputs() and module_path.has_outputs():
-        with open(module_path.outputs()) as outputs:
+        with open(module_path.outputs(), encoding="utf-8") as outputs:
             if outputs.read().count('var.labels') > 0:
                 print("{} contains references to var.labels instead of local.labels".format(
                     module_path.outputs()))
@@ -133,29 +133,27 @@ def check_label_usage(module_path: ModulePath) -> bool:
 
 def check_provider_meta(module_path: ModulePath) -> bool:
     """This is enforcing that the provider meta name matches the module name"""
+    if not module_path.has_versions():
+        return True
     version_file_path = module_path.versions()
-    module_name = module_path.name()
-    with open(version_file_path) as version_file:
-        s = version_file.read()
-        if s.count('provider_meta "google') == s.count(
-                'blueprints/terraform/hpc-toolkit:{}'.format(module_name)):
+    with open(version_file_path, encoding="utf-8") as version_file:
+        content = version_file.read()
+        if content.count('provider_meta "google') == content.count(
+                'blueprints/terraform/hpc-toolkit:{}'.format(module_path.name())):
             return True
-        else:
-            print('{} provider meta does not match module name'.format(
-                version_file_path))
-            return False
+        print('{} provider meta does not match module name'.format(
+            version_file_path))
+        return False
 
 
 def check_module(module_path: ModulePath) -> bool:
-    passed = True
+    passed = check_provider_meta(module_path)
     if not has_labels_variable(module_path):
         return passed
     if not check_for_labels_local_block(module_path):
         passed = False
         add_labels_local_block(module_path)
-    passed = check_label_usage(module_path) and passed
-    return check_provider_meta(module_path) and passed
-
+    return check_label_usage(module_path) and passed
 
 def main() -> bool:
     """Performs some basic checks on all modules.
@@ -170,11 +168,8 @@ def main() -> bool:
     Returns: True if checks passed
     """
 
-    module_paths = get_module_paths()
-    passed = True
-    for module_path in module_paths:
-        passed = check_module(ModulePath(module_path)) and passed
-    return passed
+    passed = [check_module(m) for m in get_module_paths()]
+    return all(passed)
 
 
 if __name__ == "__main__":
