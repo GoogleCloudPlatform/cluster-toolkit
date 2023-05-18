@@ -54,11 +54,11 @@ filesystem:
   settings:
     fs_type: lustre
     server_ip: 192.168.227.11@tcp
-    local_mount: /data
-    remote_mount: /lustre/mgt
+    local_mount: /scratch
+    remote_mount: /exacloud
 ```
 
-Note the use of the MGS NID (Network ID) in the `server_ip` field.
+Note the use of the MGS NID (Network ID) in the `server_ip` field - in particular, note the `@tcp` suffix.
 
 ### Mounting
 
