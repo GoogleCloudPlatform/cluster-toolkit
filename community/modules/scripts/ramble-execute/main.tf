@@ -15,7 +15,7 @@
  */
 
 locals {
-  commands_content = indent(6, yamlencode(var.commands))
+  commands_content = indent(4, yamlencode(var.commands))
 
   execute_contents = templatefile(
     "${path.module}/templates/ramble_execute.yml.tpl",
@@ -34,11 +34,16 @@ locals {
     ${local.execute_contents}
   EOT
 
-  execute_md5 = md5(local.execute_contents)
+  execute_md5 = substr(md5(local.execute_contents), 0, 4)
 
   ramble_execute_runner = {
     "type"        = "ansible-local"
     "content"     = local.runner_content
-    "destination" = join(".", [join("_", ["ramble_execute", local.execute_md5]), "yml"])
+    "destination" = "ramble_execute_${local.execute_md5}.yml"
   }
+}
+
+resource "local_file" "debug_file" {
+  content  = local.execute_contents
+  filename = "${path.module}/execute_script.yaml"
 }

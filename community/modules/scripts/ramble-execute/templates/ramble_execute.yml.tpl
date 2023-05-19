@@ -20,20 +20,32 @@
     log_file: ${log_file}
     commands: ${commands}
   tasks:
-  - name: Execute ramble commands
-    ansible.builtin.shell: |
-      set -e
-      . {{ spack_path }}/share/spack/setup-env.sh
-      . {{ ramble_path }}/share/ramble/setup-env.sh
-      echo ""
-      echo " === Starting ramble commands ==="
-      {{ commands }}
-      echo " === Finished ramble commands ==="
-    register: ramble_output
+  - name: Execute command block
+    block:
+    - name: Print Ramble commands to be executed
+      ansible.builtin.debug:
+        msg: "{{ commands.split('\n') }}"
 
-  - name: Commands output to log file
-    local_action: ansible.builtin.copy content={{ ramble_output }} dest ={{ log_file }}
+    - name: Execute ramble commands
+      ansible.builtin.shell: |
+        set -e
+        . {{ spack_path }}/share/spack/setup-env.sh
+        . {{ ramble_path }}/share/ramble/setup-env.sh
+        echo " === Starting ramble commands ==="
+        {{ commands }}
+        echo " === Finished ramble commands ==="
+      register: ramble_output
 
-  - name: Print commands output to stdout
-    ansible.builtin.debug:
-      var: ramble_output
+    always:
+    - name: Commands output to log file
+      ansible.builtin.copy:
+        content: "{{ ramble_output | to_nice_yaml }}"
+        dest: "{{ log_file }}"
+
+    - name: Print commands output to stderr
+      ansible.builtin.debug:
+        var: ramble_output.stderr_lines
+
+    - name: Print commands output to stdout
+      ansible.builtin.debug:
+        var: ramble_output.stdout_lines
