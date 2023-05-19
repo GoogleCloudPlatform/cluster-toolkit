@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "htcondor-execute-point" })
+}
 
 locals {
   network_storage_metadata = var.network_storage == null ? {} : { network_storage = jsonencode(var.network_storage) }
@@ -52,7 +56,7 @@ module "execute_point_instance_template" {
   network         = var.network_self_link
   subnetwork      = var.subnetwork_self_link
   service_account = var.service_account
-  labels          = var.labels
+  labels          = local.labels
 
   machine_type         = var.machine_type
   disk_size_gb         = var.disk_size_gb

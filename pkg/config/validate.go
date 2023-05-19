@@ -74,7 +74,7 @@ func (dc DeploymentConfig) executeValidators() error {
 	var errored, warned bool
 	implementedValidators := dc.getValidators()
 
-	if dc.Config.ValidationLevel == validationIgnore {
+	if dc.Config.ValidationLevel == ValidationIgnore {
 		return nil
 	}
 
@@ -93,7 +93,7 @@ func (dc DeploymentConfig) executeValidators() error {
 		if err := f(validator); err != nil {
 			var prefix string
 			switch dc.Config.ValidationLevel {
-			case validationWarning:
+			case ValidationWarning:
 				warned = true
 				prefix = "warning: "
 			default:
@@ -197,8 +197,8 @@ func hasIllegalChars(name string) bool {
 	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
 }
 
-func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
-
+func validateOutputs(mod Module) error {
+	modInfo := mod.InfoOrDie()
 	// Only get the map if needed
 	var outputsMap map[string]modulereader.OutputInfo
 	if len(mod.Outputs) > 0 {
@@ -217,18 +217,12 @@ func validateOutputs(mod Module, modInfo modulereader.ModuleInfo) error {
 
 // validateModules ensures parameters set in modules are set correctly.
 func (dc DeploymentConfig) validateModules() error {
-	for _, grp := range dc.Config.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			if err := validateModule(mod); err != nil {
-				return err
-			}
-			modInfo := dc.ModulesInfo[grp.Name][mod.Source]
-			if err := validateOutputs(mod, modInfo); err != nil {
-				return err
-			}
+	return dc.Config.WalkModules(func(m *Module) error {
+		if err := validateModule(*m); err != nil {
+			return err
 		}
-	}
-	return nil
+		return validateOutputs(*m)
+	})
 }
 
 type moduleVariables struct {
@@ -249,7 +243,7 @@ func validateSettings(
 		cVars.Inputs[input.Name] = input.Required
 	}
 
-	for k := range mod.Settings {
+	for k := range mod.Settings.Items() {
 		errData := fmt.Sprintf("Module ID: %s Setting: %s", mod.ID, k)
 		// Setting name included a period
 		// The user was likely trying to set a subfield which is not supported.
@@ -460,7 +454,18 @@ func (dc *DeploymentConfig) testModuleNotUsed(c validatorConfig) error {
 		return err
 	}
 
-	if err := validators.TestModuleNotUsed(dc.listUnusedModules()); err != nil {
+	acc := map[string][]string{}
+	dc.Config.WalkModules(func(m *Module) error {
+		ids := m.listUnusedModules()
+		sids := make([]string, len(ids))
+		for i, id := range ids {
+			sids[i] = string(id)
+		}
+		acc[string(m.ID)] = sids
+		return nil
+	})
+
+	if err := validators.TestModuleNotUsed(acc); err != nil {
 		log.Print(err)
 		return fmt.Errorf(funcErrorMsgTemplate, testModuleNotUsedName.String())
 	}

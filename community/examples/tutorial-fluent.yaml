@@ -1,0 +1,166 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: tutorial-fluent
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: fluent-wl
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  - id: startup_login
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        content: |
+          #!/bin/bash
+          google_mpi_tuning --hpcthroughput
+          google_mpi_tuning --nomitigation
+          yum -y install mesa-libGLU-devel libExt nmap openssl libXrandr mesa-libGL libX11-devel libSM-devel libICE-devel libXinerama libXcursor hdf5-devel dkms zlib-devel libXext-devel libGLU-devel libXt-devel libXrender-devel libXinerama-devel libpng-devel libXrandr-devel libXi-devel libXft-devel libjpeg-turbo-devel libXcursor-devel readline-devel ncurses-devel python python-devel cmake qt-devel qt-assistant mpfr-devel gmp-devel htop wget screen vim xorg-x11-drv-dummy xorg-x11-server-utils libXp-devel xorg-x11-fonts-cyrillic.noarch xterm.x86_64 motif-devel compat-libstdc++-33.x86_64 libstdc++.x86_64 libstdc++.i686 gcc-c++.x86_64 compat-libstdc++-33.i686 libstdc++-devel.x86_64 libstdc++-devel.i686 compat-gcc-34.x86_64 gtk2.i686 libXxf86vm.i686 libSM.i686 xorg-x11-fonts-ISO8859-1-75dpi.no xorg-x11-fonts-iso8859-1-75dpi.no gdm gnome-session gnome-classic-session gnome-session-xsession xorg-x11-server-Xorg xorg-x11-drv-dummy xorg-x11-fonts-Type1 xorg-x11-utils gnome-terminal gnu-free-fonts-common gnu-free-mono-fonts gnu-free-sans-fonts gnu-free-serif-fonts alsa-plugins-pulseaudio alsa-utils hdf5-devel
+
+        destination: /tmp/install-deps.sh
+      - type: shell
+        content: |
+          #!/bin/bash
+          cat <<- "EOF" >> /etc/bashrc
+          export LD_LIBRARY_PATH=/shared/apps/fluent/v222/TurboGrid/tools/Prime/lib/:${LD_LIBRARY_PATH}
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/v222/commonfiles/fluids/lib/linx64/
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/v222/commonfiles/fluids/lib/linx64/
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/v222/fluent/fluent22.2.0/multiport/lnamd64/mpi/shared/
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/shared_files/syslib/linx64
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/v222/aisol/lib/linx64/
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/v222/polyflow/polyflow22.2.0/lnamd64/libs/
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/v222/tp/IntelMKL/2021.3.0/linx64/lib/intel64/
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/v222/fluent/lib/lnamd64/
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/shared/apps/fluent/v222/dcs/
+          export INTELMPI_ROOT=/shared/apps/intel/compilers_and_libraries_2018.5.274/linux/mpi/intel64
+          source /shared/apps/intel/parallel_studio_xe_2018.4.057/psxevars.sh
+          EOF
+
+        destination: /tmp/install-bashrc.sh
+      - type: shell
+        content: |
+          #!/bin/bash
+          mkdir /tmp/intel
+          cd /tmp/intel
+          wget https://registrationcenter-download.intel.com/akdlm/irc_nas/tec/13741/l_mpi_2018.4.274.tgz
+          tar xvf l_mpi_2018.4.274.tgz
+          cd l_mpi_2018.4.274
+          patch silent.cfg <<- "EOF1"
+          16:07:46.199308305 +0000
+          @@ -6,13 +6,13 @@
+           # snpat       - the serial number pattern (ABCD-01234567)
+
+           # Accept EULA, valid values are: {accept, decline}
+          -ACCEPT_EULA=decline
+          +ACCEPT_EULA=accept
+
+           # Optional error behavior, valid values are: {yes, no}
+           CONTINUE_WITH_OPTIONAL_ERROR=yes
+
+           # Install location, valid values are: {/opt/intel, filepat}
+          -PSET_INSTALL_DIR=/opt/intel
+          +PSET_INSTALL_DIR=/shared/apps/intel
+
+           # Continue with overwrite of existing installation directory, valid values are: {yes, no}
+           CONTINUE_WITH_INSTALLDIR_OVERWRITE=yes
+          EOF1
+
+          sudo ./install.sh -s silent.cfg
+
+        destination: /tmp/install-mpi.sh
+
+  - id: startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        content: |
+          #!/bin/bash
+          google_mpi_tuning --hpcthroughput
+          google_mpi_tuning --nomitigation
+          yum -y install mesa-libGLU-devel libExt nmap openssl libXrandr mesa-libGL libX11-devel libSM-devel libICE-devel libXinerama libXcursor hdf5-devel dkms zlib-devel libXext-devel libGLU-devel libXt-devel libXrender-devel libXinerama-devel libpng-devel libXrandr-devel libXi-devel libXft-devel libjpeg-turbo-devel libXcursor-devel readline-devel ncurses-devel python python-devel cmake qt-devel qt-assistant mpfr-devel gmp-devel htop wget screen vim xorg-x11-drv-dummy xorg-x11-server-utils libXp-devel xorg-x11-fonts-cyrillic.noarch xterm.x86_64 motif-devel compat-libstdc++-33.x86_64 libstdc++.x86_64 libstdc++.i686 gcc-c++.x86_64 compat-libstdc++-33.i686 libstdc++-devel.x86_64 libstdc++-devel.i686 compat-gcc-34.x86_64 gtk2.i686 libXxf86vm.i686 libSM.i686 xorg-x11-fonts-ISO8859-1-75dpi.no xorg-x11-fonts-iso8859-1-75dpi.no gdm gnome-session gnome-classic-session gnome-session-xsession xorg-x11-server-Xorg xorg-x11-drv-dummy xorg-x11-fonts-Type1 xorg-x11-utils gnome-terminal gnu-free-fonts-common gnu-free-mono-fonts gnu-free-sans-fonts gnu-free-serif-fonts alsa-plugins-pulseaudio alsa-utils hdf5-devel
+
+        destination: /tmp/install-deps.sh
+      - type: shell
+        content: |
+          #!/bin/bash
+          hostname >> /home/hosts.txt
+        destination: /tmp/install-hosts.sh
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      size_gb: 1024
+      filestore_tier: "BASIC_HDD"
+      local_mount: /home
+
+  - id: sharefs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      size_gb: 1024
+      filestore_tier: "BASIC_HDD"
+      local_mount: /shared
+
+  - id: compute_1
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - homefs
+    - sharefs
+    - startup
+    settings:
+      threads_per_core: 1
+      disable_public_ips: false
+      bandwidth_tier: "gvnic_enabled"
+      machine_type: c2-standard-60
+      instance_count: 4
+      name_prefix: fluent-compute
+      placement_policy:
+        vm_count: 4  # Note: should match instance count
+        collocation: "COLLOCATED"
+        availability_domain_count: null
+
+  - id: login
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - homefs
+    - sharefs
+    - startup_login
+    settings:
+      threads_per_core: 1
+      disable_public_ips: false
+      bandwidth_tier: "gvnic_enabled"
+      machine_type: c2-standard-8
+      instance_count: 1
+      name_prefix: fluent-login
+
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.compute_1.name[0]))

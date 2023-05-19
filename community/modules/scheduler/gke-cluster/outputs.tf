@@ -15,8 +15,16 @@
   */
 
 output "cluster_id" {
-  description = "an identifier for the resource with format projects/<project_id>/locations/<region>/clusters/<name>."
+  description = "An identifier for the resource with format projects/<project_id>/locations/<region>/clusters/<name>."
   value       = google_container_cluster.gke_cluster.id
+}
+
+output "gke_cluster_exists" {
+  description = "A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations."
+  value       = true
+  depends_on = [
+    google_container_cluster.gke_cluster
+  ]
 }
 
 locals {

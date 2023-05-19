@@ -13,10 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-locals {
-  retries = var.timeout / 5
-}
-
 data "google_compute_instance" "vm_instance" {
   name    = var.instance_name
   zone    = var.zone
@@ -30,7 +26,6 @@ resource "null_resource" "wait_for_startup" {
       INSTANCE_NAME = var.instance_name
       ZONE          = var.zone
       PROJECT_ID    = var.project_id
-      RETRIES       = local.retries
       TIMEOUT       = var.timeout
     }
   }

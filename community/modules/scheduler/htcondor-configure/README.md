@@ -23,7 +23,7 @@ The following code snippet uses this module to create a startup script that
 installs HTCondor software and configures an HTCondor Central Manager. A full
 example can be found in the [examples README][htc-example].
 
-[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
+[htc-example]: ../../../../examples/README.md#htc-htcondoryaml--
 
 ```yaml
 - id: network1

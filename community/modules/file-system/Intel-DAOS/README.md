@@ -21,7 +21,7 @@ In order to use the DAOS server terraform module a DAOS server image must be cre
 
 DAOS server images must be built from the same tagged version of the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repository that is specified in the `source:` attribute for modules used in the [community examples](../../../examples/intel/).
 
-For example, in the following snippet taken from the [community/example/intel/daos-cluster.yml](../../../examples/intel/daos-cluster.yaml) the `source:` attribute specifies v0.3.0 of the  daos_server terraform module
+For example, in the following snippet taken from the [community/example/intel/pfs-daos.yml](../../../examples/intel/pfs-daos.yaml) the `source:` attribute specifies v0.3.0 of the  daos_server terraform module
 
 ```yaml
   - id: daos-server

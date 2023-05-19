@@ -50,9 +50,6 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     OMNIA_EXAMPLE=community/examples/omnia-cluster.yaml
 
-    # Inject the build ID into the name prefix of the vm-instance modules to avoid naming collisions
-    sed -i "s/name_prefix: \(.*\)/name_prefix: \1-$${BUILD_ID_SHORT}/" $${OMNIA_EXAMPLE}
-
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/omnia.yml"

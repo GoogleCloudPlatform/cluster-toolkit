@@ -26,36 +26,33 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-func escapeBlueprintVariables(hclBytes []byte) []byte {
+func escapeBlueprintVariables(s string) string {
 	// Convert \$(not.variable) to $(not.variable)
-	re := regexp.MustCompile(`\\\\\$\(`)
-	return re.ReplaceAll(hclBytes, []byte(`$(`))
+	re := regexp.MustCompile(`\\\$\(`)
+	return re.ReplaceAllString(s, `$(`)
 }
 
-func escapeLiteralVariables(hclBytes []byte) []byte {
+func escapeLiteralVariables(s string) string {
 	// Convert \((not.variable)) to ((not.variable))
-	re := regexp.MustCompile(`\\\\\(\(`)
-	return re.ReplaceAll(hclBytes, []byte(`((`))
+	re := regexp.MustCompile(`\\\(\(`)
+	return re.ReplaceAllString(s, `((`)
 }
 
-func writeHclAttributes(vars map[string]cty.Value, dst string) error {
+// WriteHclAttributes writes tfvars/pkvars.hcl files
+func WriteHclAttributes(vars map[string]cty.Value, dst string) error {
 	if err := createBaseFile(dst); err != nil {
 		return fmt.Errorf("error creating variables file %v: %v", filepath.Base(dst), err)
 	}
 
-	// Create hcl body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
-
-	// for each variable
 	for _, k := range orderKeys(vars) {
-		// Write attribute
-		hclBody.SetAttributeValue(k, vars[k])
+		hclBody.AppendNewline()
+		toks := TokensForValue(vars[k])
+		hclBody.SetAttributeRaw(k, toks)
 	}
 
-	// Write file
-	hclBytes := escapeLiteralVariables(hclFile.Bytes())
-	hclBytes = escapeBlueprintVariables(hclBytes)
+	hclBytes := hclFile.Bytes()
 	err := appendHCLToFile(dst, hclBytes)
 	if err != nil {
 		return fmt.Errorf("error writing HCL to %v: %v", filepath.Base(dst), err)
@@ -74,6 +71,14 @@ func TokensForValue(val cty.Value) hclwrite.Tokens {
 	}
 
 	ty := val.Type()
+	if ty == cty.String {
+		s := val.AsString()
+		// The order of application matters, for an edge cases like: `\$\((` -> `$((`
+		s = escapeLiteralVariables(s)
+		s = escapeBlueprintVariables(s)
+		return hclwrite.TokensForValue(cty.StringVal(s))
+	}
+
 	if ty.IsListType() || ty.IsSetType() || ty.IsTupleType() {
 		tl := []hclwrite.Tokens{}
 		for it := val.ElementIterator(); it.Next(); {

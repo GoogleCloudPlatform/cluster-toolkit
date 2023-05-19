@@ -1,5 +1,8 @@
 ## Description
 
+> **Warning**: this module is now deprecated. We recommend using the Slurm on GCP V5
+> [schedmd-slurm-gcp-v5-login](../schedmd-slurm-gcp-v5-login/README.md) instead.
+
 This module creates a login node for a Slurm cluster based on the
 [Slurm on GCP][slurm-on-gcp] terraform [login module][login-module]. The login
 node is used in conjunction with the
@@ -31,9 +34,6 @@ This creates a Slurm login node which is:
 * associated with the `slurm_controller` module as the slurm controller via
   `use`
 * of VM machine type `n2-standard-4`
-
-For more context see the
-[hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml)
 
 ## GPU Support
 

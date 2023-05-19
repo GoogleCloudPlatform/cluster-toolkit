@@ -20,6 +20,9 @@ Modules labeled with the ![community-badge] badge are contributed by
 the community (including the HPC Toolkit team, partners, etc.). Community modules
 are located in the [community folder](../community/modules/README.md).
 
+Modules labeled with the ![deprecated-badge] badge are now deprecated and may be
+removed in the future. Customers are advised to transition to alternatives.
+
 Modules that are still in development and less stable are labeled with the
 ![experimental-badge] badge.
 
@@ -27,26 +30,30 @@ Modules that are still in development and less stable are labeled with the
 [community-badge]: https://img.shields.io/badge/-community-%23b8def4?style=plastic
 [stable-badge]: https://img.shields.io/badge/-stable-lightgrey?style=plastic
 [experimental-badge]: https://img.shields.io/badge/-experimental-%23febfa2?style=plastic
+[deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic
 
 ### Compute
 
 * **[vm-instance]** ![core-badge] : Creates one or more VM instances.
-* **[SchedMD-slurm-on-gcp-partition]** ![community-badge] : Creates a partition
-  to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
-* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
-* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] :
   Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
 * **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
+* **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
+  Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-configure].
 * **[pbspro-execution]** ![community-badge] ![experimental-badge] :
   Creates execution hosts for use in a PBS Professional cluster.
+* **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
+  to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
+[gke-job-template]: ../community/modules/compute/gke-job-template/README.md
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
@@ -138,22 +145,22 @@ Modules that are still in development and less stable are labeled with the
   submission of Google Cloud Batch jobs.
 * **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
-* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
   Creates a Slurm login node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
-* **[SchedMD-slurm-on-gcp-controller]** ![community-badge] : Creates a Slurm
-  controller node using [slurm-gcp].
-* **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] : Creates a Slurm
-  login node using [slurm-gcp].
 * **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
   Toolkit runners and service accounts to configure an HTCondor pool.
 * **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
   a client host for submitting jobs to a PBS Professional cluster.
 * **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
   a server host for operating a PBS Professional cluster.
+* **[SchedMD-slurm-on-gcp-controller]** ![community-badge] ![deprecated-badge] : Creates a Slurm
+  controller node using [slurm-gcp].
+* **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] ![deprecated-badge] : Creates a Slurm
+  login node using [slurm-gcp].
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
@@ -175,6 +182,8 @@ Modules that are still in development and less stable are labeled with the
   that can be fed into compute VMs.
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
+* **[kubernetes-operations]** ![community-badge] ![experimental-badge] :
+  Performs pre-defined operations on Kubernetes resources.
 * **[omnia-install]** ![community-badge] ![experimental-badge] : Installs Slurm
   via [Dell Omnia](https://github.com/dellhpc/omnia) onto a cluster of VMs
   instances.
@@ -186,6 +195,10 @@ Modules that are still in development and less stable are labeled with the
 * **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a
   Toolkit runner to run common `qmgr` commands when configuring a PBS
   Professional cluster.
+* **[ramble-setup]** ![community-badge] ![experimental-badge] : Creates a
+  startup script to install
+  [Ramble](https://github.com/GoogleCloudPlatform/ramble) on an instance or a
+  slurm login or controller.
 * **[spack-install]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install [Spack](https://github.com/spack/spack) on an
   instance or a slurm login or controller.
@@ -194,13 +207,15 @@ Modules that are still in development and less stable are labeled with the
 
 [startup-script]: scripts/startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
+[kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
-[spack-install]: ../community/modules/scripts/spack-install/README.md
-[wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 [pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
 [pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
 [pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
 [pbspro]: https://www.altair.com/pbs-professional
+[ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
+[spack-install]: ../community/modules/scripts/spack-install/README.md
+[wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 
 ## Module Fields
 
@@ -284,7 +299,7 @@ the location of the Terraform module.
 
 Additionally, [specific revisions of a remote module][tfrev] can be selected by
 any valid [git reference][gitref]. Typically, these are a git branch, commit
-hash or tag. The [Intel DAOS blueprint][daos-cluster.yaml] makes extensive use
+hash or tag. The [Intel DAOS blueprint][pfs-daos.yaml] makes extensive use
 of this feature. For example, to temporarily point to a development copy of the
 Toolkit vpc module, use:
 
@@ -296,7 +311,7 @@ Toolkit vpc module, use:
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
 [gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
-[daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
+[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
 
 #### Generic Git Modules
 To use a Terraform module available in a non-GitHub git repository such as

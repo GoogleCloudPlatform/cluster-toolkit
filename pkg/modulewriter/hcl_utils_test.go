@@ -16,9 +16,12 @@ package modulewriter
 
 import (
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -55,10 +58,37 @@ func TestTokensForValueWithLiteral(t *testing.T) {
   tan = [var.kilo + 8, var.tina + 4]
 }`[1:]
 
-	got := hclwrite.NewEmptyFile()
-	got.Body().AppendUnstructuredTokens(TokensForValue(val))
+	gotF := hclwrite.NewEmptyFile()
+	gotF.Body().AppendUnstructuredTokens(TokensForValue(val))
+	got := hclwrite.Format(gotF.Bytes()) // format to normalize whitespace
 
-	if diff := cmp.Diff(want, string(got.Bytes())); diff != "" {
+	if diff := cmp.Diff(want, string(got)); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestHclAtttributesRW(t *testing.T) {
+	want := make(map[string]cty.Value)
+	// test that a string that needs escaping when written is read correctly
+	want["key1"] = cty.StringVal("${value1}")
+
+	fn, err := os.CreateTemp("", "test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(fn.Name())
+
+	err = WriteHclAttributes(want, fn.Name())
+	if err != nil {
+		t.Errorf("could not write HCL attributes file")
+	}
+
+	got, err := modulereader.ReadHclAttributes(fn.Name())
+	if err != nil {
+		t.Errorf("could not read HCL attributes file")
+	}
+
+	if diff := cmp.Diff(want, got, cmpopts.IgnoreUnexported(cty.Value{})); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }

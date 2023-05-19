@@ -54,7 +54,7 @@ steps:
     set -x -e
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=examples/batch-mpi.yaml
+    SG_EXAMPLE=examples/serverless-batch-mpi.yaml
 
     sed -i "s/# spack_cache_url:/spack_cache_url:/" $${SG_EXAMPLE}
     sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" $${SG_EXAMPLE}

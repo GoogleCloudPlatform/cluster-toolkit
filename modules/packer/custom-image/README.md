@@ -47,7 +47,7 @@ Please review the [examples README] for usage instructions.
 
 ### Intel-Optimized Slurm Cluster
 
-The [Intel-Optimized] Slurm Cluster [blueprint](../../../community/examples/intel/hpc-cluster-intel-select.yaml)
+The [Intel-Optimized] Slurm Cluster [blueprint](../../../community/examples/intel/hpc-intel-select-slurm.yaml)
 adds the Intel compliance software on top of a Slurm on GCP image.
 
 [Image Builder]: ../../../examples/image-builder.yaml

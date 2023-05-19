@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "batch-login-node" })
+}
+
 data "google_compute_instance_template" "batch_instance_template" {
   name = var.instance_template
 }
@@ -100,7 +105,7 @@ locals {
 
 module "login_startup_script" {
   source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=34bb7250"
-  labels          = var.labels
+  labels          = local.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name
   region          = var.region

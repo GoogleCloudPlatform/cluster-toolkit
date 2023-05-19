@@ -51,7 +51,7 @@ run_test() {
 		echo "*** ERROR: can't cd into the deployment folder ${DEPLOYMENT}"
 		exit 1
 	}
-	for folder in ./*; do
+	for folder in */; do
 		cd "$folder"
 		pkrdirs=()
 		while IFS= read -r -d $'\n'; do

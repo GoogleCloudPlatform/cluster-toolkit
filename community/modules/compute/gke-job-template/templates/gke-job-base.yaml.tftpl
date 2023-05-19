@@ -1,0 +1,59 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${name}${suffix}
+spec:
+  parallelism: ${node_count}
+  completions: ${node_count}
+  template:
+    spec:
+      %{~ if length(node_pool_names) > 0 ~}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: cloud.google.com/gke-nodepool
+                operator: In
+                values:
+                %{~ for node_pool in node_pool_names ~}
+                - ${node_pool}
+                %{~ endfor ~}
+      %{~ endif ~}
+      nodeSelector:
+      %{~ if machine_family != null ~}
+        cloud.google.com/machine-family: ${machine_family}
+      %{~ endif ~}
+      %{~ for key, val in node_selectors ~}
+        ${key}: ${val}
+      %{~ endfor ~}
+      tolerations:
+      %{~ for toleration in tolerations ~}
+      - key: ${toleration.key}
+        operator: ${toleration.operator}
+        value: "${toleration.value}"
+        effect: ${toleration.effect}
+      %{~ endfor ~}
+      containers:
+      - name: ${name}-container
+        image: ${image}
+        command: [%{~ for s in command ~}"${s}",%{~ endfor ~}]
+        %{~ if should_request_cpu || should_request_gpu ~}
+        resources:
+          %{~ if should_request_gpu ~}
+          limits:
+            # GPUs should only be specified as limits
+            # https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
+            nvidia.com/gpu: ${gpu_limit}
+          %{~ endif ~}
+          %{~ if should_request_cpu ~}
+          requests:
+            %{~ if full_node_request ~}
+            # cpu request attempts full node per pod
+            %{~ endif ~}
+            cpu: ${millicpu_request}
+          %{~ endif ~}
+        %{~ endif ~}
+      restartPolicy: ${restart_policy}
+  backoffLimit: ${backoff_limit}

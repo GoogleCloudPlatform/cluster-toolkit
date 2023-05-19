@@ -28,7 +28,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=5.6.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=5.7.2"
 
   project_id                      = var.project_id
   slurm_cluster_name              = local.slurm_cluster_name

@@ -67,6 +67,14 @@ func (d *Dict) Set(k string, v cty.Value) *Dict {
 	return d
 }
 
+// Unset removes a key from dictionary, if it is present
+func (d *Dict) Unset(k string) *Dict {
+	if d.Has(k) {
+		delete(d.m, k)
+	}
+	return d
+}
+
 // Items returns instance of map[string]cty.Value
 // will same set of key-value pairs as stored in Dict.
 // This map is a copy, changes to returned map have no effect on the Dict.
@@ -85,13 +93,18 @@ func (d *Dict) AsObject() cty.Value {
 	return cty.ObjectVal(d.Items())
 }
 
-// yamlValue is wrapper around cty.Value to handle YAML unmarshal.
-type yamlValue struct {
+// YamlValue is wrapper around cty.Value to handle YAML unmarshal.
+type YamlValue struct {
 	v cty.Value
 }
 
+// Unwrap returns wrapped cty.Value.
+func (y YamlValue) Unwrap() cty.Value {
+	return y.v
+}
+
 // UnmarshalYAML implements custom YAML unmarshaling.
-func (y *yamlValue) UnmarshalYAML(n *yaml.Node) error {
+func (y *YamlValue) UnmarshalYAML(n *yaml.Node) error {
 	var err error
 	switch n.Kind {
 	case yaml.ScalarNode:
@@ -106,7 +119,7 @@ func (y *yamlValue) UnmarshalYAML(n *yaml.Node) error {
 	return err
 }
 
-func (y *yamlValue) unmarshalScalar(n *yaml.Node) error {
+func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	var s interface{}
 	if err := n.Decode(&s); err != nil {
 		return err
@@ -135,8 +148,8 @@ func (y *yamlValue) unmarshalScalar(n *yaml.Node) error {
 	return nil
 }
 
-func (y *yamlValue) unmarshalObject(n *yaml.Node) error {
-	var my map[string]yamlValue
+func (y *YamlValue) unmarshalObject(n *yaml.Node) error {
+	var my map[string]YamlValue
 	if err := n.Decode(&my); err != nil {
 		return err
 	}
@@ -148,8 +161,8 @@ func (y *yamlValue) unmarshalObject(n *yaml.Node) error {
 	return nil
 }
 
-func (y *yamlValue) unmarshalTuple(n *yaml.Node) error {
-	var ly []yamlValue
+func (y *YamlValue) unmarshalTuple(n *yaml.Node) error {
+	var ly []YamlValue
 	if err := n.Decode(&ly); err != nil {
 		return err
 	}
@@ -163,7 +176,7 @@ func (y *yamlValue) unmarshalTuple(n *yaml.Node) error {
 
 // UnmarshalYAML implements custom YAML unmarshaling.
 func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
-	var m map[string]yamlValue
+	var m map[string]YamlValue
 	if err := n.Decode(&m); err != nil {
 		return err
 	}
@@ -175,7 +188,7 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 
 // MarshalYAML implements custom YAML marshaling.
 func (d Dict) MarshalYAML() (interface{}, error) {
-	o, err := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
+	o, _ := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
 		if e, is := IsExpressionValue(v); is {
 			return e.makeYamlExpressionValue(), nil
 		}

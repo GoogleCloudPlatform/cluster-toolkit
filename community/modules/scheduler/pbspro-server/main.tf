@@ -15,6 +15,11 @@
  */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "pbspro-server" })
+}
+
+locals {
   resource_prefix = var.name_prefix != null ? var.name_prefix : "${var.deployment_name}-server"
 
   user_startup_script_runners = var.startup_script == null ? [] : [
@@ -75,7 +80,7 @@ module "pbs_server" {
   project_id      = var.project_id
   region          = var.region
   zone            = var.zone
-  labels          = var.labels
+  labels          = local.labels
 
   machine_type    = var.machine_type
   service_account = var.service_account

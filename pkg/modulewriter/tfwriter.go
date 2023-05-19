@@ -18,15 +18,18 @@ package modulewriter
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
 	"hpc-toolkit/pkg/config"
@@ -81,26 +84,21 @@ func writeOutputs(
 	modules []config.Module,
 	dst string,
 ) error {
-	// Create file
-	outputsPath := filepath.Join(dst, "outputs.tf")
-	if err := createBaseFile(outputsPath); err != nil {
-		return fmt.Errorf("error creating outputs.tf file: %v", err)
-	}
-
 	// Create hcl body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
 
+	outputs := []string{}
 	// Add all outputs from each module
 	for _, mod := range modules {
 		for _, output := range mod.Outputs {
-			// Create output block
 			outputName := config.AutomaticOutputName(output.Name, mod.ID)
+			outputs = append(outputs, outputName)
+
 			hclBody.AppendNewline()
 			hclBlock := hclBody.AppendNewBlock("output", []string{outputName})
 			blockBody := hclBlock.Body()
 
-			// Add attributes (description, value)
 			desc := output.Description
 			if desc == "" {
 				desc = fmt.Sprintf("Generated output from module '%s'", mod.ID)
@@ -114,10 +112,14 @@ func writeOutputs(
 		}
 	}
 
-	// Write file
+	if len(outputs) == 0 {
+		return nil
+	}
 	hclBytes := hclFile.Bytes()
-	hclBytes = escapeLiteralVariables(hclBytes)
-	hclBytes = escapeBlueprintVariables(hclBytes)
+	outputsPath := filepath.Join(dst, "outputs.tf")
+	if err := createBaseFile(outputsPath); err != nil {
+		return fmt.Errorf("error creating outputs.tf file: %v", err)
+	}
 	err := appendHCLToFile(outputsPath, hclBytes)
 	if err != nil {
 		return fmt.Errorf("error writing HCL to outputs.tf file: %v", err)
@@ -128,7 +130,7 @@ func writeOutputs(
 func writeTfvars(vars map[string]cty.Value, dst string) error {
 	// Create file
 	tfvarsPath := filepath.Join(dst, "terraform.tfvars")
-	err := writeHclAttributes(vars, tfvarsPath)
+	err := WriteHclAttributes(vars, tfvarsPath)
 	return err
 }
 
@@ -203,6 +205,7 @@ func writeMain(
 
 	// Write Terraform backend if needed
 	if tfBackend.Type != "" {
+		hclBody.AppendNewline()
 		tfBody := hclBody.AppendNewBlock("terraform", []string{}).Body()
 		backendBlock := tfBody.AppendNewBlock("backend", []string{tfBackend.Type})
 		backendBody := backendBlock.Body()
@@ -210,28 +213,20 @@ func writeMain(
 		for _, setting := range orderKeys(vals) {
 			backendBody.SetAttributeValue(setting, vals[setting])
 		}
-		hclBody.AppendNewline()
 	}
 
 	for _, mod := range modules {
-		// Convert settings to cty.Value
-		ctySettings, err := config.ConvertMapToCty(mod.Settings)
-		if err != nil {
-			return fmt.Errorf(
-				"error converting setting in module %s to cty when writing main.tf: %v",
-				mod.ID, err)
-		}
-
+		hclBody.AppendNewline()
 		// Add block
-		moduleBlock := hclBody.AppendNewBlock("module", []string{mod.ID})
+		moduleBlock := hclBody.AppendNewBlock("module", []string{string(mod.ID)})
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
 		moduleBody.SetAttributeValue("source", cty.StringVal(mod.DeploymentSource))
 
 		// For each Setting
-		for _, setting := range orderKeys(ctySettings) {
-			value := ctySettings[setting]
+		for _, setting := range orderKeys(mod.Settings.Items()) {
+			value := mod.Settings.Get(setting)
 			if wrap, ok := mod.WrapSettingsWith[setting]; ok {
 				if len(wrap) != 2 {
 					return fmt.Errorf(
@@ -247,12 +242,9 @@ func writeMain(
 				moduleBody.SetAttributeRaw(setting, TokensForValue(value))
 			}
 		}
-		hclBody.AppendNewline()
 	}
 	// Write file
 	hclBytes := hclFile.Bytes()
-	hclBytes = escapeLiteralVariables(hclBytes)
-	hclBytes = escapeBlueprintVariables(hclBytes)
 	hclBytes = hclwrite.Format(hclBytes)
 	if err := appendHCLToFile(mainPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
@@ -298,6 +290,7 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 	hclBody := hclFile.Body()
 
 	for _, prov := range []string{"google", "google-beta"} {
+		hclBody.AppendNewline()
 		provBlock := hclBody.AppendNewBlock("provider", []string{prov})
 		provBody := provBlock.Body()
 		if _, ok := vars["project_id"]; ok {
@@ -309,13 +302,10 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 		if _, ok := vars["region"]; ok {
 			provBody.SetAttributeRaw("region", simpleTokens("var.region"))
 		}
-		hclBody.AppendNewline()
 	}
 
 	// Write file
 	hclBytes := hclFile.Bytes()
-	hclBytes = escapeLiteralVariables(hclBytes)
-	hclBytes = escapeBlueprintVariables(hclBytes)
 	if err := appendHCLToFile(providersPath, hclBytes); err != nil {
 		return fmt.Errorf("error writing HCL to providers.tf file: %v", err)
 	}
@@ -335,14 +325,20 @@ func writeVersions(dst string) error {
 	return nil
 }
 
-func printTerraformInstructions(grpPath string, moduleName string, printIntergroupWarning bool) {
-	printInstructionsPreamble("Terraform", grpPath, moduleName)
-	if printIntergroupWarning {
-		fmt.Print(intergroupWarning)
+func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName, printExportOutputs bool, printImportInputs bool) {
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Terraform group '%s' was successfully created in directory %s\n", n, grpPath)
+	fmt.Fprintln(w, "To deploy, run the following commands:")
+	fmt.Fprintln(w)
+	if printImportInputs {
+		fmt.Fprintf(w, "ghpc import-inputs %s\n", grpPath)
 	}
-	fmt.Printf("  terraform -chdir=%s init\n", grpPath)
-	fmt.Printf("  terraform -chdir=%s validate\n", grpPath)
-	fmt.Printf("  terraform -chdir=%s apply\n\n", grpPath)
+	fmt.Fprintf(w, "terraform -chdir=%s init\n", grpPath)
+	fmt.Fprintf(w, "terraform -chdir=%s validate\n", grpPath)
+	fmt.Fprintf(w, "terraform -chdir=%s apply\n", grpPath)
+	if printExportOutputs {
+		fmt.Fprintf(w, "ghpc export-outputs %s\n", grpPath)
+	}
 }
 
 // writeDeploymentGroup creates and sets up the provided terraform deployment
@@ -355,75 +351,75 @@ func (w TFWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	groupIndex int,
 	deploymentDir string,
-) (groupMetadata, error) {
+	instructionsFile io.Writer,
+) error {
 	depGroup := dc.Config.DeploymentGroups[groupIndex]
-	deploymentVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
-	intergroupVars := findIntergroupVariables(depGroup, dc.GetModuleConnections())
+	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
+	intergroupVars := FindIntergroupVariables(depGroup, dc.Config)
 	intergroupInputs := make(map[string]bool)
 	for _, igVar := range intergroupVars {
 		intergroupInputs[igVar.Name] = true
 	}
-	gmd := groupMetadata{
-		Name:             depGroup.Name,
-		DeploymentInputs: orderKeys(deploymentVars),
-		IntergroupInputs: orderKeys(intergroupInputs),
-		Outputs:          getAllOutputs(depGroup),
-	}
 
-	writePath := filepath.Join(deploymentDir, depGroup.Name)
+	groupPath := filepath.Join(deploymentDir, string(depGroup.Name))
 
 	// Write main.tf file
+	doctoredModules := substituteIgcReferences(depGroup.Modules, intergroupVars)
 	if err := writeMain(
-		depGroup.Modules, depGroup.TerraformBackend, writePath,
+		doctoredModules, depGroup.TerraformBackend, groupPath,
 	); err != nil {
-		return groupMetadata{}, fmt.Errorf("error writing main.tf file for deployment group %s: %v",
+		return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write variables.tf file
-	if err := writeVariables(deploymentVars, intergroupVars, writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+	if err := writeVariables(deploymentVars, maps.Values(intergroupVars), groupPath); err != nil {
+		return fmt.Errorf(
 			"error writing variables.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write outputs.tf file
-	if err := writeOutputs(depGroup.Modules, writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+	if err := writeOutputs(depGroup.Modules, groupPath); err != nil {
+		return fmt.Errorf(
 			"error writing outputs.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write terraform.tfvars file
-	if err := writeTfvars(deploymentVars, writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+	if err := writeTfvars(deploymentVars, groupPath); err != nil {
+		return fmt.Errorf(
 			"error writing terraform.tfvars file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write providers.tf file
-	if err := writeProviders(deploymentVars, writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+	if err := writeProviders(deploymentVars, groupPath); err != nil {
+		return fmt.Errorf(
 			"error writing providers.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
 	// Write versions.tf file
-	if err := writeVersions(writePath); err != nil {
-		return groupMetadata{}, fmt.Errorf(
+	if err := writeVersions(groupPath); err != nil {
+		return fmt.Errorf(
 			"error writing versions.tf file for deployment group %s: %v",
 			depGroup.Name, err)
 	}
 
-	printTerraformInstructions(writePath, depGroup.Name, len(intergroupInputs) > 0)
+	multiGroupDeployment := len(dc.Config.DeploymentGroups) > 1
+	printImportInputs := multiGroupDeployment && groupIndex > 0
+	printExportOutputs := multiGroupDeployment && groupIndex < len(dc.Config.DeploymentGroups)-1
 
-	return gmd, nil
+	writeTerraformInstructions(instructionsFile, groupPath, depGroup.Name, printExportOutputs, printImportInputs)
+
+	return nil
 }
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
 func (w TFWriter) restoreState(deploymentDir string) error {
 	prevDeploymentGroupPath := filepath.Join(
-		deploymentDir, hiddenGhpcDirName, prevDeploymentGroupDirName)
+		deploymentDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
 	files, err := ioutil.ReadDir(prevDeploymentGroupPath)
 	if err != nil {
 		return fmt.Errorf(
@@ -458,25 +454,20 @@ func orderKeys[T any](settings map[string]T) []string {
 	return keys
 }
 
-func filterVarsByGraph(vars map[string]cty.Value, group config.DeploymentGroup, graph map[string][]config.ModConnection) map[string]cty.Value {
+func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) map[string]cty.Value {
 	// labels must always be written as a variable as it is implicitly added
 	groupInputs := map[string]bool{
 		"labels": true,
 	}
+
 	for _, mod := range group.Modules {
-		if connections, ok := graph[mod.ID]; ok {
-			for _, conn := range connections {
-				if conn.IsDeploymentKind() {
-					for _, v := range conn.GetSharedVariables() {
-						groupInputs[v] = true
-					}
-				}
-			}
+		for _, v := range config.GetUsedDeploymentVars(mod.Settings.AsObject()) {
+			groupInputs[v] = true
 		}
 	}
 
 	filteredVars := make(map[string]cty.Value)
-	for key, val := range vars {
+	for key, val := range bp.Vars.Items() {
 		if groupInputs[key] {
 			filteredVars[key] = val
 		}
@@ -484,12 +475,55 @@ func filterVarsByGraph(vars map[string]cty.Value, group config.DeploymentGroup, 
 	return filteredVars
 }
 
-func getAllOutputs(group config.DeploymentGroup) []string {
-	outputs := make(map[string]bool)
-	for _, mod := range group.Modules {
-		for _, output := range mod.Outputs {
-			outputs[config.AutomaticOutputName(output.Name, mod.ID)] = true
+func substituteIgcReferences(mods []config.Module, igcRefs map[config.Reference]modulereader.VarInfo) []config.Module {
+	doctoredMods := make([]config.Module, len(mods))
+	for i, mod := range mods {
+		doctoredMods[i] = SubstituteIgcReferencesInModule(mod, igcRefs)
+	}
+	return doctoredMods
+}
+
+// SubstituteIgcReferencesInModule updates expressions in Module settings to use
+// special IGC var name instead of the module reference
+func SubstituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Reference]modulereader.VarInfo) config.Module {
+	v, _ := cty.Transform(mod.Settings.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
+		e, is := config.IsExpressionValue(v)
+		if !is {
+			return v, nil
+		}
+		ue := string(e.Tokenize().Bytes())
+		for _, r := range e.References() {
+			oi, exists := igcRefs[r]
+			if !exists {
+				continue
+			}
+			s := fmt.Sprintf("module.%s.%s", r.Module, r.Name)
+			rs := fmt.Sprintf("var.%s", oi.Name)
+			ue = strings.ReplaceAll(ue, s, rs)
+		}
+		return config.MustParseExpression(ue).AsValue(), nil
+	})
+	mod.Settings = config.NewDict(v.AsValueMap())
+	return mod
+}
+
+// FindIntergroupVariables returns all unique intergroup references made by
+// each module settings in a group
+func FindIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) map[config.Reference]modulereader.VarInfo {
+	res := map[config.Reference]modulereader.VarInfo{}
+	igcRefs := group.FindAllIntergroupReferences(bp)
+	for _, r := range igcRefs {
+		n := config.AutomaticOutputName(r.Name, r.Module)
+		res[r] = modulereader.VarInfo{
+			Name:        n,
+			Type:        getHclType(cty.DynamicPseudoType),
+			Description: "Automatically generated input from previous groups (ghpc import-inputs --help)",
+			Required:    true,
 		}
 	}
-	return orderKeys(outputs)
+	return res
+}
+
+func (w TFWriter) kind() config.ModuleKind {
+	return config.TerraformKind
 }

@@ -15,6 +15,8 @@
 package modulereader
 
 import (
+	"os"
+
 	. "gopkg.in/check.v1"
 )
 
@@ -32,4 +34,19 @@ func (s *MySuite) TestNormalizeType(c *C) {
 	c.Check(NormalizeType(" object (  {\na=any\n} ) "), Equals, NormalizeType("object({a=any})"))
 
 	c.Check(NormalizeType(" string # comment"), Equals, NormalizeType("string"))
+}
+
+// a full-loop test of ReadWrite is implemented in modulewriter package
+// focus on modes that should error
+func (s *MySuite) TestReadHclAtttributes(c *C) {
+	fn, err := os.CreateTemp("", "test-*")
+	if err != nil {
+		c.Fatal(err)
+	}
+	defer os.Remove(fn.Name())
+
+	fn.WriteString("attribute_name = var.name")
+
+	_, err = ReadHclAttributes(fn.Name())
+	c.Assert(err, NotNil)
 }

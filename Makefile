@@ -1,6 +1,6 @@
 # PREAMBLE
-MIN_PACKER_VERSION=1.6 # for building images
-MIN_TERRAFORM_VERSION=1.0 # for deploying modules
+MIN_PACKER_VERSION=1.7.9 # for building images
+MIN_TERRAFORM_VERSION=1.2 # for deploying modules
 MIN_GOLANG_VERSION=1.18 # for building ghpc
 
 .PHONY: install install-user tests format add-google-license install-dev-deps \
@@ -117,8 +117,9 @@ else
 ## GO IS PRESENT
 warn-go-missing:
 
-GO_VERSION_CHECK=$(shell expr `go version | cut -f 3 -d ' ' | cut -f 1 -d '-' | cut -c 3-` \>= $(MIN_GOLANG_VERSION))
-ifneq ("$(GO_VERSION_CHECK)", "1")
+GO_VERSION=$(shell go version | cut -f 3 -d ' ')
+GO_VERSION_CHECK=$(shell ./tools/version_check.sh $(GO_VERSION) $(MIN_GOLANG_VERSION))
+ifneq ("$(GO_VERSION_CHECK)", "yes")
 warn-go-version:
 	$(warning WARNING: Go version must be greater than $(MIN_GOLANG_VERSION), update at  https://go.dev/doc/install)
 else
@@ -145,8 +146,9 @@ else
 ## TERRAFORM IS PRESENT
 warn-terraform-missing:
 
-TF_VERSION_CHECK=$(shell expr `terraform version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= $(MIN_TERRAFORM_VERSION))
-ifneq ("$(TF_VERSION_CHECK)", "1")
+TF_VERSION=$(shell terraform version | cut -f 2- -d ' ' | head -n1)
+TF_VERSION_CHECK=$(shell ./tools/version_check.sh $(TF_VERSION) $(MIN_TERRAFORM_VERSION))
+ifneq ("$(TF_VERSION_CHECK)", "yes")
 warn-terraform-version:
 	$(warning WARNING: terraform version must be greater than $(MIN_TERRAFORM_VERSION), update at https://learn.hashicorp.com/tutorials/terraform/install-cli)
 else
@@ -159,7 +161,7 @@ validate_configs: ghpc
 
 validate_golden_copy: ghpc
 	$(info *********** running "Golden copy" tests ***********)
-	tools/validate_configs/validate_golden_copy.sh
+	tools/validate_configs/golden_copies/validate.sh
 
 terraform-format:
 	$(info *********** cleaning terraform files syntax and generating terraform documentation ***********)
@@ -176,7 +178,7 @@ endif
 # END OF TERRAFORM SECTION
 ###################################
 # PACKER SECTION
-ifeq (, $(shell which packer))
+ifneq (yes, $(shell  ./tools/detect_packer.sh ))
 ## PACKER IS NOT PRESENT
 warn-packer-missing:
 	$(warning WARNING: packer not installed, visit https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
@@ -193,8 +195,9 @@ else
 ## PACKER IS PRESENT
 warn-packer-missing:
 
-PK_VERSION_CHECK=$(shell expr `packer version | cut -f 2- -d ' ' | cut -c 2- | head -n1` \>= $(MIN_PACKER_VERSION))
-ifneq ("$(PK_VERSION_CHECK)", "1")
+PK_VERSION=$(shell packer version | cut -f 2- -d ' ' | head -n1)
+PK_VERSION_CHECK=$(shell ./tools/version_check.sh $(PK_VERSION) $(MIN_PACKER_VERSION))
+ifneq ("$(PK_VERSION_CHECK)", "yes")
 ### WRONG PACKER VERSION, MAY ALSO MEAN THE USER HAS SOME OTHER PACKER TOOL
 warn-packer-version:
 	$(warning WARNING: packer version must be greater than $(MIN_PACKER_VERSION), update at https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)

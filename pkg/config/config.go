@@ -17,8 +17,6 @@ package config
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -26,10 +24,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hashicorp/hcl/v2"
+	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
-	ctyJson "github.com/zclconf/go-cty/cty/json"
-	"golang.org/x/exp/slices"
+	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -86,34 +83,46 @@ var movedModules = map[string]string{
 	"community/modules/scheduler/cloud-batch-login-node": "modules/scheduler/batch-login-node",
 }
 
+// GroupName is the name of a deployment group
+type GroupName string
+
+// Validate checks that the group name is valid
+func (n GroupName) Validate() error {
+	if n == "" {
+		return errors.New(errorMessages["emptyGroupName"])
+	}
+	if hasIllegalChars(string(n)) {
+		return fmt.Errorf("%s %s", errorMessages["illegalChars"], n)
+	}
+	return nil
+}
+
 // DeploymentGroup defines a group of Modules that are all executed together
 type DeploymentGroup struct {
-	Name             string           `yaml:"group"`
+	Name             GroupName        `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
 	Modules          []Module         `yaml:"modules"`
 	Kind             ModuleKind
 }
 
-func (g DeploymentGroup) getModuleByID(modID string) (Module, error) {
-	idx := slices.IndexFunc(g.Modules, func(m Module) bool { return m.ID == modID })
-	if idx == -1 {
-		return Module{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], modID)
+// Module return the module with the given ID
+func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
+	var mod *Module
+	bp.WalkModules(func(m *Module) error {
+		if m.ID == id {
+			mod = m
+		}
+		return nil
+	})
+	if mod == nil {
+		return nil, fmt.Errorf("%s: %s", errorMessages["invalidMod"], id)
 	}
-	return g.Modules[idx], nil
-}
-
-func (dc DeploymentConfig) getGroupByID(groupID string) (DeploymentGroup, error) {
-	groupIndex := slices.IndexFunc(dc.Config.DeploymentGroups, func(d DeploymentGroup) bool { return d.Name == groupID })
-	if groupIndex == -1 {
-		return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["groupNotFound"], groupID)
-	}
-	group := dc.Config.DeploymentGroups[groupIndex]
-	return group, nil
+	return mod, nil
 }
 
 // ModuleGroup returns the group containing the module
-func (b Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
-	for _, g := range b.DeploymentGroups {
+func (bp Blueprint) ModuleGroup(mod ModuleID) (DeploymentGroup, error) {
+	for _, g := range bp.DeploymentGroups {
 		for _, m := range g.Modules {
 			if m.ID == mod {
 				return g, nil
@@ -124,12 +133,32 @@ func (b Blueprint) ModuleGroup(mod string) (DeploymentGroup, error) {
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound
-func (b Blueprint) ModuleGroupOrDie(mod string) DeploymentGroup {
-	g, err := b.ModuleGroup(mod)
+func (bp Blueprint) ModuleGroupOrDie(mod ModuleID) DeploymentGroup {
+	g, err := bp.ModuleGroup(mod)
 	if err != nil {
 		panic(fmt.Errorf("module %s not found in blueprint: %s", mod, err))
 	}
 	return g
+}
+
+// GroupIndex returns the index of the input group in the blueprint
+// return -1 if not found
+func (bp Blueprint) GroupIndex(n GroupName) int {
+	for i, g := range bp.DeploymentGroups {
+		if g.Name == n {
+			return i
+		}
+	}
+	return -1
+}
+
+// Group returns the deployment group with a given name
+func (bp Blueprint) Group(n GroupName) (DeploymentGroup, error) {
+	idx := bp.GroupIndex(n)
+	if idx == -1 {
+		return DeploymentGroup{}, fmt.Errorf("could not find group %s in blueprint", n)
+	}
+	return bp.DeploymentGroups[idx], nil
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
@@ -197,29 +226,13 @@ const (
 // this enum will be used to control how fatal validator failures will be
 // treated during blueprint creation
 const (
-	validationError int = iota
-	validationWarning
-	validationIgnore
+	ValidationError int = iota
+	ValidationWarning
+	ValidationIgnore
 )
 
 func isValidValidationLevel(level int) bool {
-	return !(level > validationIgnore || level < validationError)
-}
-
-// SetValidationLevel allows command-line tools to set the validation level
-func (dc *DeploymentConfig) SetValidationLevel(level string) error {
-	switch level {
-	case "ERROR":
-		dc.Config.ValidationLevel = validationError
-	case "WARNING":
-		dc.Config.ValidationLevel = validationWarning
-	case "IGNORE":
-		dc.Config.ValidationLevel = validationIgnore
-	default:
-		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
-	}
-
-	return nil
+	return !(level > ValidationIgnore || level < ValidationError)
 }
 
 func (v validatorName) String() string {
@@ -275,17 +288,8 @@ func (v *validatorConfig) check(name validatorName, requiredInputs []string) err
 	return nil
 }
 
-// HasKind checks to see if a resource group contains any modules of the given
-// kind. Note that a DeploymentGroup should never have more than one kind, this
-// function is used in the validation step to ensure that is true.
-func (g DeploymentGroup) HasKind(kind string) bool {
-	for _, mod := range g.Modules {
-		if mod.Kind.String() == kind {
-			return true
-		}
-	}
-	return false
-}
+// ModuleID is a unique identifier for a module in a blueprint
+type ModuleID string
 
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
@@ -293,11 +297,11 @@ type Module struct {
 	// DeploymentSource - is source to be used for this module in written deployment.
 	DeploymentSource string `yaml:"-"` // "-" prevents user from specifying it
 	Kind             ModuleKind
-	ID               string
-	Use              []string
+	ID               ModuleID
+	Use              []ModuleID
 	WrapSettingsWith map[string][]string
 	Outputs          []modulereader.OutputInfo `yaml:"outputs,omitempty"`
-	Settings         map[string]interface{}
+	Settings         Dict
 	RequiredApis     map[string][]string `yaml:"required_apis"`
 }
 
@@ -309,12 +313,22 @@ func (m *Module) createWrapSettingsWith() {
 	}
 }
 
+// InfoOrDie returns the ModuleInfo for the module or panics
+func (m Module) InfoOrDie() modulereader.ModuleInfo {
+	mi, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
+	if err != nil {
+		panic(err)
+	}
+	return mi
+}
+
 // Blueprint stores the contents on the User YAML
 // omitempty on validation_level ensures that expand will not expose the setting
 // unless it has been set to a non-default value; the implementation as an
 // integer is primarily for internal purposes even if it can be set in blueprint
 type Blueprint struct {
 	BlueprintName            string `yaml:"blueprint_name"`
+	GhpcVersion              string `yaml:"ghpc_version,omitempty"`
 	Validators               []validatorConfig
 	ValidationLevel          int `yaml:"validation_level,omitempty"`
 	Vars                     Dict
@@ -322,137 +336,67 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
 }
 
-// connectionKind defines tracks graph edges between modules and from modules to
-// deployment variables:
-//
-// use: created via module-module use keyword
-// deployment: created by a module setting equal to $(vars.name)
-// explicit: created by a module setting equal to $(mod_id.output)
-//
-// no attempt is made to track edges made via Toolkit literal strings presently
-// required when wanting to index a list or map "((mod_id.output[0]))"
-type connectionKind int
-
-const (
-	undefinedConnection connectionKind = iota
-	useConnection
-	deploymentConnection
-	explicitConnection
-)
-
-func (c connectionKind) IsValid() bool {
-	return c == useConnection || c == deploymentConnection || c == explicitConnection
-}
-
-// ModConnection defines details about connections between modules. Currently,
-// only modules connected with "use" are tracked.
-type ModConnection struct {
-	ref             reference
-	kind            connectionKind
-	sharedVariables []string
-}
-
-// IsDeploymentKind returns true if connection is to a deployment variable
-func (c ModConnection) IsDeploymentKind() bool {
-	return c.kind == deploymentConnection
-}
-
-// IsUseKind returns true if connection is module-to-module via use keyword
-func (c ModConnection) IsUseKind() bool {
-	return c.kind == useConnection
-}
-
-// GetSharedVariables returns variables used in the connection (can be empty!)
-func (c ModConnection) GetSharedVariables() []string {
-	if !c.IsIntergroup() {
-		return c.sharedVariables
-	}
-	vars := make([]string, len(c.sharedVariables))
-	for i, v := range c.sharedVariables {
-		vars[i] = AutomaticOutputName(v, c.ref.ToModuleID())
-	}
-	return vars
-}
-
-// IsIntergroup returns if underlying connection is across deployment groups
-func (c ModConnection) IsIntergroup() bool {
-	return c.ref.IsIntergroup()
-}
-
-// Returns true if a connection does not functionally link the outputs and
-// inputs of the modules. This can happen when a module is connected with "use"
-// but none of the outputs of fromID match the inputs of toID.
-func (c *ModConnection) isUnused() bool {
-	return c.kind == useConnection && len(c.sharedVariables) == 0
-}
-
 // DeploymentConfig is a container for the imported YAML data and supporting data for
 // creating the blueprint from it
 type DeploymentConfig struct {
 	Config Blueprint
-	// Indexed by Resource Group name and Module Source
-	ModulesInfo       map[string]map[string]modulereader.ModuleInfo
-	moduleConnections map[string][]ModConnection
 }
 
 // ExpandConfig expands the yaml config in place
 func (dc *DeploymentConfig) ExpandConfig() error {
-	if err := dc.checkMovedModules(); err != nil {
+	if err := dc.Config.checkMovedModules(); err != nil {
 		return err
 	}
-	dc.addKindToModules()
-	dc.setModulesInfo()
+	dc.Config.setGlobalLabels()
+	dc.Config.addKindToModules()
 	dc.validateConfig()
 	dc.expand()
 	dc.validate()
 	return nil
 }
 
-func (dc *DeploymentConfig) addModuleConnection(ref reference, kind connectionKind, sharedVariables []string) error {
-	if dc.moduleConnections == nil {
-		dc.moduleConnections = make(map[string][]ModConnection)
+func (bp *Blueprint) setGlobalLabels() {
+	if !bp.Vars.Has("labels") {
+		bp.Vars.Set("labels", cty.EmptyObjectVal)
 	}
-
-	if !kind.IsValid() {
-		log.Fatal(unexpectedConnectionKind)
-	}
-
-	conn := ModConnection{
-		ref:             ref,
-		kind:            kind,
-		sharedVariables: sharedVariables,
-	}
-
-	fromModID := ref.FromModuleID()
-	dc.moduleConnections[fromModID] = append(dc.moduleConnections[fromModID], conn)
-	return nil
 }
 
-// GetModuleConnections returns the graph of connections between modules and
-// from modules to deployment variables
-func (dc *DeploymentConfig) GetModuleConnections() map[string][]ModConnection {
-	return dc.moduleConnections
-}
-
-// SetModuleConnections directly sets module connection graph (primarily for
-// unit testing where config expansion is not well-supported)
-func (dc *DeploymentConfig) SetModuleConnections(mc map[string][]ModConnection) {
-	dc.moduleConnections = mc
-}
-
-// listUnusedModules provides a mapping of modules to modules that are in the
+// listUnusedModules provides a list modules that are in the
 // "use" field, but not actually used.
-func (dc *DeploymentConfig) listUnusedModules() map[string][]string {
-	unusedModules := make(map[string][]string)
-	for _, connections := range dc.moduleConnections {
-		for _, conn := range connections {
-			if conn.isUnused() {
-				fromMod := conn.ref.FromModuleID()
-				unusedModules[fromMod] = append(unusedModules[fromMod], conn.ref.ToModuleID())
-			}
+func (m Module) listUnusedModules() []ModuleID {
+	used := map[ModuleID]bool{}
+	// Recurse through objects/maps/lists checking each element for having `ProductOfModuleUse` mark.
+	cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
+		if mark, has := HasMark[ProductOfModuleUse](v); has {
+			used[mark.Module] = true
+		}
+		return true, nil
+	})
+
+	unused := []ModuleID{}
+	for _, w := range m.Use {
+		if !used[w] {
+			unused = append(unused, w)
 		}
 	}
-	return unusedModules
+	return unused
+}
+
+// GetUsedDeploymentVars returns a list of deployment vars used in the given value
+func GetUsedDeploymentVars(val cty.Value) []string {
+	res := map[string]bool{}
+	// Recurse through objects/maps/lists gathering used references to deployment variables.
+	cty.Walk(val, func(path cty.Path, val cty.Value) (bool, error) {
+		if ex, is := IsExpressionValue(val); is {
+			for _, r := range ex.References() {
+				if r.GlobalVar {
+					res[r.Name] = true
+				}
+			}
+		}
+		return true, nil
+	})
+	return maps.Keys(res)
 }
 
 func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
@@ -463,15 +407,12 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 		"deployment_name": true,
 	}
 
-	for _, connections := range dc.moduleConnections {
-		for _, conn := range connections {
-			if conn.kind == deploymentConnection {
-				for _, v := range conn.sharedVariables {
-					usedVars[v] = true
-				}
-			}
+	dc.Config.WalkModules(func(m *Module) error {
+		for _, v := range GetUsedDeploymentVars(m.Settings.AsObject()) {
+			usedVars[v] = true
 		}
-	}
+		return nil
+	})
 
 	unusedVars := []string{}
 	for k := range dc.Config.Vars.Items() {
@@ -483,34 +424,27 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 	return unusedVars
 }
 
-func (dc *DeploymentConfig) checkMovedModules() error {
+func (bp Blueprint) checkMovedModules() error {
 	var err error
-	for _, grp := range dc.Config.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			if replacingMod, ok := movedModules[strings.Trim(mod.Source, "./")]; ok {
-				err = fmt.Errorf("the blueprint references modules that have moved")
-				fmt.Printf(
-					"A module you are using has moved. %s has been replaced with %s. Please update the source in your blueprint and try again.\n",
-					mod.Source, replacingMod)
-			}
+	bp.WalkModules(func(m *Module) error {
+		if replacement, ok := movedModules[strings.Trim(m.Source, "./")]; ok {
+			err = fmt.Errorf("the blueprint references modules that have moved")
+			fmt.Printf(
+				"A module you are using has moved. %s has been replaced with %s. Please update the source in your blueprint and try again.\n",
+				m.Source, replacement)
 		}
-	}
+		return nil
+	})
 	return err
 }
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
 func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
-	var newDeploymentConfig DeploymentConfig
 	blueprint, err := importBlueprint(configFilename)
 	if err != nil {
-		return newDeploymentConfig, err
+		return DeploymentConfig{}, err
 	}
-
-	newDeploymentConfig = DeploymentConfig{
-		Config:            blueprint,
-		moduleConnections: make(map[string][]ModConnection),
-	}
-	return newDeploymentConfig, nil
+	return DeploymentConfig{Config: blueprint}, nil
 }
 
 // ImportBlueprint imports the blueprint configuration provided.
@@ -534,7 +468,7 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
 	if !isValidValidationLevel(blueprint.ValidationLevel) {
-		blueprint.ValidationLevel = validationError
+		blueprint.ValidationLevel = ValidationError
 	}
 
 	return blueprint, nil
@@ -566,65 +500,46 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error
 	return nil, nil
 }
 
-func createModuleInfo(
-	deploymentGroup DeploymentGroup) map[string]modulereader.ModuleInfo {
-	modsInfo := make(map[string]modulereader.ModuleInfo)
-	for _, mod := range deploymentGroup.Modules {
-		if _, exists := modsInfo[mod.Source]; !exists {
-			ri, err := modulereader.GetModuleInfo(mod.Source, mod.Kind.String())
-			if err != nil {
-				log.Fatalf(
-					"failed to get info for module at %s while setting dc.ModulesInfo: %e",
-					mod.Source, err)
-			}
-			modsInfo[mod.Source] = ri
-		}
-	}
-	return modsInfo
-}
-
 // addKindToModules sets the kind to 'terraform' when empty.
-func (dc *DeploymentConfig) addKindToModules() {
-	for iGrp, grp := range dc.Config.DeploymentGroups {
-		for iMod, mod := range grp.Modules {
-			if mod.Kind == UnknownKind {
-				dc.Config.DeploymentGroups[iGrp].Modules[iMod].Kind =
-					TerraformKind
-			}
+func (bp *Blueprint) addKindToModules() {
+	bp.WalkModules(func(m *Module) error {
+		if m.Kind == UnknownKind {
+			m.Kind = TerraformKind
 		}
-	}
+		return nil
+	})
 }
 
-// setModulesInfo populates needed information from modules
-func (dc *DeploymentConfig) setModulesInfo() {
-	dc.ModulesInfo = make(map[string]map[string]modulereader.ModuleInfo)
-	for _, grp := range dc.Config.DeploymentGroups {
-		dc.ModulesInfo[grp.Name] = createModuleInfo(grp)
-	}
+// checkModulesInfo ensures each module in the blueprint has known detailed
+// metadata (inputs, outputs)
+func (bp *Blueprint) checkModulesInfo() error {
+	return bp.WalkModules(func(m *Module) error {
+		_, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
+		return err
+	})
 }
 
-func validateGroupName(name string, usedNames map[string]bool) {
-	if name == "" {
-		log.Fatal(errorMessages["emptyGroupName"])
-	}
-	if hasIllegalChars(name) {
-		log.Fatalf("%s %s", errorMessages["illegalChars"], name)
-	}
-	if _, ok := usedNames[name]; ok {
-		log.Fatalf(
-			"%s: %s used more than once", errorMessages["duplicateGroup"], name)
-	}
-	usedNames[name] = true
-}
-
-// checkModuleAndGroupNames checks and imports module and resource group IDs
-// and names respectively.
-func checkModuleAndGroupNames(groups []DeploymentGroup) error {
-	seenMod := map[string]bool{}
-	groupNames := make(map[string]bool)
+// checkModulesAndGroups ensures:
+//   - all module IDs are unique across all groups
+//   - if deployment group kind is unknown (not explicit in blueprint), then it is
+//     set to th kind of the first module that has a known kind (a prior func sets
+//     module kind to Terraform if unset)
+//   - all modules must be of the same kind and all modules must be of the same
+//     kind as the group
+//   - all group names are unique and do not have illegal characters
+func checkModulesAndGroups(groups []DeploymentGroup) error {
+	seenMod := map[ModuleID]bool{}
+	seenGroups := map[GroupName]bool{}
 	for ig := range groups {
 		grp := &groups[ig]
-		validateGroupName(grp.Name, groupNames)
+		if err := grp.Name.Validate(); err != nil {
+			return err
+		}
+		if seenGroups[grp.Name] {
+			return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name)
+		}
+		seenGroups[grp.Name] = true
+
 		for _, mod := range grp.Modules {
 			if seenMod[mod.ID] {
 				return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
@@ -645,36 +560,17 @@ func checkModuleAndGroupNames(groups []DeploymentGroup) error {
 	return nil
 }
 
-func modToGrp(groups []DeploymentGroup, modID string) (int, error) {
-	i := slices.IndexFunc(groups, func(g DeploymentGroup) bool {
-		return slices.ContainsFunc(g.Modules, func(m Module) bool {
-			return m.ID == modID
-		})
-	})
-	if i == -1 {
-		return -1, fmt.Errorf("module %s was not found", modID)
-	}
-	return i, nil
-}
-
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
 func checkUsedModuleNames(bp Blueprint) error {
-	for _, grp := range bp.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			for _, usedMod := range mod.Use {
-				ref, err := identifyModuleByReference(usedMod, bp, mod.ID)
-				if err != nil {
-					return err
-				}
-
-				if err = ref.validate(bp); err != nil {
-					return err
-				}
+	return bp.WalkModules(func(mod *Module) error {
+		for _, used := range mod.Use {
+			if err := validateModuleReference(bp, *mod, used); err != nil {
+				return err
 			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func checkBackend(b TerraformBackend) error {
@@ -721,62 +617,31 @@ func (dc *DeploymentConfig) validateConfig() {
 		log.Fatal(err)
 	}
 
-	if err = checkModuleAndGroupNames(dc.Config.DeploymentGroups); err != nil {
+	if err = dc.Config.checkModulesInfo(); err != nil {
 		log.Fatal(err)
 	}
+
+	if err = checkModulesAndGroups(dc.Config.DeploymentGroups); err != nil {
+		log.Fatal(err)
+	}
+
+	// checkPackerGroups must come after checkModulesAndGroups, in which group
+	// Kind is set and aligned with module Kinds
+	if err = checkPackerGroups(dc.Config.DeploymentGroups); err != nil {
+		log.Fatal(err)
+	}
+
 	if err = checkUsedModuleNames(dc.Config); err != nil {
 		log.Fatal(err)
 	}
+
 	if err = checkBackends(dc.Config); err != nil {
 		log.Fatal(err)
 	}
-}
 
-// SetCLIVariables sets the variables at CLI
-func (dc *DeploymentConfig) SetCLIVariables(cliVariables []string) error {
-	for _, cliVar := range cliVariables {
-		arr := strings.SplitN(cliVar, "=", 2)
-
-		if len(arr) != 2 {
-			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
-		}
-		// Convert the variable's string litteral to its equivalent default type.
-		key := arr[0]
-		var v yamlValue
-		if err := yaml.Unmarshal([]byte(arr[1]), &v); err != nil {
-			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", key, arr[1])
-		}
-		dc.Config.Vars.Set(key, v.v)
+	if err = checkModuleSettings(dc.Config); err != nil {
+		log.Fatal(err)
 	}
-
-	return nil
-}
-
-// SetBackendConfig sets the backend config variables at CLI
-func (dc *DeploymentConfig) SetBackendConfig(cliBEConfigVars []string) error {
-	// Set "gcs" as default value when --backend-config is specified at CLI
-	if len(cliBEConfigVars) > 0 {
-		dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
-	}
-	be := &dc.Config.TerraformBackendDefaults
-	for _, config := range cliBEConfigVars {
-		arr := strings.SplitN(config, "=", 2)
-
-		if len(arr) != 2 {
-			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", config)
-		}
-
-		key, value := arr[0], arr[1]
-		switch key {
-		case "type":
-			be.Type = value
-		default:
-			be.Configuration.Set(key, cty.StringVal(value))
-		}
-
-	}
-
-	return nil
 }
 
 // SkipValidator marks validator(s) as skipped,
@@ -796,134 +661,6 @@ func (dc *DeploymentConfig) SkipValidator(name string) error {
 		dc.Config.Validators = append(dc.Config.Validators, validatorConfig{Validator: name, Skip: true})
 	}
 	return nil
-}
-
-// IsLiteralVariable returns true if string matches variable ((ctx.name))
-func IsLiteralVariable(str string) bool {
-	return literalExp.MatchString(str)
-}
-
-// IdentifyLiteralVariable returns
-// string: variable source (e.g. global "vars" or module "modname")
-// string: variable name (e.g. "project_id")
-// bool: true/false reflecting success
-func IdentifyLiteralVariable(str string) (string, string, bool) {
-	contents := literalSplitExp.FindStringSubmatch(str)
-	if len(contents) != 3 {
-		return "", "", false
-	}
-
-	return contents[1], contents[2], true
-}
-
-// HandleLiteralVariable is exported for use in modulewriter as well
-func HandleLiteralVariable(str string) string {
-	contents := literalExp.FindStringSubmatch(str)
-	if len(contents) != 2 {
-		log.Fatalf("Incorrectly formatted literal variable: %s", str)
-	}
-
-	return strings.TrimSpace(contents[1])
-}
-
-// ConvertToCty convert interface directly to a cty.Value
-func ConvertToCty(val interface{}) (cty.Value, error) {
-	// Convert to JSON bytes
-	jsonBytes, err := json.Marshal(val)
-	if err != nil {
-		return cty.Value{}, err
-	}
-
-	// Unmarshal JSON into cty
-	simpleJSON := ctyJson.SimpleJSONValue{}
-	simpleJSON.UnmarshalJSON(jsonBytes)
-	return simpleJSON.Value, nil
-}
-
-// ConvertMapToCty convert an interface map to a map of cty.Values
-func ConvertMapToCty(iMap map[string]interface{}) (map[string]cty.Value, error) {
-	cMap := make(map[string]cty.Value)
-	for k, v := range iMap {
-		convertedVal, err := ConvertToCty(v)
-		if err != nil {
-			return cMap, err
-		}
-		cMap[k] = convertedVal
-	}
-	return cMap, nil
-}
-
-// ResolveVariables is given two maps of strings to cty.Value types, one
-// representing a list of settings or variables to resolve (ctyMap) and other
-// representing variables used to resolve (origin). This function will
-// examine all cty.Values that are of type cty.String. If they are literal
-// global variables, then they are replaced by the cty.Value of the
-// corresponding entry in the origin. All other cty.Values are unmodified.
-// ERROR: if (somehow) the cty.String cannot be converted to a Go string
-// ERROR: rely on HCL TraverseAbs to bubble up "diagnostics" when the global
-// variable being resolved does not exist in b.Vars
-func ResolveVariables(
-	ctyMap map[string]cty.Value,
-	origin map[string]cty.Value,
-	allowedUnknownNames []string,
-) error {
-	evalCtx := &hcl.EvalContext{
-		Variables: map[string]cty.Value{"var": cty.ObjectVal(origin)},
-	}
-	unknownMap := map[string]bool{}
-	for _, n := range allowedUnknownNames {
-		unknownMap[n] = true
-	}
-	for key, val := range ctyMap {
-		newVal, err := cty.Transform(val, func(p cty.Path, v cty.Value) (cty.Value, error) {
-			return resolveValue(v, evalCtx, unknownMap)
-		})
-
-		var re *ResolutionError
-		if errors.As(err, &re) && re.allowed {
-			delete(ctyMap, key)
-			continue
-		} else if err != nil {
-			return err
-		}
-		ctyMap[key] = newVal
-	}
-	return nil
-}
-
-// ResolutionError reports all failures in resolveValue, some may be allowable
-type ResolutionError struct {
-	varName string
-	allowed bool
-}
-
-func (err *ResolutionError) Error() string {
-	return fmt.Sprintf("failed to resolve %s, failure is allowed: %v", err.varName, err.allowed)
-}
-
-// resolveValue will transform cty.Value string literals "((var.name))" into
-// cty.Value objects of any type from deployment variables
-func resolveValue(val cty.Value, evalCtx *hcl.EvalContext, allowedUnknown map[string]bool) (cty.Value, error) {
-	if val.Type() != cty.String || !IsLiteralVariable(val.AsString()) {
-		return val, nil
-	}
-
-	ctx, varName, found := IdentifyLiteralVariable(val.AsString())
-	if found && ctx == "var" && !allowedUnknown[varName] {
-		varTraversal := hcl.Traversal{
-			hcl.TraverseRoot{Name: ctx},
-			hcl.TraverseAttr{Name: varName},
-		}
-		newVal, diags := varTraversal.TraverseAbs(evalCtx)
-		if diags.HasErrors() {
-			return cty.Value{}, &ResolutionError{varName: varName, allowed: false}
-		}
-		return newVal, nil
-	}
-	if allowedUnknown[varName] {
-		return cty.Value{}, &ResolutionError{varName: varName, allowed: true}
-	}
-	return val, nil
 }
 
 // InputValueError signifies a problem with the blueprint name.
@@ -946,15 +683,15 @@ func isValidLabelValue(value string) bool {
 }
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.
-func (b *Blueprint) DeploymentName() (string, error) {
-	if !b.Vars.Has("deployment_name") {
+func (bp *Blueprint) DeploymentName() (string, error) {
+	if !bp.Vars.Has("deployment_name") {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["varNotFound"],
 		}
 	}
 
-	v := b.Vars.Get("deployment_name")
+	v := bp.Vars.Get("deployment_name")
 	if v.Type() != cty.String {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
@@ -983,16 +720,16 @@ func (b *Blueprint) DeploymentName() (string, error) {
 
 // checkBlueprintName returns an error if blueprint_name does not comply with
 // requirements for correct GCP label values.
-func (b *Blueprint) checkBlueprintName() error {
+func (bp *Blueprint) checkBlueprintName() error {
 
-	if len(b.BlueprintName) == 0 {
+	if len(bp.BlueprintName) == 0 {
 		return &InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["valueEmptyString"],
 		}
 	}
 
-	if !isValidLabelValue(b.BlueprintName) {
+	if !isValidLabelValue(bp.BlueprintName) {
 		return &InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["labelReqs"],
@@ -1002,15 +739,46 @@ func (b *Blueprint) checkBlueprintName() error {
 	return nil
 }
 
+// ProductOfModuleUse is a "mark" applied to values in Module.Settings if
+// this value was modified as a result of applying `use`.
+type ProductOfModuleUse struct {
+	Module ModuleID
+}
+
 // WalkModules walks all modules in the blueprint and calls the walker function
-func (b *Blueprint) WalkModules(walker func(*Module) error) error {
-	for ig := range b.DeploymentGroups {
-		g := &b.DeploymentGroups[ig]
+func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
+	for ig := range bp.DeploymentGroups {
+		g := &bp.DeploymentGroups[ig]
 		for im := range g.Modules {
 			m := &g.Modules[im]
 			if err := walker(m); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// validate every module setting in the blueprint containing a reference
+func checkModuleSettings(bp Blueprint) error {
+	return bp.WalkModules(func(m *Module) error {
+		return cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
+			if e, is := IsExpressionValue(v); is {
+				for _, r := range e.References() {
+					if err := validateModuleSettingReference(bp, *m, r); err != nil {
+						return false, err
+					}
+				}
+			}
+			return true, nil
+		})
+	})
+}
+
+func checkPackerGroups(groups []DeploymentGroup) error {
+	for _, group := range groups {
+		if group.Kind == PackerKind && len(group.Modules) != 1 {
+			return fmt.Errorf("group %s is \"kind: packer\" but has more than 1 module; separate each packer module into its own deployment group", group.Name)
 		}
 	}
 	return nil

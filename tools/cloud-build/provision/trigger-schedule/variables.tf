@@ -25,3 +25,13 @@ variable "schedule" {
   description = "Describes the schedule on which the job will be executed."
   type        = string
 }
+
+variable "retry_count" {
+  description = "Number of times to retry a failed build"
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.retry_count >= 0 && var.retry_count <= 5
+    error_message = "var.retry_count cannot be negative or greater than 5"
+  }
+}

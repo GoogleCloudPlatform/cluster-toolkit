@@ -134,12 +134,12 @@ They can also be set to 3 differing levels of behavior using the command-line
 For example, this command will set all validators to `WARNING` behavior:
 
 ```shell
-./ghpc create --validation-level WARNING examples/hpc-cluster-small.yaml
+./ghpc create --validation-level WARNING examples/hpc-slurm.yaml
 ```
 
 The flag can be shortened to `-l` as shown below using `IGNORE` to disable all
 validators.
 
 ```shell
-./ghpc create -l IGNORE examples/hpc-cluster-small.yaml
+./ghpc create -l IGNORE examples/hpc-slurm.yaml
 ```

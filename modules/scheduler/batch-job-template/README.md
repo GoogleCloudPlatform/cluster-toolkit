@@ -32,7 +32,7 @@ user will modify the template after running the HPC Toolkit.
 ```
 
 See the
-[Google Cloud Batch Example](../../../../examples/README.md#cloud-batchyaml--)
+[Google Cloud Batch Example](../../../../examples/README.md#serverless-batchyaml--)
 for how to use the `batch-job-template` module with other HPC Toolkit modules such
 as `filestore` and `startup-script`.
 

@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.6.3
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.2
 
 variable "project_id" {
   type        = string
@@ -94,8 +94,12 @@ variable "region" {
 
 variable "network_ip" {
   type        = string
-  description = "Private IP address to assign to the instance if desired."
-  default     = ""
+  description = "DEPRECATED: Use `static_ips` variable to assign an internal static ip address."
+  default     = null
+  validation {
+    condition     = var.network_ip == null
+    error_message = "network_ip is deprecated. Use static_ips to assign an internal static ip address."
+  }
 }
 
 variable "static_ips" {
@@ -293,7 +297,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "schedmd-v5-slurm-22-05-8-hpc-centos-7"
+    family  = "schedmd-v5-slurm-22-05-9-hpc-centos-7"
     project = "projects/schedmd-slurm-public/global/images/family"
   }
 

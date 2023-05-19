@@ -15,6 +15,11 @@
   */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "gke-cluster" })
+}
+
+locals {
   dash             = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
   prefix           = var.prefix_with_deployment_name ? var.deployment_name : ""
   name_maybe_empty = "${local.prefix}${local.dash}${var.name_suffix}"
@@ -37,7 +42,7 @@ resource "google_container_cluster" "gke_cluster" {
   project         = var.project_id
   name            = local.name
   location        = var.region
-  resource_labels = var.labels
+  resource_labels = local.labels
 
   # decouple node pool lifecyle from cluster life cycle
   remove_default_node_pool = true
@@ -68,10 +73,12 @@ resource "google_container_cluster" "gke_cluster" {
 
   enable_shielded_nodes = true
 
-  cluster_autoscaling { # Auto provisioning of node-pools
+  cluster_autoscaling {
+    # Controls auto provisioning of node-pools
     enabled = false
-    # Recomended profile if we ever turn on
-    # autoscaling_profile = "OPTIMIZE_UTILIZATION"
+
+    # Controls autoscaling algorithm of node-pools
+    autoscaling_profile = var.autoscaling_profile
   }
 
   datapath_provider = var.enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
@@ -115,6 +122,7 @@ resource "google_container_cluster" "gke_cluster" {
   release_channel {
     channel = var.release_channel
   }
+  min_master_version = var.min_master_version
 
   maintenance_policy {
     daily_maintenance_window {
@@ -135,12 +143,6 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   addons_config {
-    # Istio is required if there is any pod-to-pod communication.
-    istio_config {
-      disabled = !var.enable_istio
-      auth     = var.istio_auth
-    }
-
     gce_persistent_disk_csi_driver_config {
       enabled = true
     }
@@ -181,7 +183,7 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 
   node_config {
-    resource_labels = var.labels
+    resource_labels = local.labels
     service_account = var.service_account.email
     oauth_scopes    = var.service_account.scopes
     machine_type    = var.system_node_pool_machine_type

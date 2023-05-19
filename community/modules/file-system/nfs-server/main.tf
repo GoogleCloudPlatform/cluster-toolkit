@@ -14,6 +14,11 @@
  * limitations under the License.
 */
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "nfs-server" })
+}
+
 resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
@@ -54,7 +59,7 @@ resource "google_compute_disk" "attached_disk" {
   size    = var.disk_size
   type    = var.type
   zone    = var.zone
-  labels  = var.labels
+  labels  = local.labels
 }
 
 resource "google_compute_instance" "compute_instance" {
@@ -87,5 +92,5 @@ resource "google_compute_instance" "compute_instance" {
   metadata                = var.metadata
   metadata_startup_script = templatefile("${path.module}/scripts/install-nfs-server.sh.tpl", { local_mounts = var.local_mounts })
 
-  labels = var.labels
+  labels = local.labels
 }

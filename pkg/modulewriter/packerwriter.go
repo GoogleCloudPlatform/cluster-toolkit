@@ -18,10 +18,10 @@ package modulewriter
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -41,21 +41,25 @@ func (w *PackerWriter) addNumModules(value int) {
 	w.numModules += value
 }
 
-func printPackerInstructions(modPath string, moduleName string, printIntergroupWarning bool) {
-	printInstructionsPreamble("Packer", modPath, moduleName)
-	if printIntergroupWarning {
-		fmt.Print(intergroupWarning)
+func printPackerInstructions(w io.Writer, modPath string, modID config.ModuleID, printImportInputs bool) {
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Packer group '%s' was successfully created in directory %s\n", modID, modPath)
+	fmt.Fprintln(w, "To deploy, run the following commands:")
+	fmt.Fprintln(w)
+	grpPath := filepath.Clean(filepath.Join(modPath, ".."))
+	if printImportInputs {
+		fmt.Fprintf(w, "ghpc import-inputs %s\n", grpPath)
 	}
-	fmt.Printf("  cd %s\n", modPath)
-	fmt.Println("  packer init .")
-	fmt.Println("  packer validate .")
-	fmt.Println("  packer build .")
-	fmt.Printf("  cd -\n\n")
+	fmt.Fprintf(w, "cd %s\n", modPath)
+	fmt.Fprintln(w, "packer init .")
+	fmt.Fprintln(w, "packer validate .")
+	fmt.Fprintln(w, "packer build .")
+	fmt.Fprintln(w, "cd -")
 }
 
 func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 	packerAutovarsPath := filepath.Join(dst, packerAutoVarFilename)
-	err := writeHclAttributes(vars, packerAutovarsPath)
+	err := WriteHclAttributes(vars, packerAutovarsPath)
 	return err
 }
 
@@ -65,40 +69,46 @@ func (w PackerWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	grpIdx int,
 	deployDir string,
-) (groupMetadata, error) {
+	instructionsFile io.Writer,
+) error {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
-	groupPath := filepath.Join(deployDir, depGroup.Name)
-	deploymentVars := filterVarsByGraph(dc.Config.Vars.Items(), depGroup, dc.GetModuleConnections())
-	intergroupVars := findIntergroupVariables(depGroup, dc.GetModuleConnections())
-	intergroupVarNames := modulereader.GetVarNames(intergroupVars)
+	groupPath := filepath.Join(deployDir, string(depGroup.Name))
+	igcInputs := map[string]bool{}
 
 	for _, mod := range depGroup.Modules {
-		ctySettings, err := config.ConvertMapToCty(mod.Settings)
-		if err != nil {
-			return groupMetadata{}, fmt.Errorf(
-				"error converting packer module settings to cty for writing: %w", err)
+		pure := config.Dict{}
+		for setting, v := range mod.Settings.Items() {
+			igcRefs := config.FindIntergroupReferences(v, mod, dc.Config)
+			if len(igcRefs) == 0 {
+				pure.Set(setting, v)
+			}
+			for _, r := range igcRefs {
+				n := config.AutomaticOutputName(r.Name, r.Module)
+				igcInputs[n] = true
+			}
 		}
-		err = config.ResolveVariables(ctySettings, dc.Config.Vars.Items(), intergroupVarNames)
+
+		av, err := pure.Eval(dc.Config)
 		if err != nil {
-			return groupMetadata{}, err
+			return err
 		}
+
 		modPath := filepath.Join(groupPath, mod.DeploymentSource)
-		err = writePackerAutovars(ctySettings, modPath)
-		if err != nil {
-			return groupMetadata{}, err
+		if err = writePackerAutovars(av.Items(), modPath); err != nil {
+			return err
 		}
-		printPackerInstructions(modPath, mod.ID, len(intergroupVarNames) > 0)
+		hasIgc := len(pure.Items()) < len(mod.Settings.Items())
+		printPackerInstructions(instructionsFile, modPath, mod.ID, hasIgc)
 	}
 
-	return groupMetadata{
-		Name:             depGroup.Name,
-		DeploymentInputs: orderKeys(deploymentVars),
-		IntergroupInputs: intergroupVarNames,
-		Outputs:          []string{},
-	}, nil
+	return nil
 }
 
 func (w PackerWriter) restoreState(deploymentDir string) error {
 	// TODO: implement state restoration for Packer
 	return nil
+}
+
+func (w PackerWriter) kind() config.ModuleKind {
+	return config.PackerKind
 }

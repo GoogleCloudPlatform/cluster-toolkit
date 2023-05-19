@@ -1,0 +1,114 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-slurm-gromacs
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hpc-slurm-gromacs
+  region: us-central1
+  zone: us-central1-c
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  ## Filesystems
+  - id: appsfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      local_mount: /sw
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      local_mount: /home
+
+  ## Install Scripts
+  - id: spack
+    source: community/modules/scripts/spack-install
+    settings:
+      install_dir: /sw/spack
+      log_file: /var/log/spack.log
+      configs:
+      - type: single-config
+        scope: defaults
+        content: "config:build_stage:/sw/spack/spack-stage"
+      - type: file
+        scope: defaults
+        content: |
+          modules:
+            default:
+              tcl:
+                hash_length: 0
+                all:
+                  conflict:
+                    - '{name}'
+                projections:
+                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
+      compilers:
+      - gcc@10.3.0 target=x86_64
+      packages:
+      - intel-mpi@2018.4.274%gcc@10.3.0
+      - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+      # Uncomment and update the name and path to add a shared or personal Spack
+      # cache location to speed up future deployments.
+      # spack_cache_url:
+      # - mirror_name: gcs_cache
+      #   mirror_url: gs://bucket-name/...
+
+  - id: spack-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
+
+  - id: compute_partition
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
+    use:
+    - network1
+    - homefs
+    - appsfs
+    settings:
+      partition_name: compute
+      max_node_count: 20
+
+  - id: slurm_controller
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - compute_partition
+    settings:
+      login_node_count: 1
+
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - slurm_controller
+    - spack-startup

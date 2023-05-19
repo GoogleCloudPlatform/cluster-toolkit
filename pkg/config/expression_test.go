@@ -30,17 +30,17 @@ func TestTraversalToReference(t *testing.T) {
 		err  bool
 	}
 	tests := []test{
-		{"var.green", Reference{GlobalVar: true, Name: "green"}, false},
-		{"var.green.sleeve", Reference{GlobalVar: true, Name: "green"}, false},
-		{`var.green["sleeve"]`, Reference{GlobalVar: true, Name: "green"}, false},
-		{"var.green[3]", Reference{GlobalVar: true, Name: "green"}, false},
+		{"var.green", GlobalRef("green"), false},
+		{"var.green.sleeve", GlobalRef("green"), false},
+		{`var.green["sleeve"]`, GlobalRef("green"), false},
+		{"var.green[3]", GlobalRef("green"), false},
 		{"var", Reference{}, true},
 		{`var["green"]`, Reference{}, true},
 		{`var[3]`, Reference{}, true},
 		{"local.place.here", Reference{}, true},
-		{"module.pink.lime", Reference{Module: "pink", Name: "lime"}, false},
-		{"module.pink.lime.red", Reference{Module: "pink", Name: "lime"}, false},
-		{"module.pink.lime[3]", Reference{Module: "pink", Name: "lime"}, false},
+		{"module.pink.lime", ModuleRef("pink", "lime"), false},
+		{"module.pink.lime.red", ModuleRef("pink", "lime"), false},
+		{"module.pink.lime[3]", ModuleRef("pink", "lime"), false},
 		{"module.pink", Reference{}, true},
 		{`module.pink["lime"]`, Reference{}, true},
 		{"module.pink[3]", Reference{}, true},
@@ -104,9 +104,9 @@ func TestSimpleVarToReference(t *testing.T) {
 		err   bool
 	}
 	tests := []test{
-		{"$(vars.green)", Reference{GlobalVar: true, Name: "green"}, false},
-		{"$(var.green)", Reference{Module: "var", Name: "green"}, false},
-		{"$(sleeve.green)", Reference{Module: "sleeve", Name: "green"}, false},
+		{"$(vars.green)", GlobalRef("green"), false},
+		{"$(var.green)", ModuleRef("var", "green"), false},
+		{"$(sleeve.green)", ModuleRef("sleeve", "green"), false},
 		{"$(box.sleeve.green)", Reference{}, true},
 		{"$(vars)", Reference{}, true},
 		{"$(az.buki.vedi.glagol)", Reference{}, true},

@@ -22,6 +22,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/zclconf/go-cty/cty"
@@ -108,4 +109,33 @@ func NormalizeType(hclType string) string {
 		return hclType
 	}
 	return typeexpr.TypeString(ctyType)
+}
+
+// ReadHclAttributes reads cty.Values in from a .tfvars-style file
+// it will error if any of the Values are not statically defined
+func ReadHclAttributes(file string) (map[string]cty.Value, error) {
+	f, diags := hclparse.NewParser().ParseHCLFile(file)
+	if diags.HasErrors() {
+		// work around ugly <nil> in error message missing d.Subject
+		// https://github.com/hashicorp/hcl2/blob/fb75b3253c80b3bc7ca99c4bfa2ad6743841b1af/hcl/diagnostic.go#L76-L78
+		if len(diags) == 1 {
+			return nil, fmt.Errorf(diags[0].Detail)
+		}
+		return nil, diags
+	}
+	attrs, diags := f.Body.JustAttributes()
+	if diags.HasErrors() {
+		return nil, diags
+	}
+
+	a := make(map[string]cty.Value)
+	for k, v := range attrs {
+		ctyV, diags := v.Expr.Value(nil)
+		if diags.HasErrors() {
+			return nil, diags
+		}
+		a[k] = ctyV
+	}
+
+	return a, nil
 }

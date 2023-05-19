@@ -34,6 +34,7 @@
       url: https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
       dest: /tmp/chrome-remote-desktop_current_amd64.deb
       mode: "0755"
+      timeout: 30
 
   - name: Install CRD
     ansible.builtin.apt:

@@ -25,9 +25,9 @@ contained in the `community` folder of the HPC Toolkit repo and are marked as
 
 ## Example
 
-[cloud-batch.yaml](../examples/cloud-batch.yaml) contains an example
+[serverless-batch.yaml](../examples/serverless-batch.yaml) contains an example
 of how to use Google Cloud Batch with the HPC Toolkit
-([example documentation](../examples/README.md#cloud-batchyaml--)).
+([example documentation](../examples/README.md#serverless-batchyaml--)).
 
 ---
 

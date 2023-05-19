@@ -18,7 +18,6 @@
 package modulewriter
 
 import (
-	"bytes"
 	"crypto/md5"
 	"embed"
 	"encoding/hex"
@@ -26,30 +25,24 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
-	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
-
-	"github.com/zclconf/go-cty/cty"
-	"gopkg.in/yaml.v3"
 )
 
+// strings that get re-used throughout this package and others
 const (
-	hiddenGhpcDirName          = ".ghpc"
+	HiddenGhpcDirName          = ".ghpc"
+	ArtifactsDirName           = "artifacts"
 	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
-	deploymentMetadataName     = "deployment_metadata.yaml"
+	artifactsWarningFilename   = "DO_NOT_MODIFY_THIS_DIRECTORY"
+	expandedBlueprintName      = "expanded_blueprint.yaml"
 )
-
-const intergroupWarning string = `
-WARNING: this deployment group requires outputs from previous groups!
-This is an advanced feature under active development. The automatically generated
-instructions for executing terraform or packer below will not work as shown.
-
-`
 
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
@@ -59,24 +52,15 @@ type ModuleWriter interface {
 		dc config.DeploymentConfig,
 		grpIdx int,
 		deployDir string,
-	) (groupMetadata, error)
+		instructionsFile io.Writer,
+	) error
 	restoreState(deploymentDir string) error
-}
-
-type deploymentMetadata struct {
-	DeploymentMetadata []groupMetadata `yaml:"deployment_metadata"`
-}
-
-type groupMetadata struct {
-	Name             string
-	DeploymentInputs []string `yaml:"deployment_inputs"`
-	IntergroupInputs []string `yaml:"intergroup_inputs"`
-	Outputs          []string
+	kind() config.ModuleKind
 }
 
 var kinds = map[string]ModuleWriter{
-	"terraform": new(TFWriter),
-	"packer":    new(PackerWriter),
+	config.TerraformKind.String(): new(TFWriter),
+	config.PackerKind.String():    new(PackerWriter),
 }
 
 //go:embed *.tmpl
@@ -114,9 +98,15 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		return err
 	}
 
-	metadata := deploymentMetadata{
-		DeploymentMetadata: []groupMetadata{},
+	advancedDeployInstructions := filepath.Join(deploymentDir, "instructions.txt")
+	f, err := os.Create(advancedDeployInstructions)
+	if err != nil {
+		return err
 	}
+	defer f.Close()
+	fmt.Fprintln(f, "Advanced Deployment Instructions")
+	fmt.Fprintln(f, "================================")
+
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
 		writer, ok := kinds[grp.Kind.String()]
 		if !ok {
@@ -124,14 +114,15 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
 		}
 
-		gmd, err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir)
+		err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir, f)
 		if err != nil {
 			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
 		}
-		metadata.DeploymentMetadata = append(metadata.DeploymentMetadata, gmd)
 	}
 
-	if err := writeDeploymentMetadata(deploymentDir, metadata); err != nil {
+	writeDestroyInstructions(f, dc, deploymentDir)
+
+	if err := writeExpandedBlueprint(deploymentDir, dc); err != nil {
 		return err
 	}
 
@@ -142,12 +133,22 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 			}
 		}
 	}
+
+	fmt.Println("To deploy your infrastructure please run:")
+	fmt.Println()
+	fmt.Printf("./ghpc deploy %s\n", deploymentDir)
+	fmt.Println()
+	fmt.Println("Please find instructions for cleanly destroying infrastructure and advanced")
+	fmt.Println("advanced manual deployment instructions at:")
+	fmt.Println()
+	fmt.Printf("%s\n", f.Name())
+
 	return nil
 }
 
 func createGroupDirs(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 	for _, grp := range *deploymentGroups {
-		groupPath := filepath.Join(deploymentPath, grp.Name)
+		groupPath := filepath.Join(deploymentPath, string(grp.Name))
 		// Create the deployment group directory if not already created.
 		if _, err := os.Stat(groupPath); errors.Is(err, os.ErrNotExist) {
 			if err := os.Mkdir(groupPath, 0755); err != nil {
@@ -174,7 +175,7 @@ func deploymentSource(mod config.Module) (string, error) {
 		return mod.Source, nil
 	}
 	if mod.Kind == config.PackerKind {
-		return mod.ID, nil
+		return string(mod.ID), nil
 	}
 	if mod.Kind != config.TerraformKind {
 		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
@@ -219,7 +220,7 @@ func copyEmbeddedModules(base string) error {
 func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
 	for iGrp := range *deploymentGroups {
 		grp := &(*deploymentGroups)[iGrp]
-		basePath := filepath.Join(deploymentPath, grp.Name)
+		basePath := filepath.Join(deploymentPath, string(grp.Name))
 
 		var copyEmbedded = false
 		for iMod := range grp.Modules {
@@ -258,11 +259,6 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 	return nil
 }
 
-func printInstructionsPreamble(kind string, path string, name string) {
-	fmt.Printf("%s group '%s' was successfully created in directory %s\n", kind, name, path)
-	fmt.Println("To deploy, run the following commands:")
-}
-
 // Determines if overwrite is allowed
 func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, overwriteFlag bool) bool {
 	if !overwriteFlag {
@@ -277,14 +273,14 @@ func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, over
 	// build list of previous and current deployment groups
 	var prevGroups []string
 	for _, f := range files {
-		if f.IsDir() && f.Name() != hiddenGhpcDirName {
+		if f.IsDir() && f.Name() != HiddenGhpcDirName {
 			prevGroups = append(prevGroups, f.Name())
 		}
 	}
 
 	var curGroups []string
 	for _, group := range overwritingConfig.DeploymentGroups {
-		curGroups = append(curGroups, group.Name)
+		curGroups = append(curGroups, string(group.Name))
 	}
 
 	return isSubset(prevGroups, curGroups)
@@ -322,7 +318,8 @@ func (err *OverwriteDeniedError) Error() string {
 // Prepares a deployment directory to be written to.
 func prepDepDir(depDir string, overwrite bool) error {
 	deploymentio := deploymentio.GetDeploymentioLocal()
-	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
+	artifactsDir := filepath.Join(ghpcDir, ArtifactsDirName)
 	gitignoreFile := filepath.Join(depDir, ".gitignore")
 
 	// create deployment directory
@@ -331,7 +328,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 			return &OverwriteDeniedError{err}
 		}
 
-		// Confirm we have a previously written deployment dir before overwritting.
+		// Confirm we have a previously written deployment dir before overwriting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 			return fmt.Errorf(
 				"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
@@ -346,20 +343,24 @@ func prepDepDir(depDir string, overwrite bool) error {
 		}
 	}
 
-	// clean up old dirs
+	if err := prepArtifactsDir(artifactsDir); err != nil {
+		return err
+	}
+
+	// remove any existing backups of deployment group
 	prevGroupDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
 	}
 
-	// move deployment groups
+	// create new backup of deployment group directory
 	files, err := ioutil.ReadDir(depDir)
 	if err != nil {
 		return fmt.Errorf("Error trying to read directories in %s, %w", depDir, err)
 	}
 	for _, f := range files {
-		if !f.IsDir() || f.Name() == hiddenGhpcDirName {
+		if !f.IsDir() || f.Name() == HiddenGhpcDirName {
 			continue
 		}
 		src := filepath.Join(depDir, f.Name())
@@ -371,57 +372,72 @@ func prepDepDir(depDir string, overwrite bool) error {
 	return nil
 }
 
-func writeDeploymentMetadata(depDir string, metadata deploymentMetadata) error {
-	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
-	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
+func prepArtifactsDir(artifactsDir string) error {
+	// cleanup previous artifacts on every write
+	if err := os.RemoveAll(artifactsDir); err != nil {
 		return fmt.Errorf(
-			"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
+			"error while removing the artifacts directory at %s; %s", artifactsDir, err.Error())
 	}
 
-	metadataFile := filepath.Join(ghpcDir, deploymentMetadataName)
-	f, err := os.OpenFile(metadataFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err := os.MkdirAll(artifactsDir, 0700); err != nil {
+		return err
+	}
+
+	artifactsWarningFile := path.Join(artifactsDir, artifactsWarningFilename)
+	f, err := os.Create(artifactsWarningFile)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	var buf bytes.Buffer
-	buf.WriteString(config.YamlLicense)
-	buf.WriteString("\n")
-	encoder := yaml.NewEncoder(&buf)
-	defer encoder.Close()
-	encoder.SetIndent(2)
-	if err := encoder.Encode(metadata); err != nil {
+	_, err = f.WriteString(artifactsWarning)
+	if err != nil {
 		return err
 	}
-	if _, err := f.Write(buf.Bytes()); err != nil {
+	return nil
+}
+
+func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
+	artifactsDir := filepath.Join(depDir, HiddenGhpcDirName, ArtifactsDirName)
+	blueprintFile := filepath.Join(artifactsDir, expandedBlueprintName)
+
+	_, err := dc.ExportBlueprint(blueprintFile)
+	if err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func findIntergroupVariables(group config.DeploymentGroup, graph map[string][]config.ModConnection) []modulereader.VarInfo {
-	// var integroupVars []modulereader.VarInfo
-	var intergroupVars []modulereader.VarInfo
+func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymentDir string) {
+	packerManifests := []string{}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Destroying infrastructure when no longer needed")
+	fmt.Fprintln(w, "===============================================")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Infrastructure should be destroyed in reverse order of creation:")
+	fmt.Fprintln(w)
+	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
+		grp := dc.Config.DeploymentGroups[grpIdx]
+		grpPath := filepath.Join(deploymentDir, string(grp.Name))
+		if grp.Kind == config.TerraformKind {
+			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)
+		}
+		if grp.Kind == config.PackerKind {
+			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
 
-	for _, mod := range group.Modules {
-		if connections, ok := graph[mod.ID]; ok {
-			for _, conn := range connections {
-				if conn.IsIntergroup() {
-					for _, v := range conn.GetSharedVariables() {
-						vinfo := modulereader.VarInfo{
-							Name:        v,
-							Type:        getHclType(cty.DynamicPseudoType),
-							Description: fmt.Sprintf("Toolkit automatically generated variable: %s", v),
-							Default:     nil,
-							Required:    true,
-						}
-						intergroupVars = append(intergroupVars, vinfo)
-					}
-				}
-			}
 		}
 	}
-	return intergroupVars
+
+	if len(packerManifests) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "Please browse to the Cloud Console to remove VM images produced by Packer.\n")
+		fmt.Fprintln(w, "By default, the names of images can be found in these files:")
+		fmt.Fprintln(w)
+		for _, manifest := range packerManifests {
+			fmt.Fprintln(w, manifest)
+		}
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "https://console.cloud.google.com/compute/images")
+	}
 }

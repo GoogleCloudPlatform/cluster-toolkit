@@ -15,7 +15,6 @@
 resource "google_cloudbuild_trigger" "daily_project_cleanup" {
   name        = "DAILY-project-cleanup"
   description = "A cleanup script to run periodically"
-  tags        = [local.notify_chat_tag]
 
   git_file_source {
     path      = "tools/cloud-build/project-cleanup.yaml"
@@ -32,7 +31,8 @@ resource "google_cloudbuild_trigger" "daily_project_cleanup" {
 }
 
 module "daily_project_cleanup_schedule" {
-  source   = "./trigger-schedule"
-  trigger  = google_cloudbuild_trigger.daily_project_cleanup
-  schedule = "0 0 * * MON-FRI"
+  source      = "./trigger-schedule"
+  trigger     = google_cloudbuild_trigger.daily_project_cleanup
+  schedule    = "0 0 * * MON-FRI"
+  retry_count = 4
 }

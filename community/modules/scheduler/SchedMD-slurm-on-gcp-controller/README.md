@@ -1,5 +1,8 @@
 ## Description
 
+> **Warning**: this module is now deprecated. We recommend using the Slurm on GCP V5
+> [schedmd-slurm-gcp-v5-controller](../schedmd-slurm-gcp-v5-controller/README.md) instead.
+
 This module creates a slurm controller node via the SchedMD/slurm-gcp
 [controller] module.
 
@@ -30,8 +33,7 @@ controller for optimal performance at different scales.
 This creates a controller node connected to the primary subnetwork with 1 login
 node (defined elsewhere). The controller will also have the `homefs` file system
 mounted via the `use` field and manage one partition, also declared in the `use`
-field. For more context see the
-[hpc-cluster-small example](../../../../examples/hpc-cluster-small.yaml).
+field.
 
 ## GPU Support
 

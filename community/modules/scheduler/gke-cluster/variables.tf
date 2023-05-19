@@ -79,6 +79,12 @@ variable "release_channel" {
   default     = "UNSPECIFIED"
 }
 
+variable "min_master_version" {
+  description = "The minimum version of the master. If unset, the cluster's version will be set by GKE to the version of the most recent official release."
+  type        = string
+  default     = null
+}
+
 variable "maintenance_start_time" {
   description = "Start time for daily maintenance operations. Specified in GMT with `HH:MM` format."
   type        = string
@@ -116,8 +122,8 @@ variable "system_node_pool_node_count" {
     total_max_nodes = number
   })
   default = {
-    total_min_nodes = 1
-    total_max_nodes = 2
+    total_min_nodes = 2
+    total_max_nodes = 10
   }
 }
 
@@ -186,22 +192,16 @@ variable "service_account" {
   }
 }
 
+variable "autoscaling_profile" {
+  description = "(Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE_UTILIZATION."
+  type        = string
+  default     = "OPTIMIZE_UTILIZATION"
+}
+
 variable "authenticator_security_group" {
   description = "The name of the RBAC security group for use with Google security groups in Kubernetes RBAC. Group name must be in format gke-security-groups@yourdomain.com"
   type        = string
   default     = null
-}
-
-variable "enable_istio" {
-  description = "(Beta) Enable Istio addon"
-  type        = bool
-  default     = true
-}
-
-variable "istio_auth" {
-  type        = string
-  description = "(Beta) The authentication type between services in Istio."
-  default     = "AUTH_MUTUAL_TLS"
 }
 
 variable "enable_dataplane_v2" {

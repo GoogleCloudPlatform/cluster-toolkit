@@ -69,13 +69,15 @@ func TestDeploymentVariablesNotUsed(unusedVariables []string) error {
 // of the blueprint are actually used, i.e. the outputs and settings are
 // connected.
 func TestModuleNotUsed(unusedModules map[string][]string) error {
+	any := false
 	for mod, unusedMods := range unusedModules {
 		for _, unusedMod := range unusedMods {
 			log.Printf(unusedModuleMsg, mod, unusedMod)
+			any = true
 		}
 	}
 
-	if len(unusedModules) > 0 {
+	if any {
 		return fmt.Errorf(unusedModuleError)
 	}
 

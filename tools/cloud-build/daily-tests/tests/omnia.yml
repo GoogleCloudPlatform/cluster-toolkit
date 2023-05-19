@@ -20,5 +20,5 @@ zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/omnia-cluster.yaml"
 network: "default"
-remote_node: "omnia-manager-*-0"
+remote_node: "*omnia-manager-0"
 post_deploy_tests: []

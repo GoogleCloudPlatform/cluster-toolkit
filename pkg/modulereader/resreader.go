@@ -24,7 +24,6 @@ import (
 	"io/ioutil"
 	"log"
 	"path"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -116,21 +115,23 @@ func (i ModuleInfo) GetOutputsAsMap() map[string]OutputInfo {
 	return outputsMap
 }
 
-// GetVarNames returns all input variable names as a string slice
-func GetVarNames(vinfos []VarInfo) []string {
-	vnames := make([]string, len(vinfos))
-	for i, v := range vinfos {
-		vnames[i] = v.Name
-	}
-	sort.Strings(vnames)
-	return vnames
+type sourceAndKind struct {
+	source string
+	kind   string
 }
 
+var modInfoCache = map[sourceAndKind]ModuleInfo{}
+
 // GetModuleInfo gathers information about a module at a given source using the
-// tfconfig package. For applicable sources, this function also stages the
-// module contents in a local temp directory and will add required APIs to be
+// tfconfig package. It will add details about required APIs to be
 // enabled for that module.
+// There is a cache to avoid re-reading the module info for the same source and kind.
 func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
+	key := sourceAndKind{source, kind}
+	if mi, ok := modInfoCache[key]; ok {
+		return mi, nil
+	}
+
 	var modPath string
 	switch {
 	case sourcereader.IsGitPath(source):
@@ -153,6 +154,9 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 
 	reader := Factory(kind)
 	mi, err := reader.GetInfo(modPath)
+	if err != nil {
+		return ModuleInfo{}, err
+	}
 
 	// add APIs required by the module, if known
 	if sourcereader.IsEmbeddedPath(source) {
@@ -164,13 +168,20 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 			mi.RequiredApis = defaultAPIList(modPath[idx+1:])
 		}
 	}
-	return mi, err
+
+	modInfoCache[key] = mi
+	return mi, nil
+}
+
+// SetModuleInfo sets the ModuleInfo for a given source and kind
+// NOTE: This is only used for testing
+func SetModuleInfo(source string, kind string, info ModuleInfo) {
+	modInfoCache[sourceAndKind{source, kind}] = info
 }
 
 // ModReader is a module reader interface
 type ModReader interface {
 	GetInfo(path string) (ModuleInfo, error)
-	SetInfo(path string, modInfo ModuleInfo)
 }
 
 var kinds = map[string]ModReader{

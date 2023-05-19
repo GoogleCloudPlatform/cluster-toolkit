@@ -66,15 +66,6 @@ repos:
   hooks:
   - id: go-critic
     args: [-disable, "#experimental,sloppyTypeAssert"]
-- repo: https://github.com/ansible/ansible-lint
-  rev: v6.11.0
-  hooks:
-  - id: ansible-lint
-    always_run: false
-    exclude: '^(docs/|examples/|community/examples/)'
-    types: [yaml]
-    additional_dependencies:
-    - ansible==6.*
 - repo: https://github.com/adrienverge/yamllint
   rev: v1.29.0
   hooks:

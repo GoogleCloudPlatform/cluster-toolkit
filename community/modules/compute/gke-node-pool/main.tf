@@ -15,7 +15,19 @@
   */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "gke-node-pool" })
+}
+
+locals {
   sa_email = var.service_account.email != null ? var.service_account.email : data.google_compute_default_service_account.default_sa.email
+
+  has_gpu = var.guest_accelerator != null || contains(["g2", "a2"], local.machine_family)
+  gpu_taint = local.has_gpu ? [{
+    key    = "nvidia.com/gpu"
+    value  = "present"
+    effect = "NO_SCHEDULE"
+  }] : []
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -25,8 +37,9 @@ data "google_compute_default_service_account" "default_sa" {
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  name    = var.name == null ? var.machine_type : var.name
-  cluster = var.cluster_id
+  name           = var.name == null ? var.machine_type : var.name
+  cluster        = var.cluster_id
+  node_locations = var.zones
   autoscaling {
     total_min_node_count = var.total_min_nodes
     total_max_node_count = var.total_max_nodes
@@ -52,14 +65,16 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   node_config {
-    resource_labels = var.labels
-    service_account = var.service_account.email
-    oauth_scopes    = var.service_account.scopes
-    machine_type    = var.machine_type
-    spot            = var.spot
-    taint           = var.taints
-
-    image_type = var.image_type
+    disk_size_gb      = var.disk_size_gb
+    disk_type         = var.disk_type
+    resource_labels   = local.labels
+    service_account   = var.service_account.email
+    oauth_scopes      = var.service_account.scopes
+    machine_type      = var.machine_type
+    spot              = var.spot
+    taint             = concat(var.taints, local.gpu_taint)
+    image_type        = var.image_type
+    guest_accelerator = var.guest_accelerator
 
     shielded_instance_config {
       enable_secure_boot          = true

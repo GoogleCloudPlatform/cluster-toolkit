@@ -24,6 +24,12 @@ variable "cluster_id" {
   type        = string
 }
 
+variable "zones" {
+  description = "A list of zones to be used. Zones must be in region of cluster. If null, cluster zones will be inherited. Note `zones` not `zone`; does not work with `zone` deployment variable."
+  type        = list(string)
+  default     = null
+}
+
 variable "name" {
   description = "The name of the node pool. If left blank, will default to the machine type."
   type        = string
@@ -34,6 +40,32 @@ variable "machine_type" {
   description = "The name of a Google Compute Engine machine type."
   type        = string
   default     = "c2-standard-60"
+}
+
+variable "disk_size_gb" {
+  description = "Size of disk for each node."
+  type        = number
+  default     = 100
+}
+
+variable "disk_type" {
+  description = "Disk type for each node."
+  type        = string
+  default     = "pd-standard"
+}
+
+variable "guest_accelerator" {
+  description = "List of the type and count of accelerator cards attached to the instance."
+  type = list(object({
+    type               = string
+    count              = number
+    gpu_partition_size = string
+    gpu_sharing_config = list(object({
+      gpu_sharing_strategy       = string
+      max_shared_clients_per_gpu = number
+    }))
+  }))
+  default = null
 }
 
 variable "image_type" {
@@ -121,7 +153,11 @@ variable "taints" {
     value  = any
     effect = string
   }))
-  default = []
+  default = [{
+    key    = "user-workload"
+    value  = true
+    effect = "NO_SCHEDULE"
+  }]
 }
 
 variable "labels" {

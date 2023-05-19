@@ -48,7 +48,7 @@ install the HTCondor software and adds custom configurations using
 
 A full example can be found in the [examples README][htc-example].
 
-[htc-example]: ../../../../examples/README.md#htcondor-poolyaml--
+[htc-example]: ../../../../examples/README.md#htc-htcondoryaml--
 
 ## Important note
 

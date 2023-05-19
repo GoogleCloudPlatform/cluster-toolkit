@@ -18,7 +18,7 @@ test_name: htcondor
 deployment_name: "htcondor-{{ build }}"
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/htcondor-pool.yaml"
+blueprint_yaml: "{{ workspace }}/community/examples/htc-htcondor.yaml"
 network: "{{ deployment_name }}-net"
 access_point: "access-point-0"
 central_manager: "central-manager-0"

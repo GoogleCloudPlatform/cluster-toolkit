@@ -1,0 +1,34 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'zero' was successfully created in directory golden_copy_deployment/zero
+To deploy, run the following commands:
+
+terraform -chdir=golden_copy_deployment/zero init
+terraform -chdir=golden_copy_deployment/zero validate
+terraform -chdir=golden_copy_deployment/zero apply
+ghpc export-outputs golden_copy_deployment/zero
+
+Packer group 'image' was successfully created in directory golden_copy_deployment/one/image
+To deploy, run the following commands:
+
+ghpc import-inputs golden_copy_deployment/one
+cd golden_copy_deployment/one/image
+packer init .
+packer validate .
+packer build .
+cd -
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=golden_copy_deployment/zero destroy
+
+Please browse to the Cloud Console to remove VM images produced by Packer.
+By default, the names of images can be found in these files:
+
+golden_copy_deployment/one/image/packer-manifest.json
+
+https://console.cloud.google.com/compute/images

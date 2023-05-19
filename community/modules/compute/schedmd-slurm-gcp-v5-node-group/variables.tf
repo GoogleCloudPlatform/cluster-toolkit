@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.6.3
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.2
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -97,7 +97,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "schedmd-v5-slurm-22-05-8-hpc-centos-7"
+    family  = "schedmd-v5-slurm-22-05-9-hpc-centos-7"
     project = "projects/schedmd-slurm-public/global/images/family"
   }
 
@@ -341,40 +341,6 @@ variable "bandwidth_tier" {
   validation {
     condition     = contains(["platform_default", "virtio_enabled", "gvnic_enabled", "tier_1_enabled"], var.bandwidth_tier)
     error_message = "Allowed values for bandwidth_tier are 'platform_default', 'virtio_enabled', 'gvnic_enabled', or 'tier_1_enabled'."
-  }
-}
-
-variable "zone_policy_allow" {
-  description = <<-EOD
-    Partition nodes will prefer to be created in the listed zones. If a zone appears
-    in both zone_policy_allow and zone_policy_deny, then zone_policy_deny will take
-    priority for that zone.
-    EOD
-  type        = set(string)
-  default     = []
-
-  validation {
-    condition = alltrue([
-      for x in var.zone_policy_allow : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
-    ])
-    error_message = "A provided zone in zone_policy_allow is not a valid zone (Regexp: '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
-  }
-}
-
-variable "zone_policy_deny" {
-  description = <<-EOD
-    Partition nodes will not be created in the listed zones. If a zone appears in
-    both zone_policy_allow and zone_policy_deny, then zone_policy_deny will take
-    priority for that zone.
-    EOD
-  type        = set(string)
-  default     = []
-
-  validation {
-    condition = alltrue([
-      for x in var.zone_policy_deny : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
-    ])
-    error_message = "A provided zone in zone_policy_deny is not a valid zone (Regexp '^[a-z]+-[a-z]+[0-9]-[a-z]$')."
   }
 }
 

@@ -70,7 +70,7 @@ To create a deployment, an input blueprint file needs to be written or adapted
 from one of the examples found in the `examples/` or `community/examples`
 directories.
 
-This tutorial will use examples/hpc-cluster-small.yaml, which is a good starting
+This tutorial will use `examples/hpc-slurm.yaml`, which is a good starting
 point and creates a deployment containing:
 
 * a new network
@@ -79,14 +79,14 @@ point and creates a deployment containing:
 * a Slurm controller
 * several auto-scaling Slurm partitions
 
-The blueprint examples/hpc-cluster-small.yaml should be open in the Cloud Shell
+The blueprint `examples/hpc-slurm.yaml` should be open in the Cloud Shell
 Editor (on the left).
 
 This file describes the cluster you will deploy. After you have inspected the
 file, use the ghpc binary to create a deployment directory by running:
 
 ```bash
-./ghpc create examples/hpc-cluster-small.yaml --vars "project_id=<walkthrough-project-id/>"
+./ghpc create examples/hpc-slurm.yaml --vars "project_id=<walkthrough-project-id/>"
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
@@ -201,7 +201,7 @@ To avoid incurring ongoing charges we will want to destroy our cluster. Run the
 following command in the cloud shell terminal (not in the pop-up):
 
 ```bash
-terraform -chdir=hpc-cluster-small/primary destroy -auto-approve
+terraform -chdir=hpc-small/primary destroy -auto-approve
 ```
 
 When complete you should see something like:

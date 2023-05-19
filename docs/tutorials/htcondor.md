@@ -57,7 +57,7 @@ To create a deployment, an input blueprint file needs to be written or adapted
 from one of the examples found in the `examples/` or `community/examples`
 directories.
 
-This tutorial will use community/examples/htcondor-pool.yaml, which provisions
+This tutorial will use `community/examples/htc-htcondor.yaml`, which provisions
 a basic auto-scaling HTCondor pool.
 
 * a new VPC network secured from the public internet
@@ -66,14 +66,14 @@ a basic auto-scaling HTCondor pool.
 * a Managed Instance Group to scale a pool of HTCondor Execute Points to serve
   new jobs as they are submitted
 
-The blueprint community/examples/htcondor-pool.yaml should be open in the Cloud
+The blueprint `community/examples/htc-htcondor.yaml` should be open in the Cloud
 Shell Editor (on the left).
 
 This file describes the cluster you will deploy. After you have inspected the
 file, use the ghpc binary to create a deployment directory by running:
 
 ```bash
-./ghpc create community/examples/htcondor-pool.yaml --vars "project_id=<walkthrough-project-id/>"
+./ghpc create community/examples/htc-htcondor.yaml --vars "project_id=<walkthrough-project-id/>"
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
@@ -111,10 +111,10 @@ Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 Once terraform has finished, you may SSH to the HTCondor Access Point:
 
 ```bash
-gcloud compute ssh access-point-0 --tunnel-through-iap --project <walkthrough-project-id/> --zone us-central1-c
+gcloud compute ssh htcondor001-ap-0 --tunnel-through-iap --project <walkthrough-project-id/> --zone us-central1-c
 ```
 
-Alternatively, you may browse to the `access-point-0` VM and click on "SSH" in
+Alternatively, you may browse to the `htcondor001-ap-0` VM and click on "SSH" in
 the Cloud Console at this address:
 
 ```text
@@ -142,7 +142,7 @@ connect"). Installation may take 5 minutes or more. When it succeeds, you will
 observe output similar to
 
 ```text
-access-point-0.us-central1-c.c.<walkthrough-project-id/>.internal
+htcondor001-ap-0.us-central1-c.c.<walkthrough-project-id/>.internal
 ```
 
 ## Submit an example job

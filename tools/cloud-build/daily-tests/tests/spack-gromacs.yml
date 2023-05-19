@@ -18,7 +18,7 @@ test_name: spack-gromacs
 deployment_name: "spack-gromacs-{{ build }}"
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/spack-gromacs.yaml"
+blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-gromacs.yaml"
 network: "default"
 max_nodes: 5
 login_node: slurm-{{ deployment_name }}-login0

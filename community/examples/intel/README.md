@@ -75,7 +75,7 @@ And the following available quota is required in the region used by the cluster:
 Use `ghpc` to provision the blueprint, supplying your project ID
 
 ```text
-ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/hpc-cluster-intel-select.yaml
+ghpc create --vars project_id=<<PROJECT_ID>> community/examples/intel/hpc-intel-select-slurm.yaml
 ```
 
 This will create a set of directories containing Terraform modules and Packer
@@ -95,18 +95,18 @@ templates. **Please ignore the printed instructions** in favor of the following:
     ```shell
     terraform -chdir=hpc-intel-select/primary output \
       -raw startup_script_startup_controller > \
-      hpc-intel-select/packer/controller-image/startup_script.sh
+      hpc-intel-select/build1/controller-image/startup_script.sh
 
     terraform -chdir=hpc-intel-select/primary output \
       -raw startup_script_startup_compute > \
-      hpc-intel-select/packer/compute-image/startup_script.sh
+      hpc-intel-select/build2/compute-image/startup_script.sh
     ```
 
 3. Build the custom Slurm controller image. While this step is executing, you
    may begin the next step in parallel.
 
     ```shell
-    cd hpc-intel-select/packer/controller-image
+    cd hpc-intel-select/build1/controller-image
     packer init .
     packer validate .
     packer build -var startup_script_file=startup_script.sh .
@@ -116,7 +116,7 @@ templates. **Please ignore the printed instructions** in favor of the following:
 
     ```shell
     cd -
-    cd hpc-intel-select/packer/compute-image
+    cd hpc-intel-select/build2/compute-image
     packer init .
     packer validate .
     packer build -var startup_script_file=startup_script.sh .
@@ -184,7 +184,7 @@ terraform -chdir=hpc-intel-select/primary destroy
 
 ## DAOS Cluster
 
-The [daos-cluster.yaml](daos-cluster.yaml) blueprint describes an environment with
+The [pfs-daos.yaml](pfs-daos.yaml) blueprint describes an environment with
 - A [managed instance group][mig] with four DAOS server instances
 - A [managed instance group][mig] with two DAOS client instances
 
@@ -223,7 +223,7 @@ The following available quota is required in the region used by the cluster:
 Use `ghpc` to provision the blueprint
 
 ```text
-ghpc create community/examples/intel/daos-cluster.yaml  \
+ghpc create community/examples/intel/pfs-daos.yaml  \
   --vars project_id=<<PROJECT_ID>> \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
@@ -236,9 +236,9 @@ The `--backend-config` option is not required but recommended. It will save the 
 Follow `ghpc` instructions to deploy the environment
 
   ```shell
-  terraform -chdir=daos-cluster/primary init
-  terraform -chdir=daos-cluster/primary validate
-  terraform -chdir=daos-cluster/primary apply
+  terraform -chdir=pfs-daos/primary init
+  terraform -chdir=pfs-daos/primary validate
+  terraform -chdir=pfs-daos/primary apply
   ```
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
@@ -259,7 +259,7 @@ Follow `ghpc` instructions to deploy the environment
 
 ### Verify the DAOS storage system
 
-The `community/examples/intel/daos-cluster.yaml` blueprint does not contain configuration for DAOS pools and containers. Therefore, pools and containers will need to be created manually.
+The `community/examples/intel/pfs-daos.yaml` blueprint does not contain configuration for DAOS pools and containers. Therefore, pools and containers will need to be created manually.
 
 Before pools and containers can be created the storage system must be formatted. Formatting the storage is done automatically by the startup script that runs on the *daos-server-0001* instance. The startup script will run the [dmg storage format](https://docs.daos.io/v2.2/admin/deployment/?h=dmg+storage#storage-formatting) command. It may take a few minutes for all daos server instances to join.
 
@@ -396,12 +396,12 @@ See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.2/user/filesystem/?h=dfuse#d
 Delete the remaining infrastructure
 
 ```shell
-terraform -chdir=daos-cluster/primary destroy
+terraform -chdir=pfs-daos/primary destroy
 ```
 
 ## DAOS Server with Slurm cluster
 
-The [daos-slurm.yaml](daos-slurm.yaml) blueprint describes an environment with a Slurm cluster and four DAOS server instances. The compute nodes are configured as DAOS clients and have the ability to use the DAOS filesystem on the DAOS server instances.
+The [hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) blueprint describes an environment with a Slurm cluster and four DAOS server instances. The compute nodes are configured as DAOS clients and have the ability to use the DAOS filesystem on the DAOS server instances.
 
 The blueprint uses modules from
 - [google-cloud-daos][google-cloud-daos]
@@ -453,7 +453,7 @@ For Slurm:
 Use `ghpc` to provision the blueprint, supplying your project ID
 
 ```text
-ghpc create community/examples/intel/daos-slurm.yaml \
+ghpc create community/examples/intel/hpc-slurm-daos.yaml \
   --vars project_id=<<PROJECT_ID>> \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
@@ -494,7 +494,7 @@ Once the startup script has completed and Slurm reports readiness, connect to th
 
 ### Create and Mount a DAOS Container
 
-The [community/examples/intel/daos-slurm.yaml](daos-slurm.yaml) blueprint defines a single DAOS pool named `pool1`. The pool will be created when the *daos-server* instances are provisioned.
+The [community/examples/intel/hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) blueprint defines a single DAOS pool named `pool1`. The pool will be created when the *daos-server* instances are provisioned.
 
 You will need to create your own DAOS container in the pool that can be used by your Slurm jobs.
 
@@ -612,5 +612,5 @@ have been shutdown and deleted by the Slurm autoscaler. Delete the remaining
 infrastructure with `terraform`:
 
 ```shell
-terraform -chdir=daos-cluster/primary destroy
+terraform -chdir=pfs-daos/primary destroy
 ```

@@ -11,28 +11,31 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-cluster-small.yaml](#hpc-cluster-smallyaml-) ![core-badge]
-  * [hpc-cluster-high-io.yaml](#hpc-cluster-high-ioyaml-) ![core-badge]
+  * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
+  * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
+  * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
-  * [cloud-batch.yaml](#cloud-batchyaml-) ![core-badge]
-  * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
-  * [lustre.yaml](#lustreyaml-) ![core-badge]
-  * [slurm-gcp-v5-hpc-centos7.yaml](#slurm-gcp-v5-hpc-centos7yaml-) ![community-badge]
-  * [slurm-gcp-v5-ubuntu2004.yaml](#slurm-gcp-v5-ubuntu2004yaml-) ![community-badge]
-  * [slurm-gcp-v5-high-io.yaml](#slurm-gcp-v5-high-ioyaml-) ![community-badge]
-  * [hpc-cluster-intel-select.yaml](#hpc-cluster-intel-selectyaml-) ![community-badge]
-  * [daos-cluster.yaml](#daos-clusteryaml-) ![community-badge]
-  * [daos-slurm.yaml](#daos-slurmyaml-) ![community-badge]
-  * [hpc-cluster-amd-slurmv5.yaml](#hpc-cluster-amd-slurmv5yaml-) ![community-badge]
+  * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
+  * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
+  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
+  * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
+  * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
+  * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
+  * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
+  * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
-  * [spack-gromacs.yaml](#spack-gromacsyaml--) ![community-badge] ![experimental-badge]
+  * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
-  * [hpc-cluster-small-sharedvpc.yaml](#hpc-cluster-small-sharedvpcyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-cluster-localssd.yaml](#hpc-cluster-localssdyaml--) ![community-badge] ![experimental-badge]
-  * [htcondor-pool.yaml](#htcondor-poolyaml--) ![community-badge] ![experimental-badge]
-  * [gke.yaml](#gkeyaml--) ![community-badge] ![experimental-badge]
-  * [starccm-tutorial.yaml](#starccm-tutorialyaml--) ![community-badge] ![experimental-badge]
-  * [fluent-tutorial.yaml](#fluent-tutorialyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
+  * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
+  * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
+  * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
+  * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
+  * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
+  * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -74,7 +77,7 @@ You can set the configuration using the CLI in the `create` and `expand`
 subcommands as well:
 
 ```shell
-./ghpc create examples/hpc-cluster-small.yaml \
+./ghpc create examples/hpc-slurm.yaml \
   --vars "project_id=${GOOGLE_CLOUD_PROJECT}" \
   --backend-config "bucket=${GCS_BUCKET}"
 ```
@@ -91,6 +94,7 @@ subcommands as well:
 [community-badge]: https://img.shields.io/badge/-community-%23b8def4?style=plastic
 [stable-badge]: https://img.shields.io/badge/-stable-lightgrey?style=plastic
 [experimental-badge]: https://img.shields.io/badge/-experimental-%23febfa2?style=plastic
+[deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic
 
 The example blueprints listed below labeled with the core badge
 (![core-badge]) are located in this folder and are developed and tested by the
@@ -104,7 +108,16 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
 
-### [hpc-cluster-small.yaml] ![core-badge]
+### [hpc-slurm.yaml] ![core-badge]
+
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
+> ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
@@ -116,7 +129,7 @@ needing to request additional quota. The purpose of the `debug` partition is to
 make sure that first time users are not immediately blocked by quota
 limitations.
 
-[hpc-cluster-small.yaml]: ./hpc-cluster-small.yaml
+[hpc-slurm.yaml]: ./hpc-slurm.yaml
 
 #### Compute Partition
 
@@ -126,15 +139,15 @@ uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `-p compute` argument when running `srun`.
 
-#### Quota Requirements for hpc-cluster-small.yaml
+#### Quota Requirements for hpc-slurm.yaml
 
 For this example the following is needed in the selected region:
 
 * Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~20 GB static + 20
-  GB/node** up to 500 GB
-* Compute Engine API: N2 CPUs: **10**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **12**
 * Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
   in `compute` partition up to 1,204
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
@@ -142,111 +155,198 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [hpc-cluster-high-io.yaml] ![core-badge]
+### [hpc-enterprise-slurm.yaml] ![core-badge]
 
-Creates a Slurm cluster with tiered file systems for higher performance. It
-connects to the default VPC of the project and creates two partitions and a
-login node.
+This advanced blueprint creates a cluster with Slurm with several performance
+tunings enabled, along with tiered file systems for higher performance. Some of
+these features come with additional cost and required additional quotas.
+
+The Slurm system deployed here connects to the default VPC of the project and
+creates a  login node and the following six partitions:
+
+* `n2` with general-purpose [`n2-stardard-2` nodes][n2]. Placement policies and
+exclusive usage are disabled, which means the nodes can be used for multiple jobs.
+Nodes will remain idle for 5 minutes before Slurm deletes them. This partition can
+be used for debugging and workloads that do not require high performance.
+* `c2` with compute-optimized [`c2-standard-60` nodes][c2] based on Intel 3.9 GHz
+Cascade Lake processors.
+* `c2d` with compute optimized [`c2d-standard-112` nodes][c2d] base on the third
+generation AMD EPYC Milan.
+* `c3` with compute-optimized [`c3-highcpu-176` nodes][c3] based on Intel Sapphire
+Rapids processors. When configured with Tier_1 networking, C3 nodes feature 200 Gbps
+low-latency networking.
+* `a208` with [`a2-ultragpu-8g` nodes][a2] with 8 of the NVIDIA A100 GPU accelerators
+with 80GB of GPU memory each.
+* `a216` with [`a2-megagpu-16g` nodes][a2] with 16 of the NVIDIA A100 GPU accelerators
+with 40GB of GPU memory each.
+
+For all partions other than `n2`, [compact placement] policies are enabled by default
+and nodes are created and destroyed on a per-job basis. Furthermore, these partitions
+are configured with:
+
+* Faster networking: Google Virtual NIC ([GVNIC]) is used for the GPU partitions and
+[Tier_1] is selected when available. Selecting Tier_1 automatically enables GVNIC.
+* SSD PDs disks for compute nodes. See the [Storage options] page for more details.
+
+[n2]: https://cloud.google.com/compute/docs/general-purpose-machines#n2_series
+[c2]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2_machine_types
+[c2d]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2d_machine_types
+[c3]: https://cloud.google.com/blog/products/compute/introducing-c3-machines-with-googles-custom-intel-ipu
+[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
+[compact placement]: https://cloud.google.com/compute/docs/instances/define-instance-placement
+[GVNIC]: https://cloud.google.com/compute/docs/networking/using-gvnic
+[Tier_1]: https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration
+[Storage options]: https://cloud.google.com/compute/docs/disks
 
 File systems:
 
-* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
-  1 TiB of capacity
+* The homefs mounted at `/home` uses the "BASIC_SSD" tier filestore with
+  2.5 TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
 * The scratchfs is mounted at `/scratch` and is a
   [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
   file system designed for high IO performance. The capacity is ~10TiB.
 
-There are two partitions in this example: `low_cost` and `compute`. The
-`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
-debugging and workloads that do not require high performance.
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
 
-Similar to the small example, there is a
-[compute partition](#compute-partition) that should be used for any performance
-analysis.
-
-#### Quota Requirements for hpc-cluster-high-io.yaml
+#### Quota Requirements for hpc-enterprise-slurm.yaml
 
 For this example the following is needed in the selected region:
 
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
-  quota request is 61,440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
-  GB/node** up to 4596 GB
-* Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
-  in `compute` partition up to 12,008
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
+* Cloud Filestore API: Basic SSD capacity (GB) per region: **2,560 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** -
+  _min quota request is 61,440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB** static +
+  **100 GB/node** up to 23,250 GB
+* Compute Engine API: Persistent Disk Standard (GB): **~396 GB** static +
+  **50 GB/node** up to 596 GB
+* Compute Engine API: N2 CPUs: **116** for login and lustre and **2/node** active
+ in `n2` partition up to 124.
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `c2` partition up to 1,204
+* Compute Engine API: C2D CPUs: **112/node** active in `c2d` partition up to 2,240
+* Compute Engine API: C3 CPUs: **176/node** active in `c3` partition up to 3,520
+* Compute Engine API: A2 CPUs: **96/node** active in `a208` and `a216` partitions
+up to 3,072
+* Compute Engine API: NVIDIA A100 80GB GPUs: **8/node** active in `a208` partition
+ up to 128
+* Compute Engine API: NVIDIA A100 GPUs: **8/node** active in `a216` partition up
+to 256
 * Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
+  _not needed for `n2` partition_
 
-[hpc-cluster-high-io.yaml]: ./hpc-cluster-high-io.yaml
+[hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
+
+### [ml-slurm.yaml] ![core-badge]
+
+This blueprint provisions an HPC cluster running the Slurm scheduler with the
+machine learning frameworks [PyTorch] and [TensorFlow] pre-installed on every
+VM. The cluster has 2 partitions:
+
+* [A2 family VMs][a2] with the NVIDIA A100 GPU accelerator
+* [G2 family VMs][g2] with the NVIDIA L4 GPU accelerator
+
+[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
+
+To provision the cluster, please run:
+
+```text
+./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc deploy ml-example"
+```
+
+After accessing the login node, you can activate the conda environment for each
+library with:
+
+```shell
+source /etc/profile.d/conda.sh
+# to activate PyTorch
+conda activate pytorch
+# to activate TensorFlow
+conda activate tf
+```
+
+An example benchmarking job for PyTorch can be run under Slurm:
+
+```shell
+cp /var/tmp/torch_test.* .
+sbatch -N 1 torch_test.sh
+```
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+terraform -chdir=ml-example/cluster destroy
+terraform -chdir=ml-example/primary destroy
+```
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `ml-slurm` followed by a date and
+timestamp for uniqueness.
+
+[ml-slurm.yaml]: ../examples/ml-slurm.yaml
 
 ### [image-builder.yaml] ![core-badge]
 
-This Blueprint uses the [Packer template module][pkr] to create custom VM images
-by applying software and configurations to existing images.
+This blueprint uses the [Packer template module][pkr] to create a custom VM
+image and uses it to provision an HPC cluster using the Slurm scheduler. By
+using a custom image, the cluster is able to begin running jobs sooner and more
+reliably because there is no need to install applications as VMs boot. This
+example takes the following steps:
 
-This example performs the following:
+1. Creates a network with outbound internet access in which to build the image (see
+[Custom Network](#custom-network-deployment-group-1)).
+2. Creates a script that will be used to customize the image (see
+[Toolkit Runners](#toolkit-runners-deployment-group-1)).
+3. Builds a custom Slurm image by executing the script on a standard Slurm image
+(see [Packer Template](#packer-template-deployment-group-2)).
+4. Deploys a Slurm cluster using the custom image (see
+[Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
 
-1. Creates a network needed to build the image (see
-   [Custom Network](#custom-network-deployment-group-1)).
-2. Sets up a script that will be used to configure the image (see
-   [Toolkit Runners](#toolkit-runners-deployment-group-1)).
-3. Builds a new image by modifying the Slurm image (see
-   [Packer Template](#packer-template-deployment-group-2)).
-4. Deploys a Slurm cluster using the newly built image (see
-   [Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
+#### Building and using the custom image
 
-> **Note**: this example relies on the default behavior of the Toolkit to derive
-> naming convention for networks and other modules from the `deployment_name`.
+Create the deployment folder from the blueprint:
 
-The commands needed to run through this example would look like:
-
-```bash
-# Create a deployment from the blueprint
+```text
 ./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-
-# Deploy the network for packer (1) and generate the startup script (2)
-terraform -chdir=image-builder-001/builder-env init
-terraform -chdir=image-builder-001/builder-env validate
-terraform -chdir=image-builder-001/builder-env apply
-
-# Provide startup script to Packer
-terraform -chdir=image-builder-001/builder-env output \
-  -raw startup_script_scripts_for_image > \
-  image-builder-001/packer/custom-image/startup_script.sh
-
-# Build image (3)
-cd image-builder-001/packer/custom-image
-packer init .
-packer validate -var startup_script_file=startup_script.sh .
-packer build -var startup_script_file=startup_script.sh .
-
-# Deploy Slurm cluster (4)
-cd -
-terraform -chdir=image-builder-001/cluster init
-terraform -chdir=image-builder-001/cluster validate
-terraform -chdir=image-builder-001/cluster apply
-
-# When you are done you can clean up the resources in reverse order of creation
-terraform -chdir=image-builder-001/cluster destroy --auto-approve
-terraform -chdir=image-builder-001/builder-env destroy --auto-approve
+./ghpc deploy image-builder-001"
 ```
 
-Using a custom VM image can be more scalable than installing software using
-boot-time startup scripts because:
+Follow the on-screen prompts to approve the creation of each deployment group.
+For example, the network is created in the first deployment group, the VM image
+is created in the second group, and the third group uses the image to create an
+HPC cluster using the Slurm scheduler.
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+terraform -chdir=image-builder-001/cluster destroy --auto-approve
+terraform -chdir=image-builder-001/primary destroy --auto-approve
+```
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `my-slurm-image` followed by a date and
+timestamp for uniqueness.
+
+[console-images]: https://console.cloud.google.com/compute/images
+
+#### Why use a custom image?
+
+Using a custom VM image can be more scalable and reliable than installing
+software using boot-time startup scripts because:
 
 * it avoids reliance on continued availability of package repositories
 * VMs will join an HPC cluster and execute workloads more rapidly due to reduced
   boot-time configuration
-* machines are guaranteed to boot with a static set of packages available when
-  the custom image was created. No potential for some machines to be upgraded
-  relative to other based upon their creation time!
+* machines are guaranteed to boot with a static software configuration chosen
+  when the custom image was created. No potential for some machines to have
+  different software versions installed due to `apt`/`yum`/`pip` installations
+  executed after remote repositories have been updated.
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [pkr]: ../modules/packer/custom-image/README.md
@@ -256,15 +356,11 @@ boot-time startup scripts because:
 
 A tool called [Packer](https://packer.io) builds custom VM images by creating
 short-lived VMs, executing scripts on them, and saving the boot disk as an
-image that can be used by future VMs. The short-lived VM must operate in a
-network that
+image that can be used by future VMs. The short-lived VM typically operates in a
+network that has outbound access to the internet for downloading software.
 
-* has outbound access to the internet for downloading software
-* has SSH access from the machine running Packer so that local files/scripts
-  can be copied to the VM
-
-This deployment group creates such a network, while using [Cloud Nat][cloudnat]
-and [Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
+This deployment group creates a network using [Cloud Nat][cloudnat] and
+[Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
 connections without exposing the machine to the internet on a public IP address.
 
 [cloudnat]: https://cloud.google.com/nat/docs/overview
@@ -278,32 +374,31 @@ configured as a series of scripts uploaded to Cloud Storage. A simple, standard
 [VM startup script][vmstartup] runs at boot-time, downloads the scripts from
 Cloud Storage and executes them in sequence.
 
-The standard bash startup script is exported as a string by the startup-script
-module.
-
-The script in this example is performing the trivial task of creating a file in
-the image's home directory just to demonstrate the capability. You can expand
-the startup-script module to install more complex dependencies.
+The script in this example performs the trivial task of creating a file as a
+simple demonstration of functionality. You can use the startup-script module
+to address more complex scenarios.
 
 [vmstartup]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
 #### Packer Template (deployment group 2)
 
-The Packer template in this deployment group accepts [several methods for
-executing custom scripts][pkr]. To pass the exported startup string to it, you
-must collect it from the Terraform module and provide it to the Packer template.
-After running `terraform -chdir=image-builder-001/builder-env apply` as
-instructed by `ghpc`, execute the following:
+The Packer module uses the startup-script module from the first deployment group
+and executes the script to produce a custom image.
 
-```shell
-terraform -chdir=image-builder-001/builder-env \
-  output -raw startup_script_install_ansible > \
-  image-builder-001/packer/custom-image/startup_script.sh
-cd image-builder-001/packer/custom-image
-packer init .
-packer validate -var startup_script_file=startup_script.sh .
-packer build -var startup_script_file=startup_script.sh .
-```
+#### Slurm Cluster Based on Custom Image (deployment group 3)
+
+Once the Slurm cluster has been deployed we can test that our Slurm compute
+partition is using the custom image. Each compute node should contain the
+`hello.txt` file added by the startup-script.
+
+1. SSH into the login node `slurm-image-builder-001-login0`.
+2. Run a job that prints the contents of the added file:
+
+  ```bash
+  $ srun -N 2 cat /home/hello.txt
+  Hello World
+  Hello World
+  ```
 
 #### Quota Requirements for image-builder.yaml
 
@@ -321,22 +416,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-#### Slurm Cluster Based on Custom Image (deployment group 3)
-
-Once the Slurm cluster has been deployed we can test that our Slurm compute
-partition is now using the image we built. It should contain the `hello.txt`
-file that was added during image build:
-
-1. SSH into the login node `slurm-image-builder-001-login0`.
-2. Run a job that prints the contents of the added file:
-
-  ```bash
-  $ srun -N 2 cat /home/hello.txt
-  Hello World
-  Hello World
-  ```
-
-### [cloud-batch.yaml] ![core-badge]
+### [serverless-batch.yaml] ![core-badge]
 
 This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
 that mounts a Filestore instance and runs startup scripts.
@@ -348,9 +428,9 @@ renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
-[cloud-batch.yaml]: ../examples/cloud-batch.yaml
+[serverless-batch.yaml]: ../examples/serverless-batch.yaml
 
-### [batch-mpi.yaml] ![core-badge]
+### [serverless-batch-mpi.yaml] ![core-badge]
 
 This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
 
@@ -404,14 +484,18 @@ The blueprint contains the following:
     job has finished this folder will contain the results of the job. You can
     inspect the `rsl.out.0000` file for a summary of the job.
 
-[batch-mpi.yaml]: ../examples/batch-mpi.yaml
+[serverless-batch-mpi.yaml]: ../examples/serverless-batch-mpi.yaml
 
-### [lustre.yaml] ![core-badge]
+### [pfs-lustre.yaml] ![core-badge]
 
 Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
 
 The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
 file system is designed for high IO performance. It has a default capacity of ~10TiB and is mounted at `/lustre`.
+
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
 
 After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
 
@@ -419,7 +503,7 @@ After the creation of the file-system and the client instances, the lustre drive
 watch mount -t lustre
 ```
 
-#### Quota Requirements for lustre.yaml
+#### Quota Requirements for pfs-lustre.yaml
 
 For this example the following is needed in the selected region:
 
@@ -427,48 +511,21 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Persistent Disk Standard (GB): **~756GB: 20GB MDS, 276GB MGS, 3x20GB OSS, 2x200GB client-vms**
 * Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
 
-[lustre.yaml]: ./lustre.yaml
+[pfs-lustre.yaml]: ./pfs-lustre.yaml
 
-### [slurm-gcp-v5-hpc-centos7.yaml] ![community-badge]
+### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
-This example creates an HPC cluster similar to the one created by
-[hpc-cluster-small.yaml], but uses modules built from version 5 of
-[slurm-gcp].
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
+> ```
 
-The cluster will support 2 partitions named `debug` and `compute`.
-The `debug` partition is the default partition and runs on smaller
-`n2-standard-2` nodes. The `compute` partition is not default and requires
-specifying in the `srun` command via the `--partition` flag. The `compute`
-partition runs on compute optimized nodes of type `cs-standard-60`. The
-`compute` partition may require additional quota before using.
-
-#### Quota Requirements for slurm-gcp-v5-hpc-centos7.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
-* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
-  GB/node** up to 1,250 GB
-* Compute Engine API: N2 CPUs: **12**
-* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
-  in `compute` partition up to 1,204
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-[slurm-gcp-v5-hpc-centos7.yaml]: ../community/examples/slurm-gcp-v5-hpc-centos7.yaml
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
-
-### [slurm-gcp-v5-ubuntu2004.yaml] ![community-badge]
-
-Similar to the previous example, but using Ubuntu 20.04 instead of CentOS 7.
+Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
 [Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
-
-This example creates an HPC cluster similar to the one created by
-[hpc-cluster-small.yaml], but uses modules built from version 5 of
-[slurm-gcp] and Ubuntu.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller
@@ -478,9 +535,10 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 `compute` partition may require additional quota before using.
 
 [Other operating systems]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-[slurm-gcp-v5-ubuntu2004.yaml]: ../community/examples/slurm-gcp-v5-ubuntu2004.yaml
+[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
 
-#### Quota Requirements for slurm-gcp-v5-ubuntu2004.yaml
+#### Quota Requirements for hpc-slurm-ubuntu2004.yaml
 
 For this example the following is needed in the selected region:
 
@@ -496,131 +554,34 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [slurm-gcp-v5-high-io.yaml] ![community-badge]
-
-This example uses [Slurm on GCP][slurm-gcp] version 5.x modules to replicate the
-[hpc-cluster-high-io.yaml] core example. With version 5, additional features are
-available and utilized in this example:
-
-* node groups are used to allow multiple machine types in a single partition,
-  differentiated by node names.
-* Active cluster reconfiguration is on by default. When updating a partition or
-  cluster configuration, the overwrite option (`-w`) can be used and upon
-  re-applying the deployment, the changes will become active without having to
-  destroy and recreate the cluster.
-
-This blueprint will create a cluster with the following storage tiers:
-
-* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
-  1 TiB of capacity
-* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-  instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-The cluster will support 2 partitions:
-
-* `lowcost`
-  * Includes two node groups, `n2s2` of machine type `n2-standard-2` and `n2s4`
-    of machine type `n2-standard-4`.
-  * Default partition.
-  * Designed to run with lower cost nodes and within a typical project's default
-    quota.
-* `compute`
-  * Includes two node groups, `c2s60` of machine type `c2-standard-60` and
-    `c2s30` of machine type `c2-standard-30`.
-  * Can be used by setting the `--partition` option in `srun` to `compute`.
-  * Designed for performance, but may require additional quota before using.
-
-[slurm-gcp-v5-high-io.yaml]: ../community/examples/slurm-gcp-v5-high-io.yaml
-
-#### Usage of Node Groups
-This example defines partitions with more than one node group each. For more
-information on node groups and why they are used, see the documentation in the
-[schedmd-slurm-gcp-v5-node-group] module documentation. Some reference commands
-are listed here for specifying not only the partition, but also the correct node
-group when executing a Slurm command on a cluster generated by this blueprint.
-
-Partition: compute; Node Group: c2s30; Machine Type: c2-standard-30
-
-```bash
-srun -N 4 -p compute -w highioslur-compute-c2s30-[0-3] hostname
-```
-
-Partition: compute; Node Group: c2s60; Machine Type: c2-standard-60
-
-```bash
-srun -N 4 -p compute --mincpus=30 hostname
-```
-
-Partition: lowcost; Node Group: n2s2; Machine Type: n2-standard-2
-
-```bash
-srun -N 4 -w highioslur-lowcost-n2s2-[0-3] hostname
-```
-
-Partition: lowcost; Node Group: n2s4; Machine Type: n2-standard-4
-
-```bash
-srun -N 4 --mincpus=2 hostname
-```
-
-[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
-
-#### Quota Requirements for slurm-gcp-v5-high-io.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
-  quota request is 61,440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
-  GB/node** up to 4596 GB
-* Compute Engine API: N2 CPUs:
-  * **4** for the login node
-  * **2** per node for active nodes in the `n2s2` group, maximum 20.
-  * **4** per node for active nodes in the `n2s4` group, maximum 40.
-  * Maximum possible: **64**
-* Compute Engine API: C2 CPUs:
-  * **8** for controller node
-  * **60** per node for active nodes in the `c2s60` group, maximum 12,000.
-  * **30** per node for active nodes in the `c2s30` group, maximum 6,000.
-  * Maximum possible: **18,008**
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-### [hpc-cluster-intel-select.yaml] ![community-badge]
+### [hpc-intel-select-slurm.yaml] ![community-badge]
 
 This example provisions a Slurm cluster automating the [steps to comply to the
 Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
 more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
-[hpc-cluster-intel-select.yaml]: ../community/examples/intel/hpc-cluster-intel-select.yaml
+[hpc-intel-select-slurm.yaml]: ../community/examples/intel/hpc-intel-select-slurm.yaml
 [intel-examples-readme]: ../community/examples/intel/README.md
 [intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
 
-### [daos-cluster.yaml] ![community-badge]
+### [pfs-daos.yaml] ![community-badge]
 
 This example provisions a DAOS cluster with [managed instance groups][migs] for the servers and for clients. It is more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
-[daos-cluster.yaml]: ../community/examples/intel/daos-cluster.yaml
+[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
 [migs]: https://cloud.google.com/compute/docs/instance-groups
 
-### [daos-slurm.yaml] ![community-badge]
+### [hpc-slurm-daos.yaml] ![community-badge]
 
 This example provisions DAOS servers and a Slurm cluster. It is
 more extensively discussed in a dedicated [README for Intel
 examples][intel-examples-readme].
 
-[daos-slurm.yaml]: ../community/examples/intel/daos-slurm.yaml
+[hpc-slurm-daos.yaml]: ../community/examples/intel/hpc-slurm-daos.yaml
 
-### [hpc-cluster-amd-slurmv5.yaml] ![community-badge]
+### [hpc-amd-slurm.yaml] ![community-badge]
 
 This example provisions a Slurm cluster using AMD VM machine types. It
 automates the initial setup of Spack, including a script that can be used to
@@ -628,7 +589,7 @@ install the AMD Optimizing C/C++ Compiler ([AOCC]) and compile OpenMPI with
 AOCC. It is more extensively discussed in a dedicated [README for AMD
 examples][amd-examples-readme].
 
-[hpc-cluster-amd-slurmv5.yaml]: ../community/examples/AMD/hpc-cluster-amd-slurmv5.yaml
+[hpc-amd-slurm.yaml]: ../community/examples/AMD/hpc-amd-slurm.yaml
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
@@ -653,7 +614,56 @@ python /var/tmp/qsim-example.py
 [cqsdk]: https://developer.nvidia.com/cuquantum-sdk
 [cudatk]: https://developer.nvidia.com/cuda-toolkit
 
-### [spack-gromacs.yaml] ![community-badge] ![experimental-badge]
+### [client-google-cloud-storage.yaml] ![community-badge] ![experimental-badge]
+
+[client-google-cloud-storage.yaml]: ../community/examples/client-google-cloud-storage.yaml
+
+This example demonstrates several different ways to use Google Cloud Storage
+(GCS) buckets in the HPC Toolkit. There are two buckets referenced in the
+example:
+
+1. A GCS bucket that is created by the HPC Toolkit (`id: new-bucket`).
+1. A GCS bucket that is created externally from the HPC Toolkit but referenced
+   by the blueprint (`id: existing-bucket`).
+
+The created VM (`id: workstation`) references these GCS buckets with the `use`
+field. On VM startup gcsfuse will be installed, if not already on the image, and
+both buckets will be mounted under the directory specified by the `local_mount`
+option.
+
+The `wait-for-startup` module (`id: wait`) makes sure that terraform does not
+exit before the buckets have been mounted.
+
+To use the blueprint you must supply the project id and the name of an existing
+bucket:
+
+```shell
+./ghpc create community/examples/client-google-cloud-storage.yaml \
+  --vars project_id=<project_id> \
+  --vars existing_bucket_name=<name_of_existing_bucket>
+```
+
+> **Note**: The service account used by the VM must have access to the buckets
+> (`roles/storage.objectAdmin`). In this example the service account will
+> default to the default compute service account.
+>
+> **Warning**: In this example the bucket is mounted by root during startup. Due
+> to the way permissions are handled by gcsfuse this means that read or
+> read/write permissions must be granted indiscriminantly for all users which
+> could be a security concern depending on usage. To avoid this, you can
+> manually mount as the user using the bucket
+> ([Read more](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/mounting.md#access-permissions)).
+
+### [ramble.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions a single VM, installs spack using the
+[spack-install module](../community/modules/scripts/spack-install/README.md),
+and then installs ramble using the
+[ramble-setup module](../community/modules/scripts/ramble-setup/README.md).
+
+[ramble.yaml]: ../community/examples/ramble.yaml
+
+### [hpc-slurm-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Spack is an HPC software package manager. This example creates a small Slurm
 cluster with software installed using the
@@ -699,7 +709,7 @@ spack load gromacs
 > hours to run on startup. To decrease this time in future deployments, consider
 > including a spack build cache as described in the comments of the example.
 
-[spack-gromacs.yaml]: ../community/examples/spack-gromacs.yaml
+[hpc-slurm-gromacs.yaml]: ../community/examples/hpc-slurm-gromacs.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
@@ -718,17 +728,7 @@ the nodes are provisioned. All nodes mount a filestore instance on `/home`.
 [omnia-github]: https://github.com/dellhpc/omnia
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
-### [hpc-cluster-small-sharedvpc.yaml] ![community-badge] ![experimental-badge]
-
-This blueprint demonstrates the use of the Slurm and Filestore modules in
-the service project of an existing Shared VPC.  Before attempting to deploy the
-blueprint, one must first complete [initial setup for provisioning Filestore in
-a Shared VPC service project][fs-shared-vpc].
-
-[hpc-cluster-small-sharedvpc.yaml]: ../community/examples/hpc-cluster-small-sharedvpc.yaml
-[fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
-
-### [hpc-cluster-localssd.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-local-ssd.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of Slurm and Filestore, with the definition
 of a partition which deploys compute nodes that have local ssd drives deployed.
@@ -737,9 +737,52 @@ properly configured (allowing Internet access and allowing inter virtual
 machine communications, for NFS and also for communications between the Slurm
 nodes)
 
-[hpc-cluster-localssd.yaml]: ../community/examples/hpc-cluster-localssd.yaml
+[hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
 
-### [htcondor-pool.yaml] ![community-badge] ![experimental-badge]
+### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster with a system node
+pool (included in gke-cluster module) and an autoscaling compute node pool. It
+creates a VPC configured to be used by a VPC native GKE cluster with subnet
+secondary IP ranges defined.
+
+The `gke-job-template` module is used to create a job file that can be submitted
+to the cluster using `kubectl` and will run on the specified node pool.
+
+[hpc-gke.yaml]: ../community/examples/hpc-gke.yaml
+
+### [ml-gke.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates how to set up a GPU GKE cluster using the HPC
+Toolkit. It includes:
+
+> **Warning**: `authorized_cidr` variable must be entered for this example to
+> work. See note below.
+
+* Creation of a regional GKE cluster.
+* Creation of an autoscaling GKE node pool with `a2` machines each with 8
+  attached A100 GPUs.
+* Configuration of the cluster using the [`kubernetes-operations`] module to
+  install nvidia drivers.
+* Creation of a job template yaml file that can be used to submit jobs to the
+  GPU node pool.
+
+> **Note**: The Kubernetes API server will only allow requests from authorized
+> networks. Nvidia drivers are installed on GPU nodes by a DaemonSet created by
+> the [`kubernetes-operations`] Terraform module. **You must use the
+> `authorized_cidr` variable to supply an authorized network which contains the
+> IP address of the machine deploying the blueprint, for example
+> `--vars authorized_cidr=<your-ip-address>/32`.** This will allow Terraform to
+> create the necessary DaemonSet on the cluster. You can use a service like
+> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+Once you have deployed the blueprint, follow output instructions to _fetch
+credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
+
+[ml-gke.yaml]: ../community/examples/ml-gke.yaml
+[`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
+
+### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
 the [HPC VM Image][hpcvmimage].
@@ -748,35 +791,96 @@ Also see the [tutorial](../docs/tutorials/README.md#htcondor-tutorial), which
 walks through the use of this blueprint.
 
 [htcondor]: https://htcondor.org/
-[htcondor-pool.yaml]: ../community/examples/htcondor-pool.yaml
+[htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
-### [gke.yaml] ![community-badge] ![experimental-badge]
+### [htc-slurm.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint uses GKE to provision a Kubernetes cluster with a system node
-pool (included in gke-cluster module) and an autoscaling compute node pool. It
-also creates a VPC configured to be used by a VPC native GKE cluster with subnet
-secondary IP ranges defined.
+This blueprint provisions a cluster using the Slurm scheduler in a configuration
+tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs.
 
-[gke.yaml]: ../community/examples/gke.yaml
+For more information see:
 
-### [starccm-tutorial.yaml] ![community-badge] ![experimental-badge]
+* [Slurm on Google Cloud High Throughput documentation](https://github.com/SchedMD/slurm-gcp/blob/master/docs/htc.md)
+* [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
+
+[htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
+
+### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
 tutorial.
 
 > The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-star-ccm/run-workload).
 
-[starccm-tutorial.yaml]: ../community/examples/starccm-tutorial.yaml
+[tutorial-starccm.yaml]: ../community/examples/tutorial-starccm.yaml
 
-### [fluent-tutorial.yaml] ![community-badge] ![experimental-badge]
+### [tutorial-fluent.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a simple cluster for use with an Ansys Fluent
 tutorial.
 
 > The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/tutorials/ansys-fluent).
 
-[fluent-tutorial.yaml]: ../community/examples/fluent-tutorial.yaml
+[tutorial-fluent.yaml]: ../community/examples/tutorial-fluent.yaml
+
+### [hpc-slurm-legacy.yaml] ![community-badge] ![deprecated-badge]
+
+Creates a Slurm cluster with tiered file systems for higher performance. It
+connects to the default VPC of the project and creates two partitions and a
+login node.
+
+File systems:
+
+* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
+  1 TiB of capacity
+* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
+  instance with 10TiB of capacity.
+* The scratchfs is mounted at `/scratch` and is a
+  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+  file system designed for high IO performance. The capacity is ~10TiB.
+
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+
+There are two partitions in this example: `low_cost` and `compute`. The
+`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
+debugging and workloads that do not require high performance.
+
+Similar to the small example, there is a
+[compute partition](#compute-partition) that should be used for any performance
+analysis.
+
+#### Quota Requirements for hpc-slurm-legacy.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
+  quota request is 61,440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
+  GB/node** up to 4596 GB
+* Compute Engine API: N2 CPUs: **158**
+* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
+  in `compute` partition up to 12,008
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+[hpc-slurm-legacy.yaml]: ../community/examples/hpc-slurm-legacy.yaml
+
+### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge] ![deprecated-badge]
+
+This blueprint demonstrates the use of the Slurm and Filestore modules in
+the service project of an existing Shared VPC.  Before attempting to deploy the
+blueprint, one must first complete [initial setup for provisioning Filestore in
+a Shared VPC service project][fs-shared-vpc].
+
+[hpc-slurm-legacy-sharedvpc.yaml]: ../community/examples/hpc-slurm-legacy-sharedvpc.yaml
+[fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
 ## Blueprint Schema
 

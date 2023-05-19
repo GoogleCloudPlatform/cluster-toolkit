@@ -1,0 +1,62 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: serverless-batch
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hello-workload
+  region: us-central1
+  zone: us-central1-c
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  - id: appfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings: {local_mount: /sw}
+
+  - id: load-data-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: generate_hello.sh
+        content: |
+          #!/bin/sh
+          echo "Hello World" > /sw/hello.txt
+
+  - id: batch-job
+    source: modules/scheduler/batch-job-template
+    use: [network1, appfs]
+    settings:
+      runnable: "cat /sw/hello.txt"
+      machine_type: n2-standard-4
+      image:
+        family: rocky-linux-8-optimized-gcp
+        project: rocky-linux-cloud
+
+  - id: batch-login
+    source: modules/scheduler/batch-login-node
+    use: [batch-job]
+    settings: {startup_script: $(load-data-startup.startup_script)}
+    outputs: [instructions]

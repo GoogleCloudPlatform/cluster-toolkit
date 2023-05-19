@@ -67,7 +67,7 @@ deployment_groups:
       node_count_dynamic_max: 1
       disable_public_ips: false
       instance_image:
-        family: schedmd-v5-slurm-22-05-8-ubuntu-2004-lts
+        family: schedmd-v5-slurm-22-05-9-ubuntu-2004-lts
         project: projects/schedmd-slurm-public/global/images/family
       guest_accelerator:
       - type: nvidia-tesla-t4-vws

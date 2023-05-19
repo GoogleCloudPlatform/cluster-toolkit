@@ -80,10 +80,10 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 		Source: testModuleSource,
 		Kind:   config.TerraformKind,
 		ID:     "testModule",
-		Settings: map[string]interface{}{
-			"deployment_name": nil,
-			"project_id":      nil,
-		},
+		Settings: config.NewDict(map[string]cty.Value{
+			"deployment_name": cty.NilVal,
+			"project_id":      cty.NilVal,
+		}),
 		Outputs: []modulereader.OutputInfo{
 			{
 				Name:        "test-output",
@@ -97,9 +97,9 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 		Source: testModuleSourceWithLabels,
 		ID:     "testModuleWithLabels",
 		Kind:   config.TerraformKind,
-		Settings: map[string]interface{}{
-			"moduleLabel": "moduleLabelValue",
-		},
+		Settings: config.NewDict(map[string]cty.Value{
+			"moduleLabel": cty.StringVal("moduleLabelValue"),
+		}),
 	}
 	testDeploymentGroups := []config.DeploymentGroup{
 		{
@@ -117,11 +117,7 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 			}),
 			DeploymentGroups: testDeploymentGroups,
 		},
-		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
 	}
-
-	testDC.SetModuleConnections(make(map[string][]config.ModConnection))
-
 	return testDC
 }
 
@@ -132,7 +128,7 @@ func isDeploymentDirPrepped(depDirectoryPath string) error {
 		return fmt.Errorf("deloyment dir does not exist: %s: %w", depDirectoryPath, err)
 	}
 
-	ghpcDir := filepath.Join(depDirectoryPath, hiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDirectoryPath, HiddenGhpcDirName)
 	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 		return fmt.Errorf(".ghpc working dir does not exist: %s: %w", ghpcDir, err)
 	}
@@ -183,12 +179,12 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(isDeploymentDirPrepped(realDepDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, "test_prep_dir", hiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(testDir, "test_prep_dir", HiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
 	files2, _ := ioutil.ReadDir(realDepDir)
-	c.Check(len(files2), Equals, 2) // .ghpc and .gitignore
+	c.Check(len(files2), Equals, 3) // .ghpc, .gitignore, and instructions file
 }
 
 func (s *MySuite) TestIsSubset(c *C) {
@@ -202,7 +198,7 @@ func (s *MySuite) TestIsSubset(c *C) {
 
 func (s *MySuite) TestIsOverwriteAllowed(c *C) {
 	depDir := filepath.Join(testDir, "overwrite_test")
-	ghpcDir := filepath.Join(depDir, hiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
 	module1 := filepath.Join(depDir, "group1")
 	module2 := filepath.Join(depDir, "group2")
 	os.MkdirAll(ghpcDir, 0755)
@@ -259,7 +255,7 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 	if err := os.Mkdir(testDeployDir, 0755); err != nil {
 		log.Fatal("Failed to create test deployment directory for createGroupDirs")
 	}
-	groupNames := []string{"group0", "group1", "group2"}
+	groupNames := []config.GroupName{"group0", "group1", "group2"}
 
 	// No deployment groups
 	testDepGroups := []config.DeploymentGroup{}
@@ -270,7 +266,7 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 	testDepGroups = []config.DeploymentGroup{{Name: groupNames[0]}}
 	err = createGroupDirs(testDeployDir, &testDepGroups)
 	c.Check(err, IsNil)
-	grp0Path := filepath.Join(testDeployDir, groupNames[0])
+	grp0Path := filepath.Join(testDeployDir, string(groupNames[0]))
 	_, err = os.Stat(grp0Path)
 	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
 	c.Check(err, IsNil)
@@ -292,14 +288,14 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 	err = os.Remove(grp0Path)
 	c.Check(err, IsNil)
 	// Check for group 1
-	grp1Path := filepath.Join(testDeployDir, groupNames[1])
+	grp1Path := filepath.Join(testDeployDir, string(groupNames[1]))
 	_, err = os.Stat(grp1Path)
 	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
 	c.Check(err, IsNil)
 	err = os.Remove(grp1Path)
 	c.Check(err, IsNil)
 	// Check for group 2
-	grp2Path := filepath.Join(testDeployDir, groupNames[2])
+	grp2Path := filepath.Join(testDeployDir, string(groupNames[2]))
 	_, err = os.Stat(grp2Path)
 	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
 	c.Check(err, IsNil)
@@ -334,7 +330,7 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	deploymentGroupName := "fake_resource_group"
 
 	prevDeploymentGroup := filepath.Join(
-		depDir, hiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
+		depDir, HiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
 	curDeploymentGroup := filepath.Join(depDir, deploymentGroupName)
 	prevStateFile := filepath.Join(prevDeploymentGroup, tfStateFileName)
 	prevBuStateFile := filepath.Join(prevDeploymentGroup, tfStateBackupFileName)
@@ -496,10 +492,10 @@ func (s *MySuite) TestWriteMain(c *C) {
 	// Test with modules
 	testModule := config.Module{
 		ID: "test_module",
-		Settings: map[string]interface{}{
-			"testSetting": "testValue",
-			"passthrough": `(("${vars.deployment_name}-allow\"))`,
-		},
+		Settings: config.NewDict(map[string]cty.Value{
+			"testSetting": cty.StringVal("testValue"),
+			"passthrough": config.MustParseExpression(`"${var.deployment_name}-allow"`).AsValue(),
+		}),
 	}
 	testModules = append(testModules, testModule)
 	err = writeMain(testModules, testBackend, testMainDir)
@@ -508,11 +504,11 @@ func (s *MySuite) TestWriteMain(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
-	exists, err = stringExistsInFile(`"${vars.deployment_name}-allow\"`, mainFilePath)
+	exists, err = stringExistsInFile(`"${var.deployment_name}-allow"`, mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 
-	exists, err = stringExistsInFile(`("${vars.deployment_name}-allow\")`, mainFilePath)
+	exists, err = stringExistsInFile(`("${var.deployment_name}-allow")`, mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, false)
 
@@ -532,9 +528,11 @@ func (s *MySuite) TestWriteMain(c *C) {
 		WrapSettingsWith: map[string][]string{
 			"wrappedSetting": {"list(flatten(", "))"},
 		},
-		Settings: map[string]interface{}{
-			"wrappedSetting": []interface{}{"val1", "val2"},
-		},
+		Settings: config.NewDict(map[string]cty.Value{
+			"wrappedSetting": cty.TupleVal([]cty.Value{
+				cty.StringVal("val1"),
+				cty.StringVal("val2")}),
+		}),
 	}
 	testModules = append(testModules, testModuleWithWrap)
 	err = writeMain(testModules, testBackend, testMainDir)
@@ -557,10 +555,6 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	err := writeOutputs(testModules, testOutputsDir)
 	c.Assert(err, IsNil)
 
-	// Failure: Bad path
-	err = writeOutputs(testModules, "not/a/real/path")
-	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
-
 	// Success: Outputs added
 	outputList := []modulereader.OutputInfo{
 		{Name: "output1"},
@@ -570,12 +564,18 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	testModules = []config.Module{moduleWithOutputs}
 	err = writeOutputs(testModules, testOutputsDir)
 	c.Assert(err, IsNil)
-	exists, err := stringExistsInFile(outputList[0].Name, outputsFilePath)
+
+	exists, err := stringExistsInFile("output1", outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
-	exists, err = stringExistsInFile(outputList[1].Name, outputsFilePath)
+	exists, err = stringExistsInFile("output2", outputsFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
+
+	// Failure: Bad path
+	err = writeOutputs(testModules, "not/a/real/path")
+	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
+
 }
 
 func (s *MySuite) TestWriteVariables(c *C) {
@@ -659,6 +659,13 @@ func (s *MySuite) TestNumModules_PackerWriter(c *C) {
 	c.Assert(testWriter.getNumModules(), Equals, 1)
 }
 
+func (s *MySuite) TestKind(c *C) {
+	tfw := TFWriter{}
+	c.Assert(tfw.kind(), Equals, config.TerraformKind)
+	pkrw := PackerWriter{}
+	c.Assert(pkrw.kind(), Equals, config.PackerKind)
+}
+
 func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	deploymentio := deploymentio.GetDeploymentioLocal()
 	testWriter := PackerWriter{}
@@ -699,11 +706,14 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 				testDeploymentGroup,
 			},
 		},
-		ModulesInfo: map[string]map[string]modulereader.ModuleInfo{},
 	}
-
-	testWriter.writeDeploymentGroup(testDC, 0, deploymentDir)
-	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
+	f, err := os.CreateTemp("", "tmpf")
+	if err != nil {
+		c.Fatal()
+	}
+	defer os.Remove(f.Name())
+	testWriter.writeDeploymentGroup(testDC, 0, deploymentDir, f)
+	_, err = os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 
@@ -728,61 +738,25 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 
 }
 
-// hcl_utils.go
-func (s *MySuite) TestescapeLiteralVariables(c *C) {
-	// Setup
-	hclFile := hclwrite.NewEmptyFile()
-	hclBody := hclFile.Body()
+func (s *MySuite) TestStringEscape(c *C) {
+	f := func(s string) string {
+		toks := TokensForValue(cty.StringVal(s))
+		return string(toks.Bytes())
+	}
+	// LiteralVariables
+	c.Check(f(`\((not.var))`), Equals, `"((not.var))"`)
+	c.Check(f(`abc\((not.var))abc`), Equals, `"abc((not.var))abc"`)
+	c.Check(f(`abc \((not.var)) abc`), Equals, `"abc ((not.var)) abc"`)
+	c.Check(f(`abc \((not.var1)) abc \((not.var2)) abc`), Equals, `"abc ((not.var1)) abc ((not.var2)) abc"`)
+	c.Check(f(`abc \\((escape.backslash))`), Equals, `"abc \\((escape.backslash))"`)
 
-	// Set escaped var value
-	hclBody.SetAttributeValue("dummyAttributeName1", cty.StringVal("\\((not.var))"))
-	hclBody.SetAttributeValue("dummyAttributeName2", cty.StringVal("abc\\((not.var))abc"))
-	hclBody.SetAttributeValue("dummyAttributeName3", cty.StringVal("abc \\((not.var)) abc"))
-	hclBody.SetAttributeValue("dummyAttributeName4", cty.StringVal("abc \\((not.var1)) abc \\((not.var2)) abc"))
-	hclBody.SetAttributeValue("dummyAttributeName5", cty.StringVal("abc \\\\((escape.backslash))"))
-	hclBody.AppendNewline()
-	hclBytes := escapeLiteralVariables(hclFile.Bytes())
-	hclString := string(hclBytes)
+	// BlueprintVariables
+	c.Check(f(`\$(not.var)`), Equals, `"$(not.var)"`)
+	c.Check(f(`abc\$(not.var)abc`), Equals, `"abc$(not.var)abc"`)
+	c.Check(f(`abc \$(not.var) abc`), Equals, `"abc $(not.var) abc"`)
+	c.Check(f(`abc \$(not.var1) abc \$(not.var2) abc`), Equals, `"abc $(not.var1) abc $(not.var2) abc"`)
+	c.Check(f(`abc \\$(escape.backslash)`), Equals, `"abc \\$(escape.backslash)"`)
 
-	// Sucess
-	exists := strings.Contains(hclString, "dummyAttributeName1 = \"((not.var))\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName2 = \"abc((not.var))abc\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName3 = \"abc ((not.var)) abc\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName4 = \"abc ((not.var1)) abc ((not.var2)) abc\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName5 = \"abc \\\\((escape.backslash))\"")
-	c.Assert(exists, Equals, true)
-}
-
-func (s *MySuite) TestescapeBlueprintVariables(c *C) {
-	// Setup
-	hclFile := hclwrite.NewEmptyFile()
-	hclBody := hclFile.Body()
-
-	// Set escaped var value
-	hclBody.SetAttributeValue("dummyAttributeName1", cty.StringVal("\\$(not.var)"))
-	hclBody.SetAttributeValue("dummyAttributeName2", cty.StringVal("abc\\$(not.var)abc"))
-	hclBody.SetAttributeValue("dummyAttributeName3", cty.StringVal("abc \\$(not.var) abc"))
-	hclBody.SetAttributeValue("dummyAttributeName4", cty.StringVal("abc \\$(not.var1) abc \\$(not.var2) abc"))
-	hclBody.SetAttributeValue("dummyAttributeName5", cty.StringVal("abc \\\\$(escape.backslash)"))
-	hclBody.AppendNewline()
-	hclBytes := escapeBlueprintVariables(hclFile.Bytes())
-	hclString := string(hclBytes)
-
-	// Sucess
-	exists := strings.Contains(hclString, "dummyAttributeName1 = \"$(not.var)\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName2 = \"abc$(not.var)abc\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName3 = \"abc $(not.var) abc\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName4 = \"abc $(not.var1) abc $(not.var2) abc\"")
-	c.Assert(exists, Equals, true)
-	exists = strings.Contains(hclString, "dummyAttributeName5 = \"abc \\\\$(escape.backslash)\"")
-	c.Assert(exists, Equals, true)
 }
 
 func TestMain(m *testing.M) {
