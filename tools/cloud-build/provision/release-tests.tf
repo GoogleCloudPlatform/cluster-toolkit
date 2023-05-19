@@ -17,6 +17,7 @@ resource "google_cloudbuild_trigger" "release_test" {
   name        = "RELEASE-test-${each.key}"
   description = "Runs the '${each.key}' integration test against `release-candidate`"
   tags        = [local.notify_chat_tag]
+  disabled    = true
 
   git_file_source {
     path      = "tools/cloud-build/daily-tests/builds/${each.key}.yaml"
