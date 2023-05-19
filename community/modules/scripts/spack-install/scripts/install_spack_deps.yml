@@ -25,6 +25,11 @@
       name:
       - python3-pip
       - git
+    register: package
+    changed_when: package.changed
+    retries: 5
+    delay: 10
+    until: package is success
   - name: Create virtualenv for Spack
     # this declares our minimum support for Python 3.6+ along with ensuring the
     # presence of a copy of pip capable of proper dependency resolution of
