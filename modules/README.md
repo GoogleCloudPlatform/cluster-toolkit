@@ -193,6 +193,10 @@ Modules that are still in development and less stable are labeled with the
   Toolkit runner to install [PBS Professional][pbspro] from RPM packages.
 * **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a Toolkit
   runner to run common `qmgr` commands when configuring a PBS Pro cluster.
+* **[ramble-execute]** ![community-badge] ![experimental-badge] : Creates a
+  startup script to execute
+  [Ramble](https://github.com/GoogleCloudPlatform/ramble) commands on a target
+  VM
 * **[ramble-setup]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install
   [Ramble](https://github.com/GoogleCloudPlatform/ramble) on an instance or a
@@ -211,6 +215,7 @@ Modules that are still in development and less stable are labeled with the
 [pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
 [pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
 [pbspro]: https://www.altair.com/pbs-professional
+[ramble-execute]: ../community/modules/scripts/ramble-execute/README.md
 [ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
 [spack-install]: ../community/modules/scripts/spack-install/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
