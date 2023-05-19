@@ -501,13 +501,10 @@ You will need to create your own DAOS container in the pool that can be used by 
 While logged into the login node create a container named `cont1` in the `pool1` pool:
 
 ```bash
-daos cont create pool1 \
-  --label cont1 \
-  --type POSIX \
-  --properties rf:0
+daos cont create --type=POSIX --properties=rf:0 --label=cont1 pool1
 ```
 
-The `cont1` container is owned by your account and therefore your Slurm jobs will need to run with your user account in order to access the container.
+Since the `cont1` container is owned by your account, your Slurm jobs will need to run as your user account in order to access the container.
 
 Create a mount point for the container and mount it with dfuse (DAOS Fuse)
 
@@ -612,5 +609,5 @@ have been shutdown and deleted by the Slurm autoscaler. Delete the remaining
 infrastructure with `terraform`:
 
 ```shell
-terraform -chdir=pfs-daos/primary destroy
+terraform -chdir=daos-slurm/primary destroy
 ```
