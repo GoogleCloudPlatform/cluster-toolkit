@@ -151,7 +151,7 @@ func TestProjectExists(projectID string) error {
 		err = handleClientError(err)
 		return err
 	}
-	_, err = s.Projects.Get(projectID).Fields().Do() // !!! is no fields ok?
+	_, err = s.Projects.Get(projectID).Fields().Do()
 	if err != nil {
 		if strings.Contains(err.Error(), computeDisabledError) {
 			log.Printf(computeDisabledMsg, projectID)
