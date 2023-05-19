@@ -28,15 +28,15 @@
 
     - name: Execute ramble commands
       ansible.builtin.shell: |
+        set -eo pipefail
+        {
         . {{ spack_path }}/share/spack/setup-env.sh
         . {{ ramble_path }}/share/ramble/setup-env.sh
 
-        set -eo pipefail
         echo " === Starting ramble commands ==="
-        {
         {{ commands }}
-        } | tee -a {{ log_file }}
         echo " === Finished ramble commands ==="
+        } | tee -a {{ log_file }}
       register: ramble_output
 
     always:

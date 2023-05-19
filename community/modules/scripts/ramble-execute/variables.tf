@@ -16,7 +16,6 @@
 
 variable "ramble_path" {
   description = "Path to the Ramble installation"
-  default     = null
   type        = string
 }
 
@@ -28,7 +27,6 @@ variable "log_file" {
 
 variable "spack_path" {
   description = "Path to the Spack installation"
-  default     = null
   type        = string
 }
 
@@ -49,4 +47,12 @@ variable "ramble_runner" {
     content     = string
     destination = string
   })
+  validation {
+    condition     = var.ramble_runner == null || try(var.ramble_runner["type"] == "ansible-local", false)
+    error_message = "Ramble runner should be of type 'ansible'."
+  }
+  validation {
+    condition     = var.ramble_runner == null || contains(keys(var.ramble_runner), "content")
+    error_message = "Ramble runner should contain a 'content' key."
+  }
 }

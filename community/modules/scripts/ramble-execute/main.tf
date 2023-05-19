@@ -15,7 +15,7 @@
  */
 
 locals {
-  commands_content = indent(4, yamlencode(var.commands))
+  commands_content = var.commands == null ? "" : indent(4, yamlencode(var.commands))
 
   execute_contents = templatefile(
     "${path.module}/templates/ramble_execute.yml.tpl",
