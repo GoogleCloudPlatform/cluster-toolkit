@@ -28,20 +28,18 @@
 
     - name: Execute ramble commands
       ansible.builtin.shell: |
-        set -e
         . {{ spack_path }}/share/spack/setup-env.sh
         . {{ ramble_path }}/share/ramble/setup-env.sh
+
+        set -eo pipefail
         echo " === Starting ramble commands ==="
+        {
         {{ commands }}
+        } | tee -a {{ log_file }}
         echo " === Finished ramble commands ==="
       register: ramble_output
 
     always:
-    - name: Commands output to log file
-      ansible.builtin.copy:
-        content: "{{ ramble_output | to_nice_yaml }}"
-        dest: "{{ log_file }}"
-
     - name: Print commands output to stderr
       ansible.builtin.debug:
         var: ramble_output.stderr_lines
