@@ -183,6 +183,8 @@ main() {
 		cat <<-EOF >/etc/ansible/ansible.cfg
 			[defaults]
 			interpreter_python=${venv_python_path}
+			stdout_callback=debug
+			stderr_callback=debug
 		EOF
 	fi
 

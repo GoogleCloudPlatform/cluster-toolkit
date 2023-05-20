@@ -31,9 +31,11 @@
     delay: 10
     until: package is success
   - name: Create virtualenv for Spack
-    # this declares our minimum support for Python 3.6+ along with ensuring the
-    # presence of a copy of pip capable of proper dependency resolution of
-    # real-world problems with google-cloud-* (and third-party) Python packages
+    # Python 3.6 is minimum we wish to support due to ease of installation on
+    # CentOS 7 and Rocky Linux 8. pip 21.3.1 is the *maximum* version of pip
+    # supported by 3.6. Additionally, recent versions of pip are necessary for
+    # proper dependency resolution of real-world problems with google-cloud-*
+    # (and third-party) Python packages (20.3+ probably effective minimum).
     ansible.builtin.pip:
       name: pip>=21.3.1
       virtualenv: "{{ spack_virtualenv_path }}"

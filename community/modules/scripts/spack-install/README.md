@@ -119,6 +119,8 @@ Alternatively, it can be added as a startup script via:
 
 ## Environment Setup
 
+### Activating Spack
+
 [Spack installation] produces a setup script that adds `spack` to your `PATH` as
 well as some other command-line integration tools. This script can be found at
 `<install path>/share/spack/setup-env.sh`. This script will be automatically
@@ -151,6 +153,21 @@ instal through a shared file system.
     use: [spack-setup, ...]
 ```
 
+### Managing Spack Python dependencies
+
+Spack is configured with [SPACK_PYTHON] to ensure that Spack itself uses a
+Python virtual environment with a supported copy of Python with the package
+`google-cloud-storage` pre-installed. This enables Spack to use mirrors and
+[build caches][builds] on Google Cloud Storage. It does not configure Python
+packages *inside* Spack virtual environments. If you need to add more Python
+dependencies for Spack itself, use the `spack python` command:
+
+```shell
+sudo -i spack python -m pip install package-name
+```
+
+[SPACK_PYTHON]: https://spack.readthedocs.io/en/latest/getting_started.html#shell-support
+[builds]: https://spack.readthedocs.io/en/latest/binary_caches.html
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
