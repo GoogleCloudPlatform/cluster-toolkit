@@ -85,19 +85,6 @@ data "google_compute_image" "compute_image" {
   project = var.instance_image.project
 }
 
-resource "google_compute_disk" "boot_disk" {
-  project = var.project_id
-
-  count = var.instance_count
-
-  name   = "${local.resource_prefix}-boot-disk-${count.index}"
-  image  = data.google_compute_image.compute_image.self_link
-  type   = var.disk_type
-  size   = var.disk_size_gb
-  labels = local.labels
-  zone   = var.zone
-}
-
 resource "google_compute_resource_policy" "placement_policy" {
   project = var.project_id
 
@@ -128,9 +115,13 @@ resource "google_compute_instance" "compute_vm" {
   labels = local.labels
 
   boot_disk {
-    source      = google_compute_disk.boot_disk[count.index].self_link
-    device_name = google_compute_disk.boot_disk[count.index].name
     auto_delete = var.auto_delete_boot_disk
+    initialize_params {
+      size   = var.disk_size_gb
+      type   = var.disk_type
+      image  = data.google_compute_image.compute_image.self_link
+      labels = local.labels
+    }
   }
 
   dynamic "scratch_disk" {
