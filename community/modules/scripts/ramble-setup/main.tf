@@ -29,7 +29,7 @@ locals {
   )
 
   deps_file = templatefile(
-    "${path.module}/templates/install_ramble_deps.yml",
+    "${path.module}/templates/install_ramble_deps.yml.tpl",
     {
       ramble_ref = var.ramble_ref
     }

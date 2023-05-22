@@ -45,6 +45,10 @@ duplicates = [
         "community/modules/compute/gke-node-pool/threads_per_core_calc.tf",
         "modules/compute/vm-instance/threads_per_core_calc.tf"
     ],
+    [
+        "community/modules/scripts/ramble-setup/templates/install_ramble_deps.yml.tpl",
+        "community/modules/scripts/ramble-access/templates/install_ramble_deps.yml.tpl",
+    ],
 ]
 
 for group in duplicates:
@@ -52,4 +56,4 @@ for group in duplicates:
     for second in group[1:]:
         if not filecmp.cmp(first, second):  # true if files are the same
             print(f'found diff between {first} and {second}')
-            sys.exit(1)        
+            sys.exit(1)

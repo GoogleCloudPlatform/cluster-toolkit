@@ -45,10 +45,6 @@ deployment_groups:
         ramble list
         ramble info intel-mpi-benchmarks
 
-  - id: ramble-access
-    source: community/modules/scripts/ramble-access
-    use: [ramble-setup]
-
   - id: vm-startup
     source: modules/scripts/startup-script
     settings:
@@ -56,7 +52,6 @@ deployment_groups:
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
       - $(ramble-execute.ramble_runner)
-      - $(ramble-access.ramble_runner)
 
   - id: ramble-vm
     source: modules/compute/vm-instance

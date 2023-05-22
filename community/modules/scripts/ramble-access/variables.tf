@@ -15,7 +15,7 @@
  */
 
 variable "ramble_path" {
-  description = "Destination directory of installation of Ramble"
+  description = "Directory where Ramble is installed. Note: This module will not actually install Ramble"
   default     = "/apps/ramble"
   type        = string
 }

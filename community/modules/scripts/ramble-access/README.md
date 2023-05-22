@@ -1,7 +1,9 @@
 ## Description
 
-This module will create a set of startup-script runners that will add ramble to profile.d,
-and install Ramble’s dependencies.
+This module will create a set of startup-script runners that will add ramble to
+profile.d, and install Ramble’s dependencies. This module will not install
+Ramble. It allows VMs with access to a shared installation of
+Ramble ensure they are configured to properly run Ramble.
 
 Ramble is a multi-platform experimentation framework capable of driving
 software installation, acquiring input files, configuring experiments, and
@@ -49,7 +51,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
 
 ## Providers
 
@@ -67,7 +69,7 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_ramble_path"></a> [ramble\_path](#input\_ramble\_path) | Destination directory of installation of Ramble | `string` | `"/apps/ramble"` | no |
+| <a name="input_ramble_path"></a> [ramble\_path](#input\_ramble\_path) | Directory where Ramble is installed. Note: This module will not actually install Ramble | `string` | `"/apps/ramble"` | no |
 | <a name="input_ramble_ref"></a> [ramble\_ref](#input\_ramble\_ref) | Git ref to checkout for Ramble. | `string` | `"develop"` | no |
 
 ## Outputs

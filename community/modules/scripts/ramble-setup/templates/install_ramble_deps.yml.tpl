@@ -21,6 +21,7 @@
   - name: Install dependencies through system package manager
     ansible.builtin.package:
       name:
+      - python
       - python3-pip
       - git
 

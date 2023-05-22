@@ -15,23 +15,23 @@
  */
 
 locals {
-  access_file = templatefile(
-    "${path.module}/templates/ramble_access.yml",
-    {
-      ramble_path = var.ramble_path
-    }
-  )
-
-  deps_file = templatefile(
-    "${path.module}/templates/install_ramble_deps.yml",
+  deps_contents = templatefile(
+    "${path.module}/templates/install_ramble_deps.yml.tpl",
     {
       ramble_ref = var.ramble_ref
     }
   )
 
+  access_contents = templatefile(
+    "${path.module}/templates/ramble_access.yml.tpl",
+    {
+      ramble_path = var.ramble_path
+    }
+  )
+
   ramble_runner_content = <<-EOT
-   ${local.deps_file}
-   ${local.access_file}
+   ${local.deps_contents}
+   ${local.access_contents}
   EOT
 
   ramble_access_runner = {
