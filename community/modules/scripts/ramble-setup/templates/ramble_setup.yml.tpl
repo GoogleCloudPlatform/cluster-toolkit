@@ -12,20 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Install necessary dependencies
-  hosts: localhost
-  tasks:
-  - name: Install git
-    ansible.builtin.package:
-      name:
-      - git
-      state: latest
-
-  - name: Install python
-    ansible.builtin.package:
-      name:
-      - python
-
 - name: Install Ramble
   hosts: localhost
   vars:

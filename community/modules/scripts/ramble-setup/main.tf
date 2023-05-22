@@ -15,8 +15,15 @@
  */
 
 locals {
+  deps_file = templatefile(
+    "${path.module}/templates/install_ramble_deps.yml.tpl",
+    {
+      ramble_ref = var.ramble_ref
+    }
+  )
+
   setup_file = templatefile(
-    "${path.module}/templates/ramble_setup.tpl",
+    "${path.module}/templates/ramble_setup.yml.tpl",
     {
       install_dir = var.install_dir
       ramble_url  = var.ramble_url
@@ -28,16 +35,9 @@ locals {
     }
   )
 
-  deps_file = templatefile(
-    "${path.module}/templates/install_ramble_deps.yml.tpl",
-    {
-      ramble_ref = var.ramble_ref
-    }
-  )
-
   ramble_runner_content = <<-EOT
-   ${local.setup_file}
    ${local.deps_file}
+   ${local.setup_file}
   EOT
 
   ramble_setup_runner = {
