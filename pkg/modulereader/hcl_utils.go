@@ -36,10 +36,11 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	ret := ModuleInfo{}
 
 	if sourcereader.IsEmbeddedPath(source) {
-		if !tfconfig.IsModuleDirOnFilesystem(tfconfig.WrapFS(ModuleFS), source) {
+		wrapFS := tfconfig.WrapFS(sourcereader.ModuleFS)
+		if !tfconfig.IsModuleDirOnFilesystem(wrapFS, source) {
 			return ret, fmt.Errorf("Source is not a terraform or packer module: %s", source)
 		}
-		module, _ = tfconfig.LoadModuleFromFilesystem(tfconfig.WrapFS(ModuleFS), source)
+		module, _ = tfconfig.LoadModuleFromFilesystem(wrapFS, source)
 	} else {
 		fileInfo, err := os.Stat(source)
 		if os.IsNotExist(err) {
