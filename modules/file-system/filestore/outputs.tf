@@ -27,30 +27,6 @@ output "network_storage" {
   }
 }
 
-output "install_nfs_client" {
-  description = "Script for installing NFS client"
-  value       = file("${path.module}/scripts/install-nfs-client.sh")
-}
-
-output "install_nfs_client_runner" {
-  description = "Runner to install NFS client using the startup-script module"
-  value       = local.install_nfs_client_runner
-}
-
-output "mount_runner" {
-  description = <<-EOT
-  Runner to mount the file-system using an ansible playbook. The startup-script
-  module will automatically handle installation of ansible.
-  - id: example-startup-script
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(your-fs-id.mount_runner)
-  ...
-  EOT
-  value       = local.mount_runner
-}
-
 output "filestore_id" {
   description = "An identifier for the resource with format `projects/{{project}}/locations/{{location}}/instances/{{name}}`"
   value       = google_filestore_instance.filestore_instance.id

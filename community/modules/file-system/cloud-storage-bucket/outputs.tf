@@ -42,16 +42,6 @@ locals {
   }
 }
 
-output "client_install_runner" {
-  description = "Runner that performs client installation needed to use gcs fuse."
-  value       = local.client_install_runner
-}
-
-output "mount_runner" {
-  description = "Runner that mounts the cloud storage bucket with gcs fuse."
-  value       = local.mount_runner
-}
-
 output "gcs_bucket_path" {
   description = "The gsutil bucket path with format of `gs://<bucket-name>`."
   # cannot use resource attribute, will cause lookup failure in startup-script

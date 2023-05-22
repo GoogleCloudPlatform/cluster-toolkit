@@ -101,8 +101,8 @@ install the client and mount the file system. See the following example:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(filestore.install_nfs_client_runner)
-      - $(filestore.mount_runner)
+      - $(filestore.network_storage.client_install_runner)
+      - $(filestore.network_storage.mount_runner)
 
 ```
 
@@ -178,4 +178,5 @@ No modules.
 | <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using the startup-script module |
 | <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using an ansible playbook. The startup-script<br>module will automatically handle installation of ansible.<br>- id: example-startup-script<br>  source: modules/scripts/startup-script<br>  settings:<br>    runners:<br>    - $(your-fs-id.mount\_runner)<br>... |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a filestore instance. |
+touch
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

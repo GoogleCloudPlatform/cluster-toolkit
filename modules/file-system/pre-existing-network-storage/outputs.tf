@@ -84,13 +84,3 @@ locals {
   }
   mount_runner = lookup(local.mount_scripts, var.fs_type, local.mount_runner_vanilla)
 }
-
-output "client_install_runner" {
-  description = "Runner that performs client installation needed to use file system."
-  value       = local.client_install_runner
-}
-
-output "mount_runner" {
-  description = "Runner that mounts the file system."
-  value       = local.mount_runner
-}

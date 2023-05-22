@@ -45,13 +45,11 @@ deployment_groups:
     use: [vpc]
     outputs:
     - network_storage
-    - install_nfs_client
 
   - id: nfs
     source: ./community/modules/file-system/nfs-server
     outputs:
     - network_storage
-    - install_nfs_client
 
   - id: pre-existing-storage
     source: modules/file-system/pre-existing-network-storage
@@ -144,7 +142,6 @@ deployment_groups:
     outputs:
     - private_addresses
     - ssh_console
-    - mount_command
     - http_console
     - network_storage
 

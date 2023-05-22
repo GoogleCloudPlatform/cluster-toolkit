@@ -80,8 +80,8 @@ following example:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(bucket.client_install_runner)
-      - $(bucket.mount_runner)
+      - $(bucket.network_storage.client_install_runner)
+      - $(bucket.network_storage.mount_runner))
 ```
 
 [matrix]: ../../../../docs/network_storage.md#compatibility-matrix
@@ -147,8 +147,6 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Runner that performs client installation needed to use gcs fuse. |
 | <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | The gsutil bucket path with format of `gs://<bucket-name>`. |
-| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner that mounts the cloud storage bucket with gcs fuse. |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a remote network storage to be mounted by fs-tab. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

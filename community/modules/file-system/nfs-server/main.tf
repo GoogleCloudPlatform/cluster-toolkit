@@ -43,11 +43,6 @@ locals {
       "destination" = "mount${replace(mount, "/", "_")}.sh"
     }
   ]
-  ansible_mount_runner = {
-    "type"        = "ansible-local"
-    "source"      = "${path.module}/scripts/mount.yaml"
-    "destination" = "mount.yaml"
-  }
 }
 
 data "google_compute_default_service_account" "default" {}

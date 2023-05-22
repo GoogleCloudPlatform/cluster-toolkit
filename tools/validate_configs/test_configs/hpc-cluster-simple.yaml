@@ -40,9 +40,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        content: $(homefs.install_nfs_client)
-        destination: install-nfs.sh
+      - $(homefs.network_storage.client-install-runner)
 
   - id: workstation
     source: modules/compute/vm-instance

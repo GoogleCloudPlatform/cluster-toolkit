@@ -49,8 +49,8 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(scratchfs.install_ddn_lustre_client_runner)
-      - $(scratchfs.mount_runner)
+      - $(scratchfs.network_storage.client_install_runner)
+      - $(scratchfs.network_storage.mount_runner)
 
   # Create a separate workstation to catch regressions in vm-instance
   - id: workstation
@@ -82,8 +82,8 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(pre-fs.client_install_runner)
-      - $(pre-fs.mount_runner)
+      - $(pre-fs.network_storage.client_install_runner)
+      - $(pre-fs.network_storage.mount_runner)
 
   - id: install-luster-from-pre-existing
     source: modules/compute/vm-instance

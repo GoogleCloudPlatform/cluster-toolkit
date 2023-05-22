@@ -138,7 +138,7 @@ sudo journalctl -u google-startup-scripts.service
   settings:
     runners:
       # Some modules such as filestore have runners as outputs for convenience:
-      - $(homefs.install_nfs_client_runner)
+      - $(homefs.network_storage.client_install_runner)
       # These runners can still be created manually:
       # - type: shell
       #   destination: "modules/filestore/scripts/install_nfs_client.sh"

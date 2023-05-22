@@ -86,8 +86,8 @@ The following is an example setting up a filestore using startup script:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(homefs.install_nfs_client_runner)
-      - $(homefs.mount_runner)
+      - $(homefs.network_storage.client_install_runner)
+      - $(homefs.network_storage.mount_runner)
 ```
 
 > **_NOTE:_** The exact names of the runners may be different from module to
