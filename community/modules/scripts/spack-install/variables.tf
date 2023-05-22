@@ -227,3 +227,9 @@ variable "log_file" {
   default     = "/var/log/spack.log"
   type        = string
 }
+
+variable "spack_virtualenv_path" {
+  description = "Virtual environment path in which to install Spack Python interpreter and other dependencies"
+  default     = "/usr/local/spack-python"
+  type        = string
+}

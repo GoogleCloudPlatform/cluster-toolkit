@@ -172,7 +172,21 @@ main() {
 	# Create pip virtual environment for HPC Toolkit
 	${python_path} -m pip install virtualenv
 	${python_path} -m virtualenv /usr/local/ghpc-venv
-	python_path=/usr/local/ghpc-venv/bin/python3
+	venv_python_path=/usr/local/ghpc-venv/bin/python3
+
+	# when Ansible creates virtual environments, it defaults to virtualenv
+	# these steps install virtualenv in the Ansible virtual environment and
+	# ensures that it will be found
+	${venv_python_path} -m pip install virtualenv
+	if [ ! -f /etc/ansible/ansible.cfg ]; then
+		mkdir /etc/ansible
+		cat <<-EOF >/etc/ansible/ansible.cfg
+			[defaults]
+			interpreter_python=${venv_python_path}
+			stdout_callback=debug
+			stderr_callback=debug
+		EOF
+	fi
 
 	# Install ansible
 	ansible_version=""
@@ -185,7 +199,7 @@ main() {
 	fi
 	if [ -z "${ansible_version}" ] || [ "${ansible_major_vers}" -ne "${ansible_req_major_vers}" ] ||
 		[ "${ansible_minor_vers}" -lt "${ansible_req_minor_vers}" ]; then
-		${python_path} -m pip install ansible==${REQ_ANSIBLE_PIP_VERSION}
+		${venv_python_path} -m pip install ansible==${REQ_ANSIBLE_PIP_VERSION}
 	fi
 }
 
