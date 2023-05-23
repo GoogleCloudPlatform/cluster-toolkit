@@ -36,6 +36,8 @@ func Test(t *testing.T) {
 
 func (s *MySuite) TestFindTerraform(c *C) {
 	if _, err := exec.LookPath("terraform"); err != nil {
+		_, err := ConfigureTerraform(".")
+		c.Assert(err, NotNil)
 		c.Skip("terraform not found in PATH")
 	}
 

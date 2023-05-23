@@ -19,14 +19,12 @@ package shell
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulewriter"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"golang.org/x/sys/unix"
 )
 
@@ -48,47 +46,6 @@ func ValidateDeploymentDirectory(groups []config.DeploymentGroup, deploymentRoot
 		}
 	}
 	return nil
-}
-
-// return a map from group names to a list of outputs that are needed by this group
-func getIntergroupOutputNamesByGroup(thisGroup config.GroupName, dc config.DeploymentConfig) (map[config.GroupName][]string, error) {
-	thisGroupIdx := dc.Config.GroupIndex(thisGroup)
-	if thisGroupIdx == -1 {
-		return nil, fmt.Errorf("this group wasn't found in the deployment metadata")
-	}
-	if thisGroupIdx == 0 {
-		return nil, nil
-	}
-
-	thisIntergroupRefs := dc.Config.DeploymentGroups[thisGroupIdx].FindAllIntergroupReferences(dc.Config)
-	thisIntergroupInputNames := make([]string, len(thisIntergroupRefs))
-	for i, ref := range thisIntergroupRefs {
-		thisIntergroupInputNames[i] = config.AutomaticOutputName(ref.Name, ref.Module)
-	}
-	outputsByGroup := make(map[config.GroupName][]string)
-	for _, g := range dc.Config.DeploymentGroups[:thisGroupIdx] {
-		outputsByGroup[g.Name] = intersection(thisIntergroupInputNames, g.OutputNames())
-	}
-	return outputsByGroup, nil
-}
-
-// return sorted list of elements common to s1 and s2
-func intersection(s1 []string, s2 []string) []string {
-	count := make(map[string]int)
-
-	for _, v := range s1 {
-		count[v]++
-	}
-
-	foundInBoth := map[string]bool{}
-	for _, v := range s2 {
-		if count[v] > 0 {
-			foundInBoth[v] = true
-		}
-	}
-	is := maps.Keys(foundInBoth)
-	slices.Sort(is)
-	return is
 }
 
 func intersectMapKeys[K comparable, T any](s []K, m map[K]T) map[K]T {
@@ -131,25 +88,6 @@ func CheckWritableDir(path string) error {
 		return fmt.Errorf("%s must be a writable directory", path)
 	}
 	return nil
-}
-
-func getIntergroupPackerSettings(dc config.DeploymentConfig, packerModule config.Module) config.Dict {
-	nonIntergroupSettings := map[string]bool{}
-	for setting, v := range packerModule.Settings.Items() {
-		igcRefs := config.FindIntergroupReferences(v, packerModule, dc.Config)
-		if len(igcRefs) == 0 {
-			nonIntergroupSettings[setting] = true
-		}
-	}
-
-	packerGroup := dc.Config.ModuleGroupOrDie(packerModule.ID)
-	igcRefs := modulewriter.FindIntergroupVariables(packerGroup, dc.Config)
-	packerModule = modulewriter.SubstituteIgcReferencesInModule(packerModule, igcRefs)
-	packerSettings := packerModule.Settings
-	for setting := range nonIntergroupSettings {
-		packerSettings.Unset(setting)
-	}
-	return packerSettings
 }
 
 // ApplyChangesChoice prompts the user to decide whether they want to approve
