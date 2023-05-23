@@ -254,19 +254,16 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 // working directory
 func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
 	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
-	thisGroup := config.GroupName(filepath.Base(deploymentGroupDir))
 
 	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
-
-	group, err := dc.Config.Group(thisGroup)
+	g, err := dc.Config.Group(config.GroupName(filepath.Base(deploymentGroupDir)))
 	if err != nil {
-		return fmt.Errorf("group %s not found in deployment blueprint", thisGroup)
+		return err
 	}
-
-	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, dc)
+	outputNamesByGroup, err := config.OutputNamesByGroup(g, dc)
 	if err != nil {
 		return err
 	}
@@ -278,7 +275,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		if len(intergroupOutputNames) == 0 {
 			continue
 		}
-		log.Printf("collecting outputs for group %s from group %s", thisGroup, groupName)
+		log.Printf("collecting outputs for group %s from group %s", g.Name, groupName)
 		filepath := outputsFile(artifactsDir, groupName)
 		groupOutputValues, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
@@ -296,11 +293,11 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	}
 
 	var outfile string
-	switch group.Kind {
+	switch g.Kind {
 	case config.TerraformKind:
-		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
+		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", g.Name))
 	case config.PackerKind:
-		thisGroupIdx := dc.Config.GroupIndex(thisGroup)
+		thisGroupIdx := dc.Config.GroupIndex(g.Name)
 		packerGroup := dc.Config.DeploymentGroups[thisGroupIdx]
 		// Packer groups are enforced to have length 1
 		packerModule := packerGroup.Modules[0]
@@ -309,18 +306,28 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 
 		// evaluate Packer settings that contain intergroup references in the
 		// context of deployment variables and intergroup output values
-		packerSettings := getIntergroupPackerSettings(dc, packerModule)
+		intergroupSettings := config.Dict{}
+		for setting, value := range packerModule.Settings.Items() {
+			igcRefs := config.FindIntergroupReferences(value, packerModule, dc.Config)
+			if len(igcRefs) > 0 {
+				intergroupSettings.Set(setting, value)
+			}
+		}
+
+		igcVars := modulewriter.FindIntergroupVariables(packerGroup, dc.Config)
+		newModule := modulewriter.SubstituteIgcReferencesInModule(config.Module{Settings: intergroupSettings}, igcVars)
+
 		varsValues := dc.Config.Vars.Items()
 		mergeMapsWithoutLoss(allInputValues, varsValues)
-		evaluatedSettings, err := packerSettings.Eval(config.Blueprint{Vars: config.NewDict(allInputValues)})
+		evaluatedSettings, err := newModule.Settings.Eval(config.Blueprint{Vars: config.NewDict(allInputValues)})
 		if err != nil {
 			return err
 		}
 		allInputValues = evaluatedSettings.Items()
 	default:
-		return fmt.Errorf("unexpected error: unknown module kind for group %s", thisGroup)
+		return fmt.Errorf("unexpected error: unknown module kind for group %s", g.Name)
 	}
-	log.Printf("writing outputs for group %s to file %s\n", thisGroup, outfile)
+	log.Printf("writing outputs for group %s to file %s\n", g.Name, outfile)
 	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
 		return err
 	}

@@ -67,14 +67,6 @@ func (d *Dict) Set(k string, v cty.Value) *Dict {
 	return d
 }
 
-// Unset removes a key from dictionary, if it is present
-func (d *Dict) Unset(k string) *Dict {
-	if d.Has(k) {
-		delete(d.m, k)
-	}
-	return d
-}
-
 // Items returns instance of map[string]cty.Value
 // will same set of key-value pairs as stored in Dict.
 // This map is a copy, changes to returned map have no effect on the Dict.
