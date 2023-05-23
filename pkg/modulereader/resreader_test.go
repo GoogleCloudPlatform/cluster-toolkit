@@ -16,6 +16,7 @@ package modulereader
 
 import (
 	"embed"
+	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
 	"log"
 	"os"
@@ -104,7 +105,7 @@ func (s *MySuite) TestFactory(c *C) {
 }
 
 func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
-	ModuleFS = testModuleFS
+	sourcereader.ModuleFS = testModuleFS
 
 	// Success
 	moduleInfo, err := GetModuleInfo("modules/test_role/test_module", tfKindString)

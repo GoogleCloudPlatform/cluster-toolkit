@@ -18,7 +18,6 @@
 package modulereader
 
 import (
-	"embed"
 	"fmt"
 	"hpc-toolkit/pkg/sourcereader"
 	"io/ioutil"
@@ -28,9 +27,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
-
-// ModuleFS contains embedded modules (./modules) for use in building
-var ModuleFS embed.FS
 
 // VarInfo stores information about a module input variables
 type VarInfo struct {
