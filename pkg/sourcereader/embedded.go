@@ -39,8 +39,8 @@ type BaseFS interface {
 // EmbeddedSourceReader reads modules from a local directory
 type EmbeddedSourceReader struct{}
 
-func copyFileOut(fs BaseFS, src string, dst string) error {
-	content, err := fs.ReadFile(src)
+func copyFileOut(bfs BaseFS, src string, dst string) error {
+	content, err := bfs.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("failed to read embedded %#v: %v", src, err)
 	}
@@ -56,8 +56,8 @@ func copyFileOut(fs BaseFS, src string, dst string) error {
 }
 
 // copyDirFromModules copies an FS directory to a local path
-func copyDirFromModules(fs BaseFS, source string, dest string) error {
-	dirEntries, err := fs.ReadDir(source)
+func copyDirFromModules(bfs BaseFS, source string, dest string) error {
+	dirEntries, err := bfs.ReadDir(source)
 	if err != nil {
 		return err
 	}
@@ -72,11 +72,11 @@ func copyDirFromModules(fs BaseFS, source string, dest string) error {
 			if err := os.Mkdir(entryDest, 0755); err != nil {
 				return err
 			}
-			if err = copyDirFromModules(fs, entrySource, entryDest); err != nil {
+			if err = copyDirFromModules(bfs, entrySource, entryDest); err != nil {
 				return err
 			}
 		} else {
-			if err := copyFileOut(fs, entrySource, entryDest); err != nil {
+			if err := copyFileOut(bfs, entrySource, entryDest); err != nil {
 				return err
 			}
 
@@ -88,12 +88,12 @@ func copyDirFromModules(fs BaseFS, source string, dest string) error {
 // copyFSToTempDir is a temporary workaround until tfconfig.ReadFromFilesystem
 // works against embed.FS.
 // Open Issue: https://github.com/hashicorp/terraform-config-inspect/issues/68
-func copyFSToTempDir(fs BaseFS, modulePath string) (string, error) {
+func copyFSToTempDir(bfs BaseFS, modulePath string) (string, error) {
 	tmpDir, err := ioutil.TempDir("", "tfconfig-module-*")
 	if err != nil {
 		return tmpDir, err
 	}
-	err = copyDirFromModules(fs, modulePath, tmpDir)
+	err = copyDirFromModules(bfs, modulePath, tmpDir)
 	return tmpDir, err
 }
 
