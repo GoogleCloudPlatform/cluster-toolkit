@@ -47,10 +47,10 @@ install_python_deps() {
 # checking python. Sets the variable to an empty string if neither are found.
 get_python_path() {
 	python_path=""
-	if which python3 2>/dev/null; then
-		python_path=$(which python3 2>/dev/null)
-	elif which python 2>/dev/null; then
-		python_path=$(which python 2>/dev/null)
+	if command -v python3 1>/dev/null; then
+		python_path=$(command -v python3)
+	elif command -v python 1>/dev/null; then
+		python_path=$(command -v python)
 	fi
 }
 
@@ -81,7 +81,7 @@ install_python3_yum() {
 		echo "Unsupported version of centos/RHEL/Rocky"
 		return 1
 	fi
-	yum install --disablerepo="*" --enablerepo=${enable_repo} -y python3 python3-pip
+	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3 python3-pip
 	python_path=$(rpm -ql python3 | grep 'bin/python3$')
 }
 
@@ -90,7 +90,7 @@ install_python3_yum() {
 install_python3_apt() {
 	apt_wait
 	apt-get install -y python3 python3-distutils python3-pip
-	python_path=$(which python3)
+	python_path=$(command -v python3)
 }
 
 install_python3() {
@@ -119,7 +119,7 @@ install_pip3_yum() {
 		echo "Unsupported version of centos/RHEL/Rocky"
 		return 1
 	fi
-	yum install --disablerepo="*" --enablerepo=${enable_repo} -y python3-pip
+	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3-pip
 }
 
 # Install python3 with the apt package manager. Updates python_path to the
@@ -194,7 +194,7 @@ main() {
 
 	# Install ansible
 	ansible_version=""
-	if which ansible-playbook 2>/dev/null; then
+	if command -v ansible-playbook 1>/dev/null; then
 		ansible_version=$(ansible-playbook --version 2>/dev/null | sed -nr 's/^ansible-playbook.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
 		ansible_major_vers=$(echo "${ansible_version}" | cut -d '.' -f 1)
 		ansible_minor_vers=$(echo "${ansible_version}" | cut -d '.' -f 2)
