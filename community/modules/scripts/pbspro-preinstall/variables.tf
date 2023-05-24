@@ -148,3 +148,8 @@ variable "bucket_viewers" {
     ])
   }
 }
+
+variable "labels" {
+  description = "Labels to add to the created bucket. Key-value pairs."
+  type        = map(string)
+}
