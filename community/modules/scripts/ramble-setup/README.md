@@ -93,7 +93,6 @@ No resources.
 | <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | Mode to chmod the Ramble clone to. Defaults to null (i.e. do not modify).<br>For usage information see:<br>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `null` | no |
 | <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Owner to chown the Ramble clone to. Default will not modify the clone. | `string` | `null` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Destination directory of installation of Ramble. | `string` | `"/apps/ramble"` | no |
-| <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Log file to write output from ramble setup steps into. | `string` | `"/var/log/ramble-setup.log"` | no |
 | <a name="input_ramble_ref"></a> [ramble\_ref](#input\_ramble\_ref) | Git ref to checkout for Ramble. | `string` | `"develop"` | no |
 | <a name="input_ramble_url"></a> [ramble\_url](#input\_ramble\_url) | URL for Ramble repository to clone. | `string` | `"https://github.com/GoogleCloudPlatform/ramble"` | no |
 
