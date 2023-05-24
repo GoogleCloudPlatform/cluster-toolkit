@@ -143,6 +143,13 @@ install_pip3() {
 }
 
 main() {
+	if [ $# -gt 1 ]; then
+		echo "Error: provide only 1 optional argument identifying virtual environment path for Ansible"
+		return 1
+	fi
+
+	venv_path="${1:-/usr/local/ghpc-venv}"
+
 	# Get the python3 executable, or install it if not found
 	get_python_path
 	get_python_major_version "${python_path}"
@@ -171,13 +178,10 @@ main() {
 
 	# Create pip virtual environment for HPC Toolkit
 	${python_path} -m pip install virtualenv
-	${python_path} -m virtualenv /usr/local/ghpc-venv
-	venv_python_path=/usr/local/ghpc-venv/bin/python3
+	${python_path} -m virtualenv "${venv_path}"
+	venv_python_path=${venv_path}/bin/python3
 
-	# when Ansible creates virtual environments, it defaults to virtualenv
-	# these steps install virtualenv in the Ansible virtual environment and
-	# ensures that it will be found
-	${venv_python_path} -m pip install virtualenv
+	# configure ansible to always use correct Python binary
 	if [ ! -f /etc/ansible/ansible.cfg ]; then
 		mkdir /etc/ansible
 		cat <<-EOF >/etc/ansible/ansible.cfg
@@ -199,8 +203,9 @@ main() {
 	fi
 	if [ -z "${ansible_version}" ] || [ "${ansible_major_vers}" -ne "${ansible_req_major_vers}" ] ||
 		[ "${ansible_minor_vers}" -lt "${ansible_req_minor_vers}" ]; then
-		${venv_python_path} -m pip install ansible==${REQ_ANSIBLE_PIP_VERSION}
+		${venv_python_path} -m pip install ansible=="${REQ_ANSIBLE_PIP_VERSION}"
 	fi
+	ln -s "${venv_path}/bin/ansible-playbook" /usr/bin/ansible-playbook
 }
 
-main
+main "$@"
