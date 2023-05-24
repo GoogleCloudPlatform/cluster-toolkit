@@ -15,7 +15,7 @@
 
 REQ_ANSIBLE_VERSION=2.11
 REQ_ANSIBLE_PIP_VERSION=4.10.0
-REQ_PIP_MINOR_VERSION=18
+REQ_PIP_MAJOR_VERSION=21
 REQ_PYTHON3_VERSION=6
 
 apt_wait() {
@@ -165,7 +165,7 @@ main() {
 	fi
 	pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
 	pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
-	if [ "${pip_major_version}" -lt "${REQ_PIP_MINOR_VERSION}" ]; then
+	if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
 		${python_path} -m pip install --upgrade pip
 	fi
 
