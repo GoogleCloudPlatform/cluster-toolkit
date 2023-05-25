@@ -211,12 +211,9 @@ No resources.
 | Name | Description |
 |------|-------------|
 | <a name="output_nat_ips"></a> [nat\_ips](#output\_nat\_ips) | the external IPs assigned to the NAT |
-| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The ID of the network created |
-| <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The name of the network created |
+| <a name="output_network"></a> [network](#output\_network) | Information about the network and its primary subnetwork.<br>See: <br>https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network<br>https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The URI of the VPC being created |
-| <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | The primary subnetwork object created by the input variable primary\_subnetwork |
 | <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | The address range of the primary subnetwork |
 | <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | The name of the primary subnetwork |
 | <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | The self-link to the primary subnetwork |
-| <a name="output_subnetworks"></a> [subnetworks](#output\_subnetworks) | All subnetwork resources created by this module |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

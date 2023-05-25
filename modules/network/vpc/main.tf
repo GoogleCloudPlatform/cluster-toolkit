@@ -70,10 +70,8 @@ locals {
   regions = distinct([for subnet in local.subnetworks : subnet.subnet_region])
 
   # this comprehension should have 1 and only 1 match
-  output_primary_subnetwork               = one([for k, v in module.vpc.subnets : v if k == "${local.subnetworks[0].subnet_region}/${local.subnetworks[0].subnet_name}"])
-  output_primary_subnetwork_name          = local.output_primary_subnetwork.name
-  output_primary_subnetwork_self_link     = local.output_primary_subnetwork.self_link
-  output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
+  out_primary_subnet = one([for k, v in module.vpc.subnets : v if k == "${local.subnetworks[0].subnet_region}/${local.subnetworks[0].subnet_name}"])
+
 
   allow_iap_ssh_ingress = {
     name                    = "${local.network_name}-fw-allow-iap-ssh-ingress"

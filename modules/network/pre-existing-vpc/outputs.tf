@@ -14,24 +14,10 @@
  * limitations under the License.
 */
 
-output "network_name" {
-  description = "The name of the existing network"
-  value       = data.google_compute_network.vpc.name
-}
-
-output "network_id" {
-  description = "The ID of the existing network"
-  value       = data.google_compute_network.vpc.id
-}
 
 output "network_self_link" {
   description = "The URI of the existing network"
   value       = data.google_compute_network.vpc.self_link
-}
-
-output "subnetwork" {
-  description = "The subnetwork in the specified primary region"
-  value       = data.google_compute_subnetwork.primary_subnetwork
 }
 
 output "subnetwork_name" {
@@ -47,4 +33,27 @@ output "subnetwork_self_link" {
 output "subnetwork_address" {
   description = "The subnetwork address in the specified primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork.ip_cidr_range
+}
+
+
+output "network" {
+  description = <<-EOT
+  Information about the network and its primary subnetwork.
+  See: 
+  https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network
+  https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork
+  EOT
+  value = {
+    id        = data.google_compute_network.vpc.id
+    name      = data.google_compute_network.vpc.name
+    self_link = data.google_compute_network.vpc.self_link
+    project   = data.google_compute_network.vpc.project
+
+    primary_subnet = {
+      name          = data.google_compute_subnetwork.primary_subnetwork.name
+      self_link     = data.google_compute_subnetwork.primary_subnetwork.self_link
+      project       = data.google_compute_subnetwork.primary_subnetwork.project
+      ip_cidr_range = data.google_compute_subnetwork.primary_subnetwork.ip_cidr_range
+    }
+  }
 }

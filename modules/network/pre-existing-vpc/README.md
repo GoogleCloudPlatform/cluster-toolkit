@@ -79,10 +79,8 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The ID of the existing network |
-| <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The name of the existing network |
+| <a name="output_network"></a> [network](#output\_network) | Information about the network and its primary subnetwork.<br>See: <br>https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network<br>https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The URI of the existing network |
-| <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | The subnetwork in the specified primary region |
 | <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | The subnetwork address in the specified primary region |
 | <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | The name of the subnetwork in the specified primary region |
 | <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | The subnetwork self-link in the specified primary region |

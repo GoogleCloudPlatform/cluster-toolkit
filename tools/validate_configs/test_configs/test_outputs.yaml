@@ -68,7 +68,6 @@ deployment_groups:
     outputs:
     - network_name
     - network_self_link
-    - subnetwork
     - subnetwork_name
     - subnetwork_self_link
     - subnetwork_address
@@ -78,7 +77,6 @@ deployment_groups:
     outputs:
     - network_name
     - network_self_link
-    - subnetwork
     - subnetwork_name
     - subnetwork_self_link
     - subnetwork_address

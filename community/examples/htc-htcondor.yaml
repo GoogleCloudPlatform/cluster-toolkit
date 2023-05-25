@@ -29,8 +29,6 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-    outputs:
-    - network_name
 
   - id: htcondor_install
     source: community/modules/scripts/htcondor-install

@@ -14,55 +14,54 @@
  * limitations under the License.
 */
 
-output "network_name" {
-  description = "The name of the network created"
-  value       = module.vpc.network_name
-  depends_on  = [module.vpc, module.cloud_router]
-}
-
-output "network_id" {
-  description = "The ID of the network created"
-  value       = module.vpc.network_id
-  depends_on  = [module.vpc, module.cloud_router]
-}
-
 output "network_self_link" {
   description = "The URI of the VPC being created"
   value       = module.vpc.network_self_link
   depends_on  = [module.vpc, module.cloud_router]
 }
 
-output "subnetworks" {
-  description = "All subnetwork resources created by this module"
-  value       = module.vpc.subnets
-  depends_on  = [module.vpc, module.cloud_router]
-}
-
-output "subnetwork" {
-  description = "The primary subnetwork object created by the input variable primary_subnetwork"
-  value       = local.output_primary_subnetwork
-  depends_on  = [module.vpc, module.cloud_router]
-}
-
 output "subnetwork_name" {
   description = "The name of the primary subnetwork"
-  value       = local.output_primary_subnetwork_name
+  value       = local.out_primary_subnet.name
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork_self_link" {
   description = "The self-link to the primary subnetwork"
-  value       = local.output_primary_subnetwork_self_link
+  value       = local.out_primary_subnet.self_link
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork_address" {
   description = "The address range of the primary subnetwork"
-  value       = local.output_primary_subnetwork_ip_cidr_range
+  value       = local.out_primary_subnet.ip_cidr_range
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "nat_ips" {
   description = "the external IPs assigned to the NAT"
   value       = flatten([for ipmod in module.nat_ip_addresses : ipmod.addresses])
+}
+
+output "network" {
+  description = <<-EOT
+  Information about the network and its primary subnetwork.
+  See: 
+  https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network
+  https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork
+  EOT
+  value = {
+    id        = module.vpc.network_id
+    name      = module.vpc.network_name
+    self_link = module.vpc.network_self_link
+    project   = module.vpc.project_id
+
+    primary_subnet = {
+      name          = local.out_primary_subnet.name
+      self_link     = local.out_primary_subnet.self_link
+      project       = local.out_primary_subnet.project
+      ip_cidr_range = local.out_primary_subnet.ip_cidr_range
+    }
+  }
+  depends_on = [module.vpc, module.cloud_router]
 }

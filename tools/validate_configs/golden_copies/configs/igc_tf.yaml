@@ -32,7 +32,7 @@ deployment_groups:
   modules:
   - id: homefs
     source: modules/file-system/filestore
-    use: [network0] # wires network_id
+    use: [network0] # wires network
     settings:
       local_mount: /home
       name: $(network0.subnetwork_name)

@@ -24,8 +24,8 @@ output "subnetwork_name_network0" {
   value       = module.network0.subnetwork_name
 }
 
-output "network_id_network0" {
+output "network_network0" {
   description = "Automatically-generated output exported for use by later deployment groups"
-  value       = module.network0.network_id
+  value       = module.network0.network
   sensitive   = true
 }

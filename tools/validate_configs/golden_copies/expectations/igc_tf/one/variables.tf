@@ -24,7 +24,7 @@ variable "labels" {
   type        = any
 }
 
-variable "network_id_network0" {
+variable "network_network0" {
   description = "Automatically generated input from previous groups (ghpc import-inputs --help)"
   type        = any
 }

@@ -48,8 +48,8 @@ resource "google_container_cluster" "gke_cluster" {
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
 
-  network    = var.network_id
-  subnetwork = var.subnetwork_self_link
+  network    = var.network.id
+  subnetwork = var.network.primary_subnet.self_link
 
   # Note: the existence of the "master_authorized_networks_config" block enables
   # the master authorized networks even if it's empty.

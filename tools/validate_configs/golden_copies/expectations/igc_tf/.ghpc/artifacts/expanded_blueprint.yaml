@@ -58,7 +58,7 @@ deployment_groups:
         outputs:
           - name: nat_ips
           - name: subnetwork_name
-          - name: network_id
+          - name: network
             description: Automatically-generated output exported for use by later deployment groups
             sensitive: true
         settings:
@@ -90,7 +90,7 @@ deployment_groups:
             - ghpc_role: file-system
           local_mount: /home
           name: ((module.network0.subnetwork_name))
-          network_id: ((module.network0.network_id))
+          network: ((module.network0.network))
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))

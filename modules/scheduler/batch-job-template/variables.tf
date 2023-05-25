@@ -103,10 +103,15 @@ variable "instance_template" {
   default     = null
 }
 
-variable "subnetwork" {
+variable "network" {
   description = "The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided."
-  type        = any
-  default     = null
+  type = object({
+    primary_subnet = object({
+      name : string
+      project : string
+    })
+  })
+  default = null
 }
 
 variable "enable_public_ips" {

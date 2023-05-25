@@ -41,18 +41,14 @@ variable "region" {
   type        = string
 }
 
-variable "network_id" {
-  description = "The ID of the GCE VPC network to host the cluster given in the format: `projects/<project_id>/global/networks/<network_name>`."
-  type        = string
-  validation {
-    condition     = length(split("/", var.network_id)) == 5
-    error_message = "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
-  }
-}
-
-variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork to host the cluster in."
-  type        = string
+variable "network" {
+  description = "The GCE VPC network to host the cluster."
+  type = object({
+    id = string,
+    primary_subnet = object({
+      self_link = string
+    })
+  })
 }
 
 variable "pods_ip_range_name" {

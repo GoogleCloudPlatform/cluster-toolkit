@@ -148,19 +148,15 @@ module "address" {
   version    = "~> 3.0"
   project_id = var.project_id
   region     = var.region
-  subnetwork = var.subnetwork_self_link
+  subnetwork = var.network.primary_subnet.self_link
   names      = local.central_manager_ip_names
-}
-
-data "google_compute_subnetwork" "htcondor" {
-  self_link = var.subnetwork_self_link
 }
 
 module "health_check_firewall_rule" {
   source       = "terraform-google-modules/network/google//modules/firewall-rules"
   version      = "~> 6.0"
-  project_id   = data.google_compute_subnetwork.htcondor.project
-  network_name = data.google_compute_subnetwork.htcondor.network
+  project_id   = var.network.project
+  network_name = var.network.name
 
   rules = [{
     name        = "allow-health-check-${var.deployment_name}"

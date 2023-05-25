@@ -34,11 +34,6 @@ variable "region" {
   type        = string
 }
 
-variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork in which Central Managers will be placed."
-  type        = string
-}
-
 variable "access_point_roles" {
   description = "Project-wide roles for HTCondor Access Point service account"
   type        = list(string)
@@ -93,4 +88,15 @@ variable "spool_parent_dir" {
   description = "HTCondor access point configuration SPOOL will be set to subdirectory named \"spool\""
   type        = string
   default     = "/var/lib/condor"
+}
+
+variable "network" {
+  description = "The subnetwork in which Central Managers will be placed."
+  type = object({
+    name    = string
+    project = string
+    primary_subnet = object({
+      self_link = string
+    })
+  })
 }

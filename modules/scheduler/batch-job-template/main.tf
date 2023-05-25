@@ -24,6 +24,11 @@ locals {
 
   tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
 
+  network = var.network != null ? var.network : { primary_subnet : {
+    name : "default"
+    project : var.project_id
+  } }
+
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.json.tftpl",
     {
@@ -42,9 +47,6 @@ locals {
   job_id                   = var.job_id != null ? var.job_id : var.deployment_name
   job_filename             = var.job_filename != null ? var.job_filename : "cloud-batch-${local.job_id}.json"
   job_template_output_path = "${path.root}/${local.job_filename}"
-
-  subnetwork_name    = var.subnetwork != null ? var.subnetwork.name : "default"
-  subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
 
   # Filter network_storage for native Batch support
   native_fstype = var.native_batch_mounting ? ["nfs"] : []
@@ -75,8 +77,8 @@ module "instance_template" {
 
   name_prefix        = var.instance_template == null ? "${local.job_id}-instance-template" : "unused-template"
   project_id         = var.project_id
-  subnetwork         = local.subnetwork_name
-  subnetwork_project = local.subnetwork_project
+  subnetwork         = local.network.primary_subnet.name
+  subnetwork_project = local.network.primary_subnet.project
   service_account    = var.service_account
   access_config      = var.enable_public_ips ? [{ nat_ip = null, network_tier = null }] : []
   labels             = local.labels

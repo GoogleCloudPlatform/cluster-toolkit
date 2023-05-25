@@ -22,7 +22,7 @@ module "homefs" {
   })
   local_mount = "/home"
   name        = var.subnetwork_name_network0
-  network_id  = var.network_id_network0
+  network     = var.network_network0
   project_id  = var.project_id
   region      = var.region
   zone        = var.zone

@@ -28,7 +28,7 @@ module "homefs" {
     ghpc_role = "file-system"
   })
   local_mount = "/home"
-  network_id  = module.network0.network_id
+  network     = module.network0.network
   project_id  = var.project_id
   region      = var.region
   zone        = var.zone
@@ -41,7 +41,7 @@ module "projectsfs" {
     ghpc_role = "file-system"
   })
   local_mount = "/projects"
-  network_id  = module.network0.network_id
+  network     = module.network0.network
   project_id  = var.project_id
   region      = var.region
   zone        = var.zone
