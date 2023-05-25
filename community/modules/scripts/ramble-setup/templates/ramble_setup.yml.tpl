@@ -22,10 +22,17 @@
     chown_owner: ${chown_owner}
     chgrp_group: ${chgrp_group}
   tasks:
+  - name: Create parent of install directory
+    ansible.builtin.file:
+      path: "{{ install_dir | dirname }}"
+      state: directory
+
   - name: Acquire lock
-    ansible.builtin.shell:
-      mkdir -p "{{ install_dir | dirname }}/.ramble_lock"
+    ansible.builtin.command:
+      mkdir "{{ install_dir | dirname }}/.ramble_lock"
     register: lock_out
+    changed_when: lock_out.rc == 0
+    failed_when: false
 
   - name: Clones ramble into installation directory
     ansible.builtin.git:
@@ -55,6 +62,13 @@
       recurse: true
     when: chmod_mode != "" and lock_out.rc == 0
 
+  - name: Check if ramble profile exists
+    ansible.builtin.stat:
+      path: /etc/profile.d/ramble.sh
+    register: profile_check
+
   - name: Add ramble to profile
-    ansible.builtin.shell:
-      echo ". {{ install_dir }}/share/ramble/setup-env.sh" > /etc/profile.d/ramble.sh
+    ansible.builtin.copy:
+      dest: /etc/profile.d/ramble.sh
+      content: ". {{ install_dir }}/share/ramble/setup-env.sh"
+    when: not profile_check.stat.exists
