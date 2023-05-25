@@ -26,7 +26,31 @@ locals {
     destination = "install_cloud_ops_agent_automatic.sh"
   }] : []
 
-  has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"])
+  ssh_args = join("", [
+    "-e host_name_prefix=${var.deployment_name}"
+  ])
+
+  configure_ssh_runners = var.configure_ssh ? [
+    {
+      type        = "data"
+      source      = "${path.module}/files/setup-ssh-keys.sh"
+      destination = "/usr/local/ghpc/setup-ssh-keys.sh"
+    },
+    {
+      type        = "data"
+      source      = "${path.module}/files/setup-ssh-keys.yml"
+      destination = "/usr/local/ghpc/setup-ssh-keys.yml"
+    },
+    {
+      type        = "ansible-local"
+      content     = file("${path.module}/files/configure-ssh.yml")
+      destination = "configure-ssh.yml"
+      args        = local.ssh_args
+    }
+  ] : []
+
+
+  has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"]) || var.configure_ssh
   install_ansible     = var.install_ansible == null ? local.has_ansible_runners : var.install_ansible
   ansible_installer = local.install_ansible ? [{
     type        = "shell"
@@ -34,7 +58,7 @@ locals {
     destination = "install_ansible_automatic.sh"
   }] : []
 
-  runners = concat(local.ops_agent_installer, local.ansible_installer, var.runners)
+  runners = concat(local.ops_agent_installer, local.ansible_installer, local.configure_ssh_runners, var.runners)
 
   bucket_regex               = "^gs://([^/]*)/*(.*)"
   gcs_bucket_path_trimmed    = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")

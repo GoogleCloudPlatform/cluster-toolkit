@@ -112,6 +112,12 @@ variable "install_ansible" {
   default     = null
 }
 
+variable "configure_ssh" {
+  description = "If set to true, it will automate ssh configuration by setting StrictHostKeyChecking to no and, the first fine users log-in, creating ssh keys that are added to the authorized keys list . This requires a shared /home filesystem."
+  type        = bool
+  default     = false
+}
+
 variable "prepend_ansible_installer" {
   description = <<EOT
   DEPRECATED. Use `install_ansible=false` to prevent ansible installation.
