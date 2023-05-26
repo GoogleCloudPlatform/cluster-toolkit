@@ -230,6 +230,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_configure_ssh"></a> [configure\_ssh](#input\_configure\_ssh) | If set to true, it will automate ssh configuration by setting StrictHostKeyChecking to no and, the first fine users log-in, creating ssh keys that are added to the authorized keys list . This requires a shared /home filesystem. | `bool` | `false` | no |
+| <a name="input_ansible_virtualenv_path"></a> [ansible\_virtualenv\_path](#input\_ansible\_virtualenv\_path) | Virtual environment path in which to install Ansible | `string` | `"/usr/local/ghpc-venv"` | no |
 | <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script'. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
 | <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object. | `string` | `null` | no |

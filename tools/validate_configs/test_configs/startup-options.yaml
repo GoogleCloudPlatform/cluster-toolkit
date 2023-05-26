@@ -31,6 +31,7 @@ deployment_groups:
   - id: startup
     source: ./modules/scripts/startup-script
     settings:
+      ansible_virtualenv_path: /usr/local/ghpc
       runners:
       - type: data
         source: /tmp/foo.tgz
@@ -42,6 +43,9 @@ deployment_groups:
           echo $2
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
+      - type: ansible-local
+        content: "--- {}"
+        destination: empty_tasks.yaml
 
   - id: instance-explicit-startup
     source: ./modules/compute/vm-instance

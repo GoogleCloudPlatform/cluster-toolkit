@@ -128,5 +128,14 @@ variable "prepend_ansible_installer" {
     condition     = var.prepend_ansible_installer == null
     error_message = "The variable prepend_ansible_installer has been removed. Use install_ansible instead"
   }
+}
 
+variable "ansible_virtualenv_path" {
+  description = "Virtual environment path in which to install Ansible"
+  type        = string
+  default     = "/usr/local/ghpc-venv"
+  validation {
+    condition     = can(regex("^(/[\\w-]+)+$", var.ansible_virtualenv_path))
+    error_message = "var.ansible_virtualenv_path must be an absolute path to a directory without spaces or special characters"
+  }
 }

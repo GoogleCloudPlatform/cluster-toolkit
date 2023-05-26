@@ -56,6 +56,7 @@ locals {
     type        = "shell"
     source      = "${path.module}/files/install_ansible.sh"
     destination = "install_ansible_automatic.sh"
+    args        = var.ansible_virtualenv_path
   }] : []
 
   runners = concat(local.ops_agent_installer, local.ansible_installer, local.configure_ssh_runners, var.runners)
