@@ -113,8 +113,13 @@ variable "install_ansible" {
 }
 
 variable "configure_ssh" {
-  description = "If set to true, it will automate ssh configuration by setting StrictHostKeyChecking to no and, the first fine users log-in, creating ssh keys that are added to the authorized keys list . This requires a shared /home filesystem."
-  type        = bool
+  description = <<EOT
+  If set to true, it will automate ssh configuration by:
+  - Setting StrictHostKeyChecking to 'No' when hosts start with the same "deployment_name"
+  - The first time users log-in, it will create ssh keys that are added to the authorized keys list
+  This requires a shared /home filesystem and implies on using the deployment name as prefix.
+  EOT
+  type        = string
   default     = false
 }
 
