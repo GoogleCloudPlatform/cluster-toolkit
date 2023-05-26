@@ -205,7 +205,21 @@ main() {
 		[ "${ansible_minor_vers}" -lt "${ansible_req_minor_vers}" ]; then
 		${venv_python_path} -m pip install ansible=="${REQ_ANSIBLE_PIP_VERSION}"
 	fi
-	ln -s "${venv_path}/bin/ansible-playbook" /usr/bin/ansible-playbook
+	while read -r cmd; do
+		ln -s "${venv_path}/bin/${cmd}" "/usr/bin/${cmd}"
+	done <<-EOF
+		ansible
+		ansible-config
+		ansible-connection
+		ansible-console
+		ansible-doc
+		ansible-galaxy
+		ansible-inventory
+		ansible-playbook
+		ansible-pull
+		ansible-test
+		ansible-vault
+	EOF
 }
 
 main "$@"
