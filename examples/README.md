@@ -36,6 +36,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
+  * [hps-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacs--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -654,17 +655,6 @@ bucket:
 > manually mount as the user using the bucket
 > ([Read more](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/mounting.md#access-permissions)).
 
-### [ramble.yaml] ![community-badge] ![experimental-badge]
-
-This blueprint provisions a single VM, installs spack using the
-[spack-install module](../community/modules/scripts/spack-install/README.md),
-installs ramble using the
-[ramble-setup module](../community/modules/scripts/ramble-setup/README.md),
-and executes ramble commands using the
-[ramble-execute module](../community/modules/scripts/ramble-execute/README.md).
-
-[ramble.yaml]: ../community/examples/ramble.yaml
-
 ### [hpc-slurm-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Spack is an HPC software package manager. This example creates a small Slurm
@@ -712,6 +702,39 @@ spack load gromacs
 > including a spack build cache as described in the comments of the example.
 
 [hpc-slurm-gromacs.yaml]: ../community/examples/hpc-slurm-gromacs.yaml
+
+### [hpc-slurm-ramble-gromacs.yaml] ![community-badge] ![experimental-badge]
+
+Ramble is an experimentation framework which can drive the installation of
+software with Spack and create, execute, and analyze experiments using the
+installed software.
+
+This example blueprint will deploy a Slurm cluster, install Spack and Ramble on
+it, and create a Ramble workspace (named gromacs). This workspace can be setup using:
+
+```shell
+ramble workspace activate
+ramble workspace setup
+```
+
+After setup is complete, the experiments can be executed using:
+
+```shell
+ramble workspace activate # If not active
+ramble on
+```
+
+And after the experiments are complete, they can be analyzed using:
+
+```shell
+ramble workspace activate # If not active
+ramble workspace analyze
+```
+
+The experiments defined by the workspace configuration are a 1, 2, 4, 8, and 16
+node scaling study of the Lignocellulose benchmark for Gromacs.
+
+[hpc-slurm-ramble-gromacs.yaml]: ../community/examples/hpc-slurm-ramble-gromacs.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
