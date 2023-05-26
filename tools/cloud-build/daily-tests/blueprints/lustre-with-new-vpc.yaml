@@ -67,16 +67,16 @@ deployment_groups:
   - id: wait0
     source: ./community/modules/scripts/wait-for-startup
     settings:
-      instance_name: ((module.workstation.name[0]))
+      instance_name: $(workstation.name[0])
 
   # test installing lustre from pre-existing-network-storage
   - id: pre-fs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip: ((module.scratchfs.network_storage.server_ip))
-      remote_mount: ((module.scratchfs.network_storage.remote_mount))
-      local_mount: ((module.scratchfs.network_storage.local_mount))
-      fs_type: ((module.scratchfs.network_storage.fs_type))
+      server_ip: $(scratchfs.network_storage.server_ip)
+      remote_mount: $(scratchfs.network_storage.remote_mount)
+      local_mount: $(scratchfs.network_storage.local_mount)
+      fs_type: $(scratchfs.network_storage.fs_type)
 
   - id: mount-exascaler-from-pre-existing
     source: modules/scripts/startup-script
@@ -98,7 +98,7 @@ deployment_groups:
   - id: wait1
     source: ./community/modules/scripts/wait-for-startup
     settings:
-      instance_name: ((module.install-luster-from-pre-existing.name[0]))
+      instance_name: $(install-luster-from-pre-existing.name[0])
 
   - id: compute_partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
