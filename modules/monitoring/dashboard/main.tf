@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "dashboard" })
+}
 
 locals {
   dash_path = "${path.module}/dashboards/${var.base_dashboard}.json.tpl"
@@ -24,6 +28,7 @@ resource "google_monitoring_dashboard" "dashboard" {
     widgets         = var.widgets
     deployment_name = var.deployment_name
     title           = var.title
+    labels          = local.labels
     }
   )
   project = var.project_id

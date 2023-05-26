@@ -45,3 +45,8 @@ variable "widgets" {
   type        = list(string)
   default     = []
 }
+
+variable "labels" {
+  description = "Labels to add to the monitoring dashboard instance. Key-value pairs."
+  type        = map(string)
+}

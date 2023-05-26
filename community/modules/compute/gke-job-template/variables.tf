@@ -112,3 +112,8 @@ variable "random_name_sufix" {
   type        = bool
   default     = true
 }
+
+variable "labels" {
+  description = "Labels to add to the GKE job template. Key-value pairs."
+  type        = map(string)
+}

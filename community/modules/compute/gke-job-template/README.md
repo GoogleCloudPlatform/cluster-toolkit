@@ -89,6 +89,7 @@ No modules.
 | <a name="input_command"></a> [command](#input\_command) | The command and arguments for the container that run in the Pod. The command field corresponds to entrypoint in some container runtimes. | `list(string)` | <pre>[<br>  "hostname"<br>]</pre> | no |
 | <a name="input_has_gpu"></a> [has\_gpu](#input\_has\_gpu) | Indicates that the job should request nodes with GPUs. Typically supplied by a gke-node-pool module. | `list(bool)` | <pre>[<br>  false<br>]</pre> | no |
 | <a name="input_image"></a> [image](#input\_image) | The container image the job should use. | `string` | `"debian"` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the GKE job template. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_family"></a> [machine\_family](#input\_machine\_family) | The machine family to use in the node selector (example: `n2`). If null then machine family will not be used as selector criteria. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the job. | `string` | `"my-job"` | no |
 | <a name="input_node_count"></a> [node\_count](#input\_node\_count) | How many nodes the job should run in parallel. | `number` | `1` | no |

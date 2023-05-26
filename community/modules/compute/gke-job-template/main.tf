@@ -15,6 +15,11 @@
   */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "gke-job-template" })
+}
+
+locals {
   # Start with the minimum cpu available of used node pools
   min_allocatable_cpu = min(var.allocatable_cpu_per_node...)
   full_node_cpu_request = (
@@ -62,6 +67,7 @@ locals {
       restart_policy     = var.restart_policy
       backoff_limit      = var.backoff_limit
       tolerations        = distinct(var.tolerations)
+      labels             = local.labels
     }
   )
 

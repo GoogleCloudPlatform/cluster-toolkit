@@ -15,6 +15,11 @@
  */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "pbspro-preinstall" })
+}
+
+locals {
   location = coalesce(var.location, var.region)
 
   bucket_name = "pbspro-packages"
@@ -49,6 +54,7 @@ module "pbspro_bucket" {
   prefix           = var.deployment_name
   names            = [local.bucket_name]
   randomize_suffix = true
+  labels           = local.labels
 
   bucket_viewers   = local.bucket_viewers
   set_viewer_roles = local.set_viewer_roles
