@@ -84,18 +84,30 @@ variable "job_template_contents" {
   description = "Deprecated (use `job_data`): The contents of the Google Cloud Batch job template. Typically supplied by a batch-job-template module."
   type        = string
   default     = null
+  validation {
+    condition     = var.job_template_contents == null
+    error_message = "job_template_contents is deprecated. Please use `job_data` instead."
+  }
 }
 
 variable "job_filename" {
   description = "Deprecated (use `job_data`): The filename of the generated job template file. Typically supplied by a batch-job-template module."
   type        = string
   default     = null
+  validation {
+    condition     = var.job_filename == null
+    error_message = "job_filename is deprecated. Please use `job_data` instead."
+  }
 }
 
 variable "job_id" {
   description = "Deprecated (use `job_data`): The ID for the Google Cloud Batch job. Typically supplied by a batch-job-template module for use in the output instructions."
   type        = string
   default     = null
+  validation {
+    condition     = var.job_id == null
+    error_message = "job_id is deprecated. Please use `job_data` instead."
+  }
 }
 
 variable "gcloud_version" {
