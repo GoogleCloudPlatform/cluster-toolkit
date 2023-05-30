@@ -32,18 +32,15 @@
       environment:
         TF_IN_AUTOMATION: "TRUE"
     always:
-    - name: Destroy cluster deployment group
-      register: terraform_destroy_cluster
-      changed_when: terraform_destroy_cluster.changed
+    - name: Destroy deployment
+      register: ghpc_destroy
+      changed_when: ghpc_destroy.changed
       ignore_errors: true
-      ansible.builtin.command: "{{ item }}"
+      ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
       args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/cluster"
+        chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      loop:
-      - terraform init
-      - terraform destroy -auto-approve -no-color
     - name: Delete VM Image
       register: image_deletion
       changed_when: image_deletion.changed
@@ -54,15 +51,3 @@
       args:
         chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
         executable: /bin/bash
-    - name: Destroy primary deployment group
-      register: terraform_destroy_primary
-      changed_when: terraform_destroy_primary.changed
-      ignore_errors: true
-      ansible.builtin.command: "{{ item }}"
-      args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
-      environment:
-        TF_IN_AUTOMATION: "TRUE"
-      loop:
-      - terraform init
-      - terraform destroy -auto-approve -no-color

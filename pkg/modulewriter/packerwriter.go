@@ -105,7 +105,7 @@ func (w PackerWriter) writeDeploymentGroup(
 }
 
 func (w PackerWriter) restoreState(deploymentDir string) error {
-	// TODO: implement state restoration for Packer
+	// TODO: restore packer-manifest.json if it exists
 	return nil
 }
 

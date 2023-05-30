@@ -74,7 +74,7 @@ func DirInfo(path string) (isDir bool, isWritable bool) {
 	}
 
 	isDir = p.Mode().IsDir()
-	isWritable = unix.Access(path, unix.W_OK|unix.X_OK) == nil
+	isWritable = unix.Access(path, unix.W_OK|unix.R_OK|unix.X_OK) == nil
 
 	return isDir, isWritable
 }
