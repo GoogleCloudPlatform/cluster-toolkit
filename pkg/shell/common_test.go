@@ -74,7 +74,7 @@ func (s *MySuite) TestCheckWritableDir(c *C) {
 	// and in MacOS. TODO: investigate why
 	// err = os.Chmod(dir, 0600)
 	// if err != nil {
-	// 	c.Error(err)
+	//      c.Error(err)
 	// }
 	// err = CheckWritableDir(dir)
 	// c.Assert(err, NotNil)
