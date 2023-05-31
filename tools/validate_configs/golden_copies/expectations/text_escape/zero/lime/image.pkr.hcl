@@ -19,8 +19,23 @@ locals {
   image_name         = var.image_name != null ? var.image_name : local.image_name_default
 
   # construct metadata from startup_script and metadata variables
-  linux_startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
-  metadata                      = merge(var.metadata, local.linux_startup_script_metadata)
+  startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
+  user_management_metadata = {
+    block-project-ssh-keys = "TRUE"
+    shutdown-script        = <<-EOT
+      #!/bin/bash
+      userdel -r ${var.ssh_username}
+      sed -i '/${var.ssh_username}/d' /var/lib/google/google_users
+    EOT
+  }
+
+  # merge metadata such that var.metadata always overrides user management
+  # metadata but always allow var.startup_script to override var.metadata
+  metadata = merge(
+    local.user_management_metadata,
+    var.metadata,
+    local.startup_script_metadata,
+  )
 
   # determine communicator to use and whether to enable Identity-Aware Proxy
   no_shell_scripts     = length(var.shell_scripts) == 0

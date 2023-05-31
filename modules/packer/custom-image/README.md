@@ -247,7 +247,7 @@ No resources.
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the short-lived VM | `map(string)` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2-standard-4"` | no |
 | <a name="input_manifest_file"></a> [manifest\_file](#input\_manifest\_file) | File to which to write Packer build manifest | `string` | `"packer-manifest.json"` | no |
-| <a name="input_metadata"></a> [metadata](#input\_metadata) | Instance metadata to attach to the build VM (startup-script key overridden by var.startup\_script and var.startup\_script\_file if either is set) | `map(string)` | `{}` | no |
+| <a name="input_metadata"></a> [metadata](#input\_metadata) | Instance metadata for the builder VM (use var.startup\_script or var.startup\_script\_file to set startup-script metadata) | `map(string)` | `{}` | no |
 | <a name="input_network_project_id"></a> [network\_project\_id](#input\_network\_project\_id) | Project ID of Shared VPC network | `string` | `null` | no |
 | <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `true` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except the use of GPUs requires it to be `TERMINATE` | `string` | `null` | no |
