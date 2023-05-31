@@ -17,10 +17,12 @@ limitations under the License.
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -126,10 +128,10 @@ func setup() {
 		log.Fatalf("failed to create variables.tf in test module dir: %v", err)
 	}
 	testVariablesTF := `
-	variable "test_variable" {
-		description = "Test Variable"
-		type        = string
-	}`
+    variable "test_variable" {
+        description = "Test Variable"
+        type        = string
+    }`
 	_, err = varFile.WriteString(testVariablesTF)
 	if err != nil {
 		log.Fatalf("failed to write variables.tf in test module dir: %v", err)
@@ -205,6 +207,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	// the next two steps simulate relevant steps in ghpc expand
 	dc.addMetadataToModules()
 	dc.addDefaultValidators()
+
 	return dc
 }
 
@@ -615,6 +618,101 @@ func (s *MySuite) TestImportBlueprint(c *C) {
 		expectedSimpleBlueprint.Vars.Get("labels"))
 	c.Assert(obtainedBlueprint.DeploymentGroups[0].Modules[0].ID,
 		Equals, expectedSimpleBlueprint.DeploymentGroups[0].Modules[0].ID)
+}
+
+func (s *MySuite) TestImportBlueprint_LabelValidation(c *C) {
+	dc := getDeploymentConfigForTest()
+
+	labelName := "my_test_label_name"
+	labelValue := "my-valid-label-value"
+	invalidLabelName := "my_test_label_name_with_a_bad_char!"
+	invalidLabelValue := "some/long/path/with/invalid/characters/and/with/more/than/63/characters!"
+
+	maxLabels := 64
+
+	var err error
+
+	// Simple success case
+	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		labelName: cty.StringVal(labelValue),
+	}))
+	err = dc.validateVars()
+	c.Assert(err, Equals, nil)
+
+	// Succeed on empty value
+	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		labelName: cty.StringVal(""),
+	}))
+	err = dc.validateVars()
+	c.Assert(err, Equals, nil)
+
+	// Succeed on lowercase international character
+	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		"ñ" + labelName: cty.StringVal("ñ"),
+	}))
+	err = dc.validateVars()
+	c.Assert(err, Equals, nil)
+
+	// Succeed on case-less international character
+	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		"ƿ" + labelName: cty.StringVal("ƿ"), // Unicode 01BF, latin character "wynn"
+	}))
+	err = dc.validateVars()
+	c.Assert(err, Equals, nil)
+
+	// Succeed on max number of labels
+	largeLabelsMap := map[string]cty.Value{}
+	for i := 0; i < maxLabels; i++ {
+		largeLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
+	}
+	dc.Config.Vars.Set("labels", cty.MapVal(largeLabelsMap))
+	err = dc.validateVars()
+	c.Assert(err, Equals, nil)
+
+	// Invalid label name
+	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		invalidLabelName: cty.StringVal(labelValue),
+	}))
+	err = dc.validateVars()
+	c.Assert(err, ErrorMatches, fmt.Sprintf(`.*name.*'%s: %s'.*`,
+		regexp.QuoteMeta(invalidLabelName),
+		regexp.QuoteMeta(labelValue)))
+
+	// Invalid label value
+	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		labelName: cty.StringVal(invalidLabelValue),
+	}))
+	err = dc.validateVars()
+	c.Assert(err, ErrorMatches, fmt.Sprintf(`.*value.*'%s: %s'.*`,
+		regexp.QuoteMeta(labelName),
+		regexp.QuoteMeta(invalidLabelValue)))
+
+	// Too many labels
+	tooManyLabelsMap := map[string]cty.Value{}
+	for i := 0; i < maxLabels+1; i++ {
+		tooManyLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
+	}
+	dc.Config.Vars.Set("labels", cty.MapVal(tooManyLabelsMap))
+	err = dc.validateVars()
+	c.Assert(err, ErrorMatches, `vars.labels cannot have more than 64 labels`)
+
+	// Fail on uppercase international character
+	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		labelName: cty.StringVal("Ñ"),
+	}))
+	err = dc.validateVars()
+	c.Assert(err, ErrorMatches, fmt.Sprintf(`.*value.*'%s: %s'.*`,
+		regexp.QuoteMeta(labelName),
+		regexp.QuoteMeta("Ñ")))
+
+	// Fail on empty name
+	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		"": cty.StringVal(labelValue),
+	}))
+	err = dc.validateVars()
+	c.Assert(err, ErrorMatches, fmt.Sprintf(`.*name.*'%s: %s'.*`,
+		"",
+		regexp.QuoteMeta(labelValue)))
 }
 
 func (s *MySuite) TestImportBlueprint_ExtraField_ThrowsError(c *C) {
