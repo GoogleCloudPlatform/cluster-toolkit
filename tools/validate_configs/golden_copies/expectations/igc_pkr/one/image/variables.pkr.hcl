@@ -204,7 +204,7 @@ variable "state_timeout" {
 }
 
 variable "metadata" {
-  description = "Instance metadata to attach to the build VM (startup-script key overridden by var.startup_script and var.startup_script_file if either is set)"
+  description = "Instance metadata for the builder VM (use var.startup_script or var.startup_script_file to set startup-script metadata)"
   type        = map(string)
   default     = {}
 }
