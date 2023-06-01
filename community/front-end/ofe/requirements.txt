@@ -3,7 +3,7 @@ argcomplete==3.0.5
 asgiref==3.6.0
 astroid==2.15.1
 backports.zoneinfo==0.2.1
-cachetools==5.3.0
+cachetools==5.3.1
 certifi==2022.12.7
 cffi==1.15.1
 cfgv==3.3.1
