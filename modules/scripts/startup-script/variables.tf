@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -110,6 +110,18 @@ variable "install_ansible" {
   description = "Run Ansible installation script if either set to true or unset and runner of type 'ansible-local' are used."
   type        = bool
   default     = null
+}
+
+variable "configure_ssh_host_patterns" {
+  description = <<EOT
+  If specified, it will automate ssh configuration by:
+  - Defining a Host block for every element of this variable and setting StrictHostKeyChecking to 'No'.
+  Ex: "hpc*", "hpc01*", "ml*"
+  - The first time users log-in, it will create ssh keys that are added to the authorized keys list
+  This requires a shared /home filesystem and relies on specifying the right prefix.
+  EOT
+  type        = list(string)
+  default     = []
 }
 
 variable "prepend_ansible_installer" {
