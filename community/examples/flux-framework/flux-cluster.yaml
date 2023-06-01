@@ -37,15 +37,15 @@ deployment_groups:
     source: github.com/GoogleCloudPlatform/scientific-computing-examples.git/fluxfw-gcp/tf
     settings:
       compute_node_specs:
-        - name_prefix: gfluxfw-compute
-          machine_arch: x86-64
-          machine_type: c2-standard-16
-          gpu_type: null
-          gpu_count: 0
-          compact: true
-          instances: 4
-          properties: ["c2"]
-          boot_script: null
+      - name_prefix: gfluxfw-compute
+        machine_arch: x86-64
+        machine_type: c2-standard-16
+        gpu_type: null
+        gpu_count: 0
+        compact: true
+        instances: 4
+        properties: ["c2"]
+        boot_script: null
       login_node_specs:
       - name_prefix: gfluxfw-login
         machine_arch: x86-64
@@ -62,7 +62,7 @@ deployment_groups:
         manager: null
         login: null
         compute: null
- 
+
       cluster_storage:
         mountpoint: $(homefs.network_storage.local_mount)
         share_ip: $(homefs.network_storage.server_ip)
