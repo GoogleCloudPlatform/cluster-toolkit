@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -112,15 +112,16 @@ variable "install_ansible" {
   default     = null
 }
 
-variable "configure_ssh" {
+variable "configure_ssh_host_patterns" {
   description = <<EOT
-  If set to true, it will automate ssh configuration by:
-  - Setting StrictHostKeyChecking to 'No' when hosts start with the same "deployment_name"
+  If specified, it will automate ssh configuration by:
+  - Defining a Host block for every element of this variable and setting StrictHostKeyChecking to 'No'.
+  Ex: "hpc*", "hpc01*", "ml*"
   - The first time users log-in, it will create ssh keys that are added to the authorized keys list
-  This requires a shared /home filesystem and implies on using the deployment name as prefix.
+  This requires a shared /home filesystem and relies on specifying the right prefix.
   EOT
-  type        = string
-  default     = false
+  type        = list(string)
+  default     = []
 }
 
 variable "prepend_ansible_installer" {

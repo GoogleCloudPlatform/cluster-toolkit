@@ -26,8 +26,10 @@
     ansible.builtin.blockinfile:
       path: "{{ ssh_config_path }}"
       block: |
-        Host {{ host_name_prefix }}*
+        Host "{{ item }}"
           StrictHostKeyChecking no
+      marker: "# {mark} ANSIBLE MANAGED BLOCK {{item}}"
+    loop: "{{ host_name_prefix }}"
   - name: "Create ssh keys in .bashrc if not alrady done"
     ansible.builtin.lineinfile:
       path: "{{ bashrc }}"

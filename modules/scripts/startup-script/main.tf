@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,11 +26,14 @@ locals {
     destination = "install_cloud_ops_agent_automatic.sh"
   }] : []
 
-  ssh_args = join("", [
-    "-e host_name_prefix=${var.deployment_name}"
-  ])
+  configure_ssh = length(var.configure_ssh_host_patterns) > 0
+  host_args = {
+    host_name_prefix = var.configure_ssh_host_patterns
+  }
 
-  configure_ssh_runners = var.configure_ssh ? [
+  prefix_file = "/tmp/prefix_file.json"
+
+  configure_ssh_runners = local.configure_ssh ? [
     {
       type        = "data"
       source      = "${path.module}/files/setup-ssh-keys.sh"
@@ -42,15 +45,20 @@ locals {
       destination = "/usr/local/ghpc/setup-ssh-keys.yml"
     },
     {
+      type        = "data"
+      content     = jsonencode(local.host_args)
+      destination = local.prefix_file
+    },
+    {
       type        = "ansible-local"
       content     = file("${path.module}/files/configure-ssh.yml")
       destination = "configure-ssh.yml"
-      args        = local.ssh_args
+      args        = "-e  @${local.prefix_file}"
     }
   ] : []
 
 
-  has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"]) || var.configure_ssh
+  has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"]) || local.configure_ssh
   install_ansible     = var.install_ansible == null ? local.has_ansible_runners : var.install_ansible
   ansible_installer = local.install_ansible ? [{
     type        = "shell"
