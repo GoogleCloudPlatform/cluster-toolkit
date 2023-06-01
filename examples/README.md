@@ -258,7 +258,7 @@ To provision the cluster, please run:
 
 ```text
 ./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy ml-example"
+./ghpc deploy ml-example
 ```
 
 After accessing the login node, you can activate the conda environment for each

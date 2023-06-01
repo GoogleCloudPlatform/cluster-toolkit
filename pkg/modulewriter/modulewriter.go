@@ -138,8 +138,8 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 	fmt.Println()
 	fmt.Printf("./ghpc deploy %s\n", deploymentDir)
 	fmt.Println()
-	fmt.Println("Please find instructions for cleanly destroying infrastructure and advanced")
-	fmt.Println("advanced manual deployment instructions at:")
+	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
+	fmt.Println("deployment instructions at:")
 	fmt.Println()
 	fmt.Printf("%s\n", f.Name())
 
