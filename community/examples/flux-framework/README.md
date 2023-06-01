@@ -4,6 +4,7 @@ The [flux-cluster.yaml](flux-cluster.yaml) blueprint describes a flux-framework 
 is deployed as the native resource manager as described in the [Flux Administrator's Guide](https://flux-framework.readthedocs.io/en/latest/guides/admin-guide.html).
 
 The cluster includes
+
 - A management node
 - A login node
 - Four compute nodes each of which is an instance of the c2-standard-16 machine type
@@ -138,4 +139,3 @@ Use `^d` to release the resources in the allocation and return to the login node
 
 To learn how to make the best use of flux follow the [Introduction to Flux](https://hpc-tutorials.llnl.gov/flux/)
 tutorial.
-
