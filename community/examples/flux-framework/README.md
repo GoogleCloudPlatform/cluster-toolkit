@@ -36,11 +36,11 @@ This will create a directory containing Terraform modules.
 
 Follow `ghpc` instructions to deploy the cluster
 
-  ```text
-  terraform -chdir=flux-fw-cluster/primary init
-  terraform -chdir=flux-fw-cluster/primary validate
-  terraform -chdir=flux-fw-cluster/primary apply
-  ```
+```text
+terraform -chdir=flux-fw-cluster/primary init
+terraform -chdir=flux-fw-cluster/primary validate
+terraform -chdir=flux-fw-cluster/primary apply
+```
   
 ### Connect to the login node
 
@@ -60,8 +60,7 @@ Or via the Google Cloud Console
 
    Select the project in which the flux-framework cluster was provisioned.
 
-2. Click on the **SSH** button associated with the **gfluxfw-login-001**
-   instance to open a window with a terminal into the cluster login node.
+2. Click on the **SSH** button associated with the **gfluxfw-login-001** instance to open a window with a terminal into the cluster login node.
 
 ### Verify the flux-framework Cluster
 
