@@ -171,7 +171,7 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 //   - other
 //     => ./modules/<basename(source)>-<hash(abs(source))>
 func deploymentSource(mod config.Module) (string, error) {
-	if sourcereader.IsGitPath(mod.Source) {
+	if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
 		return mod.Source, nil
 	}
 	if mod.Kind == config.PackerKind {
@@ -231,7 +231,7 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 			}
 			mod.DeploymentSource = ds
 
-			if sourcereader.IsGitPath(mod.Source) {
+			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
 				continue // do not download
 			}
 			factory(mod.Kind.String()).addNumModules(1)
