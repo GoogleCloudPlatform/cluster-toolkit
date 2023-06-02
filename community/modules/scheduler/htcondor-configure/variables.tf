@@ -46,7 +46,6 @@ variable "access_point_roles" {
     "roles/compute.instanceAdmin",
     "roles/monitoring.metricWriter",
     "roles/logging.logWriter",
-    "roles/storage.objectViewer",
   ]
 }
 
@@ -56,7 +55,6 @@ variable "central_manager_roles" {
   default = [
     "roles/monitoring.metricWriter",
     "roles/logging.logWriter",
-    "roles/storage.objectViewer",
   ]
 }
 
@@ -66,7 +64,6 @@ variable "execute_point_roles" {
   default = [
     "roles/monitoring.metricWriter",
     "roles/logging.logWriter",
-    "roles/storage.objectViewer",
   ]
 }
 

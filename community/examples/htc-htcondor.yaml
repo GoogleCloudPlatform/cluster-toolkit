@@ -43,6 +43,8 @@ deployment_groups:
   - id: htcondor_startup_central_manager
     source: modules/scripts/startup-script
     settings:
+      bucket_viewers:
+      - $(htcondor_configure.central_manager_service_account_iam_email)
       runners:
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.central_manager_runner)
@@ -58,9 +60,9 @@ deployment_groups:
       machine_type: c2-standard-4
       disable_public_ips: true
       service_account:
-        email: $(htcondor_configure.central_manager_service_account)
+        email: $(htcondor_configure.central_manager_service_account_email)
         scopes:
-        - cloud-platform
+        - https://www.googleapis.com/auth/cloud-platform
       network_interfaces:
       - network: null
         subnetwork: $(network1.subnetwork_self_link)
@@ -78,6 +80,8 @@ deployment_groups:
   - id: htcondor_startup_execute_point
     source: modules/scripts/startup-script
     settings:
+      bucket_viewers:
+      - $(htcondor_configure.execute_point_service_account_iam_email)
       runners:
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.execute_point_runner)
@@ -92,9 +96,9 @@ deployment_groups:
     - htcondor_startup_execute_point
     settings:
       service_account:
-        email: $(htcondor_configure.execute_point_service_account)
+        email: $(htcondor_configure.execute_point_service_account_email)
         scopes:
-        - cloud-platform
+        - https://www.googleapis.com/auth/cloud-platform
 
   - id: htcondor_execute_point_spot
     source: community/modules/compute/htcondor-execute-point
@@ -104,13 +108,15 @@ deployment_groups:
     settings:
       spot: true
       service_account:
-        email: $(htcondor_configure.execute_point_service_account)
+        email: $(htcondor_configure.execute_point_service_account_email)
         scopes:
-        - cloud-platform
+        - https://www.googleapis.com/auth/cloud-platform
 
   - id: htcondor_startup_access_point
     source: modules/scripts/startup-script
     settings:
+      bucket_viewers:
+      - $(htcondor_configure.access_point_service_account_iam_email)
       runners:
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_install.install_autoscaler_deps_runner)
@@ -142,9 +148,9 @@ deployment_groups:
       add_deployment_name_before_prefix: true
       machine_type: c2-standard-4
       service_account:
-        email: $(htcondor_configure.access_point_service_account)
+        email: $(htcondor_configure.access_point_service_account_email)
         scopes:
-        - cloud-platform
+        - https://www.googleapis.com/auth/cloud-platform
     outputs:
     - internal_ip
     - external_ip

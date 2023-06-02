@@ -236,11 +236,11 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_access_point_roles"></a> [access\_point\_roles](#input\_access\_point\_roles) | Project-wide roles for HTCondor Access Point service account | `list(string)` | <pre>[<br>  "roles/compute.instanceAdmin",<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
+| <a name="input_access_point_roles"></a> [access\_point\_roles](#input\_access\_point\_roles) | Project-wide roles for HTCondor Access Point service account | `list(string)` | <pre>[<br>  "roles/compute.instanceAdmin",<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter"<br>]</pre> | no |
 | <a name="input_central_manager_high_availability"></a> [central\_manager\_high\_availability](#input\_central\_manager\_high\_availability) | Provision HTCondor central manager in high availability mode | `bool` | `false` | no |
-| <a name="input_central_manager_roles"></a> [central\_manager\_roles](#input\_central\_manager\_roles) | Project-wide roles for HTCondor Central Manager service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
+| <a name="input_central_manager_roles"></a> [central\_manager\_roles](#input\_central\_manager\_roles) | Project-wide roles for HTCondor Central Manager service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter"<br>]</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
-| <a name="input_execute_point_roles"></a> [execute\_point\_roles](#input\_execute\_point\_roles) | Project-wide roles for HTCondor Execute Point service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
+| <a name="input_execute_point_roles"></a> [execute\_point\_roles](#input\_execute\_point\_roles) | Project-wide roles for HTCondor Execute Point service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter"<br>]</pre> | no |
 | <a name="input_job_queue_high_availability"></a> [job\_queue\_high\_availability](#input\_job\_queue\_high\_availability) | Provision HTCondor access points in high availability mode (experimental: see README) | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
 | <a name="input_pool_password"></a> [pool\_password](#input\_pool\_password) | HTCondor Pool Password | `string` | `null` | no |
@@ -254,12 +254,15 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_access_point_runner"></a> [access\_point\_runner](#output\_access\_point\_runner) | Toolkit Runner to configure an HTCondor Access Point |
-| <a name="output_access_point_service_account"></a> [access\_point\_service\_account](#output\_access\_point\_service\_account) | HTCondor Access Point Service Account (e-mail format) |
+| <a name="output_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#output\_access\_point\_service\_account\_email) | HTCondor Access Point Service Account (e-mail format) |
+| <a name="output_access_point_service_account_iam_email"></a> [access\_point\_service\_account\_iam\_email](#output\_access\_point\_service\_account\_iam\_email) | HTCondor Access Point Service Account (IAM binding format) |
 | <a name="output_central_manager_internal_ip"></a> [central\_manager\_internal\_ip](#output\_central\_manager\_internal\_ip) | Reserved internal IP address for use by Central Manager |
 | <a name="output_central_manager_runner"></a> [central\_manager\_runner](#output\_central\_manager\_runner) | Toolkit Runner to configure an HTCondor Central Manager |
 | <a name="output_central_manager_secondary_internal_ip"></a> [central\_manager\_secondary\_internal\_ip](#output\_central\_manager\_secondary\_internal\_ip) | Reserved internal IP address for use by failover Central Manager |
-| <a name="output_central_manager_service_account"></a> [central\_manager\_service\_account](#output\_central\_manager\_service\_account) | HTCondor Central Manager Service Account (e-mail format) |
+| <a name="output_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#output\_central\_manager\_service\_account\_email) | HTCondor Central Manager Service Account (e-mail format) |
+| <a name="output_central_manager_service_account_iam_email"></a> [central\_manager\_service\_account\_iam\_email](#output\_central\_manager\_service\_account\_iam\_email) | HTCondor Central Manager Service Account (IAM binding format) |
 | <a name="output_execute_point_runner"></a> [execute\_point\_runner](#output\_execute\_point\_runner) | Toolkit Runner to configure an HTCondor Execute Point |
-| <a name="output_execute_point_service_account"></a> [execute\_point\_service\_account](#output\_execute\_point\_service\_account) | HTCondor Execute Point Service Account (e-mail format) |
+| <a name="output_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#output\_execute\_point\_service\_account\_email) | HTCondor Execute Point Service Account (e-mail format) |
+| <a name="output_execute_point_service_account_iam_email"></a> [execute\_point\_service\_account\_iam\_email](#output\_execute\_point\_service\_account\_iam\_email) | HTCondor Execute Point Service Account (IAM binding format) |
 | <a name="output_pool_password_secret_id"></a> [pool\_password\_secret\_id](#output\_pool\_password\_secret\_id) | Google Cloud Secret Manager ID containing HTCondor Pool Password |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

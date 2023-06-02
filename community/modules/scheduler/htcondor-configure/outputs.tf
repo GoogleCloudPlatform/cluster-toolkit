@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-output "access_point_service_account" {
+output "access_point_service_account_email" {
   description = "HTCondor Access Point Service Account (e-mail format)"
   value       = module.access_point_service_account.email
   depends_on = [
@@ -23,7 +23,16 @@ output "access_point_service_account" {
   ]
 }
 
-output "central_manager_service_account" {
+output "access_point_service_account_iam_email" {
+  description = "HTCondor Access Point Service Account (IAM binding format)"
+  value       = module.access_point_service_account.iam_email
+  depends_on = [
+    google_secret_manager_secret_iam_member.access_point,
+    module.access_point_service_account
+  ]
+}
+
+output "central_manager_service_account_email" {
   description = "HTCondor Central Manager Service Account (e-mail format)"
   value       = module.central_manager_service_account.email
   depends_on = [
@@ -32,9 +41,27 @@ output "central_manager_service_account" {
   ]
 }
 
-output "execute_point_service_account" {
+output "central_manager_service_account_iam_email" {
+  description = "HTCondor Central Manager Service Account (IAM binding format)"
+  value       = module.central_manager_service_account.iam_email
+  depends_on = [
+    google_secret_manager_secret_iam_member.central_manager,
+    module.central_manager_service_account
+  ]
+}
+
+output "execute_point_service_account_email" {
   description = "HTCondor Execute Point Service Account (e-mail format)"
   value       = module.execute_point_service_account.email
+  depends_on = [
+    google_secret_manager_secret_iam_member.execute_point,
+    module.execute_point_service_account
+  ]
+}
+
+output "execute_point_service_account_iam_email" {
+  description = "HTCondor Execute Point Service Account (IAM binding format)"
+  value       = module.execute_point_service_account.iam_email
   depends_on = [
     google_secret_manager_secret_iam_member.execute_point,
     module.execute_point_service_account
