@@ -33,11 +33,12 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
-  * [hps-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacs--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacs--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
+  * [flux-cluster](#flux-cluster--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -864,6 +865,14 @@ After deploying the blueprint perform the following actions:
 
 [crd-instructions]: ../community/modules/remote-desktop/chrome-remote-desktop/README.md#setting-up-the-remote-desktop
 [hpc-slurm-chromedesktop.yaml]: ../community/examples/hpc-slurm-chromedesktop.yaml
+### [flux-cluster.yaml] ![community-badge] ![experimental-badge]
+
+The [flux-cluster.yaml] blueprint describes a flux-framework cluster where flux
+is deployed as the native resource manager.
+
+See [README](../community/examples/flux-framework/README.md)
+
+[flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
 
 ### [hpc-slurm-legacy.yaml] ![community-badge] ![deprecated-badge]
 
