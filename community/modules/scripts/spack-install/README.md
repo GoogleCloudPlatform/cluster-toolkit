@@ -98,7 +98,7 @@ deployment via the following:
   source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
   use: [spack]
   settings:
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
+    subnetwork_name: $(network1.primary_subnetwork.name)
     login_node_count: 1
     partitions:
     - $(compute_partition.partition)

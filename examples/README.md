@@ -1142,23 +1142,17 @@ The variable is referred to by the source, either vars for deploment variables
 or the module ID for module variables, followed by the name of the value being
 referenced. The entire variable is then wrapped in “$()”.
 
-Currently, references to variable attributes and string operations with
-variables are not supported.
+Currently, string interpolation with variables is not supported.
 
 ### Literal Variables
 
-Literal variables are not interpreted by `ghpc` directly, but rather embedded in the
-underlying module. Literal variables should only be used by those familiar
-with the underlying module technology (Terraform or Packer); no validation
-will be done before deployment to ensure that they are referencing
-something that exists.
-
-Literal variables are occasionally needed when referring to the data structure
-of the underlying module. For example, to refer to the subnetwork self link from
-a vpc module through terraform itself:
+Literal variables should only be used by those familiar
+with the underlying module technology (Terraform or Packer);
+Literal variables are occasionally needed when calling a function or other complex statements. For example, to JSON-encode network storage metadata:
 
 ```yaml
-subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
+metadata:
+  network_storage: ((jsonencode([module.appfs.network_storage])))
 ```
 
 Here the network1 module is referenced, the terraform module name is the same as
