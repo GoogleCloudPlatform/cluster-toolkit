@@ -8,17 +8,42 @@ Allows creation of service accounts for a Google Cloud Platform project.
 - id: service_acct
   source: community/modules/project/service-account
   settings:
-  - project_id: $(vars.project_id)
-  - names: [ "instance_acct" ]
-  - project_roles: [
-    "roles/viewer",
-    "roles/storage.objectViewer",
-  ]
+    project_id: $(vars.project_id)
+    name: instance_acct
+    project_roles:
+    - logging.logWriter
+    - monitoring.metricWriter
+    - storage.objectViewer
 ```
 
 This creates a service account in GCP project "project_id" with the name
-"instance_acct". It will have the two roles "viewer" and
-"storage.objectViewer".
+"instance_acct". It will have the 3 roles listed for all resources within the
+project.
+
+### Usage with startup-script module
+
+When this module is used in conjunction with the [startup-script] module, the
+service account must be granted (at least) read access to the bucket. This can
+be achieved by granting project-wide access as shown above or by specifying the
+service account as a bucket viewer in the startup-script module:
+
+```yaml
+- id: service_acct
+  source: community/modules/project/service-account
+  settings:
+    project_id: $(vars.project_id)
+    name: instance_acct
+    project_roles:
+    - logging.logWriter
+    - monitoring.metricWriter
+- id: script
+  source: modules/scripts/startup-script
+  settings:
+    bucket_viewers:
+    - $(service_acct.service_account_iam_email)
+```
+
+[startup-script]: ../../../../modules/scripts/startup-script/README.md
 
 ## License
 

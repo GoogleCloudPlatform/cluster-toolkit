@@ -36,7 +36,7 @@ variable "gcs_bucket_path" {
 }
 
 variable "bucket_viewers" {
-  description = "Service accounts or other IAM members (groups, users, domains) to which to grant read-only access to startup-script bucket"
+  description = "Additional service accounts or groups, users, and domains to which to grant read-only access to startup-script bucket (leave unset if using default Compute Engine service account)"
   type        = list(string)
   default     = []
 
