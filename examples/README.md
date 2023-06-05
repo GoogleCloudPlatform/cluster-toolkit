@@ -117,7 +117,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.3/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -522,7 +522,7 @@ For this example the following is needed in the selected region:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.3/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
