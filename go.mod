@@ -3,7 +3,7 @@ module hpc-toolkit
 go 1.18
 
 require (
-	cloud.google.com/go/compute v1.19.2 // indirect
+	cloud.google.com/go/compute v1.19.3 // indirect
 	cloud.google.com/go/storage v1.28.1 // indirect
 	github.com/go-git/go-git/v5 v5.7.0
 	github.com/hashicorp/go-getter v1.7.1
@@ -16,7 +16,7 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/zclconf/go-cty v1.13.2
 	golang.org/x/exp v0.0.0-20230108222341-4b8118a2686a
-	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
+	google.golang.org/genproto v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -26,12 +26,14 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/hashicorp/terraform-exec v0.18.1
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
-	google.golang.org/api v0.124.0
+	google.golang.org/api v0.125.0
 )
 
 require (
-	github.com/googleapis/gax-go/v2 v2.8.0 // indirect
+	github.com/googleapis/gax-go/v2 v2.10.0 // indirect
 	github.com/hashicorp/terraform-json v0.15.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
 )
 
 require (
