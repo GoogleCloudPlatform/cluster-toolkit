@@ -129,6 +129,12 @@ resource "google_storage_bucket" "configs_bucket" {
   labels                      = local.labels
 }
 
+resource "google_storage_bucket_iam_binding" "viewers" {
+  bucket  = local.storage_bucket_name
+  role    = "roles/storage.objectViewer"
+  members = var.bucket_viewers
+}
+
 resource "google_storage_bucket_object" "scripts" {
   # this writes all scripts exactly once into GCS
   for_each = local.runners_map

@@ -17,14 +17,23 @@
 output "startup_script" {
   description = "script to load and run all runners, as a string value."
   value       = local.stdlib
+  depends_on = [
+    google_storage_bucket_iam_binding.viewers
+  ]
 }
 
 output "compute_startup_script" {
   description = "script to load and run all runners, as a string value. Targets the inputs for the slurm controller."
   value       = local.stdlib
+  depends_on = [
+    google_storage_bucket_iam_binding.viewers
+  ]
 }
 
 output "controller_startup_script" {
   description = "script to load and run all runners, as a string value. Targets the inputs for the slurm controller."
   value       = local.stdlib
+  depends_on = [
+    google_storage_bucket_iam_binding.viewers
+  ]
 }
