@@ -20,26 +20,36 @@ variable "billing_account_id" {
   default     = ""
 }
 
-variable "description" {
-  description = "Default description of the created service accounts (defaults to no description)."
+variable "deployment_name" {
+  description = "Name of the deployment (will be prepended to service account name)"
   type        = string
-  default     = ""
+}
+
+variable "description" {
+  description = "Description of the created service account."
+  type        = string
+  default     = "Service Account"
 }
 
 variable "descriptions" {
-  description = "List of descriptions of the created service accounts (elements default to the value of description)."
+  description = "Deprecated; create single service accounts using var.description."
   type        = list(string)
-  default     = []
+  default     = null
+
+  validation {
+    condition     = var.descriptions == null
+    error_message = "var.descriptions has been deprecated in favor of creating single accounts with var.description"
+  }
 }
 
 variable "display_name" {
-  description = "display names of the created service accounts."
+  description = "Display name of the created service account."
   type        = string
-  default     = ""
+  default     = "Service Account"
 }
 
 variable "generate_keys" {
-  description = "Generate keys for service accounts."
+  description = "Generate keys for service account."
   type        = bool
   default     = false
 }
@@ -56,10 +66,20 @@ variable "grant_xpn_roles" {
   default     = true
 }
 
+variable "name" {
+  description = "Name of the service account to create."
+  type        = string
+}
+
 variable "names" {
-  description = "Names of the services accounts to create."
+  description = "Deprecated; create single service accounts using var.name."
   type        = list(string)
-  default     = []
+  default     = null
+
+  validation {
+    condition     = var.names == null
+    error_message = "var.names has been deprecated in favor of creating single accounts with var.name"
+  }
 }
 
 variable "org_id" {
@@ -69,9 +89,14 @@ variable "org_id" {
 }
 
 variable "prefix" {
-  description = "prefix applied to service account names"
+  description = "Deprecated; prefix now set using var.deployment_name"
   type        = string
-  default     = ""
+  default     = null
+
+  validation {
+    condition     = var.prefix == null
+    error_message = "var.prefix has been deprecated in favor of setting prefix with var.deployment_name"
+  }
 }
 
 variable "project_id" {
@@ -80,6 +105,6 @@ variable "project_id" {
 }
 
 variable "project_roles" {
-  description = "list of roles to apply to created service accounts"
+  description = "List of roles to grant to service account"
   type        = list(string)
 }

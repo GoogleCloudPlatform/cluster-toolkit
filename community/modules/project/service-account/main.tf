@@ -14,20 +14,24 @@
  * limitations under the License.
 */
 
-module "service_accounts" {
+locals {
+  display_name = "${var.display_name} (${var.deployment_name})"
+  description  = "${var.description} (${var.deployment_name})"
+}
+
+module "service_account" {
   source  = "terraform-google-modules/service-accounts/google"
-  version = "~> 4.1"
+  version = "~> 4.2"
 
   billing_account_id = var.billing_account_id
-  description        = var.description
-  descriptions       = var.descriptions
-  display_name       = var.display_name
+  description        = local.description
+  display_name       = local.display_name
   generate_keys      = var.generate_keys
   grant_billing_role = var.grant_billing_role
   grant_xpn_roles    = var.grant_xpn_roles
-  names              = var.names
+  names              = [var.name]
   org_id             = var.org_id
-  prefix             = var.prefix
+  prefix             = var.deployment_name
   project_id         = var.project_id
   project_roles      = [for role in var.project_roles : "${var.project_id}=>roles/${role}"]
 }
