@@ -51,7 +51,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_service_accounts"></a> [service\_accounts](#module\_service\_accounts) | terraform-google-modules/service-accounts/google | ~> 4.1 |
+| <a name="module_service_account"></a> [service\_account](#module\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.2 |
 
 ## Resources
 
@@ -62,31 +62,25 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_billing_account_id"></a> [billing\_account\_id](#input\_billing\_account\_id) | If assigning billing role, specify a billing account (default is to assign at the organizational level). | `string` | `""` | no |
-| <a name="input_description"></a> [description](#input\_description) | Default description of the created service accounts (defaults to no description). | `string` | `""` | no |
-| <a name="input_descriptions"></a> [descriptions](#input\_descriptions) | List of descriptions of the created service accounts (elements default to the value of description). | `list(string)` | `[]` | no |
-| <a name="input_display_name"></a> [display\_name](#input\_display\_name) | display names of the created service accounts. | `string` | `""` | no |
-| <a name="input_generate_keys"></a> [generate\_keys](#input\_generate\_keys) | Generate keys for service accounts. | `bool` | `false` | no |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment (will be prepended to service account name) | `string` | n/a | yes |
+| <a name="input_description"></a> [description](#input\_description) | Description of the created service account. | `string` | `"Service Account"` | no |
+| <a name="input_descriptions"></a> [descriptions](#input\_descriptions) | Deprecated; create single service accounts using var.description. | `list(string)` | `null` | no |
+| <a name="input_display_name"></a> [display\_name](#input\_display\_name) | Display name of the created service account. | `string` | `"Service Account"` | no |
+| <a name="input_generate_keys"></a> [generate\_keys](#input\_generate\_keys) | Generate keys for service account. | `bool` | `false` | no |
 | <a name="input_grant_billing_role"></a> [grant\_billing\_role](#input\_grant\_billing\_role) | Grant billing user role. | `bool` | `false` | no |
 | <a name="input_grant_xpn_roles"></a> [grant\_xpn\_roles](#input\_grant\_xpn\_roles) | Grant roles for shared VPC management. | `bool` | `true` | no |
-| <a name="input_names"></a> [names](#input\_names) | Names of the services accounts to create. | `list(string)` | `[]` | no |
+| <a name="input_name"></a> [name](#input\_name) | Name of the service account to create. | `string` | n/a | yes |
+| <a name="input_names"></a> [names](#input\_names) | Deprecated; create single service accounts using var.name. | `list(string)` | `null` | no |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Id of the organization for org-level roles. | `string` | `""` | no |
-| <a name="input_prefix"></a> [prefix](#input\_prefix) | prefix applied to service account names | `string` | `""` | no |
+| <a name="input_prefix"></a> [prefix](#input\_prefix) | Deprecated; prefix now set using var.deployment\_name | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of the project | `string` | n/a | yes |
-| <a name="input_project_roles"></a> [project\_roles](#input\_project\_roles) | list of roles to apply to created service accounts | `list(string)` | n/a | yes |
+| <a name="input_project_roles"></a> [project\_roles](#input\_project\_roles) | List of roles to grant to service account | `list(string)` | n/a | yes |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_email"></a> [email](#output\_email) | Service account email (for single use). |
-| <a name="output_emails"></a> [emails](#output\_emails) | Service account emails by name. |
-| <a name="output_emails_list"></a> [emails\_list](#output\_emails\_list) | Service account emails s list. |
-| <a name="output_iam_email"></a> [iam\_email](#output\_iam\_email) | IAM-format service account email (for single use). |
-| <a name="output_iam_emails"></a> [iam\_emails](#output\_iam\_emails) | IAM-format service account emails by name. |
-| <a name="output_iam_emails_list"></a> [iam\_emails\_list](#output\_iam\_emails\_list) | IAM-format service account emails s list. |
-| <a name="output_key"></a> [key](#output\_key) | Service account key (for single use). |
-| <a name="output_keys"></a> [keys](#output\_keys) | Map of service account keys. |
-| <a name="output_service_account"></a> [service\_account](#output\_service\_account) | Service account resource (for single use). |
-| <a name="output_service_accounts"></a> [service\_accounts](#output\_service\_accounts) | Service account resources as list. |
-| <a name="output_service_accounts_map"></a> [service\_accounts\_map](#output\_service\_accounts\_map) | Service account resources by name. |
+| <a name="output_key"></a> [key](#output\_key) | Service account key (if creation was requested) |
+| <a name="output_service_account_email"></a> [service\_account\_email](#output\_service\_account\_email) | Service account e-mail address |
+| <a name="output_service_account_iam_email"></a> [service\_account\_iam\_email](#output\_service\_account\_iam\_email) | Service account IAM binding format (serviceAccount:name@example.com) |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

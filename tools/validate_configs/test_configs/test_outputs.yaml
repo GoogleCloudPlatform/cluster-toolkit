@@ -112,22 +112,13 @@ deployment_groups:
   - id: sa
     source: community/modules/project/service-account
     outputs:
-    - email
-    - emails
-    - emails_list
-    - iam_email
-    - iam_emails
-    - iam_emails_list
     - key
-    - keys
-    - service_account
-    - service_accounts
-    - service_accounts_map
+    - service_account_email
+    - service_account_iam_email
     settings:
-      names:
-      - "hpc-service-acct"
+      name: hpc-service-acct
       project_roles:
-      - "compute.instanceAdmin.v1"
+      - compute.instanceAdmin.v1
 
   - id: spack
     source: community/modules/scripts/spack-install
