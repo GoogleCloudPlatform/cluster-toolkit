@@ -29,11 +29,23 @@ variable "region" {
   type        = string
 }
 
-
 variable "gcs_bucket_path" {
   description = "The GCS path for storage bucket and the object."
   type        = string
   default     = null
+}
+
+variable "bucket_viewers" {
+  description = "Additional service accounts or groups, users, and domains to which to grant read-only access to startup-script bucket (leave unset if using default Compute Engine service account)"
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for u in var.bucket_viewers : length(regexall("^(allUsers$|allAuthenticatedUsers$|user:|group:|serviceAccount:|domain:)", u)) > 0
+    ])
+    error_message = "Bucket viewer members must begin with user/group/serviceAccount/domain following https://cloud.google.com/iam/docs/reference/rest/v1/Policy#Binding"
+  }
 }
 
 variable "debug_file" {
