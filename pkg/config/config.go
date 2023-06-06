@@ -74,7 +74,8 @@ var errorMessages = map[string]string{
 	"varNotDefined":      "variable not defined",
 	"valueNotString":     "value was not of type string",
 	"valueEmptyString":   "value is an empty string",
-	"labelReqs":          "value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long.",
+	"labelNameReqs":      "name must begin with a lowercase letter, can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long",
+	"labelValueReqs":     "value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 0 and 63 characters long",
 }
 
 // map[moved module path]replacing module path
@@ -673,7 +674,15 @@ func (err *InputValueError) Error() string {
 	return fmt.Sprintf("%v input error, cause: %v", err.inputKey, err.cause)
 }
 
+var matchLabelNameExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}][\p{Ll}\p{Lo}\p{N}_-]{0,62}$`)
 var matchLabelValueExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{0,63}$`)
+
+// isValidLabelName checks if a string is a valid name for a GCP label.
+// For more information on valid label names, see the docs at:
+// https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
+func isValidLabelName(name string) bool {
+	return matchLabelNameExp.MatchString(name)
+}
 
 // isValidLabelValue checks if a string is a valid value for a GCP label.
 // For more information on valid label values, see the docs at:
@@ -711,7 +720,7 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 	if !isValidLabelValue(s) {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["labelReqs"],
+			cause:    errorMessages["labelValueReqs"],
 		}
 	}
 
@@ -732,7 +741,7 @@ func (bp *Blueprint) checkBlueprintName() error {
 	if !isValidLabelValue(bp.BlueprintName) {
 		return &InputValueError{
 			inputKey: "blueprint_name",
-			cause:    errorMessages["labelReqs"],
+			cause:    errorMessages["labelValueReqs"],
 		}
 	}
 

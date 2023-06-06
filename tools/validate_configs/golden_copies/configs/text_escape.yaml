@@ -20,7 +20,7 @@ vars:
   deployment_name: text_escape
   zone: us-east4-c
   labels:
-    red: \((blue))
+    ñred: ñblue
 
 deployment_groups:
 - group: zero
