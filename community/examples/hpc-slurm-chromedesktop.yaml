@@ -46,20 +46,6 @@ deployment_groups:
       # which can be used with slurm node provisioning
       instance_count: 0
 
-  - id: remote_desktop_startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - type: ansible-local
-        source: modules/chrome-remote-desktop/scripts/configure-grid-drivers.yml
-        destination: /tmp/configure-grid-drivers.yml
-      - type: ansible-local
-        source: modules/chrome-remote-desktop/scripts/configure-chrome-desktop.yml
-        destination: /tmp/configure-chrome-desktop.yml
-      - type: ansible-local
-        source: modules/chrome-remote-desktop/scripts/disable-sleep.yml
-        destination: /tmp/disable-sleep.yml
-
   - id: crd_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
@@ -67,7 +53,7 @@ deployment_groups:
       node_count_dynamic_max: 1
       disable_public_ips: false
       instance_image:
-        family: schedmd-v5-slurm-22-05-9-ubuntu-2004-lts
+        family: slurm-gcp-5-7-debian-11
         project: projects/schedmd-slurm-public/global/images/family
       guest_accelerator:
       - type: nvidia-tesla-t4-vws
@@ -78,7 +64,7 @@ deployment_groups:
     use:
     - network1
     - homefs
-    - remote_desktop_startup
+    - remote-desktop
     - crd_node_group
     settings:
       partition_name: desktop
