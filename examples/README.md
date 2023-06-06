@@ -33,12 +33,12 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacs--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
+  * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
-  * [flux-cluster](#flux-cluster--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
