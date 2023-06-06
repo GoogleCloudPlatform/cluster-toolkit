@@ -48,7 +48,7 @@ locals {
   # determine best value for on_host_maintenance if not supplied by user
   machine_vals                = split("-", var.machine_type)
   machine_family              = local.machine_vals[0]
-  gpu_attached                = contains(["a2"], local.machine_family) || var.accelerator_type != null
+  gpu_attached                = contains(["a2", "g2"], local.machine_family) || var.accelerator_type != null
   on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
   on_host_maintenance = (
     var.on_host_maintenance != null
