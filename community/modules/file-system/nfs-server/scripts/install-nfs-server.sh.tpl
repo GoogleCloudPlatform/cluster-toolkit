@@ -14,19 +14,21 @@
 # limitations under the License.
 set -ex
 
-# format, add to fstab, and mount the disk. See https://cloud.google.com/compute/docs/disks/add-persistent-disk
-uuid=$(uuidgen)
-mkfs.ext4 -F -m 0 -U "$uuid" -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/disk/by-id/google-attached_disk
+if [ ! -d "/exports" ]; then # first load, format and mount the disk
+    # See https://cloud.google.com/compute/docs/disks/add-persistent-disk
+    uuid=$(uuidgen)
+    mkfs.ext4 -F -m 0 -U "$uuid" -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/disk/by-id/google-attached_disk
 
-mkdir /exports
-echo "UUID=$uuid /exports ext4 discard,defaults 0 0" >> /etc/fstab
-mount --target /exports/
+    mkdir /exports
+    echo "UUID=$uuid /exports ext4 discard,defaults 0 0" >> /etc/fstab
+    mount --target /exports/
 
-%{ for mount in local_mounts ~}
-mkdir -p /exports${mount}
-chmod 755 /exports${mount}
-echo '/exports${mount} *(rw,sync,no_root_squash)' >> "/etc/exports"    
-%{ endfor ~}
+    %{ for mount in local_mounts ~}
+    mkdir -p /exports${mount}
+    chmod 755 /exports${mount}
+    echo '/exports${mount} *(rw,sync,no_root_squash)' >> "/etc/exports"    
+    %{ endfor ~}
+fi
 
 systemctl start nfs-server rpcbind
 systemctl enable nfs-server 
