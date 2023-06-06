@@ -224,7 +224,7 @@ image created with slurm 21.08.8:
       node_count_dynamic_max: 20
       instance_image:
         project: $(vars.project_id)
-        family: schedmd-v5-slurm-21-08-8-hpc-centos-7
+        family: slurm-gcp-5-7-hpc-centos-7
 
 - id: compute-partition
   source: community/modules/compute/schedmd-slurm-gcp-v5-partition
