@@ -600,8 +600,7 @@ func (s *MySuite) TestCheckBlueprintName(c *C) {
 func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
-	_, err := dc.ExportBlueprint(outFile)
-	c.Assert(err, IsNil)
+	c.Assert(dc.ExportBlueprint(outFile), IsNil)
 	newDC, err := NewDeploymentConfig(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(dc.Config, DeepEquals, newDC.Config)
@@ -731,17 +730,10 @@ dragon: "Lews Therin Telamon"`)
 }
 
 func (s *MySuite) TestExportBlueprint(c *C) {
-	// Return bytes
-	dc := DeploymentConfig{}
-	dc.Config = expectedSimpleBlueprint
-	obtainedYaml, err := dc.ExportBlueprint("")
-	c.Assert(err, IsNil)
-	c.Assert(obtainedYaml, Not(IsNil))
-
-	// Write file
+	dc := DeploymentConfig{Config: expectedSimpleBlueprint}
 	outFilename := "out_TestExportBlueprint.yaml"
 	outFile := filepath.Join(tmpTestDir, outFilename)
-	dc.ExportBlueprint(outFile)
+	c.Assert(dc.ExportBlueprint(outFile), IsNil)
 	fileInfo, err := os.Stat(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(fileInfo.Name(), Equals, outFilename)

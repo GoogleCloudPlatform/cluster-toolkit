@@ -400,13 +400,7 @@ func prepArtifactsDir(artifactsDir string) error {
 func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
 	artifactsDir := filepath.Join(depDir, HiddenGhpcDirName, ArtifactsDirName)
 	blueprintFile := filepath.Join(artifactsDir, expandedBlueprintName)
-
-	_, err := dc.ExportBlueprint(blueprintFile)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return dc.ExportBlueprint(blueprintFile)
 }
 
 func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymentDir string) {
