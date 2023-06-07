@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 ---
 
 test_name: hpc-enterprise-slurm
@@ -19,7 +18,10 @@ deployment_name: "enter-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
 slurm_cluster_name: "enter{{ build[0:5] }}"
-zone: us-central1-a
+zone: europe-west1-d
+cli_deployment_vars:
+  region: europe-west1
+  zone: "{{ zone }}"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm.yaml"
 network: "default"
@@ -36,6 +38,8 @@ custom_vars:
   - c2
   - c2d
   # Disable those partitions for now.
+  # Note the current selected region may not support some of these partitions
+  # consult with https://cloud.google.com/compute/docs/regions-zones/
   #- c3
   #- a208
   #- a216
