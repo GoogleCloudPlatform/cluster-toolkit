@@ -52,8 +52,8 @@ deployment_groups:
       runnable: "cat /sw/hello.txt"
       machine_type: n2-standard-4
       image:
-        family: rocky-linux-8-optimized-gcp
-        project: rocky-linux-cloud
+        family: hpc-rocky-linux-8
+        project: cloud-hpc-image-public
 
   - id: batch-login
     source: modules/scheduler/batch-login-node
