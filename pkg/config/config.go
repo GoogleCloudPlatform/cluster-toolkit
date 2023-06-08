@@ -476,7 +476,7 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 }
 
 // ExportBlueprint exports the internal representation of a blueprint config
-func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error) {
+func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 	var buf bytes.Buffer
 	buf.WriteString(YamlLicense)
 	buf.WriteString("\n")
@@ -485,20 +485,18 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error
 	err := encoder.Encode(&dc.Config)
 	encoder.Close()
 	d := buf.Bytes()
+
 	if err != nil {
-		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
+		return fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
 
-	if outputFilename == "" {
-		return d, nil
-	}
 	err = ioutil.WriteFile(outputFilename, d, 0644)
 	if err != nil {
 		// hitting this error writing yaml
-		return d, fmt.Errorf("%s, Filename: %s: %w",
+		return fmt.Errorf("%s, Filename: %s: %w",
 			errorMessages["fileSaveError"], outputFilename, err)
 	}
-	return nil, nil
+	return nil
 }
 
 // addKindToModules sets the kind to 'terraform' when empty.

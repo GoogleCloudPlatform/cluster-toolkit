@@ -49,6 +49,6 @@ var (
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
-	dc.ExportBlueprint(outputFilename)
+	cobra.CheckErr(dc.ExportBlueprint(outputFilename))
 	fmt.Printf("Expanded Environment Definition created successfully, saved as %s.\n", outputFilename)
 }
