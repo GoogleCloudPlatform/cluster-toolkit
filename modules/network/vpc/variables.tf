@@ -208,6 +208,17 @@ variable "extra_iap_ports" {
   default     = []
 }
 
+variable "allowed_ssh_ip_ranges" {
+  type        = list(string)
+  description = "A list of CIDR IP ranges from which to allow ssh access"
+  default     = []
+
+  validation {
+    condition     = alltrue([for r in var.allowed_ssh_ip_ranges : can(cidrhost(r, 32))])
+    error_message = "Each element of var.allowed_ssh_ip_ranges must be a valid CIDR-formatted IPv4 range."
+  }
+}
+
 variable "firewall_rules" {
   type        = any
   description = "List of firewall rules"
