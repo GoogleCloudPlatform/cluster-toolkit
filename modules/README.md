@@ -472,7 +472,7 @@ For example, if all modules are to be created in a single region, that region
 can be defined as a deployment variable named `region`, which is shared between
 all modules without an explicit setting. Similarly, if many modules need to be
 connected to the same VPC network, they all can add the vpc module ID to their
-`use` list so that `network_name` would be inferred from that vpc module rather
+`use` list so that `network_self_link` would be inferred from that vpc module rather
 than having to set it manually.
 
 * **project_id**: The GCP project ID in which to create the GCP resources.
@@ -484,7 +484,6 @@ than having to set it manually.
   will be created in.
 * **zone**: The GCP [zone](https://cloud.google.com/compute/docs/regions-zones)
   the module will be created in.
-* **network_name**: The name of the network a module will use or connect to.
 * **labels**:
   [Labels](https://cloud.google.com/resource-manager/docs/creating-managing-labels)
   added to the module. In order to include any module in advanced
@@ -493,42 +492,5 @@ than having to set it manually.
 
 ## Writing Custom HPC Modules
 
-Modules are flexible by design, however we do define some best practices when
+Modules are flexible by design, however we do define some [best practices](../docs/module-guidelines.md) when
 creating a new module meant to be used with the HPC Toolkit.
-
-### Terraform Requirements
-
-The module source field must point to a single terraform module. We recommend
-the following structure:
-
-* main.tf file composing the terraform resources using provided variables.
-* variables.tf file defining the variables used.
-* (Optional) outputs.tf file defining any exported outputs used (if any).
-* (Optional) modules/ sub-directory pointing to submodules needed to create the
-  top level module.
-
-### General Best Practices
-
-* Variables for environment-specific values (like project_id) should not be
-  given defaults. This forces the calling module to provide meaningful values.
-* Variables should only have zero-value defaults (like null or empty strings)
-  where leaving the variable empty is a valid preference which will not be
-  rejected by the underlying API(s).
-* Set good defaults wherever possible. Be opinionated about HPC use cases.
-* Follow common variable [naming conventions](#common-settings).
-
-### Terraform Coding Standards
-
-Any Terraform based modules in the HPC Toolkit should implement the following
-standards:
-
-* terraform-docs is used to generate README files for each module.
-* The first parameter listed under a module should be source (when referring to
-  an external implementation).
-* The order for parameters in inputs should be:
-  * description
-  * type
-  * default
-* The order for parameters in outputs should be:
-  * description
-  * value
