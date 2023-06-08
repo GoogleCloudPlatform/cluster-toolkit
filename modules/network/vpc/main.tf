@@ -101,6 +101,26 @@ locals {
     }
   }
 
+  allow_ssh_ingress = {
+    name                    = "${local.network_name}-fw-allow-ssh-ingress"
+    description             = "allow SSH access"
+    direction               = "INGRESS"
+    priority                = null
+    ranges                  = var.allowed_ssh_ip_ranges
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = ["22"]
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
   allow_internal_traffic = {
     name                    = "${local.network_name}-fw-allow-internal-traffic"
     priority                = null
@@ -130,6 +150,7 @@ locals {
 
   firewall_rules = concat(
     var.firewall_rules,
+    length(var.allowed_ssh_ip_ranges) > 0 ? [local.allow_ssh_ingress] : [],
     var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
     length(local.iap_ports) > 0 ? [local.allow_iap_ingress] : []
   )
