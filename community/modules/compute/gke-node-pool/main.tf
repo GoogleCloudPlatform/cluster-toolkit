@@ -89,6 +89,13 @@ resource "google_container_node_pool" "node_pool" {
       enable_integrity_monitoring = true
     }
 
+    dynamic "gcfs_config" {
+      for_each = var.enable_gcfs ? [1] : []
+      content {
+        enabled = true
+      }
+    }
+
     gvnic {
       enabled = true
     }

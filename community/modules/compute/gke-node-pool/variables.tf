@@ -54,6 +54,12 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "enable_gcfs" {
+  description = "Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config)."
+  type        = bool
+  default     = false
+}
+
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
