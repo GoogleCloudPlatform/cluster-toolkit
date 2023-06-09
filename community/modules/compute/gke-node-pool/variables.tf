@@ -170,6 +170,18 @@ variable "labels" {
   type        = map(string)
 }
 
+variable "timeout_create" {
+  description = "Timeout for creating a node pool"
+  type        = string
+  default     = null
+}
+
+variable "timeout_update" {
+  description = "Timeout for updating a node pool"
+  type        = string
+  default     = null
+}
+
 # Deprecated
 variable "total_min_nodes" {
   description = "DEPRECATED: Use autoscaling_total_min_nodes."

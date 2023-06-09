@@ -154,6 +154,11 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+  }
+
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
