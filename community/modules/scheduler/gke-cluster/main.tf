@@ -169,6 +169,7 @@ resource "google_container_cluster" "gke_cluster" {
 # having to destroy the entire cluster.
 resource "google_container_node_pool" "system_node_pools" {
   provider = google-beta
+  count    = var.system_node_pool_enabled ? 1 : 0
 
   project = var.project_id
   name    = var.system_node_pool_name
