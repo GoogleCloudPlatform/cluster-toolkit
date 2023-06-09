@@ -139,16 +139,16 @@ variable "compact_placement" {
   default     = false
 }
 
-variable "service_account" {
-  description = "Service account to use with the system node pool"
-  type = object({
-    email  = string,
-    scopes = set(string)
-  })
-  default = {
-    email  = null
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-  }
+variable "service_account_email" {
+  description = "Service account e-mail address to use with the node pool"
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to to use with the node pool."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
 }
 
 variable "taints" {
@@ -183,6 +183,7 @@ variable "timeout_update" {
 }
 
 # Deprecated
+
 variable "total_min_nodes" {
   description = "DEPRECATED: Use autoscaling_total_min_nodes."
   type        = number
@@ -200,5 +201,18 @@ variable "total_max_nodes" {
   validation {
     condition     = var.total_max_nodes == null
     error_message = "total_max_nodes was renamed to autoscaling_total_max_nodes and is deprecated; use autoscaling_total_max_nodes"
+  }
+}
+
+variable "service_account" {
+  description = "DEPRECATED: use service_account_email and scopes."
+  type = object({
+    email  = string,
+    scopes = set(string)
+  })
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "service_account is deprecated and replaced with service_account_email and scopes."
   }
 }

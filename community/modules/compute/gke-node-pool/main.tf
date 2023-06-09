@@ -20,7 +20,7 @@ locals {
 }
 
 locals {
-  sa_email = var.service_account.email != null ? var.service_account.email : data.google_compute_default_service_account.default_sa.email
+  sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
   has_gpu = var.guest_accelerator != null || contains(["a2", "g2"], local.machine_family)
   gpu_taint = local.has_gpu ? [{
@@ -76,8 +76,8 @@ resource "google_container_node_pool" "node_pool" {
     disk_size_gb      = var.disk_size_gb
     disk_type         = var.disk_type
     resource_labels   = local.labels
-    service_account   = var.service_account.email
-    oauth_scopes      = var.service_account.scopes
+    service_account   = var.service_account_email
+    oauth_scopes      = var.service_account_scopes
     machine_type      = var.machine_type
     spot              = var.spot
     taint             = concat(var.taints, local.gpu_taint)
