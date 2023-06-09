@@ -75,12 +75,38 @@ locals {
   output_primary_subnetwork_self_link     = local.output_primary_subnetwork.self_link
   output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
 
-  allow_iap_ssh_ingress = {
-    name                    = "${local.network_name}-fw-allow-iap-ssh-ingress"
-    description             = "allow SSH access via Identity-Aware Proxy"
+  iap_ports = distinct(concat(compact([
+    var.enable_iap_rdp_ingress ? "3389" : "",
+    var.enable_iap_ssh_ingress ? "22" : "",
+    var.enable_iap_winrm_ingress ? "5986" : "",
+  ]), var.extra_iap_ports))
+
+  allow_iap_ingress = {
+    name                    = "${local.network_name}-fw-allow-iap-ingress"
+    description             = "allow TCP access via Identity-Aware Proxy"
     direction               = "INGRESS"
     priority                = null
     ranges                  = ["35.235.240.0/20"]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = local.iap_ports
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
+  allow_ssh_ingress = {
+    name                    = "${local.network_name}-fw-allow-ssh-ingress"
+    description             = "allow SSH access"
+    direction               = "INGRESS"
+    priority                = null
+    ranges                  = var.allowed_ssh_ip_ranges
     source_tags             = null
     source_service_accounts = null
     target_tags             = null
@@ -94,27 +120,6 @@ locals {
       metadata = "INCLUDE_ALL_METADATA"
     }
   }
-
-  allow_iap_rdp_ingress = {
-    name                    = "${local.network_name}-fw-allow-iap-rdp-ingress"
-    description             = "allow Windows remote desktop access via Identity-Aware Proxy"
-    direction               = "INGRESS"
-    priority                = null
-    ranges                  = ["35.235.240.0/20"]
-    source_tags             = null
-    source_service_accounts = null
-    target_tags             = null
-    target_service_accounts = null
-    allow = [{
-      protocol = "tcp"
-      ports    = ["3389"]
-    }]
-    deny = []
-    log_config = {
-      metadata = "INCLUDE_ALL_METADATA"
-    }
-  }
-
 
   allow_internal_traffic = {
     name                    = "${local.network_name}-fw-allow-internal-traffic"
@@ -143,10 +148,11 @@ locals {
     }
   }
 
-  firewall_rules = concat(var.firewall_rules,
+  firewall_rules = concat(
+    var.firewall_rules,
+    length(var.allowed_ssh_ip_ranges) > 0 ? [local.allow_ssh_ingress] : [],
     var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
-    var.enable_iap_rdp_ingress ? [local.allow_iap_rdp_ingress] : [],
-    var.enable_iap_ssh_ingress ? [local.allow_iap_ssh_ingress] : [],
+    length(local.iap_ports) > 0 ? [local.allow_iap_ingress] : []
   )
 }
 
