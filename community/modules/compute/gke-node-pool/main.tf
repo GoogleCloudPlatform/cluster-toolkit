@@ -28,6 +28,9 @@ locals {
     value  = "present"
     effect = "NO_SCHEDULE"
   }] : []
+
+  autoscale_set   = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
+  static_node_set = var.static_node_count != null
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -40,10 +43,15 @@ resource "google_container_node_pool" "node_pool" {
   name           = var.name == null ? var.machine_type : var.name
   cluster        = var.cluster_id
   node_locations = var.zones
-  autoscaling {
-    total_min_node_count = var.total_min_nodes
-    total_max_node_count = var.total_max_nodes
-    location_policy      = "ANY"
+
+  node_count = var.static_node_count
+  dynamic "autoscaling" {
+    for_each = local.static_node_set ? [] : [1]
+    content {
+      total_min_node_count = var.autoscaling_total_min_nodes
+      total_max_node_count = var.autoscaling_total_max_nodes
+      location_policy      = "ANY"
+    }
   }
 
   management {
@@ -113,6 +121,10 @@ resource "google_container_node_pool" "node_pool" {
     ignore_changes = [
       node_config[0].labels,
     ]
+    precondition {
+      condition     = !local.static_node_set || !local.autoscale_set
+      error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
+    }
   }
 }
 

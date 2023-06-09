@@ -74,17 +74,22 @@ variable "image_type" {
   default     = "COS_CONTAINERD"
 }
 
-# TODO
-variable "total_min_nodes" {
+variable "autoscaling_total_min_nodes" {
   description = "Total minimum number of nodes in the NodePool."
   type        = number
   default     = 0
 }
 
-variable "total_max_nodes" {
+variable "autoscaling_total_max_nodes" {
   description = "Total maximum number of nodes in the NodePool."
   type        = number
   default     = 1000
+}
+
+variable "static_node_count" {
+  description = "The static number of nodes in the node pool. If set, autoscaling will be disabled."
+  type        = number
+  default     = null
 }
 
 variable "auto_upgrade" {
@@ -163,4 +168,25 @@ variable "taints" {
 variable "labels" {
   description = "GCE resource labels to be applied to resources. Key-value pairs."
   type        = map(string)
+}
+
+# Deprecated
+variable "total_min_nodes" {
+  description = "DEPRECATED: Use autoscaling_total_min_nodes."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.total_min_nodes == null
+    error_message = "total_min_nodes was renamed to autoscaling_total_min_nodes and is deprecated; use autoscaling_total_min_nodes"
+  }
+}
+
+variable "total_max_nodes" {
+  description = "DEPRECATED: Use autoscaling_total_max_nodes."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.total_max_nodes == null
+    error_message = "total_max_nodes was renamed to autoscaling_total_max_nodes and is deprecated; use autoscaling_total_max_nodes"
+  }
 }
