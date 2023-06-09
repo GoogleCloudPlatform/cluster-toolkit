@@ -238,3 +238,15 @@ variable "labels" {
   description = "GCE resource labels to be applied to resources. Key-value pairs."
   type        = map(string)
 }
+
+variable "timeout_create" {
+  description = "Timeout for creating a node pool"
+  type        = string
+  default     = null
+}
+
+variable "timeout_update" {
+  description = "Timeout for updating a node pool"
+  type        = string
+  default     = null
+}
