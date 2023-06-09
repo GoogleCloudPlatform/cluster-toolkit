@@ -29,7 +29,7 @@ locals {
     security_group = var.authenticator_security_group
   }]
 
-  sa_email = var.service_account.email != null ? var.service_account.email : data.google_compute_default_service_account.default_sa.email
+  sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -196,8 +196,8 @@ resource "google_container_node_pool" "system_node_pools" {
 
   node_config {
     resource_labels = local.labels
-    service_account = var.service_account.email
-    oauth_scopes    = var.service_account.scopes
+    service_account = var.service_account_email
+    oauth_scopes    = var.service_account_scopes
     machine_type    = var.system_node_pool_machine_type
     taint           = var.system_node_pool_taints
 
