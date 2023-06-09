@@ -127,6 +127,12 @@ variable "enable_persistent_disk_csi" {
   default     = true
 }
 
+variable "system_node_pool_enabled" {
+  description = "Create a system node pool."
+  type        = bool
+  default     = true
+}
+
 variable "system_node_pool_name" {
   description = "Name of the system node pool."
   type        = string
