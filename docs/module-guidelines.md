@@ -1,6 +1,6 @@
 # Module authoring guidelines
 
-Regardless of module type (wrapper or full module) it should adhere to following guidelines.
+Modules should adhere to following guidelines.
 
 ## Terraform Requirements
 
@@ -22,6 +22,9 @@ the following structure:
   rejected by the underlying API(s).
 * Set good defaults wherever possible. Be opinionated about HPC use cases.
 * Follow common variable [naming conventions](#use-common-names-and-types-for-common-variables).
+* If there are common hpc-toolkit variables already defined, then do not set defaults (`region`, `zone`, `project_id`, `deployment_name`, etc.)
+* All files should contain a license header. Headers can be added automatically
+  using `make add-google-license`.
 
 ## Terraform Coding Standards
 
@@ -29,8 +32,8 @@ Any Terraform based modules in the HPC Toolkit should implement the following
 standards:
 
 * `terraform-docs` is used to generate `README` files for each module.
-* The first parameter listed under a module should be `source` (when referring to
-  an external implementation).
+* The first parameter listed under a module should be [`source`](../modules/README.md#source-required)
+  (when referring to an external implementation).
 * The order for parameters in inputs should be:
   * `description`
   * `type`
@@ -84,14 +87,14 @@ Matching names allow implicitly inject variables into the module.
 * `project_id {type=string}` - the GCP project ID in which to create the GCP resources;
 * `labels {type=map(string)}` - [labels](https://cloud.google.com/resource-manager/docs/creating-managing-labels) added to the module. In order to include any module in advanced
   monitoring, labels must be exposed. We strongly recommend that all modules
-  expose this variable;
+  expose this variable. It also makes it easy for customers to filter resources on the cloud console and billing;
 * `region {type=string}` - the GCP;
   [region](https://cloud.google.com/compute/docs/regions-zones) the module will be created in;
 * `zone {type=string}` - the GCP [zone](https://cloud.google.com/compute/docs/regions-zones)
   the module will be created in;
 * `deployment_name {type=string}`  - the name of the current deployment of a blueprint. This
   can help to avoid naming conflicts of modules when multiple deployments are
-  created from the same blueprint.
+  created from the same blueprint. `deployment_name` is often used to determine default resource names, or a prefix to the resource names e.g. [`modules/filestore.deploy_name`](../modules/file-system/filestore/README.md#inputs);
 
 ### `instance_image {type=object({family=string,project=string})}`
 
@@ -107,7 +110,7 @@ Properties of networks are represented by scattered variables:
 * `network_name` - name of the network (avoid using this);
 * `network_id` - ID of the network;
 * `network_self_link` - URI of the VPC (preferred);
-* `subnetwork_name` - yhe name of the primary subnetwork;
+* `subnetwork_name` - the name of the primary subnetwork;
 * `subnetwork_self_link` - self-link to the primary subnetwork (preferred);
 * `subnetwork_address` - address range of the primary subnetwork.
 
