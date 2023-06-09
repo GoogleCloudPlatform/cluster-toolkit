@@ -117,6 +117,11 @@ resource "google_container_node_pool" "node_pool" {
     }
   }
 
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+  }
+
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
