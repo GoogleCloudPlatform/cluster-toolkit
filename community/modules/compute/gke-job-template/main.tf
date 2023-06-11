@@ -48,6 +48,8 @@ locals {
 
   suffix = var.random_name_sufix ? "-${random_id.resource_name_suffix.hex}" : ""
 
+  has_node_selector = var.machine_family != null || length(var.node_selectors) != 0
+
   job_template_contents = templatefile(
     "${path.module}/templates/gke-job-base.yaml.tftpl",
     {
@@ -59,6 +61,7 @@ locals {
       machine_family     = var.machine_family
       node_pool_names    = var.node_pool_name
       node_selectors     = var.node_selectors
+      has_node_selector  = local.has_node_selector
       should_request_cpu = local.should_request_cpu
       full_node_request  = local.full_node_request
       millicpu_request   = "${local.millicpu}m"

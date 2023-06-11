@@ -25,6 +25,7 @@ spec:
                 - ${node_pool}
                 %{~ endfor ~}
       %{~ endif ~}
+      %{~ if has_node_selector ~}
       nodeSelector:
       %{~ if machine_family != null ~}
         cloud.google.com/machine-family: ${machine_family}
@@ -32,6 +33,7 @@ spec:
       %{~ for key, val in node_selectors ~}
         ${key}: ${val}
       %{~ endfor ~}
+      %{~ endif ~}
       tolerations:
       %{~ for toleration in tolerations ~}
       - key: ${toleration.key}
