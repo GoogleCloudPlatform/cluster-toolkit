@@ -43,22 +43,13 @@ deployment_groups:
     settings:
       local_mount: /scratch
 
-  # these runners are no longer necessary, but it is important that we test it still works
-  # even when added twice
-  - id: mount-exascaler
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(scratchfs.install_ddn_lustre_client_runner)
-      - $(scratchfs.mount_runner)
-
   # Create a separate workstation to catch regressions in vm-instance
   - id: workstation
     source: ./modules/compute/vm-instance
     use:
     - network1
     - homefs
-    - mount-exascaler
+    - scratchfs
     settings:
       name_prefix: test-workstation1
       add_deployment_name_before_prefix: true
@@ -78,18 +69,11 @@ deployment_groups:
       local_mount: $(scratchfs.network_storage.local_mount)
       fs_type: $(scratchfs.network_storage.fs_type)
 
-  - id: mount-exascaler-from-pre-existing
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(pre-fs.client_install_runner)
-      - $(pre-fs.mount_runner)
-
   - id: install-luster-from-pre-existing
     source: modules/compute/vm-instance
     use:
     - network1
-    - mount-exascaler-from-pre-existing
+    - pre-fs
     settings:
       name_prefix: test-workstation2
       add_deployment_name_before_prefix: false
