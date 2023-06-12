@@ -20,6 +20,10 @@ vars:
   deployment_name: htcondor-001
   region: us-central1
   zone: us-central1-c
+  # Only CentOS 7 and Rocky 8 are supported; for CentOS 7, remove next 2 lines
+  instance_image:
+    project: cloud-hpc-image-public
+    family: hpc-rocky-linux-8
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
