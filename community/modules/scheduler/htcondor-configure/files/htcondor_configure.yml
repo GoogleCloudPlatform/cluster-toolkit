@@ -41,7 +41,6 @@
   - name: Set HTCondor Pool password (token signing key)
     ansible.builtin.shell: |
       set -e -o pipefail
-      export CLOUDSDK_PYTHON=/usr/bin/python
       POOL_PASSWORD=$(gcloud secrets versions access latest --secret={{ password_id }})
       echo -n "$POOL_PASSWORD" | sh -c "condor_store_cred add -c -i -"
     args:
