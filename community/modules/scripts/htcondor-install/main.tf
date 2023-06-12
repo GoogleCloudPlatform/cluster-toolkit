@@ -19,7 +19,10 @@ locals {
     "type"        = "ansible-local"
     "source"      = "${path.module}/files/install-htcondor.yaml"
     "destination" = "install-htcondor.yaml"
-    "args"        = "-e enable_docker=${var.enable_docker}"
+    "args" = join(" ", [
+      "-e enable_docker=${var.enable_docker}",
+      "-e condor_version=${var.condor_version}",
+    ])
   }
 
   runner_install_autoscaler_deps = {
