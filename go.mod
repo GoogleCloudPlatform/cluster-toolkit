@@ -26,7 +26,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/hashicorp/terraform-exec v0.18.1
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
-	google.golang.org/api v0.125.0
+	google.golang.org/api v0.126.0
 )
 
 require (
