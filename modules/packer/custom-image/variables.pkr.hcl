@@ -34,6 +34,12 @@ variable "disk_size" {
   default     = null
 }
 
+variable "disk_type" {
+  description = "Type of persistent disk to provision"
+  type        = string
+  default     = "pd-balanced"
+}
+
 variable "zone" {
   description = "Cloud zone in which to provision image building VM"
   type        = string
