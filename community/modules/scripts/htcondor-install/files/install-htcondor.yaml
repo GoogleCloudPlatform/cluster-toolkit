@@ -28,6 +28,11 @@
     ansible.builtin.package:
       name:
       - epel-release
+  # adding key explicitly addresses https://github.com/ansible/ansible/pull/71640
+  - name: Add HTCondor RPM key
+    ansible.builtin.rpm_key:
+      state: present
+      key: https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-10.x-Key
   - name: Enable HTCondor Feature Release repository
     ansible.builtin.yum_repository:
       name: htcondor-feature
@@ -50,7 +55,7 @@
       priority: "90"
   - name: Install HTCondor
     ansible.builtin.package:
-      name: condor
+      name: condor-{{ condor_version | default("10.*") | string }}
       state: present
   - name: Ensure token directory
     ansible.builtin.file:
@@ -61,6 +66,11 @@
   - name: Install Docker and configure HTCondor to use it
     when: enable_docker | bool  # allows string to be passed at CLI
     block:
+    # adding key explicitly addresses https://github.com/ansible/ansible/pull/71640
+    - name: Add Docker RPM key
+      ansible.builtin.rpm_key:
+        state: present
+        key: https://download.docker.com/linux/centos/gpg
     - name: Setup Docker repo
       ansible.builtin.yum_repository:
         name: docker-ce-stable

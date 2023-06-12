@@ -19,3 +19,9 @@ variable "enable_docker" {
   type        = bool
   default     = true
 }
+
+variable "condor_version" {
+  description = "Yum/DNF-compatible version string; leave unset to default to 10.x series (examples: \"10.5.1\",\"10.*\"))"
+  type        = string
+  default     = "10.*"
+}
