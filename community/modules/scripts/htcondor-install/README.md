@@ -124,6 +124,7 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_condor_version"></a> [condor\_version](#input\_condor\_version) | Yum/DNF-compatible version string; leave unset to default to 10.x series (examples: "10.5.1","10.*")) | `string` | `"10.*"` | no |
 | <a name="input_enable_docker"></a> [enable\_docker](#input\_enable\_docker) | Install and enable docker daemon alongside HTCondor | `bool` | `true` | no |
 
 ## Outputs

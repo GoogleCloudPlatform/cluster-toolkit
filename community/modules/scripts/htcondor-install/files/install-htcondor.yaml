@@ -50,7 +50,7 @@
       priority: "90"
   - name: Install HTCondor
     ansible.builtin.package:
-      name: condor
+      name: condor-{{ condor_version | default("10.*") | string }}
       state: present
   - name: Ensure token directory
     ansible.builtin.file:
