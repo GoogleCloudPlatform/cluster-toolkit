@@ -206,7 +206,9 @@ main() {
 		${venv_python_path} -m pip install ansible=="${REQ_ANSIBLE_PIP_VERSION}"
 	fi
 	while read -r cmd; do
-		ln -s "${venv_path}/bin/${cmd}" "/usr/bin/${cmd}"
+		if ! [ -L "/usr/bin/${cmd}" ]; then
+			ln -s "${venv_path}/bin/${cmd}" "/usr/bin/${cmd}"
+		fi
 	done <<-EOF
 		ansible
 		ansible-config
