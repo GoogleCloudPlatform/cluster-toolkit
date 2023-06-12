@@ -68,6 +68,7 @@ source "googlecompute" "toolkit_image" {
   accelerator_count       = var.accelerator_count
   on_host_maintenance     = local.on_host_maintenance
   disk_size               = var.disk_size
+  disk_type               = var.disk_type
   omit_external_ip        = var.omit_external_ip
   use_internal_ip         = var.omit_external_ip
   subnetwork              = var.subnetwork_name
