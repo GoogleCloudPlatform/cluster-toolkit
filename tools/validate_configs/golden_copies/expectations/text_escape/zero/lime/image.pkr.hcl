@@ -37,13 +37,20 @@ locals {
     local.startup_script_metadata,
   )
 
-  # determine communicator to use and whether to enable Identity-Aware Proxy
-  no_shell_scripts     = length(var.shell_scripts) == 0
-  no_ansible_playbooks = length(var.ansible_playbooks) == 0
-  no_provisioners      = local.no_shell_scripts && local.no_ansible_playbooks
-  communicator_default = local.no_provisioners ? "none" : "ssh"
-  communicator         = var.communicator == null ? local.communicator_default : var.communicator
-  use_iap              = local.communicator == "none" ? false : var.use_iap
+  # default to explicit var.communicator, otherwise in-order: ssh/winrm/none
+  shell_script_communicator      = length(var.shell_scripts) > 0 ? "ssh" : ""
+  ansible_playbook_communicator  = length(var.ansible_playbooks) > 0 ? "ssh" : ""
+  powershell_script_communicator = length(var.powershell_scripts) > 0 ? "winrm" : ""
+  communicator = coalesce(
+    var.communicator,
+    local.shell_script_communicator,
+    local.ansible_playbook_communicator,
+    local.powershell_script_communicator,
+    "none"
+  )
+
+  # must not enable IAP when no communicator is in use
+  use_iap = local.communicator == "none" ? false : var.use_iap
 
   # determine best value for on_host_maintenance if not supplied by user
   machine_vals                = split("-", var.machine_type)
@@ -55,6 +62,10 @@ locals {
     ? var.on_host_maintenance
     : local.on_host_maintenance_default
   )
+
+  winrm_username = local.communicator == "winrm" ? "packer_user" : null
+  winrm_insecure = local.communicator == "winrm" ? true : null
+  winrm_use_ssl  = local.communicator == "winrm" ? true : null
 }
 
 source "googlecompute" "toolkit_image" {
@@ -68,6 +79,7 @@ source "googlecompute" "toolkit_image" {
   accelerator_count       = var.accelerator_count
   on_host_maintenance     = local.on_host_maintenance
   disk_size               = var.disk_size
+  disk_type               = var.disk_type
   omit_external_ip        = var.omit_external_ip
   use_internal_ip         = var.omit_external_ip
   subnetwork              = var.subnetwork_name
@@ -80,6 +92,9 @@ source "googlecompute" "toolkit_image" {
   tags                    = var.tags
   use_iap                 = local.use_iap
   use_os_login            = var.use_os_login
+  winrm_username          = local.winrm_username
+  winrm_insecure          = local.winrm_insecure
+  winrm_use_ssl           = local.winrm_use_ssl
   zone                    = var.zone
   labels                  = var.labels
   metadata                = local.metadata
@@ -104,6 +119,16 @@ build {
     content {
       execute_command = "sudo -H sh -c '{{ .Vars }} {{ .Path }}'"
       script          = provisioner.value
+    }
+  }
+
+  # provisioner "powershell" blocks
+  dynamic "provisioner" {
+    labels   = ["powershell"]
+    for_each = var.powershell_scripts
+    content {
+      elevated_user = "Administrator"
+      script        = provisioner.value
     }
   }
 
