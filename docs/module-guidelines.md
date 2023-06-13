@@ -17,14 +17,14 @@ the following structure:
 
 * Variables for environment-specific values (like `project_id`) should not be
   given defaults. This forces the calling module to provide meaningful values.
-* Variables should only have zero-value defaults (like null or empty strings)
+* Variables should only have zero-value defaults, such as null (preferred) or empty string,
   where leaving the variable empty is a valid preference which will not be
   rejected by the underlying API(s).
 * Set good defaults wherever possible. Be opinionated about HPC use cases.
 * Follow common variable [naming conventions](#use-common-names-and-types-for-common-variables).
 * If there are common hpc-toolkit variables already defined, then do not set defaults (`region`, `zone`, `project_id`, `deployment_name`, etc.)
-* All files should contain a license header. Headers can be added automatically
-  using `make add-google-license`.
+* All files should contain a license header. Headers can be added automatically using [addlicense](https://github.com/google/addlicense),
+  or `make add-google-license` if adding a Google License.
 
 ## Terraform Coding Standards
 
@@ -32,8 +32,6 @@ Any Terraform based modules in the HPC Toolkit should implement the following
 standards:
 
 * `terraform-docs` is used to generate `README` files for each module.
-* The first parameter listed under a module should be [`source`](../modules/README.md#source-required)
-  (when referring to an external implementation).
 * The order for parameters in inputs should be:
   * `description`
   * `type`
@@ -63,7 +61,7 @@ For instance, in networks `network_self_link` over `network_name`, `subnetwork_s
 
 ## All resources should be labeled
 
-The module should take a variable called labels and apply it to every resource.
+The module, if it creates any resource, should take a variable called `labels` and apply it to every resource.
 
 ```hcl
 variable "labels" {
