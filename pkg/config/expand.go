@@ -45,37 +45,33 @@ var (
 
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
-func (dc *DeploymentConfig) expand() {
+func (dc *DeploymentConfig) expand() error {
 	if err := dc.addMetadataToModules(); err != nil {
 		log.Printf("could not determine required APIs: %v", err)
 	}
 
 	if err := dc.expandBackends(); err != nil {
-		log.Fatalf("failed to apply default backend to deployment groups: %v", err)
+		return fmt.Errorf("failed to apply default backend to deployment groups: %v", err)
 	}
 
 	if err := dc.addDefaultValidators(); err != nil {
-		log.Fatalf(
-			"failed to update validators when expanding the config: %v", err)
+		return fmt.Errorf("failed to update validators when expanding the config: %v", err)
 	}
 
 	if err := dc.combineLabels(); err != nil {
-		log.Fatalf(
-			"failed to update module labels when expanding the config: %v", err)
+		return fmt.Errorf("failed to update module labels when expanding the config: %v", err)
 	}
 
 	if err := dc.applyUseModules(); err != nil {
-		log.Fatalf(
-			"failed to apply \"use\" modules when expanding the config: %v", err)
+		return fmt.Errorf("failed to apply \"use\" modules when expanding the config: %v", err)
 	}
 
 	if err := dc.applyGlobalVariables(); err != nil {
-		log.Fatalf(
-			"failed to apply deployment variables in modules when expanding the config: %v",
-			err)
+		return fmt.Errorf("failed to apply deployment variables in modules when expanding the config: %v", err)
 	}
 
 	dc.Config.populateOutputs()
+	return nil
 }
 
 func (dc *DeploymentConfig) addMetadataToModules() error {

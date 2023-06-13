@@ -50,24 +50,18 @@ func (err *InvalidSettingError) Error() string {
 }
 
 // validate is the top-level function for running the validation suite.
-func (dc DeploymentConfig) validate() {
-	// Drop the flags for log to improve readability only for running the validation suite
-	log.SetFlags(0)
-
+func (dc DeploymentConfig) validate() error {
 	// variables should be validated before running validators
 	if err := dc.executeValidators(); err != nil {
-		log.Fatal(err)
+		return err
 	}
-
 	if err := dc.validateModules(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err := dc.validateModuleSettings(); err != nil {
-		log.Fatal(err)
+		return err
 	}
-
-	// Set it back to the initial value
-	log.SetFlags(log.LstdFlags)
+	return nil
 }
 
 // performs validation of global variables

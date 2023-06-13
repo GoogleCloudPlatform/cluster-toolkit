@@ -57,6 +57,9 @@ HPC deployments on the Google Cloud Platform.`,
 
 // Execute the root command
 func Execute() error {
+	// Don't prefix messages with data & time to improve readability.
+	// See https://pkg.go.dev/log#pkg-constants
+	log.SetFlags(0)
 
 	mismatch, branch, hash, dir := checkGitHashMismatch()
 	if mismatch {
