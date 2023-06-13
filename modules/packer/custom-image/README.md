@@ -241,6 +241,7 @@ No resources.
 | <a name="input_communicator"></a> [communicator](#input\_communicator) | Communicator to use for provisioners that require access to VM ("ssh" or "winrm") | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
+| <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Type of persistent disk to provision | `string` | `"pd-balanced"` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | The family name of the image to be built. Defaults to `deployment_name` | `string` | `null` | no |
 | <a name="input_image_name"></a> [image\_name](#input\_image\_name) | The name of the image to be built. If not supplied, it will be set to image\_family-$ISO\_TIMESTAMP | `string` | `null` | no |
 | <a name="input_image_storage_locations"></a> [image\_storage\_locations](#input\_image\_storage\_locations) | Storage location, either regional or multi-regional, where snapshot content is to be stored and only accepts 1 value.<br>See https://developer.hashicorp.com/packer/plugins/builders/googlecompute#image_storage_locations | `list(string)` | `null` | no |
@@ -251,6 +252,7 @@ No resources.
 | <a name="input_network_project_id"></a> [network\_project\_id](#input\_network\_project\_id) | Project ID of Shared VPC network | `string` | `null` | no |
 | <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `true` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except the use of GPUs requires it to be `TERMINATE` | `string` | `null` | no |
+| <a name="input_powershell_scripts"></a> [powershell\_scripts](#input\_powershell\_scripts) | A list of paths to local powershell scripts which will be uploaded to customize the Windows VM image (requires WinRM communicator) | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which to create VM and image | `string` | n/a | yes |
 | <a name="input_scopes"></a> [scopes](#input\_scopes) | Service account scopes to attach to the instance. See<br>https://cloud.google.com/compute/docs/access/service-accounts. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/userinfo.email",<br>  "https://www.googleapis.com/auth/compute",<br>  "https://www.googleapis.com/auth/devstorage.full_control",<br>  "https://www.googleapis.com/auth/logging.write"<br>]</pre> | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The service account email to use. If null or 'default', then the default Compute Engine service account will be used. | `string` | `null` | no |
