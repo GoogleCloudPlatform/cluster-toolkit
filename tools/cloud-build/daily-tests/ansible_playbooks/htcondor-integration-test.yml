@@ -33,18 +33,14 @@
       file: tasks/create_deployment_directory.yml
   - name: Create Infrastructure and test
     block:
-    - name: Setup network and HTCondor install scripts
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor"
+    - name: Execute ghpc deploy
+      register: deployment
+      changed_when: deployment.changed
+      ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
       args:
-        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
+        chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      with_items:
-      - terraform init
-      - terraform validate
-      - terraform apply -auto-approve -no-color
     - name: Print instance IDs of VMs
       ansible.builtin.include_tasks:
         file: tasks/get_instance_ids.yml
@@ -52,10 +48,10 @@
       register: access_ip
       changed_when: false
       args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor"
+        chdir: "{{ workspace }}/{{ deployment_name }}/pool"
         executable: /bin/bash
       ansible.builtin.shell: |
-        set -o pipefail
+        set -e -o pipefail
         terraform output -json external_ip_htcondor_access | jq -r '.[0]'
     - name: Add Login node as host
       ansible.builtin.add_host:
@@ -66,9 +62,12 @@
     - name: Get Builder IP
       register: build_ip
       changed_when: false
-      ansible.builtin.shell: >-
-        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
-         awk -F'"' '{print $2}'
+      args:
+        executable: /bin/bash
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
+            awk -F'"' '{print $2}'
     - name: Create firewall rule
       register: fw_result
       changed_when: fw_result.rc == 0
@@ -111,19 +110,25 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-    - name: Tear Down Pool
-      changed_when: true  # assume something destroyed
-      failed_when: false  # keep cleaning up
-      run_once: true
-      delegate_to: localhost
+    - name: Destroy deployment
+      register: ghpc_destroy
+      changed_when: ghpc_destroy.changed
+      ignore_errors: true
+      ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
+      args:
+        chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor"
-      with_items:
-      - terraform init
-      - terraform destroy -auto-approve
+    - name: Delete VM Image
+      register: image_deletion
+      changed_when: image_deletion.changed
+      ignore_errors: true
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+        executable: /bin/bash
 
 - name: Run Integration Tests
   hosts: remote_host
@@ -148,7 +153,6 @@
         timeout: 480
     - name: Run Integration tests for HPC toolkit
       ansible.builtin.include_tasks: "{{ test }}"
-      run_once: true
       vars:
         access_point: "{{ access_point }}"
       loop: "{{ post_deploy_tests }}"
@@ -156,11 +160,10 @@
         loop_var: test
     always:
     - name: Delete Firewall Rule
+      delegate_to: localhost
       register: fw_deleted
       changed_when: fw_deleted.rc == 0
       failed_when: false  # keep cleaning up
-      run_once: true
-      delegate_to: localhost
       ansible.builtin.command:
         argv:
         - gcloud
@@ -168,15 +171,24 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
-    - name: Tear Down Pool
-      changed_when: true  # assume something destroyed
+    - name: Destroy deployment
       delegate_to: localhost
-      run_once: true
+      register: ghpc_destroy
+      changed_when: ghpc_destroy.changed
+      ignore_errors: true
+      ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
+      args:
+        chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/htcondor"
-      with_items:
-      - terraform init
-      - terraform destroy -auto-approve
+    - name: Delete VM Image
+      delegate_to: localhost
+      register: image_deletion
+      changed_when: image_deletion.changed
+      ignore_errors: true
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
+      args:
+        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+        executable: /bin/bash
