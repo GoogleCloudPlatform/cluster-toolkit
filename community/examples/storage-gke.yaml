@@ -1,0 +1,78 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: storage-gke
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: storage-gke-01
+  region: us-central1
+  zone: us-central1-c
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <your-ip-address>/32
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: gke-subnet
+      secondary_ranges:
+        gke-subnet:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: gke_cluster
+    source: community/modules/scheduler/gke-cluster
+    use: [network1]
+    settings:
+      enable_filestore_csi: true
+      enable_private_endpoint: false  # Allows for access from authorized public IPs
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: $(vars.authorized_cidr)
+    outputs: [instructions]
+
+  - id: debug_pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      zones: [$(vars.zone)]
+      machine_type: n2-standard-2
+
+  - id: sharedfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings: {local_mount: /shared}
+
+  - id: sharedfs-pv
+    source: community/modules/file-system/gke-persistent-volume
+    use: [gke_cluster, sharedfs]
+
+  - id: job-template
+    source: community/modules/compute/gke-job-template
+    use: [debug_pool, sharedfs-pv]
+    settings:
+      image: bash
+      command:
+      - bash
+      - -c
+      - echo \$(date) >> /shared/timestamp.log; cat /shared/timestamp.log
+      node_count: 3
+    outputs: [instructions]
