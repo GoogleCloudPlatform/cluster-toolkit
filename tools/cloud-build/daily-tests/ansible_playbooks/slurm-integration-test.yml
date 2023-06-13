@@ -86,11 +86,14 @@
 
     ## Setup firewall for cloud build
     - name: Get Builder IP
-      changed_when: false
-      ansible.builtin.shell: >-
-        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com |
-         awk -F'"' '{print $2}'
       register: build_ip
+      changed_when: false
+      args:
+        executable: /bin/bash
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
+            awk -F'"' '{print $2}'
     - name: Create firewall rule
       register: fw_created
       changed_when: fw_created.rc == 0
@@ -172,7 +175,6 @@
         timeout: 600
     - name: Run Integration tests for HPC toolkit
       ansible.builtin.include_tasks: "{{ test }}"
-      run_once: true
       vars:
         login_node: "{{ login_node }}"
         custom_vars: "{{ custom_vars }}"
