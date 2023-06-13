@@ -17,14 +17,11 @@ package config
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 
 	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	. "gopkg.in/check.v1"
 )
 
@@ -190,53 +187,6 @@ func (s *MySuite) TestAddDefaultValidators(c *C) {
 	dc.Config.Vars.Set("zone", cty.StringVal("us-central1-c"))
 	dc.addDefaultValidators()
 	c.Assert(dc.Config.Validators, HasLen, 7)
-}
-
-func (s *MySuite) TestMergeBlueprintRequirements(c *C) {
-	map1 := make(map[string][]string)
-	map2 := make(map[string][]string)
-
-	// each expected value should individually be sorted and have no duplicate
-	// elements, although different values may share elements
-	expectedValues1 := []string{"bar", "bat"}
-	expectedValues2 := []string{"value2", "value3"}
-
-	reversedValues1 := slices.Clone(expectedValues1)
-	sort.Sort(sort.Reverse(sort.StringSlice(reversedValues1)))
-
-	// TEST: merge with identical keys and duplicate elements in values
-	map1["key1"] = slices.Clone(reversedValues1)
-	map2["key1"] = []string{expectedValues1[0], expectedValues1[0]}
-	map3 := mergeBlueprintRequirements(map1, map2)
-
-	// expected value (duplicates removed and sorted)
-	expectedMap := map[string][]string{
-		"key1": expectedValues1,
-	}
-	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
-
-	// unexpected value (duplicates removed and reverse sorted)
-	unexpectedMap := map[string][]string{
-		"key1": reversedValues1,
-	}
-	c.Assert(maps.EqualFunc(map3, unexpectedMap, slices.Equal[string]), Equals, false)
-
-	// TEST: merge with additional key in 1st map
-	map1["key2"] = []string{expectedValues2[1], expectedValues2[0]}
-	map3 = mergeBlueprintRequirements(map1, map2)
-
-	// test the expected value (duplicates removed and sorted)
-	expectedMap = map[string][]string{
-		"key1": slices.Clone(expectedValues1),
-		"key2": slices.Clone(expectedValues2),
-	}
-	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
-
-	// TEST: merge with additional key in 2nd map (expected value unchanged!)
-	delete(map1, "key2")
-	map2["key2"] = slices.Clone(expectedValues2)
-	map3 = mergeBlueprintRequirements(map1, map2)
-	c.Assert(maps.EqualFunc(map3, expectedMap, slices.Equal[string]), Equals, true)
 }
 
 func (s *MySuite) TestExecuteValidators(c *C) {

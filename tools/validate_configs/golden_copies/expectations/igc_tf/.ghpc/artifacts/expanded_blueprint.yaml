@@ -65,9 +65,6 @@ deployment_groups:
           deployment_name: ((var.deployment_name ))
           project_id: ((var.project_id ))
           region: ((var.region ))
-        required_apis:
-          $(vars.project_id):
-            - compute.googleapis.com
     kind: terraform
   - group: one
     terraform_backend:
@@ -94,9 +91,6 @@ deployment_groups:
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))
-        required_apis:
-          $(vars.project_id):
-            - file.googleapis.com
     kind: terraform
 terraform_backend_defaults:
   type: ""

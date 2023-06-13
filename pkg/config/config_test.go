@@ -204,8 +204,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	setTestModuleInfo(testModule, testModuleInfo)
 	setTestModuleInfo(testModuleWithLabels, testModuleInfo)
 
-	// the next two steps simulate relevant steps in ghpc expand
-	dc.addMetadataToModules()
+	// the next step simulates relevant step in ghpc expand
 	dc.addDefaultValidators()
 
 	return dc
@@ -224,6 +223,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 			},
 		},
 	}
+
 	return DeploymentConfig{
 		Config: Blueprint{
 			BlueprintName:    "simple",
@@ -356,7 +356,6 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		},
 	}
 
-	dc.addMetadataToModules()
 	dc.addDefaultValidators()
 	return dc
 }
@@ -393,7 +392,12 @@ func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 // config.go
 func (s *MySuite) TestExpandConfig(c *C) {
 	dc := getBasicDeploymentConfigWithTestModule()
-	dc.ExpandConfig()
+	for v := range dc.getValidators() { // skip all validators
+		dc.Config.Validators = append(
+			dc.Config.Validators,
+			validatorConfig{Validator: v, Skip: true})
+	}
+	c.Check(dc.ExpandConfig(), IsNil)
 }
 
 func (s *MySuite) TestCheckModulesAndGroups(c *C) {

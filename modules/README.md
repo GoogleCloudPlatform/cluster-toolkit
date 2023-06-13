@@ -433,33 +433,10 @@ in the project used by the HPC environment. For example, the [creation of
 VMs](compute/vm-instance/) requires the Compute Engine API
 (compute.googleapis.com). The [startup-script](scripts/startup-script/) module
 requires the Cloud Storage API (storage.googleapis.com) for storage of the
-scripts themselves. Each module includes in the Toolkit source code describes
-its required APIs internally. The Toolkit will merge the requiements from all
+scripts themselves. Each module included in the Toolkit source code describes
+its required APIs internally. The Toolkit will merge the requirements from all
 modules and [automatically validate](../README.md#blueprint-validation) that all
 APIs are enabled in the project specified by `$(vars.project_id)`.
-
-For advanced multi-project use cases and for modules not included with the
-Toolkit, you may manually add required APIs to each module with the following
-format:
-
-```yaml
-deployment_groups:
-- group: primary
-  modules:
-  ...
-  - id: examplevm
-    source: modules/example/module
-    required_apis:
-      $(vars.project_id):
-      - compute.googleapis.com
-      - storage.googleapis.com
-      $(vars.other_project_id):
-      - storage.googleapis.com
-      explicit-project-id:
-      - file.googleapis.com
-    settings:
-    ...
-```
 
 ## Common Settings
 
