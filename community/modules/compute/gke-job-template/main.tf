@@ -45,8 +45,15 @@ locals {
   # May come from node pool in future.
   gpu_limit_string = alltrue(var.has_gpu) ? "1" : null
 
-  suffix = var.random_name_sufix ? "-${random_id.resource_name_suffix.hex}" : ""
+  volumes = [for v in var.persistent_volume_claim :
+    {
+      name       = "vol-${v.name}"
+      mount_path = v.mount_path
+      claim_name = v.name
+    }
+  ]
 
+  suffix = var.random_name_sufix ? "-${random_id.resource_name_suffix.hex}" : ""
   machine_family_node_selector = var.machine_family != null ? [{
     key   = "cloud.google.com/machine-family"
     value = var.machine_family
@@ -70,6 +77,7 @@ locals {
       backoff_limit     = var.backoff_limit
       tolerations       = distinct(var.tolerations)
       labels            = local.labels
+      volumes           = local.volumes
     }
   )
 

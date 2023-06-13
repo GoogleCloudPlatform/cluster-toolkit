@@ -113,6 +113,16 @@ variable "random_name_sufix" {
   default     = true
 }
 
+variable "persistent_volume_claim" {
+  description = "A list of objects that describes a k8s PVC that is to be used and mounted on the job. Generally supplied by the gke-persistent-volume module."
+  type = list(object({
+    name          = string
+    mount_path    = string
+    mount_options = string
+  }))
+  default = []
+}
+
 variable "labels" {
   description = "Labels to add to the GKE job template. Key-value pairs."
   type        = map(string)
