@@ -63,9 +63,6 @@ deployment_groups:
           deployment_name: ((var.deployment_name ))
           project_id: ((var.project_id ))
           region: ((var.region ))
-        required_apis:
-          $(vars.project_id):
-            - compute.googleapis.com
       - source: modules/file-system/filestore
         kind: terraform
         id: homefs
@@ -85,9 +82,6 @@ deployment_groups:
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))
-        required_apis:
-          $(vars.project_id):
-            - file.googleapis.com
       - source: modules/file-system/filestore
         kind: terraform
         id: projectsfs
@@ -107,9 +101,6 @@ deployment_groups:
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))
-        required_apis:
-          $(vars.project_id):
-            - file.googleapis.com
       - source: modules/scripts/startup-script
         kind: terraform
         id: script
@@ -135,9 +126,6 @@ deployment_groups:
                 echo "Hello, World!"
               destination: hello.sh
               type: shell
-        required_apis:
-          $(vars.project_id):
-            - storage.googleapis.com
     kind: terraform
   - group: one
     terraform_backend:
@@ -161,10 +149,6 @@ deployment_groups:
           startup_script: ((module.script.startup_script))
           subnetwork_name: ((module.network0.subnetwork_name))
           zone: ((var.zone ))
-        required_apis:
-          $(vars.project_id):
-            - compute.googleapis.com
-            - storage.googleapis.com
     kind: packer
 terraform_backend_defaults:
   type: ""

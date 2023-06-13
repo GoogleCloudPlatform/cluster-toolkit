@@ -16,7 +16,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 
@@ -46,10 +45,6 @@ var (
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() error {
-	if err := dc.addMetadataToModules(); err != nil {
-		log.Printf("could not determine required APIs: %v", err)
-	}
-
 	if err := dc.expandBackends(); err != nil {
 		return fmt.Errorf("failed to apply default backend to deployment groups: %v", err)
 	}
@@ -72,25 +67,6 @@ func (dc *DeploymentConfig) expand() error {
 
 	dc.Config.populateOutputs()
 	return nil
-}
-
-func (dc *DeploymentConfig) addMetadataToModules() error {
-	return dc.Config.WalkModules(func(mod *Module) error {
-		if mod.RequiredApis != nil {
-			return nil
-		}
-		if dc.Config.Vars.Get("project_id").Type() != cty.String {
-			return fmt.Errorf("global variable project_id must be defined")
-		}
-		requiredAPIs := mod.InfoOrDie().RequiredApis
-		if requiredAPIs == nil {
-			requiredAPIs = []string{}
-		}
-		mod.RequiredApis = map[string][]string{
-			"$(vars.project_id)": requiredAPIs,
-		}
-		return nil
-	})
 }
 
 func (dc *DeploymentConfig) expandBackends() error {

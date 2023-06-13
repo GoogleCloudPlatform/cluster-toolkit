@@ -68,10 +68,6 @@ deployment_groups:
           project_id: ((var.project_id))
           subnetwork_name: \$(purple
           zone: ((var.zone))
-        required_apis:
-          $(vars.project_id):
-            - compute.googleapis.com
-            - storage.googleapis.com
     kind: packer
 terraform_backend_defaults:
   type: ""
