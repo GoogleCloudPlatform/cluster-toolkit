@@ -24,6 +24,7 @@
   ansible.builtin.command: condor_status -collector -autoformat HostsTotal
   register: hosts_total
   changed_when: False
+  # must match total min_idle settings of execute-point modules in blueprint
   until: hosts_total.stdout == "2"
   retries: 20
   delay: 15

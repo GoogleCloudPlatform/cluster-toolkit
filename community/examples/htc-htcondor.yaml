@@ -21,7 +21,7 @@ vars:
   region: us-central1
   zone: us-central1-c
   disk_size_gb: 100
-  image_family: htcondor-10x
+  new_image_family: htcondor-10x
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -55,7 +55,7 @@ deployment_groups:
     settings:
       disk_size: $(vars.disk_size_gb)
       source_image_family: hpc-rocky-linux-8
-      image_family: $(vars.image_family)
+      image_family: $(vars.new_image_family)
 
 - group: pool
   modules:
@@ -79,7 +79,7 @@ deployment_groups:
       name_prefix: cm
       instance_image:
         project: $(vars.project_id)
-        family: $(vars.image_family)
+        family: $(vars.new_image_family)
       add_deployment_name_before_prefix: true
       machine_type: c2-standard-4
       disable_public_ips: true
@@ -118,7 +118,7 @@ deployment_groups:
     settings:
       instance_image:
         project: $(vars.project_id)
-        family: $(vars.image_family)
+        family: $(vars.new_image_family)
       min_idle: 2
       service_account:
         email: $(htcondor_configure.execute_point_service_account)
@@ -134,7 +134,7 @@ deployment_groups:
       spot: true
       instance_image:
         project: $(vars.project_id)
-        family: $(vars.image_family)
+        family: $(vars.new_image_family)
       service_account:
         email: $(htcondor_configure.execute_point_service_account)
         scopes:
@@ -171,7 +171,7 @@ deployment_groups:
       name_prefix: ap
       instance_image:
         project: $(vars.project_id)
-        family: $(vars.image_family)
+        family: $(vars.new_image_family)
       add_deployment_name_before_prefix: true
       machine_type: c2-standard-4
       service_account:
