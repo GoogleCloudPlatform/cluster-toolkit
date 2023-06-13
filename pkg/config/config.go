@@ -303,7 +303,6 @@ type Module struct {
 	WrapSettingsWith map[string][]string
 	Outputs          []modulereader.OutputInfo `yaml:"outputs,omitempty"`
 	Settings         Dict
-	RequiredApis     map[string][]string `yaml:"required_apis"`
 }
 
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
