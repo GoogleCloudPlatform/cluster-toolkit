@@ -497,3 +497,46 @@ func (s *MySuite) TestValidateModuleReference(c *C) {
 	c.Check(validateModuleReference(bp, y, pkr.ID), NotNil)
 
 }
+
+func (s *MySuite) TestIntersection(c *C) {
+	is := intersection([]string{"A", "B", "C"}, []string{"A", "B", "C"})
+	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
+
+	is = intersection([]string{"A", "B", "C"}, []string{"C", "B", "A"})
+	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
+
+	is = intersection([]string{"C", "B", "A"}, []string{"A", "B", "C", "C"})
+	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
+
+	is = intersection([]string{"A", "B", "C"}, []string{"D", "C", "B", "A"})
+	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
+
+	is = intersection([]string{"A", "C"}, []string{"D", "C", "B", "A"})
+	c.Assert(is, DeepEquals, []string{"A", "C"})
+
+	is = intersection([]string{"A", "C"}, []string{})
+	c.Assert(is, DeepEquals, []string{})
+
+	is = intersection([]string{"A", "C"}, nil)
+	c.Assert(is, DeepEquals, []string{})
+}
+
+func (s *MySuite) TestOutputNamesByGroup(c *C) {
+	dc := getMultiGroupDeploymentConfig()
+	dc.applyGlobalVariables()
+	dc.applyUseModules()
+
+	group0 := dc.Config.DeploymentGroups[0]
+	mod0 := group0.Modules[0]
+	group1 := dc.Config.DeploymentGroups[1]
+
+	outputNamesGroup0, err := OutputNamesByGroup(group0, dc)
+	c.Assert(err, IsNil)
+	c.Assert(outputNamesGroup0, DeepEquals, map[GroupName][]string{})
+
+	outputNamesGroup1, err := OutputNamesByGroup(group1, dc)
+	c.Assert(err, IsNil)
+	c.Assert(outputNamesGroup1, DeepEquals, map[GroupName][]string{
+		group0.Name: {AutomaticOutputName("test_inter_0", mod0.ID)},
+	})
+}

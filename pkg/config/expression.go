@@ -68,46 +68,72 @@ func MakeStringInterpolationError(s string) error {
 		"variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally. \n%s", hint)
 }
 
-// SimpleVarToReference takes a string `$(...)` and transforms it to `Reference`
-func SimpleVarToReference(s string) (Reference, error) {
+// Takes `$(expression)` and returns `expression`
+func extractSimpleVarExpression(s string) (string, error) {
 	if !hasVariable(s) {
-		return Reference{}, fmt.Errorf("%#v is not a variable", s)
+		return "", fmt.Errorf("%#v is not a variable", s)
 	}
 	if !isSimpleVariable(s) {
-		return Reference{}, MakeStringInterpolationError(s)
+		return "", MakeStringInterpolationError(s)
 	}
 	contents := simpleVariableExp.FindStringSubmatch(s)
 	if len(contents) != 2 { // Should always be (match, contents) here
-		return Reference{}, fmt.Errorf("%s %s, failed to extract contents: %v",
-			errorMessages["invalidVar"], s, contents)
+		return "", fmt.Errorf("%s %s, failed to extract contents: %v", errorMessages["invalidVar"], s, contents)
 	}
-	components := strings.Split(contents[1], ".")
-	if len(components) != 2 {
-		return Reference{}, fmt.Errorf("%s %s, expected format: %s", errorMessages["invalidVar"], s, expectedVarFormat)
+	return contents[1], nil
+}
+
+// Takes traversal in "blueprint namespace" (e.g. `vars.zone` or `homefs.mount`)
+// and transforms it to `Expression`.
+func simpleTraversalToExpression(t hcl.Traversal) (Expression, error) {
+	if len(t) < 2 {
+		return nil, fmt.Errorf(expectedVarFormat)
 	}
-	if components[0] == "vars" {
-		return Reference{
-			GlobalVar: true,
-			Name:      components[1]}, nil
+	attr, ok := t[1].(hcl.TraverseAttr)
+	if !ok {
+		return nil, fmt.Errorf(expectedVarFormat)
 	}
-	return Reference{
-		Module: ModuleID(components[0]),
-		Name:   components[1]}, nil
+
+	var ref Reference
+	if t.RootName() == "vars" {
+		t[0] = hcl.TraverseRoot{Name: "var"}
+		ref = GlobalRef(attr.Name)
+	} else {
+		mod := t.RootName()
+		t[0] = hcl.TraverseAttr{Name: mod}
+		root := hcl.TraverseRoot{Name: "module"}
+		t = append(hcl.Traversal{root}, t...)
+		ref = ModuleRef(ModuleID(mod), attr.Name)
+	}
+
+	return &BaseExpression{
+		e:    &hclsyntax.ScopeTraversalExpr{Traversal: t},
+		toks: hclwrite.TokensForTraversal(t),
+		rs:   []Reference{ref},
+	}, nil
 }
 
 // SimpleVarToExpression takes a string `$(...)` and transforms it to `Expression`
 func SimpleVarToExpression(s string) (Expression, error) {
-	ref, err := SimpleVarToReference(s)
+	s, err := extractSimpleVarExpression(s)
 	if err != nil {
 		return nil, err
 	}
-	var ex Expression
-	if ref.GlobalVar {
-		ex, err = ParseExpression(fmt.Sprintf("var.%s", ref.Name))
-	} else {
-		ex, err = ParseExpression(fmt.Sprintf("module.%s.%s", ref.Module, ref.Name))
+	hexp, diag := hclsyntax.ParseExpression([]byte(s), "", hcl.Pos{})
+	if diag.HasErrors() {
+		return nil, diag
 	}
-	return ex, err
+
+	switch texp := hexp.(type) {
+	case *hclsyntax.ScopeTraversalExpr:
+		exp, err := simpleTraversalToExpression(texp.Traversal)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse variable %q: %w", s, err)
+		}
+		return exp, nil
+	default:
+		return nil, fmt.Errorf("only traversal expressions are supported, got %q", s)
+	}
 }
 
 // TraversalToReference takes HCL traversal and returns `Reference`

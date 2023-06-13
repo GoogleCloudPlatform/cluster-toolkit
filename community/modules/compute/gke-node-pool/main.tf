@@ -22,7 +22,7 @@ locals {
 locals {
   sa_email = var.service_account.email != null ? var.service_account.email : data.google_compute_default_service_account.default_sa.email
 
-  has_gpu = var.guest_accelerator != null || contains(["g2", "a2"], local.machine_family)
+  has_gpu = var.guest_accelerator != null || contains(["a2", "g2"], local.machine_family)
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"

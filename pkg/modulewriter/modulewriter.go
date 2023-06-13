@@ -138,8 +138,8 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 	fmt.Println()
 	fmt.Printf("./ghpc deploy %s\n", deploymentDir)
 	fmt.Println()
-	fmt.Println("Please find instructions for cleanly destroying infrastructure and advanced")
-	fmt.Println("advanced manual deployment instructions at:")
+	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
+	fmt.Println("deployment instructions at:")
 	fmt.Println()
 	fmt.Printf("%s\n", f.Name())
 
@@ -171,7 +171,7 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 //   - other
 //     => ./modules/<basename(source)>-<hash(abs(source))>
 func deploymentSource(mod config.Module) (string, error) {
-	if sourcereader.IsGitPath(mod.Source) {
+	if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
 		return mod.Source, nil
 	}
 	if mod.Kind == config.PackerKind {
@@ -231,7 +231,7 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 			}
 			mod.DeploymentSource = ds
 
-			if sourcereader.IsGitPath(mod.Source) {
+			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
 				continue // do not download
 			}
 			factory(mod.Kind.String()).addNumModules(1)
@@ -400,13 +400,7 @@ func prepArtifactsDir(artifactsDir string) error {
 func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
 	artifactsDir := filepath.Join(depDir, HiddenGhpcDirName, ArtifactsDirName)
 	blueprintFile := filepath.Join(artifactsDir, expandedBlueprintName)
-
-	_, err := dc.ExportBlueprint(blueprintFile)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return dc.ExportBlueprint(blueprintFile)
 }
 
 func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymentDir string) {
@@ -415,6 +409,13 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 	fmt.Fprintln(w, "Destroying infrastructure when no longer needed")
 	fmt.Fprintln(w, "===============================================")
 	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Automated")
+	fmt.Fprintln(w, "---------")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "./ghpc destroy %s\n", deploymentDir)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Advanced / Manual")
+	fmt.Fprintln(w, "-----------------")
 	fmt.Fprintln(w, "Infrastructure should be destroyed in reverse order of creation:")
 	fmt.Fprintln(w)
 	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
@@ -429,15 +430,22 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 		}
 	}
 
-	if len(packerManifests) > 0 {
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Please browse to the Cloud Console to remove VM images produced by Packer.\n")
-		fmt.Fprintln(w, "By default, the names of images can be found in these files:")
-		fmt.Fprintln(w)
-		for _, manifest := range packerManifests {
-			fmt.Fprintln(w, manifest)
-		}
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "https://console.cloud.google.com/compute/images")
+	WritePackerDestroyInstructions(w, packerManifests)
+}
+
+// WritePackerDestroyInstructions prints our best effort guidance to the user on
+// deleting images produced by Packer; must improve definition of Packer outputs
+func WritePackerDestroyInstructions(w io.Writer, manifests []string) {
+	if len(manifests) == 0 {
+		return
 	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Please browse to the Cloud Console to remove VM images produced by Packer.\n")
+	fmt.Fprintln(w, "If this file is present, the names of images can be read from it:")
+	fmt.Fprintln(w)
+	for _, manifest := range manifests {
+		fmt.Fprintln(w, manifest)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "https://console.cloud.google.com/compute/images")
 }

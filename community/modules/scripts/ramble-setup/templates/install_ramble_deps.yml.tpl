@@ -21,19 +21,13 @@
   - name: Install dependencies through system package manager
     ansible.builtin.package:
       name:
+      - python
       - python3-pip
       - git
 
-  - name: Gather the package facts
-    ansible.builtin.package_facts:
-      manager: auto
-
-  - name: Install protobuf for old releases of Python
-    when: ansible_facts.packages["python3"][0].version is version("3.7", "<") and ansible_facts.packages["python3"][0].version is version("3.5", ">=")
+  - name: Ensure a recent copy of pip
     ansible.builtin.pip:
-      name: protobuf
-      version: 3.19.4
-      executable: pip3
+      name: pip>=21.3.1
 
   - name: Download ramble requirements file
     ansible.builtin.get_url:

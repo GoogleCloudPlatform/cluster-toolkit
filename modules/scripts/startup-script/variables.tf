@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,11 +29,23 @@ variable "region" {
   type        = string
 }
 
-
 variable "gcs_bucket_path" {
   description = "The GCS path for storage bucket and the object."
   type        = string
   default     = null
+}
+
+variable "bucket_viewers" {
+  description = "Additional service accounts or groups, users, and domains to which to grant read-only access to startup-script bucket (leave unset if using default Compute Engine service account)"
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for u in var.bucket_viewers : length(regexall("^(allUsers$|allAuthenticatedUsers$|user:|group:|serviceAccount:|domain:)", u)) > 0
+    ])
+    error_message = "Bucket viewer members must begin with user/group/serviceAccount/domain following https://cloud.google.com/iam/docs/reference/rest/v1/Policy#Binding"
+  }
 }
 
 variable "debug_file" {
@@ -112,6 +124,18 @@ variable "install_ansible" {
   default     = null
 }
 
+variable "configure_ssh_host_patterns" {
+  description = <<EOT
+  If specified, it will automate ssh configuration by:
+  - Defining a Host block for every element of this variable and setting StrictHostKeyChecking to 'No'.
+  Ex: "hpc*", "hpc01*", "ml*"
+  - The first time users log-in, it will create ssh keys that are added to the authorized keys list
+  This requires a shared /home filesystem and relies on specifying the right prefix.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "prepend_ansible_installer" {
   description = <<EOT
   DEPRECATED. Use `install_ansible=false` to prevent ansible installation.
@@ -122,5 +146,14 @@ variable "prepend_ansible_installer" {
     condition     = var.prepend_ansible_installer == null
     error_message = "The variable prepend_ansible_installer has been removed. Use install_ansible instead"
   }
+}
 
+variable "ansible_virtualenv_path" {
+  description = "Virtual environment path in which to install Ansible"
+  type        = string
+  default     = "/usr/local/ghpc-venv"
+  validation {
+    condition     = can(regex("^(/[\\w-]+)+$", var.ansible_virtualenv_path))
+    error_message = "var.ansible_virtualenv_path must be an absolute path to a directory without spaces or special characters"
+  }
 }

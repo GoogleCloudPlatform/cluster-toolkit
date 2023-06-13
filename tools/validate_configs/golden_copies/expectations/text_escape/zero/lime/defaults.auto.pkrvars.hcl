@@ -25,7 +25,7 @@ labels = {
   ghpc_blueprint  = "text_escape"
   ghpc_deployment = "golden_copy_deployment"
   ghpc_role       = "packer"
-  red             = "((blue))"
+  ñred            = "ñblue"
 }
 
 project_id = "invalid-project"

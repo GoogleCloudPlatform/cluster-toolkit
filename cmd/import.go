@@ -37,17 +37,16 @@ var (
 		Long:              "Import input values from previous deployment groups upon which this group depends.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
-		PreRun:            setArtifactsDir,
+		PreRun:            parseExportImportArgs,
 		RunE:              runImportCmd,
 		SilenceUsage:      true,
 	}
 )
 
 func runImportCmd(cmd *cobra.Command, args []string) error {
-	workingDir := filepath.Clean(args[0])
-	deploymentRoot := filepath.Clean(filepath.Join(workingDir, ".."))
+	groupDir := filepath.Clean(args[0])
 
-	if err := shell.CheckWritableDir(workingDir); err != nil {
+	if err := shell.CheckWritableDir(groupDir); err != nil {
 		return err
 	}
 
@@ -61,7 +60,7 @@ func runImportCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := shell.ImportInputs(workingDir, artifactsDir, expandedBlueprintFile); err != nil {
+	if err := shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile); err != nil {
 		return err
 	}
 

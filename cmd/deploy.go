@@ -47,31 +47,32 @@ var (
 		Long:              "deploy all resources in a Toolkit deployment directory.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
-		PreRun:            parseArgs,
+		PreRunE:           parseDeployArgs,
 		RunE:              runDeployCmd,
 		SilenceUsage:      true,
 	}
 )
 
-func parseArgs(cmd *cobra.Command, args []string) {
-	if autoApprove {
-		applyBehavior = shell.AutomaticApply
-	} else {
-		applyBehavior = shell.PromptBeforeApply
-	}
+func parseDeployArgs(cmd *cobra.Command, args []string) error {
+	applyBehavior = getApplyBehavior(autoApprove)
 
 	deploymentRoot = args[0]
-}
-
-func runDeployCmd(cmd *cobra.Command, args []string) error {
-	if artifactsDir == "" {
-		artifactsDir = filepath.Clean(filepath.Join(deploymentRoot, defaultArtifactsDir))
-	}
-
+	artifactsDir = getArtifactsDir(deploymentRoot)
 	if err := shell.CheckWritableDir(artifactsDir); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func getApplyBehavior(autoApprove bool) shell.ApplyBehavior {
+	if autoApprove {
+		return shell.AutomaticApply
+	}
+	return shell.PromptBeforeApply
+}
+
+func runDeployCmd(cmd *cobra.Command, args []string) error {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
 	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {

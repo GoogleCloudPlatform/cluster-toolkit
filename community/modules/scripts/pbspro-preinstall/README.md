@@ -126,6 +126,7 @@ limitations under the License.
 | <a name="input_devel_rpm"></a> [devel\_rpm](#input\_devel\_rpm) | Absolute path to PBS Pro Development RPM file | `string` | n/a | yes |
 | <a name="input_execution_rpm"></a> [execution\_rpm](#input\_execution\_rpm) | Absolute path to PBS Pro Execution Host RPM file | `string` | n/a | yes |
 | <a name="input_force_destroy"></a> [force\_destroy](#input\_force\_destroy) | Set to true if object versioning is enabled and you are certain that you want to destroy the bucket. | `bool` | `false` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the created bucket. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_license_file"></a> [license\_file](#input\_license\_file) | Path to PBS Pro license file | `string` | `null` | no |
 | <a name="input_location"></a> [location](#input\_location) | Google Cloud Storage bucket location (defaults to var.region if not set) | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which Google Cloud Storage bucket will be created | `string` | n/a | yes |

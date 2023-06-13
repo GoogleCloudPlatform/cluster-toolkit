@@ -37,13 +37,21 @@ deployment_groups:
     settings:
       install_dir: /ramble
 
+  - id: ramble-execute
+    source: community/modules/scripts/ramble-execute
+    use: [spack, ramble-setup]
+    settings:
+      commands: |
+        ramble list
+        ramble info intel-mpi-benchmarks
+
   - id: vm-startup
     source: modules/scripts/startup-script
     settings:
       runners:
       - $(spack.install_spack_deps_runner)
       - $(spack.install_spack_runner)
-      - $(ramble-setup.ramble_runner)
+      - $(ramble-execute.ramble_runner)
 
   - id: ramble-vm
     source: modules/compute/vm-instance

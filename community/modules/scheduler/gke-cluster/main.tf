@@ -143,8 +143,14 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   addons_config {
+    gcp_filestore_csi_driver_config {
+      enabled = var.enable_filestore_csi
+    }
+    gcs_fuse_csi_driver_config {
+      enabled = var.enable_gcsfuse_csi
+    }
     gce_persistent_disk_csi_driver_config {
-      enabled = true
+      enabled = var.enable_persistent_disk_csi
     }
   }
 

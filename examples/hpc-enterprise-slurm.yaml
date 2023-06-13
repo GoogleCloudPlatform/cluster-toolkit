@@ -46,6 +46,36 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
+  - id: controller_sa
+    source: community/modules/project/service-account
+    settings:
+      name: controller
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - logging.logWriter
+      - monitoring.metricWriter
+      - pubsub.admin
+      - storage.objectViewer
+
+  - id: login_sa
+    source: community/modules/project/service-account
+    settings:
+      name: login
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+
+  - id: compute_sa
+    source: community/modules/project/service-account
+    settings:
+      name: compute
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectCreator
+
   - id: homefs
     source: modules/file-system/filestore
     use: [network1]
@@ -78,6 +108,10 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
 
   - id: n2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -99,6 +133,10 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
 
   # use `-p c2` to submit jobs to this partition:
   # ex: `srun -p c2 -N 1 hostname`
@@ -122,6 +160,10 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
 
   - id: c2d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -140,6 +182,10 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
 
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -158,6 +204,10 @@ deployment_groups:
         project: $(vars.project)
       disk_type: pd-ssd
       disk_size_gb: 100
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
 
   # use `-p a208` to submit jobs to this partition:
   # ex: `srun -p a208 --gpus-per-node=8 -N 1 nvidia-smi`
@@ -181,6 +231,10 @@ deployment_groups:
         project: $(vars.project)
       disk_type: pd-ssd
       disk_size_gb: 100
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
 
   # use `-p a208` to submit jobs to this partition:
   # ex: `srun -p a216 --gpus-per-node=16 -N 1 nvidia-smi`
@@ -213,6 +267,10 @@ deployment_groups:
       # but that requires your network to have a NAT or
       # private access configured
       disable_controller_public_ips: false
+      service_account:
+        email: $(controller_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
@@ -225,6 +283,10 @@ deployment_groups:
         project: $(vars.project)
       machine_type: n2-standard-4
       disable_login_public_ips: false
+      service_account:
+        email: $(login_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
 
   - id: hpc_dashboard
     source: modules/monitoring/dashboard

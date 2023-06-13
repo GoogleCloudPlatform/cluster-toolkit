@@ -64,7 +64,7 @@ No providers.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 34bb7250 |
-| <a name="module_instances"></a> [instances](#module\_instances) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | 6c6b9e0a |
+| <a name="module_instances"></a> [instances](#module\_instances) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | 69848ab |
 
 ## Resources
 

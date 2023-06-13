@@ -18,7 +18,7 @@ up a node.
 - id: wait
   source: community/modules/scripts/wait-for-startup
   settings:
-    instance_name: ((module.workstation.name[0]))
+    instance_name: $(workstation.name[0])
 ```
 
 ## License

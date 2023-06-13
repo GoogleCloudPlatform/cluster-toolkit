@@ -97,27 +97,44 @@ func TestIsYamlHclLiteral(t *testing.T) {
 	}
 }
 
-func TestSimpleVarToReference(t *testing.T) {
+func TestSimpleVarToExpression(t *testing.T) {
 	type test struct {
 		input string
-		want  Reference
+		want  string
 		err   bool
 	}
 	tests := []test{
-		{"$(vars.green)", GlobalRef("green"), false},
-		{"$(var.green)", ModuleRef("var", "green"), false},
-		{"$(sleeve.green)", ModuleRef("sleeve", "green"), false},
-		{"$(box.sleeve.green)", Reference{}, true},
-		{"$(vars)", Reference{}, true},
-		{"$(az.buki.vedi.glagol)", Reference{}, true},
-		{"gold $(var.here)", Reference{}, true},
+		{"$(vars.green)", "var.green", false},
+		{"$(vars.green[3])", "var.green[3]", false},
+		{"$(vars.green.sleeve)", "var.green.sleeve", false},
+		{`$(vars.green["sleeve"])`, `var.green["sleeve"]`, false},
+		{"$(vars.green.sleeve[3])", "var.green.sleeve[3]", false},
+
+		{"$(var.green)", "module.var.green", false},
+		{"$(box.green)", "module.box.green", false},
+		{"$(box.green.sleeve)", "module.box.green.sleeve", false},
+		{"$(box.green[3])", "module.box.green[3]", false},
+		{"$(box.green.sleeve[3])", "module.box.green.sleeve[3]", false},
+		{`$(box.green["sleeve"])`, `module.box.green["sleeve"]`, false},
+
+		{"$(vars)", "", true},
+		{"$(sleeve)", "", true},
+		{"gold $(var.here)", "", true},
+		{"$(box[3])", "", true},        // can't index module
+		{`$(box["green"])`, "", true},  // can't index module
+		{"$(vars[3]])", "", true},      // can't index vars
+		{`$(vars["green"])`, "", true}, // can't index module
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			got, err := SimpleVarToReference(tc.input)
+			exp, err := SimpleVarToExpression(tc.input)
 			if tc.err != (err != nil) {
 				t.Errorf("got unexpected error: %s", err)
 			}
+			if err != nil {
+				return
+			}
+			got := string(exp.Tokenize().Bytes())
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}

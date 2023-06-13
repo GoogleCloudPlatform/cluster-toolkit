@@ -31,14 +31,15 @@ $ ./list_tests.py | jq
 ...
 ```
 """
-def list_builds():
+def list_builds(start_time=30, end_time=5*60):
+    """
+    start_time: int, minutes since midnight to run the first test, e.g. 30 = 00:30
+    end_time: int, minutes since midnight to run the last test, e.g. 5*60 = 05:00
+    """
     builds = glob.glob("*.yaml", root_dir="../daily-tests/builds/")
     assert builds, "No builds have been found"
     # Sort and strip ".yaml"
     builds = [b[:-5] for b in sorted(builds)]
-
-    start_time = 30  # 00:30
-    end_time = 5*60  # 05:00
     interval = (end_time - start_time) // max(1, len(builds) - 1)
     res = {}
     for b in builds:
@@ -49,4 +50,12 @@ def list_builds():
 
 
 if __name__ == "__main__":
-    print(json.dumps(list_builds()))
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('start_time', type=int,
+                        help='minutes since midnight to run the first test, e.g. 30 = 00:30')
+    parser.add_argument('end_time', type=int,
+                        help='minutes since midnight to run the last test, e.g. 300 = 05:00')
+    args = parser.parse_args()
+
+    print(json.dumps(list_builds(args.start_time, args.end_time)))

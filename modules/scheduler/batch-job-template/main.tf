@@ -59,7 +59,7 @@ locals {
   # for attaching GPUs to N1 VMs. For now, identify only A2 types.
   machine_vals                = split("-", var.machine_type)
   machine_family              = local.machine_vals[0]
-  gpu_attached                = contains(["a2"], local.machine_family)
+  gpu_attached                = contains(["a2", "g2"], local.machine_family)
   on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
 
   on_host_maintenance = (

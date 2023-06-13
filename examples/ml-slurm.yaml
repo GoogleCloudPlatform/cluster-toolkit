@@ -75,6 +75,7 @@ deployment_groups:
 
           source $CONDA_BASE/bin/activate base
           conda init --system
+          conda config --system --set auto_activate_base False
           # following channel ordering is important! use strict_priority!
           conda config --system --set channel_priority strict
           conda config --system --remove channels defaults

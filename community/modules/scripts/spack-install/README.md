@@ -98,7 +98,7 @@ deployment via the following:
   source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
   use: [spack]
   settings:
-    subnetwork_name: ((module.network1.primary_subnetwork.name))
+    subnetwork_name: $(network1.primary_subnetwork.name)
     login_node_count: 1
     partitions:
     - $(compute_partition.partition)
@@ -118,6 +118,8 @@ Alternatively, it can be added as a startup script via:
 [hpc-slurm-gromacs.yaml]: ../../../examples/hpc-slurm-gromacs.yaml
 
 ## Environment Setup
+
+### Activating Spack
 
 [Spack installation] produces a setup script that adds `spack` to your `PATH` as
 well as some other command-line integration tools. This script can be found at
@@ -151,6 +153,21 @@ instal through a shared file system.
     use: [spack-setup, ...]
 ```
 
+### Managing Spack Python dependencies
+
+Spack is configured with [SPACK_PYTHON] to ensure that Spack itself uses a
+Python virtual environment with a supported copy of Python with the package
+`google-cloud-storage` pre-installed. This enables Spack to use mirrors and
+[build caches][builds] on Google Cloud Storage. It does not configure Python
+packages *inside* Spack virtual environments. If you need to add more Python
+dependencies for Spack itself, use the `spack python` command:
+
+```shell
+sudo -i spack python -m pip install package-name
+```
+
+[SPACK_PYTHON]: https://spack.readthedocs.io/en/latest/getting_started.html#shell-support
+[builds]: https://spack.readthedocs.io/en/latest/binary_caches.html
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -203,8 +220,9 @@ No resources.
 | <a name="input_packages"></a> [packages](#input\_packages) | Defines root packages for spack to install (in order). | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | List of buildcaches for spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
-| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.19.0"` | no |
+| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
+| <a name="input_spack_virtualenv_path"></a> [spack\_virtualenv\_path](#input\_spack\_virtualenv\_path) | Virtual environment path in which to install Spack Python interpreter and other dependencies | `string` | `"/usr/local/spack-python"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | The GCP zone where the instance is running. | `string` | n/a | yes |
 
 ## Outputs

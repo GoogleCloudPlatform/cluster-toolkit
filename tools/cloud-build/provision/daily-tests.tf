@@ -13,7 +13,7 @@
 # limitations under the License.
 
 resource "google_cloudbuild_trigger" "daily_test" {
-  for_each    = data.external.list_tests_py.result
+  for_each    = data.external.list_tests_midnight.result
   name        = "DAILY-test-${each.key}"
   description = "Runs the '${each.key}' integration test against `develop`"
   tags        = [local.notify_chat_tag]
@@ -39,7 +39,7 @@ resource "google_cloudbuild_trigger" "daily_test" {
 
 module "daily_test_schedule" {
   source   = "./trigger-schedule"
-  for_each = data.external.list_tests_py.result
+  for_each = data.external.list_tests_midnight.result
   trigger  = google_cloudbuild_trigger.daily_test[each.key]
   schedule = each.value
 }

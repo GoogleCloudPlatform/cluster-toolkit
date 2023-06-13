@@ -48,5 +48,5 @@ deployment_groups:
   - id: wait
     source: ./community/modules/scripts/wait-for-startup
     settings:
-      instance_name: ((module.compute-hpc-image.name[0]))
+      instance_name: $(compute-hpc-image.name[0])
       timeout: 25

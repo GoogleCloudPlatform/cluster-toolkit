@@ -41,7 +41,7 @@ vars:
   labels:
     ghpc_blueprint: text_escape
     ghpc_deployment: golden_copy_deployment
-    red: \((blue))
+    ñred: ñblue
   project_id: invalid-project
   zone: us-east4-c
 deployment_groups:
@@ -64,7 +64,7 @@ deployment_groups:
             ghpc_blueprint: text_escape
             ghpc_deployment: golden_copy_deployment
             ghpc_role: packer
-            red: \((blue))
+            ñred: ñblue
           project_id: ((var.project_id))
           subnetwork_name: \$(purple
           zone: ((var.zone))

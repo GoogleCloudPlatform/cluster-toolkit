@@ -32,12 +32,6 @@ variable "ramble_ref" {
   type        = string
 }
 
-variable "log_file" {
-  description = "Log file to write output from ramble setup steps into."
-  default     = "/var/log/ramble-setup.log"
-  type        = string
-}
-
 variable "chown_owner" {
   description = "Owner to chown the Ramble clone to. Default will not modify the clone."
   default     = null

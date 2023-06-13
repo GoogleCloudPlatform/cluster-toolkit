@@ -49,6 +49,14 @@ repos:
     files: '.*(\.sh|\.tf)$'
     pass_filenames: true
     require_serial: true
+  - id: module-label-check
+    name: module-label-check
+    entry: python3 tools/label-check.py
+    language: python
+    language_version: python3
+    files: '.*\.tf$'
+    pass_filenames: false
+    require_serial: true
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
   hooks:

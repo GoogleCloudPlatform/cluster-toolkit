@@ -41,12 +41,14 @@ locals {
       GPG_KEYS           = var.gpg_keys == null ? [] : var.gpg_keys
       CACHES_TO_POPULATE = var.caches_to_populate == null ? [] : var.caches_to_populate
       LOG_FILE           = var.log_file == null ? "/dev/null" : var.log_file
+      SPACK_PYTHON_VENV  = var.spack_virtualenv_path
     }
   )
   install_spack_deps_runner = {
     "type"        = "ansible-local"
     "source"      = "${path.module}/scripts/install_spack_deps.yml"
     "destination" = "install_spack_deps.yml"
+    "args"        = "-e spack_virtualenv_path=${var.spack_virtualenv_path}"
   }
   install_spack_runner = {
     "type"        = "shell"

@@ -19,6 +19,7 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"log"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/exp/slices"
@@ -38,6 +39,11 @@ func (m *modInfo) Input(name string) (varInfo, bool) {
 		return varInfo{}, false
 	}
 	return m.Inputs[ind], true
+}
+
+func (m *modInfo) Role() string {
+	split := strings.Split(m.Source, "/")
+	return split[len(split)-2]
 }
 
 var allMods []modInfo = nil
@@ -82,10 +88,29 @@ func all(ps ...predicate) predicate {
 	}
 }
 
+func not(p predicate) predicate {
+	return func(mod modInfo) bool {
+		return !p(mod)
+	}
+}
+
 func hasInput(name string) predicate {
 	return func(mod modInfo) bool {
 		_, ok := mod.Input(name)
 		return ok
+	}
+}
+
+func hasOutput(name string) predicate {
+	return func(m modInfo) bool {
+		ind := slices.IndexFunc(m.Outputs, func(i modulereader.OutputInfo) bool { return i.Name == name })
+		return ind != -1
+	}
+}
+
+func ofRole(role string) predicate {
+	return func(mod modInfo) bool {
+		return mod.Role() == role
 	}
 }
 
@@ -133,5 +158,9 @@ func TestNetworkStorage(t *testing.T) {
 	  }))`
 	for _, mod := range notEmpty(query(hasInput("network_storage")), t) {
 		checkInputType(t, mod, "network_storage", expected)
+	}
+
+	for _, mod := range query(all(ofRole("file-system"), not(hasOutput("network_storage")))) {
+		t.Errorf("%q does not output 'network_storage'", mod.Source)
 	}
 }

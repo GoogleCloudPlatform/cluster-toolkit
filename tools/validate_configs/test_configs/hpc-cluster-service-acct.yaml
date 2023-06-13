@@ -40,11 +40,9 @@ deployment_groups:
     source: ./community/modules/project/service-account
     settings:
       project_id: $(vars.project_id)
-      names:
-      - "hpc-service-acct"
+      name: hpc-service-acct
       project_roles:
-      - "compute.instanceAdmin.v1"
-
+      - compute.instanceAdmin.v1
 
   - id: compute-partition
     source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
@@ -62,4 +60,4 @@ deployment_groups:
       - $(homefs.network_storage)
       partition:
       - $(compute-partition.partition)
-      controller_service_account: $(service_acct.email)
+      controller_service_account: $(service_acct.service_account_email)

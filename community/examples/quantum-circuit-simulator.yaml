@@ -47,6 +47,7 @@ deployment_groups:
           bash Miniconda3-py39_4.12.0-Linux-x86_64.sh -b -p /opt/conda
           source /opt/conda/bin/activate base
           conda init --system
+          conda config --system --set auto_activate_base False
           # following channel ordering is important! use strict_priority!
           # cuquantum comes from cuquantum label in nvidia channel
           # libcutensor comes from main (default) label in nvidia channel
@@ -135,5 +136,5 @@ deployment_groups:
   - id: wait
     source: community/modules/scripts/wait-for-startup
     settings:
-      instance_name: ((module.qsimvm.name[0]))
+      instance_name: $(qsimvm.name[0])
       timeout: 2400
