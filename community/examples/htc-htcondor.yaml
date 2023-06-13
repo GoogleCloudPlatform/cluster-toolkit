@@ -17,19 +17,17 @@ blueprint_name: htc-htcondor
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: htcondor-001
+  deployment_name: htcondor-pool
   region: us-central1
   zone: us-central1-c
-  # Only CentOS 7 and Rocky 8 are supported; for CentOS 7, remove next 2 lines
-  instance_image:
-    project: cloud-hpc-image-public
-    family: hpc-rocky-linux-8
+  disk_size_gb: 100
+  new_image_family: htcondor-10x
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
 deployment_groups:
-- group: htcondor
+- group: primary
   modules:
   - id: network1
     source: modules/network/vpc
@@ -39,6 +37,28 @@ deployment_groups:
   - id: htcondor_install
     source: community/modules/scripts/htcondor-install
 
+  - id: htcondor_install_script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(htcondor_install.install_htcondor_runner)
+      - $(htcondor_install.install_autoscaler_deps_runner)
+
+- group: packer
+  modules:
+  - id: custom-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - network1
+    - htcondor_install_script
+    settings:
+      disk_size: $(vars.disk_size_gb)
+      source_image_family: hpc-rocky-linux-8
+      image_family: $(vars.new_image_family)
+
+- group: pool
+  modules:
   - id: htcondor_configure
     source: community/modules/scheduler/htcondor-configure
     use:
@@ -48,7 +68,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.central_manager_runner)
 
   - id: htcondor_cm
@@ -58,6 +77,9 @@ deployment_groups:
     - htcondor_startup_central_manager
     settings:
       name_prefix: cm
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.new_image_family)
       add_deployment_name_before_prefix: true
       machine_type: c2-standard-4
       disable_public_ips: true
@@ -83,7 +105,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_configure.execute_point_runner)
 
   # the HTCondor modules support up to 2 execute points per blueprint
@@ -95,6 +116,10 @@ deployment_groups:
     - network1
     - htcondor_startup_execute_point
     settings:
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.new_image_family)
+      min_idle: 2
       service_account:
         email: $(htcondor_configure.execute_point_service_account)
         scopes:
@@ -107,6 +132,9 @@ deployment_groups:
     - htcondor_startup_execute_point
     settings:
       spot: true
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.new_image_family)
       service_account:
         email: $(htcondor_configure.execute_point_service_account)
         scopes:
@@ -116,8 +144,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(htcondor_install.install_htcondor_runner)
-      - $(htcondor_install.install_autoscaler_deps_runner)
       - $(htcondor_install.install_autoscaler_runner)
       - $(htcondor_configure.access_point_runner)
       - $(htcondor_execute_point.configure_autoscaler_runner)
@@ -143,6 +169,9 @@ deployment_groups:
     - htcondor_startup_access_point
     settings:
       name_prefix: ap
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.new_image_family)
       add_deployment_name_before_prefix: true
       machine_type: c2-standard-4
       service_account:
