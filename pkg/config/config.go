@@ -350,9 +350,15 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	}
 	dc.Config.setGlobalLabels()
 	dc.Config.addKindToModules()
-	dc.validateConfig()
-	dc.expand()
-	dc.validate()
+	if err := dc.validateConfig(); err != nil {
+		return err
+	}
+	if err := dc.expand(); err != nil {
+		return err
+	}
+	if err := dc.validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -602,45 +608,46 @@ func checkBackends(bp Blueprint) error {
 }
 
 // validateConfig runs a set of simple early checks on the imported input YAML
-func (dc *DeploymentConfig) validateConfig() {
-	_, err := dc.Config.DeploymentName()
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = dc.Config.checkBlueprintName()
-	if err != nil {
-		log.Fatal(err)
+func (dc *DeploymentConfig) validateConfig() error {
+
+	if _, err := dc.Config.DeploymentName(); err != nil {
+		return err
 	}
 
-	if err = dc.validateVars(); err != nil {
-		log.Fatal(err)
+	if err := dc.Config.checkBlueprintName(); err != nil {
+		return err
 	}
 
-	if err = dc.Config.checkModulesInfo(); err != nil {
-		log.Fatal(err)
+	if err := dc.validateVars(); err != nil {
+		return err
 	}
 
-	if err = checkModulesAndGroups(dc.Config.DeploymentGroups); err != nil {
-		log.Fatal(err)
+	if err := dc.Config.checkModulesInfo(); err != nil {
+		return err
+	}
+
+	if err := checkModulesAndGroups(dc.Config.DeploymentGroups); err != nil {
+		return err
 	}
 
 	// checkPackerGroups must come after checkModulesAndGroups, in which group
 	// Kind is set and aligned with module Kinds
-	if err = checkPackerGroups(dc.Config.DeploymentGroups); err != nil {
-		log.Fatal(err)
+	if err := checkPackerGroups(dc.Config.DeploymentGroups); err != nil {
+		return err
 	}
 
-	if err = checkUsedModuleNames(dc.Config); err != nil {
-		log.Fatal(err)
+	if err := checkUsedModuleNames(dc.Config); err != nil {
+		return err
 	}
 
-	if err = checkBackends(dc.Config); err != nil {
-		log.Fatal(err)
+	if err := checkBackends(dc.Config); err != nil {
+		return err
 	}
 
-	if err = checkModuleSettings(dc.Config); err != nil {
-		log.Fatal(err)
+	if err := checkModuleSettings(dc.Config); err != nil {
+		return err
 	}
+	return nil
 }
 
 // SkipValidator marks validator(s) as skipped,
