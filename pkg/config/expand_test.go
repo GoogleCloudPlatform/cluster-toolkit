@@ -24,8 +24,7 @@ import (
 
 func (s *MySuite) TestExpand(c *C) {
 	dc := getDeploymentConfigForTest()
-	fmt.Println("TEST_DEBUG: If tests die without report, check TestExpand")
-	dc.expand()
+	c.Check(dc.expand(), IsNil)
 }
 
 func (s *MySuite) TestExpandBackends(c *C) {
