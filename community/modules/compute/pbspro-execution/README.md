@@ -74,7 +74,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_execution_startup_script"></a> [execution\_startup\_script](#module\_execution\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 34bb7250 |
+| <a name="module_execution_startup_script"></a> [execution\_startup\_script](#module\_execution\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 185837b5 |
 | <a name="module_pbs_execution"></a> [pbs\_execution](#module\_pbs\_execution) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | 6c6b9e0a |
 | <a name="module_pbs_install"></a> [pbs\_install](#module\_pbs\_install) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install | 6c6b9e0a |
 
