@@ -185,25 +185,13 @@ var kinds = map[string]ModReader{
 	"packer":    NewPackerReader(),
 }
 
-// IsValidReaderKind returns true if the kind input is valid
-func IsValidReaderKind(input string) bool {
-	for k := range kinds {
-		if k == input {
-			return true
-		}
-	}
-	return false
-}
-
 // Factory returns a ModReader of type 'kind'
 func Factory(kind string) ModReader {
-	for k, v := range kinds {
-		if kind == k {
-			return v
-		}
+	r, ok := kinds[kind]
+	if !ok {
+		log.Fatalf("Invalid request to create a reader of kind %s", kind)
 	}
-	log.Fatalf("Invalid request to create a reader of kind %s", kind)
-	return nil
+	return r
 }
 
 func defaultAPIList(source string) []string {
