@@ -13,3 +13,13 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+
+output "persistent_volume_claim" {
+  description = "An object that describes a k8s PVC created by this module."
+  value = {
+    name          = local.pvc_name
+    mount_path    = var.network_storage.local_mount
+    mount_options = var.network_storage.mount_options
+  }
+  depends_on = [kubectl_manifest.filestore_pvc]
+}

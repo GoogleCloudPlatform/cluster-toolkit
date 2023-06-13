@@ -14,6 +14,38 @@
  * limitations under the License.
 */
 
+variable "cluster_id" {
+  description = "An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}`"
+  type        = string
+}
+
+variable "network_storage" {
+  description = "Network attached storage mount to be configured."
+  type = object({
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string)
+    mount_runner          = map(string)
+  })
+}
+
+variable "filestore_id" {
+  description = "An identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`."
+  type        = string
+  validation {
+    condition     = var.filestore_id == null || length(split("/", var.filestore_id)) == 6
+    error_message = "filestore_id must be in the format of 'projects/{{project}}/locations/{{location}}/instances/{{name}}'."
+  }
+}
+
+variable "capacity_gb" {
+  description = "The storage capacity with which to create the persistent volume."
+  type        = number
+}
+
 variable "labels" {
   description = "GCE resource labels to be applied to resources. Key-value pairs."
   type        = map(string)
