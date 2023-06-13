@@ -72,16 +72,6 @@ func Test(t *testing.T) {
 	TestingT(t)
 }
 
-// modulereader.go
-func (s *MySuite) TestIsValidKind(c *C) {
-	c.Assert(IsValidReaderKind(pkrKindString), Equals, true)
-	c.Assert(IsValidReaderKind(tfKindString), Equals, true)
-	c.Assert(IsValidReaderKind("Packer"), Equals, false)
-	c.Assert(IsValidReaderKind("Terraform"), Equals, false)
-	c.Assert(IsValidReaderKind("META"), Equals, false)
-	c.Assert(IsValidReaderKind(""), Equals, false)
-}
-
 func (s *MySuite) TestGetOutputsAsMap(c *C) {
 	// Simple: empty outputs
 	modInfo := ModuleInfo{}
