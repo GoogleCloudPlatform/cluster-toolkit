@@ -38,39 +38,38 @@ locals {
     )
   )
   millicpu           = floor(local.cpu_request * 1000)
-  should_request_cpu = local.millicpu >= 0
+  cpu_request_string = local.millicpu >= 0 ? "${local.millicpu}m" : null
   full_node_request  = local.min_allocatable_cpu >= 0 && var.requested_cpu_per_pod < 0
 
-  should_request_gpu = alltrue(var.has_gpu)
   # arbitrarily, user can edit in template.
   # May come from node pool in future.
-  gpu_limit = 1
+  gpu_limit_string = alltrue(var.has_gpu) ? "1" : null
 
   suffix = var.random_name_sufix ? "-${random_id.resource_name_suffix.hex}" : ""
 
-  has_node_selector = var.machine_family != null || length(var.node_selectors) != 0
+  machine_family_node_selector = var.machine_family != null ? [{
+    key   = "cloud.google.com/machine-family"
+    value = var.machine_family
+  }] : []
+  node_selectors = concat(local.machine_family_node_selector, var.node_selectors)
 
   job_template_contents = templatefile(
     "${path.module}/templates/gke-job-base.yaml.tftpl",
     {
-      name               = var.name
-      suffix             = local.suffix
-      image              = var.image
-      command            = var.command
-      node_count         = var.node_count
-      machine_family     = var.machine_family
-      node_pool_names    = var.node_pool_name
-      node_selectors     = var.node_selectors
-      has_node_selector  = local.has_node_selector
-      should_request_cpu = local.should_request_cpu
-      full_node_request  = local.full_node_request
-      millicpu_request   = "${local.millicpu}m"
-      should_request_gpu = local.should_request_gpu
-      gpu_limit          = local.gpu_limit
-      restart_policy     = var.restart_policy
-      backoff_limit      = var.backoff_limit
-      tolerations        = distinct(var.tolerations)
-      labels             = local.labels
+      name              = var.name
+      suffix            = local.suffix
+      image             = var.image
+      command           = var.command
+      node_count        = var.node_count
+      node_pool_names   = var.node_pool_name
+      node_selectors    = local.node_selectors
+      full_node_request = local.full_node_request
+      cpu_request       = local.cpu_request_string
+      gpu_limit         = local.gpu_limit_string
+      restart_policy    = var.restart_policy
+      backoff_limit     = var.backoff_limit
+      tolerations       = distinct(var.tolerations)
+      labels            = local.labels
     }
   )
 
