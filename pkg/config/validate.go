@@ -212,10 +212,6 @@ func validateModule(c Module) error {
 	return nil
 }
 
-func hasIllegalChars(name string) bool {
-	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
-}
-
 func validateOutputs(mod Module) error {
 	modInfo := mod.InfoOrDie()
 	// Only get the map if needed
