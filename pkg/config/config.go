@@ -87,8 +87,9 @@ func (n GroupName) Validate() error {
 		return errors.New(errorMessages["emptyGroupName"])
 	}
 
-	if !regexp.MustCompile(`^[\w]+[\w-]*$`).MatchString(string(n)) {
-		return fmt.Errorf("invalid character(s) found in group name %q. Allowed : alphanumeric, '_', and '-'", n)
+	if !regexp.MustCompile(`^\w(-*\w)*$`).MatchString(string(n)) {
+		return fmt.Errorf("invalid character(s) found in group name %q.\n"+
+			"Allowed : alphanumeric, '_', and '-'; can not start/end with '-'", n)
 	}
 	return nil
 }
