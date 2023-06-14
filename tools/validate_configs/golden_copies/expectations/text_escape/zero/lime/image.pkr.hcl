@@ -18,25 +18,6 @@ locals {
   image_name_default = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
   image_name         = var.image_name != null ? var.image_name : local.image_name_default
 
-  # construct metadata from startup_script and metadata variables
-  startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
-  user_management_metadata = {
-    block-project-ssh-keys = "TRUE"
-    shutdown-script        = <<-EOT
-      #!/bin/bash
-      userdel -r ${var.ssh_username}
-      sed -i '/${var.ssh_username}/d' /var/lib/google/google_users
-    EOT
-  }
-
-  # merge metadata such that var.metadata always overrides user management
-  # metadata but always allow var.startup_script to override var.metadata
-  metadata = merge(
-    local.user_management_metadata,
-    var.metadata,
-    local.startup_script_metadata,
-  )
-
   # default to explicit var.communicator, otherwise in-order: ssh/winrm/none
   shell_script_communicator      = length(var.shell_scripts) > 0 ? "ssh" : ""
   ansible_playbook_communicator  = length(var.ansible_playbooks) > 0 ? "ssh" : ""
@@ -51,6 +32,32 @@ locals {
 
   # must not enable IAP when no communicator is in use
   use_iap = local.communicator == "none" ? false : var.use_iap
+
+  # construct metadata from startup_script and metadata variables
+  startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
+
+  linux_user_metadata = {
+    block-project-ssh-keys = "TRUE"
+    shutdown-script        = <<-EOT
+      #!/bin/bash
+      userdel -r ${var.ssh_username}
+      sed -i '/${var.ssh_username}/d' /var/lib/google/google_users
+    EOT
+  }
+  windows_packer_user = "packer_user"
+  windows_user_metadata = {
+    sysprep-specialize-script-cmd = "winrm quickconfig -quiet & net user /add ${local.windows_packer_user} & net localgroup administrators ${local.windows_packer_user} /add & winrm set winrm/config/service/auth @{Basic=\\\"true\\\"}"
+    windows-shutdown-script-cmd   = "net user /delete ${local.windows_packer_user}"
+  }
+  user_metadata = local.communicator == "winrm" ? local.windows_user_metadata : local.linux_user_metadata
+
+  # merge metadata such that var.metadata always overrides user management
+  # metadata but always allow var.startup_script to override var.metadata
+  metadata = merge(
+    local.user_metadata,
+    var.metadata,
+    local.startup_script_metadata,
+  )
 
   # determine best value for on_host_maintenance if not supplied by user
   machine_vals                = split("-", var.machine_type)
@@ -127,8 +134,7 @@ build {
     labels   = ["powershell"]
     for_each = var.powershell_scripts
     content {
-      elevated_user = "Administrator"
-      script        = provisioner.value
+      script = provisioner.value
     }
   }
 
