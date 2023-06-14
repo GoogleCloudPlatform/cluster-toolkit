@@ -16,26 +16,17 @@ blueprint_name: igc
 ghpc_version: golden
 validators:
   - validator: test_project_exists
-    inputs: {}
     skip: true
   - validator: test_apis_enabled
-    inputs: {}
     skip: true
   - validator: test_region_exists
-    inputs: {}
     skip: true
   - validator: test_zone_exists
-    inputs: {}
     skip: true
   - validator: test_zone_in_region
-    inputs: {}
     skip: true
   - validator: test_module_not_used
-    inputs: {}
-    skip: false
   - validator: test_deployment_variable_not_used
-    inputs: {}
-    skip: false
 vars:
   deployment_name: golden_copy_deployment
   labels:
@@ -46,15 +37,10 @@ vars:
   zone: us-east4-c
 deployment_groups:
   - group: zero
-    terraform_backend:
-      type: ""
-      configuration: {}
     modules:
       - source: modules/network/vpc
         kind: terraform
         id: network0
-        use: []
-        wrapsettingswith: {}
         outputs:
           - name: subnetwork_name
             description: Automatically-generated output exported for use by later deployment groups
@@ -104,7 +90,6 @@ deployment_groups:
       - source: modules/scripts/startup-script
         kind: terraform
         id: script
-        use: []
         wrapsettingswith:
           labels:
             - merge(
@@ -128,9 +113,6 @@ deployment_groups:
               type: shell
     kind: terraform
   - group: one
-    terraform_backend:
-      type: ""
-      configuration: {}
     modules:
       - source: modules/packer/custom-image
         kind: packer
@@ -138,7 +120,6 @@ deployment_groups:
         use:
           - network0
           - script
-        wrapsettingswith: {}
         settings:
           deployment_name: ((var.deployment_name ))
           labels:
@@ -150,6 +131,3 @@ deployment_groups:
           subnetwork_name: ((module.network0.subnetwork_name))
           zone: ((var.zone ))
     kind: packer
-terraform_backend_defaults:
-  type: ""
-  configuration: {}

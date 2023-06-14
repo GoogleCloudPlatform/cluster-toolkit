@@ -101,7 +101,7 @@ func (n GroupName) Validate() error {
 // DeploymentGroup defines a group of Modules that are all executed together
 type DeploymentGroup struct {
 	Name             GroupName        `yaml:"group"`
-	TerraformBackend TerraformBackend `yaml:"terraform_backend"`
+	TerraformBackend TerraformBackend `yaml:"terraform_backend,omitempty"`
 	Modules          []Module         `yaml:"modules"`
 	Kind             ModuleKind
 }
@@ -259,8 +259,8 @@ func (v validatorName) String() string {
 
 type validatorConfig struct {
 	Validator string
-	Inputs    Dict
-	Skip      bool
+	Inputs    Dict `yaml:"inputs,omitempty"`
+	Skip      bool `yaml:"skip,omitempty"`
 }
 
 func (v *validatorConfig) check(name validatorName, requiredInputs []string) error {
@@ -299,10 +299,10 @@ type Module struct {
 	DeploymentSource string `yaml:"-"` // "-" prevents user from specifying it
 	Kind             ModuleKind
 	ID               ModuleID
-	Use              []ModuleID
-	WrapSettingsWith map[string][]string
+	Use              []ModuleID                `yaml:"use,omitempty"`
+	WrapSettingsWith map[string][]string       `yaml:"wrapsettingswith,omitempty"`
 	Outputs          []modulereader.OutputInfo `yaml:"outputs,omitempty"`
-	Settings         Dict
+	Settings         Dict                      `yaml:"settings,omitempty"`
 	// DEPRECATED fields, keep in the struct for backwards compatibility
 	RequiredApis interface{} `yaml:"required_apis,omitempty"`
 }
@@ -329,13 +329,13 @@ func (m Module) InfoOrDie() modulereader.ModuleInfo {
 // unless it has been set to a non-default value; the implementation as an
 // integer is primarily for internal purposes even if it can be set in blueprint
 type Blueprint struct {
-	BlueprintName            string `yaml:"blueprint_name"`
-	GhpcVersion              string `yaml:"ghpc_version,omitempty"`
-	Validators               []validatorConfig
-	ValidationLevel          int `yaml:"validation_level,omitempty"`
+	BlueprintName            string            `yaml:"blueprint_name"`
+	GhpcVersion              string            `yaml:"ghpc_version,omitempty"`
+	Validators               []validatorConfig `yaml:"validators,omitempty"`
+	ValidationLevel          int               `yaml:"validation_level,omitempty"`
 	Vars                     Dict
 	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
-	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults"`
+	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults,omitempty"`
 }
 
 // DeploymentConfig is a container for the imported YAML data and supporting data for
