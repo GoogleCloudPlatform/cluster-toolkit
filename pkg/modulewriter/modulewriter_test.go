@@ -491,7 +491,9 @@ func (s *MySuite) TestWriteMain(c *C) {
 
 	// Test with modules
 	testModule := config.Module{
-		ID: "test_module",
+		ID:     "test_module",
+		Kind:   config.TerraformKind,
+		Source: "modules/network/vpc",
 		Settings: config.NewDict(map[string]cty.Value{
 			"testSetting": cty.StringVal("testValue"),
 			"passthrough": config.MustParseExpression(`"${var.deployment_name}-allow"`).AsValue(),
@@ -528,6 +530,8 @@ func (s *MySuite) TestWriteMain(c *C) {
 		WrapSettingsWith: map[string][]string{
 			"wrappedSetting": {"list(flatten(", "))"},
 		},
+		Kind:   config.TerraformKind,
+		Source: "modules/network/vpc",
 		Settings: config.NewDict(map[string]cty.Value{
 			"wrappedSetting": cty.TupleVal([]cty.Value{
 				cty.StringVal("val1"),
@@ -687,9 +691,8 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	}
 
 	testPackerModule := config.Module{
-		Kind:             config.PackerKind,
-		ID:               "testPackerModule",
-		DeploymentSource: "testPackerModule",
+		Kind: config.PackerKind,
+		ID:   "testPackerModule",
 	}
 	testDeploymentGroup := config.DeploymentGroup{
 		Name:    "packerGroup",
