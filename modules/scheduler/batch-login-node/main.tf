@@ -104,7 +104,7 @@ locals {
 }
 
 module "login_startup_script" {
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=34bb7250"
+  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=185837b5"
   labels          = local.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name
