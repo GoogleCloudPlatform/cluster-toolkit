@@ -303,6 +303,8 @@ type Module struct {
 	WrapSettingsWith map[string][]string
 	Outputs          []modulereader.OutputInfo `yaml:"outputs,omitempty"`
 	Settings         Dict
+	// DEPRECATED fields, keep in the struct for backwards compatibility
+	RequiredApis interface{} `yaml:"required_apis,omitempty"`
 }
 
 // createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
