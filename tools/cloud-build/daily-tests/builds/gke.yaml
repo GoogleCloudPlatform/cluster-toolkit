@@ -19,7 +19,7 @@ steps:
 ## Test simple golang build
 - id: build_ghpc
   waitFor: ["-"]
-  name: golang
+  name: "golang:bullseye"
   entrypoint: /bin/bash
   args:
   - -c
