@@ -96,7 +96,7 @@ func printAdvancedInstructionsMessage(deplDir string) {
 }
 
 func expandOrDie(path string) config.DeploymentConfig {
-	dc, err := config.NewDeploymentConfig(path)
+	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,10 +120,28 @@ func expandOrDie(path string) config.DeploymentConfig {
 
 	// Expand the blueprint
 	if err := dc.ExpandConfig(); err != nil {
-		log.Fatal(err)
+		log.Fatal(renderError(err, ctx))
 	}
 
 	return dc
+}
+
+func renderError(err error, ctx config.YamlCtx) string {
+	var be config.BpError
+	if errors.As(err, &be) {
+		if pos, ok := ctx.PathToPos[be.Path]; ok {
+			return renderRichError(be.Err, pos, ctx)
+		}
+	}
+	return err.Error()
+}
+
+func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
+	return fmt.Sprintf(`
+Error: %s
+on line %d, column %d:
+%d: %s
+`, err, pos.Line, pos.Column, pos.Line, ctx.Lines[pos.Line-1])
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {
