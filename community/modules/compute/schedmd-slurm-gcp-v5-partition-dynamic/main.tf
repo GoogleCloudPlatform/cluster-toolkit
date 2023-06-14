@@ -16,8 +16,11 @@
  */
 
 locals {
-  # Default to value in partition_conf if both set "Default"
-  partition_conf = merge(var.is_default == true ? { "Default" : "YES" } : {}, var.partition_conf)
+  # Default to value in partition_conf if both set the same key
+  partition_conf = merge({
+    "Default"     = var.is_default ? "YES" : null,
+    "SuspendTime" = "INFINITE"
+  }, var.partition_conf)
 
   # Since deployment name may be used to create a cluster name, we remove any invalid character from the beginning
   # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
