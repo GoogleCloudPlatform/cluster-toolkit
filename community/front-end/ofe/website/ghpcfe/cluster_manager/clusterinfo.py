@@ -242,7 +242,7 @@ class ClusterInfo:
             ["hpc_network"] + filesystems_references
         )
 
-        controller_sa = f"{self.cluster.cloud_id}-sa"
+        controller_sa = "sa"
         # TODO: Determine if these all should be different, and if so, add to
         # resource to be created. NOTE though, that at the moment, GHPC won't
         # let us unpack output variables, so we can't index properly.
