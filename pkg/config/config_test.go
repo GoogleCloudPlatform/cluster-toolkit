@@ -1041,3 +1041,23 @@ func (s *MySuite) TestCheckModuleSettings(c *C) {
 	bp.Vars.Set("zebra", cty.StringVal("stripes"))
 	c.Check(checkModuleSettings(bp), IsNil)
 }
+
+func (s *MySuite) TestGroupNameValidate(c *C) {
+	// Invalid
+	c.Check(GroupName("").Validate(), NotNil)
+	c.Check(GroupName("-").Validate(), NotNil)
+	c.Check(GroupName("-g").Validate(), NotNil)
+	c.Check(GroupName("g-").Validate(), NotNil)
+	c.Check(GroupName("g+").Validate(), NotNil)
+	c.Check(GroupName("a b").Validate(), NotNil)
+
+	// Valid
+	c.Check(GroupName("g").Validate(), IsNil)
+	c.Check(GroupName("gg").Validate(), IsNil)
+	c.Check(GroupName("_g").Validate(), IsNil)
+	c.Check(GroupName("g_dd").Validate(), IsNil)
+	c.Check(GroupName("g_dd-ff").Validate(), IsNil)
+	c.Check(GroupName("g-dd_ff").Validate(), IsNil)
+	c.Check(GroupName("1").Validate(), IsNil)
+	c.Check(GroupName("12g").Validate(), IsNil)
+}

@@ -47,18 +47,14 @@ var errorMessages = map[string]string{
 	"yamlMarshalError":   "failed to export the configuration to a blueprint yaml file",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
-	"missingSetting":       "a required setting is missing from a module",
-	"globalLabelType":      "deployment variable 'labels' are not a map",
-	"settingsLabelType":    "labels in module settings are not a map",
-	"invalidVar":           "invalid variable definition in",
-	"invalidMod":           "invalid module reference",
-	"invalidDeploymentRef": "invalid deployment-wide reference (only \"vars\") is supported)",
-	"varNotFound":          "Could not find source of variable",
-	"intergroupOrder":      "References to outputs from other groups must be to earlier groups",
-	"referenceWrongGroup":  "Reference specified the wrong group for the module",
-	"noOutput":             "Output not found for a variable",
-	"groupNotFound":        "The group ID was not found",
-	"cannotUsePacker":      "Packer modules cannot be used by other modules",
+	"missingSetting":    "a required setting is missing from a module",
+	"settingsLabelType": "labels in module settings are not a map",
+	"invalidVar":        "invalid variable definition in",
+	"invalidMod":        "invalid module reference",
+	"varNotFound":       "Could not find source of variable",
+	"intergroupOrder":   "References to outputs from other groups must be to earlier groups",
+	"noOutput":          "Output not found for a variable",
+	"cannotUsePacker":   "Packer modules cannot be used by other modules",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -69,9 +65,7 @@ var errorMessages = map[string]string{
 	"duplicateGroup":     "group names must be unique",
 	"duplicateID":        "module IDs must be unique",
 	"emptyGroupName":     "group name must be set for each deployment group",
-	"illegalChars":       "invalid character(s) found in group name",
 	"invalidOutput":      "requested output was not found in the module",
-	"varNotDefined":      "variable not defined",
 	"valueNotString":     "value was not of type string",
 	"valueEmptyString":   "value is an empty string",
 	"labelNameReqs":      "name must begin with a lowercase letter, can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long",
@@ -92,8 +86,10 @@ func (n GroupName) Validate() error {
 	if n == "" {
 		return errors.New(errorMessages["emptyGroupName"])
 	}
-	if hasIllegalChars(string(n)) {
-		return fmt.Errorf("%s %s", errorMessages["illegalChars"], n)
+
+	if !regexp.MustCompile(`^\w(-*\w)*$`).MatchString(string(n)) {
+		return fmt.Errorf("invalid character(s) found in group name %q.\n"+
+			"Allowed : alphanumeric, '_', and '-'; can not start/end with '-'", n)
 	}
 	return nil
 }
