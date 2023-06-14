@@ -58,14 +58,14 @@ spec:
             cpu: ${cpu_request}
           %{~ endif ~}
         %{~ endif ~}
-        %{~ if length(volumes) != 0 ~}
+        %{~ if length(volumes) > 0 ~}
         volumeMounts:
         %{~ for v in volumes ~}
         - name: ${v.name}
           mountPath: ${v.mount_path}
         %{~ endfor ~}
         %{~ endif ~}
-      %{~ if length(volumes) != 0 ~}
+      %{~ if length(volumes) > 0 ~}
       volumes:
       %{~ for v in volumes ~}
       - name: ${v.name}

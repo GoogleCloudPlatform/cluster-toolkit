@@ -36,7 +36,7 @@ variable "filestore_id" {
   description = "An identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`."
   type        = string
   validation {
-    condition     = var.filestore_id == null || length(split("/", var.filestore_id)) == 6
+    condition     = length(split("/", var.filestore_id)) == 6
     error_message = "filestore_id must be in the format of 'projects/{{project}}/locations/{{location}}/instances/{{name}}'."
   }
 }

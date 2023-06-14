@@ -58,5 +58,5 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_persistent_volume_claim"></a> [persistent\_volume\_claim](#output\_persistent\_volume\_claim) | An object that describes a k8s PVC created by this module. |
+| <a name="output_persistent_volume_claims"></a> [persistent\_volume\_claims](#output\_persistent\_volume\_claims) | An object that describes a k8s PVC created by this module. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

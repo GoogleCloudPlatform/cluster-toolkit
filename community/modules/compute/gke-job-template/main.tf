@@ -45,7 +45,7 @@ locals {
   # May come from node pool in future.
   gpu_limit_string = alltrue(var.has_gpu) ? "1" : null
 
-  volumes = [for v in var.persistent_volume_claim :
+  volumes = [for v in var.persistent_volume_claims :
     {
       name       = "vol-${v.name}"
       mount_path = v.mount_path

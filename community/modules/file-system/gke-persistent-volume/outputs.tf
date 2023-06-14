@@ -14,7 +14,7 @@
   * limitations under the License.
   */
 
-output "persistent_volume_claim" {
+output "persistent_volume_claims" {
   description = "An object that describes a k8s PVC created by this module."
   value = {
     name          = local.pvc_name

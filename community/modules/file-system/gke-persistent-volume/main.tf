@@ -20,9 +20,8 @@ locals {
 }
 
 locals {
-  split_filestore_id   = var.filestore_id != null ? split("/", var.filestore_id) : [null, null, null, null, null, null]
-  location             = local.split_filestore_id[3]
-  filestore_name       = local.split_filestore_id[5]
+  location             = split("/", var.filestore_id)[3]
+  filestore_name       = split("/", var.filestore_id)[5]
   filestore_share_name = trimprefix(var.network_storage.remote_mount, "/")
 
   pv_name  = "${local.filestore_name}-pv"
@@ -51,9 +50,8 @@ locals {
     }
   )
 
-  split_cluster_id = split("/", var.cluster_id)
-  cluster_name     = local.split_cluster_id[5]
-  cluster_location = local.split_cluster_id[3]
+  cluster_name     = split("/", var.cluster_id)[5]
+  cluster_location = split("/", var.cluster_id)[3]
 }
 
 resource "local_file" "debug_file" {

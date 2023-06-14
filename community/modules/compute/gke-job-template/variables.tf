@@ -113,7 +113,7 @@ variable "random_name_sufix" {
   default     = true
 }
 
-variable "persistent_volume_claim" {
+variable "persistent_volume_claims" {
   description = "A list of objects that describes a k8s PVC that is to be used and mounted on the job. Generally supplied by the gke-persistent-volume module."
   type = list(object({
     name          = string
