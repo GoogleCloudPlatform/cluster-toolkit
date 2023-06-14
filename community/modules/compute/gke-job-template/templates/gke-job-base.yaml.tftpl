@@ -25,13 +25,12 @@ spec:
                 - ${node_pool}
                 %{~ endfor ~}
       %{~ endif ~}
+      %{~ if length(node_selectors) > 0 ~}
       nodeSelector:
-      %{~ if machine_family != null ~}
-        cloud.google.com/machine-family: ${machine_family}
-      %{~ endif ~}
-      %{~ for key, val in node_selectors ~}
-        ${key}: ${val}
+      %{~ for selector in node_selectors ~}
+        ${selector.key}: ${selector.value}
       %{~ endfor ~}
+      %{~ endif ~}
       tolerations:
       %{~ for toleration in tolerations ~}
       - key: ${toleration.key}
@@ -43,20 +42,20 @@ spec:
       - name: ${name}-container
         image: ${image}
         command: [%{~ for s in command ~}"${s}",%{~ endfor ~}]
-        %{~ if should_request_cpu || should_request_gpu ~}
+        %{~ if gpu_limit != null || cpu_request != null ~}
         resources:
-          %{~ if should_request_gpu ~}
+          %{~ if gpu_limit != null ~}
           limits:
             # GPUs should only be specified as limits
             # https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
             nvidia.com/gpu: ${gpu_limit}
           %{~ endif ~}
-          %{~ if should_request_cpu ~}
+          %{~ if cpu_request != null ~}
           requests:
             %{~ if full_node_request ~}
             # cpu request attempts full node per pod
             %{~ endif ~}
-            cpu: ${millicpu_request}
+            cpu: ${cpu_request}
           %{~ endif ~}
         %{~ endif ~}
       restartPolicy: ${restart_policy}
