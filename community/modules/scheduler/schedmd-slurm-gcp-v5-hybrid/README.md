@@ -38,7 +38,7 @@ manually. This will require addition configuration and verification of
 permissions. For more information see the [hybrid.md] documentation on
 [slurm-gcp].
 
-[slurm-controller-hybrid]: https://github.com/SchedMD/slurm-gcp/tree/5.7.3/terraform/slurm_cluster/modules/slurm_controller_hybrid
+[slurm-controller-hybrid]: https://github.com/SchedMD/slurm-gcp/tree/5.7.4/terraform/slurm_cluster/modules/slurm_controller_hybrid
 
 > **_NOTE:_** The hybrid module requires the following dependencies to be
 > installed on the system deploying the module:
@@ -58,15 +58,15 @@ permissions. For more information see the [hybrid.md] documentation on
 [pyyaml]: https://pypi.org/project/PyYAML/
 [google-api-python-client]: https://pypi.org/project/google-api-python-client/
 [google-cloud-pubsub]: https://pypi.org/project/google-cloud-pubsub/
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.7.3/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.7.4/scripts/requirements.txt
 
 ### Manual Configuration
 This module *does not* complete the installation of hybrid partitions on your
 slurm cluster. After deploying, you must follow the steps listed out in the
 [hybrid.md] documentation under [manual steps].
 
-[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/5.7.3/docs/hybrid.md
-[manual steps]: https://github.com/SchedMD/slurm-gcp/blob/5.7.3/docs/hybrid.md#manual-configurations
+[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/5.7.4/docs/hybrid.md
+[manual steps]: https://github.com/SchedMD/slurm-gcp/blob/5.7.4/docs/hybrid.md#manual-configurations
 
 ### Example Usage
 The hybrid module can be added to a blueprint as follows:
@@ -146,10 +146,10 @@ strongly advise only using versions 21 or 22 when using this module. Attempting
 to use this module with any version older than 21 may lead to unexpected
 results.
 
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.3
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.4
 [pre-existing-network-storage]: ../../../../modules/file-system/pre-existing-network-storage/
 [schedmd-slurm-gcp-v5-partition]: ../../compute/schedmd-slurm-gcp-v5-partition/
-[packer templates]: https://github.com/SchedMD/slurm-gcp/tree/5.7.3/packer
+[packer templates]: https://github.com/SchedMD/slurm-gcp/tree/5.7.4/packer
 
 ## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
