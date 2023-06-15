@@ -329,22 +329,24 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	lime := dc.Config.DeploymentGroups[0]
 	// Labels are set and override role
 	coral = lime.Modules[0]
-	c.Check(coral.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
-	c.Check(coral.Settings.Get("labels"), DeepEquals, cty.TupleVal([]cty.Value{
-		labelsRef,
-		cty.ObjectVal(map[string]cty.Value{
-			"magenta":   cty.StringVal("orchid"),
-			"ghpc_role": cty.StringVal("maroon"),
-		}),
-	}))
+	c.Check(coral.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
+		"merge", []cty.Value{
+			labelsRef,
+			cty.ObjectVal(map[string]cty.Value{
+				"ghpc_role": cty.StringVal("blue")}),
+			cty.ObjectVal(map[string]cty.Value{
+				"ghpc_role": cty.StringVal("maroon"),
+				"magenta":   cty.StringVal("orchid")}),
+		}).AsValue())
+
 	// Labels are not set, infer role from module.source
 	khaki = lime.Modules[1]
-	c.Check(khaki.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
-	c.Check(khaki.Settings.Get("labels"), DeepEquals, cty.TupleVal([]cty.Value{
-		labelsRef,
-		cty.ObjectVal(map[string]cty.Value{
-			"ghpc_role": cty.StringVal("brown")}),
-	}))
+	c.Check(khaki.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
+		"merge", []cty.Value{
+			labelsRef,
+			cty.ObjectVal(map[string]cty.Value{
+				"ghpc_role": cty.StringVal("brown")}),
+		}).AsValue())
 	// No labels input
 	silver = lime.Modules[2]
 	c.Check(silver.WrapSettingsWith["labels"], IsNil)
@@ -353,7 +355,6 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	// Packer, include global include explicitly
 	// Keep overridden ghpc_deployment=navy
 	orange = dc.Config.DeploymentGroups[1].Modules[0]
-	c.Check(orange.WrapSettingsWith["labels"], IsNil)
 	c.Check(orange.Settings.Get("labels"), DeepEquals, cty.ObjectVal(map[string]cty.Value{
 		"ghpc_blueprint":  cty.StringVal("simple"),
 		"ghpc_deployment": cty.StringVal("navy"),

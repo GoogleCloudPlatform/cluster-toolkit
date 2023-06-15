@@ -743,7 +743,7 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 
 func (s *MySuite) TestStringEscape(c *C) {
 	f := func(s string) string {
-		toks := TokensForValue(cty.StringVal(s))
+		toks := config.TokensForValue(cty.StringVal(s))
 		return string(toks.Bytes())
 	}
 	// LiteralVariables
@@ -812,4 +812,24 @@ func (s *MySuite) TestDeploymentSource(c *C) {
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
+}
+
+func (s *MySuite) TestSubstituteIgcReferencesInModule(c *C) {
+	d := config.Dict{}
+	d.Set("fold", cty.TupleVal([]cty.Value{
+		cty.StringVal("zebra"),
+		config.MustParseExpression(`module.golf.red + 6 + module.golf.green`).AsValue(),
+		config.MustParseExpression(`module.tennis.brown`).AsValue(),
+	}))
+	m := SubstituteIgcReferencesInModule(
+		config.Module{Settings: d},
+		map[config.Reference]modulereader.VarInfo{
+			config.ModuleRef("golf", "red"):   {Name: "pink"},
+			config.ModuleRef("golf", "green"): {Name: "lime"},
+		})
+	c.Check(m.Settings.Items(), DeepEquals, map[string]cty.Value{"fold": cty.TupleVal([]cty.Value{
+		cty.StringVal("zebra"),
+		config.MustParseExpression(`var.pink + 6 + var.lime`).AsValue(),
+		config.MustParseExpression(`module.tennis.brown`).AsValue(),
+	})})
 }

@@ -243,7 +243,7 @@ func writeMain(
 				}
 				moduleBody.SetAttributeRaw(setting, toks)
 			} else {
-				moduleBody.SetAttributeRaw(setting, TokensForValue(value))
+				moduleBody.SetAttributeRaw(setting, config.TokensForValue(value))
 			}
 		}
 	}
@@ -272,7 +272,7 @@ func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, 
 				Bytes: []byte{','}})
 		}
 		_, el := it.Element()
-		toks = append(toks, TokensForValue(el)...)
+		toks = append(toks, config.TokensForValue(el)...)
 		first = false
 	}
 	toks = append(toks, simpleTokens(suf)...)
