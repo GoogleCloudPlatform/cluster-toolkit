@@ -20,6 +20,13 @@ terraform -chdir=golden_copy_deployment/one apply
 Destroying infrastructure when no longer needed
 ===============================================
 
+Automated
+---------
+
+./ghpc destroy golden_copy_deployment
+
+Advanced / Manual
+-----------------
 Infrastructure should be destroyed in reverse order of creation:
 
 terraform -chdir=golden_copy_deployment/one destroy

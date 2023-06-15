@@ -35,6 +35,10 @@ variable "subnetwork_size" {
   description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
   type        = number
   default     = null
+  validation {
+    condition     = var.subnetwork_size == null
+    error_message = "subnetwork_size is deprecated. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
+  }
 }
 
 variable "default_primary_subnetwork_size" {
@@ -118,44 +122,24 @@ variable "primary_subnetwork" {
   type        = map(string)
   default     = null
   validation {
-    condition     = var.primary_subnetwork == null || can(var.primary_subnetwork["subnet_name"])
-    error_message = "Primary subnetwork must define \"subnet_name\"."
-  }
-  validation {
-    condition     = var.primary_subnetwork == null || can(var.primary_subnetwork["subnet_region"])
-    error_message = "Primary subnetwork must define \"subnet_region\"."
-  }
-  validation {
-    condition     = var.primary_subnetwork == null || can(var.primary_subnetwork["new_bits"])
-    error_message = "Primary subnetwork must define \"new_bits\"."
+    condition     = var.primary_subnetwork == null
+    error_message = "primary_subnetwork is deprecated. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
   }
 }
 
 variable "additional_subnetworks" {
   description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
   type        = list(map(string))
-  default     = []
+  default     = null
   validation {
-    condition = alltrue([
-      for s in var.additional_subnetworks : can(s["subnet_name"])
-    ])
-    error_message = "All additional subnetworks must define \"subnet_name\"."
-  }
-  validation {
-    condition = alltrue([
-      for s in var.additional_subnetworks : can(s["subnet_region"])
-    ])
-    error_message = "All additional subnetworks must define \"subnet_region\"."
-  }
-  validation {
-    condition     = alltrue([for s in var.additional_subnetworks : can(s["new_bits"])])
-    error_message = "All additional subnetworks must define \"new_bits\"."
+    condition     = var.additional_subnetworks == null
+    error_message = "additional_subnetworks is deprecated. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
   }
 }
 
 variable "secondary_ranges" {
   type        = map(list(object({ range_name = string, ip_cidr_range = string })))
-  description = "Secondary ranges that will be used in some of the subnets"
+  description = "Secondary ranges that will be used in some of the subnets. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
   default     = {}
 }
 

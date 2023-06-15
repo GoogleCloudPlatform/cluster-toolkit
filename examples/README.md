@@ -33,6 +33,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
+  * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
@@ -116,7 +119,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.3/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -257,7 +260,7 @@ To provision the cluster, please run:
 
 ```text
 ./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy ml-example"
+./ghpc deploy ml-example
 ```
 
 After accessing the login node, you can activate the conda environment for each
@@ -521,7 +524,7 @@ For this example the following is needed in the selected region:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.2/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.3/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -654,15 +657,6 @@ bucket:
 > manually mount as the user using the bucket
 > ([Read more](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/mounting.md#access-permissions)).
 
-### [ramble.yaml] ![community-badge] ![experimental-badge]
-
-This blueprint provisions a single VM, installs spack using the
-[spack-install module](../community/modules/scripts/spack-install/README.md),
-and then installs ramble using the
-[ramble-setup module](../community/modules/scripts/ramble-setup/README.md).
-
-[ramble.yaml]: ../community/examples/ramble.yaml
-
 ### [hpc-slurm-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Spack is an HPC software package manager. This example creates a small Slurm
@@ -710,6 +704,39 @@ spack load gromacs
 > including a spack build cache as described in the comments of the example.
 
 [hpc-slurm-gromacs.yaml]: ../community/examples/hpc-slurm-gromacs.yaml
+
+### [hpc-slurm-ramble-gromacs.yaml] ![community-badge] ![experimental-badge]
+
+Ramble is an experimentation framework which can drive the installation of
+software with Spack and create, execute, and analyze experiments using the
+installed software.
+
+This example blueprint will deploy a Slurm cluster, install Spack and Ramble on
+it, and create a Ramble workspace (named gromacs). This workspace can be setup using:
+
+```shell
+ramble workspace activate
+ramble workspace setup
+```
+
+After setup is complete, the experiments can be executed using:
+
+```shell
+ramble workspace activate # If not active
+ramble on
+```
+
+And after the experiments are complete, they can be analyzed using:
+
+```shell
+ramble workspace activate # If not active
+ramble workspace analyze
+```
+
+The experiments defined by the workspace configuration are a 1, 2, 4, 8, and 16
+node scaling study of the Lignocellulose benchmark for Gromacs.
+
+[hpc-slurm-ramble-gromacs.yaml]: ../community/examples/hpc-slurm-ramble-gromacs.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
 
@@ -823,6 +850,29 @@ tutorial.
 > The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/tutorials/ansys-fluent).
 
 [tutorial-fluent.yaml]: ../community/examples/tutorial-fluent.yaml
+
+### [hpc-slurm-chromedesktop.yaml] ![community-badge] ![experimental-badge]
+
+This example shows how to use the `chrome-remote-desktop` module with a Slurm
+partition to be able to `salloc` a GPU accelerated remote desktop.
+
+After deploying the blueprint perform the following actions:
+1. SSH to the Slurm login node or controller.
+1. Provision a remote desktop with the following command: `salloc -p desktop -N
+   1`
+1. Once you see `salloc: Nodes slurmchrom-desktop-ghpc-0 are ready for job`,
+   follow the [instructions to set up the remote desktop][crd-instructions].
+
+[crd-instructions]: ../community/modules/remote-desktop/chrome-remote-desktop/README.md#setting-up-the-remote-desktop
+[hpc-slurm-chromedesktop.yaml]: ../community/examples/hpc-slurm-chromedesktop.yaml
+### [flux-cluster.yaml] ![community-badge] ![experimental-badge]
+
+The [flux-cluster.yaml] blueprint describes a flux-framework cluster where flux
+is deployed as the native resource manager.
+
+See [README](../community/examples/flux-framework/README.md)
+
+[flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
 
 ### [hpc-slurm-legacy.yaml] ![community-badge] ![deprecated-badge]
 
@@ -1117,23 +1167,17 @@ The variable is referred to by the source, either vars for deploment variables
 or the module ID for module variables, followed by the name of the value being
 referenced. The entire variable is then wrapped in “$()”.
 
-Currently, references to variable attributes and string operations with
-variables are not supported.
+Currently, string interpolation with variables is not supported.
 
 ### Literal Variables
 
-Literal variables are not interpreted by `ghpc` directly, but rather embedded in the
-underlying module. Literal variables should only be used by those familiar
-with the underlying module technology (Terraform or Packer); no validation
-will be done before deployment to ensure that they are referencing
-something that exists.
-
-Literal variables are occasionally needed when referring to the data structure
-of the underlying module. For example, to refer to the subnetwork self link from
-a vpc module through terraform itself:
+Literal variables should only be used by those familiar
+with the underlying module technology (Terraform or Packer);
+Literal variables are occasionally needed when calling a function or other complex statements. For example, to JSON-encode network storage metadata:
 
 ```yaml
-subnetwork_self_link: ((module.network1.primary_subnetwork.self_link))
+metadata:
+  network_storage: ((jsonencode([module.appfs.network_storage])))
 ```
 
 Here the network1 module is referenced, the terraform module name is the same as

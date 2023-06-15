@@ -1,5 +1,6 @@
 {
   "displayName": "${title}: ${deployment_name}",
+  "labels": ${jsonencode(labels)},
   "gridLayout": {
     "columns": 2,
     "widgets": [

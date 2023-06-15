@@ -242,7 +242,7 @@ class ClusterInfo:
             ["hpc_network"] + filesystems_references
         )
 
-        controller_sa = f"{self.cluster.cloud_id}-sa"
+        controller_sa = "sa"
         # TODO: Determine if these all should be different, and if so, add to
         # resource to be created. NOTE though, that at the moment, GHPC won't
         # let us unpack output variables, so we can't index properly.
@@ -282,7 +282,7 @@ deployment_groups:
     id: hpc_service_account
     settings:
       project_id: {project_id}
-      names: [ {controller_sa} ]
+      name: {controller_sa}
       project_roles:
       - compute.instanceAdmin.v1
       - iam.serviceAccountUser
@@ -306,7 +306,7 @@ deployment_groups:
       disk_type: {self.cluster.controller_disk_type}
       disk_size_gb: {self.cluster.controller_disk_size}
       service_account:
-        email: $(hpc_service_account.email)
+        email: $(hpc_service_account.service_account_email)
         scopes:
         - https://www.googleapis.com/auth/cloud-platform
         - https://www.googleapis.com/auth/monitoring.write
@@ -335,7 +335,7 @@ deployment_groups:
       disk_type: {self.cluster.login_node_disk_type}
       disk_size_gb: {self.cluster.login_node_disk_size}
       service_account:
-        email: $(hpc_service_account.email)
+        email: $(hpc_service_account.service_account_email)
         scopes:
         - https://www.googleapis.com/auth/cloud-platform
         - https://www.googleapis.com/auth/monitoring.write

@@ -16,7 +16,7 @@
 
 locals {
   setup_file = templatefile(
-    "${path.module}/templates/ramble_setup.tpl",
+    "${path.module}/templates/ramble_setup.yml.tpl",
     {
       install_dir = var.install_dir
       ramble_url  = var.ramble_url
@@ -24,12 +24,11 @@ locals {
       chown_owner = var.chown_owner == null ? "" : var.chown_owner
       chgrp_group = var.chgrp_group == null ? "" : var.chgrp_group
       chmod_mode  = var.chmod_mode == null ? "" : var.chmod_mode
-      log_file    = var.log_file
     }
   )
 
   deps_file = templatefile(
-    "${path.module}/templates/install_ramble_deps.yml",
+    "${path.module}/templates/install_ramble_deps.yml.tpl",
     {
       ramble_ref = var.ramble_ref
     }

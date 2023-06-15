@@ -585,3 +585,42 @@ func (dg DeploymentGroup) OutputNames() []string {
 	}
 	return outputs
 }
+
+// OutputNamesByGroup returns the outputs from prior groups that match input
+// names for this group as a map
+func OutputNamesByGroup(g DeploymentGroup, dc DeploymentConfig) (map[GroupName][]string, error) {
+	refs := g.FindAllIntergroupReferences(dc.Config)
+	inputNames := make([]string, len(refs))
+	for i, ref := range refs {
+		inputNames[i] = AutomaticOutputName(ref.Name, ref.Module)
+	}
+
+	i := dc.Config.GroupIndex(g.Name)
+	if i == -1 {
+		return nil, fmt.Errorf("group %s not found in blueprint", g.Name)
+	}
+	outputNamesByGroup := make(map[GroupName][]string)
+	for _, g := range dc.Config.DeploymentGroups[:i] {
+		outputNamesByGroup[g.Name] = intersection(inputNames, g.OutputNames())
+	}
+	return outputNamesByGroup, nil
+}
+
+// return sorted list of elements common to s1 and s2
+func intersection(s1 []string, s2 []string) []string {
+	first := make(map[string]bool)
+
+	for _, v := range s1 {
+		first[v] = true
+	}
+
+	both := map[string]bool{}
+	for _, v := range s2 {
+		if first[v] {
+			both[v] = true
+		}
+	}
+	is := maps.Keys(both)
+	slices.Sort(is)
+	return is
+}

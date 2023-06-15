@@ -20,7 +20,7 @@ steps:
 - id: git-fetch-unshallow
   name: gcr.io/cloud-builders/git
   args: ['fetch', '--unshallow']
-- name: golang:bullseye
+- name: "golang:bullseye"
   entrypoint: /bin/bash
   args:
   - -c

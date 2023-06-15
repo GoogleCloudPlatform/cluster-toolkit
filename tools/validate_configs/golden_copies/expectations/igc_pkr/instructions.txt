@@ -22,12 +22,19 @@ cd -
 Destroying infrastructure when no longer needed
 ===============================================
 
+Automated
+---------
+
+./ghpc destroy golden_copy_deployment
+
+Advanced / Manual
+-----------------
 Infrastructure should be destroyed in reverse order of creation:
 
 terraform -chdir=golden_copy_deployment/zero destroy
 
 Please browse to the Cloud Console to remove VM images produced by Packer.
-By default, the names of images can be found in these files:
+If this file is present, the names of images can be read from it:
 
 golden_copy_deployment/one/image/packer-manifest.json
 

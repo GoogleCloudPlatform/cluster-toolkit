@@ -18,7 +18,6 @@ package main
 import (
 	"embed"
 	"hpc-toolkit/cmd"
-	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 	"os"
 )
@@ -35,7 +34,6 @@ var gitInitialHash string
 
 func main() {
 	sourcereader.ModuleFS = moduleFS
-	modulereader.ModuleFS = moduleFS
 	cmd.GitTagVersion = gitTagVersion
 	cmd.GitBranch = gitBranch
 	cmd.GitCommitInfo = gitCommitInfo

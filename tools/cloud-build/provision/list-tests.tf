@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-data "external" "list_tests_py" {
-  program = ["./list_tests.py"]
+data "external" "list_tests_midnight" {
+  program = ["./list_tests.py", "30", "300"] # 00:30 - 05:00
+}
+
+data "external" "list_tests_morning" {
+  program = ["./list_tests.py", "330", "720"] # 05:30 - 12:00
 }

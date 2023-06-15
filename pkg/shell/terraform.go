@@ -91,7 +91,7 @@ func needsInit(tf *tfexec.Terraform) bool {
 func initModule(tf *tfexec.Terraform) error {
 	var err error
 	if needsInit(tf) {
-		log.Printf("initializing terraform directory %s", tf.WorkingDir())
+		log.Printf("initializing terraform module %s", tf.WorkingDir())
 		err = tf.Init(context.Background())
 	}
 
@@ -138,9 +138,9 @@ func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 // note planned deprecration of Plan in favor of JSON-only format
 // may need to determine future-proof way of getting human-readable plan
 // https://github.com/hashicorp/terraform-exec/blob/1b7714111a94813e92936051fb3014fec81218d5/tfexec/plan.go#L128-L129
-func planModule(tf *tfexec.Terraform, f *os.File) (bool, error) {
-	outOpt := tfexec.Out(f.Name())
-	wantsChange, err := tf.Plan(context.Background(), outOpt)
+func planModule(tf *tfexec.Terraform, path string, destroy bool) (bool, error) {
+	outOpt := tfexec.Out(path)
+	wantsChange, err := tf.Plan(context.Background(), outOpt, tfexec.Destroy(destroy))
 	if err != nil {
 		return false, &TfError{
 			help: fmt.Sprintf("terraform plan for %s failed; suggest running \"ghpc export-outputs\" on previous deployment groups to define inputs", tf.WorkingDir()),
@@ -151,64 +151,97 @@ func planModule(tf *tfexec.Terraform, f *os.File) (bool, error) {
 	return wantsChange, nil
 }
 
-func getOutputs(tf *tfexec.Terraform, applyBehavior ApplyBehavior) (map[string]cty.Value, error) {
-	if err := initModule(tf); err != nil {
-		return nil, err
+func promptForApply(tf *tfexec.Terraform, path string, b ApplyBehavior) bool {
+	switch b {
+	case AutomaticApply:
+		return true
+	case PromptBeforeApply:
+		plan, err := tf.ShowPlanFileRaw(context.Background(), path)
+		if err != nil {
+			return false
+		}
+
+		re := regexp.MustCompile(`Plan: .*\n`)
+		summary := re.FindString(plan)
+
+		if summary == "" {
+			summary = fmt.Sprintf("Please review full proposed changes for %s", tf.WorkingDir())
+		}
+
+		changes := ProposedChanges{
+			Summary: summary,
+			Full:    plan,
+		}
+
+		return ApplyChangesChoice(changes)
+	default:
+		return false
+	}
+}
+
+func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
+	planFileOpt := tfexec.DirOrPlan(path)
+	log.Printf("running terraform apply on group %s", tf.WorkingDir())
+	tf.SetStdout(os.Stdout)
+	tf.SetStderr(os.Stderr)
+	if err := tf.Apply(context.Background(), planFileOpt); err != nil {
+		return err
+	}
+	tf.SetStdout(nil)
+	tf.SetStderr(nil)
+	return nil
+}
+
+// generate a Terraform plan to apply or destroy a module
+// recall "destroy" is just an alias for "apply -destroy"!
+// apply the plan automatically or after prompting the user
+func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
+	action := "adding or changing"
+	pastTense := "applied"
+	if destroy {
+		action = "destroying"
+		pastTense = "destroyed"
 	}
 
-	log.Printf("testing if terraform state of %s is in sync with cloud infrastructure", tf.WorkingDir())
+	if err := initModule(tf); err != nil {
+		return err
+	}
+
+	log.Printf("testing if module in %s requires %s cloud infrastructure", tf.WorkingDir(), action)
 	// capture Terraform plan in a file
 	f, err := os.CreateTemp("", "plan-)")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer os.Remove(f.Name())
-	wantsChange, err := planModule(tf, f)
+	wantsChange, err := planModule(tf, f.Name(), destroy)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var apply bool
 	if wantsChange {
-		log.Println("cloud infrastructure requires changes")
-		switch applyBehavior {
-		case AutomaticApply:
-			apply = true
-		case PromptBeforeApply:
-			plan, err := tf.ShowPlanFileRaw(context.Background(), f.Name())
-
-			re := regexp.MustCompile(`Plan: .*\n`)
-			summary := re.FindString(plan)
-
-			if summary == "" {
-				summary = fmt.Sprintf("Please review full proposed changes for %s", tf.WorkingDir())
-			}
-
-			changes := ProposedChanges{
-				Summary: summary,
-				Full:    plan,
-			}
-
-			if err != nil {
-				return nil, err
-			}
-			apply = ApplyChangesChoice(changes)
-		default:
-			return nil,
-				fmt.Errorf("cloud infrastructure requires changes; please run \"terraform -chdir=%s apply\"", tf.WorkingDir())
-		}
+		log.Printf("module in %s requires %s cloud infrastructure", tf.WorkingDir(), action)
+		apply = b == AutomaticApply || promptForApply(tf, f.Name(), b)
 	} else {
-		log.Printf("cloud infrastructure in %s requires no changes", tf.WorkingDir())
+		log.Printf("cloud infrastructure in %s is already %s", tf.WorkingDir(), pastTense)
 	}
 
-	if apply {
-		planFileOpt := tfexec.DirOrPlan(f.Name())
-		log.Printf("running terraform apply on group %s", tf.WorkingDir())
-		tf.SetStdout(os.Stdout)
-		tf.SetStderr(os.Stderr)
-		tf.Apply(context.Background(), planFileOpt)
-		tf.SetStdout(nil)
-		tf.SetStderr(nil)
+	if !apply {
+		return nil
+	}
+
+	if err := applyPlanConsoleOutput(tf, f.Name()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getOutputs(tf *tfexec.Terraform, b ApplyBehavior) (map[string]cty.Value, error) {
+	err := applyOrDestroy(tf, b, false)
+	if err != nil {
+		return nil, err
 	}
 
 	outputValues, err := outputModule(tf)
@@ -254,19 +287,16 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 // working directory
 func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
 	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
-	thisGroup := config.GroupName(filepath.Base(deploymentGroupDir))
 
 	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
-
-	group, err := dc.Config.Group(thisGroup)
+	g, err := dc.Config.Group(config.GroupName(filepath.Base(deploymentGroupDir)))
 	if err != nil {
-		return fmt.Errorf("group %s not found in deployment blueprint", thisGroup)
+		return err
 	}
-
-	outputNamesByGroup, err := getIntergroupOutputNamesByGroup(thisGroup, dc)
+	outputNamesByGroup, err := config.OutputNamesByGroup(g, dc)
 	if err != nil {
 		return err
 	}
@@ -278,7 +308,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		if len(intergroupOutputNames) == 0 {
 			continue
 		}
-		log.Printf("collecting outputs for group %s from group %s", thisGroup, groupName)
+		log.Printf("collecting outputs for group %s from group %s", g.Name, groupName)
 		filepath := outputsFile(artifactsDir, groupName)
 		groupOutputValues, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
@@ -296,11 +326,11 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	}
 
 	var outfile string
-	switch group.Kind {
+	switch g.Kind {
 	case config.TerraformKind:
-		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", thisGroup))
+		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", g.Name))
 	case config.PackerKind:
-		thisGroupIdx := dc.Config.GroupIndex(thisGroup)
+		thisGroupIdx := dc.Config.GroupIndex(g.Name)
 		packerGroup := dc.Config.DeploymentGroups[thisGroupIdx]
 		// Packer groups are enforced to have length 1
 		packerModule := packerGroup.Modules[0]
@@ -309,21 +339,36 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 
 		// evaluate Packer settings that contain intergroup references in the
 		// context of deployment variables and intergroup output values
-		packerSettings := getIntergroupPackerSettings(dc, packerModule)
+		intergroupSettings := config.Dict{}
+		for setting, value := range packerModule.Settings.Items() {
+			igcRefs := config.FindIntergroupReferences(value, packerModule, dc.Config)
+			if len(igcRefs) > 0 {
+				intergroupSettings.Set(setting, value)
+			}
+		}
+
+		igcVars := modulewriter.FindIntergroupVariables(packerGroup, dc.Config)
+		newModule := modulewriter.SubstituteIgcReferencesInModule(config.Module{Settings: intergroupSettings}, igcVars)
+
 		varsValues := dc.Config.Vars.Items()
 		mergeMapsWithoutLoss(allInputValues, varsValues)
-		evaluatedSettings, err := packerSettings.Eval(config.Blueprint{Vars: config.NewDict(allInputValues)})
+		evaluatedSettings, err := newModule.Settings.Eval(config.Blueprint{Vars: config.NewDict(allInputValues)})
 		if err != nil {
 			return err
 		}
 		allInputValues = evaluatedSettings.Items()
 	default:
-		return fmt.Errorf("unexpected error: unknown module kind for group %s", thisGroup)
+		return fmt.Errorf("unexpected error: unknown module kind for group %s", g.Name)
 	}
-	log.Printf("writing outputs for group %s to file %s\n", thisGroup, outfile)
+	log.Printf("writing outputs for group %s to file %s\n", g.Name, outfile)
 	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// Destroy destroys all infrastructure in the module working directory
+func Destroy(tf *tfexec.Terraform, b ApplyBehavior) error {
+	return applyOrDestroy(tf, b, true)
 }

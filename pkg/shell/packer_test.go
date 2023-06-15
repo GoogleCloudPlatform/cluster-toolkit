@@ -26,6 +26,8 @@ import (
 
 func (s *MySuite) TestPacker(c *C) {
 	if _, err := exec.LookPath("packer"); err != nil {
+		err := ConfigurePacker()
+		c.Assert(err, NotNil)
 		c.Skip("packer not found in PATH")
 	}
 

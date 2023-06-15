@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
 
 ---
 
-blueprint_name: slurm-crd
+blueprint_name: config-ssh
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: slurm-chromedesktop
-  region: us-central1
-  zone: us-central1-c
+  deployment_name: hpc-small
+  region: us-west4
+  zone: us-west4-c
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -28,6 +28,9 @@ vars:
 deployment_groups:
 - group: primary
   modules:
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
   - id: network1
     source: modules/network/vpc
 
@@ -37,59 +40,33 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  - id: remote-desktop
-    source: community/modules/remote-desktop/chrome-remote-desktop
-    use: [network1]
-    settings:
-      install_nvidia_driver: true
-      # instance_count: 0 will create installation scripts only
-      # which can be used with slurm node provisioning
-      instance_count: 0
-
-  - id: remote_desktop_startup
+  - id: script
     source: modules/scripts/startup-script
     settings:
-      runners:
-      - type: ansible-local
-        source: modules/chrome-remote-desktop/scripts/configure-grid-drivers.yml
-        destination: /tmp/configure-grid-drivers.yml
-      - type: ansible-local
-        source: modules/chrome-remote-desktop/scripts/configure-chrome-desktop.yml
-        destination: /tmp/configure-chrome-desktop.yml
-      - type: ansible-local
-        source: modules/chrome-remote-desktop/scripts/disable-sleep.yml
-        destination: /tmp/disable-sleep.yml
+      configure_ssh_host_patterns: ['10.182.0.*', 'hpcsm*']
 
-  - id: crd_node_group
+  - id: debug_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
-      machine_type: n1-standard-8
-      node_count_dynamic_max: 1
-      disable_public_ips: false
-      instance_image:
-        family: schedmd-v5-slurm-22-05-9-ubuntu-2004-lts
-        project: projects/schedmd-slurm-public/global/images/family
-      guest_accelerator:
-      - type: nvidia-tesla-t4-vws
-        count: 1
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
 
-  - id: crd_partition
+  - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - network1
     - homefs
-    - remote_desktop_startup
-    - crd_node_group
+    - debug_node_group
     settings:
-      partition_name: desktop
-      enable_placement: false
-      partition_startup_scripts_timeout: 900
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      enable_placement: false # the default is: true
+      is_default: true
 
   - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
-      machine_type: n2-standard-4
-      node_count_dynamic_max: 1
+      node_count_dynamic_max: 20
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -104,24 +81,19 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - network1
-    - homefs
-    - crd_partition
+    - debug_partition
     - compute_partition
+    - homefs
+    - script
     settings:
       disable_controller_public_ips: false
-      compute_startup_scripts_timeout: 900
-      cloud_parameters:
-        resume_rate: 0
-        resume_timeout: 900
-        suspend_rate: 0
-        suspend_timeout: 300
-        no_comma_params: false
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use:
     - network1
     - slurm_controller
+    - script
     settings:
       machine_type: n2-standard-4
       disable_login_public_ips: false

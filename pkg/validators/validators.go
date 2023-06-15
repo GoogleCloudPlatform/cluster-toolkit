@@ -21,12 +21,10 @@ import (
 	"log"
 	"strings"
 
-	compute "cloud.google.com/go/compute/apiv1"
-	serviceusage "cloud.google.com/go/serviceusage/apiv1"
-	"github.com/googleapis/gax-go/v2/apierror"
+	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
-	serviceusagepb "google.golang.org/genproto/googleapis/api/serviceusage/v1"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
+	serviceusage "google.golang.org/api/serviceusage/v1"
 )
 
 const enableAPImsg = "%[1]s: can be enabled at https://console.cloud.google.com/apis/library/%[1]s?project=%[2]s"
@@ -93,12 +91,11 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 
 	ctx := context.Background()
 
-	c, err := serviceusage.NewClient(ctx, option.WithQuotaProject(projectID))
+	s, err := serviceusage.NewService(ctx, option.WithQuotaProject(projectID))
 	if err != nil {
 		err = handleClientError(err)
 		return err
 	}
-	defer c.Close()
 
 	prefix := "projects/" + projectID
 	var serviceNames []string
@@ -106,34 +103,35 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 		serviceNames = append(serviceNames, prefix+"/services/"+api)
 	}
 
-	req := &serviceusagepb.BatchGetServicesRequest{
-		Parent: prefix,
-		Names:  serviceNames,
-	}
-	resp, err := c.BatchGetServices(ctx, req)
+	resp, err := s.Services.BatchGet(prefix).Names(serviceNames...).Do()
 	if err != nil {
-		var ae *apierror.APIError
-		if errors.As(err, &ae) {
-			switch reason := ae.Reason(); reason {
-			case "SERVICE_DISABLED":
-				log.Printf(enableAPImsg, "serviceusage.googleapis.com", projectID)
-				return fmt.Errorf(serviceDisabledMsg, projectID)
-			case "SERVICE_CONFIG_NOT_FOUND_OR_PERMISSION_DENIED":
-				return fmt.Errorf("service %s does not exist in project %s", ae.Metadata()["services"], projectID)
-			case "USER_PROJECT_DENIED":
-				return fmt.Errorf(projectError, projectID)
-			case "SU_MISSING_NAMES":
-				// occurs if API list is empty and 0 APIs to validate
-				return nil
-			default:
-				return fmt.Errorf("unhandled error: %s", err)
-			}
+		var herr *googleapi.Error
+		if !errors.As(err, &herr) {
+			return fmt.Errorf("unhandled error: %s", err)
+		}
+		ok, reason, metadata := getErrorReason(*herr)
+		if !ok {
+			return fmt.Errorf("unhandled error: %s", err)
+		}
+		switch reason {
+		case "SERVICE_DISABLED":
+			log.Printf(enableAPImsg, "serviceusage.googleapis.com", projectID)
+			return fmt.Errorf(serviceDisabledMsg, projectID)
+		case "SERVICE_CONFIG_NOT_FOUND_OR_PERMISSION_DENIED":
+			return fmt.Errorf("service %s does not exist in project %s", metadata["services"], projectID)
+		case "USER_PROJECT_DENIED":
+			return fmt.Errorf(projectError, projectID)
+		case "SU_MISSING_NAMES":
+			// occurs if API list is empty and 0 APIs to validate
+			return nil
+		default:
+			return fmt.Errorf("unhandled error: %s", err)
 		}
 	}
 
 	var errored bool
 	for _, service := range resp.Services {
-		if service.State.String() == "DISABLED" {
+		if service.State == "DISABLED" {
 			errored = true
 			log.Printf("%s: service is disabled in project %s", service.Config.Name, projectID)
 			log.Printf(enableAPImsg, service.Config.Name, projectID)
@@ -148,18 +146,12 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 // TestProjectExists whether projectID exists / is accessible with credentials
 func TestProjectExists(projectID string) error {
 	ctx := context.Background()
-	c, err := compute.NewProjectsRESTClient(ctx)
+	s, err := compute.NewService(ctx)
 	if err != nil {
 		err = handleClientError(err)
 		return err
 	}
-	defer c.Close()
-
-	req := &computepb.GetProjectRequest{
-		Project: projectID,
-	}
-
-	_, err = c.Get(ctx, req)
+	_, err = s.Projects.Get(projectID).Fields().Do()
 	if err != nil {
 		if strings.Contains(err.Error(), computeDisabledError) {
 			log.Printf(computeDisabledMsg, projectID)
@@ -173,25 +165,27 @@ func TestProjectExists(projectID string) error {
 	return nil
 }
 
-func getRegion(projectID string, region string) (*computepb.Region, error) {
+func getErrorReason(err googleapi.Error) (bool, string, map[string]interface{}) {
+	for _, d := range err.Details {
+		m, ok := d.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if reason, ok := m["reason"].(string); ok {
+			return true, reason, m["metadata"].(map[string]interface{})
+		}
+	}
+	return false, "", nil
+}
+
+func getRegion(projectID string, region string) (*compute.Region, error) {
 	ctx := context.Background()
-	c, err := compute.NewRegionsRESTClient(ctx)
+	s, err := compute.NewService(ctx)
 	if err != nil {
 		err = handleClientError(err)
 		return nil, err
 	}
-	defer c.Close()
-
-	req := &computepb.GetRegionRequest{
-		Project: projectID,
-		Region:  region,
-	}
-	regionObject, err := c.Get(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return regionObject, nil
+	return s.Regions.Get(projectID, region).Do()
 }
 
 // TestRegionExists whether region exists / is accessible with credentials
@@ -203,25 +197,14 @@ func TestRegionExists(projectID string, region string) error {
 	return nil
 }
 
-func getZone(projectID string, zone string) (*computepb.Zone, error) {
+func getZone(projectID string, zone string) (*compute.Zone, error) {
 	ctx := context.Background()
-	c, err := compute.NewZonesRESTClient(ctx)
+	s, err := compute.NewService(ctx)
 	if err != nil {
 		err = handleClientError(err)
 		return nil, err
 	}
-	defer c.Close()
-
-	req := &computepb.GetZoneRequest{
-		Project: projectID,
-		Zone:    zone,
-	}
-	zoneObject, err := c.Get(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return zoneObject, nil
+	return s.Zones.Get(projectID, zone).Do()
 }
 
 // TestZoneExists whether zone exists / is accessible with credentials
@@ -244,7 +227,7 @@ func TestZoneInRegion(projectID string, zone string, region string) error {
 		return fmt.Errorf(zoneError, zone, projectID)
 	}
 
-	if *zoneObject.Region != *regionObject.SelfLink {
+	if zoneObject.Region != regionObject.SelfLink {
 		return fmt.Errorf(zoneInRegionError, zone, region, projectID)
 	}
 

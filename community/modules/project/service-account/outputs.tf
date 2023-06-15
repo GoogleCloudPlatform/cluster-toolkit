@@ -14,47 +14,23 @@
  * limitations under the License.
  */
 
-output "email" {
-  description = "Service account email (for single use)."
-  value       = module.service_accounts.email
-}
-output "emails" {
-  description = "Service account emails by name."
-  value       = module.service_accounts.emails
-}
-output "emails_list" {
-  description = "Service account emails s list."
-  value       = module.service_accounts.emails_list
-}
-output "iam_email" {
-  description = "IAM-format service account email (for single use)."
-  value       = module.service_accounts.iam_email
-}
-output "iam_emails" {
-  description = "IAM-format service account emails by name."
-  value       = module.service_accounts.iam_emails
-}
-output "iam_emails_list" {
-  description = "IAM-format service account emails s list."
-  value       = module.service_accounts.iam_emails_list
-}
 output "key" {
-  description = "Service account key (for single use)."
-  value       = module.service_accounts.key
+  description = "Service account key (if creation was requested)"
+  value       = module.service_account.key
 }
-output "keys" {
-  description = "Map of service account keys."
-  value       = module.service_accounts.keys
+
+output "service_account_email" {
+  description = "Service account e-mail address"
+  value       = module.service_account.email
+  depends_on = [
+    module.service_account,
+  ]
 }
-output "service_account" {
-  description = "Service account resource (for single use)."
-  value       = module.service_accounts.service_account
-}
-output "service_accounts" {
-  description = "Service account resources as list."
-  value       = module.service_accounts.service_accounts
-}
-output "service_accounts_map" {
-  description = "Service account resources by name."
-  value       = module.service_accounts.service_accounts_map
+
+output "service_account_iam_email" {
+  description = "Service account IAM binding format (serviceAccount:name@example.com)"
+  value       = module.service_account.iam_email
+  depends_on = [
+    module.service_account,
+  ]
 }

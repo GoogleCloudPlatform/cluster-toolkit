@@ -39,7 +39,7 @@ variable "spack_url" {
 variable "spack_ref" {
   description = "Git ref to checkout for spack."
   type        = string
-  default     = "v0.19.0"
+  default     = "v0.20.0"
 }
 
 variable "spack_cache_url" {
@@ -225,5 +225,11 @@ EOT
 variable "log_file" {
   description = "Defines the logfile that script output will be written to"
   default     = "/var/log/spack.log"
+  type        = string
+}
+
+variable "spack_virtualenv_path" {
+  description = "Virtual environment path in which to install Spack Python interpreter and other dependencies"
+  default     = "/usr/local/spack-python"
   type        = string
 }

@@ -1,5 +1,8 @@
 #!/bin/bash
-set -e
+
+set -e -o pipefail
+
+SPACK_PYTHON=${SPACK_PYTHON_VENV}/bin/python3
 
 PREFIX="spack:"
 
@@ -9,9 +12,16 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-# Activate ghpc-venv virtual environment if it exists
-if [ -d /usr/local/ghpc-venv ]; then
-  source /usr/local/ghpc-venv/bin/activate
+# create an /etc/profile.d file that sources the Spack environment; it safely
+# skips sourcing when Spack has not yet been installed
+if [ ! -f /etc/profile.d/spack.sh ]; then
+        cat <<EOF > /etc/profile.d/spack.sh
+SPACK_PYTHON=${SPACK_PYTHON_VENV}/bin/python3
+if [ -f ${INSTALL_DIR}/share/spack/setup-env.sh ]; then
+        . ${INSTALL_DIR}/share/spack/setup-env.sh
+fi
+EOF
+        chmod 0644 /etc/profile.d/spack.sh
 fi
 
 # Only install and configure spack if ${INSTALL_DIR} doesn't exist
@@ -153,10 +163,5 @@ echo "$PREFIX Populating defined buildcaches"
     } >> ${LOG_FILE}
   %{endif ~}
 %{endfor ~}
-
-if [ ! -f /etc/profile.d/spack.sh ]; then
-        echo "source ${INSTALL_DIR}/share/spack/setup-env.sh" > /etc/profile.d/spack.sh
-        chmod a+rx /etc/profile.d/spack.sh
-fi
 
 echo "$PREFIX Setup complete..."

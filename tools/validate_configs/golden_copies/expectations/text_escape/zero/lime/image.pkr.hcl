@@ -19,8 +19,23 @@ locals {
   image_name         = var.image_name != null ? var.image_name : local.image_name_default
 
   # construct metadata from startup_script and metadata variables
-  linux_startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
-  metadata                      = merge(var.metadata, local.linux_startup_script_metadata)
+  startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
+  user_management_metadata = {
+    block-project-ssh-keys = "TRUE"
+    shutdown-script        = <<-EOT
+      #!/bin/bash
+      userdel -r ${var.ssh_username}
+      sed -i '/${var.ssh_username}/d' /var/lib/google/google_users
+    EOT
+  }
+
+  # merge metadata such that var.metadata always overrides user management
+  # metadata but always allow var.startup_script to override var.metadata
+  metadata = merge(
+    local.user_management_metadata,
+    var.metadata,
+    local.startup_script_metadata,
+  )
 
   # determine communicator to use and whether to enable Identity-Aware Proxy
   no_shell_scripts     = length(var.shell_scripts) == 0
@@ -33,7 +48,7 @@ locals {
   # determine best value for on_host_maintenance if not supplied by user
   machine_vals                = split("-", var.machine_type)
   machine_family              = local.machine_vals[0]
-  gpu_attached                = contains(["a2"], local.machine_family) || var.accelerator_type != null
+  gpu_attached                = contains(["a2", "g2"], local.machine_family) || var.accelerator_type != null
   on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
   on_host_maintenance = (
     var.on_host_maintenance != null

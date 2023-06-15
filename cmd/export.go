@@ -44,7 +44,7 @@ var (
 		Long:              "Export output values from deployment group to other deployment groups that depend upon them.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
-		PreRun:            setArtifactsDir,
+		PreRun:            parseExportImportArgs,
 		RunE:              runExportCmd,
 		SilenceUsage:      true,
 	}
@@ -66,19 +66,21 @@ func matchDirs(cmd *cobra.Command, args []string, toComplete string) ([]string, 
 	return nil, cobra.ShellCompDirectiveFilterDirs | cobra.ShellCompDirectiveNoFileComp
 }
 
-func setArtifactsDir(cmd *cobra.Command, args []string) {
-	workingDir := filepath.Clean(args[0])
-	deploymentRoot := filepath.Join(workingDir, "..")
+func parseExportImportArgs(cmd *cobra.Command, args []string) {
+	deploymentRoot = filepath.Join(filepath.Clean(args[0]), "..")
+	artifactsDir = getArtifactsDir(deploymentRoot)
+}
 
+func getArtifactsDir(deploymentRoot string) string {
 	if artifactsDir == "" {
-		artifactsDir = filepath.Clean(filepath.Join(deploymentRoot, defaultArtifactsDir))
+		return filepath.Clean(filepath.Join(deploymentRoot, defaultArtifactsDir))
 	}
+	return artifactsDir
 }
 
 func runExportCmd(cmd *cobra.Command, args []string) error {
-	workingDir := filepath.Clean(args[0])
-	deploymentGroup := config.GroupName(filepath.Base(workingDir))
-	deploymentRoot := filepath.Clean(filepath.Join(workingDir, ".."))
+	groupDir := filepath.Clean(args[0])
+	deploymentGroup := config.GroupName(filepath.Base(args[0]))
 
 	if err := shell.CheckWritableDir(artifactsDir); err != nil {
 		return err
@@ -102,7 +104,7 @@ func runExportCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("export command is unsupported on Packer modules because they do not have outputs")
 	}
 
-	tf, err := shell.ConfigureTerraform(workingDir)
+	tf, err := shell.ConfigureTerraform(groupDir)
 	if err != nil {
 		return err
 	}

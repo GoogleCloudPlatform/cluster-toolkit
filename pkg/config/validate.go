@@ -36,6 +36,7 @@ const (
 	validationWarningMsg = "Validation failures were treated as a warning, continuing to create blueprint."
 	validationErrorMsg   = "validation failed due to the issues listed above"
 	funcErrorMsgTemplate = "validator %s failed"
+	maxLabels            = 64
 )
 
 // InvalidSettingError signifies a problem with the supplied setting name in a
@@ -148,9 +149,27 @@ func (dc DeploymentConfig) validateVars() error {
 		if !ty.IsObjectType() && !ty.IsMapType() {
 			return errors.New("vars.labels must be a map of strings")
 		}
-		for _, v := range labels.AsValueMap() {
+		if labels.LengthInt() > maxLabels {
+			// GCP resources cannot have more than 64 labels, so enforce this upper bound here
+			// to do some early validation. Modules may add more labels, leading to potential
+			// deployment failures.
+			return errors.New("vars.labels cannot have more than 64 labels")
+		}
+		for labelName, v := range labels.AsValueMap() {
 			if v.Type() != cty.String {
 				return errors.New("vars.labels must be a map of strings")
+			}
+			labelValue := v.AsString()
+
+			// Check that label names are valid
+			if !isValidLabelName(labelName) {
+				return errors.Errorf("%s: '%s: %s'",
+					errorMessages["labelNameReqs"], labelName, labelValue)
+			}
+			// Check that label values are valid
+			if !isValidLabelValue(labelValue) {
+				return errors.Errorf("%s: '%s: %s'",
+					errorMessages["labelValueReqs"], labelName, labelValue)
 			}
 		}
 	}

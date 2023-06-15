@@ -109,6 +109,24 @@ variable "maintenance_exclusions" {
   }
 }
 
+variable "enable_filestore_csi" {
+  description = "The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes."
+  type        = bool
+  default     = false
+}
+
+variable "enable_gcsfuse_csi" {
+  description = "The status of the GCSFuse Filestore Container Storage Interface (CSI) driver addon, which allows the usage of a gcs bucket as volumes."
+  type        = bool
+  default     = false
+}
+
+variable "enable_persistent_disk_csi" {
+  description = "The status of the Google Compute Engine Persistent Disk Container Storage Interface (CSI) driver addon, which allows the usage of a PD as volumes."
+  type        = bool
+  default     = true
+}
+
 variable "system_node_pool_name" {
   description = "Name of the system node pool."
   type        = string

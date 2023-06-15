@@ -37,6 +37,7 @@
       that:
       - ansible_os_family in ["Debian", "Ubuntu"]
       - ansible_distribution_release in ["bullseye", "jammy"]
+      fail_msg: "ansible_os_family: {{ ansible_os_family }} or ansible_distribution_release: {{ansible_distribution_release}} was not acceptable."
 
   - name: Check if GRID driver installed
     ansible.builtin.command: which nvidia-smi

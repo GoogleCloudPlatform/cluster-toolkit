@@ -45,6 +45,21 @@ were directories. This is important when working with files that were created by
 another source, but there may have performance impacts. The `_netdev` mount option
 denotes that the storage device requires network access.
 
+The following is an example of using `pre-existing-network-storage` with the `lustre`
+filesystem:
+
+```yaml
+- id: lustrefs
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    fs_type: lustre
+    server_ip: 192.168.227.11@tcp
+    local_mount: /scratch
+    remote_mount: /exacloud
+```
+
+Note the use of the MGS NID (Network ID) in the `server_ip` field - in particular, note the `@tcp` suffix.
+
 ### Mounting
 
 For the `fs_type` listed below, this module will provide `client_install_runner`
@@ -54,7 +69,7 @@ mount the network storage system.
 Supported `fs_type`:
 
 - nfs
-- lustre (DDN)
+- lustre
 - gcsfuse
 
 [scripts/mount.sh](./scripts/mount.sh) is used as the contents of

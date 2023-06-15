@@ -55,7 +55,6 @@ data "google_compute_default_service_account" "default" {}
 resource "google_compute_disk" "attached_disk" {
   project = var.project_id
   name    = "${local.name}-nfs-instance-disk"
-  image   = var.image
   size    = var.disk_size
   type    = var.type
   zone    = var.zone
@@ -76,7 +75,8 @@ resource "google_compute_instance" "compute_instance" {
   }
 
   attached_disk {
-    source = google_compute_disk.attached_disk.id
+    source      = google_compute_disk.attached_disk.id
+    device_name = "attached_disk"
   }
 
   network_interface {

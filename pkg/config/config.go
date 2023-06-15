@@ -74,7 +74,8 @@ var errorMessages = map[string]string{
 	"varNotDefined":      "variable not defined",
 	"valueNotString":     "value was not of type string",
 	"valueEmptyString":   "value is an empty string",
-	"labelReqs":          "value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long.",
+	"labelNameReqs":      "name must begin with a lowercase letter, can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long",
+	"labelValueReqs":     "value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 0 and 63 characters long",
 }
 
 // map[moved module path]replacing module path
@@ -475,7 +476,7 @@ func importBlueprint(blueprintFilename string) (Blueprint, error) {
 }
 
 // ExportBlueprint exports the internal representation of a blueprint config
-func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error) {
+func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 	var buf bytes.Buffer
 	buf.WriteString(YamlLicense)
 	buf.WriteString("\n")
@@ -484,20 +485,18 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) ([]byte, error
 	err := encoder.Encode(&dc.Config)
 	encoder.Close()
 	d := buf.Bytes()
+
 	if err != nil {
-		return d, fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
+		return fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
 
-	if outputFilename == "" {
-		return d, nil
-	}
 	err = ioutil.WriteFile(outputFilename, d, 0644)
 	if err != nil {
 		// hitting this error writing yaml
-		return d, fmt.Errorf("%s, Filename: %s: %w",
+		return fmt.Errorf("%s, Filename: %s: %w",
 			errorMessages["fileSaveError"], outputFilename, err)
 	}
-	return nil, nil
+	return nil
 }
 
 // addKindToModules sets the kind to 'terraform' when empty.
@@ -673,13 +672,21 @@ func (err *InputValueError) Error() string {
 	return fmt.Sprintf("%v input error, cause: %v", err.inputKey, err.cause)
 }
 
-var matchLabelExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{1,63}$`)
+var matchLabelNameExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}][\p{Ll}\p{Lo}\p{N}_-]{0,62}$`)
+var matchLabelValueExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{0,63}$`)
+
+// isValidLabelName checks if a string is a valid name for a GCP label.
+// For more information on valid label names, see the docs at:
+// https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
+func isValidLabelName(name string) bool {
+	return matchLabelNameExp.MatchString(name)
+}
 
 // isValidLabelValue checks if a string is a valid value for a GCP label.
 // For more information on valid label values, see the docs at:
 // https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
 func isValidLabelValue(value string) bool {
-	return matchLabelExp.MatchString(value)
+	return matchLabelValueExp.MatchString(value)
 }
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.
@@ -711,7 +718,7 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 	if !isValidLabelValue(s) {
 		return "", &InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["labelReqs"],
+			cause:    errorMessages["labelValueReqs"],
 		}
 	}
 
@@ -732,7 +739,7 @@ func (bp *Blueprint) checkBlueprintName() error {
 	if !isValidLabelValue(bp.BlueprintName) {
 		return &InputValueError{
 			inputKey: "blueprint_name",
-			cause:    errorMessages["labelReqs"],
+			cause:    errorMessages["labelValueReqs"],
 		}
 	}
 
