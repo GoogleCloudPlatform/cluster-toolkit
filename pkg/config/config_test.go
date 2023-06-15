@@ -165,18 +165,14 @@ func setTestModuleInfo(mod Module, info modulereader.ModuleInfo) {
 
 func getDeploymentConfigForTest() DeploymentConfig {
 	testModule := Module{
-		Source:           "testSource",
-		Kind:             TerraformKind,
-		ID:               "testModule",
-		Use:              []ModuleID{},
-		WrapSettingsWith: make(map[string][]string),
+		Source: "testSource",
+		Kind:   TerraformKind,
+		ID:     "testModule",
 	}
 	testModuleWithLabels := Module{
-		Source:           "./role/source",
-		ID:               "testModuleWithLabels",
-		Kind:             TerraformKind,
-		Use:              []ModuleID{},
-		WrapSettingsWith: make(map[string][]string),
+		Source: "./role/source",
+		ID:     "testModuleWithLabels",
+		Kind:   TerraformKind,
 		Settings: NewDict(map[string]cty.Value{
 			"moduleLabel": cty.StringVal("moduleLabelValue"),
 		}),
@@ -187,7 +183,6 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	}
 	testBlueprint := Blueprint{
 		BlueprintName: "simple",
-		Validators:    nil,
 		Vars: NewDict(map[string]cty.Value{
 			"deployment_name": cty.StringVal("deployment_name"),
 			"project_id":      cty.StringVal("test-project"),

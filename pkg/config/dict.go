@@ -85,6 +85,12 @@ func (d *Dict) AsObject() cty.Value {
 	return cty.ObjectVal(d.Items())
 }
 
+// IsZero determine whether it should be omitted when YAML marshaling
+// with the `omitempty“ flag.
+func (d Dict) IsZero() bool {
+	return len(d.m) == 0
+}
+
 // YamlValue is wrapper around cty.Value to handle YAML unmarshal.
 type YamlValue struct {
 	v cty.Value

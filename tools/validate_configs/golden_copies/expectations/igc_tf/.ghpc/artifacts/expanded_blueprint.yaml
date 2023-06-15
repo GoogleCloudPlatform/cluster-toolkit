@@ -16,26 +16,17 @@ blueprint_name: igc
 ghpc_version: golden
 validators:
   - validator: test_project_exists
-    inputs: {}
     skip: true
   - validator: test_apis_enabled
-    inputs: {}
     skip: true
   - validator: test_region_exists
-    inputs: {}
     skip: true
   - validator: test_zone_exists
-    inputs: {}
     skip: true
   - validator: test_zone_in_region
-    inputs: {}
     skip: true
   - validator: test_module_not_used
-    inputs: {}
-    skip: false
   - validator: test_deployment_variable_not_used
-    inputs: {}
-    skip: false
 vars:
   deployment_name: golden_copy_deployment
   labels:
@@ -46,15 +37,10 @@ vars:
   zone: us-east4-c
 deployment_groups:
   - group: zero
-    terraform_backend:
-      type: ""
-      configuration: {}
     modules:
       - source: modules/network/vpc
         kind: terraform
         id: network0
-        use: []
-        wrapsettingswith: {}
         outputs:
           - name: nat_ips
           - name: subnetwork_name
@@ -67,9 +53,6 @@ deployment_groups:
           region: ((var.region ))
     kind: terraform
   - group: one
-    terraform_backend:
-      type: ""
-      configuration: {}
     modules:
       - source: modules/file-system/filestore
         kind: terraform
@@ -92,6 +75,3 @@ deployment_groups:
           region: ((var.region ))
           zone: ((var.zone ))
     kind: terraform
-terraform_backend_defaults:
-  type: ""
-  configuration: {}
