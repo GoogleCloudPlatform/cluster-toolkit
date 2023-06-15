@@ -59,15 +59,12 @@ deployment_groups:
         id: homefs
         use:
           - network0
-        wrapsettingswith:
-          labels:
-            - merge(
-            - )
         settings:
           deployment_name: ((var.deployment_name ))
-          labels:
-            - ((var.labels ))
-            - ghpc_role: file-system
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "file-system"
+            }) ))
           local_mount: /home
           name: ((module.network0.subnetwork_name))
           network_id: ((module.network0.network_id))
