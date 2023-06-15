@@ -225,11 +225,6 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 		var copyEmbedded = false
 		for iMod := range grp.Modules {
 			mod := &grp.Modules[iMod]
-			ds, err := deploymentSource(*mod)
-			if err != nil {
-				return err
-			}
-			mod.DeploymentSource = ds
 
 			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
 				continue // do not download
@@ -239,8 +234,13 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 				copyEmbedded = true
 				continue // all embedded terraform modules fill be copied at once
 			}
+
 			/* Copy source files */
-			dst := filepath.Join(basePath, mod.DeploymentSource)
+			ds, err := deploymentSource(*mod)
+			if err != nil {
+				return err
+			}
+			dst := filepath.Join(basePath, ds)
 			if _, err := os.Stat(dst); err == nil {
 				continue
 			}

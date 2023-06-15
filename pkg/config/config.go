@@ -290,9 +290,7 @@ type ModuleID string
 
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
-	Source string
-	// DeploymentSource - is source to be used for this module in written deployment.
-	DeploymentSource string `yaml:"-"` // "-" prevents user from specifying it
+	Source           string
 	Kind             ModuleKind
 	ID               ModuleID
 	Use              []ModuleID                `yaml:"use,omitempty"`

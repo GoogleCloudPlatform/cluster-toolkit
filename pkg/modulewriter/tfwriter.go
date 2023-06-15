@@ -222,7 +222,11 @@ func writeMain(
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
-		moduleBody.SetAttributeValue("source", cty.StringVal(mod.DeploymentSource))
+		ds, err := deploymentSource(mod)
+		if err != nil {
+			return err
+		}
+		moduleBody.SetAttributeValue("source", cty.StringVal(ds))
 
 		// For each Setting
 		for _, setting := range orderKeys(mod.Settings.Items()) {

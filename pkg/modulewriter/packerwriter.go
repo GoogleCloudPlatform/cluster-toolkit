@@ -93,7 +93,11 @@ func (w PackerWriter) writeDeploymentGroup(
 			return err
 		}
 
-		modPath := filepath.Join(groupPath, mod.DeploymentSource)
+		ds, err := deploymentSource(mod)
+		if err != nil {
+			return err
+		}
+		modPath := filepath.Join(groupPath, ds)
 		if err = writePackerAutovars(av.Items(), modPath); err != nil {
 			return err
 		}
