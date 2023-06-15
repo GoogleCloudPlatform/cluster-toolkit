@@ -128,6 +128,9 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	// found. If it's the hpc-toolkit repo, return it.
 	// repo := new(git.Repository)
 	dir, err = os.Getwd()
+	if err != nil {
+		return nil, "", err
+	}
 	subdir := filepath.Dir(dir)
 	o := git.PlainOpenOptions{DetectDotGit: true}
 	repo, err = git.PlainOpenWithOptions(dir, &o)
@@ -171,8 +174,5 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 func isHpcToolkitRepo(r git.Repository) bool {
 	h := plumbing.NewHash(GitInitialHash)
 	_, err := r.CommitObject(h)
-	if err == nil {
-		return true
-	}
-	return false
+	return err == nil
 }
