@@ -61,7 +61,7 @@ data "google_compute_default_service_account" "default" {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=5.7.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=5.7.4"
 
   access_config                      = local.access_config
   slurm_cluster_name                 = local.slurm_cluster_name
@@ -97,7 +97,7 @@ module "slurm_controller_instance" {
 }
 
 module "slurm_controller_template" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.7.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.7.4"
 
   additional_disks         = local.additional_disks
   can_ip_forward           = var.can_ip_forward
