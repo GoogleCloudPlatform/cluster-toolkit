@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+import shutil
 
 import yaml
 
@@ -200,8 +201,8 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
     if command in ["apply", "destroy"]:
         cmdline.append("-auto-approve")
 
-    log_out_fn = target_dir / f"terraform_{command}_log.stdout"
-    log_err_fn = target_dir / f"terraform_{command}_log.stderr"
+    log_out_fn = Path(target_dir) / f"terraform_{command}_log.stdout"
+    log_err_fn = Path(target_dir) / f"terraform_{command}_log.stderr"
 
     new_env = os.environ.copy()
     # Don't have terraform try to re-use any existing SSH agent
@@ -222,3 +223,50 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
             )
 
     return (log_out_fn, log_err_fn)
+
+def run_packer(target_dir, command, arguments=None, extra_env=None):
+    arguments = arguments if arguments else []
+    extra_env = extra_env if extra_env else {}
+
+    # There is another binary called packer on the OS
+    # To make sure we using correct packer specify full path
+    cmdline = ["/usr/bin/packer", command]
+    cmdline.extend(arguments)
+
+    log_out_fn = Path(target_dir) / f"packer_{command}_log.stdout"
+    log_err_fn = Path(target_dir) / f"packer_{command}_log.stderr"
+
+    new_env = os.environ.copy()
+    if "SSH_AUTH_SOCK" in new_env:
+        del new_env["SSH_AUTH_SOCK"]
+    new_env.update(extra_env)
+
+    try:
+        with log_out_fn.open("wb") as log_out:
+            with log_err_fn.open("wb") as log_err:
+                subprocess.run(
+                    cmdline,
+                    cwd=target_dir,
+                    env=new_env,
+                    stdout=log_out,
+                    stderr=log_err,
+                    check=True,
+                )
+    except subprocess.CalledProcessError as e:
+        # Handle the error from Packer command execution
+        raise RuntimeError(f"Packer command failed: {e}")
+    except Exception as E:
+        # At this point catch any other exception as well.
+        raise RuntimeError(f"Packer command failed: {E}")
+
+    return (log_out_fn, log_err_fn)
+
+
+def copy_file(source_file, destination_file):
+    try:
+        shutil.copy(source_file, destination_file)
+        logger.info("File copied successfully.")
+    except shutil.Error as e:
+        logger.exception(f"Error occurred while copying the file: {e}")
+    except IOError as e:
+        logger.exception(f"Error occurred while reading or writing the file: {e}")
