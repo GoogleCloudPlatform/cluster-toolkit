@@ -165,13 +165,19 @@ class ClusterInfo:
             refs.append(storage_id)
 
         return ("\n\n".join(yaml), refs)
-
+            
     def _prepare_ghpc_partitions(self, part_uses):
         yaml = []
         refs = []
         uses_str = self._yaml_refs_to_uses(part_uses)
         for (count, part) in enumerate(self.cluster.partitions.all()):
             part_id = f"partition_{count}"
+            if part.image is not None:
+                instance_image_yaml = f"""instance_image:
+        family: {part.image.family}
+        project: {self.cluster.project_id}"""
+            else:
+                instance_image_yaml = ""
             yaml.append(
                 f"""
   - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -193,6 +199,7 @@ class ClusterInfo:
       enable_smt: {part.enable_hyperthreads}
       machine_type: {part.machine_type}
       node_count_dynamic_max: {part.max_node_count}
+      {instance_image_yaml}
 """
             )
 
@@ -217,43 +224,61 @@ class ClusterInfo:
 
     def _yaml_refs_to_uses(self, use_list):
         return "\n".join([f"    - {x}" for x in use_list])
+    
 
     def _prepare_ghpc_yaml(self):
-        yaml_file = self.cluster_dir / "cluster.yaml"
-        project_id = json.loads(self.cluster.cloud_credential.detail)[
-            "project_id"
-        ]
+            try:
+                yaml_file = self.cluster_dir / "cluster.yaml"
+                project_id = json.loads(self.cluster.cloud_credential.detail)[
+                    "project_id"
+                ]
 
-        (
-            filesystems_yaml,
-            filesystems_references,
-        ) = self._prepare_ghpc_filesystems()
-        (
-            partitions_yaml,
-            partitions_references,
-        ) = self._prepare_ghpc_partitions(
-            ["hpc_network"] + filesystems_references
-        )
+                (
+                    filesystems_yaml,
+                    filesystems_references,
+                ) = self._prepare_ghpc_filesystems()
+                (
+                    partitions_yaml,
+                    partitions_references,
+                ) = self._prepare_ghpc_partitions(
+                    ["hpc_network"] + filesystems_references
+                )
 
-        controller_uses = self._yaml_refs_to_uses(
-            ["hpc_network"] + partitions_references + filesystems_references
-        )
-        login_uses = self._yaml_refs_to_uses(
-            ["hpc_network"] + filesystems_references
-        )
+                controller_uses = self._yaml_refs_to_uses(
+                    ["hpc_network"] + partitions_references + filesystems_references
+                )
+                login_uses = self._yaml_refs_to_uses(
+                    ["hpc_network"] + filesystems_references
+                )
 
-        controller_sa = "sa"
-        # TODO: Determine if these all should be different, and if so, add to
-        # resource to be created. NOTE though, that at the moment, GHPC won't
-        # let us unpack output variables, so we can't index properly.
-        # for now, just use the singular access, and only create a single acct
-        # compute_sa = controller_sa
-        # login_sa = controller_sa
+                controller_sa = "sa"
+                # TODO: Determine if these all should be different, and if so, add to
+                # resource to be created. NOTE though, that at the moment, GHPC won't
+                # let us unpack output variables, so we can't index properly.
+                # for now, just use the singular access, and only create a single acct
+                # compute_sa = controller_sa
+                # login_sa = controller_sa
 
-        # pylint: disable=line-too-long
-        startup_bucket = self.config["server"]["gcs_bucket"]
-        with yaml_file.open("w") as f:
-            f.write(
+                # pylint: disable=line-too-long
+                startup_bucket = self.config["server"]["gcs_bucket"]
+
+                if self.cluster.login_node_image is not None:
+                    login_image_yaml = f"""instance_image:
+                family: {self.cluster.login_node_image.family}
+                project: {self.cluster.project_id}"""
+                else:
+                    login_image_yaml = ""
+
+                if self.cluster.controller_node_image is not None:
+                    controller_image_yaml = f"""instance_image:
+                family: {self.cluster.controller_node_image.family}
+                project: {self.cluster.project_id}
+                """
+                else:
+                    controller_image_yaml = ""
+
+                with yaml_file.open("w") as f:
+                    f.write(
                 f"""
 blueprint_name: {self.cluster.cloud_id}
 
@@ -305,6 +330,7 @@ deployment_groups:
       machine_type: {self.cluster.controller_instance_type}
       disk_type: {self.cluster.controller_disk_type}
       disk_size_gb: {self.cluster.controller_disk_size}
+      {controller_image_yaml}
       service_account:
         email: $(hpc_service_account.service_account_email)
         scopes:
@@ -313,13 +339,13 @@ deployment_groups:
         - https://www.googleapis.com/auth/logging.write
         - https://www.googleapis.com/auth/devstorage.read_write
         - https://www.googleapis.com/auth/pubsub
-      controller_startup_script: |
-        #!/bin/bash
-        echo "******************************************** CALLING CONTROLLER STARTUP"
-        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_controller.sh - | bash
-      compute_startup_script: |
-        #!/bin/bash
-        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
+        controller_startup_script: |
+          #!/bin/bash
+          echo "******************************************** CALLING CONTROLLER STARTUP"
+          gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_controller.sh - | bash
+        compute_startup_script: |
+          #!/bin/bash
+          gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
 #TODO:     enable_cleanup_compute: True
 #TODO:     enable_cleanup_subscriptions: True
     use:
@@ -334,6 +360,7 @@ deployment_groups:
       machine_type: {self.cluster.login_node_instance_type}
       disk_type: {self.cluster.login_node_disk_type}
       disk_size_gb: {self.cluster.login_node_disk_size}
+      {login_image_yaml}
       service_account:
         email: $(hpc_service_account.service_account_email)
         scopes:
@@ -349,10 +376,13 @@ deployment_groups:
     - slurm_controller
 {login_uses}
 
-"""
-            )
+    """
+                )
+        # pylint: enable=line-too-long
+        
+            except Exception as E:
+                logger.exception(f"Exception happened creating blueprint for cluster {self.cluster.name} - {E}")
 
-    # pylint: enable=line-too-long
 
     def _prepare_bootstrap_gcs(self):
         template_dir = (
