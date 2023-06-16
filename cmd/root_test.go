@@ -199,7 +199,7 @@ func checkPathsEqual(c *C, a, b string) {
 	if err != nil {
 		c.Fatal(err)
 	}
-	b, err = filepath.EvalSymlinks(a)
+	b, err = filepath.EvalSymlinks(b)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -241,6 +241,9 @@ func initTestRepo(path string) (repo *git.Repository, initHash plumbing.Hash, er
 	}
 
 	initHash, err = commit("Init")
+	if err != nil {
+		return
+	}
 	_, err = commit("Last")
 	return
 }
