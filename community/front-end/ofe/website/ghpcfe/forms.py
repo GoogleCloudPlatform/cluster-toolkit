@@ -176,6 +176,8 @@ class ClusterForm(forms.ModelForm):
             "login_node_instance_type",
             "login_node_disk_type",
             "login_node_disk_size",
+            "login_node_image",
+            "controller_node_image",
         )
 
         widgets = {
@@ -206,6 +208,14 @@ class ClusterForm(forms.ModelForm):
             "num_login_nodes": forms.NumberInput(
                 attrs={"class": "form-control"}
             ),
+            "login_node_image": forms.Select(attrs={"class": "form-control",
+                                                       "id": "login-node-image",
+                                                       "name": "login_node_image",
+                                                       "value": "",}),
+            "controller_node_image": forms.Select(attrs={"class": "form-control",
+                                                       "id": "controller-node-image",
+                                                       "name": "controller_node_image",
+                                                       "value": "",}),
         }
 
 
@@ -857,3 +867,74 @@ class WorkbenchMountPointForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for field in self.fields:
             self.fields[field].widget.attrs.update({"class": "form-control"})
+
+class StartupScriptForm(forms.ModelForm):
+    """Custom form for StartupScript model"""
+
+    class Meta:
+        model = StartupScript
+
+        fields = (
+            "name", 
+            "description", 
+            "type", 
+            "content",
+        )
+
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "description": forms.Textarea(attrs={"class": "form-control"}),
+            "type": forms.Select(attrs={"class": "form-control"}),
+            "content": forms.ClearableFileInput(attrs={"class": "form-control"}),
+        }
+
+class ImageForm(forms.ModelForm):
+    """Custom form for Image model"""
+
+    class Meta:
+        model = Image
+
+        fields = (
+            "cloud_credential",
+            "name", 
+            "family",
+            "cloud_region",
+            "cloud_zone",
+            "source_image_project",
+            "source_image_family",
+            "startup_script",
+            "enable_os_login",
+            "block_project_ssh_keys",
+            "authorised_users"
+        )
+
+        widgets = {
+            "cloud_credential": forms.Select(attrs={"class": "form-control"}),
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "family": forms.TextInput(attrs={"class": "form-control"}),
+            "cloud_region": forms.Select(attrs={"class": "form-control"}),
+            "cloud_zone": forms.Select(attrs={"class": "form-control"}),
+            "source_image_project": forms.TextInput(attrs={"class": "form-control"}),
+            "source_image_family": forms.TextInput(attrs={"class": "form-control"}),
+            "startup_script": forms.SelectMultiple(attrs={"class": "form-control"}),
+            "enable_os_login": forms.RadioSelect(),
+            "block_project_ssh_keys": forms.RadioSelect(),
+            "authorised_users": forms.SelectMultiple(attrs={"class": "form-control"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        self.fields["startup_script"].queryset = self.get_startup_scripts(user)
+
+    def get_startup_scripts(self, user):
+        # Retrieve startup scripts owned by the user
+        owned_scripts = StartupScript.objects.filter(owner=user)
+
+        # Retrieve startup scripts authorized for the user
+        authorized_scripts = StartupScript.objects.filter(authorised_users=user)
+
+        # Combine the owned and authorized scripts
+        startup_scripts = owned_scripts | authorized_scripts
+
+        return startup_scripts
