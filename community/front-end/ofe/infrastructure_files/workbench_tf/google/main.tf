@@ -110,7 +110,7 @@ data "google_compute_subnetwork" "default" {
 module "vpc_ai_notebook" {
   count   = var.create_network ? 1 : 0
   source  = "terraform-google-modules/network/google"
-  version = "~> 7.0"
+  version = "~> 3.0"
 
   project_id   = local.project.project_id
   network_name = var.network_name

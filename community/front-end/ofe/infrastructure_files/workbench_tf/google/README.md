@@ -18,7 +18,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 4.69.1 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.87.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 2.0 |
 | <a name="requirement_time"></a> [time](#requirement\_time) | >= 0.7.2 |
 
@@ -26,7 +26,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 4.69.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 3.87.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | >= 2.0 |
 | <a name="provider_time"></a> [time](#provider\_time) | >= 0.7.2 |
 
@@ -35,7 +35,7 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_project_radlab_ds_analytics"></a> [project\_radlab\_ds\_analytics](#module\_project\_radlab\_ds\_analytics) | terraform-google-modules/project-factory/google | ~> 11.0 |
-| <a name="module_vpc_ai_notebook"></a> [vpc\_ai\_notebook](#module\_vpc\_ai\_notebook) | terraform-google-modules/network/google | ~> 7.0 |
+| <a name="module_vpc_ai_notebook"></a> [vpc\_ai\_notebook](#module\_vpc\_ai\_notebook) | terraform-google-modules/network/google | ~> 3.0 |
 | <a name="module_waitforstartup"></a> [waitforstartup](#module\_waitforstartup) | ./wait-for-startup | n/a |
 
 ## Resources
