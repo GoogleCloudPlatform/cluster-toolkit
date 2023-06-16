@@ -21,6 +21,7 @@ from django.views.generic import TemplateView
 from rest_framework import routers
 from . import views
 from .views.credentials import *
+from .views.images import *
 from .views.clusters import *
 from .views.applications import *
 from .views.jobs import *
@@ -475,4 +476,40 @@ urlpatterns += [
         BackendUpdateWorkbench.as_view(),
         name="backend-update-workbench",
     ),
+    path(
+        "backend/image-create/<int:pk>",
+        BackendCreateImage.as_view(),
+        name="backend-create-image",
+    ),
+    path(
+        "backend/get-regions/<int:pk>",
+        BackendListRegions.as_view(),
+        name="backend-list-regions",
+    ),
+]
+
+# Url paths that handle custom image views
+urlpatterns += [
+    path("images/", ImagesListView.as_view(), name="images"),
+    path(
+        "images/create/startup-script", StartupScriptCreateView.as_view(), name="startup-script-create"
+    ),
+    path(
+        "images/startup-script-view/<int:pk>", StartupScriptDetailView.as_view(), name="startup-script-view"
+        ),
+    path(
+        "images/startup-script-delete/<int:pk>", StartupScriptDeleteView.as_view(), name="startup-script-delete"
+        ),
+    path(
+        "images/create/image", ImageCreateView.as_view(), name="image-create"
+    ),
+    path(
+        "images/image-view/<int:pk>", ImageDetailView.as_view(), name="image-view"
+        ),
+    path(
+        "images/image-delete/<int:pk>", ImageDeleteView.as_view(), name="image-delete"
+        ),
+    path(
+        "images/image-status/<int:pk>", ImageStatusView.as_view(), name="image-status"
+        ),
 ]
