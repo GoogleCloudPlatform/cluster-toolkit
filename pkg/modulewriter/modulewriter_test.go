@@ -523,27 +523,6 @@ func (s *MySuite) TestWriteMain(c *C) {
 	exists, err = stringExistsInFile("a_bucket", mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
-
-	// Test with WrapSettingsWith
-	testModuleWithWrap := config.Module{
-		ID: "test_module_with_wrap",
-		WrapSettingsWith: map[string][]string{
-			"wrappedSetting": {"list(flatten(", "))"},
-		},
-		Kind:   config.TerraformKind,
-		Source: "modules/network/vpc",
-		Settings: config.NewDict(map[string]cty.Value{
-			"wrappedSetting": cty.TupleVal([]cty.Value{
-				cty.StringVal("val1"),
-				cty.StringVal("val2")}),
-		}),
-	}
-	testModules = append(testModules, testModuleWithWrap)
-	err = writeMain(testModules, testBackend, testMainDir)
-	c.Assert(err, IsNil)
-	exists, err = stringExistsInFile("list(flatten(", mainFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
 }
 
 func (s *MySuite) TestWriteOutputs(c *C) {

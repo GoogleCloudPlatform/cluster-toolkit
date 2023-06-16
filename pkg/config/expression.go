@@ -365,10 +365,16 @@ func escapeLiteralVariables(s string) string {
 // TokensForValue is a modification of hclwrite.TokensForValue.
 // The only difference in behavior is handling "HCL literal" strings.
 func TokensForValue(val cty.Value) hclwrite.Tokens {
+	if val.IsNull() { // terminate early as Null value can has any type (e.g. String)
+		return hclwrite.TokensForValue(val)
+	}
+
 	// We need to handle both cases, until all "expression" users are moved to Expression
 	if e, is := IsExpressionValue(val); is {
 		return e.Tokenize()
-	} else if s, is := IsYamlExpressionLiteral(val); is { // return it "as is"
+	}
+	val, _ = val.Unmark()                          // remove marks, as we don't need them anymore
+	if s, is := IsYamlExpressionLiteral(val); is { // return it "as is"
 		return hclwrite.TokensForIdentifier(s)
 	}
 
@@ -407,7 +413,7 @@ func TokensForValue(val cty.Value) hclwrite.Tokens {
 }
 
 // FunctionCallExpression is a helper to build function call expression.
-func FunctionCallExpression(n string, args []cty.Value) Expression {
+func FunctionCallExpression(n string, args ...cty.Value) Expression {
 	ta := make([]hclwrite.Tokens, len(args))
 	for i, a := range args {
 		ta[i] = TokensForValue(a)

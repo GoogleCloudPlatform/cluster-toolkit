@@ -61,10 +61,9 @@ deployment_groups:
 `)
 	testModules = []Module{
 		{
-			Source:           "./modules/network/vpc",
-			Kind:             TerraformKind,
-			ID:               "vpc",
-			WrapSettingsWith: make(map[string][]string),
+			Source: "./modules/network/vpc",
+			Kind:   TerraformKind,
+			ID:     "vpc",
 			Settings: NewDict(map[string]cty.Value{
 				"network_name": cty.StringVal("$\"${var.deployment_name}_net\""),
 				"project_id":   cty.StringVal("project_name"),
@@ -428,7 +427,7 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 			ID:  "m",
 			Use: []ModuleID{"w"},
 			Settings: NewDict(map[string]cty.Value{
-				"x": cty.True.Mark(ProductOfModuleUse{"w"})})}
+				"x": AsProductOfModuleUse(cty.True, "w")})}
 		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{})
 	}
 
@@ -437,7 +436,7 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 			ID:  "m",
 			Use: []ModuleID{"w", "u"},
 			Settings: NewDict(map[string]cty.Value{
-				"x": cty.True.Mark(ProductOfModuleUse{"w"})})}
+				"x": AsProductOfModuleUse(cty.True, "w")})}
 		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{"u"})
 	}
 }

@@ -62,18 +62,16 @@ func (s *MySuite) TestAddListValue(c *C) {
 	mod := Module{ID: "TestModule"}
 
 	setting := "newSetting"
-	nonListSetting := "not-a-list"
-	first := cty.StringVal("value1")
-	second := cty.StringVal("value2")
+	first := AsProductOfModuleUse(cty.StringVal("value1"), "mod1")
+	second := AsProductOfModuleUse(cty.StringVal("value2"), "mod2")
 
-	c.Assert(mod.addListValue(setting, first), IsNil)
-	c.Check(mod.Settings.Get(setting), DeepEquals, cty.TupleVal([]cty.Value{first}))
+	mod.addListValue(setting, first)
+	c.Check(mod.Settings.Get(setting), DeepEquals,
+		AsProductOfModuleUse(MustParseExpression(`flatten(["value1"])`).AsValue(), "mod1"))
 
-	c.Assert(mod.addListValue(setting, second), IsNil)
-	c.Check(mod.Settings.Get(setting), DeepEquals, cty.TupleVal([]cty.Value{first, second}))
-
-	mod.Settings.Set(nonListSetting, cty.StringVal("string-value"))
-	c.Assert(mod.addListValue(nonListSetting, second), NotNil)
+	mod.addListValue(setting, second)
+	c.Check(mod.Settings.Get(setting), DeepEquals,
+		AsProductOfModuleUse(MustParseExpression(`flatten(["value2", flatten(["value1"])])`).AsValue(), "mod2", "mod1"))
 }
 
 func (s *MySuite) TestUseModule(c *C) {
@@ -87,7 +85,6 @@ func (s *MySuite) TestUseModule(c *C) {
 		Type: "number",
 	}
 	ref := ModuleRef("UsedModule", "val1").AsExpression().AsValue()
-	useMark := ProductOfModuleUse{"UsedModule"}
 
 	{ // Pass: No Inputs, No Outputs
 		mod := Module{ID: "lime", Source: "modSource"}
@@ -124,7 +121,7 @@ func (s *MySuite) TestUseModule(c *C) {
 		err := useModule(&mod, usedMod, []string{})
 		c.Check(err, IsNil)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": ref.Mark(useMark),
+			"val1": AsProductOfModuleUse(ref, "UsedModule"),
 		})
 	}
 
@@ -146,7 +143,7 @@ func (s *MySuite) TestUseModule(c *C) {
 	{ // Pass: re-apply used modules, should be a no-op
 		// Assume no settings were in blueprint
 		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", ref.Mark(useMark))
+		mod.Settings.Set("val1", AsProductOfModuleUse(ref, "UsedModule"))
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
@@ -156,7 +153,8 @@ func (s *MySuite) TestUseModule(c *C) {
 
 		err := useModule(&mod, usedMod, []string{})
 		c.Check(err, IsNil)
-		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{"val1": ref.Mark(useMark)})
+		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
+			"val1": AsProductOfModuleUse(ref, "UsedModule")})
 	}
 
 	{ // Pass: Single Input/Output match, input is list, not already set
@@ -170,9 +168,9 @@ func (s *MySuite) TestUseModule(c *C) {
 		err := useModule(&mod, usedMod, []string{})
 		c.Check(err, IsNil)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": cty.TupleVal([]cty.Value{
-				ref.Mark(useMark),
-			})})
+			"val1": AsProductOfModuleUse(
+				MustParseExpression(`flatten([module.UsedModule.val1])`).AsValue(),
+				"UsedModule")})
 	}
 
 	{ // Pass: Setting exists, Input is List, Output is not a list
@@ -189,10 +187,9 @@ func (s *MySuite) TestUseModule(c *C) {
 		err := useModule(&mod, usedMod, []string{})
 		c.Check(err, IsNil)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": cty.TupleVal([]cty.Value{
-				ref,
-				ref.Mark(useMark),
-			})})
+			"val1": AsProductOfModuleUse(
+				MustParseExpression(`flatten([module.UsedModule.val1,[module.UsedModule.val1]])`).AsValue(),
+				"UsedModule")})
 	}
 
 	{ // Pass: Setting exists, Input is List, Output is not a list
@@ -255,8 +252,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		c.Assert(dc.applyUseModules(), IsNil)
 		ref := ModuleRef("TestModule0", "test_inter_0").AsExpression().AsValue()
 		c.Assert(m.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"test_inter_0": ref.Mark(ProductOfModuleUse{"TestModule0"}),
-		})
+			"test_inter_0": AsProductOfModuleUse(ref, "TestModule0")})
 	}
 
 	{ // Deliberately break the match and see that no settings are added
@@ -330,26 +326,24 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	// Labels are set and override role
 	coral = lime.Modules[0]
 	c.Check(coral.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
-		"merge", []cty.Value{
-			labelsRef,
-			cty.ObjectVal(map[string]cty.Value{
-				"ghpc_role": cty.StringVal("blue")}),
-			cty.ObjectVal(map[string]cty.Value{
-				"ghpc_role": cty.StringVal("maroon"),
-				"magenta":   cty.StringVal("orchid")}),
-		}).AsValue())
+		"merge",
+		labelsRef,
+		cty.ObjectVal(map[string]cty.Value{
+			"ghpc_role": cty.StringVal("blue")}),
+		cty.ObjectVal(map[string]cty.Value{
+			"ghpc_role": cty.StringVal("maroon"),
+			"magenta":   cty.StringVal("orchid")}),
+	).AsValue())
 
 	// Labels are not set, infer role from module.source
 	khaki = lime.Modules[1]
 	c.Check(khaki.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
-		"merge", []cty.Value{
-			labelsRef,
-			cty.ObjectVal(map[string]cty.Value{
-				"ghpc_role": cty.StringVal("brown")}),
-		}).AsValue())
+		"merge",
+		labelsRef,
+		cty.ObjectVal(map[string]cty.Value{"ghpc_role": cty.StringVal("brown")}),
+	).AsValue())
 	// No labels input
 	silver = lime.Modules[2]
-	c.Check(silver.WrapSettingsWith["labels"], IsNil)
 	c.Check(silver.Settings.Get("labels"), DeepEquals, cty.NilVal)
 
 	// Packer, include global include explicitly

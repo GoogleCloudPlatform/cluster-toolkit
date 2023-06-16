@@ -112,22 +112,24 @@ func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
 
 // initialize a Toolkit setting that corresponds to a module input of type list
 // create new list if unset, append if already set, error if value not a list
-func (mod *Module) addListValue(settingName string, value cty.Value) error {
-	var cur []cty.Value
-	if !mod.Settings.Has(settingName) {
-		mod.createWrapSettingsWith()
-		mod.WrapSettingsWith[settingName] = []string{"flatten([", "])"}
-		cur = []cty.Value{}
-	} else {
-		v := mod.Settings.Get(settingName)
-		ty := v.Type()
-		if !ty.IsTupleType() && !ty.IsSetType() && !ty.IsSetType() {
-			return fmt.Errorf("%s: module %s, setting %s", errorMessages["appendToNonList"], mod.ID, settingName)
-		}
-		cur = mod.Settings.Get(settingName).AsValueSlice()
+func (mod *Module) addListValue(settingName string, value cty.Value) {
+	args := []cty.Value{value}
+	mods := map[ModuleID]bool{}
+	for _, mod := range IsProductOfModuleUse(value) {
+		mods[mod] = true
 	}
-	mod.Settings.Set(settingName, cty.TupleVal(append(cur, value)))
-	return nil
+
+	if mod.Settings.Has(settingName) {
+		cur := mod.Settings.Get(settingName)
+		for _, mod := range IsProductOfModuleUse(cur) {
+			mods[mod] = true
+		}
+		args = append(args, cur)
+	}
+
+	exp := FunctionCallExpression("flatten", cty.TupleVal(args))
+	val := AsProductOfModuleUse(exp.AsValue(), maps.Keys(mods)...)
+	mod.Settings.Set(settingName, val)
 }
 
 // useModule matches input variables in a "using" module to output values
@@ -169,17 +171,14 @@ func useModule(
 			continue
 		}
 
-		v := ModuleRef(useMod.ID, settingName).
-			AsExpression().
-			AsValue().
-			Mark(ProductOfModuleUse{Module: useMod.ID})
+		v := AsProductOfModuleUse(
+			ModuleRef(useMod.ID, settingName).AsExpression().AsValue(),
+			useMod.ID)
 
 		if !isList {
 			mod.Settings.Set(settingName, v)
 		} else {
-			if err := mod.addListValue(settingName, v); err != nil {
-				return err
-			}
+			mod.addListValue(settingName, v)
 		}
 	}
 	return nil
@@ -278,7 +277,7 @@ func mergeLabelsTf(extra map[string]cty.Value, cur cty.Value) cty.Value {
 	if !cur.IsNull() {
 		args = append(args, cur)
 	}
-	return FunctionCallExpression("merge", args).AsValue()
+	return FunctionCallExpression("merge", args...).AsValue()
 }
 
 // Packer doesn't support `merge`, so merge it here.
@@ -296,7 +295,10 @@ func mergeLabelsPkr(global map[string]cty.Value, extra map[string]cty.Value, cur
 	return cty.ObjectVal(mergeMaps(global, extra, modLabels)), nil
 }
 
-// see https://developer.hashicorp.com/terraform/language/functions/merge
+// mergeMaps takes an arbitrary number of maps, and returns a single map that contains
+// a merged set of elements from all arguments.
+// If more than one given map defines the same key, then the one that is later in the argument sequence takes precedence.
+// See https://developer.hashicorp.com/terraform/language/functions/merge
 func mergeMaps(ms ...map[string]cty.Value) map[string]cty.Value {
 	r := map[string]cty.Value{}
 	for _, m := range ms {

@@ -290,23 +290,15 @@ type ModuleID string
 
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
-	Source           string
-	Kind             ModuleKind
-	ID               ModuleID
-	Use              []ModuleID                `yaml:"use,omitempty"`
-	WrapSettingsWith map[string][]string       `yaml:"wrapsettingswith,omitempty"`
-	Outputs          []modulereader.OutputInfo `yaml:"outputs,omitempty"`
-	Settings         Dict                      `yaml:"settings,omitempty"`
+	Source   string
+	Kind     ModuleKind
+	ID       ModuleID
+	Use      []ModuleID                `yaml:"use,omitempty"`
+	Outputs  []modulereader.OutputInfo `yaml:"outputs,omitempty"`
+	Settings Dict                      `yaml:"settings,omitempty"`
 	// DEPRECATED fields, keep in the struct for backwards compatibility
-	RequiredApis interface{} `yaml:"required_apis,omitempty"`
-}
-
-// createWrapSettingsWith ensures WrapSettingsWith field is not nil, if it is
-// a new map is created.
-func (m *Module) createWrapSettingsWith() {
-	if m.WrapSettingsWith == nil {
-		m.WrapSettingsWith = make(map[string][]string)
-	}
+	RequiredApis     interface{} `yaml:"required_apis,omitempty"`
+	WrapSettingsWith interface{} `yaml:"wrapsettingswith,omitempty"`
 }
 
 // InfoOrDie returns the ModuleInfo for the module or panics
@@ -369,8 +361,8 @@ func (m Module) listUnusedModules() []ModuleID {
 	used := map[ModuleID]bool{}
 	// Recurse through objects/maps/lists checking each element for having `ProductOfModuleUse` mark.
 	cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
-		if mark, has := HasMark[ProductOfModuleUse](v); has {
-			used[mark.Module] = true
+		for _, mod := range IsProductOfModuleUse(v) {
+			used[mod] = true
 		}
 		return true, nil
 	})
@@ -748,10 +740,34 @@ func (bp *Blueprint) checkBlueprintName() error {
 	return nil
 }
 
-// ProductOfModuleUse is a "mark" applied to values in Module.Settings if
-// this value was modified as a result of applying `use`.
-type ProductOfModuleUse struct {
-	Module ModuleID
+// productOfModuleUseMark is a "mark" applied to values that are result of `use`.
+// Should not be used directly, use AsProductOfModuleUse and IsProductOfModuleUse instead.
+type productOfModuleUseMark struct {
+	mods string
+}
+
+// AsProductOfModuleUse marks a value as a result of `use` of given modules.
+func AsProductOfModuleUse(v cty.Value, mods ...ModuleID) cty.Value {
+	s := make([]string, len(mods))
+	for i, m := range mods {
+		s[i] = string(m)
+	}
+	return v.Mark(productOfModuleUseMark{strings.Join(s, ",")})
+}
+
+// IsProductOfModuleUse returns list of modules that contributed (by `use`) to this value.
+func IsProductOfModuleUse(v cty.Value) []ModuleID {
+	mark, marked := HasMark[productOfModuleUseMark](v)
+	if !marked {
+		return []ModuleID{}
+	}
+
+	s := strings.Split(mark.mods, ",")
+	mods := make([]ModuleID, len(s))
+	for i, m := range s {
+		mods[i] = ModuleID(m)
+	}
+	return mods
 }
 
 // WalkModules walks all modules in the blueprint and calls the walker function

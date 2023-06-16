@@ -147,6 +147,7 @@ func TestTokensForValueNoLiteral(t *testing.T) {
 	val := cty.ObjectVal(map[string]cty.Value{
 		"tan": cty.TupleVal([]cty.Value{
 			cty.StringVal("biege"),
+			cty.NullVal(cty.String),
 			cty.MapVal(map[string]cty.Value{
 				"cu": cty.NumberIntVal(29),
 				"ba": cty.NumberIntVal(56),
