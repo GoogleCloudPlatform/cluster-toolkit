@@ -178,24 +178,6 @@ var TerraformKind = ModuleKind{kind: "terraform"}
 // PackerKind is the kind for Packer modules (should be treated as const)
 var PackerKind = ModuleKind{kind: "packer"}
 
-// UnmarshalYAML implements a custom unmarshaler from YAML string to ModuleKind
-func (mk *ModuleKind) UnmarshalYAML(n *yaml.Node) error {
-	var kind string
-	const yamlErrorMsg string = "block beginning at line %d: %s"
-
-	err := n.Decode(&kind)
-	if err == nil && IsValidModuleKind(kind) {
-		mk.kind = kind
-		return nil
-	}
-	return fmt.Errorf(yamlErrorMsg, n.Line, "kind must be \"packer\" or \"terraform\" or removed from YAML")
-}
-
-// MarshalYAML implements a custom marshaler from ModuleKind to YAML string
-func (mk ModuleKind) MarshalYAML() (interface{}, error) {
-	return mk.String(), nil
-}
-
 // IsValidModuleKind ensures that the user has specified a supported kind
 func IsValidModuleKind(kind string) bool {
 	return kind == TerraformKind.String() || kind == PackerKind.String() ||
@@ -288,12 +270,15 @@ func (v *validatorConfig) check(name validatorName, requiredInputs []string) err
 // ModuleID is a unique identifier for a module in a blueprint
 type ModuleID string
 
+// ModuleIDs is a list of ModuleID
+type ModuleIDs []ModuleID
+
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
 	Source   string
 	Kind     ModuleKind
 	ID       ModuleID
-	Use      []ModuleID                `yaml:"use,omitempty"`
+	Use      ModuleIDs                 `yaml:"use,omitempty"`
 	Outputs  []modulereader.OutputInfo `yaml:"outputs,omitempty"`
 	Settings Dict                      `yaml:"settings,omitempty"`
 	// DEPRECATED fields, keep in the struct for backwards compatibility
@@ -357,7 +342,7 @@ func (bp *Blueprint) setGlobalLabels() {
 
 // listUnusedModules provides a list modules that are in the
 // "use" field, but not actually used.
-func (m Module) listUnusedModules() []ModuleID {
+func (m Module) listUnusedModules() ModuleIDs {
 	used := map[ModuleID]bool{}
 	// Recurse through objects/maps/lists checking each element for having `ProductOfModuleUse` mark.
 	cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
@@ -367,7 +352,7 @@ func (m Module) listUnusedModules() []ModuleID {
 		return true, nil
 	})
 
-	unused := []ModuleID{}
+	unused := ModuleIDs{}
 	for _, w := range m.Use {
 		if !used[w] {
 			unused = append(unused, w)
