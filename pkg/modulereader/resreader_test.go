@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 	"gopkg.in/yaml.v3"
 )
@@ -150,15 +149,6 @@ func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 	moduleInfo, err = GetModuleInfo(badSource, tfKindString)
 	expectedErr = "source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
-}
-
-// hcl_utils.go
-func getTestFS() afero.IOFS {
-	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("modules/network/vpc", 0755)
-	afero.WriteFile(
-		aferoFS, "modules/network/vpc/main.tf", []byte(testMainTf), 0644)
-	return afero.NewIOFS(aferoFS)
 }
 
 func (s *MySuite) TestGetHCLInfo(c *C) {
