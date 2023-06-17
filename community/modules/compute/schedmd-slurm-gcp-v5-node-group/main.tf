@@ -20,13 +20,19 @@ locals {
 }
 
 locals {
+  instance_image_project_raw = lookup(var.instance_image, "project", "")
+  instance_image = {
+    name    = lookup(var.instance_image, "name", "")
+    family  = lookup(var.instance_image, "family", "")
+    project = strcontains(local.instance_image_project_raw, "/") ? local.instance_image_project_raw : "projects/${local.instance_image_project_raw}/global/images/family"
+  }
 
   # Handle VM image format from 2 sources, prioritize source_image* variables
   # over instance_image
   source_image_input_used = var.source_image != "" || var.source_image_family != "" || var.source_image_project != ""
-  source_image            = local.source_image_input_used ? var.source_image : lookup(var.instance_image, "name", "")
-  source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
-  source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
+  source_image            = local.source_image_input_used ? var.source_image : local.instance_image.name
+  source_image_family     = local.source_image_input_used ? var.source_image_family : local.instance_image.family
+  source_image_project    = local.source_image_input_used ? var.source_image_project : local.instance_image.project
 
   enable_public_ip_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
   access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
