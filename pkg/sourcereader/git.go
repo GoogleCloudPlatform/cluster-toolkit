@@ -59,7 +59,7 @@ func copyGitModules(srcPath string, destPath string) error {
 // GetModule copies the git source to a provided destination (the deployment directory)
 func (r GitSourceReader) GetModule(modPath string, copyPath string) error {
 	if !IsGitPath(modPath) {
-		return fmt.Errorf("Source is not valid: %s", modPath)
+		return fmt.Errorf("source is not valid: %s", modPath)
 	}
 
 	modDir, err := ioutil.TempDir("", "git-module-*")

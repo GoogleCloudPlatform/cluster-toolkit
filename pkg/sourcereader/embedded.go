@@ -103,7 +103,7 @@ func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
 		return fmt.Errorf("embedded file system is not initialized")
 	}
 	if !IsEmbeddedPath(modPath) {
-		return fmt.Errorf("Source is not valid: %s", modPath)
+		return fmt.Errorf("source is not valid: %s", modPath)
 	}
 
 	modDir, err := copyFSToTempDir(ModuleFS, modPath)
