@@ -96,6 +96,12 @@ resource "google_compute_disk" "boot_disk" {
   size   = var.disk_size_gb
   labels = local.labels
   zone   = var.zone
+
+  lifecycle {
+    ignore_changes = [
+      image
+    ]
+  }
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
