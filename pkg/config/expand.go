@@ -112,22 +112,24 @@ func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
 
 // initialize a Toolkit setting that corresponds to a module input of type list
 // create new list if unset, append if already set, error if value not a list
-func (mod *Module) addListValue(settingName string, value cty.Value) error {
-	var cur []cty.Value
-	if !mod.Settings.Has(settingName) {
-		mod.createWrapSettingsWith()
-		mod.WrapSettingsWith[settingName] = []string{"flatten([", "])"}
-		cur = []cty.Value{}
-	} else {
-		v := mod.Settings.Get(settingName)
-		ty := v.Type()
-		if !ty.IsTupleType() && !ty.IsSetType() && !ty.IsSetType() {
-			return fmt.Errorf("%s: module %s, setting %s", errorMessages["appendToNonList"], mod.ID, settingName)
-		}
-		cur = mod.Settings.Get(settingName).AsValueSlice()
+func (mod *Module) addListValue(settingName string, value cty.Value) {
+	args := []cty.Value{value}
+	mods := map[ModuleID]bool{}
+	for _, mod := range IsProductOfModuleUse(value) {
+		mods[mod] = true
 	}
-	mod.Settings.Set(settingName, cty.TupleVal(append(cur, value)))
-	return nil
+
+	if mod.Settings.Has(settingName) {
+		cur := mod.Settings.Get(settingName)
+		for _, mod := range IsProductOfModuleUse(cur) {
+			mods[mod] = true
+		}
+		args = append(args, cur)
+	}
+
+	exp := FunctionCallExpression("flatten", cty.TupleVal(args))
+	val := AsProductOfModuleUse(exp.AsValue(), maps.Keys(mods)...)
+	mod.Settings.Set(settingName, val)
 }
 
 // useModule matches input variables in a "using" module to output values
@@ -169,17 +171,14 @@ func useModule(
 			continue
 		}
 
-		v := ModuleRef(useMod.ID, settingName).
-			AsExpression().
-			AsValue().
-			Mark(ProductOfModuleUse{Module: useMod.ID})
+		v := AsProductOfModuleUse(
+			ModuleRef(useMod.ID, settingName).AsExpression().AsValue(),
+			useMod.ID)
 
 		if !isList {
 			mod.Settings.Set(settingName, v)
 		} else {
-			if err := mod.addListValue(settingName, v); err != nil {
-				return err
-			}
+			mod.addListValue(settingName, v)
 		}
 	}
 	return nil
@@ -238,7 +237,7 @@ func (dc *DeploymentConfig) combineLabels() error {
 	if !vars.Has(labels) { // Shouldn't happen if blueprint was properly constructed
 		vars.Set(labels, cty.EmptyObjectVal)
 	}
-	gl := mergeLabels(vars.Get(labels).AsValueMap(), defaults)
+	gl := mergeMaps(defaults, vars.Get(labels).AsValueMap())
 	vars.Set(labels, cty.ObjectVal(gl))
 
 	return dc.Config.WalkModules(func(mod *Module) error {
@@ -247,60 +246,63 @@ func (dc *DeploymentConfig) combineLabels() error {
 }
 
 func combineModuleLabels(mod *Module, dc DeploymentConfig) error {
-	mod.createWrapSettingsWith()
 	labels := "labels"
 
-	// previously expanded blueprint, user written BPs do not use `WrapSettingsWith`
-	if _, ok := mod.WrapSettingsWith[labels]; ok {
-		return nil // Do nothing
-	}
-
-	// Check if labels are set for this module
 	if !moduleHasInput(*mod, labels) {
-		return nil
+		return nil // no op
 	}
 
-	modLabels := map[string]cty.Value{}
-	if mod.Settings.Has(labels) {
-		// Cast into map so we can index into them
-		v := mod.Settings.Get(labels)
-		ty := v.Type()
-		if !ty.IsObjectType() && !ty.IsMapType() {
-			return fmt.Errorf("%s, Module %s, labels type: %s",
-				errorMessages["settingsLabelType"], mod.ID, ty.FriendlyName())
-		}
-		if v.AsValueMap() != nil {
-			modLabels = v.AsValueMap()
-		}
-	}
-	// Add the role (e.g. compute, network, etc)
-	if _, exists := modLabels[roleLabel]; !exists {
-		modLabels[roleLabel] = cty.StringVal(getRole(mod.Source))
-	}
+	cur := mod.Settings.Get(labels)
+	extra := map[string]cty.Value{roleLabel: cty.StringVal(getRole(mod.Source))}
 
 	if mod.Kind == TerraformKind {
-		// Terraform module labels to be expressed as
-		// `merge(var.labels, { ghpc_role=..., **settings.labels })`
-		mod.WrapSettingsWith[labels] = []string{"merge(", ")"}
-		ref := GlobalRef(labels).AsExpression()
-		args := []cty.Value{ref.AsValue(), cty.ObjectVal(modLabels)}
-		mod.Settings.Set(labels, cty.TupleVal(args))
+		mod.Settings.Set(labels, mergeLabelsTf(extra, cur))
 	} else if mod.Kind == PackerKind {
-		g := dc.Config.Vars.Get(labels).AsValueMap()
-		mod.Settings.Set(labels, cty.ObjectVal(mergeLabels(modLabels, g)))
+		gl := dc.Config.Vars.Get(labels).AsValueMap()
+		merged, err := mergeLabelsPkr(gl, extra, cur)
+		if err != nil {
+			return err
+		}
+		mod.Settings.Set(labels, merged)
 	}
 	return nil
 }
 
-// mergeLabels returns a new map with the keys from both maps. If a key exists in both maps,
-// the value from the first map is used.
-func mergeLabels(a map[string]cty.Value, b map[string]cty.Value) map[string]cty.Value {
-	r := map[string]cty.Value{}
-	for k, v := range a {
-		r[k] = v
+// Terraform labels are `merge(var.labels, {ghpc_role="foo"}, [module labels])`
+func mergeLabelsTf(extra map[string]cty.Value, cur cty.Value) cty.Value {
+	args := []cty.Value{
+		GlobalRef("labels").AsExpression().AsValue(),
+		cty.ObjectVal(extra),
 	}
-	for k, v := range b {
-		if _, exists := a[k]; !exists {
+	if !cur.IsNull() {
+		args = append(args, cur)
+	}
+	return FunctionCallExpression("merge", args...).AsValue()
+}
+
+// Packer doesn't support `merge`, so merge it here.
+func mergeLabelsPkr(global map[string]cty.Value, extra map[string]cty.Value, cur cty.Value) (cty.Value, error) {
+	modLabels := map[string]cty.Value{}
+	if !cur.IsNull() {
+		ty := cur.Type()
+		if !ty.IsObjectType() && !ty.IsMapType() {
+			return cty.NilVal, fmt.Errorf("%s,labels type: %s", errorMessages["settingsLabelType"], ty.FriendlyName())
+		}
+		if cur.AsValueMap() != nil {
+			modLabels = cur.AsValueMap()
+		}
+	}
+	return cty.ObjectVal(mergeMaps(global, extra, modLabels)), nil
+}
+
+// mergeMaps takes an arbitrary number of maps, and returns a single map that contains
+// a merged set of elements from all arguments.
+// If more than one given map defines the same key, then the one that is later in the argument sequence takes precedence.
+// See https://developer.hashicorp.com/terraform/language/functions/merge
+func mergeMaps(ms ...map[string]cty.Value) map[string]cty.Value {
+	r := map[string]cty.Value{}
+	for _, m := range ms {
+		for k, v := range m {
 			r[k] = v
 		}
 	}

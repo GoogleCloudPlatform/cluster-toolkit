@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: igc
+blueprint_name: merge_flatten
 ghpc_version: golden
 validators:
   - validator: test_project_exists
@@ -30,7 +30,7 @@ validators:
 vars:
   deployment_name: golden_copy_deployment
   labels:
-    ghpc_blueprint: igc
+    ghpc_blueprint: merge_flatten
     ghpc_deployment: golden_copy_deployment
   project_id: invalid-project
   region: us-east4
@@ -40,85 +40,74 @@ deployment_groups:
     modules:
       - source: modules/network/vpc
         kind: terraform
-        id: network0
-        outputs:
-          - name: subnetwork_name
-            description: Automatically-generated output exported for use by later deployment groups
-            sensitive: true
+        id: network
         settings:
           deployment_name: ((var.deployment_name ))
           project_id: ((var.project_id ))
           region: ((var.region ))
       - source: modules/file-system/filestore
         kind: terraform
-        id: homefs
+        id: first-fs
         use:
-          - network0
+          - network
         settings:
           deployment_name: ((var.deployment_name ))
           labels: |-
             ((merge(var.labels, {
               ghpc_role = "file-system"
             }) ))
-          local_mount: /home
-          network_id: ((module.network0.network_id ))
+          local_mount: /first
+          network_id: ((module.network.network_id ))
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))
       - source: modules/file-system/filestore
         kind: terraform
-        id: projectsfs
+        id: second-fs
         use:
-          - network0
+          - network
         settings:
           deployment_name: ((var.deployment_name ))
           labels: |-
             ((merge(var.labels, {
               ghpc_role = "file-system"
             }) ))
-          local_mount: /projects
-          network_id: ((module.network0.network_id ))
+          local_mount: /first
+          network_id: ((module.network.network_id ))
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))
-      - source: modules/scripts/startup-script
+      - source: modules/compute/vm-instance
         kind: terraform
-        id: script
-        outputs:
-          - name: startup_script
-            description: Automatically-generated output exported for use by later deployment groups
-            sensitive: true
+        id: first-vm
+        use:
+          - first-fs
         settings:
           deployment_name: ((var.deployment_name ))
           labels: |-
             ((merge(var.labels, {
-              ghpc_role = "scripts"
+              ghpc_role = "compute"
+              }, {
+              green = "sleeves"
             }) ))
+          network_storage: ((flatten([module.first-fs.network_storage]) ))
           project_id: ((var.project_id ))
           region: ((var.region ))
-          runners:
-            - content: |
-                #!/bin/bash
-                echo "Hello, World!"
-              destination: hello.sh
-              type: shell
+          zone: ((var.zone ))
+      - source: modules/compute/vm-instance
+        kind: terraform
+        id: second-vm
+        use:
+          - first-fs
+          - second-fs
+        settings:
+          deployment_name: ((var.deployment_name ))
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "compute"
+            }) ))
+          network_storage: ((flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])]) ))
+          project_id: ((var.project_id ))
+          region: ((var.region ))
+          zone: ((var.zone ))
     kind: terraform
-  - group: one
-    modules:
-      - source: modules/packer/custom-image
-        kind: packer
-        id: image
-        use:
-          - network0
-          - script
-        settings:
-          deployment_name: ((var.deployment_name ))
-          labels:
-            ghpc_blueprint: igc
-            ghpc_deployment: golden_copy_deployment
-            ghpc_role: packer
-          project_id: ((var.project_id ))
-          startup_script: ((module.script.startup_script))
-          subnetwork_name: ((module.network0.subnetwork_name))
-          zone: ((var.zone ))
-    kind: packer
