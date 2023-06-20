@@ -32,6 +32,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/hashicorp/go-getter"
 )
 
 // strings that get re-used throughout this package and others
@@ -148,7 +150,7 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 	return nil
 }
 
-// Get module source within deployment group
+// DeploymentSource returns module source within deployment group
 // Rules are following:
 //   - git source
 //     => keep the same source
@@ -158,22 +160,27 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 //     => ./modules/embedded/<source>
 //   - other
 //     => ./modules/<basename(source)>-<hash(abs(source))>
-func deploymentSource(mod config.Module) (string, error) {
-	if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
-		return mod.Source, nil
+func DeploymentSource(mod config.Module) (string, error) {
+	if mod.Kind != config.PackerKind && mod.Kind != config.TerraformKind {
+		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
+	}
+	if sourcereader.IsGitPath(mod.Source) {
+		switch mod.Kind {
+		case config.TerraformKind:
+			return mod.Source, nil
+		case config.PackerKind:
+			_, subDir := getter.SourceDirSubdir(mod.Source)
+			return filepath.Join(string(mod.ID), subDir), nil
+		}
 	}
 	if mod.Kind == config.PackerKind {
 		return string(mod.ID), nil
 	}
-	if mod.Kind != config.TerraformKind {
-		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
-	}
-
 	if sourcereader.IsEmbeddedPath(mod.Source) {
 		return "./modules/" + filepath.Join("embedded", mod.Source), nil
 	}
 	if !sourcereader.IsLocalPath(mod.Source) {
-		return "", fmt.Errorf("unuexpected module source %s", mod.Source)
+		return "", fmt.Errorf("unexpected module source %s", mod.Source)
 	}
 
 	abs, err := filepath.Abs(mod.Source)
@@ -224,17 +231,31 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 			}
 
 			/* Copy source files */
-			ds, err := deploymentSource(*mod)
-			if err != nil {
-				return err
+			var modPath string
+			var dst string
+			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.PackerKind {
+				modPath, _ = getter.SourceDirSubdir(mod.Source)
+				dst = filepath.Join(basePath, string(mod.ID))
+
+			} else {
+				modPath = mod.Source
+				ds, err := DeploymentSource(*mod)
+				if err != nil {
+					return err
+				}
+				dst = filepath.Join(basePath, ds)
 			}
-			dst := filepath.Join(basePath, ds)
 			if _, err := os.Stat(dst); err == nil {
 				continue
 			}
-			reader := sourcereader.Factory(mod.Source)
-			if err := reader.GetModule(mod.Source, dst); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, dst, err)
+			reader := sourcereader.Factory(modPath)
+			if err := reader.GetModule(modPath, dst); err != nil {
+				return fmt.Errorf("failed to get module from %s to %s: %v", modPath, dst, err)
+			}
+			// remove .git directory if one exists; we do not want submodule
+			// git history in deployment directory
+			if err := os.RemoveAll(filepath.Join(dst, ".git")); err != nil {
+				return err
 			}
 		}
 		if copyEmbedded {

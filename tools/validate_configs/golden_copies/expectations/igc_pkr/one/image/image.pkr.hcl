@@ -70,6 +70,8 @@ locals {
     : local.on_host_maintenance_default
   )
 
+  accelerator_type = var.accelerator_type == null ? null : "projects/${var.project_id}/zones/${var.zone}/acceleratorTypes/${var.accelerator_type}"
+
   winrm_username = local.communicator == "winrm" ? "packer_user" : null
   winrm_insecure = local.communicator == "winrm" ? true : null
   winrm_use_ssl  = local.communicator == "winrm" ? true : null
@@ -82,7 +84,7 @@ source "googlecompute" "toolkit_image" {
   image_family            = local.image_family
   image_labels            = var.labels
   machine_type            = var.machine_type
-  accelerator_type        = var.accelerator_type
+  accelerator_type        = local.accelerator_type
   accelerator_count       = var.accelerator_count
   on_host_maintenance     = local.on_host_maintenance
   disk_size               = var.disk_size

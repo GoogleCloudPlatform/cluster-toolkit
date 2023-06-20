@@ -25,6 +25,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/hashicorp/go-getter"
 	"gopkg.in/yaml.v3"
 )
 
@@ -135,10 +136,18 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 		if err != nil {
 			return ModuleInfo{}, err
 		}
-		modPath = path.Join(tmpDir, "module")
-		sourceReader := sourcereader.Factory(source)
-		if err = sourceReader.GetModule(source, modPath); err != nil {
-			return ModuleInfo{}, fmt.Errorf("failed to clone git module at %s: %v", source, err)
+		pkgAddr, subDir := getter.SourceDirSubdir(source)
+		pkgPath := path.Join(tmpDir, "module")
+		modPath = path.Join(pkgPath, subDir)
+		sourceReader := sourcereader.Factory(pkgAddr)
+		if err = sourceReader.GetModule(pkgAddr, pkgPath); err != nil {
+			if subDir == "" {
+				return ModuleInfo{}, err
+			}
+			return ModuleInfo{},
+				fmt.Errorf("module source %s included \"//\" package syntax; "+
+					"the \"//\" should typically be placed at the root of the repository:\n%s",
+					source, err.Error())
 		}
 
 	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
