@@ -31,13 +31,9 @@ func (s *MySuite) TestExpandBackends(c *C) {
 	dc := getDeploymentConfigForTest()
 	deplName := dc.Config.Vars.Get("deployment_name").AsString()
 
-	// Simple test: Does Nothing
-	err := dc.expandBackends()
-	c.Assert(err, IsNil)
-
 	dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
-	err = dc.expandBackends()
-	c.Assert(err, IsNil)
+	dc.expandBackends()
+
 	grp := dc.Config.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix := grp.TerraformBackend.Configuration.Get("prefix")
@@ -49,8 +45,8 @@ func (s *MySuite) TestExpandBackends(c *C) {
 		Name: "group2",
 	}
 	dc.Config.DeploymentGroups = append(dc.Config.DeploymentGroups, newGroup)
-	err = dc.expandBackends()
-	c.Assert(err, IsNil)
+	dc.expandBackends()
+
 	newGrp := dc.Config.DeploymentGroups[1]
 	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix = newGrp.TerraformBackend.Configuration.Get("prefix")
@@ -92,8 +88,7 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{})
 		setTestModuleInfo(usedMod, modulereader.ModuleInfo{})
 
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, usedMod, []string{})
 		c.Check(mod.Settings, DeepEquals, Dict{})
 	}
 
@@ -104,8 +99,7 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, usedMod, []string{})
 		c.Check(mod.Settings, DeepEquals, Dict{})
 	}
 
@@ -118,8 +112,7 @@ func (s *MySuite) TestUseModule(c *C) {
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, usedMod, []string{})
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": AsProductOfModuleUse(ref, "UsedModule"),
 		})
@@ -135,8 +128,7 @@ func (s *MySuite) TestUseModule(c *C) {
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{"val1"})
-		c.Check(err, IsNil)
+		useModule(&mod, usedMod, []string{"val1"})
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{"val1": ref})
 	}
 
@@ -151,8 +143,7 @@ func (s *MySuite) TestUseModule(c *C) {
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, usedMod, []string{})
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": AsProductOfModuleUse(ref, "UsedModule")})
 	}
@@ -165,8 +156,7 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, usedMod, []string{})
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": AsProductOfModuleUse(
 				MustParseExpression(`flatten([module.UsedModule.val1])`).AsValue(),
@@ -184,8 +174,7 @@ func (s *MySuite) TestUseModule(c *C) {
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, usedMod, []string{})
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": AsProductOfModuleUse(
 				MustParseExpression(`flatten([module.UsedModule.val1,[module.UsedModule.val1]])`).AsValue(),
@@ -203,8 +192,7 @@ func (s *MySuite) TestUseModule(c *C) {
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{"val1"})
-		c.Check(err, IsNil)
+		useModule(&mod, usedMod, []string{"val1"})
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": cty.TupleVal([]cty.Value{ref})})
 	}
