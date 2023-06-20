@@ -71,7 +71,7 @@ func (s *MySuite) TestAddListValue(c *C) {
 
 	mod.addListValue(setting, second)
 	c.Check(mod.Settings.Get(setting), DeepEquals,
-		AsProductOfModuleUse(MustParseExpression(`flatten(["value2", flatten(["value1"])])`).AsValue(), "mod2", "mod1"))
+		AsProductOfModuleUse(MustParseExpression(`flatten(["value2", flatten(["value1"])])`).AsValue(), "mod1", "mod2"))
 }
 
 func (s *MySuite) TestUseModule(c *C) {
