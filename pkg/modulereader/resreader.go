@@ -145,7 +145,7 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 		modPath = source
 
 	default:
-		return ModuleInfo{}, fmt.Errorf("Source is not valid: %s", source)
+		return ModuleInfo{}, fmt.Errorf("source is not valid: %s", source)
 	}
 
 	reader := Factory(kind)
