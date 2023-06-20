@@ -50,3 +50,13 @@ output "mount_runner" {
   EOT
   value       = local.mount_runner
 }
+
+output "filestore_id" {
+  description = "An identifier for the resource with format `projects/{{project}}/locations/{{location}}/instances/{{name}}`"
+  value       = google_filestore_instance.filestore_instance.id
+}
+
+output "capacity_gb" {
+  description = "File share capacity in GiB."
+  value       = google_filestore_instance.filestore_instance.file_shares[0].capacity_gb
+}
