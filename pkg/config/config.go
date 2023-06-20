@@ -22,6 +22,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -752,6 +753,7 @@ func AsProductOfModuleUse(v cty.Value, mods ...ModuleID) cty.Value {
 	for i, m := range mods {
 		s[i] = string(m)
 	}
+	sort.Strings(s)
 	return v.Mark(productOfModuleUseMark{strings.Join(s, ",")})
 }
 
