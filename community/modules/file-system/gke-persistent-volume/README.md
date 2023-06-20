@@ -1,3 +1,73 @@
+## Description
+
+This module creates Kubernetes Persistent Volumes (PV) and Persistent Volume
+Claims (PVC) that can be used by a [gke-job-template].
+
+Currently, the `gke-persistent-volume` module only works with Filestore. Each
+`gke-persistent-volume` can only use a single Filestore. If multiple Filestores
+are used then multiple `gke-persistent-volume` modules are needed.
+
+> **_NOTE:_** This is an experimental module and the functionality and
+> documentation will likely be updated in the near future. This module has only
+> been tested in limited capacity.
+
+### Example
+
+The following example creates a Filestore and then uses the
+`gke-persistent-volume` module to use the Filestore as shared storage in a
+`gke-job-template`.
+
+```yaml
+  - id: gke_cluster
+    source: community/modules/scheduler/gke-cluster
+    use: [network1]
+    settings:
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: <your-ip-address>/32
+
+  - id: datafs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings: { local_mount: /data }
+
+  - id: datafs-pv
+    source: community/modules/file-system/gke-persistent-volume
+    use: [datafs, gke_cluster]
+
+  - id: job-template
+    source: community/modules/compute/gke-job-template
+    use: [datafs-pv, compute_pool]
+```
+
+### Authorized Network
+
+Since the `gke-persistent-volume` module is making calls to the Kubernetes API
+to create Kubernetes entities, the machine performing the deployment must be
+authorized to connect to the Kubernetes API. You can add the
+`master_authorized_networks` settings block, as shown in the example above, with
+the IP address of the machine performing the deployment. This will ensure that
+the deploying machine can connect to the cluster.
+
+### Connecting Via Use
+
+The diagram below shows the valid `use` relationships for the GKE HPC Toolkit
+modules. For example the `gke-persistent-volume` module can `use` a
+`gke-cluster` module and a `filestore` module, as shown in the example above.
+
+```mermaid
+graph TD;
+    vpc-->|OneToMany|gke-cluster;
+    gke-cluster-->|OneToMany|gke-node-pool;
+    gke-node-pool-->|ManyToMany|gke-job-template;
+    gke-cluster-->|OneToMany|gke-persistent-volume;
+    gke-persistent-volume-->|ManyToMany|gke-job-template;
+    vpc-->|OneToMany|filestore;
+    filestore-->|OneToOne|gke-persistent-volume;
+```
+
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
 
