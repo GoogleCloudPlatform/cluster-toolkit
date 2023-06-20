@@ -18,6 +18,7 @@ package cmd
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"log"
 	"path/filepath"
@@ -86,7 +87,9 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		switch group.Kind {
 		case config.PackerKind:
 			// Packer groups are enforced to have length 1
-			moduleDir := filepath.Join(groupDir, string(group.Modules[0].ID))
+			subPath, e := modulewriter.DeploymentSource(group.Modules[0])
+			cobra.CheckErr(e)
+			moduleDir := filepath.Join(groupDir, subPath)
 			err = deployPackerGroup(moduleDir)
 		case config.TerraformKind:
 			err = deployTerraformGroup(groupDir)

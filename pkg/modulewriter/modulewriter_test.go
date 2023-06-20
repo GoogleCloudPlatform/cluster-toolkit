@@ -747,10 +747,22 @@ func (s *MySuite) TestDeploymentSource(c *C) {
 		c.Check(s, Equals, "github.com/x/y.git")
 	}
 	{ // packer
-		m := config.Module{Kind: config.PackerKind, Source: "modules/packer/custom-image", ID: "custom-image"}
+		m := config.Module{Kind: config.PackerKind, Source: "modules/packer/custom-image", ID: "image-id"}
 		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
-		c.Check(s, Equals, "custom-image")
+		c.Check(s, Equals, "image-id")
+	}
+	{ // remote packer non-package
+		m := config.Module{Kind: config.PackerKind, Source: "github.com/GoogleCloudPlatform/modules/packer/custom-image", ID: "image-id"}
+		s, err := DeploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "image-id")
+	}
+	{ // remote packer package
+		m := config.Module{Kind: config.PackerKind, Source: "github.com/GoogleCloudPlatform//modules/packer/custom-image?ref=main", ID: "image-id"}
+		s, err := DeploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "image-id/modules/packer/custom-image")
 	}
 	{ // embedded core
 		m := config.Module{Kind: config.TerraformKind, Source: "modules/x/y"}
