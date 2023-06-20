@@ -80,6 +80,7 @@ Modules that are still in development and less stable are labeled with the
 * **[Intel-DAOS]** ![community-badge] : Creates
   a [DAOS](https://docs.daos.io/) file system.
 * **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates a Google Cloud Storage (GCS) bucket.
+* **[gke-persistent-volume]** ![community-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
 
@@ -89,6 +90,7 @@ Modules that are still in development and less stable are labeled with the
 [intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
+[gke-persistent-volume]: ../community/modules/file-system/gke-persistent-volume/README.md
 
 ### Monitoring
 
