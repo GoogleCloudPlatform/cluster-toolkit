@@ -165,25 +165,25 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
 	testDC := getDeploymentConfigForTest()
 	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_prep_dir"))
-	realDepDir := filepath.Join(testDir, "test_prep_dir")
+	depDir := filepath.Join(testDir, "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
-	WriteDeployment(testDC, testDir, false /* overwrite */)
+	WriteDeployment(testDC, depDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
-	files, _ := ioutil.ReadDir(realDepDir)
+	files, _ := ioutil.ReadDir(depDir)
 	c.Check(len(files) > 1, Equals, true)
 
-	err := prepDepDir(realDepDir, true /* overwrite */)
+	err := prepDepDir(depDir, true /* overwrite */)
 	c.Check(err, IsNil)
-	c.Check(isDeploymentDirPrepped(realDepDir), IsNil)
+	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, "test_prep_dir", HiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(depDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
-	files2, _ := ioutil.ReadDir(realDepDir)
+	files2, _ := ioutil.ReadDir(depDir)
 	c.Check(len(files2), Equals, 3) // .ghpc, .gitignore, and instructions file
 }
 
@@ -236,16 +236,16 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	afero.WriteFile(aferoFS, "community/modules/green/lime/main.tf", []byte("lime"), 0644)
 	sourcereader.ModuleFS = afero.NewIOFS(aferoFS)
 
-	testDC := getDeploymentConfigForTest()
+	dc := getDeploymentConfigForTest()
+	dir := filepath.Join(testDir, "test_write_deployment")
 
-	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_write_deployment"))
-	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
+	err := WriteDeployment(dc, dir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the deployment fails
-	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(dc, dir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
 	// Overwriting the deployment succeeds with flag
-	err = WriteDeployment(testDC, testDir, true /* overwriteFlag */)
+	err = WriteDeployment(dc, dir, true /* overwriteFlag */)
 	c.Check(err, IsNil)
 }
 
@@ -305,15 +305,6 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 	// deployment group(s) already exists
 	err = createGroupDirs(testDeployDir, &testDepGroups)
 	c.Check(err, IsNil)
-}
-
-func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
-	testDC := getDeploymentConfigForTest()
-	var e *config.InputValueError
-
-	testDC.Config.Vars.Set("deployment_name", cty.NumberIntVal(100))
-	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
-	c.Check(errors.As(err, &e), Equals, true)
 }
 
 // tfwriter.go

@@ -78,13 +78,7 @@ func factory(kind string) ModuleWriter {
 
 // WriteDeployment writes a deployment directory using modules defined the
 // environment blueprint.
-func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag bool) error {
-	deploymentName, err := dc.Config.DeploymentName()
-	if err != nil {
-		return err
-	}
-	deploymentDir := filepath.Join(outputDir, deploymentName)
-
+func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwriteFlag bool) error {
 	overwrite := isOverwriteAllowed(deploymentDir, &dc.Config, overwriteFlag)
 	if err := prepDepDir(deploymentDir, overwrite); err != nil {
 		return err
@@ -98,8 +92,7 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		return err
 	}
 
-	advancedDeployInstructions := filepath.Join(deploymentDir, "instructions.txt")
-	f, err := os.Create(advancedDeployInstructions)
+	f, err := os.Create(InstructionsPath(deploymentDir))
 	if err != nil {
 		return err
 	}
@@ -133,17 +126,12 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 			}
 		}
 	}
-
-	fmt.Println("To deploy your infrastructure please run:")
-	fmt.Println()
-	fmt.Printf("./ghpc deploy %s\n", deploymentDir)
-	fmt.Println()
-	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
-	fmt.Println("deployment instructions at:")
-	fmt.Println()
-	fmt.Printf("%s\n", f.Name())
-
 	return nil
+}
+
+// InstructionsPath returns the path to the instructions file for a deployment
+func InstructionsPath(deploymentDir string) string {
+	return filepath.Join(deploymentDir, "instructions.txt")
 }
 
 func createGroupDirs(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {

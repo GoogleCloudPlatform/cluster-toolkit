@@ -48,7 +48,7 @@ var (
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
 		PreRunE:           parseDeployArgs,
-		RunE:              runDeployCmd,
+		Run:               runDeployCmd,
 		SilenceUsage:      true,
 	}
 )
@@ -72,22 +72,15 @@ func getApplyBehavior(autoApprove bool) shell.ApplyBehavior {
 	return shell.PromptBeforeApply
 }
 
-func runDeployCmd(cmd *cobra.Command, args []string) error {
+func runDeployCmd(cmd *cobra.Command, args []string) {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
 	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return err
-	}
-
-	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
-		return err
-	}
+	cobra.CheckErr(err)
+	cobra.CheckErr(shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot))
 
 	for _, group := range dc.Config.DeploymentGroups {
 		groupDir := filepath.Join(deploymentRoot, string(group.Name))
-		if err = shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile); err != nil {
-			return err
-		}
+		cobra.CheckErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
 
 		var err error
 		switch group.Kind {
@@ -100,12 +93,10 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 		default:
 			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind.String())
 		}
-		if err != nil {
-			return err
-		}
-
+		cobra.CheckErr(err)
 	}
-	return nil
+	fmt.Println("\n###############################")
+	printAdvancedInstructionsMessage(deploymentRoot)
 }
 
 func deployPackerGroup(moduleDir string) error {
