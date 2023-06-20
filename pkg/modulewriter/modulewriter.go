@@ -148,7 +148,7 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 	return nil
 }
 
-// Get module source within deployment group
+// DeploymentSource returns module source within deployment group
 // Rules are following:
 //   - git source
 //     => keep the same source
@@ -158,7 +158,7 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 //     => ./modules/embedded/<source>
 //   - other
 //     => ./modules/<basename(source)>-<hash(abs(source))>
-func deploymentSource(mod config.Module) (string, error) {
+func DeploymentSource(mod config.Module) (string, error) {
 	if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
 		return mod.Source, nil
 	}
@@ -224,7 +224,7 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 			}
 
 			/* Copy source files */
-			ds, err := deploymentSource(*mod)
+			ds, err := DeploymentSource(*mod)
 			if err != nil {
 				return err
 			}

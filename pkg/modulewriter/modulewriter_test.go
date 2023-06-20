@@ -742,43 +742,43 @@ func TestMain(m *testing.M) {
 func (s *MySuite) TestDeploymentSource(c *C) {
 	{ // git
 		m := config.Module{Kind: config.TerraformKind, Source: "github.com/x/y.git"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "github.com/x/y.git")
 	}
 	{ // packer
 		m := config.Module{Kind: config.PackerKind, Source: "modules/packer/custom-image", ID: "custom-image"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "custom-image")
 	}
 	{ // embedded core
 		m := config.Module{Kind: config.TerraformKind, Source: "modules/x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "./modules/embedded/modules/x/y")
 	}
 	{ // embedded community
 		m := config.Module{Kind: config.TerraformKind, Source: "community/modules/x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "./modules/embedded/community/modules/x/y")
 	}
 	{ // local rel in repo
 		m := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
 	{ // local rel
 		m := config.Module{Kind: config.TerraformKind, Source: "./../../../../x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
 	{ // local abs
 		m := config.Module{Kind: config.TerraformKind, Source: "/tmp/x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}

@@ -221,7 +221,7 @@ func writeMain(
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
-		ds, err := deploymentSource(mod)
+		ds, err := DeploymentSource(mod)
 		if err != nil {
 			return err
 		}

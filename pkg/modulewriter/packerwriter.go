@@ -93,7 +93,7 @@ func (w PackerWriter) writeDeploymentGroup(
 			return err
 		}
 
-		ds, err := deploymentSource(mod)
+		ds, err := DeploymentSource(mod)
 		if err != nil {
 			return err
 		}
