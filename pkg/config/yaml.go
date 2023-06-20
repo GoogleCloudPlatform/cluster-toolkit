@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
@@ -72,6 +73,46 @@ type YamlCtx struct {
 	Lines     []string
 }
 
+func syntheticOutputsNode(name string, ln int, col int) *yaml.Node {
+	return &yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			{
+				Kind:   yaml.ScalarNode,
+				Value:  "name",
+				Line:   ln,
+				Column: col,
+			},
+			{
+				Kind:   yaml.ScalarNode,
+				Value:  name,
+				Line:   ln,
+				Column: col,
+			},
+		},
+		Line:   ln,
+		Column: col,
+	}
+}
+
+// normalizeNode is treating variadic YAML syntax, ensuring that
+// there is only one (canonical) way to refer to a piece of blueprint.
+// Handled cases:
+// * Module.outputs:
+// ```
+// outputs:
+// - name: grog  # canonical path to "grog" value is `...outputs[0].name`
+// - mork		 # canonical path to "mork" value is `...outputs[1].name`, NOT `...outputs[1]`
+// ```
+func normalizeYamlNode(p Path, n *yaml.Node) *yaml.Node {
+	switch {
+	case n.Kind == yaml.ScalarNode && regexp.MustCompile(`^deployment_groups\[\d+\]\.modules\[\d+\]\.outputs\[\d+\]$`).MatchString(p.String()):
+		return syntheticOutputsNode(n.Value, n.Line, n.Column)
+	default:
+		return n
+	}
+}
+
 func newYamlCtx(data []byte) YamlCtx {
 	var c nodeCapturer
 	if err := yaml.Unmarshal(data, &c); err != nil {
@@ -81,6 +122,7 @@ func newYamlCtx(data []byte) YamlCtx {
 	m := map[Path]Pos{}
 	var walk func(n *yaml.Node, p Path)
 	walk = func(n *yaml.Node, p Path) {
+		n = normalizeYamlNode(p, n)
 		m[p] = Pos{n.Line, n.Column}
 		if n.Kind == yaml.MappingNode {
 			for i := 0; i < len(n.Content); i += 2 {
