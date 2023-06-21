@@ -505,20 +505,16 @@ func checkModulesAndGroups(groups []DeploymentGroup) error {
 		if err := grp.Name.Validate(); err != nil {
 			return err
 		}
-		pg := Path{"deployment_groups"}.At(ig)
+		pg := Root.Groups.At(ig)
 		if seenGroups[grp.Name] {
-			return BpError{
-				pg.Dot("name"),
-				fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name)}
+			return BpError{pg.Name, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name)}
 		}
 		seenGroups[grp.Name] = true
 
 		for im, mod := range grp.Modules {
-			pm := pg.Dot("modules").At(im)
+			pm := pg.Modules.At(im)
 			if seenMod[mod.ID] {
-				return BpError{
-					pm.Dot("id"),
-					fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)}
+				return BpError{pm.ID, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)}
 			}
 			seenMod[mod.ID] = true
 
@@ -528,7 +524,7 @@ func checkModulesAndGroups(groups []DeploymentGroup) error {
 			}
 			if grp.Kind != mod.Kind {
 				return BpError{
-					pm.Dot("kind"),
+					pm.Kind,
 					fmt.Errorf(
 						"mixing modules of differing kinds in a deployment group is not supported: deployment group %s, got %s and %s",
 						grp.Name, grp.Kind, mod.Kind)}
@@ -678,7 +674,7 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 		}
 	}
 
-	path := Path{"vars.deployment_name"}
+	path := Root.Vars.Dot("deployment_name")
 	v := bp.Vars.Get("deployment_name")
 	if v.Type() != cty.String {
 		return "", BpError{path, InputValueError{
@@ -709,16 +705,15 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 // checkBlueprintName returns an error if blueprint_name does not comply with
 // requirements for correct GCP label values.
 func (bp *Blueprint) checkBlueprintName() error {
-	p := Path{"blueprint_name"}
 	if len(bp.BlueprintName) == 0 {
-		return BpError{p, InputValueError{
+		return BpError{Root.BlueprintName, InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["valueEmptyString"],
 		}}
 	}
 
 	if !isValidLabelValue(bp.BlueprintName) {
-		return BpError{p, InputValueError{
+		return BpError{Root.BlueprintName, InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["labelValueReqs"],
 		}}

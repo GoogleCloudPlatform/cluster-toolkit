@@ -24,26 +24,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Path points to concrete location in the blueprint file.
-type Path struct {
-	v string
-}
-
-func (p Path) String() string {
-	return p.v
-}
+// yPath is a helper for YamlCtx to build "Path". It's agnostic to the Blueprint structure.
+type yPath string
 
 // At is a builder method for a path of a child in a sequence.
-func (p Path) At(i int) Path {
-	return Path{fmt.Sprintf("%s[%d]", p.v, i)}
+func (p yPath) At(i int) yPath {
+	return yPath(fmt.Sprintf("%s[%d]", p, i))
 }
 
 // Dot is a builder method for a path of a child in a mapping.
-func (p Path) Dot(k string) Path {
-	if p.v == "" {
-		return Path{k}
+func (p yPath) Dot(k string) yPath {
+	if p == "" {
+		return yPath(k)
 	}
-	return Path{fmt.Sprintf("%s.%s", p.v, k)}
+	return yPath(fmt.Sprintf("%s.%s", p, k))
 }
 
 // Pos is a position in the blueprint file.
@@ -64,13 +58,19 @@ func importBlueprint(f string) (Blueprint, YamlCtx, error) {
 	if err = decoder.Decode(&bp); err != nil {
 		return Blueprint{}, YamlCtx{}, fmt.Errorf(errorMessages["yamlUnmarshalError"], f, err)
 	}
-	return bp, newYamlCtx(data), nil
+	return bp, NewYamlCtx(data), nil
 }
 
 // YamlCtx is a contextual information to render errors.
 type YamlCtx struct {
-	PathToPos map[Path]Pos
+	pathToPos map[yPath]Pos
 	Lines     []string
+}
+
+// Pos returns a position of a given path if one is found.
+func (c YamlCtx) Pos(p Path) (Pos, bool) {
+	pos, ok := c.pathToPos[yPath(p.String())]
+	return pos, ok
 }
 
 func syntheticOutputsNode(name string, ln int, col int) *yaml.Node {
@@ -104,24 +104,31 @@ func syntheticOutputsNode(name string, ln int, col int) *yaml.Node {
 // - name: grog  # canonical path to "grog" value is `...outputs[0].name`
 // - mork		 # canonical path to "mork" value is `...outputs[1].name`, NOT `...outputs[1]`
 // ```
-func normalizeYamlNode(p Path, n *yaml.Node) *yaml.Node {
+func normalizeYamlNode(p yPath, n *yaml.Node) *yaml.Node {
+	fmt.Printf("node: %#v, path: %#v", n, string(p))
 	switch {
-	case n.Kind == yaml.ScalarNode && regexp.MustCompile(`^deployment_groups\[\d+\]\.modules\[\d+\]\.outputs\[\d+\]$`).MatchString(p.String()):
+	case n.Kind == yaml.ScalarNode && regexp.MustCompile(`^deployment_groups\[\d+\]\.modules\[\d+\]\.outputs\[\d+\]$`).MatchString(string(p)):
 		return syntheticOutputsNode(n.Value, n.Line, n.Column)
 	default:
 		return n
 	}
 }
 
-func newYamlCtx(data []byte) YamlCtx {
+// NewYamlCtx creates a new YamlCtx from a given YAML data.
+// NOTE: The data should be a valid blueprint YAML (previously used to parse Blueprint),
+// this function will panic if it's not valid YAML and doesn't validate Blueprint structure.
+func NewYamlCtx(data []byte) YamlCtx {
 	var c nodeCapturer
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		panic(err) // shouldn't happen
 	}
+	if c.n == nil {
+		return YamlCtx{} // empty
+	}
 
-	m := map[Path]Pos{}
-	var walk func(n *yaml.Node, p Path)
-	walk = func(n *yaml.Node, p Path) {
+	m := map[yPath]Pos{}
+	var walk func(n *yaml.Node, p yPath)
+	walk = func(n *yaml.Node, p yPath) {
 		n = normalizeYamlNode(p, n)
 		m[p] = Pos{n.Line, n.Column}
 		if n.Kind == yaml.MappingNode {
@@ -134,7 +141,7 @@ func newYamlCtx(data []byte) YamlCtx {
 			}
 		}
 	}
-	walk(c.n, Path{""})
+	walk(c.n, "")
 
 	var lines []string
 	sc := bufio.NewScanner(bytes.NewReader(data))
