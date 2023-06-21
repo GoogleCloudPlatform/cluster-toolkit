@@ -33,7 +33,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_control_bucket"></a> [control\_bucket](#module\_control\_bucket) | terraform-google-modules/cloud-storage/google | ~> 3.0 |
+| <a name="module_control_bucket"></a> [control\_bucket](#module\_control\_bucket) | terraform-google-modules/cloud-storage/google | ~> 4.0 |
 | <a name="module_network"></a> [network](#module\_network) | ./network | n/a |
 | <a name="module_pubsub"></a> [pubsub](#module\_pubsub) | terraform-google-modules/pubsub/google | ~> 1.8 |
 | <a name="module_service_account"></a> [service\_account](#module\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.1 |
