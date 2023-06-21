@@ -64,7 +64,7 @@ module "service_account" {
 
 module "control_bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
-  version = "~> 2.2"
+  version = "~> 3.0"
 
   project_id = var.project_id
   names      = ["storage"]

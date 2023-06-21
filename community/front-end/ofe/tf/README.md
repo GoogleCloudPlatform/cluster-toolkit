@@ -18,22 +18,22 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 3.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 3.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 4.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 4.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 1.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 3.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | ~> 4.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 1.0 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_control_bucket"></a> [control\_bucket](#module\_control\_bucket) | terraform-google-modules/cloud-storage/google | ~> 2.2 |
+| <a name="module_control_bucket"></a> [control\_bucket](#module\_control\_bucket) | terraform-google-modules/cloud-storage/google | ~> 3.0 |
 | <a name="module_network"></a> [network](#module\_network) | ./network | n/a |
 | <a name="module_pubsub"></a> [pubsub](#module\_pubsub) | terraform-google-modules/pubsub/google | ~> 1.8 |
 | <a name="module_service_account"></a> [service\_account](#module\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.1 |
