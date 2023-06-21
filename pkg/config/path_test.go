@@ -19,9 +19,8 @@ import (
 )
 
 func TestPath(t *testing.T) {
-	//fmt.Printf("p.string = %q\n", Root.Groups.At(7).Name)
 	type test struct {
-		p    Paath
+		p    Path
 		want string
 	}
 	r := Root
@@ -40,9 +39,9 @@ func TestPath(t *testing.T) {
 		{r.Validators.At(2).Validator, "validators[2].validator"},
 		{r.Validators.At(2).Skip, "validators[2].skip"},
 		{r.Validators.At(2).Inputs, "validators[2].inputs"},
-		{r.Validators.At(2).Inputs.At("zebra"), "validators[2].inputs[zebra]"},
+		{r.Validators.At(2).Inputs.Dot("zebra"), "validators[2].inputs.zebra"},
 
-		{r.Vars.At("red"), "vars[red]"},
+		{r.Vars.Dot("red"), "vars.red"},
 
 		{r.Groups.At(3), "deployment_groups[3]"},
 		{r.Groups.At(3).Name, "deployment_groups[3].group"},
@@ -62,11 +61,11 @@ func TestPath(t *testing.T) {
 		{m.Outputs.At(2).Description, "deployment_groups[3].modules[1].outputs[2].description"},
 		{m.Outputs.At(2).Sensitive, "deployment_groups[3].modules[1].outputs[2].sensitive"},
 		{m.Settings, "deployment_groups[3].modules[1].settings"},
-		{m.Settings.At("lime"), "deployment_groups[3].modules[1].settings[lime]"},
+		{m.Settings.Dot("lime"), "deployment_groups[3].modules[1].settings.lime"},
 
 		{r.Backend.Type, "terraform_backend_defaults.type"},
 		{r.Backend.Configuration, "terraform_backend_defaults.configuration"},
-		{r.Backend.Configuration.At("goo"), "terraform_backend_defaults.configuration[goo]"},
+		{r.Backend.Configuration.Dot("goo"), "terraform_backend_defaults.configuration.goo"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.want, func(t *testing.T) {

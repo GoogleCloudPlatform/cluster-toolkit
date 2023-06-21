@@ -137,23 +137,23 @@ func (s *MySuite) TestRenderError(c *C) {
 		c.Check(got, Equals, "arbuz")
 	}
 	{ // has pos, but context is missing
-		pth := config.Path{}.Dot("rainbow").Dot("over")
+		ctx := config.NewYamlCtx([]byte(``))
+		pth := config.Root.Vars.Dot("kale")
 		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
-		got := renderError(err, config.YamlCtx{})
-		c.Check(got, Equals, "rainbow.over: arbuz")
+		got := renderError(err, ctx)
+		c.Check(got, Equals, "vars.kale: arbuz")
 	}
 	{ // has pos, has context
-		pth := config.Path{}.Dot("rainbow").Dot("over")
-		ctx := config.YamlCtx{
-			PathToPos: map[config.Path]config.Pos{
-				pth: {Line: 2, Column: 3}},
-			Lines: []string{"uno", "dos", "tres"}}
+		ctx := config.NewYamlCtx([]byte(`
+vars:
+  kale: dos`))
+		pth := config.Root.Vars.Dot("kale")
 		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
 		got := renderError(err, ctx)
 		c.Check(got, Equals, `
 Error: arbuz
-on line 2, column 3:
-2: dos
+on line 3, column 9:
+3:   kale: dos
 `)
 	}
 }

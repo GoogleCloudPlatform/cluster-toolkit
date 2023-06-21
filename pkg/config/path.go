@@ -20,24 +20,24 @@ import (
 )
 
 // Path is unique identifier of a piece of configuration.
-type Paath interface {
+type Path interface {
 	String() string
-	Parent() Paath
+	Parent() Path
 }
 
 type basePath struct {
-	Prev  Paath
-	Piece string
+	InternalPrev  Path
+	InternalPiece string
 }
 
-func (p basePath) Parent() Paath { return p.Prev }
+func (p basePath) Parent() Path { return p.InternalPrev }
 
 func (p basePath) String() string {
 	pref := ""
 	if p.Parent() != nil {
 		pref = p.Parent().String()
 	}
-	return fmt.Sprintf("%s%s", pref, p.Piece)
+	return fmt.Sprintf("%s%s", pref, p.InternalPiece)
 }
 
 type arrayPath[E any] struct{ basePath }
@@ -50,58 +50,33 @@ func (p arrayPath[E]) At(i int) E {
 
 type mapPath[E any] struct{ basePath }
 
-func (p mapPath[E]) At(k string) E {
+func (p mapPath[E]) Dot(k string) E {
 	var e E
-	initPath(&e, &p, fmt.Sprintf("[%s]", k))
+	initPath(&e, &p, fmt.Sprintf(".%s", k))
 	return e
 }
 
 func initPath(p any, prev any, piece string) {
-	// Couldn't figure out how constrain it using `initPath` signature
-	if _, ok := p.(Paath); !ok {
-		panic(fmt.Sprintf("p is not a Paath: %#v", p))
-	}
-	if _, ok := prev.(Paath); prev != nil && !ok {
-		panic(fmt.Sprintf("prev is not a Paath: %#v", p))
-	}
-
-	if base, ok := p.(*basePath); ok {
-		base.Piece = piece
-		base.Prev = prev.(Paath)
-		return
-	}
-
-	pref := reflect.Indirect(reflect.ValueOf(p))
+	r := reflect.Indirect(reflect.ValueOf(p))
 	ty := reflect.TypeOf(p).Elem()
+	if !r.FieldByName("InternalPiece").IsValid() || !r.FieldByName("InternalPrev").IsValid() {
+		panic(fmt.Sprintf("%s does not embed basePath", ty.Name()))
+	}
+	if _, ok := prev.(Path); prev != nil && !ok {
+		panic(fmt.Sprintf("prev is not a Path: %#v", p))
+	}
 
-	// !!! Get base in a better way
-	//  E.g.
-	// bref, ok := pref.Field(0).Addr().Interface().(basePath)
-	// if !ok {
-	// 	panic(fmt.Sprintf("%s does not embed basePath", ty.Name()))
-	// } else {
-	// 	bref.Piece = piece
-	// 	bref.Prev = prev.(Paath)
-	// 	return
-	// }
-
-	base := pref.Field(0)
-	base.FieldByName("Piece").SetString(piece)
+	r.FieldByName("InternalPiece").SetString(piece)
 	if prev != nil {
-		base.FieldByName("Prev").Set(reflect.ValueOf(prev))
+		r.FieldByName("InternalPrev").Set(reflect.ValueOf(prev))
 	}
 
 	for i := 0; i < ty.NumField(); i++ {
-		field := ty.Field(i)
-		tag, ok := field.Tag.Lookup("path")
+		tag, ok := ty.Field(i).Tag.Lookup("path")
 		if !ok {
 			continue
 		}
-		ref, ok := pref.FieldByName(field.Name).Addr().Interface().(Paath)
-		if !ok {
-			panic(fmt.Sprintf("field %s.%s is not a Path", ty.Name(), field.Name))
-		}
-		initPath(ref, p, tag)
+		initPath(r.Field(i).Addr().Interface(), p, tag)
 	}
 }
 
@@ -156,7 +131,8 @@ type outputPath struct {
 	Sensitive   basePath `path:".sensitive"`
 }
 
-var Root rootPath = rootPath{}
+// Root is a starting point for creating a Blueprint Path
+var Root rootPath
 
 func init() {
 	initPath(&Root, nil, "")

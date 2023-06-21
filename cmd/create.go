@@ -130,7 +130,7 @@ func expandOrDie(path string) config.DeploymentConfig {
 func renderError(err error, ctx config.YamlCtx) string {
 	var be config.BpError
 	if errors.As(err, &be) {
-		if pos, ok := ctx.PathToPos[be.Path]; ok {
+		if pos, ok := ctx.Pos(be.Path); ok {
 			return renderRichError(be.Err, pos, ctx)
 		}
 	}

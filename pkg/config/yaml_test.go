@@ -79,72 +79,72 @@ terraform_backend_defaults:
 		}
 	}
 
-	exp := map[string]Pos{
-		"":               {3, 1},
-		"blueprint_name": {3, 17},
-		"ghpc_version":   {5, 15},
+	type test struct {
+		path Path
+		want Pos
+	}
+	tests := []test{
+		{Root, Pos{3, 1}},
+		{Root.BlueprintName, Pos{3, 17}},
+		{Root.GhpcVersion, Pos{5, 15}},
+		{Root.Validators, Pos{8, 1}},
+		{Root.Validators.At(0), Pos{8, 3}},
+		{Root.Validators.At(0).Inputs, Pos{10, 5}},
+		{Root.Validators.At(0).Inputs.Dot("spice"), Pos{10, 12}},
+		{Root.Validators.At(0).Validator, Pos{8, 14}},
+		{Root.Validators.At(1), Pos{11, 3}},
+		{Root.Validators.At(1).Skip, Pos{12, 9}},
+		{Root.Validators.At(1).Validator, Pos{11, 14}},
+		{Root.ValidationLevel, Pos{14, 19}},
+		{Root.Vars, Pos{17, 3}},
+		{Root.Vars.Dot("red"), Pos{17, 8}},
+		{Root.Groups, Pos{20, 1}},
+		{Root.Groups.At(0), Pos{20, 3}},
+		{Root.Groups.At(0).Name, Pos{20, 10}},
 
-		"validators":                 {8, 1},
-		"validators[0]":              {8, 3},
-		"validators[0].inputs":       {10, 5},
-		"validators[0].inputs.spice": {10, 12},
-		"validators[0].validator":    {8, 14},
-		"validators[1]":              {11, 3},
-		"validators[1].skip":         {12, 9},
-		"validators[1].validator":    {11, 14},
+		{Root.Groups.At(0).Backend, Pos{22, 5}},
+		{Root.Groups.At(0).Backend.Type, Pos{22, 11}},
+		{Root.Groups.At(0).Backend.Configuration, Pos{24, 7}},
+		{Root.Groups.At(0).Backend.Configuration.Dot("carrot"), Pos{24, 15}},
+		{Root.Groups.At(0).Kind, Pos{25, 9}},
 
-		"validation_level": {14, 19},
+		{Root.Groups.At(0).Modules, Pos{27, 3}},
+		{Root.Groups.At(0).Modules.At(0), Pos{27, 5}},
+		{Root.Groups.At(0).Modules.At(0).ID, Pos{27, 9}},
+		{Root.Groups.At(0).Modules.At(0).Source, Pos{28, 13}},
+		{Root.Groups.At(0).Modules.At(0).Kind, Pos{29, 11}},
+		{Root.Groups.At(0).Modules.At(0).Use, Pos{30, 10}},
+		{Root.Groups.At(0).Modules.At(0).Use.At(0), Pos{30, 11}},
+		{Root.Groups.At(0).Modules.At(0).Use.At(1), Pos{30, 18}},
+		{Root.Groups.At(0).Modules.At(0).Outputs, Pos{32, 5}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(0), Pos{32, 7}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(0).Name, Pos{32, 7}}, // synthetic
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(1), Pos{33, 7}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Name, Pos{33, 13}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Description, Pos{34, 20}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Sensitive, Pos{35, 18}},
+		{Root.Groups.At(0).Modules.At(0).Settings, Pos{37, 7}},
+		{Root.Groups.At(0).Modules.At(0).Settings.Dot("dijon"), Pos{37, 14}},
 
-		"vars":     {17, 3},
-		"vars.red": {17, 8},
+		{Root.Groups.At(1), Pos{39, 3}},
+		{Root.Groups.At(1).Name, Pos{39, 10}},
+		{Root.Groups.At(1).Modules, Pos{41, 3}},
+		{Root.Groups.At(1).Modules.At(0), Pos{41, 5}},
+		{Root.Groups.At(1).Modules.At(0).ID, Pos{41, 9}},
+		{Root.Groups.At(1).Modules.At(1), Pos{42, 5}},
+		{Root.Groups.At(1).Modules.At(1).ID, Pos{42, 9}},
 
-		"deployment_groups":          {20, 1},
-		"deployment_groups[0]":       {20, 3},
-		"deployment_groups[0].group": {20, 10},
-
-		"deployment_groups[0].terraform_backend":                      {22, 5},
-		"deployment_groups[0].terraform_backend.type":                 {22, 11},
-		"deployment_groups[0].terraform_backend.configuration":        {24, 7},
-		"deployment_groups[0].terraform_backend.configuration.carrot": {24, 15},
-		"deployment_groups[0].kind":                                   {25, 9},
-
-		"deployment_groups[0].modules":                           {27, 3},
-		"deployment_groups[0].modules[0]":                        {27, 5},
-		"deployment_groups[0].modules[0].id":                     {27, 9},
-		"deployment_groups[0].modules[0].source":                 {28, 13},
-		"deployment_groups[0].modules[0].kind":                   {29, 11},
-		"deployment_groups[0].modules[0].use":                    {30, 10},
-		"deployment_groups[0].modules[0].use[0]":                 {30, 11},
-		"deployment_groups[0].modules[0].use[1]":                 {30, 18},
-		"deployment_groups[0].modules[0].outputs":                {32, 5},
-		"deployment_groups[0].modules[0].outputs[0]":             {32, 7},
-		"deployment_groups[0].modules[0].outputs[0].name":        {32, 7}, // synthetic
-		"deployment_groups[0].modules[0].outputs[1]":             {33, 7},
-		"deployment_groups[0].modules[0].outputs[1].name":        {33, 13},
-		"deployment_groups[0].modules[0].outputs[1].description": {34, 20},
-		"deployment_groups[0].modules[0].outputs[1].sensitive":   {35, 18},
-		"deployment_groups[0].modules[0].settings":               {37, 7},
-		"deployment_groups[0].modules[0].settings.dijon":         {37, 14},
-
-		"deployment_groups[1]":               {39, 3},
-		"deployment_groups[1].group":         {39, 10},
-		"deployment_groups[1].modules":       {41, 3},
-		"deployment_groups[1].modules[0]":    {41, 5},
-		"deployment_groups[1].modules[0].id": {41, 9},
-		"deployment_groups[1].modules[1]":    {42, 5},
-		"deployment_groups[1].modules[1].id": {42, 9},
-
-		"terraform_backend_defaults":      {45, 3},
-		"terraform_backend_defaults.type": {45, 9},
+		{Root.Backend, Pos{45, 3}},
+		{Root.Backend.Type, Pos{45, 9}},
 	}
 
-	ctx := newYamlCtx([]byte(data))
-	for path, pos := range exp {
-		t.Run(path, func(t *testing.T) {
-			got, ok := ctx.PathToPos[Path{path}]
+	ctx := NewYamlCtx([]byte(data))
+	for _, tc := range tests {
+		t.Run(tc.path.String(), func(t *testing.T) {
+			got, ok := ctx.Pos(tc.path)
 			if !ok {
-				t.Errorf("%q not found", path)
-			} else if diff := cmp.Diff(pos, got); diff != "" {
+				t.Errorf("%q not found", tc.path.String())
+			} else if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
 		})
