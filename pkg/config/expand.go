@@ -134,45 +134,38 @@ func (mod *Module) addListValue(settingName string, value cty.Value) {
 // a list, in which case output values are appended and flattened using HCL.
 //
 //	mod: "using" module as defined above
-//	useMod: "used" module as defined above
-//	settingsToIgnore: a list of module settings not to modify for any reason;
-//	 typical usage will be to leave explicit blueprint settings unmodified
-func useModule(
-	mod *Module,
-	useMod Module,
-	settingsToIgnore []string,
-) {
+//	use: "used" module as defined above
+func useModule(mod *Module, use Module) {
 	modInputsMap := getModuleInputMap(mod.InfoOrDie().Inputs)
-	for _, useOutput := range useMod.InfoOrDie().Outputs {
-		settingName := useOutput.Name
-
-		// explicitly ignore these settings (typically those in blueprint)
-		if slices.Contains(settingsToIgnore, settingName) {
-			continue
-		}
+	for _, useOutput := range use.InfoOrDie().Outputs {
+		setting := useOutput.Name
 
 		// Skip settings that do not have matching module inputs
-		inputType, ok := modInputsMap[settingName]
+		inputType, ok := modInputsMap[setting]
 		if !ok {
 			continue
 		}
 
+		alreadySet := mod.Settings.Has(setting)
+		if alreadySet && len(IsProductOfModuleUse(mod.Settings.Get(setting))) == 0 {
+			continue // set explicitly, skip
+		}
+
 		// skip settings that are not of list type, but already have a value
 		// these were probably added by a previous call to this function
-		alreadySet := mod.Settings.Has(settingName)
 		isList := strings.HasPrefix(inputType, "list")
 		if alreadySet && !isList {
 			continue
 		}
 
 		v := AsProductOfModuleUse(
-			ModuleRef(useMod.ID, settingName).AsExpression().AsValue(),
-			useMod.ID)
+			ModuleRef(use.ID, setting).AsExpression().AsValue(),
+			use.ID)
 
 		if !isList {
-			mod.Settings.Set(settingName, v)
+			mod.Settings.Set(setting, v)
 		} else {
-			mod.addListValue(settingName, v)
+			mod.addListValue(setting, v)
 		}
 	}
 }
@@ -181,13 +174,12 @@ func useModule(
 // when/if applicable
 func (dc *DeploymentConfig) applyUseModules() error {
 	return dc.Config.WalkModules(func(m *Module) error {
-		settingsInBlueprint := maps.Keys(m.Settings.Items())
 		for _, u := range m.Use {
 			used, err := dc.Config.Module(u)
 			if err != nil {
 				return err
 			}
-			useModule(m, *used, settingsInBlueprint)
+			useModule(m, *used)
 		}
 		return nil
 	})
