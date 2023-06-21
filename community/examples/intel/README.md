@@ -228,18 +228,15 @@ ghpc create community/examples/intel/pfs-daos.yaml  \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
 
-This will create a set of directories containing Terraform modules and Packer
-templates.
+This will create the deployment directory containing Terraform modules and
+Packer templates. The `--backend-config` option is not required but recommended.
+It will save the terraform state in a pre-existing [Google Cloud Storage
+bucket][bucket]. For more information see [Setting up a remote terraform
+state][backend]. Use `ghpc deploy` to provision your DAOS storage cluster:
 
-The `--backend-config` option is not required but recommended. It will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket]. For more information see [Setting up a remote terraform state][backend].
-
-Follow `ghpc` instructions to deploy the environment
-
-  ```shell
-  terraform -chdir=pfs-daos/primary init
-  terraform -chdir=pfs-daos/primary validate
-  terraform -chdir=pfs-daos/primary apply
-  ```
+```text
+ghpc deploy pfs-daos --auto-approve
+```
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
 [bucket]: https://cloud.google.com/storage/docs/creating-buckets
@@ -396,7 +393,7 @@ See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.2/user/filesystem/?h=dfuse#d
 Delete the remaining infrastructure
 
 ```shell
-terraform -chdir=pfs-daos/primary destroy
+ghpc destroy pfs-daos --auto-approve
 ```
 
 ## DAOS Server with Slurm cluster
@@ -465,11 +462,9 @@ The `--backend-config` option is not required but recommended. It will save the 
 
 Follow `ghpc` instructions to deploy the environment
 
-  ```shell
-  terraform -chdir=daos-slurm/primary init
-  terraform -chdir=daos-slurm/primary validate
-  terraform -chdir=daos-slurm/primary apply
-  ```
+```text
+ghpc deploy daos-slurm --auto-approve
+```
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
 [bucket]: https://cloud.google.com/storage/docs/creating-buckets
@@ -609,5 +604,5 @@ have been shutdown and deleted by the Slurm autoscaler. Delete the remaining
 infrastructure with `terraform`:
 
 ```shell
-terraform -chdir=daos-slurm/primary destroy
+ghpc destroy daos-slurm --auto-approve
 ```
