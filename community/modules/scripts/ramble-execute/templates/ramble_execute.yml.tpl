@@ -12,38 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Execute Ramble Commands
+- name: Execute Commands
   hosts: localhost
   vars:
-    spack_path: ${spack_path}
-    ramble_path: ${ramble_path}
+    pre_script: ${pre_script}
     log_file: ${log_file}
     commands: ${commands}
   tasks:
   - name: Execute command block
     block:
-    - name: Print Ramble commands to be executed
+    - name: Print commands to be executed
       ansible.builtin.debug:
         msg: "{{ commands.split('\n') }}"
 
-    - name: Execute ramble commands
+    - name: Execute commands
       ansible.builtin.shell: |
         set -eo pipefail
         {
-        . {{ spack_path }}/share/spack/setup-env.sh
-        . {{ ramble_path }}/share/ramble/setup-env.sh
-
-        echo " === Starting ramble commands ==="
+        {{ pre_script }}
+        echo " === Starting commands ==="
         {{ commands }}
-        echo " === Finished ramble commands ==="
+        echo " === Finished commands ==="
         } | tee -a {{ log_file }}
-      register: ramble_output
+      register: output
 
     always:
     - name: Print commands output to stderr
       ansible.builtin.debug:
-        var: ramble_output.stderr_lines
+        var: output.stderr_lines
 
     - name: Print commands output to stdout
       ansible.builtin.debug:
-        var: ramble_output.stdout_lines
+        var: output.stdout_lines
