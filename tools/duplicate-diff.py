@@ -45,6 +45,10 @@ duplicates = [
         "community/modules/compute/gke-node-pool/threads_per_core_calc.tf",
         "modules/compute/vm-instance/threads_per_core_calc.tf"
     ],
+    [
+        "community/modules/scripts/ramble-execute/templates/ramble_execute.yml.tpl",
+        "community/modules/scripts/spack-install/templates/execute_commands.yml.tpl",
+    ],
 ]
 
 for group in duplicates:

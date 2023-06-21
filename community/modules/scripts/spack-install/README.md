@@ -189,36 +189,48 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0.0 |
+| <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 
 ## Providers
 
-No providers.
+| Name | Version |
+|------|---------|
+| <a name="provider_local"></a> [local](#provider\_local) | >= 2.0.0 |
 
 ## Modules
 
-No modules.
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.19.1 |
 
 ## Resources
 
-No resources.
+| Name | Type |
+|------|------|
+| [local_file.debug_file_ansible_execute](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
+| [local_file.debug_file_shell_install](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_caches_to_populate"></a> [caches\_to\_populate](#input\_caches\_to\_populate) | Defines caches which will be populated with the installed packages.<br>  Each cache must specify a type (either directory, or mirror).<br>  Each cache must also specify a path. For directory caches, this path<br>  must be on a local file system (i.e. file:///path/to/cache). For<br>  mirror paths, this can be any valid URL that spack accepts.<br><br>  NOTE: GPG Keys should be installed before trying to populate a cache<br>  with packages.<br><br>  NOTE: The gpg\_keys variable can be used to install existing GPG keys<br>  and create new GPG keys, both of which are acceptable for populating a<br>  cache. | `list(map(any))` | `[]` | no |
+| <a name="input_commands"></a> [commands](#input\_commands) | String of commands to run within this module | `string` | `null` | no |
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | Defines compilers for spack to install before installing packages. | `list(string)` | `[]` | no |
 | <a name="input_concretize_flags"></a> [concretize\_flags](#input\_concretize\_flags) | Defines the flags to pass into `spack concretize` | `string` | `""` | no |
 | <a name="input_configs"></a> [configs](#input\_configs) | List of configuration options to set within spack.<br>    Configs can be of type 'single-config' or 'file'.<br>    All configs must specify content, and a<br>    a scope. | `list(map(any))` | `[]` | no |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of deployment, used to name bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_environments"></a> [environments](#input\_environments) | Defines spack environments to configure, given as a list.<br>  Each environment must define a name.<br>  Additional optional attributes are 'content' and 'packages'.<br>  'content' must be a string, defining the content of the Spack Environment YAML file.<br>  'packages' must be a list of strings, defining the spack specs to install.<br>  If both 'content' and 'packages' are defined, 'content' is processed first. | `any` | `[]` | no |
 | <a name="input_gpg_keys"></a> [gpg\_keys](#input\_gpg\_keys) | GPG Keys to trust within spack.<br>  Each key must define a type. Valid types are 'file' and 'new'.<br>  Keys of type 'file' must define a path to the key that<br>  should be trusted.<br>  Keys of type 'new' must define a 'name' and 'email' to create<br>  the key with. | `list(map(any))` | `[]` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory to install spack into. | `string` | `"/sw/spack"` | no |
 | <a name="input_install_flags"></a> [install\_flags](#input\_install\_flags) | Defines the flags to pass into `spack install` | `string` | `""` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Key-value pairs of labels to be added to created resources. | `map(string)` | n/a | yes |
 | <a name="input_licenses"></a> [licenses](#input\_licenses) | List of software licenses to install within spack. | <pre>list(object({<br>    source = string<br>    dest   = string<br>  }))</pre> | `null` | no |
 | <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Defines the logfile that script output will be written to | `string` | `"/var/log/spack.log"` | no |
 | <a name="input_packages"></a> [packages](#input\_packages) | Defines root packages for spack to install (in order). | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | List of buildcaches for spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
 | <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
