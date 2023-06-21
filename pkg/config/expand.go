@@ -45,31 +45,26 @@ var (
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() error {
-	if err := dc.expandBackends(); err != nil {
-		return fmt.Errorf("failed to apply default backend to deployment groups: %v", err)
-	}
-
-	if err := dc.addDefaultValidators(); err != nil {
-		return fmt.Errorf("failed to update validators when expanding the config: %v", err)
-	}
+	dc.expandBackends()
+	dc.addDefaultValidators()
 
 	if err := dc.combineLabels(); err != nil {
-		return fmt.Errorf("failed to update module labels when expanding the config: %v", err)
+		return err
 	}
 
 	if err := dc.applyUseModules(); err != nil {
-		return fmt.Errorf("failed to apply \"use\" modules when expanding the config: %v", err)
+		return err
 	}
 
 	if err := dc.applyGlobalVariables(); err != nil {
-		return fmt.Errorf("failed to apply deployment variables in modules when expanding the config: %v", err)
+		return err
 	}
 
 	dc.Config.populateOutputs()
 	return nil
 }
 
-func (dc *DeploymentConfig) expandBackends() error {
+func (dc *DeploymentConfig) expandBackends() {
 	// 1. DEFAULT: use TerraformBackend configuration (if supplied) in each
 	//    resource group
 	// 2. If top-level TerraformBackendDefaults is defined, insert that
@@ -99,7 +94,6 @@ func (dc *DeploymentConfig) expandBackends() error {
 			}
 		}
 	}
-	return nil
 }
 
 func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
@@ -147,7 +141,7 @@ func useModule(
 	mod *Module,
 	useMod Module,
 	settingsToIgnore []string,
-) error {
+) {
 	modInputsMap := getModuleInputMap(mod.InfoOrDie().Inputs)
 	for _, useOutput := range useMod.InfoOrDie().Outputs {
 		settingName := useOutput.Name
@@ -181,7 +175,6 @@ func useModule(
 			mod.addListValue(settingName, v)
 		}
 	}
-	return nil
 }
 
 // applyUseModules applies variables from modules listed in the "use" field
@@ -194,9 +187,7 @@ func (dc *DeploymentConfig) applyUseModules() error {
 			if err != nil {
 				return err
 			}
-			if err := useModule(m, *used, settingsInBlueprint); err != nil {
-				return err
-			}
+			useModule(m, *used, settingsInBlueprint)
 		}
 		return nil
 	})
@@ -409,7 +400,7 @@ func hasVariable(str string) bool {
 
 // this function adds default validators to the blueprint.
 // default validators are only added for global variables that exist
-func (dc *DeploymentConfig) addDefaultValidators() error {
+func (dc *DeploymentConfig) addDefaultValidators() {
 	if dc.Config.Validators == nil {
 		dc.Config.Validators = []validatorConfig{}
 	}
@@ -484,8 +475,6 @@ func (dc *DeploymentConfig) addDefaultValidators() error {
 		}
 		dc.Config.Validators = append(dc.Config.Validators, v)
 	}
-
-	return nil
 }
 
 // FindAllIntergroupReferences finds all intergroup references within the group
