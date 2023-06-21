@@ -72,7 +72,7 @@ func (s *MySuite) TestAddListValue(c *C) {
 
 func (s *MySuite) TestUseModule(c *C) {
 	// Setup
-	usedMod := Module{
+	used := Module{
 		ID:     "UsedModule",
 		Source: "usedSource",
 	}
@@ -86,9 +86,9 @@ func (s *MySuite) TestUseModule(c *C) {
 		mod := Module{ID: "lime", Source: "modSource"}
 
 		setTestModuleInfo(mod, modulereader.ModuleInfo{})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{})
+		setTestModuleInfo(used, modulereader.ModuleInfo{})
 
-		useModule(&mod, usedMod, []string{})
+		useModule(&mod, used)
 		c.Check(mod.Settings, DeepEquals, Dict{})
 	}
 
@@ -96,10 +96,10 @@ func (s *MySuite) TestUseModule(c *C) {
 		mod := Module{ID: "lime", Source: "limeTree"}
 
 		setTestModuleInfo(mod, modulereader.ModuleInfo{})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
-		useModule(&mod, usedMod, []string{})
+		useModule(&mod, used)
 		c.Check(mod.Settings, DeepEquals, Dict{})
 	}
 
@@ -108,11 +108,11 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		useModule(&mod, usedMod, []string{})
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": AsProductOfModuleUse(ref, "UsedModule"),
 		})
@@ -124,11 +124,11 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		useModule(&mod, usedMod, []string{"val1"})
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{"val1": ref})
 	}
 
@@ -139,11 +139,11 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		useModule(&mod, usedMod, []string{})
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": AsProductOfModuleUse(ref, "UsedModule")})
 	}
@@ -153,10 +153,10 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
-		useModule(&mod, usedMod, []string{})
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": AsProductOfModuleUse(
 				MustParseExpression(`flatten([module.UsedModule.val1])`).AsValue(),
@@ -166,19 +166,19 @@ func (s *MySuite) TestUseModule(c *C) {
 	{ // Pass: Setting exists, Input is List, Output is not a list
 		// Assume setting was not set in blueprint
 		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", cty.TupleVal([]cty.Value{ref}))
+		mod.Settings.Set("val1", AsProductOfModuleUse(cty.TupleVal([]cty.Value{ref}), "other"))
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		useModule(&mod, usedMod, []string{})
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": AsProductOfModuleUse(
 				MustParseExpression(`flatten([module.UsedModule.val1,[module.UsedModule.val1]])`).AsValue(),
-				"UsedModule")})
+				"other", "UsedModule")})
 	}
 
 	{ // Pass: Setting exists, Input is List, Output is not a list
@@ -188,11 +188,11 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		useModule(&mod, usedMod, []string{"val1"})
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": cty.TupleVal([]cty.Value{ref})})
 	}
