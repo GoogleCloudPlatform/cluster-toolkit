@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"errors"
 	"hpc-toolkit/pkg/config"
 
 	"github.com/zclconf/go-cty/cty"
@@ -127,4 +128,32 @@ func (s *MySuite) TestValidationLevels(c *C) {
 	c.Check(bp.ValidationLevel, Equals, config.ValidationIgnore)
 
 	c.Check(setValidationLevel(&bp, "INVALID"), NotNil)
+}
+
+func (s *MySuite) TestRenderError(c *C) {
+	{ // simple
+		err := errors.New("arbuz")
+		got := renderError(err, config.YamlCtx{})
+		c.Check(got, Equals, "arbuz")
+	}
+	{ // has pos, but context is missing
+		pth := config.Path{}.Dot("rainbow").Dot("over")
+		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
+		got := renderError(err, config.YamlCtx{})
+		c.Check(got, Equals, "rainbow.over: arbuz")
+	}
+	{ // has pos, has context
+		pth := config.Path{}.Dot("rainbow").Dot("over")
+		ctx := config.YamlCtx{
+			PathToPos: map[config.Path]config.Pos{
+				pth: {Line: 2, Column: 3}},
+			Lines: []string{"uno", "dos", "tres"}}
+		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
+		got := renderError(err, ctx)
+		c.Check(got, Equals, `
+Error: arbuz
+on line 2, column 3:
+2: dos
+`)
+	}
 }

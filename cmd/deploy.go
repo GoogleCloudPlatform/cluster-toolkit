@@ -75,7 +75,7 @@ func getApplyBehavior(autoApprove bool) shell.ApplyBehavior {
 
 func runDeployCmd(cmd *cobra.Command, args []string) {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	cobra.CheckErr(err)
 	cobra.CheckErr(shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot))
 

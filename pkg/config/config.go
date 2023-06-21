@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -434,39 +433,17 @@ func (bp Blueprint) checkMovedModules() error {
 }
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
-func NewDeploymentConfig(configFilename string) (DeploymentConfig, error) {
-	blueprint, err := importBlueprint(configFilename)
+func NewDeploymentConfig(configFilename string) (DeploymentConfig, YamlCtx, error) {
+	bp, ctx, err := importBlueprint(configFilename)
 	if err != nil {
-		return DeploymentConfig{}, err
+		return DeploymentConfig{}, YamlCtx{}, err
 	}
-	return DeploymentConfig{Config: blueprint}, nil
-}
-
-// ImportBlueprint imports the blueprint configuration provided.
-func importBlueprint(blueprintFilename string) (Blueprint, error) {
-	var blueprint Blueprint
-
-	reader, err := os.Open(blueprintFilename)
-	if err != nil {
-		return blueprint, fmt.Errorf("%s, filename=%s: %v",
-			errorMessages["fileLoadError"], blueprintFilename, err)
-	}
-
-	decoder := yaml.NewDecoder(reader)
-	decoder.KnownFields(true)
-
-	if err = decoder.Decode(&blueprint); err != nil {
-		return blueprint, fmt.Errorf(errorMessages["yamlUnmarshalError"],
-			blueprintFilename, err)
-	}
-
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
-	if !isValidValidationLevel(blueprint.ValidationLevel) {
-		blueprint.ValidationLevel = ValidationError
+	if !isValidValidationLevel(bp.ValidationLevel) {
+		bp.ValidationLevel = ValidationError
 	}
-
-	return blueprint, nil
+	return DeploymentConfig{Config: bp}, ctx, nil
 }
 
 // ExportBlueprint exports the internal representation of a blueprint config
@@ -528,14 +505,20 @@ func checkModulesAndGroups(groups []DeploymentGroup) error {
 		if err := grp.Name.Validate(); err != nil {
 			return err
 		}
+		pg := Path{"deployment_groups"}.At(ig)
 		if seenGroups[grp.Name] {
-			return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name)
+			return BpError{
+				pg.Dot("name"),
+				fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name)}
 		}
 		seenGroups[grp.Name] = true
 
-		for _, mod := range grp.Modules {
+		for im, mod := range grp.Modules {
+			pm := pg.Dot("modules").At(im)
 			if seenMod[mod.ID] {
-				return fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)
+				return BpError{
+					pm.Dot("id"),
+					fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)}
 			}
 			seenMod[mod.ID] = true
 
@@ -544,9 +527,11 @@ func checkModulesAndGroups(groups []DeploymentGroup) error {
 				grp.Kind = mod.Kind
 			}
 			if grp.Kind != mod.Kind {
-				return fmt.Errorf(
-					"mixing modules of differing kinds in a deployment group is not supported: deployment group %s, got %s and %s",
-					grp.Name, grp.Kind, mod.Kind)
+				return BpError{
+					pm.Dot("kind"),
+					fmt.Errorf(
+						"mixing modules of differing kinds in a deployment group is not supported: deployment group %s, got %s and %s",
+						grp.Name, grp.Kind, mod.Kind)}
 			}
 		}
 	}
@@ -663,7 +648,7 @@ type InputValueError struct {
 	cause    string
 }
 
-func (err *InputValueError) Error() string {
+func (err InputValueError) Error() string {
 	return fmt.Sprintf("%v input error, cause: %v", err.inputKey, err.cause)
 }
 
@@ -687,34 +672,35 @@ func isValidLabelValue(value string) bool {
 // DeploymentName returns the deployment_name from the config and does approperate checks.
 func (bp *Blueprint) DeploymentName() (string, error) {
 	if !bp.Vars.Has("deployment_name") {
-		return "", &InputValueError{
+		return "", InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["varNotFound"],
 		}
 	}
 
+	path := Path{"vars.deployment_name"}
 	v := bp.Vars.Get("deployment_name")
 	if v.Type() != cty.String {
-		return "", &InputValueError{
+		return "", BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["valueNotString"],
-		}
+		}}
 	}
 
 	s := v.AsString()
 	if len(s) == 0 {
-		return "", &InputValueError{
+		return "", BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["valueEmptyString"],
-		}
+		}}
 	}
 
 	// Check that deployment_name is a valid label
 	if !isValidLabelValue(s) {
-		return "", &InputValueError{
+		return "", BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["labelValueReqs"],
-		}
+		}}
 	}
 
 	return s, nil
@@ -723,19 +709,19 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 // checkBlueprintName returns an error if blueprint_name does not comply with
 // requirements for correct GCP label values.
 func (bp *Blueprint) checkBlueprintName() error {
-
+	p := Path{"blueprint_name"}
 	if len(bp.BlueprintName) == 0 {
-		return &InputValueError{
+		return BpError{p, InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["valueEmptyString"],
-		}
+		}}
 	}
 
 	if !isValidLabelValue(bp.BlueprintName) {
-		return &InputValueError{
+		return BpError{p, InputValueError{
 			inputKey: "blueprint_name",
 			cause:    errorMessages["labelValueReqs"],
-		}
+		}}
 	}
 
 	return nil

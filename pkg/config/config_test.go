@@ -398,13 +398,13 @@ func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 	{ // Duplicate module name same group
 		g := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}, {ID: "pony"}}}
 		err := checkModulesAndGroups([]DeploymentGroup{g})
-		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
+		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
 	{ // Duplicate module name different groups
 		ice := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}}}
 		fire := DeploymentGroup{Name: "fire", Modules: []Module{{ID: "pony"}}}
 		err := checkModulesAndGroups([]DeploymentGroup{ice, fire})
-		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
+		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
 	{ // Mixing module kinds
 		g := DeploymentGroup{Name: "ice", Modules: []Module{
@@ -412,7 +412,7 @@ func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 			{ID: "zebra", Kind: TerraformKind},
 		}}
 		err := checkModulesAndGroups([]DeploymentGroup{g})
-		c.Check(err, ErrorMatches, "mixing modules of differing kinds in a deployment group is not supported: deployment group ice, got packer and terraform")
+		c.Check(err, ErrorMatches, ".*got packer and terraform")
 	}
 }
 
@@ -516,7 +516,7 @@ func (s *MySuite) TestGetModule(c *C) {
 
 func (s *MySuite) TestDeploymentName(c *C) {
 	bp := Blueprint{}
-	var e *InputValueError
+	var e InputValueError
 
 	// Is deployment_name a valid string?
 	bp.Vars.Set("deployment_name", cty.StringVal("yellow"))
@@ -563,7 +563,7 @@ func (s *MySuite) TestDeploymentName(c *C) {
 
 func (s *MySuite) TestCheckBlueprintName(c *C) {
 	dc := getDeploymentConfigForTest()
-	var e *InputValueError
+	var e InputValueError
 
 	// Is blueprint_name a valid string?
 	err := dc.Config.checkBlueprintName()
@@ -599,21 +599,21 @@ func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
 	c.Assert(dc.ExportBlueprint(outFile), IsNil)
-	newDC, err := NewDeploymentConfig(outFile)
+	newDC, _, err := NewDeploymentConfig(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(dc.Config, DeepEquals, newDC.Config)
 }
 
 func (s *MySuite) TestImportBlueprint(c *C) {
-	obtainedBlueprint, err := importBlueprint(simpleYamlFilename)
+	bp, _, err := importBlueprint(simpleYamlFilename)
 	c.Assert(err, IsNil)
-	c.Assert(obtainedBlueprint.BlueprintName,
+	c.Assert(bp.BlueprintName,
 		Equals, expectedSimpleBlueprint.BlueprintName)
 	c.Assert(
-		obtainedBlueprint.Vars.Get("labels"),
+		bp.Vars.Get("labels"),
 		DeepEquals,
 		expectedSimpleBlueprint.Vars.Get("labels"))
-	c.Assert(obtainedBlueprint.DeploymentGroups[0].Modules[0].ID,
+	c.Assert(bp.DeploymentGroups[0].Modules[0].ID,
 		Equals, expectedSimpleBlueprint.DeploymentGroups[0].Modules[0].ID)
 }
 
@@ -723,7 +723,7 @@ dragon: "Lews Therin Telamon"`)
 	file.Close()
 
 	// should fail on strict unmarshal as field does not match schema
-	_, err := importBlueprint(filename)
+	_, _, err := importBlueprint(filename)
 	c.Check(err, NotNil)
 }
 
