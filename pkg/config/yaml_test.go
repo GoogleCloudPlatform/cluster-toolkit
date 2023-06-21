@@ -23,7 +23,7 @@ import (
 )
 
 func TestYamlCtx(t *testing.T) {
-	data := `
+	data := `            # line 1
 # comment
 blueprint_name: green
 
@@ -32,7 +32,7 @@ ghpc_version: apricot
 validators:
 - validator: clay
   inputs:
-    spice: curry
+    spice: curry         # line 10
 - validator: sand
   skip: true
 
@@ -42,7 +42,7 @@ vars:
   red: ruby
 
 deployment_groups:
-- group: tiger
+- group: tiger           # line 20
   terraform_backend:
     type: yam
     configuration:
@@ -52,7 +52,7 @@ deployment_groups:
   - id: tan
     source: oatmeal
     kind: terraform
-    use: [mocha, coffee]
+    use: [mocha, coffee] # line 30
     outputs:
     - latte
     - name: hazelnut
@@ -62,7 +62,7 @@ deployment_groups:
       dijon: pine
 
 - group: crocodile
-  modules:
+  modules:               # line 40
   - id: green
   - id: olive
 
