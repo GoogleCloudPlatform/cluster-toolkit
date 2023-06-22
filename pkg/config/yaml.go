@@ -105,7 +105,6 @@ func syntheticOutputsNode(name string, ln int, col int) *yaml.Node {
 // - mork		 # canonical path to "mork" value is `...outputs[1].name`, NOT `...outputs[1]`
 // ```
 func normalizeYamlNode(p yPath, n *yaml.Node) *yaml.Node {
-	fmt.Printf("node: %#v, path: %#v", n, string(p))
 	switch {
 	case n.Kind == yaml.ScalarNode && regexp.MustCompile(`^deployment_groups\[\d+\]\.modules\[\d+\]\.outputs\[\d+\]$`).MatchString(string(p)):
 		return syntheticOutputsNode(n.Value, n.Line, n.Column)
