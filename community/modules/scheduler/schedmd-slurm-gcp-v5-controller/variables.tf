@@ -540,7 +540,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     family  = "slurm-gcp-5-7-hpc-centos-7"
-    project = "projects/schedmd-slurm-public/global/images/family"
+    project = "schedmd-slurm-public"
   }
 
   validation {

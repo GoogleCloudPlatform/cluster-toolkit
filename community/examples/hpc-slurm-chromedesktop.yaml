@@ -54,7 +54,7 @@ deployment_groups:
       disable_public_ips: false
       instance_image:
         family: slurm-gcp-5-7-debian-11
-        project: projects/schedmd-slurm-public/global/images/family
+        project: schedmd-slurm-public
       guest_accelerator:
       - type: nvidia-tesla-t4-vws
         count: 1
