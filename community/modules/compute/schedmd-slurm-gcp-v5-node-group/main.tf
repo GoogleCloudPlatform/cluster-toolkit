@@ -20,15 +20,6 @@ locals {
 }
 
 locals {
-
-  # Handle VM image format from 2 sources, prioritize source_image* variables
-  # over instance_image
-  source_image_input_used         = var.source_image != "" || var.source_image_family != "" || var.source_image_project != ""
-  source_image                    = local.source_image_input_used ? var.source_image : lookup(var.instance_image, "name", "")
-  source_image_family             = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
-  source_image_project            = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
-  source_image_project_normalized = local.source_image != "" || strcontains(local.source_image_project, "/") ? local.source_image_project : "projects/${local.source_image_project}/global/images/family"
-
   enable_public_ip_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
   access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
 
@@ -71,9 +62,9 @@ locals {
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible
     shielded_instance_config = var.shielded_instance_config
-    source_image_family      = local.source_image_family
-    source_image_project     = local.source_image_project_normalized
-    source_image             = local.source_image
+    source_image_family      = local.source_image_family             # requires source_image_logic.tf
+    source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
+    source_image             = local.source_image                    # requires source_image_logic.tf
     tags                     = var.tags
     access_config            = local.access_config
     service_account = var.service_account != null ? var.service_account : {
