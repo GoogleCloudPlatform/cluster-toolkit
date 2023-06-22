@@ -246,7 +246,7 @@ variable "guest_accelerator" {
 }
 
 variable "automatic_restart" {
-  description = "Specifies if the instance should be restarted if it was terminated by Compute Engine (not a user). Defaults to true."
+  description = "Specifies if the instance should be restarted if it was terminated by Compute Engine (not a user)."
   type        = bool
   default     = null
 }
