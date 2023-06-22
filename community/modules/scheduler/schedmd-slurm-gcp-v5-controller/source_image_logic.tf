@@ -22,7 +22,7 @@ locals {
   source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
   source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
   source_image_project_normalized = (
-    local.source_image != "" || strcontains(local.source_image_project, "/")
+    local.source_image != "" || length(regexall("/", local.source_image_project)) > 0
     ? local.source_image_project
     : "projects/${local.source_image_project}/global/images/family"
   )
