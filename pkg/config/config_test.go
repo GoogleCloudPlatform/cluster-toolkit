@@ -316,7 +316,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 			matchingIntragroupName1: cty.StringVal("explicit-intra-value"),
 			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsExpression().AsValue(),
 		}),
-		Use: []ModuleID{mod0.ID},
+		Use: ModuleIDs{mod0.ID},
 	}
 	setTestModuleInfo(mod1, testModuleInfo1)
 
@@ -329,7 +329,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		ID:     "TestModule2",
 		Kind:   TerraformKind,
 		Source: testModuleSource2,
-		Use:    []ModuleID{mod0.ID},
+		Use:    ModuleIDs{mod0.ID},
 	}
 	setTestModuleInfo(mod2, testModuleInfo2)
 
@@ -419,25 +419,25 @@ func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 func (s *MySuite) TestListUnusedModules(c *C) {
 	{ // No modules in "use"
 		m := Module{ID: "m"}
-		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{})
+		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{})
 	}
 
 	{ // Useful
 		m := Module{
 			ID:  "m",
-			Use: []ModuleID{"w"},
+			Use: ModuleIDs{"w"},
 			Settings: NewDict(map[string]cty.Value{
 				"x": AsProductOfModuleUse(cty.True, "w")})}
-		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{})
+		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{})
 	}
 
 	{ // Unused
 		m := Module{
 			ID:  "m",
-			Use: []ModuleID{"w", "u"},
+			Use: ModuleIDs{"w", "u"},
 			Settings: NewDict(map[string]cty.Value{
 				"x": AsProductOfModuleUse(cty.True, "w")})}
-		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{"u"})
+		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{"u"})
 	}
 }
 
