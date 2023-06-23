@@ -24,6 +24,8 @@ variable "project_id" {
   type        = string
 }
 
+# spack-setup variables
+
 variable "install_dir" {
   description = "Directory to install spack into."
   type        = string
@@ -41,6 +43,43 @@ variable "spack_ref" {
   type        = string
   default     = "v0.20.0"
 }
+
+variable "spack_virtualenv_path" {
+  description = "Virtual environment path in which to install Spack Python interpreter and other dependencies"
+  default     = "/usr/local/spack-python"
+  type        = string
+}
+
+# spack-build variables
+
+variable "log_file" {
+  description = "Defines the logfile that script output will be written to"
+  default     = "/var/log/spack.log"
+  type        = string
+}
+
+variable "commands" {
+  description = "String of commands to run within this module"
+  default     = null
+  type        = string
+}
+
+variable "deployment_name" {
+  description = "Name of deployment, used to name bucket containing startup script."
+  type        = string
+}
+
+variable "region" {
+  description = "Region to place bucket containing startup script."
+  type        = string
+}
+
+variable "labels" {
+  description = "Key-value pairs of labels to be added to created resources."
+  type        = map(string)
+}
+
+# variables to be deprecated
 
 variable "spack_cache_url" {
   description = "List of buildcaches for spack."
@@ -220,16 +259,4 @@ EOT
     ])
     error_message = "The content attribute within environments is required to be a string."
   }
-}
-
-variable "log_file" {
-  description = "Defines the logfile that script output will be written to"
-  default     = "/var/log/spack.log"
-  type        = string
-}
-
-variable "spack_virtualenv_path" {
-  description = "Virtual environment path in which to install Spack Python interpreter and other dependencies"
-  default     = "/usr/local/spack-python"
-  type        = string
 }

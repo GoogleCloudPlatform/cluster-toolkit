@@ -16,12 +16,12 @@
 
 output "startup_script" {
   description = "Path to the Spack installation script."
-  value       = local.script_content
+  value       = module.startup_script.startup_script
 }
 
 output "controller_startup_script" {
   description = "Path to the Spack installation script, duplicate for SLURM controller."
-  value       = local.script_content
+  value       = module.startup_script.startup_script
 }
 
 output "install_spack_deps_runner" {
@@ -40,7 +40,7 @@ output "install_spack_deps_runner" {
 
 output "install_spack_runner" {
   description = "Runner to install Spack using the startup-script module"
-  value       = local.install_spack_runner
+  value       = local.combined_install_execute_runner
 }
 
 output "setup_spack_runner" {
