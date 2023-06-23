@@ -144,24 +144,4 @@ fi
 %{endfor ~}
 %{endif ~}
 
-echo "$PREFIX Populating defined buildcaches"
-%{for c in CACHES_TO_POPULATE ~}
-  %{if c.type == "directory" ~}
-    # shellcheck disable=SC2046
-    {
-      spack buildcache create -d ${c.path} -af $(spack find --format /{hash});
-      spack gpg publish -d ${c.path};
-      spack buildcache update-index -d ${c.path} --keys;
-    } >> ${LOG_FILE}
-  %{endif ~}
-  %{if c.type == "mirror" ~}
-    # shellcheck disable=SC2046
-    {
-      spack buildcache create --mirror-url ${c.path} -af $(spack find --format /{hash});
-      spack gpg publish --mirror-url ${c.path};
-      spack buildcache update-index --mirror-url ${c.path} --keys;
-    } >> ${LOG_FILE}
-  %{endif ~}
-%{endfor ~}
-
 echo "$PREFIX Setup complete..."

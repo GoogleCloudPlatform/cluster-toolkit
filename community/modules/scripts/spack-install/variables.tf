@@ -196,12 +196,19 @@ EOT
 }
 
 variable "caches_to_populate" {
-  description = <<EOT
+  description = <<-EOT
+  DEPRECATED
+
+  The following `commands` can be used to populate a cache:
+
+  ```
+  MIRROR_URL=gs://my-bucket
+  spack buildcache create --mirror-url $MIRROR_URL -af \$(spack find --format /{hash});
+  spack gpg publish --mirror-url $MIRROR_URL;
+  spack buildcache update-index --mirror-url $MIRROR_URL --keys;
+  ```
+
   Defines caches which will be populated with the installed packages.
-  Each cache must specify a type (either directory, or mirror).
-  Each cache must also specify a path. For directory caches, this path
-  must be on a local file system (i.e. file:///path/to/cache). For
-  mirror paths, this can be any valid URL that spack accepts.
 
   NOTE: GPG Keys should be installed before trying to populate a cache
   with packages.
@@ -210,20 +217,11 @@ variable "caches_to_populate" {
   and create new GPG keys, both of which are acceptable for populating a
   cache.
 EOT
-  default     = []
+  default     = null
   type        = list(map(any))
   validation {
-    condition = alltrue([
-      for c in var.caches_to_populate : (contains(keys(c), "type") && contains(keys(c), "path"))
-    ])
-    error_message = "Each cache_to_populate must have define both 'type' and 'path'."
-  }
-  validation {
-    condition = alltrue([
-      for c in var.caches_to_populate : (c["type"] == "directory" || c["type"] == "mirror")
-    ])
-
-    error_message = "Cache_to_populate type must be either 'directory' or 'mirror'."
+    condition     = var.caches_to_populate == null
+    error_message = "caches_to_populate is deprecated. Use commands instead. See variable documentation for proposed alterantive commands."
   }
 }
 

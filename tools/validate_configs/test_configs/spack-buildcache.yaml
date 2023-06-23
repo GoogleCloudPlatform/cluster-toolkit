@@ -45,9 +45,11 @@ deployment_groups:
       gpg_keys:
       - type: 'file'
         path: '/tmp/spack_key.gpg'
-      caches_to_populate:
-      - type: 'mirror'
-        path:  ##  Add GCS bucket to populate here ##
+      commands: |
+        MIRROR_URL=gs://<name of your bucket>
+        spack buildcache create --mirror-url $MIRROR_URL -af \$(spack find --format /{hash});
+        spack gpg publish --mirror-url $MIRROR_URL;
+        spack buildcache update-index --mirror-url $MIRROR_URL --keys;
 
   - id: spack-startup
     source: modules/scripts/startup-script
