@@ -70,6 +70,20 @@ variable "data_files" {
     condition     = alltrue([for r in var.data_files : substr(r["destination"], 0, 1) == "/"])
     error_message = "All destinations must be absolute paths and start with '/'."
   }
+  validation {
+    condition = alltrue([
+      for r in var.data_files :
+      can(r["content"]) != can(r["source"])
+    ])
+    error_message = "A runner must specify either 'content' or 'source', but never both."
+  }
+  validation {
+    condition = alltrue([
+      for r in var.data_files :
+      lookup(r, "content", lookup(r, "source", null)) != null
+    ])
+    error_message = "A runner must specify a non-null 'content' or 'source'."
+  }
 }
 
 variable "commands" {
