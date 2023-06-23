@@ -58,10 +58,38 @@ variable "log_file" {
   type        = string
 }
 
+variable "data_files" {
+  description = <<-EOT
+    A list of files to be transferred prior to running commands. 
+    It must specify one of 'source' (absolute local file path) or 'content' (string).
+    It must specify a 'destination' with absolute path where file should be placed.
+  EOT
+  type        = list(map(string))
+  default     = []
+  validation {
+    condition     = alltrue([for r in var.data_files : substr(r["destination"], 0, 1) == "/"])
+    error_message = "All destinations must be absolute paths and start with '/'."
+  }
+  validation {
+    condition = alltrue([
+      for r in var.data_files :
+      can(r["content"]) != can(r["source"])
+    ])
+    error_message = "A runner must specify either 'content' or 'source', but never both."
+  }
+  validation {
+    condition = alltrue([
+      for r in var.data_files :
+      lookup(r, "content", lookup(r, "source", null)) != null
+    ])
+    error_message = "A runner must specify a non-null 'content' or 'source'."
+  }
+}
+
 variable "commands" {
   description = "String of commands to run within this module"
-  default     = null
   type        = string
+  default     = null
 }
 
 variable "deployment_name" {
