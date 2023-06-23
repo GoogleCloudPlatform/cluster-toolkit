@@ -43,8 +43,14 @@ locals {
 
   # both of these must be false if either compact placement or preemptible/spot instances are used
   # automatic restart is tolerant of GPUs while on host maintenance is not
-  automatic_restart           = local.compact_placement || var.spot ? false : null
+  automatic_restart_default   = local.compact_placement || var.spot ? false : null
   on_host_maintenance_default = local.compact_placement || var.spot || local.gpu_attached ? "TERMINATE" : "MIGRATE"
+
+  automatic_restart = (
+    var.automatic_restart != null
+    ? var.automatic_restart
+    : local.automatic_restart_default
+  )
 
   on_host_maintenance = (
     var.on_host_maintenance != null

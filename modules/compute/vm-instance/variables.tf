@@ -245,6 +245,12 @@ variable "guest_accelerator" {
   default = null
 }
 
+variable "automatic_restart" {
+  description = "Specifies if the instance should be restarted if it was terminated by Compute Engine (not a user)."
+  type        = bool
+  default     = null
+}
+
 variable "on_host_maintenance" {
   description = "Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy`, spot provisioning, or GPUs require it to be `TERMINATE`"
   type        = string
