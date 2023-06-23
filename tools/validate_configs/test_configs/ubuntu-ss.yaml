@@ -46,9 +46,11 @@ deployment_groups:
     settings:
       install_dir: /apps/spack
       spack_cache_url:
-      compilers:
-      - gcc@10.3.0 target=x86_64
       commands: |
+        spack install gcc@10.3.0 target=x86_64
+        spack load gcc@10.3.0 target=x86_64
+        spack compiler find --scope site
+
         spack install cmake%gcc@10.3.0 target=x86_64
         spack install intel-mkl%gcc@10.3.0 target=skylake
         spack install intel-mpi@2018.4.274%gcc@10.3.0 target=skylake

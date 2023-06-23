@@ -154,9 +154,27 @@ EOT
 }
 
 variable "compilers" {
-  description = "Defines compilers for spack to install before installing packages."
-  default     = []
+  description = <<-EOT
+  DEPRECATED
+
+  The following `commands` can be used to install compilers:
+
+  ```
+  spack install gcc@10.3.0 target=x86_64
+  spack load gcc@10.3.0 target=x86_64
+  spack compiler find --scope site
+  spack clean -s
+  spack unload gcc@10.3.0
+  ```
+
+  Defines compilers for spack to install before installing packages.
+  EOT
   type        = list(string)
+  default     = null
+  validation {
+    condition     = var.compilers == null
+    error_message = "compilers is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+  }
 }
 
 variable "licenses" {

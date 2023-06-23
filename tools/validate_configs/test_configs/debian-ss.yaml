@@ -45,9 +45,12 @@ deployment_groups:
     source: ./community//modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
-      compilers:
-      - gcc@10.3.0 target=x86_64
-      commands: spack install cmake%gcc@10.3.0 target=x86_64
+      commands: |
+        spack install gcc@10.3.0 target=x86_64
+        spack load gcc@10.3.0 target=x86_64
+        spack compiler find --scope site
+
+        spack install cmake%gcc@10.3.0 target=x86_64
 
   - id: startup
     source: ./modules/scripts/startup-script
