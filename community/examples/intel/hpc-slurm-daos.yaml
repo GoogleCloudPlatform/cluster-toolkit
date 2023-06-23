@@ -43,9 +43,9 @@ deployment_groups:
 
 - group: daos-server-image
   modules:
-  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.0/images
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/images
   - id: daos-server-image
-    source: github.com/daos-stack/google-cloud-daos//images?ref=v0.4.0&depth=1
+    source: github.com/daos-stack/google-cloud-daos//images?ref=v0.4.1&depth=1
     kind: packer
     settings:
       daos_version: 2.2.0
@@ -69,7 +69,7 @@ deployment_groups:
   modules:
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
   - id: daos
-    source: github.com/daos-stack/google-cloud-daos//terraform/modules/daos_server?ref=v0.4.0&depth=1
+    source: github.com/daos-stack/google-cloud-daos//terraform/modules/daos_server?ref=v0.4.1&depth=1
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}
