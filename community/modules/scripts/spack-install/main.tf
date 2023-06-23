@@ -74,12 +74,16 @@ locals {
     }
   )
 
+  data_runners = [for data_file in var.data_files : merge(data_file, { type = "data" })]
+
   execute_md5 = substr(md5(local.execute_contents), 0, 4)
   execute_runner = {
     "type"        = "ansible-local"
     "content"     = local.execute_contents
     "destination" = "spack_execute_${local.execute_md5}.yml"
   }
+
+  runners = concat([local.install_spack_runner], local.data_runners, [local.execute_runner])
 
   combined_md5 = substr(md5(module.startup_script.startup_script), 0, 4)
   combined_install_execute_runner = {
@@ -96,7 +100,7 @@ module "startup_script" {
   project_id      = var.project_id
   deployment_name = var.deployment_name
   region          = var.region
-  runners         = [local.install_spack_runner, local.execute_runner]
+  runners         = local.runners
 }
 
 resource "local_file" "debug_file_shell_install" {
