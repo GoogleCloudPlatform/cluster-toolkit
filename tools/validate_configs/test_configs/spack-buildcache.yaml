@@ -39,13 +39,13 @@ deployment_groups:
         content: 'config:install_tree:padded_length:128'
       compilers:
       - gcc@10.3.0 target=x86_64
-      packages:
-      - intel-mpi@2018.4.274%gcc@10.3.0
-      - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
       gpg_keys:
       - type: 'file'
         path: '/tmp/spack_key.gpg'
       commands: |
+        spack install intel-mpi@2018.4.274%gcc@10.3.0
+        spack install gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+
         MIRROR_URL=gs://<name of your bucket>
         spack buildcache create --mirror-url $MIRROR_URL -af \$(spack find --format /{hash});
         spack gpg publish --mirror-url $MIRROR_URL;

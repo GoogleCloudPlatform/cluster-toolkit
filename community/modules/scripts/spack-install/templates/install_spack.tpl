@@ -100,10 +100,4 @@ echo "$PREFIX Installing compilers..."
 
 spack compiler find --scope site >> ${LOG_FILE} 2>&1
 
-echo "$PREFIX Installing root spack specs..."
-%{for p in PACKAGES ~}
-  spack install ${INSTALL_FLAGS} ${p} >> ${LOG_FILE} 2>&1
-  spack clean -s
-%{endfor ~}
-
 echo "$PREFIX Setup complete..."
