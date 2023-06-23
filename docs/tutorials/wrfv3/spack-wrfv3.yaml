@@ -67,9 +67,8 @@ deployment_groups:
               buildable: False
       compilers:
       - gcc@8.2.0 target=x86_64
-      environments:
-      - name: wrfv3
-        type: file
+      data_files:
+      - destination: /share/spack/wrfv3_env.yaml
         content: |
           spack:
             definitions:
@@ -87,6 +86,12 @@ deployment_groups:
               - - $mpi_packages
               - - $%compilers
               - - $^mpis
+      commands: |
+        if ! spack env list | grep -q wrfv3; then
+          spack env create wrfv3 /share/spack/wrfv3_env.yaml
+          spack env activate wrfv3
+          spack concretize
+        fi
       # Un-comment and update mirror_url to install from spack cache
       # spack_cache_url:
       # - mirror_name: gcs_cache
