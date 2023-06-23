@@ -122,6 +122,24 @@ Use the following settings for spread placement:
 More information on GPU support in `vm-instance` and other HPC Toolkit modules
 can be found at [docs/gpu-support.md](../../../docs/gpu-support.md)
 
+## Lifecycle
+
+The `vm-instance` module will be replaced when the `instance_image` variable is
+changed and `terraform apply` is run on  the deployment group folder or
+`ghpc deploy` is run. However, it will not be automatically replaced if a new
+image is created in a family.
+
+To selectively replace the vm-instance(s), consider running terraform
+`apply -replace` such as:
+
+> See https://developer.hashicorp.com/terraform/cli/commands/plan#replace-address for precise syntax terraform apply -replace=ADDRESS
+
+```shell
+terraform state list
+# search for the module ID and resource
+terraform apply -replace="address"
+```
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -143,9 +161,10 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.2.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.42 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.12 |
+| <a name="requirement_null"></a> [null](#requirement\_null) | >= 1.0 |
 
 ## Providers
 
@@ -153,6 +172,7 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.42 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.12 |
+| <a name="provider_null"></a> [null](#provider\_null) | >= 1.0 |
 
 ## Modules
 
@@ -167,6 +187,7 @@ limitations under the License.
 | [google-beta_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance) | resource |
 | [google_compute_disk.boot_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [google_compute_resource_policy.placement_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy) | resource |
+| [null_resource.image](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_image.compute_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 
 ## Inputs
