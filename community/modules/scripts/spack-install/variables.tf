@@ -75,14 +75,14 @@ variable "data_files" {
       for r in var.data_files :
       can(r["content"]) != can(r["source"])
     ])
-    error_message = "A runner must specify either 'content' or 'source', but never both."
+    error_message = "A data_file must specify either 'content' or 'source', but never both."
   }
   validation {
     condition = alltrue([
       for r in var.data_files :
       lookup(r, "content", lookup(r, "source", null)) != null
     ])
-    error_message = "A runner must specify a non-null 'content' or 'source'."
+    error_message = "A data_file must specify a non-null 'content' or 'source'."
   }
 }
 

@@ -85,7 +85,8 @@ locals {
 
   runners = concat([local.install_spack_runner], local.data_runners, [local.execute_runner])
 
-  combined_md5 = substr(md5(module.startup_script.startup_script), 0, 4)
+  combined_unique_string = join("\n", [for runner in local.runners : try(runner["content"], runner["source"])])
+  combined_md5           = substr(md5(local.combined_unique_string), 0, 4)
   combined_install_execute_runner = {
     "type"        = "shell"
     "content"     = module.startup_script.startup_script
