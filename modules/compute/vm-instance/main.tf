@@ -91,6 +91,13 @@ data "google_compute_image" "compute_image" {
   project = var.instance_image.project
 }
 
+resource "null_resource" "image" {
+  triggers = {
+    image   = var.instance_image.family,
+    project = var.instance_image.project
+  }
+}
+
 resource "google_compute_disk" "boot_disk" {
   project = var.project_id
 
@@ -102,6 +109,14 @@ resource "google_compute_disk" "boot_disk" {
   size   = var.disk_size_gb
   labels = local.labels
   zone   = var.zone
+
+  lifecycle {
+    replace_triggered_by = [null_resource.image]
+
+    ignore_changes = [
+      image
+    ]
+  }
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
