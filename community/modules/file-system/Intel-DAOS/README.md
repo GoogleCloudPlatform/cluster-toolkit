@@ -2,99 +2,64 @@
 
 This module allows creating an instance of Distributed Asynchronous Object Storage ([DAOS](https://docs.daos.io/)) on Google Cloud Platform ([GCP](https://cloud.google.com/)).
 
-For more information, please refer to the [Google Cloud DAOS repo on GitHub](https://github.com/daos-stack/google-cloud-daos).
+> **_NOTE:_**
+> DAOS on GCP does not require an HPC Toolkit wrapper.
+> Terraform modules are sourced directly from GitHub.
+> It will not work as a [local or embedded module](../../../../modules/README.md#embedded-modules).
 
-For more information on this and other network storage options in the Cloud HPC
-Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
+Terraform modules for DAOS servers and clients are located in the [Google Cloud DAOS repo on GitHub](https://github.com/daos-stack/google-cloud-daos).
 
-> **_NOTE:_** DAOS on GCP does not require an HPC Toolkit wrapper and, therefore, sources directly from GitHub. It will not work as a [local or embedded module](../../../../modules/README.md#embedded-modules).
+DAOS Terraform module parameters can be found in the README.md files in each module directory.
 
+- [DAOS Server module](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server#readme)
+- [DAOS Client module](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_client#readme)
+
+For more information on this and other network storage options in the Cloud HPC Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 ## Examples
 
-Working examples of a DAOS deployment and how it can be used in conjunction with Slurm [can be found in the community examples folder](../../../examples/intel/).
+The [community examples folder](../../../examples/intel/) contains two example blueprints for deploying DAOS.
 
-A full list of server module parameters can be found at [the DAOS Server module README](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server).
+- [community/examples/intel/pfs-daos.yml](../../../examples/intel/pfs-daos.yml)
+  Blueprint for deploying a DAOS cluster consisting of servers and clients.
+  After deploying this example the DAOS storage system will be formatted but no pools or containers will exist.
+  The instructions in the [community/examples/intel/README.md](../../../examples/intel/README.md#create-a-daos-pool-and-container) describe how to
 
-### DAOS Server Images
+  - Deploy a DAOS cluster
+  - Manage storage (create a [pool](https://docs.daos.io/v2.2/overview/storage/?h=container#daos-pool) and a [container](https://docs.daos.io/v2.2/overview/storage/?h=container#daos-container))
+  - Mount a container on a client
+  - Store a large file in a DAOS container
 
-In order to use the DAOS server terraform module a DAOS server image must be created as instructed in the *images* directory [here](https://github.com/daos-stack/google-cloud-daos/tree/main/images).
-
-DAOS server images must be built from the same tagged version of the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repository that is specified in the `source:` attribute for modules used in the [community examples](../../../examples/intel/).
-
-For example, in the following snippet taken from the [community/example/intel/pfs-daos.yml](../../../examples/intel/pfs-daos.yaml) the `source:` attribute specifies v0.3.0 of the  daos_server terraform module
-
-```yaml
-  - id: daos-server
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.3.0
-    use: [network1]
-    settings:
-      number_of_instances: 2
-      labels: {ghpc_role: file-system}
-```
-
-In order to use the daos_server module v0.3.0 , you need to
-
-1. Clone the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repo and check out v0.3.0
-2. Follow the instructions in the images/README.md directory to build a DAOS server image
-
-## Recommended settings
-
-By default, the DAOS system is created with 4 servers will be configured for best cost per GB (TCO, see below), the system will be formated at the server side using [`dmg format`](https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#format-storage) but no pool or containers will be created.
-
-The following settings will configure this [system for TCO](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/examples/daos_cluster#the-terraformtfvarstcoexample-file) (default):
-
-```yaml
-  - id: daos-server
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.3.0
-    use: [network1]
-    settings:
-      labels: {ghpc_role: file-system}
-      number_of_instances : 4 # number of DAOS server instances
-      machine_type        : "n2-custom-36-215040"
-      os_disk_size_gb     : 20
-      daos_disk_count     : 16
-      daos_scm_size       : 180
-```
-
-The following settings will configure this system for [best performance](https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/examples/daos_cluster#the-terraformtfvarsperfexample-file):
-
-```yaml
-  - id: daos-server
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.3.0
-    use: [network1]
-    settings:
-      labels: {ghpc_role: file-system}
-      # The default DAOS settings are optimized for TCO
-      # The following will tune this system for best perf
-      machine_type        : "n2-standard-16"
-      os_disk_size_gb     : 20
-      daos_disk_count     : 4
-      daos_scm_size       : 45
-```
+- [community/examples/intel/hpc-slurm-daos.yaml](../../../examples/intel/hpc-slurm-daos.yaml)
+  Blueprint for deploying a Slurm cluster and DAOS storage with 4 servers.
+  The Slurm compute nodes are configured as DAOS clients and have the ability to use the DAOS filesystem.
+  The instructions in the [community/examples/intel/README.md](../../../examples/intel/README.md#deploy-the-daosslurm-cluster) describe how to deploy the Slurm cluster and run a job which uses the DAOS file system.
 
 ## Support
 
 Content in the [google-cloud-daos](https://github.com/daos-stack/google-cloud-daos) repository is licensed under the [Apache License Version 2.0](https://github.com/daos-stack/google-cloud-daos/blob/main/LICENSE) open-source license.
 
-[DAOS](https://github.com/daos-stack/daos) is being distributed under the BSD-2-Clause-Patent open-source license.
+[DAOS](https://github.com/daos-stack/daos) is distributed under the BSD-2-Clause-Patent open-source license.
 
-Intel Corporation provides several ways for the users to get technical support:
+Intel Corporation provides two options for technical support:
 
-1. Community support is available to everybody through Jira and via the DAOS channel for the Google Cloud users on Slack.
+1. Community Support
 
-   To access Jira, please follow these steps:
+   Community support is available to anyone through Jira and via the DAOS channel for Google Cloud users on Slack.
 
-   - Navigate to https://daosio.atlassian.net/jira/software/c/projects/DAOS/issues/
+   JIRA: https://daosio.atlassian.net/jira/software/c/projects/DAOS/issues/
 
-   - You will need to request access to DAOS Jira to be able to create and update tickets. An Atlassian account is required for this type of access. Read-only access is available without an account.
-   - If you do not have an Atlassian account, follow the steps at https://support.atlassian.com/atlassian-account/docs/create-an-atlassian-account/ to create one.
+   - An Atlassian account is not needed for read only access to Jira.
+   - An Atlassian account is required to create and update tickets.
+     To create an account follow the steps at https://support.atlassian.com/atlassian-account/docs/create-an-atlassian-account.
 
-   To access the Slack channel for DAOS on Google Cloud, please follow this link https://daos-stack.slack.com/archives/C03GLTLHA59
+   Slack: https://daos-stack.slack.com/archives/C03GLTLHA59
 
-   > This type of support is provided on a best-effort basis, and it does not have any SLA attached.
+   Community support is provided on a best-effort basis.
 
-2. Commercial L3 support is available on an on-demand basis. Please get in touch with Intel Corporation to obtain more information.
+2. Commercial L3 Support
 
-   - You may inquire about the L3 support via the Slack channel (https://daos-stack.slack.com/archives/C03GLTLHA59)
+   Commercial L3 support is available on an on-demand basis.
 
-[here](https://github.com/daos-stack/google-cloud-daos/tree/main/images)
+   Contact Intel Corporation to obtain more information about Commercial L3 support.
+
+   You may inquire about L3 support via the [Slack channel](https://daos-stack.slack.com/archives/C03GLTLHA59).
