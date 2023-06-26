@@ -84,6 +84,10 @@ resource "google_container_node_pool" "node_pool" {
     image_type        = var.image_type
     guest_accelerator = var.guest_accelerator
 
+    ephemeral_storage_local_ssd_config {
+      local_ssd_count = var.local_ssd_count
+    }
+
     shielded_instance_config {
       enable_secure_boot          = true
       enable_integrity_monitoring = true
