@@ -252,7 +252,6 @@ No resources.
 | <a name="input_network_project_id"></a> [network\_project\_id](#input\_network\_project\_id) | Project ID of Shared VPC network | `string` | `null` | no |
 | <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `true` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except the use of GPUs requires it to be `TERMINATE` | `string` | `null` | no |
-| <a name="input_powershell_scripts"></a> [powershell\_scripts](#input\_powershell\_scripts) | A list of paths to local powershell scripts which will be uploaded to customize the Windows VM image (requires WinRM communicator) | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which to create VM and image | `string` | n/a | yes |
 | <a name="input_scopes"></a> [scopes](#input\_scopes) | Service account scopes to attach to the instance. See<br>https://cloud.google.com/compute/docs/access/service-accounts. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/userinfo.email",<br>  "https://www.googleapis.com/auth/compute",<br>  "https://www.googleapis.com/auth/devstorage.full_control",<br>  "https://www.googleapis.com/auth/logging.write"<br>]</pre> | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The service account email to use. If null or 'default', then the default Compute Engine service account will be used. | `string` | `null` | no |
@@ -268,6 +267,7 @@ No resources.
 | <a name="input_tags"></a> [tags](#input\_tags) | Assign network tags to apply firewall rules to VM instance | `list(string)` | `null` | no |
 | <a name="input_use_iap"></a> [use\_iap](#input\_use\_iap) | Use IAP proxy when connecting by SSH | `bool` | `true` | no |
 | <a name="input_use_os_login"></a> [use\_os\_login](#input\_use\_os\_login) | Use OS Login when connecting by SSH | `bool` | `false` | no |
+| <a name="input_windows_startup_ps1"></a> [windows\_startup\_ps1](#input\_windows\_startup\_ps1) | A list of strings containing PowerShell scripts which will customize a Windows VM image (requires WinRM communicator) | `list(string)` | `[]` | no |
 | <a name="input_wrap_startup_script"></a> [wrap\_startup\_script](#input\_wrap\_startup\_script) | Wrap startup script with Packer-generated wrapper | `bool` | `true` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Cloud zone in which to provision image building VM | `string` | n/a | yes |
 
