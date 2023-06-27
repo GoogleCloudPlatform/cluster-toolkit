@@ -134,7 +134,7 @@ deployment_groups:
     settings:
       name_prefix: spack-builder
       add_deployment_name_before_prefix: true
-      machine_type: c2-standard-30
+      machine_type: c2-standard-16
 
   ### Batch Modules ###
   - id: batch-job
