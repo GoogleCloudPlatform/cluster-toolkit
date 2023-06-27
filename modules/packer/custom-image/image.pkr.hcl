@@ -21,7 +21,7 @@ locals {
   # default to explicit var.communicator, otherwise in-order: ssh/winrm/none
   shell_script_communicator      = length(var.shell_scripts) > 0 ? "ssh" : ""
   ansible_playbook_communicator  = length(var.ansible_playbooks) > 0 ? "ssh" : ""
-  powershell_script_communicator = length(var.powershell_scripts) > 0 ? "winrm" : ""
+  powershell_script_communicator = length(var.windows_startup_ps1) > 0 ? "winrm" : ""
   communicator = coalesce(
     var.communicator,
     local.shell_script_communicator,
@@ -134,9 +134,9 @@ build {
   # provisioner "powershell" blocks
   dynamic "provisioner" {
     labels   = ["powershell"]
-    for_each = var.powershell_scripts
+    for_each = var.windows_startup_ps1
     content {
-      script = provisioner.value
+      inline = split("\n", provisioner.value)
     }
   }
 

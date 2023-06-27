@@ -156,8 +156,8 @@ variable "shell_scripts" {
   default     = []
 }
 
-variable "powershell_scripts" {
-  description = "A list of paths to local powershell scripts which will be uploaded to customize the Windows VM image (requires WinRM communicator)"
+variable "windows_startup_ps1" {
+  description = "A list of strings containing PowerShell scripts which will customize a Windows VM image (requires WinRM communicator)"
   type        = list(string)
   default     = []
 }
