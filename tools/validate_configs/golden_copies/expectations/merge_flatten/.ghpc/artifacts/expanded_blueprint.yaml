@@ -81,6 +81,7 @@ deployment_groups:
         kind: terraform
         id: first-vm
         use:
+          - network
           - first-fs
         settings:
           deployment_name: ((var.deployment_name ))
@@ -90,14 +91,17 @@ deployment_groups:
               }, {
               green = "sleeves"
             }) ))
+          network_self_link: ((module.network.network_self_link ))
           network_storage: ((flatten([module.first-fs.network_storage]) ))
           project_id: ((var.project_id ))
           region: ((var.region ))
+          subnetwork_self_link: ((module.network.subnetwork_self_link ))
           zone: ((var.zone ))
       - source: modules/compute/vm-instance
         kind: terraform
         id: second-vm
         use:
+          - network
           - first-fs
           - second-fs
         settings:
@@ -106,8 +110,10 @@ deployment_groups:
             ((merge(var.labels, {
               ghpc_role = "compute"
             }) ))
+          network_self_link: ((module.network.network_self_link ))
           network_storage: ((flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])]) ))
           project_id: ((var.project_id ))
           region: ((var.region ))
+          subnetwork_self_link: ((module.network.subnetwork_self_link ))
           zone: ((var.zone ))
     kind: terraform

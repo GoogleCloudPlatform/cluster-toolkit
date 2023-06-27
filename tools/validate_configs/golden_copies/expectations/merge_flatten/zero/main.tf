@@ -55,10 +55,12 @@ module "first-vm" {
     }, {
     green = "sleeves"
   })
-  network_storage = flatten([module.first-fs.network_storage])
-  project_id      = var.project_id
-  region          = var.region
-  zone            = var.zone
+  network_self_link    = module.network.network_self_link
+  network_storage      = flatten([module.first-fs.network_storage])
+  project_id           = var.project_id
+  region               = var.region
+  subnetwork_self_link = module.network.subnetwork_self_link
+  zone                 = var.zone
 }
 
 module "second-vm" {
@@ -67,8 +69,10 @@ module "second-vm" {
   labels = merge(var.labels, {
     ghpc_role = "compute"
   })
-  network_storage = flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])
-  project_id      = var.project_id
-  region          = var.region
-  zone            = var.zone
+  network_self_link    = module.network.network_self_link
+  network_storage      = flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])
+  project_id           = var.project_id
+  region               = var.region
+  subnetwork_self_link = module.network.subnetwork_self_link
+  zone                 = var.zone
 }

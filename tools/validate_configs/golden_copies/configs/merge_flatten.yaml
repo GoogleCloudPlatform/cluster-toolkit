@@ -40,10 +40,10 @@ deployment_groups:
   
   - id: first-vm
     source: modules/compute/vm-instance
-    use: [first-fs]
+    use: [network, first-fs]
     settings:
       labels: {"green": "sleeves"}
     
   - id: second-vm
     source: modules/compute/vm-instance
-    use: [first-fs, second-fs]
+    use: [network, first-fs, second-fs]
