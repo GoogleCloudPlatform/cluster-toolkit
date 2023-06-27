@@ -1,0 +1,34 @@
+Set-StrictMode -Version latest
+$ErrorActionPreference = 'Stop'
+
+# Windows 2016 defaults to old TLS protocols, override it
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+
+# do not show progress bar when running Invoke-WebRequest
+$ProgressPreference = 'SilentlyContinue'
+
+# download C Runtime DLL necessary for HTCondor installer
+Invoke-WebRequest https://aka.ms/vs/17/release/vc_redist.x64.exe -OutFile C:\vc_redist.x64.exe
+Start-Process C:\vc_redist.x64.exe -Wait -ArgumentList "/norestart /quiet /log c:\vc_redist_log.txt"
+Remove-Item C:\vc_redist.x64.exe
+
+# download HTCondor installer
+%{ if condor_version == "10.*" }
+Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/current/current/condor-Windows-x64.msi -OutFile C:\htcondor.msi
+%{ else ~}
+Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/current/${condor_version}/release/condor-${condor_version}-Windows-x64.msi -OutFile C:\htcondor.msi
+%{ endif ~}
+$args='/qn /l* condor-install-log.txt /i'
+$args=$args + ' C:\htcondor.msi'
+$args=$args + ' NEWPOOL="N"'
+$args=$args + ' RUNJOBS="N"'
+$args=$args + ' SUBMITJOBS="N"'
+$args=$args + ' INSTALLDIR="C:\Condor"'
+Start-Process msiexec.exe -Wait -ArgumentList $args
+Remove-Item C:\htcondor.msi
+
+# remove settings from condor_config that we want to override in configuration step
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^CONDOR_HOST' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^INSTALL_USER' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^DAEMON_LIST' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^use SECURITY' -NotMatch)
