@@ -182,6 +182,9 @@ Modules that are still in development and less stable are labeled with the
 
 * **[startup-script]** ![core-badge] : Creates a customizable startup script
   that can be fed into compute VMs.
+* **[windows-startup-script]** ![community-badge] ![experimental-badge]: Creates
+  Windows PowerShell (PS1) scripts that can be used to customize Windows VMs
+  and VM images.
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
 * **[kubernetes-operations]** ![community-badge] ![experimental-badge] :
@@ -210,6 +213,7 @@ Modules that are still in development and less stable are labeled with the
   successful completion of a startup script on a compute VM.
 
 [startup-script]: scripts/startup-script/README.md
+[windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
 [kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
