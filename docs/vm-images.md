@@ -2,6 +2,7 @@
 
 * [HPC CentOS 7 VM Image](#hpc-centos-7-vm-image)
 * [Ubuntu](#ubuntu)
+* [Windows](#windows)
 * [Other Images](#other-images)
 
 ## HPC CentOS 7 VM Image
@@ -56,6 +57,20 @@ settings:
 [exascalerimages]: https://github.com/DDNStorage/exascaler-cloud-terraform/blob/master/gcp/README.md#boot-image-options
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
 [hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
+
+## Windows
+
+The HPC Toolkit provides limited support for building custom VM images based on
+the [Windows images][windows-images] published by Google. The custom VM images
+can be used in blueprints so long as the underlying scheduler and workload
+supports Windows. Windows solutions do not receive the same level of testing as
+Linux solutions so you should anticipate that there will not be functionality
+parity. Please file [issues] when encountering specific problems and [feature
+requests][features] when requesting new functionality.
+
+[windows-images]: https://cloud.google.com/compute/docs/images/os-details#windows_server
+[issues]: https://github.com/GoogleCloudPlatform/hpc-toolkit/issues
+[features]: https://github.com/GoogleCloudPlatform/hpc-toolkit/discussions/categories/ideas-and-feature-requests
 
 ## Other Images
 
