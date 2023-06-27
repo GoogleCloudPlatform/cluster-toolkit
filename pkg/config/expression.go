@@ -23,6 +23,8 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/function"
+	"github.com/zclconf/go-cty/cty/function/stdlib"
 )
 
 // Reference is data struct that represents a reference to a variable.
@@ -254,6 +256,7 @@ type BaseExpression struct {
 func (e BaseExpression) Eval(bp Blueprint) (cty.Value, error) {
 	ctx := hcl.EvalContext{
 		Variables: map[string]cty.Value{"var": bp.Vars.AsObject()},
+		Functions: functions(),
 	}
 	v, diag := e.e.Value(&ctx)
 	if diag.HasErrors() {
@@ -414,10 +417,20 @@ func TokensForValue(val cty.Value) hclwrite.Tokens {
 
 // FunctionCallExpression is a helper to build function call expression.
 func FunctionCallExpression(n string, args ...cty.Value) Expression {
+	if _, ok := functions()[n]; !ok {
+		panic("unknown function " + n)
+	}
 	ta := make([]hclwrite.Tokens, len(args))
 	for i, a := range args {
 		ta[i] = TokensForValue(a)
 	}
 	toks := hclwrite.TokensForFunctionCall(n, ta...)
 	return MustParseExpression(string(toks.Bytes()))
+}
+
+func functions() map[string]function.Function {
+	return map[string]function.Function{
+		"flatten": stdlib.FlattenFunc,
+		"merge":   stdlib.MergeFunc,
+	}
 }
