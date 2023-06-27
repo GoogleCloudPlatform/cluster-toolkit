@@ -19,9 +19,8 @@ locals {
   subnetwork_name = var.subnetwork_name == null ? "${var.deployment_name}-primary-subnet" : var.subnetwork_name
 
   # define a default subnetwork for cases in which no explicit subnetworks are
-  # defined in var.primary_subnetwork or var.subnetworks
-  default_primary_subnetwork_new_bits   = coalesce(try(var.primary_subnetwork.new_bits, var.subnetwork_size), var.default_primary_subnetwork_size)
-  default_primary_subnetwork_cidr_block = cidrsubnet(var.network_address_range, local.default_primary_subnetwork_new_bits, 0)
+  # defined in var.subnetworks
+  default_primary_subnetwork_cidr_block = cidrsubnet(var.network_address_range, var.default_primary_subnetwork_size, 0)
   default_primary_subnetwork = {
     subnet_name           = local.subnetwork_name
     subnet_ip             = local.default_primary_subnetwork_cidr_block
@@ -34,22 +33,14 @@ locals {
   }
 
   # Identify user-supplied primary subnetwork
-  # (1) explicit var.primary_subnetwork
-  # (2) explicit var.subnetworks[0]
-  # (3) implicit local default subnetwork
-  input_primary_subnetwork = try(coalesce(
-    var.primary_subnetwork,
-    try(var.subnetworks[0], null)
-  ), local.default_primary_subnetwork)
+  # (1) explicit var.subnetworks[0]
+  # (2) implicit local default subnetwork
+  input_primary_subnetwork = coalesce(try(var.subnetworks[0], null), local.default_primary_subnetwork)
 
   # Identify user-supplied additional subnetworks
-  # (1) explicit var.additional_subnetworks
-  # (2) explicit var.subnetworks[1:end]
-  # (3) empty list
-  input_additional_subnetworks = try(coalescelist(
-    var.additional_subnetworks,
-    try(slice(var.subnetworks, 1, length(var.subnetworks)), []),
-  ), [])
+  # (1) explicit var.subnetworks[1:end]
+  # (2) empty list
+  input_additional_subnetworks = try(slice(var.subnetworks, 1, length(var.subnetworks)), [])
 
   # at this point we have constructed a list of subnetworks but need to extract
   # user-provided CIDR blocks or calculate them from user-provided new_bits

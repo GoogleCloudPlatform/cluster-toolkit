@@ -24,17 +24,7 @@ data "google_compute_instance_template" "batch_instance_template" {
 }
 
 locals {
-
-  # Handle directly created job data (deprecated). All of job_id, job_template_contents and job_filename must be set.
-  default_job_data = var.job_template_contents == null || var.job_id == null || var.job_filename == null ? [] : [{
-    id                = var.job_id
-    filename          = var.job_filename
-    template_contents = var.job_template_contents
-  }]
-
-  job_data = concat(local.default_job_data, var.job_data)
-
-  job_template_runners = [for job in local.job_data : {
+  job_template_runners = [for job in var.job_data : {
     content     = job.template_contents
     destination = "${var.batch_job_directory}/${job.filename}"
     type        = "data"
@@ -51,7 +41,7 @@ locals {
 
   login_metadata = merge(local.instance_template_metadata, local.startup_metadata, local.oslogin_metadata)
 
-  batch_command_instructions = join("\n", [for job in local.job_data : <<-EOT
+  batch_command_instructions = join("\n", [for job in var.job_data : <<-EOT
   ## For job: ${job.id} ##
 
   Submit your job from login node:
