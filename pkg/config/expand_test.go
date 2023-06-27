@@ -261,7 +261,6 @@ func (s *MySuite) TestCombineLabels(c *C) {
 
 	coral := Module{
 		Source: "blue/salmon",
-		Kind:   TerraformKind,
 		ID:     "coral",
 		Settings: NewDict(map[string]cty.Value{
 			"labels": cty.ObjectVal(map[string]cty.Value{
@@ -273,20 +272,12 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	setTestModuleInfo(coral, infoWithLabels)
 
 	// has no labels set
-	khaki := Module{Source: "brown/oak", Kind: TerraformKind, ID: "khaki"}
+	khaki := Module{Source: "brown/oak", ID: "khaki"}
 	setTestModuleInfo(khaki, infoWithLabels)
 
 	// has no labels set, also module has no labels input
-	silver := Module{Source: "ivory/black", Kind: TerraformKind, ID: "silver"}
+	silver := Module{Source: "ivory/black", ID: "silver"}
 	setTestModuleInfo(silver, modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{}})
-
-	orange := Module{Source: "red/velvet", Kind: PackerKind, ID: "orange", Settings: NewDict(map[string]cty.Value{
-		"labels": cty.ObjectVal(map[string]cty.Value{
-			"olive":           cty.StringVal("teal"),
-			"ghpc_deployment": cty.StringVal("navy"),
-		}),
-	})}
-	setTestModuleInfo(orange, infoWithLabels)
 
 	dc := DeploymentConfig{
 		Config: Blueprint{
@@ -296,11 +287,10 @@ func (s *MySuite) TestCombineLabels(c *C) {
 			}),
 			DeploymentGroups: []DeploymentGroup{
 				{Name: "lime", Modules: []Module{coral, khaki, silver}},
-				{Name: "pink", Modules: []Module{orange}},
 			},
 		},
 	}
-	c.Check(dc.combineLabels(), IsNil)
+	dc.combineLabels()
 
 	// Were global labels created?
 	c.Check(dc.Config.Vars.Get("labels"), DeepEquals, cty.ObjectVal(map[string]cty.Value{
@@ -333,16 +323,6 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	// No labels input
 	silver = lime.Modules[2]
 	c.Check(silver.Settings.Get("labels"), DeepEquals, cty.NilVal)
-
-	// Packer, include global include explicitly
-	// Keep overridden ghpc_deployment=navy
-	orange = dc.Config.DeploymentGroups[1].Modules[0]
-	c.Check(orange.Settings.Get("labels"), DeepEquals, cty.ObjectVal(map[string]cty.Value{
-		"ghpc_blueprint":  cty.StringVal("simple"),
-		"ghpc_deployment": cty.StringVal("navy"),
-		"ghpc_role":       cty.StringVal("red"),
-		"olive":           cty.StringVal("teal"),
-	}))
 }
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {

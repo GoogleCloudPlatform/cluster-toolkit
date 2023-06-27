@@ -113,10 +113,10 @@ deployment_groups:
           - script
         settings:
           deployment_name: ((var.deployment_name ))
-          labels:
-            ghpc_blueprint: igc
-            ghpc_deployment: golden_copy_deployment
-            ghpc_role: packer
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "packer"
+            })))
           project_id: ((var.project_id ))
           startup_script: ((module.script.startup_script))
           subnetwork_name: ((module.network0.subnetwork_name))

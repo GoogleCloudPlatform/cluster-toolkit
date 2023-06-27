@@ -47,10 +47,7 @@ var (
 func (dc *DeploymentConfig) expand() error {
 	dc.expandBackends()
 	dc.addDefaultValidators()
-
-	if err := dc.combineLabels(); err != nil {
-		return err
-	}
+	dc.combineLabels()
 
 	if err := dc.applyUseModules(); err != nil {
 		return err
@@ -210,7 +207,7 @@ func getRole(source string) string {
 // combineLabels sets defaults for labels based on other variables and merges
 // the global labels defined in Vars with module setting labels. It also
 // determines the role and sets it for each module independently.
-func (dc *DeploymentConfig) combineLabels() error {
+func (dc *DeploymentConfig) combineLabels() {
 	vars := &dc.Config.Vars
 	defaults := map[string]cty.Value{
 		blueprintLabel:  cty.StringVal(dc.Config.BlueprintName),
@@ -223,59 +220,29 @@ func (dc *DeploymentConfig) combineLabels() error {
 	gl := mergeMaps(defaults, vars.Get(labels).AsValueMap())
 	vars.Set(labels, cty.ObjectVal(gl))
 
-	return dc.Config.WalkModules(func(mod *Module) error {
-		return combineModuleLabels(mod, *dc)
+	dc.Config.WalkModules(func(mod *Module) error {
+		combineModuleLabels(mod, *dc)
+		return nil
 	})
 }
 
-func combineModuleLabels(mod *Module, dc DeploymentConfig) error {
+func combineModuleLabels(mod *Module, dc DeploymentConfig) {
 	labels := "labels"
-
 	if !moduleHasInput(*mod, labels) {
-		return nil // no op
+		return // no op
 	}
 
-	cur := mod.Settings.Get(labels)
-	extra := map[string]cty.Value{roleLabel: cty.StringVal(getRole(mod.Source))}
-
-	if mod.Kind == TerraformKind {
-		mod.Settings.Set(labels, mergeLabelsTf(extra, cur))
-	} else if mod.Kind == PackerKind {
-		gl := dc.Config.Vars.Get(labels).AsValueMap()
-		merged, err := mergeLabelsPkr(gl, extra, cur)
-		if err != nil {
-			return err
-		}
-		mod.Settings.Set(labels, merged)
-	}
-	return nil
-}
-
-// Terraform labels are `merge(var.labels, {ghpc_role="foo"}, [module labels])`
-func mergeLabelsTf(extra map[string]cty.Value, cur cty.Value) cty.Value {
+	extra := map[string]cty.Value{
+		roleLabel: cty.StringVal(getRole(mod.Source))}
 	args := []cty.Value{
-		GlobalRef("labels").AsExpression().AsValue(),
+		GlobalRef(labels).AsExpression().AsValue(),
 		cty.ObjectVal(extra),
 	}
-	if !cur.IsNull() {
-		args = append(args, cur)
+	if !mod.Settings.Get(labels).IsNull() {
+		args = append(args, mod.Settings.Get(labels))
 	}
-	return FunctionCallExpression("merge", args...).AsValue()
-}
 
-// Packer doesn't support `merge`, so merge it here.
-func mergeLabelsPkr(global map[string]cty.Value, extra map[string]cty.Value, cur cty.Value) (cty.Value, error) {
-	modLabels := map[string]cty.Value{}
-	if !cur.IsNull() {
-		ty := cur.Type()
-		if !ty.IsObjectType() && !ty.IsMapType() {
-			return cty.NilVal, fmt.Errorf("%s,labels type: %s", errorMessages["settingsLabelType"], ty.FriendlyName())
-		}
-		if cur.AsValueMap() != nil {
-			modLabels = cur.AsValueMap()
-		}
-	}
-	return cty.ObjectVal(mergeMaps(global, extra, modLabels)), nil
+	mod.Settings.Set(labels, FunctionCallExpression("merge", args...).AsValue())
 }
 
 // mergeMaps takes an arbitrary number of maps, and returns a single map that contains

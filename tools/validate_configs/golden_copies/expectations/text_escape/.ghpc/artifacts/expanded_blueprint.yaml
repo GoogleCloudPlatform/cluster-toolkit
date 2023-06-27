@@ -45,12 +45,12 @@ deployment_groups:
           deployment_name: ((var.deployment_name))
           image_family: \$(zebra/to(ad
           image_name: \((cat /dog))
-          labels:
-            brown: \$(fox)
-            ghpc_blueprint: text_escape
-            ghpc_deployment: golden_copy_deployment
-            ghpc_role: packer
-            ñred: ñblue
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "packer"
+              }, {
+              brown = "$(fox)"
+            })))
           project_id: ((var.project_id))
           subnetwork_name: \$(purple
           zone: ((var.zone))
