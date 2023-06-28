@@ -621,18 +621,6 @@ func (s *MySuite) TestWriteProviders(c *C) {
 	c.Assert(exists, Equals, true)
 }
 
-// packerwriter.go
-func (s *MySuite) TestNumModules_PackerWriter(c *C) {
-	testWriter := PackerWriter{}
-	c.Assert(testWriter.getNumModules(), Equals, 0)
-	testWriter.addNumModules(-1)
-	c.Assert(testWriter.getNumModules(), Equals, -1)
-	testWriter.addNumModules(2)
-	c.Assert(testWriter.getNumModules(), Equals, 1)
-	testWriter.addNumModules(0)
-	c.Assert(testWriter.getNumModules(), Equals, 1)
-}
-
 func (s *MySuite) TestKind(c *C) {
 	tfw := TFWriter{}
 	c.Assert(tfw.kind(), Equals, config.TerraformKind)

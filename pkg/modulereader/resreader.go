@@ -141,13 +141,12 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 		modPath = path.Join(pkgPath, subDir)
 		sourceReader := sourcereader.Factory(pkgAddr)
 		if err = sourceReader.GetModule(pkgAddr, pkgPath); err != nil {
-			if subDir == "" {
-				return ModuleInfo{}, err
+			if subDir != "" {
+				err = fmt.Errorf("module source %s included \"//\" package syntax; "+
+					"the \"//\" should typically be placed at the root of the repository:\n%w", source, err)
+
 			}
-			return ModuleInfo{},
-				fmt.Errorf("module source %s included \"//\" package syntax; "+
-					"the \"//\" should typically be placed at the root of the repository:\n%s",
-					source, err.Error())
+			return ModuleInfo{}, err
 		}
 
 	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
