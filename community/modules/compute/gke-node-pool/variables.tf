@@ -176,7 +176,7 @@ variable "labels" {
   type        = map(string)
 }
 
-variable "node_labels" {
+variable "kubernetes_labels" {
   description = <<-EOT
   Kubernetes labels to be applied to each node in the node group. Key-value pairs. 
   (The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified)
