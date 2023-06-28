@@ -249,40 +249,34 @@ EOT
   type        = list(map(any))
   validation {
     condition     = var.caches_to_populate == null
-    error_message = "caches_to_populate is deprecated. Use commands instead. See variable documentation for proposed alterantive commands."
+    error_message = "caches_to_populate is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
   }
 }
 
 variable "environments" {
-  description = <<EOT
-  Defines spack environments to configure, given as a list.
-  Each environment must define a name.
-  Additional optional attributes are 'content' and 'packages'.
-  'content' must be a string, defining the content of the Spack Environment YAML file.
-  'packages' must be a list of strings, defining the spack specs to install.
-  If both 'content' and 'packages' are defined, 'content' is processed first.
+  description = <<-EOT
+  DEPRECATED
+
+  The following `commands` can be used to configure an environment:
+
+  ```
+  if ! spack env list | grep -q my-env; then
+    spack env create my-env
+  fi
+  spack env activate my-env
+  spack add intel-mpi@2018.4.274 %gcc@10.3.0
+  spack concretize
+  spack install
+  ```
+  
+  Defines spack environments to configure.
+  For more information, see: https://spack.readthedocs.io/en/latest/environments.html.
 
 EOT
-  default     = []
+  default     = null
   type        = any
   validation {
-    condition = alltrue([
-      for e in var.environments : (contains(keys(e), "name"))
-    ])
-    error_message = "All environments must have a name."
-  }
-
-  validation {
-    condition = alltrue([
-      for e in var.environments : (contains(keys(e), "packages") ? alltrue(([for p in e["packages"] : alltrue([tostring(p) == p])])) : true)
-    ])
-    error_message = "The packages attribute within environments is required to be a list of strings."
-  }
-
-  validation {
-    condition = alltrue([
-      for e in var.environments : (contains(keys(e), "content") ? tostring(e["content"]) == e["content"] : true)
-    ])
-    error_message = "The content attribute within environments is required to be a string."
+    condition     = var.environments == null
+    error_message = "environments is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
   }
 }

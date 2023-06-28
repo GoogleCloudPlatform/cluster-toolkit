@@ -67,9 +67,9 @@ deployment_groups:
               buildable: False
       compilers:
       - gcc@9.3.0 %gcc@4.8.5 target=x86_64
-      environments:
+      data_files:
+      - destination: /share/spack/openfoam_env.yaml
       - name: openfoam
-        type: file
         content: |
           spack:
             definitions:
@@ -94,6 +94,13 @@ deployment_groups:
               - - $^mpis
             concretizer:
               unify: when_possible
+      commands: |
+        if ! spack env list | grep -q openfoam; then
+          spack env create openfoam /share/spack/openfoam_env.yaml
+          spack env activate openfoam
+          spack concretize
+          spack install
+        fi
       # Un-comment and update mirror_url to install from spack cache
       # spack_cache_url:
       # - mirror_name: gcs_cache

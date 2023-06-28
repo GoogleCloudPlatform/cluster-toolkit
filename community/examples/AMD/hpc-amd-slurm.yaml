@@ -83,9 +83,8 @@ deployment_groups:
       # gcc 12.1.0 is known to have runtime failures with OpenFOAM 8
       # gcc 10.3.0 is the earliest copy of gcc with Zen 3 support
       - gcc@10.3.0 %gcc@4.8.5 target=x86_64
-      environments:
-      - name: openfoam
-        type: file
+      data_files:
+      - destination: /sw/spack/openfoam_env.yaml
         content: |
           spack:
             definitions:
@@ -110,6 +109,13 @@ deployment_groups:
               - - $^mpis
             concretizer:
               unify: when_possible
+      commands: |
+        if ! spack env list | grep -q openfoam; then
+          spack env create openfoam /sw/spack/openfoam_env.yaml
+          spack env activate openfoam
+          spack concretize
+          spack install
+        fi
 
   - id: spack-startup
     source: modules/scripts/startup-script

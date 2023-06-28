@@ -106,42 +106,4 @@ echo "$PREFIX Installing root spack specs..."
   spack clean -s
 %{endfor ~}
 
-echo "$PREFIX Configuring spack environments"
-%{if ENVIRONMENTS != null ~}
-%{for e in ENVIRONMENTS ~}
-if [ ! -d ${INSTALL_DIR}/var/spack/environments/${e.name} ]; then
-  %{if e.content != null}
-    {
-      cat << 'EOF' > ${INSTALL_DIR}/spack_env.yaml
-${e.content}
-EOF
-      spack env create ${e.name} ${INSTALL_DIR}/spack_env.yaml
-      rm -f ${INSTALL_DIR}/spack_env.yaml
-    } &>> ${LOG_FILE}
-  %{else ~}
-      spack env create ${e.name} >> ${LOG_FILE} 2>&1
-  %{endif ~}
-
-  spack env activate ${e.name} >> ${LOG_FILE} 2>&1
-
-  %{if e.packages != null}
-    echo "$PREFIX    Configuring spack environment ${e.name}"
-    %{for p in e.packages ~}
-      spack add ${p} >> ${LOG_FILE} 2>&1
-    %{endfor ~}
-  %{endif ~}
-
-  echo "$PREFIX    Concretizing spack environment ${e.name}"
-  spack concretize ${CONCRETIZE_FLAGS} >> ${LOG_FILE} 2>&1
-
-  echo "$PREFIX    Installing packages for spack environment ${e.name}"
-  # shellcheck disable=SC2129
-  spack install ${INSTALL_FLAGS} >> ${LOG_FILE} 2>&1
-
-  spack env deactivate >> ${LOG_FILE} 2>&1
-  spack clean -s >> ${LOG_FILE} 2>&1
-fi
-%{endfor ~}
-%{endif ~}
-
 echo "$PREFIX Setup complete..."

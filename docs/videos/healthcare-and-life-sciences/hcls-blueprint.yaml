@@ -146,9 +146,8 @@ deployment_groups:
                   prefix: /usr/local
               buildable: False
       compilers: [gcc@11.3.0 target=x86_64]
-      environments:
-      - name: gromacs
-        type: file
+      data_files:
+      - destination: /share/spack/gromacs_env.yaml
         content: |
           spack:
             definitions:
@@ -176,6 +175,13 @@ deployment_groups:
                 - [$^cuda_mpis]
                 - [$%compilers]
                 - [target=skylake]
+      commands: |
+        if ! spack env list | grep -q gromacs; then
+          spack env create gromacs /share/spack/gromacs_env.yaml
+          spack env activate gromacs
+          spack concretize
+          spack install
+        fi
 
   - id: spack-builder-startup
     source: modules/scripts/startup-script
