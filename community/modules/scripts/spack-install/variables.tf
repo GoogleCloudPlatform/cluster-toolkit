@@ -169,9 +169,23 @@ variable "licenses" {
 }
 
 variable "packages" {
-  description = "Defines root packages for spack to install (in order)."
-  default     = []
+  description = <<-EOT
+  DEPRECATED
+
+  The following `commands` can be used to install a package:
+
+  ```
+  spack install intel-mpi@2018.4.274 %gcc@10.3.0
+  ```
+
+  Defines root packages for spack to install.
+  EOT
   type        = list(string)
+  default     = null
+  validation {
+    condition     = var.packages == null
+    error_message = "packages is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+  }
 }
 
 variable "install_flags" {

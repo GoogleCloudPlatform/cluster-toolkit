@@ -48,13 +48,11 @@ deployment_groups:
       spack_cache_url:
       compilers:
       - gcc@10.3.0 target=x86_64
-      packages:
-      - cmake%gcc@10.3.0 target=x86_64
-      - intel-mkl%gcc@10.3.0 target=skylake
-      - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
-      - >-
-        fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5
-        target=x86_64
+      commands: |
+        spack install cmake%gcc@10.3.0 target=x86_64
+        spack install intel-mkl%gcc@10.3.0 target=skylake
+        spack install intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
+        spack install fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5 target=x86_64
 
   - id: startup
     source: ./modules/scripts/startup-script
