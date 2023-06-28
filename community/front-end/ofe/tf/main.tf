@@ -109,7 +109,7 @@ resource "google_storage_bucket_object" "config_file" {
 
 module "pubsub" {
   source  = "terraform-google-modules/pubsub/google"
-  version = "~> 1.8"
+  version = "~> 5.0"
 
   topic               = var.deployment_name
   project_id          = var.project_id
