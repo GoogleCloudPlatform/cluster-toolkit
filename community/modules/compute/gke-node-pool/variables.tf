@@ -176,6 +176,15 @@ variable "labels" {
   type        = map(string)
 }
 
+variable "kubernetes_labels" {
+  description = <<-EOT
+  Kubernetes labels to be applied to each node in the node group. Key-value pairs. 
+  (The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified)
+  EOT
+  type        = map(string)
+  default     = null
+}
+
 variable "timeout_create" {
   description = "Timeout for creating a node pool"
   type        = string

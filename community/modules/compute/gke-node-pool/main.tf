@@ -76,6 +76,7 @@ resource "google_container_node_pool" "node_pool" {
     disk_size_gb      = var.disk_size_gb
     disk_type         = var.disk_type
     resource_labels   = local.labels
+    labels            = var.kubernetes_labels
     service_account   = var.service_account_email
     oauth_scopes      = var.service_account_scopes
     machine_type      = var.machine_type
