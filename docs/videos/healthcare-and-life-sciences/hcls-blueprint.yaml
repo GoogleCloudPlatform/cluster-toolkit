@@ -180,6 +180,7 @@ deployment_groups:
           spack env create gromacs /share/spack/gromacs_env.yaml
           spack env activate gromacs
           spack concretize
+          spack install
         fi
 
   - id: spack-builder-startup

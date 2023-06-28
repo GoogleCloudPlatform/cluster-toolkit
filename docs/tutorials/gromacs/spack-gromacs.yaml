@@ -91,6 +91,7 @@ deployment_groups:
           spack env create gromacs /share/spack/gromacs_env.yaml
           spack env activate gromacs
           spack concretize
+          spack install
         fi
       # Un-comment and update mirror_url to install from spack cache
       # spack_cache_url:

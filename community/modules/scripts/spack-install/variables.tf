@@ -266,6 +266,7 @@ variable "environments" {
   spack env activate my-env
   spack add intel-mpi@2018.4.274 %gcc@10.3.0
   spack concretize
+  spack install
   ```
   
   Defines spack environments to configure.

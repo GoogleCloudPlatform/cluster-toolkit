@@ -91,6 +91,7 @@ deployment_groups:
           spack env create wrfv3 /share/spack/wrfv3_env.yaml
           spack env activate wrfv3
           spack concretize
+          spack install
         fi
       # Un-comment and update mirror_url to install from spack cache
       # spack_cache_url:

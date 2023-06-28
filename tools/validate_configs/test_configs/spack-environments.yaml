@@ -73,6 +73,7 @@ deployment_groups:
           spack env create test-file /apps/spack/env_file.yaml
           spack env activate test-file
           spack concretize
+          spack install
         fi
 
         if ! spack env list | grep -q test-package; then
@@ -82,6 +83,7 @@ deployment_groups:
         spack add intel-mpi@2018.4.274 %gcc@10.3.0
         spack add gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
         spack concretize
+        spack install
 
         if ! spack env list | grep -q test-mixed; then
           spack env create test-mixed /apps/spack/mixed_env_file.yaml
@@ -89,6 +91,7 @@ deployment_groups:
         spack env activate test-mixed
         spack add gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
         spack concretize
+        spack install
 
         MIRROR_URL=gs://<name of your bucket>
         spack buildcache create --mirror-url $MIRROR_URL -af \$(spack find --format /{hash});

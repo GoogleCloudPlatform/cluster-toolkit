@@ -99,6 +99,7 @@ deployment_groups:
           spack env create openfoam /share/spack/openfoam_env.yaml
           spack env activate openfoam
           spack concretize
+          spack install
         fi
       # Un-comment and update mirror_url to install from spack cache
       # spack_cache_url:

@@ -114,6 +114,7 @@ deployment_groups:
           spack env create openfoam /sw/spack/openfoam_env.yaml
           spack env activate openfoam
           spack concretize
+          spack install
         fi
 
   - id: spack-startup
