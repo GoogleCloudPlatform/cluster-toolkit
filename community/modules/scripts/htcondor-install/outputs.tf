@@ -19,6 +19,11 @@ output "install_htcondor_runner" {
   value       = local.runner_install_htcondor
 }
 
+output "windows_startup_ps1" {
+  description = "Windows PowerShell script to install HTCondor"
+  value       = local.install_htcondor_ps1
+}
+
 output "install_autoscaler_deps_runner" {
   description = "Toolkit Runner to install HTCondor autoscaler dependencies"
   value       = local.runner_install_autoscaler_deps

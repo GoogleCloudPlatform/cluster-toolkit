@@ -25,6 +25,11 @@ locals {
     ])
   }
 
+  install_htcondor_ps1 = templatefile(
+    "${path.module}/templates/install-htcondor.ps1.tftpl", {
+      condor_version = var.condor_version
+  })
+
   runner_install_autoscaler_deps = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/install-htcondor-autoscaler-deps.yml")
