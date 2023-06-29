@@ -84,11 +84,6 @@ else
   source ${INSTALL_DIR}/share/spack/setup-env.sh >> ${LOG_FILE} 2>&1
 fi
 
-echo "$PREFIX Installing licenses..."
-%{for lic in LICENSES ~}
-  gsutil cp ${lic.source} ${lic.dest} >> ${LOG_FILE} 2>&1
-%{endfor ~}
-
 echo "$PREFIX Installing compilers..."
 %{for c in COMPILERS ~}
   {

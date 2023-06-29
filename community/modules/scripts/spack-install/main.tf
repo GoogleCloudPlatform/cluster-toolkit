@@ -30,7 +30,6 @@ locals {
       SPACK_REF          = var.spack_ref
       COMPILERS          = var.compilers == null ? [] : var.compilers
       CONFIGS            = var.configs == null ? [] : var.configs
-      LICENSES           = var.licenses == null ? [] : var.licenses
       INSTALL_FLAGS      = var.install_flags == null ? "" : var.install_flags
       CONCRETIZE_FLAGS   = var.concretize_flags == null ? "" : var.concretize_flags
       MIRRORS            = var.spack_cache_url == null ? [] : var.spack_cache_url

@@ -160,12 +160,30 @@ variable "compilers" {
 }
 
 variable "licenses" {
-  description = "List of software licenses to install within spack."
-  default     = null
+  description = <<-EOT
+  DEPRECATED
+
+  Use `data_files` variable to install license files:
+
+  ```
+  data_files = [{
+    source = "/abs/path/on/deployment/machine/license.lic"
+    destination = "/sw/spack/etc/spack/licenses/license.lic"
+  }]
+  ```
+
+  List of software licenses to install within spack.
+  EOT
+
+  default = null
   type = list(object({
     source = string
     dest   = string
   }))
+  validation {
+    condition     = var.licenses == null
+    error_message = "licenses is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+  }
 }
 
 variable "packages" {
@@ -274,7 +292,7 @@ variable "environments" {
   The following `commands` can be used to configure an environment:
 
   ```
-  if ! spack env list | grep -q my-env; then
+  if ! spack env list \| grep -q my-env; then
     spack env create my-env
   fi
   spack env activate my-env
