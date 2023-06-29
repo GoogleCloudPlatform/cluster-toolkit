@@ -83,9 +83,7 @@ variable "metadata" {
 
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the node group VM instances. This
-    value is overridden if any of `source_image`, `source_image_family` or
-    `source_image_project` are set.
+    Defines the image that will be used in the node group VM instances. 
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -114,20 +112,32 @@ variable "instance_image" {
 
 variable "source_image_project" {
   type        = string
-  description = "The hosting the custom VM image. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image_project == null
+    error_message = "Variable `source_image_project` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "source_image_family" {
   type        = string
-  description = "The custom VM image family. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image_family == null
+    error_message = "Variable `source_image_family` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "source_image" {
   type        = string
-  description = "The custom VM image. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image == null
+    error_message = "Variable `source_image` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "tags" {
