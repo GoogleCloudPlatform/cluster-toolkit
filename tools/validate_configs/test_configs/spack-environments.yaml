@@ -35,10 +35,6 @@ deployment_groups:
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.1
       log_file: /var/log/spack.log
-      configs:
-      - type: 'single-config'
-        scope: 'site'
-        content: 'config:install_tree:padded_length:128'
       data_files:
       - destination: /apps/spack/env_file.yaml
         content: |
@@ -64,6 +60,8 @@ deployment_groups:
             specs:
               intel-mpi@20184.274 %gcc@10.3.0
       commands: |
+        spack config --scope site add config:install_tree:padded_length:128
+
         spack gpg init
         spack gpg create "Robert Pirsig" pirsig@zamm.org
 

@@ -28,7 +28,6 @@ locals {
       INSTALL_DIR        = var.install_dir
       SPACK_URL          = var.spack_url
       SPACK_REF          = var.spack_ref
-      CONFIGS            = var.configs == null ? [] : var.configs
       CACHES_TO_POPULATE = var.caches_to_populate == null ? [] : var.caches_to_populate
       LOG_FILE           = var.log_file == null ? "/dev/null" : var.log_file
       SPACK_PYTHON_VENV  = var.spack_virtualenv_path

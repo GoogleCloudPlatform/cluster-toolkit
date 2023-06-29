@@ -39,15 +39,8 @@ deployment_groups:
     settings:
       spack_ref: v0.19.0
       install_dir: /share/spack
-      configs:
-      - type: file
-        scope: defaults
-        content: |
-          config:
-            build_stage:
-              - /share/spack/spack-stage
-      - type: file
-        scope: defaults
+      data_files:
+      - destination: /tmp/projections-config.yaml
         content: |
           modules:
             default:
@@ -58,7 +51,6 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      data_files:
       - destination: /share/spack/wrfv3_env.yaml
         content: |
           spack:
@@ -81,6 +73,9 @@ deployment_groups:
         # Un-comment and update mirror_url to install from spack cache
         # spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
         # spack buildcache keys --install --trust
+
+        spack config --scope defaults add config:build_stage:/share/spack/spack-stage
+        spack config --scope defaults add -f /tmp/projections-config.yaml
 
         spack install gcc@8.2.0 target=x86_64
         spack load gcc@8.2.0 target=x86_64

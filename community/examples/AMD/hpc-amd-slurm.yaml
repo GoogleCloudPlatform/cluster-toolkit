@@ -45,15 +45,8 @@ deployment_groups:
       install_dir: /sw/spack
       spack_ref: v0.18.1
       log_file: /var/log/spack.log
-      configs:
-      - type: file
-        scope: defaults
-        content: |
-          config:
-            build_stage:
-              - /opt/spack_build_stage
-      - type: file
-        scope: defaults
+      data_files:
+      - destination: /tmp/projections-config.yaml
         content: |
           modules:
             default:
@@ -64,8 +57,7 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      - type: file
-        scope: site
+      - destination: /tmp/slurm-external-config.yaml
         content: |
           packages:
             slurm:
@@ -73,13 +65,6 @@ deployment_groups:
                 - spec: slurm@22-05-8
                   prefix: /usr/local
               buildable: False
-      - type: file
-        scope: site
-        content: |
-          concretizer:
-            targets:
-              host_compatible: false
-      data_files:
       - destination: /sw/spack/openfoam_env.yaml
         content: |
           spack:
@@ -106,6 +91,11 @@ deployment_groups:
             concretizer:
               unify: when_possible
       commands: |
+        spack config --scope defaults add config:build_stage:/opt/spack_build_stage
+        spack config --scope defaults add -f /tmp/projections-config.yaml
+        spack config --scope site add -f /tmp/slurm-external-config.yaml
+        spack config --scope site add concretizer:targets:host_compatible:false
+
         # gcc 12.1.0 is known to have runtime failures with OpenFOAM 8
         # gcc 10.3.0 is the earliest copy of gcc with Zen 3 support
         spack install gcc@10.3.0 %gcc@4.8.5 target=x86_64
