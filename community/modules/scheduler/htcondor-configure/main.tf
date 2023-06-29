@@ -95,6 +95,12 @@ locals {
       "-e trust_domain=${local.trust_domain}",
     ])
   }
+  windows_startup_ps1 = templatefile(
+    "${path.module}/templates/download-condor-config.ps1.tftpl",
+    {
+      config_object = local.execute_object
+    }
+  )
 }
 
 module "htcondor_bucket" {
