@@ -78,6 +78,10 @@ deployment_groups:
               - - $%compilers
               - - $^mpis
       commands: |
+        # Un-comment and update mirror_url to install from spack cache
+        # spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
+        # spack buildcache keys --install --trust
+
         spack install gcc@8.2.0 target=x86_64
         spack load gcc@8.2.0 target=x86_64
         spack compiler find --scope site
@@ -88,10 +92,6 @@ deployment_groups:
           spack concretize
           spack install
         fi
-      # Un-comment and update mirror_url to install from spack cache
-      # spack_cache_url:
-      # - mirror_name: gcs_cache
-      #   mirror_url: gs://optionally_set_spack_cache_bucket
 
   - id: spack-build-startup
     source: modules/scripts/startup-script

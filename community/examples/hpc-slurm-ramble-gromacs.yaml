@@ -49,9 +49,9 @@ deployment_groups:
         content: "concretizer:targets:host_compatible:false"
       # Uncomment and update the name and path to add a shared or personal Spack
       # cache location to speed up future deployments.
-      # spack_cache_url:
-      # - mirror_name: gcs_cache
-      #   mirror_url: gs://bucket-name/...
+      # commands: |
+      #   spack mirror add --scope site gcs_cache gs://bucket-name/...
+      #   spack buildcache keys --install --trust
 
   - id: ramble-setup
     source: community/modules/scripts/ramble-setup

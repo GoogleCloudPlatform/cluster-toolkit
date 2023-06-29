@@ -62,12 +62,8 @@ EOF
     %{endif ~}
   %{endfor ~}
 
-  echo "$PREFIX Setting up spack mirrors..."
-  %{for m in MIRRORS ~}
-  spack mirror add --scope site ${m.mirror_name} ${m.mirror_url} >> ${LOG_FILE} 2>&1
-  %{endfor ~}
+  spack gpg init
 
-  spack buildcache keys --install --trust >> ${LOG_FILE} 2>&1
 else
   source ${INSTALL_DIR}/share/spack/setup-env.sh >> ${LOG_FILE} 2>&1
 fi

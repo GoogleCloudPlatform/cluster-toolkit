@@ -232,7 +232,7 @@ limitations under the License.
 | <a name="input_packages"></a> [packages](#input\_packages) | DEPRECATED<br><br>The following `commands` can be used to install a package:<pre>spack install intel-mpi@2018.4.274 %gcc@10.3.0</pre>Defines root packages for spack to install. | `list(string)` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
-| <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | List of buildcaches for spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
+| <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | DEPRECATED<br><br>The following `commands` can be used to add a build cache:<pre>spack mirror add --scope site <mirror name> gs://my-build-cache<br>spack buildcache keys --install --trust</pre>List of build caches for Spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
 | <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
 | <a name="input_spack_virtualenv_path"></a> [spack\_virtualenv\_path](#input\_spack\_virtualenv\_path) | Virtual environment path in which to install Spack Python interpreter and other dependencies | `string` | `"/usr/local/spack-python"` | no |

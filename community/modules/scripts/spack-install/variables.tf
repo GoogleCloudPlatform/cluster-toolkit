@@ -110,12 +110,27 @@ variable "labels" {
 # variables to be deprecated
 
 variable "spack_cache_url" {
-  description = "List of buildcaches for spack."
+  description = <<-EOT
+  DEPRECATED
+
+  The following `commands` can be used to add a build cache:
+
+  ```
+  spack mirror add --scope site <mirror name> gs://my-build-cache
+  spack buildcache keys --install --trust
+  ```
+
+  List of build caches for Spack.
+  EOT
   type = list(object({
     mirror_name = string
     mirror_url  = string
   }))
   default = null
+  validation {
+    condition     = var.spack_cache_url == null
+    error_message = "spack_cache_url is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+  }
 }
 
 variable "configs" {
