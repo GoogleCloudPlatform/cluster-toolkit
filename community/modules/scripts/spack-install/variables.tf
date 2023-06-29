@@ -110,12 +110,27 @@ variable "labels" {
 # variables to be deprecated
 
 variable "spack_cache_url" {
-  description = "List of buildcaches for spack."
+  description = <<-EOT
+  DEPRECATED
+
+  The following `commands` can be used to add a build cache:
+
+  ```
+  spack mirror add --scope site <mirror name> gs://my-build-cache
+  spack buildcache keys --install --trust
+  ```
+
+  List of build caches for Spack.
+  EOT
   type = list(object({
     mirror_name = string
     mirror_url  = string
   }))
   default = null
+  validation {
+    condition     = var.spack_cache_url == null
+    error_message = "spack_cache_url is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+  }
 }
 
 variable "configs" {
@@ -246,38 +261,24 @@ variable "concretize_flags" {
 
 variable "gpg_keys" {
   description = <<EOT
+  DEPRECATED
+
+  The following `commands` can be used to create a new GPG key:
+
+  ```
+  spack gpg init
+  spack gpg create <name> <email>
+  ```
+
+  Alternatively, `data_files` can be used to transfer an existing GPG key. Then use `spack gpg trust <file>` to add the key to the keyring.
+
   GPG Keys to trust within spack.
-  Each key must define a type. Valid types are 'file' and 'new'.
-  Keys of type 'file' must define a path to the key that
-  should be trusted.
-  Keys of type 'new' must define a 'name' and 'email' to create
-  the key with.
 EOT
-  default     = []
+  default     = null
   type        = list(map(any))
   validation {
-    condition = alltrue([
-      for k in var.gpg_keys : contains(keys(k), "type")
-    ])
-    error_message = "Each gpg_key must define a type."
-  }
-  validation {
-    condition = alltrue([
-      for k in var.gpg_keys : (k["type"] == "file" || k["type"] == "new")
-    ])
-    error_message = "Valid types for gpg_keys are 'file' and 'new'."
-  }
-  validation {
-    condition = alltrue([
-      for k in var.gpg_keys : ((k["type"] == "file" && contains(keys(k), "path")) || (k["type"] == "new"))
-    ])
-    error_message = "Each gpg_key of type file must define a path."
-  }
-  validation {
-    condition = alltrue([
-      for k in var.gpg_keys : (k["type"] == "file" || ((k["type"] == "new") && contains(keys(k), "name") && contains(keys(k), "email")))
-    ])
-    error_message = "Each gpg_key of type new must define a name and email."
+    condition     = var.gpg_keys == null
+    error_message = "gpg_keys is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
   }
 }
 

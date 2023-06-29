@@ -37,10 +37,13 @@ deployment_groups:
       - type: 'single-config'
         scope: 'site'
         content: 'config:install_tree:padded_length:128'
-      gpg_keys:
-      - type: 'file'
-        path: '/tmp/spack_key.gpg'
+      data_files:
+      - source: /path/to/local/spack_gpg_key.pub
+        destination: /apps/spack_gpg_key.pub
       commands: |
+        spack gpg init
+        spack gpg trust /apps/spack_gpg_key.pub
+
         spack install gcc@10.3.0 target=x86_64
         spack load gcc@10.3.0 target=x86_64
         spack compiler find --scope site

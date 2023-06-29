@@ -87,16 +87,16 @@ deployment_groups:
               - - $%compilers
               - - $^mpis
       commands: |
+        # Un-comment and update mirror_url to install from spack cache
+        # spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
+        # spack buildcache keys --install --trust
+
         if ! spack env list | grep -q wrfv3; then
           spack env create wrfv3 /share/spack/wrfv3_env.yaml
           spack env activate wrfv3
           spack concretize
           spack install
         fi
-      # Un-comment and update mirror_url to install from spack cache
-      # spack_cache_url:
-      # - mirror_name: gcs_cache
-      #   mirror_url: gs://optionally_set_spack_cache_bucket
 
   - id: controller-setup
     source: modules/scripts/startup-script
