@@ -29,8 +29,6 @@ locals {
       SPACK_URL          = var.spack_url
       SPACK_REF          = var.spack_ref
       CONFIGS            = var.configs == null ? [] : var.configs
-      INSTALL_FLAGS      = var.install_flags == null ? "" : var.install_flags
-      CONCRETIZE_FLAGS   = var.concretize_flags == null ? "" : var.concretize_flags
       MIRRORS            = var.spack_cache_url == null ? [] : var.spack_cache_url
       GPG_KEYS           = var.gpg_keys == null ? [] : var.gpg_keys
       CACHES_TO_POPULATE = var.caches_to_populate == null ? [] : var.caches_to_populate

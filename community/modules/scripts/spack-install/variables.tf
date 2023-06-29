@@ -225,15 +225,23 @@ variable "packages" {
 }
 
 variable "install_flags" {
-  description = "Defines the flags to pass into `spack install`"
-  default     = ""
+  description = "DEPRECATED - spack install is now performed using the `commands` variable."
+  default     = null
   type        = string
+  validation {
+    condition     = var.install_flags == null
+    error_message = "install_flags is deprecated. Add install flags to the relevant line in commands."
+  }
 }
 
 variable "concretize_flags" {
-  description = "Defines the flags to pass into `spack concretize`"
-  default     = ""
+  description = "DEPRECATED - spack concretize is now performed using the `commands` variable."
+  default     = null
   type        = string
+  validation {
+    condition     = var.concretize_flags == null
+    error_message = "concretize_flags is deprecated. Add concretize flags to the relevant line in commands."
+  }
 }
 
 variable "gpg_keys" {
