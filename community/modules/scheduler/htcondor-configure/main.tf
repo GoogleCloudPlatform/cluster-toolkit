@@ -33,21 +33,21 @@ locals {
   pool_password = coalesce(var.pool_password, random_password.pool.result)
   trust_domain  = "c.${var.project_id}.internal"
 
-  cm_config = templatefile("${path.module}/templates/htcondor.tftpl", {
+  cm_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_central_manager",
     central_manager_ips = module.address.addresses,
     trust_domain        = local.trust_domain,
     spool_dir           = "${var.spool_parent_dir}/spool",
   })
 
-  execute_config = templatefile("${path.module}/templates/htcondor.tftpl", {
+  execute_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_execute",
     central_manager_ips = module.address.addresses,
     trust_domain        = local.trust_domain,
     spool_dir           = "${var.spool_parent_dir}/spool",
   })
 
-  ap_config = templatefile("${path.module}/templates/htcondor.tftpl", {
+  ap_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_submit",
     central_manager_ips = module.address.addresses,
     trust_domain        = local.trust_domain,
