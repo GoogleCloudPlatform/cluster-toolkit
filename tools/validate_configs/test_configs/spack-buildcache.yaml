@@ -33,14 +33,12 @@ deployment_groups:
     settings:
       install_dir: /apps/spack
       log_file: /var/log/spack.log
-      configs:
-      - type: 'single-config'
-        scope: 'site'
-        content: 'config:install_tree:padded_length:128'
       data_files:
       - source: /path/to/local/spack_gpg_key.pub
         destination: /apps/spack_gpg_key.pub
       commands: |
+        spack config --scope site add config:install_tree:padded_length:128
+
         spack gpg init
         spack gpg trust /apps/spack_gpg_key.pub
 

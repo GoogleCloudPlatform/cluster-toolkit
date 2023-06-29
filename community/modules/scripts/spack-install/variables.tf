@@ -134,37 +134,24 @@ variable "spack_cache_url" {
 }
 
 variable "configs" {
-  description = <<EOT
-    List of configuration options to set within spack.
-    Configs can be of type 'single-config' or 'file'.
-    All configs must specify content, and a
-    a scope.
-EOT
-  default     = []
+  description = <<-EOT
+  DEPRECATED
+
+  The following `commands` can be used to add a single config:
+
+  ```
+  spack config --scope defaults add config:default:true
+  ```
+
+  Alternatively, use `data_files` to transfer a config file and use the `spack config add -f <file>` command to add the config.
+
+  List of configuration options to set within spack.
+  EOT
+  default     = null
   type        = list(map(any))
   validation {
-    condition = alltrue([
-      for c in var.configs : contains(keys(c), "type")
-    ])
-    error_message = "All configs must declare a type."
-  }
-  validation {
-    condition = alltrue([
-      for c in var.configs : contains(keys(c), "scope")
-    ])
-    error_message = "All configs must declare a scope."
-  }
-  validation {
-    condition = alltrue([
-      for c in var.configs : contains(keys(c), "content")
-    ])
-    error_message = "All configs must declare a content."
-  }
-  validation {
-    condition = alltrue([
-      for c in var.configs : (c["type"] == "single-config" || c["type"] == "file")
-    ])
-    error_message = "The 'type' must be 'single-config' or 'file'."
+    condition     = var.configs == null
+    error_message = "configs is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
   }
 }
 

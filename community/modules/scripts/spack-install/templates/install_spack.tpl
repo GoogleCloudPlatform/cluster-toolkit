@@ -44,24 +44,6 @@ if [ ! -d ${INSTALL_DIR} ]; then
   spack compiler find --scope site
   } &>> ${LOG_FILE} 2>&1
 
-  echo "$PREFIX Configuring spack..."
-  %{for c in CONFIGS ~}
-    %{if c.type == "single-config" ~}
-      spack config --scope=${c.scope} add "${c.content}" >> ${LOG_FILE} 2>&1
-    %{endif ~}
-
-    %{if c.type == "file" ~}
-      {
-      cat << 'EOF' > ${INSTALL_DIR}/spack_conf.yaml
-${c.content}
-EOF
-
-      spack config --scope=${c.scope} add -f ${INSTALL_DIR}/spack_conf.yaml
-      rm -f ${INSTALL_DIR}/spack_conf.yaml
-      } &>> ${LOG_FILE} 2>&1
-    %{endif ~}
-  %{endfor ~}
-
   spack gpg init
 
 else

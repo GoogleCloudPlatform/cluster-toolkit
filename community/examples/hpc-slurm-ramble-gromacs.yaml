@@ -40,18 +40,13 @@ deployment_groups:
     settings:
       install_dir: /opt/apps/spack
       log_file: /var/log/spack.log
-      configs:
-      - type: single-config
-        scope: defaults
-        content: "config:build_stage:/opt/apps/spack/spack-stage"
-      - type: single-config
-        scope: defaults
-        content: "concretizer:targets:host_compatible:false"
-      # Uncomment and update the name and path to add a shared or personal Spack
-      # cache location to speed up future deployments.
-      # commands: |
-      #   spack mirror add --scope site gcs_cache gs://bucket-name/...
-      #   spack buildcache keys --install --trust
+      commands: |
+        # Un-comment and update mirror_url to install from spack cache
+        # spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
+        # spack buildcache keys --install --trust
+
+        spack config --scope defaults add config:build_stage:/opt/apps/spack/spack-stage
+        spack config --scope defaults add concretizer:targets:host_compatible:false
 
   - id: ramble-setup
     source: community/modules/scripts/ramble-setup

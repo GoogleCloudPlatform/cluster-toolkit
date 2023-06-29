@@ -117,15 +117,9 @@ deployment_groups:
     source: community/modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
-      configs:
-      - type: file
-        scope: defaults
-        content: |
-          config:
-            build_stage:
-              - /apps/spack/spack-stage
-      - type: file
-        scope: defaults
+      compilers: [gcc@11.3.0 target=x86_64]
+      data_files:
+      - destination: /tmp/projections-config.yaml
         content: |
           modules:
             default:
@@ -136,8 +130,7 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      - type: file
-        scope: site
+      - destination: /tmp/slurm-external-config.yaml
         content: |
           packages:
             slurm:
@@ -145,8 +138,6 @@ deployment_groups:
                 - spec: slurm@21-08-8-2
                   prefix: /usr/local
               buildable: False
-      compilers: [gcc@11.3.0 target=x86_64]
-      data_files:
       - destination: /share/spack/gromacs_env.yaml
         content: |
           spack:
@@ -176,6 +167,10 @@ deployment_groups:
                 - [$%compilers]
                 - [target=skylake]
       commands: |
+        spack config --scope defaults add config:build_stage:/apps/spack/spack-stage
+        spack config --scope defaults add -f /tmp/projections-config.yaml
+        spack config --scope site add -f /tmp/slurm-external-config.yaml
+
         if ! spack env list | grep -q gromacs; then
           spack env create gromacs /share/spack/gromacs_env.yaml
           spack env activate gromacs

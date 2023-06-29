@@ -50,12 +50,8 @@ deployment_groups:
     settings:
       install_dir: /sw/spack
       log_file: /var/log/spack.log
-      configs:
-      - type: single-config
-        scope: defaults
-        content: "config:build_stage:/sw/spack/spack-stage"
-      - type: file
-        scope: defaults
+      data_files:
+      - destination: /tmp/projections-config.yaml
         content: |
           modules:
             default:
@@ -70,6 +66,9 @@ deployment_groups:
         # Un-comment and update mirror_url to install from spack cache
         # spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
         # spack buildcache keys --install --trust
+
+        spack config --scope defaults add config:build_stage:/sw/spack/spack-stage
+        spack config --scope defaults add -f /tmp/projections-config.yaml
 
         spack install gcc@10.3.0 target=x86_64
         spack load gcc@10.3.0 target=x86_64
