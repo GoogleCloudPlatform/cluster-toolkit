@@ -15,5 +15,16 @@
  */
 
 terraform {
-  required_version = ">= 0.13.0"
+  required_version = ">= 1.0"
+
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 4.0"
+    }
+  }
+
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-execute-point/v1.19.1"
+  }
 }
