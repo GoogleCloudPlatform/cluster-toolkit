@@ -117,7 +117,6 @@ deployment_groups:
     source: community/modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
-      compilers: [gcc@11.3.0 target=x86_64]
       data_files:
       - destination: /tmp/projections-config.yaml
         content: |
@@ -170,6 +169,10 @@ deployment_groups:
         spack config --scope defaults add config:build_stage:/apps/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
         spack config --scope site add -f /tmp/slurm-external-config.yaml
+
+        spack install gcc@11.3.0 target=x86_64
+        spack load gcc@11.3.0 target=x86_64
+        spack compiler find --scope site
 
         if ! spack env list | grep -q gromacs; then
           spack env create gromacs /share/spack/gromacs_env.yaml
