@@ -21,16 +21,15 @@ locals {
 
 locals {
   script_content = templatefile(
-    "${path.module}/templates/install_spack.tpl",
+    "${path.module}/templates/spack_setup.yml.tpl",
     {
-      ZONE               = var.zone
-      PROJECT_ID         = var.project_id
-      INSTALL_DIR        = var.install_dir
-      SPACK_URL          = var.spack_url
-      SPACK_REF          = var.spack_ref
-      CACHES_TO_POPULATE = var.caches_to_populate == null ? [] : var.caches_to_populate
-      LOG_FILE           = var.log_file == null ? "/dev/null" : var.log_file
-      SPACK_PYTHON_VENV  = var.spack_virtualenv_path
+      install_dir      = var.install_dir
+      git_url          = var.spack_url
+      git_ref          = var.spack_ref
+      chown_owner      = var.chown_owner == null ? "" : var.chown_owner
+      chgrp_group      = var.chgrp_group == null ? "" : var.chgrp_group
+      chmod_mode       = var.chmod_mode == null ? "" : var.chmod_mode
+      spack_python_env = var.spack_virtualenv_path
     }
   )
   install_spack_deps_runner = {
@@ -40,9 +39,9 @@ locals {
     "args"        = "-e spack_virtualenv_path=${var.spack_virtualenv_path}"
   }
   install_spack_runner = {
-    "type"        = "shell"
+    "type"        = "ansible-local"
     "content"     = local.script_content
-    "destination" = "install_spack.sh"
+    "destination" = "install_spack.yml"
   }
 }
 
