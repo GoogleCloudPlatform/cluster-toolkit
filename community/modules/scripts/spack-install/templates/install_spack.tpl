@@ -67,18 +67,6 @@ EOF
   spack mirror add --scope site ${m.mirror_name} ${m.mirror_url} >> ${LOG_FILE} 2>&1
   %{endfor ~}
 
-  echo "$PREFIX Installing GPG keys"
-  spack gpg init >> ${LOG_FILE} 2>&1
-  %{for k in GPG_KEYS ~}
-    %{if k.type == "file" ~}
-      spack gpg trust ${k.path}
-    %{endif ~}
-
-    %{if k.type == "new" ~}
-      spack gpg create "${k.name}" ${k.email}
-    %{endif ~}
-  %{endfor ~}
-
   spack buildcache keys --install --trust >> ${LOG_FILE} 2>&1
 else
   source ${INSTALL_DIR}/share/spack/setup-env.sh >> ${LOG_FILE} 2>&1

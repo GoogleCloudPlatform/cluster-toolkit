@@ -63,10 +63,10 @@ deployment_groups:
           spack:
             specs:
               intel-mpi@20184.274 %gcc@10.3.0
-      gpg_keys:
-      - type: 'file'
-        path: '/tmp/spack_key.gpg'
       commands: |
+        spack gpg init
+        spack gpg create "Robert Pirsig" pirsig@zamm.org
+
         spack install gcc@10.3.0 target=x86_64
         spack load gcc@10.3.0 target=x86_64
         spack compiler find --scope site

@@ -30,7 +30,6 @@ locals {
       SPACK_REF          = var.spack_ref
       CONFIGS            = var.configs == null ? [] : var.configs
       MIRRORS            = var.spack_cache_url == null ? [] : var.spack_cache_url
-      GPG_KEYS           = var.gpg_keys == null ? [] : var.gpg_keys
       CACHES_TO_POPULATE = var.caches_to_populate == null ? [] : var.caches_to_populate
       LOG_FILE           = var.log_file == null ? "/dev/null" : var.log_file
       SPACK_PYTHON_VENV  = var.spack_virtualenv_path
