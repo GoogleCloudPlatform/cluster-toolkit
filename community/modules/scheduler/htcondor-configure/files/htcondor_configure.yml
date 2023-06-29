@@ -20,24 +20,17 @@
     job_queue_ha: false
     spool_dir: /var/lib/condor/spool
     condor_config_root: /etc/condor
-    role_file: 00-role
-    pool_file: 01-pool
-    cm_config_file: 02-central-manager
-    cm_ha_config_file: 02-central-manager-high-availability
-    schedd_config_file: 02-schedd
-    schedd_ha_config_file: 02-schedd-high-availability
+    ghpc_config_file: 50-ghpc-managed
+    schedd_ha_config_file: 51-ghpc-schedd-high-availability
     execute_config_file: 02-execute
   tasks:
-  - name: User must supply HTCondor role
+  - name: Ensure necessary variables are set
     ansible.builtin.assert:
       that:
-      - htcondor_central_manager_ips is defined
       - htcondor_role is defined
       - password_id is defined
-      - project_id is defined
-  - name: Set Trust Domain
-    ansible.builtin.set_fact:
-      trust_domain: c.{{ project_id }}.internal
+      - trust_domain is defined
+      - config_object is defined
   - name: Set HTCondor Pool password (token signing key)
     ansible.builtin.shell: |
       set -e -o pipefail
@@ -45,30 +38,35 @@
       echo -n "$POOL_PASSWORD" | sh -c "condor_store_cred add -c -i -"
     args:
       creates: "{{ condor_config_root }}/passwords.d/POOL"
+      executable: /bin/bash
   - name: Remove default HTCondor configuration
     ansible.builtin.file:
       path: "{{ condor_config_root }}/config.d/00-htcondor-9.0.config"
       state: absent
     notify:
     - Reload HTCondor
-  - name: Set HTCondor role on all hosts
-    ansible.builtin.copy:
-      dest: "{{ condor_config_root }}/config.d/{{ role_file }}"
-      mode: 0644
-      content: |
-        use role:{{ htcondor_role }}
-    notify:
-    - Reload HTCondor
-  - name: Set HTCondor Central Manager and trust domain on all hosts
-    ansible.builtin.copy:
-      dest: "{{ condor_config_root }}/config.d/{{ pool_file }}"
-      mode: 0644
-      content: |
-        CONDOR_HOST={{ htcondor_central_manager_ips }}
-        UID_DOMAIN={{ trust_domain }}
-        TRUST_DOMAIN={{ trust_domain }}
-    notify:
-    - Reload HTCondor
+  - name: Create Toolkit configuration file
+    register: config_update
+    changed_when: config_update.rc == 137
+    failed_when: config_update.rc != 0 and config_update.rc != 137
+    ansible.builtin.shell: |
+      set -e -o pipefail
+      REMOTE_HASH=$(gcloud --format="value(md5_hash)" storage hash {{ config_object }})
+
+      CONFIG_FILE="{{ condor_config_root }}/config.d/{{ ghpc_config_file }}"
+      if [ -f "${CONFIG_FILE}" ]; then
+          LOCAL_HASH=$(gcloud --format="value(md5_hash)" storage hash "${CONFIG_FILE}")
+      else
+          LOCAL_HASH="INVALID-HASH"
+      fi
+
+      if [ "${REMOTE_HASH}" != "${LOCAL_HASH}" ]; then
+          gcloud storage cp {{ config_object }} "${CONFIG_FILE}"
+          chmod 0644 "${CONFIG_FILE}"
+          exit 137
+      fi
+    args:
+      executable: /bin/bash
   - name: Configure HTCondor Central Manager
     when: htcondor_role == 'get_htcondor_central_manager'
     block:
@@ -81,53 +79,6 @@
           -token condor@{{ trust_domain }}
       args:
         creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
-    - name: Generate list of Central Managers
-      ansible.builtin.set_fact:
-        central_manager_list: "{{ htcondor_central_manager_ips | split(',') }}"
-    - name: Create Central Manager standard configuration file
-      ansible.builtin.copy:
-        dest: "{{ condor_config_root }}/config.d/{{ cm_config_file }}"
-        mode: 0644
-        content: |
-          COLLECTOR_UPDATE_INTERVAL=30
-          NEGOTIATOR_UPDATE_INTERVAL=30
-          NEGOTIATOR_DEPTH_FIRST=True
-          NEGOTIATOR_UPDATE_AFTER_CYCLE=True
-      notify:
-      - Reload HTCondor
-    - name: Create Central Manager HA configuration file
-      when: central_manager_list | length > 1
-      ansible.builtin.copy:
-        dest: "{{ condor_config_root }}/config.d/{{ cm_ha_config_file }}"
-        mode: 0644
-        content: |
-          # following https://htcondor.readthedocs.io/en/latest/admin-manual/high-availability.html#high-availability-of-the-central-manager
-          CM_LIST = \
-            {{ central_manager_list[0] }}:$(SHARED_PORT_PORT), \
-            {{ central_manager_list[1] }}:$(SHARED_PORT_PORT)
-
-          HAD_USE_SHARED_PORT=True
-          HAD_LIST=$(CM_LIST)
-
-          REPLICATION_USE_SHARED_PORT=True
-          REPLICATION_LIST=$(CM_LIST)
-
-          HAD_USE_PRIMARY=True
-          HAD_CONTROLLEE=NEGOTIATOR
-          MASTER_NEGOTIATOR_CONTROLLER=HAD
-
-          DAEMON_LIST=$(DAEMON_LIST), HAD, REPLICATION
-          HAD_USE_REPLICATION=True
-          MASTER_HAD_BACKOFF_CONSTANT=360
-      notify:
-      - Restart HTCondor
-    - name: Remove Central Manager HA configuration file
-      when: central_manager_list | length == 1
-      ansible.builtin.file:
-        path: "{{ condor_config_root }}/config.d/{{ cm_ha_config_file }}"
-        state: absent
-      notify:
-      - Restart HTCondor
   - name: Configure HTCondor SchedD
     when: htcondor_role == 'get_htcondor_submit'
     block:
@@ -138,41 +89,6 @@
         owner: condor
         group: condor
         mode: 0755
-    - name: Create SchedD configuration file
-      ansible.builtin.copy:
-        dest: "{{ condor_config_root }}/config.d/{{ schedd_config_file }}"
-        mode: 0644
-        content: |
-          SCHEDD_INTERVAL=30
-          TRUST_UID_DOMAIN=True
-          SUBMIT_ATTRS=RunAsOwner
-          RunAsOwner=True
-          use feature:JobsHaveInstanceIDs
-          SYSTEM_JOB_MACHINE_ATTRS=$(SYSTEM_JOB_MACHINE_ATTRS) \
-            CloudVMType CloudZone CloudInterruptible
-          SYSTEM_JOB_MACHINE_ATTRS_HISTORY_LENGTH=10
-          SPOOL={{ spool_dir }}
-          use feature:ScheddCronOneShot(cloud, $(LIBEXEC)/common-cloud-attributes-google.py)
-          SCHEDD_CRON_cloud_PREFIX=Cloud
-          # the sequence of job transforms and submit requirements below set
-          # a default job attribute RequireSpot to False but allow the user to
-          # specify *only* a boolean value with +RequireSpot = True in their job
-          # submit file; the requirements of the job are transformed to filter
-          # on +RequireSpot unless job has explicit CloudInterruptible requirements
-          JOB_TRANSFORM_NAMES = SPOT_DEFAULT, SPOT_REQS
-          JOB_TRANSFORM_SPOT_DEFAULT @=end
-             DEFAULT RequireSpot False
-          @end
-          # Unless explicit, set CloudInterruptible requirements to job RequireSpot attribute
-          JOB_TRANSFORM_SPOT_REQS @=end
-             REQUIREMENTS ! unresolved(Requirements, "^CloudInterruptible$")
-             SET Requirements $(MY.Requirements) && (CloudInterruptible is My.RequireSpot)
-          @end
-          SUBMIT_REQUIREMENT_NAMES = REQSPOT
-          SUBMIT_REQUIREMENT_REQSPOT = isBoolean(RequireSpot)
-          SUBMIT_REQUIREMENT_REQSPOT_REASON = "Jobs must set +RequireSpot to either True or False"
-      notify:
-      - Reload HTCondor
     - name: Create IDTOKEN to advertise access point
       ansible.builtin.shell: |
         umask 0077
@@ -237,19 +153,6 @@
   - name: Configure HTCondor StartD
     when: htcondor_role == 'get_htcondor_execute'
     block:
-    - name: Create StartD configuration file
-      ansible.builtin.copy:
-        dest: "{{ condor_config_root }}/config.d/{{ execute_config_file }}"
-        mode: 0644
-        content: |
-          use feature:PartitionableSlot
-          use feature:CommonCloudAttributesGoogle("-c created-by")
-          UPDATE_INTERVAL=30
-          TRUST_UID_DOMAIN=True
-          STARTER_ALLOW_RUNAS_OWNER=True
-          RUNBENCHMARKS=False
-      notify:
-      - Reload HTCondor
     - name: Create IDTOKEN to advertise execute point
       ansible.builtin.shell: |
         umask 0077
