@@ -84,15 +84,4 @@ else
   source ${INSTALL_DIR}/share/spack/setup-env.sh >> ${LOG_FILE} 2>&1
 fi
 
-echo "$PREFIX Installing compilers..."
-%{for c in COMPILERS ~}
-  {
-    spack install ${INSTALL_FLAGS} ${c};
-    spack load ${c};
-    spack clean -s
-  } &>> ${LOG_FILE}
-%{endfor ~}
-
-spack compiler find --scope site >> ${LOG_FILE} 2>&1
-
 echo "$PREFIX Setup complete..."

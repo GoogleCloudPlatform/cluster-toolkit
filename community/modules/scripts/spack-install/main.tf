@@ -28,7 +28,6 @@ locals {
       INSTALL_DIR        = var.install_dir
       SPACK_URL          = var.spack_url
       SPACK_REF          = var.spack_ref
-      COMPILERS          = var.compilers == null ? [] : var.compilers
       CONFIGS            = var.configs == null ? [] : var.configs
       INSTALL_FLAGS      = var.install_flags == null ? "" : var.install_flags
       CONCRETIZE_FLAGS   = var.concretize_flags == null ? "" : var.concretize_flags

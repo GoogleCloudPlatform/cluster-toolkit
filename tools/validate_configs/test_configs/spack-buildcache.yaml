@@ -37,12 +37,14 @@ deployment_groups:
       - type: 'single-config'
         scope: 'site'
         content: 'config:install_tree:padded_length:128'
-      compilers:
-      - gcc@10.3.0 target=x86_64
       gpg_keys:
       - type: 'file'
         path: '/tmp/spack_key.gpg'
       commands: |
+        spack install gcc@10.3.0 target=x86_64
+        spack load gcc@10.3.0 target=x86_64
+        spack compiler find --scope site
+
         spack install intel-mpi@2018.4.274%gcc@10.3.0
         spack install gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
 

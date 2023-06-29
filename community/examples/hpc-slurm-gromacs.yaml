@@ -66,9 +66,11 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      compilers:
-      - gcc@10.3.0 target=x86_64
       commands: |
+        spack install gcc@10.3.0 target=x86_64
+        spack load gcc@10.3.0 target=x86_64
+        spack compiler find --scope site
+
         spack install intel-mpi@2018.4.274%gcc@10.3.0
         spack install gromacs@2023.1 %gcc@10.3.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@4.8.5
       # Uncomment and update the name and path to add a shared or personal Spack

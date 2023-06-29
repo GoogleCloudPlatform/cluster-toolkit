@@ -58,8 +58,6 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      compilers:
-      - gcc@8.2.0 target=x86_64
       data_files:
       - destination: /share/spack/wrfv3_env.yaml
         content: |
@@ -80,6 +78,10 @@ deployment_groups:
               - - $%compilers
               - - $^mpis
       commands: |
+        spack install gcc@8.2.0 target=x86_64
+        spack load gcc@8.2.0 target=x86_64
+        spack compiler find --scope site
+
         if ! spack env list | grep -q wrfv3; then
           spack env create wrfv3 /share/spack/wrfv3_env.yaml
           spack env activate wrfv3

@@ -39,8 +39,6 @@ deployment_groups:
       - type: 'single-config'
         scope: 'site'
         content: 'config:install_tree:padded_length:128'
-      compilers:
-      - gcc@10.3.0 target=x86_64
       data_files:
       - destination: /apps/spack/env_file.yaml
         content: |
@@ -69,6 +67,10 @@ deployment_groups:
       - type: 'file'
         path: '/tmp/spack_key.gpg'
       commands: |
+        spack install gcc@10.3.0 target=x86_64
+        spack load gcc@10.3.0 target=x86_64
+        spack compiler find --scope site
+
         if ! spack env list | grep -q test-file; then
           spack env create test-file /apps/spack/env_file.yaml
           spack env activate test-file

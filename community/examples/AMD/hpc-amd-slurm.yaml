@@ -79,10 +79,6 @@ deployment_groups:
           concretizer:
             targets:
               host_compatible: false
-      compilers:
-      # gcc 12.1.0 is known to have runtime failures with OpenFOAM 8
-      # gcc 10.3.0 is the earliest copy of gcc with Zen 3 support
-      - gcc@10.3.0 %gcc@4.8.5 target=x86_64
       data_files:
       - destination: /sw/spack/openfoam_env.yaml
         content: |
@@ -110,6 +106,12 @@ deployment_groups:
             concretizer:
               unify: when_possible
       commands: |
+        # gcc 12.1.0 is known to have runtime failures with OpenFOAM 8
+        # gcc 10.3.0 is the earliest copy of gcc with Zen 3 support
+        spack install gcc@10.3.0 %gcc@4.8.5 target=x86_64
+        spack load gcc@10.3.0 %gcc@4.8.5 target=x86_64
+        spack compiler find --scope site
+
         if ! spack env list | grep -q openfoam; then
           spack env create openfoam /sw/spack/openfoam_env.yaml
           spack env activate openfoam
