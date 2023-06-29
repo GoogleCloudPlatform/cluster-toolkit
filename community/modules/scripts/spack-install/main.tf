@@ -20,16 +20,32 @@ locals {
 }
 
 locals {
+  profile_script = <<-EOF
+    SPACK_PYTHON=${var.spack_virtualenv_path}/bin/python3
+    if [ -f ${var.install_dir}/share/spack/setup-env.sh ]; then
+            . ${var.install_dir}/share/spack/setup-env.sh
+    fi
+  EOF
+
+  finalize_setup_script = <<-EOF
+    set -e
+    source /etc/profile.d/spack.sh
+    spack gpg init
+    spack compiler find --scope site
+  EOF
+
   script_content = templatefile(
     "${path.module}/templates/spack_setup.yml.tpl",
     {
-      install_dir      = var.install_dir
-      git_url          = var.spack_url
-      git_ref          = var.spack_ref
-      chown_owner      = var.chown_owner == null ? "" : var.chown_owner
-      chgrp_group      = var.chgrp_group == null ? "" : var.chgrp_group
-      chmod_mode       = var.chmod_mode == null ? "" : var.chmod_mode
-      spack_python_env = var.spack_virtualenv_path
+      app_name              = "spack"
+      profile_script        = indent(4, yamlencode(local.profile_script))
+      install_dir           = var.install_dir
+      git_url               = var.spack_url
+      git_ref               = var.spack_ref
+      chown_owner           = var.chown_owner == null ? "" : var.chown_owner
+      chgrp_group           = var.chgrp_group == null ? "" : var.chgrp_group
+      chmod_mode            = var.chmod_mode == null ? "" : var.chmod_mode
+      finalize_setup_script = indent(4, yamlencode(local.finalize_setup_script))
     }
   )
   install_spack_deps_runner = {
@@ -89,7 +105,7 @@ module "startup_script" {
 
 resource "local_file" "debug_file_shell_install" {
   content  = local.script_content
-  filename = "${path.module}/debug_install.sh"
+  filename = "${path.module}/debug_install.yml"
 }
 
 resource "local_file" "debug_file_ansible_execute" {

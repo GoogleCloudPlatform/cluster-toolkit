@@ -12,26 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Install Spack
+- name: Install Application
   hosts: localhost
   vars:
+    app_name: ${app_name}
+    profile_script: ${profile_script}
     install_dir: ${install_dir}
     git_url: ${git_url}
     git_ref: ${git_ref}
     chmod_mode: ${chmod_mode}
     chown_owner: ${chown_owner}
     chgrp_group: ${chgrp_group}
-    spack_python_env: ${spack_python_env}
+    finalize_setup_script: ${finalize_setup_script}
   tasks:
-  - name: Add to profile
+  - name: Print Application Name
+    ansible.builtin.debug:
+      msg: "Running installation for application: {{app_name}}"
+
+  - name: Add profile script for application
     ansible.builtin.copy:
-      dest: /etc/profile.d/spack.sh
+      dest: /etc/profile.d/{{ app_name }}.sh
       mode: '0644'
-      content: |
-        SPACK_PYTHON={{ spack_python_env }}/bin/python3
-        if [ -f {{ install_dir }}/share/spack/setup-env.sh ]; then
-                . {{ install_dir }}/share/spack/setup-env.sh
-        fi
+      content: "{{ profile_script }}"
 
   - name: Create parent of install directory
     ansible.builtin.file:
@@ -40,7 +42,7 @@
 
   - name: Acquire lock
     ansible.builtin.command:
-      mkdir "{{ install_dir | dirname }}/.install_lock"
+      mkdir "{{ install_dir | dirname }}/.install_{{ app_name }}_lock"
     register: lock_out
     changed_when: lock_out.rc == 0
     failed_when: false
@@ -70,10 +72,6 @@
       recurse: true
     when: chmod_mode != "" and lock_out.rc == 0
 
-  - name: Final Spack Setup - gpg init and compiler find
-    ansible.builtin.shell: |
-      set -e
-      source /etc/profile.d/spack.sh
-      spack gpg init
-      spack compiler find --scope site
+  - name: Finalize Setup
+    ansible.builtin.shell: "{{ finalize_setup_script }}"
     when: lock_out.rc == 0
