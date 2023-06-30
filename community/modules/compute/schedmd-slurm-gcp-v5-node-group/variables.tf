@@ -137,13 +137,13 @@ variable "tags" {
 }
 
 variable "disk_type" {
-  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
+  description = "Boot disk type, can be either pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   type        = string
   default     = "pd-standard"
 
   validation {
-    condition     = contains(["pd-ssd", "local-ssd", "pd-standard"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, local-ssd, or pd-standard."
+    condition     = contains(["pd-ssd", "pd-standard", "pd-balanced", "pd-extreme"], var.disk_type)
+    error_message = "Variable disk_type must be one of pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   }
 }
 
