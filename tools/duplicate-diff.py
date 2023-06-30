@@ -50,8 +50,8 @@ duplicates = [
         "community/modules/scripts/spack-install/templates/execute_commands.yml.tpl",
     ],
     [
-        "community/modules/scripts/spack-install/templates/spack_setup.yml.tpl",
-        "community/modules/scripts/ramble-setup/templates/ramble_setup.yml.tpl",
+        "community/modules/scripts/spack-install/templates/spack_setup.yml.tftpl",
+        "community/modules/scripts/ramble-setup/templates/ramble_setup.yml.tftpl",
     ],
 ]
 

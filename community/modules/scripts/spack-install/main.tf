@@ -23,7 +23,7 @@ locals {
   profile_script = <<-EOF
     SPACK_PYTHON=${var.spack_virtualenv_path}/bin/python3
     if [ -f ${var.install_dir}/share/spack/setup-env.sh ]; then
-            . ${var.install_dir}/share/spack/setup-env.sh
+          . ${var.install_dir}/share/spack/setup-env.sh
     fi
   EOF
 
@@ -35,9 +35,9 @@ locals {
   EOF
 
   script_content = templatefile(
-    "${path.module}/templates/spack_setup.yml.tpl",
+    "${path.module}/templates/spack_setup.yml.tftpl",
     {
-      app_name              = "spack"
+      sw_name               = "spack"
       profile_script        = indent(4, yamlencode(local.profile_script))
       install_dir           = var.install_dir
       git_url               = var.spack_url

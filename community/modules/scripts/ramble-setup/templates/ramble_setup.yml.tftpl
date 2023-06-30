@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Install Application
+- name: Install Software
   hosts: localhost
   vars:
-    app_name: ${app_name}
+    sw_name: ${sw_name}
     profile_script: ${profile_script}
     install_dir: ${install_dir}
     git_url: ${git_url}
@@ -25,15 +25,16 @@
     chgrp_group: ${chgrp_group}
     finalize_setup_script: ${finalize_setup_script}
   tasks:
-  - name: Print Application Name
+  - name: Print Software Name
     ansible.builtin.debug:
-      msg: "Running installation for application: {{app_name}}"
+      msg: "Running installation for software: {{  sw_name  }}"
 
-  - name: Add profile script for application
+  - name: Add profile script for software
     ansible.builtin.copy:
-      dest: /etc/profile.d/{{ app_name }}.sh
+      dest: /etc/profile.d/{{ sw_name }}.sh
       mode: '0644'
       content: "{{ profile_script }}"
+    when: profile_script
 
   - name: Create parent of install directory
     ansible.builtin.file:
@@ -42,7 +43,7 @@
 
   - name: Acquire lock
     ansible.builtin.command:
-      mkdir "{{ install_dir | dirname }}/.install_{{ app_name }}_lock"
+      mkdir "{{ install_dir | dirname }}/.install_{{ sw_name }}_lock"
     register: lock_out
     changed_when: lock_out.rc == 0
     failed_when: false
@@ -51,27 +52,15 @@
     ansible.builtin.command: git clone --branch {{ git_ref }} {{ git_url }} {{ install_dir }}
     when: lock_out.rc == 0
 
-  - name: chgrp on installation
+  - name: Set ownership and permissions
     ansible.builtin.file:
       path: "{{ install_dir }}"
-      group: "{{ chgrp_group }}"
+      mode: "{{ chmod_mode | default(omit, true)  }}"
+      owner: "{{ chown_owner | default(omit, true) }}"
+      group: "{{ chgrp_group | default(omit, true)  }}"
       recurse: true
-    when: chgrp_group != "" and lock_out.rc == 0
-
-  - name: chown on installation
-    ansible.builtin.file:
-      path: "{{ install_dir }}"
-      owner: "{{ chown_owner }}"
-      recurse: true
-    when: chown_owner != "" and lock_out.rc == 0
-
-  - name: chmod on installation
-    ansible.builtin.file:
-      path: "{{ install_dir }}"
-      mode: "{{ chmod_mode }}"
-      recurse: true
-    when: chmod_mode != "" and lock_out.rc == 0
+    when: lock_out.rc == 0
 
   - name: Finalize Setup
     ansible.builtin.shell: "{{ finalize_setup_script }}"
-    when: lock_out.rc == 0
+    when: lock_out.rc == 0 and finalize_setup_script
