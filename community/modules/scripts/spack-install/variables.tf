@@ -14,11 +14,6 @@
  * limitations under the License.
  */
 
-variable "zone" {
-  description = "The GCP zone where the instance is running."
-  type        = string
-}
-
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
   type        = string
@@ -42,6 +37,28 @@ variable "spack_ref" {
   description = "Git ref to checkout for spack."
   type        = string
   default     = "v0.20.0"
+}
+
+variable "chown_owner" {
+  description = "Owner to chown the Spack clone to. Default will not modify the clone."
+  default     = null
+  type        = string
+}
+
+variable "chgrp_group" {
+  description = "Group to chgrp the Spack clone to. Default will not modify the clone."
+  default     = null
+  type        = string
+}
+
+variable "chmod_mode" {
+  description = <<-EOT
+    Mode to chmod the Spack clone to. Defaults to null (i.e. do not modify).
+    For usage information see:
+    https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode
+    EOT
+  default     = "a+rwxs"
+  type        = string
 }
 
 variable "spack_virtualenv_path" {
