@@ -52,12 +52,10 @@ locals {
   hostnames = var.spot ? "${var.deployment_name}-spot-xp" : "${var.deployment_name}-xp"
 }
 
-
 data "google_compute_image" "htcondor" {
   family  = var.instance_image.family
   project = var.instance_image.project
 }
-
 
 module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
@@ -76,6 +74,11 @@ module "execute_point_instance_template" {
   startup_script = local.is_windows_image ? null : var.startup_script
   metadata       = local.metadata
   source_image   = data.google_compute_image.htcondor.self_link
+}
+
+data "google_compute_zones" "available" {
+  project = var.project_id
+  region  = var.region
 }
 
 module "mig" {
@@ -103,4 +106,17 @@ module "mig" {
     host                = ""
     enable_logging      = true
   }
+
+  update_policy = [{
+    instance_redistribution_type = "NONE"
+    replacement_method           = "SUBSTITUTE"
+    max_surge_fixed              = length(data.google_compute_zones.available.names)
+    max_unavailable_fixed        = length(data.google_compute_zones.available.names)
+    max_surge_percent            = null
+    max_unavailable_percent      = null
+    min_ready_sec                = 300
+    minimal_action               = "REPLACE"
+    type                         = "OPPORTUNISTIC"
+  }]
+
 }
