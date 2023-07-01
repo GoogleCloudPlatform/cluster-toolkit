@@ -22,7 +22,7 @@ django-extensions==3.2.3
 djangorestframework==3.14.0
 filelock==3.12.2
 google-api-core==2.11.1
-google-api-python-client==2.90.0
+google-api-python-client==2.91.0
 google-auth==2.20.0
 google-auth-httplib2==0.1.0
 google-cloud-billing==1.11.0
