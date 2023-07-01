@@ -76,7 +76,7 @@ tomlkit==0.11.8
 typing-inspect==0.9.0
 typing_extensions==4.6.3
 uritemplate==4.1.1
-urllib3==1.26.16
+urllib3==2.0.3
 uvicorn==0.22.0
 virtualenv==20.23.1
 wrapt==1.15.0
