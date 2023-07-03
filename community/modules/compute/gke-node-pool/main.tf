@@ -85,7 +85,7 @@ resource "google_container_node_pool" "node_pool" {
     guest_accelerator = var.guest_accelerator
 
     ephemeral_storage_local_ssd_config {
-      local_ssd_count = var.ephemeral_storage_local_ssd_count
+      local_ssd_count = var.local_ssd_count_ephemeral_storage
     }
 
     shielded_instance_config {

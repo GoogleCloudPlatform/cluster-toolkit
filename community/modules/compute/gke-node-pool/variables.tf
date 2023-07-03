@@ -80,7 +80,7 @@ variable "image_type" {
   default     = "COS_CONTAINERD"
 }
 
-variable "ephemeral_storage_local_ssd_count" {
+variable "local_ssd_count_ephemeral_storage" {
   description = <<-EOT
   The number of local SSDs to attach to each node to back ephemeral storage.  
   Uses NVMe interfaces.  Must be supported by `machine_type` - see 
