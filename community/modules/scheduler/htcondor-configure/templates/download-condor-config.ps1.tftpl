@@ -1,15 +1,18 @@
+gcloud secrets versions access latest --secret ${xp_idtoken_secret_id} `
+    --out-file C:\condor\tokens.d\condor@${trust_domain}
+
 $remote_hash = gcloud --format="value(md5_hash)" storage hash ${config_object}
 
 # custom install location are not supported in Windows
 $config_file = "C:\condor\condor_config.local"
 if (Test-Path -Path $config_file -PathType Leaf) {
-  $local_hash = gcloud --format="value(md5_hash)" storage hash $config_file
+    $local_hash = gcloud --format="value(md5_hash)" storage hash $config_file
 } else {
-  $local_hash = "INVALID-HASH"
+    $local_hash = "INVALID-HASH"
 }
 
 if ($local_hash -cne $remote_hash) {
-  Write-Output "Updating condor configuration"
-  gcloud storage cp ${config_object} $config_file
-  condor_reconfig.exe
+    Write-Output "Updating condor configuration"
+    gcloud storage cp ${config_object} $config_file
+    Restart-Service condor
 }
