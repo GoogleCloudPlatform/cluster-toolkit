@@ -230,5 +230,16 @@ resource "google_compute_instance" "compute_vm" {
     ignore_changes = [
       metadata["ssh-keys"],
     ]
+
+    precondition {
+      condition     = (length(var.network_interfaces) == 0) != (var.network_self_link == null && var.subnetwork_self_link == null)
+      error_message = "Exactly one of network_interfaces or network_self_link/subnetwork_self_link must be specified."
+    }
+
+    precondition {
+      condition     = (var.network_self_link == null || var.subnetwork_self_link == null)
+      error_message = "Exactly one of var.network_self_link or var.subnetwork_self_link must be specified."
+      # Similiar check for var.network_interfaces is performed by variable validation block
+    }
   }
 }
