@@ -251,6 +251,19 @@ m2:
 	}
 }
 
+func TestDicWrongTypeUnmarshalYAML(t *testing.T) {
+	yml := `
+17`
+	var d Dict
+	err := yaml.Unmarshal([]byte(yml), &d)
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+	if diff := cmp.Diff(err.Error(), "line 2: must be a mapping, got number"); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
 func TestDictMarshalYAML(t *testing.T) {
 	d := Dict{}
 	d.
@@ -312,6 +325,29 @@ zebra: *passtime
 		t.Fatalf("failed to decode: %v", err)
 	}
 	if diff := cmp.Diff(want.Items(), got.Items(), ctydebug.CmpOptions); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestYAMLValueUnmarshalNil(t *testing.T) {
+	yml := `
+a:
+b: null
+c: ~
+d: "null"
+`
+	want := cty.ObjectVal(map[string]cty.Value{
+		"a": cty.NilVal,
+		"b": cty.NilVal,
+		"c": cty.NilVal,
+		"d": cty.StringVal("null"),
+	})
+
+	var got YamlValue
+	if err := yaml.Unmarshal([]byte(yml), &got); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if diff := cmp.Diff(want, got.Unwrap(), ctydebug.CmpOptions); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }
