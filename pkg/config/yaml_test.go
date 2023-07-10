@@ -251,7 +251,7 @@ m2:
 	}
 }
 
-func TestDicWrongTypeUnmarshalYAML(t *testing.T) {
+func TestDictWrongTypeUnmarshalYAML(t *testing.T) {
 	yml := `
 17`
 	var d Dict

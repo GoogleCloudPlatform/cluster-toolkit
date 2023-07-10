@@ -49,7 +49,7 @@ deployment_groups:
         auto_delete: true
         boot: false
       - device_name: test-disk-2
-        disk_name: {}
+        disk_name: null
         disk_size_gb: 375
         disk_type: local-ssd
         disk_labels: {}
