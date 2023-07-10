@@ -32,6 +32,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/hashicorp/go-getter"
 )
 
 // strings that get re-used throughout this package and others
@@ -78,13 +80,7 @@ func factory(kind string) ModuleWriter {
 
 // WriteDeployment writes a deployment directory using modules defined the
 // environment blueprint.
-func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag bool) error {
-	deploymentName, err := dc.Config.DeploymentName()
-	if err != nil {
-		return err
-	}
-	deploymentDir := filepath.Join(outputDir, deploymentName)
-
+func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwriteFlag bool) error {
 	overwrite := isOverwriteAllowed(deploymentDir, &dc.Config, overwriteFlag)
 	if err := prepDepDir(deploymentDir, overwrite); err != nil {
 		return err
@@ -98,8 +94,7 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		return err
 	}
 
-	advancedDeployInstructions := filepath.Join(deploymentDir, "instructions.txt")
-	f, err := os.Create(advancedDeployInstructions)
+	f, err := os.Create(InstructionsPath(deploymentDir))
 	if err != nil {
 		return err
 	}
@@ -133,17 +128,12 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 			}
 		}
 	}
-
-	fmt.Println("To deploy your infrastructure please run:")
-	fmt.Println()
-	fmt.Printf("./ghpc deploy %s\n", deploymentDir)
-	fmt.Println()
-	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
-	fmt.Println("deployment instructions at:")
-	fmt.Println()
-	fmt.Printf("%s\n", f.Name())
-
 	return nil
+}
+
+// InstructionsPath returns the path to the instructions file for a deployment
+func InstructionsPath(deploymentDir string) string {
+	return filepath.Join(deploymentDir, "instructions.txt")
 }
 
 func createGroupDirs(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
@@ -160,7 +150,7 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 	return nil
 }
 
-// Get module source within deployment group
+// DeploymentSource returns module source within deployment group
 // Rules are following:
 //   - git source
 //     => keep the same source
@@ -170,22 +160,27 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 //     => ./modules/embedded/<source>
 //   - other
 //     => ./modules/<basename(source)>-<hash(abs(source))>
-func deploymentSource(mod config.Module) (string, error) {
-	if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
-		return mod.Source, nil
+func DeploymentSource(mod config.Module) (string, error) {
+	if mod.Kind != config.PackerKind && mod.Kind != config.TerraformKind {
+		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
+	}
+	if sourcereader.IsGitPath(mod.Source) {
+		switch mod.Kind {
+		case config.TerraformKind:
+			return mod.Source, nil
+		case config.PackerKind:
+			_, subDir := getter.SourceDirSubdir(mod.Source)
+			return filepath.Join(string(mod.ID), subDir), nil
+		}
 	}
 	if mod.Kind == config.PackerKind {
 		return string(mod.ID), nil
 	}
-	if mod.Kind != config.TerraformKind {
-		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
-	}
-
 	if sourcereader.IsEmbeddedPath(mod.Source) {
 		return "./modules/" + filepath.Join("embedded", mod.Source), nil
 	}
 	if !sourcereader.IsLocalPath(mod.Source) {
-		return "", fmt.Errorf("unuexpected module source %s", mod.Source)
+		return "", fmt.Errorf("unexpected module source %s", mod.Source)
 	}
 
 	abs, err := filepath.Abs(mod.Source)
@@ -225,11 +220,6 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 		var copyEmbedded = false
 		for iMod := range grp.Modules {
 			mod := &grp.Modules[iMod]
-			ds, err := deploymentSource(*mod)
-			if err != nil {
-				return err
-			}
-			mod.DeploymentSource = ds
 
 			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
 				continue // do not download
@@ -239,14 +229,33 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 				copyEmbedded = true
 				continue // all embedded terraform modules fill be copied at once
 			}
+
 			/* Copy source files */
-			dst := filepath.Join(basePath, mod.DeploymentSource)
+			var modPath string
+			var dst string
+			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.PackerKind {
+				modPath, _ = getter.SourceDirSubdir(mod.Source)
+				dst = filepath.Join(basePath, string(mod.ID))
+
+			} else {
+				modPath = mod.Source
+				ds, err := DeploymentSource(*mod)
+				if err != nil {
+					return err
+				}
+				dst = filepath.Join(basePath, ds)
+			}
 			if _, err := os.Stat(dst); err == nil {
 				continue
 			}
-			reader := sourcereader.Factory(mod.Source)
-			if err := reader.GetModule(mod.Source, dst); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, dst, err)
+			reader := sourcereader.Factory(modPath)
+			if err := reader.GetModule(modPath, dst); err != nil {
+				return fmt.Errorf("failed to get module from %s to %s: %v", modPath, dst, err)
+			}
+			// remove .git directory if one exists; we do not want submodule
+			// git history in deployment directory
+			if err := os.RemoveAll(filepath.Join(dst, ".git")); err != nil {
+				return err
 			}
 		}
 		if copyEmbedded {

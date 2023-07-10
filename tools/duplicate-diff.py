@@ -43,7 +43,12 @@ duplicates = [
     ],
     [
         "community/modules/compute/gke-node-pool/threads_per_core_calc.tf",
-        "modules/compute/vm-instance/threads_per_core_calc.tf"
+        "modules/compute/vm-instance/threads_per_core_calc.tf",
+    ],
+    [
+        "community/modules/compute/schedmd-slurm-gcp-v5-node-group/source_image_logic.tf",
+        "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/source_image_logic.tf",
+        "community/modules/scheduler/schedmd-slurm-gcp-v5-login/source_image_logic.tf",
     ],
 ]
 

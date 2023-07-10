@@ -184,12 +184,15 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_additional_subnetworks"></a> [additional\_subnetworks](#input\_additional\_subnetworks) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `list(map(string))` | `null` | no |
+| <a name="input_allowed_ssh_ip_ranges"></a> [allowed\_ssh\_ip\_ranges](#input\_allowed\_ssh\_ip\_ranges) | A list of CIDR IP ranges from which to allow ssh access | `list(string)` | `[]` | no |
 | <a name="input_default_primary_subnetwork_size"></a> [default\_primary\_subnetwork\_size](#input\_default\_primary\_subnetwork\_size) | The size, in CIDR bits, of the default primary subnetwork unless explicitly defined in var.subnetworks | `number` | `15` | no |
 | <a name="input_delete_default_internet_gateway_routes"></a> [delete\_default\_internet\_gateway\_routes](#input\_delete\_default\_internet\_gateway\_routes) | If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_enable_iap_rdp_ingress"></a> [enable\_iap\_rdp\_ingress](#input\_enable\_iap\_rdp\_ingress) | Enable a firewall rule to allow Windows Remote Desktop Protocol access using IAP tunnels | `bool` | `false` | no |
 | <a name="input_enable_iap_ssh_ingress"></a> [enable\_iap\_ssh\_ingress](#input\_enable\_iap\_ssh\_ingress) | Enable a firewall rule to allow SSH access using IAP tunnels | `bool` | `true` | no |
+| <a name="input_enable_iap_winrm_ingress"></a> [enable\_iap\_winrm\_ingress](#input\_enable\_iap\_winrm\_ingress) | Enable a firewall rule to allow Windows Remote Management (WinRM) access using IAP tunnels | `bool` | `false` | no |
 | <a name="input_enable_internal_traffic"></a> [enable\_internal\_traffic](#input\_enable\_internal\_traffic) | Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network | `bool` | `true` | no |
+| <a name="input_extra_iap_ports"></a> [extra\_iap\_ports](#input\_extra\_iap\_ports) | A list of TCP ports for which to create firewall rules that enable IAP for TCP forwarding (use dedicated enable\_iap variables for standard ports) | `list(string)` | `[]` | no |
 | <a name="input_firewall_rules"></a> [firewall\_rules](#input\_firewall\_rules) | List of firewall rules | `any` | `[]` | no |
 | <a name="input_ips_per_nat"></a> [ips\_per\_nat](#input\_ips\_per\_nat) | The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT) | `number` | `2` | no |
 | <a name="input_mtu"></a> [mtu](#input\_mtu) | The network MTU (default: 8896). Recommended values: 0 (use Compute Engine default), 1460 (default outside HPC environments), 1500 (Internet default), or 8896 (for Jumbo packets). Allowed are all values in the range 1300 to 8896, inclusively. | `number` | `8896` | no |

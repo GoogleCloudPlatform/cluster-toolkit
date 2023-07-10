@@ -18,6 +18,7 @@ package cmd
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"log"
 	"path/filepath"
@@ -48,7 +49,7 @@ var (
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
 		PreRunE:           parseDeployArgs,
-		RunE:              runDeployCmd,
+		Run:               runDeployCmd,
 		SilenceUsage:      true,
 	}
 )
@@ -72,40 +73,33 @@ func getApplyBehavior(autoApprove bool) shell.ApplyBehavior {
 	return shell.PromptBeforeApply
 }
 
-func runDeployCmd(cmd *cobra.Command, args []string) error {
+func runDeployCmd(cmd *cobra.Command, args []string) {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return err
-	}
-
-	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
-		return err
-	}
+	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	cobra.CheckErr(err)
+	cobra.CheckErr(shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot))
 
 	for _, group := range dc.Config.DeploymentGroups {
 		groupDir := filepath.Join(deploymentRoot, string(group.Name))
-		if err = shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile); err != nil {
-			return err
-		}
+		cobra.CheckErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
 
 		var err error
 		switch group.Kind {
 		case config.PackerKind:
 			// Packer groups are enforced to have length 1
-			moduleDir := filepath.Join(groupDir, string(group.Modules[0].ID))
+			subPath, e := modulewriter.DeploymentSource(group.Modules[0])
+			cobra.CheckErr(e)
+			moduleDir := filepath.Join(groupDir, subPath)
 			err = deployPackerGroup(moduleDir)
 		case config.TerraformKind:
 			err = deployTerraformGroup(groupDir)
 		default:
 			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind.String())
 		}
-		if err != nil {
-			return err
-		}
-
+		cobra.CheckErr(err)
 	}
-	return nil
+	fmt.Println("\n###############################")
+	printAdvancedInstructionsMessage(deploymentRoot)
 }
 
 func deployPackerGroup(moduleDir string) error {

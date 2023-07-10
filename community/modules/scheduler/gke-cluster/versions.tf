@@ -26,6 +26,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.19.1"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.20.0"
   }
 }

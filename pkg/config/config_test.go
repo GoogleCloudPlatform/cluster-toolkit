@@ -61,10 +61,9 @@ deployment_groups:
 `)
 	testModules = []Module{
 		{
-			Source:           "./modules/network/vpc",
-			Kind:             TerraformKind,
-			ID:               "vpc",
-			WrapSettingsWith: make(map[string][]string),
+			Source: "./modules/network/vpc",
+			Kind:   TerraformKind,
+			ID:     "vpc",
 			Settings: NewDict(map[string]cty.Value{
 				"network_name": cty.StringVal("$\"${var.deployment_name}_net\""),
 				"project_id":   cty.StringVal("project_name"),
@@ -165,18 +164,14 @@ func setTestModuleInfo(mod Module, info modulereader.ModuleInfo) {
 
 func getDeploymentConfigForTest() DeploymentConfig {
 	testModule := Module{
-		Source:           "testSource",
-		Kind:             TerraformKind,
-		ID:               "testModule",
-		Use:              []ModuleID{},
-		WrapSettingsWith: make(map[string][]string),
+		Source: "testSource",
+		Kind:   TerraformKind,
+		ID:     "testModule",
 	}
 	testModuleWithLabels := Module{
-		Source:           "./role/source",
-		ID:               "testModuleWithLabels",
-		Kind:             TerraformKind,
-		Use:              []ModuleID{},
-		WrapSettingsWith: make(map[string][]string),
+		Source: "./role/source",
+		ID:     "testModuleWithLabels",
+		Kind:   TerraformKind,
 		Settings: NewDict(map[string]cty.Value{
 			"moduleLabel": cty.StringVal("moduleLabelValue"),
 		}),
@@ -187,7 +182,6 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	}
 	testBlueprint := Blueprint{
 		BlueprintName: "simple",
-		Validators:    nil,
 		Vars: NewDict(map[string]cty.Value{
 			"deployment_name": cty.StringVal("deployment_name"),
 			"project_id":      cty.StringVal("test-project"),
@@ -204,8 +198,7 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	setTestModuleInfo(testModule, testModuleInfo)
 	setTestModuleInfo(testModuleWithLabels, testModuleInfo)
 
-	// the next two steps simulate relevant steps in ghpc expand
-	dc.addMetadataToModules()
+	// the next step simulates relevant step in ghpc expand
 	dc.addDefaultValidators()
 
 	return dc
@@ -224,6 +217,7 @@ func getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 			},
 		},
 	}
+
 	return DeploymentConfig{
 		Config: Blueprint{
 			BlueprintName:    "simple",
@@ -322,7 +316,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 			matchingIntragroupName1: cty.StringVal("explicit-intra-value"),
 			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsExpression().AsValue(),
 		}),
-		Use: []ModuleID{mod0.ID},
+		Use: ModuleIDs{mod0.ID},
 	}
 	setTestModuleInfo(mod1, testModuleInfo1)
 
@@ -335,7 +329,7 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		ID:     "TestModule2",
 		Kind:   TerraformKind,
 		Source: testModuleSource2,
-		Use:    []ModuleID{mod0.ID},
+		Use:    ModuleIDs{mod0.ID},
 	}
 	setTestModuleInfo(mod2, testModuleInfo2)
 
@@ -356,7 +350,6 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 		},
 	}
 
-	dc.addMetadataToModules()
 	dc.addDefaultValidators()
 	return dc
 }
@@ -393,20 +386,25 @@ func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 // config.go
 func (s *MySuite) TestExpandConfig(c *C) {
 	dc := getBasicDeploymentConfigWithTestModule()
-	dc.ExpandConfig()
+	for v := range dc.getValidators() { // skip all validators
+		dc.Config.Validators = append(
+			dc.Config.Validators,
+			validatorConfig{Validator: v, Skip: true})
+	}
+	c.Check(dc.ExpandConfig(), IsNil)
 }
 
 func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 	{ // Duplicate module name same group
 		g := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}, {ID: "pony"}}}
 		err := checkModulesAndGroups([]DeploymentGroup{g})
-		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
+		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
 	{ // Duplicate module name different groups
 		ice := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}}}
 		fire := DeploymentGroup{Name: "fire", Modules: []Module{{ID: "pony"}}}
 		err := checkModulesAndGroups([]DeploymentGroup{ice, fire})
-		c.Check(err, ErrorMatches, "module IDs must be unique: pony used more than once")
+		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
 	{ // Mixing module kinds
 		g := DeploymentGroup{Name: "ice", Modules: []Module{
@@ -414,32 +412,32 @@ func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 			{ID: "zebra", Kind: TerraformKind},
 		}}
 		err := checkModulesAndGroups([]DeploymentGroup{g})
-		c.Check(err, ErrorMatches, "mixing modules of differing kinds in a deployment group is not supported: deployment group ice, got packer and terraform")
+		c.Check(err, ErrorMatches, ".*got packer and terraform")
 	}
 }
 
 func (s *MySuite) TestListUnusedModules(c *C) {
 	{ // No modules in "use"
 		m := Module{ID: "m"}
-		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{})
+		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{})
 	}
 
 	{ // Useful
 		m := Module{
 			ID:  "m",
-			Use: []ModuleID{"w"},
+			Use: ModuleIDs{"w"},
 			Settings: NewDict(map[string]cty.Value{
-				"x": cty.True.Mark(ProductOfModuleUse{"w"})})}
-		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{})
+				"x": AsProductOfModuleUse(cty.True, "w")})}
+		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{})
 	}
 
 	{ // Unused
 		m := Module{
 			ID:  "m",
-			Use: []ModuleID{"w", "u"},
+			Use: ModuleIDs{"w", "u"},
 			Settings: NewDict(map[string]cty.Value{
-				"x": cty.True.Mark(ProductOfModuleUse{"w"})})}
-		c.Check(m.listUnusedModules(), DeepEquals, []ModuleID{"u"})
+				"x": AsProductOfModuleUse(cty.True, "w")})}
+		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{"u"})
 	}
 }
 
@@ -518,7 +516,7 @@ func (s *MySuite) TestGetModule(c *C) {
 
 func (s *MySuite) TestDeploymentName(c *C) {
 	bp := Blueprint{}
-	var e *InputValueError
+	var e InputValueError
 
 	// Is deployment_name a valid string?
 	bp.Vars.Set("deployment_name", cty.StringVal("yellow"))
@@ -565,7 +563,7 @@ func (s *MySuite) TestDeploymentName(c *C) {
 
 func (s *MySuite) TestCheckBlueprintName(c *C) {
 	dc := getDeploymentConfigForTest()
-	var e *InputValueError
+	var e InputValueError
 
 	// Is blueprint_name a valid string?
 	err := dc.Config.checkBlueprintName()
@@ -601,21 +599,21 @@ func (s *MySuite) TestNewBlueprint(c *C) {
 	dc := getDeploymentConfigForTest()
 	outFile := filepath.Join(tmpTestDir, "out_TestNewBlueprint.yaml")
 	c.Assert(dc.ExportBlueprint(outFile), IsNil)
-	newDC, err := NewDeploymentConfig(outFile)
+	newDC, _, err := NewDeploymentConfig(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(dc.Config, DeepEquals, newDC.Config)
 }
 
 func (s *MySuite) TestImportBlueprint(c *C) {
-	obtainedBlueprint, err := importBlueprint(simpleYamlFilename)
+	bp, _, err := importBlueprint(simpleYamlFilename)
 	c.Assert(err, IsNil)
-	c.Assert(obtainedBlueprint.BlueprintName,
+	c.Assert(bp.BlueprintName,
 		Equals, expectedSimpleBlueprint.BlueprintName)
 	c.Assert(
-		obtainedBlueprint.Vars.Get("labels"),
+		bp.Vars.Get("labels"),
 		DeepEquals,
 		expectedSimpleBlueprint.Vars.Get("labels"))
-	c.Assert(obtainedBlueprint.DeploymentGroups[0].Modules[0].ID,
+	c.Assert(bp.DeploymentGroups[0].Modules[0].ID,
 		Equals, expectedSimpleBlueprint.DeploymentGroups[0].Modules[0].ID)
 }
 
@@ -725,7 +723,7 @@ dragon: "Lews Therin Telamon"`)
 	file.Close()
 
 	// should fail on strict unmarshal as field does not match schema
-	_, err := importBlueprint(filename)
+	_, _, err := importBlueprint(filename)
 	c.Check(err, NotNil)
 }
 
@@ -1036,4 +1034,24 @@ func (s *MySuite) TestCheckModuleSettings(c *C) {
 
 	bp.Vars.Set("zebra", cty.StringVal("stripes"))
 	c.Check(checkModuleSettings(bp), IsNil)
+}
+
+func (s *MySuite) TestGroupNameValidate(c *C) {
+	// Invalid
+	c.Check(GroupName("").Validate(), NotNil)
+	c.Check(GroupName("-").Validate(), NotNil)
+	c.Check(GroupName("-g").Validate(), NotNil)
+	c.Check(GroupName("g-").Validate(), NotNil)
+	c.Check(GroupName("g+").Validate(), NotNil)
+	c.Check(GroupName("a b").Validate(), NotNil)
+
+	// Valid
+	c.Check(GroupName("g").Validate(), IsNil)
+	c.Check(GroupName("gg").Validate(), IsNil)
+	c.Check(GroupName("_g").Validate(), IsNil)
+	c.Check(GroupName("g_dd").Validate(), IsNil)
+	c.Check(GroupName("g_dd-ff").Validate(), IsNil)
+	c.Check(GroupName("g-dd_ff").Validate(), IsNil)
+	c.Check(GroupName("1").Validate(), IsNil)
+	c.Check(GroupName("12g").Validate(), IsNil)
 }

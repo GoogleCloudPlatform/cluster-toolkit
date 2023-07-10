@@ -122,6 +122,6 @@ func (s *MySuite) TestGetModule_Local(c *C) {
 	// Invalid: Unsupported Module Source by LocalSourceReader
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	err = reader.GetModule(badSource, dest)
-	expectedErr = "Source is not valid: .*"
+	expectedErr = "source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }

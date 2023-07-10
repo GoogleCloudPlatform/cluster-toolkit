@@ -16,8 +16,11 @@
  */
 
 locals {
-  # Default to value in partition_conf if both set "Default"
-  partition_conf = merge(var.is_default == true ? { "Default" : "YES" } : {}, var.partition_conf)
+  # Default to value in partition_conf if both set the same key
+  partition_conf = merge({
+    "Default"     = var.is_default ? "YES" : null,
+    "SuspendTime" = "INFINITE"
+  }, var.partition_conf)
 
   # Since deployment name may be used to create a cluster name, we remove any invalid character from the beginning
   # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
@@ -26,7 +29,7 @@ locals {
 }
 
 module "slurm_partition" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=5.7.3"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=5.7.4"
 
   slurm_cluster_name   = local.slurm_cluster_name
   enable_job_exclusive = var.exclusive

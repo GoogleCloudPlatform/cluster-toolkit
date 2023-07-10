@@ -18,9 +18,25 @@ locals {
   image_name_default = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
   image_name         = var.image_name != null ? var.image_name : local.image_name_default
 
+  # default to explicit var.communicator, otherwise in-order: ssh/winrm/none
+  shell_script_communicator      = length(var.shell_scripts) > 0 ? "ssh" : ""
+  ansible_playbook_communicator  = length(var.ansible_playbooks) > 0 ? "ssh" : ""
+  powershell_script_communicator = length(var.windows_startup_ps1) > 0 ? "winrm" : ""
+  communicator = coalesce(
+    var.communicator,
+    local.shell_script_communicator,
+    local.ansible_playbook_communicator,
+    local.powershell_script_communicator,
+    "none"
+  )
+
+  # must not enable IAP when no communicator is in use
+  use_iap = local.communicator == "none" ? false : var.use_iap
+
   # construct metadata from startup_script and metadata variables
   startup_script_metadata = var.startup_script == null ? {} : { startup-script = var.startup_script }
-  user_management_metadata = {
+
+  linux_user_metadata = {
     block-project-ssh-keys = "TRUE"
     shutdown-script        = <<-EOT
       #!/bin/bash
@@ -28,22 +44,20 @@ locals {
       sed -i '/${var.ssh_username}/d' /var/lib/google/google_users
     EOT
   }
+  windows_packer_user = "packer_user"
+  windows_user_metadata = {
+    sysprep-specialize-script-cmd = "winrm quickconfig -quiet & net user /add ${local.windows_packer_user} & net localgroup administrators ${local.windows_packer_user} /add & winrm set winrm/config/service/auth @{Basic=\\\"true\\\"}"
+    windows-shutdown-script-cmd   = "net user /delete ${local.windows_packer_user}"
+  }
+  user_metadata = local.communicator == "winrm" ? local.windows_user_metadata : local.linux_user_metadata
 
   # merge metadata such that var.metadata always overrides user management
   # metadata but always allow var.startup_script to override var.metadata
   metadata = merge(
-    local.user_management_metadata,
+    local.user_metadata,
     var.metadata,
     local.startup_script_metadata,
   )
-
-  # determine communicator to use and whether to enable Identity-Aware Proxy
-  no_shell_scripts     = length(var.shell_scripts) == 0
-  no_ansible_playbooks = length(var.ansible_playbooks) == 0
-  no_provisioners      = local.no_shell_scripts && local.no_ansible_playbooks
-  communicator_default = local.no_provisioners ? "none" : "ssh"
-  communicator         = var.communicator == null ? local.communicator_default : var.communicator
-  use_iap              = local.communicator == "none" ? false : var.use_iap
 
   # determine best value for on_host_maintenance if not supplied by user
   machine_vals                = split("-", var.machine_type)
@@ -55,6 +69,12 @@ locals {
     ? var.on_host_maintenance
     : local.on_host_maintenance_default
   )
+
+  accelerator_type = var.accelerator_type == null ? null : "projects/${var.project_id}/zones/${var.zone}/acceleratorTypes/${var.accelerator_type}"
+
+  winrm_username = local.communicator == "winrm" ? "packer_user" : null
+  winrm_insecure = local.communicator == "winrm" ? true : null
+  winrm_use_ssl  = local.communicator == "winrm" ? true : null
 }
 
 source "googlecompute" "toolkit_image" {
@@ -64,10 +84,11 @@ source "googlecompute" "toolkit_image" {
   image_family            = local.image_family
   image_labels            = var.labels
   machine_type            = var.machine_type
-  accelerator_type        = var.accelerator_type
+  accelerator_type        = local.accelerator_type
   accelerator_count       = var.accelerator_count
   on_host_maintenance     = local.on_host_maintenance
   disk_size               = var.disk_size
+  disk_type               = var.disk_type
   omit_external_ip        = var.omit_external_ip
   use_internal_ip         = var.omit_external_ip
   subnetwork              = var.subnetwork_name
@@ -80,6 +101,9 @@ source "googlecompute" "toolkit_image" {
   tags                    = var.tags
   use_iap                 = local.use_iap
   use_os_login            = var.use_os_login
+  winrm_username          = local.winrm_username
+  winrm_insecure          = local.winrm_insecure
+  winrm_use_ssl           = local.winrm_use_ssl
   zone                    = var.zone
   labels                  = var.labels
   metadata                = local.metadata
@@ -104,6 +128,15 @@ build {
     content {
       execute_command = "sudo -H sh -c '{{ .Vars }} {{ .Path }}'"
       script          = provisioner.value
+    }
+  }
+
+  # provisioner "powershell" blocks
+  dynamic "provisioner" {
+    labels   = ["powershell"]
+    for_each = var.windows_startup_ps1
+    content {
+      inline = split("\n", provisioner.value)
     }
   }
 

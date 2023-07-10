@@ -1,0 +1,23 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'zero' was successfully created in directory golden_copy_deployment/zero
+To deploy, run the following commands:
+
+terraform -chdir=golden_copy_deployment/zero init
+terraform -chdir=golden_copy_deployment/zero validate
+terraform -chdir=golden_copy_deployment/zero apply
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Automated
+---------
+
+./ghpc destroy golden_copy_deployment
+
+Advanced / Manual
+-----------------
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=golden_copy_deployment/zero destroy

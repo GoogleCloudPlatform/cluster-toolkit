@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.3
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.4
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -98,7 +98,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     family  = "slurm-gcp-5-7-hpc-centos-7"
-    project = "projects/schedmd-slurm-public/global/images/family"
+    project = "schedmd-slurm-public"
   }
 
   validation {
@@ -166,7 +166,7 @@ variable "disk_labels" {
 }
 
 variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes."
+  description = "Configurations of additional disks to be included on the partition nodes. (do not use \"disk_type: local-ssd\"; known issue being addressed)"
   type = list(object({
     disk_name    = string
     device_name  = string

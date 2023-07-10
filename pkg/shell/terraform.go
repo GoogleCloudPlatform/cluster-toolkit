@@ -288,7 +288,7 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
 	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
 
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
@@ -334,8 +334,12 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		packerGroup := dc.Config.DeploymentGroups[thisGroupIdx]
 		// Packer groups are enforced to have length 1
 		packerModule := packerGroup.Modules[0]
-		moduleID := string(packerModule.ID)
-		outfile = filepath.Join(deploymentGroupDir, moduleID, fmt.Sprintf("%s_inputs.auto.pkrvars.hcl", moduleID))
+		modPath, err := modulewriter.DeploymentSource(packerModule)
+		if err != nil {
+			return err
+		}
+		outfile = filepath.Join(deploymentGroupDir, modPath,
+			fmt.Sprintf("%s_inputs.auto.pkrvars.hcl", packerModule.ID))
 
 		// evaluate Packer settings that contain intergroup references in the
 		// context of deployment variables and intergroup output values

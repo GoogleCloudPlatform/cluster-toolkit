@@ -182,7 +182,7 @@ No resources.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `number` | `100` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
-| <a name="input_image"></a> [image](#input\_image) | HTCondor execute point VM image | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | HTCondor execute point VM image | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-rocky-linux-8",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to HTConodr execute points | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor execute points | `string` | `"n2-standard-4"` | no |
 | <a name="input_max_size"></a> [max\_size](#input\_max\_size) | Maximum size of the HTCondor execute point pool. | `number` | `100` | no |

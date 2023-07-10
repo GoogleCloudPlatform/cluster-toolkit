@@ -185,42 +185,28 @@ terraform -chdir=hpc-intel-select/primary destroy
 ## DAOS Cluster
 
 The [pfs-daos.yaml](pfs-daos.yaml) blueprint describes an environment with
-- A [managed instance group][mig] with four DAOS server instances
-- A [managed instance group][mig] with two DAOS client instances
+- Two DAOS server instances
+- Two DAOS client instances
 
-For more information, please refer to the [Google Cloud DAOS repo on GitHub][google-cloud-daos].
-
-> **_NOTE:_** The [pre-deployment steps in the google-cloud-daos/README.md][pre-deployment] must be completed prior to running this HPC Toolkit example.
-
-[mig]: https://cloud.google.com/compute/docs/instance-groups
-[google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
-[pre-deployment]: https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps
+The [pfs-daos.yaml](pfs-daos.yaml) blueprint uses a Packer template and Terraform modules from the [Google Cloud DAOS][google-cloud-daos] repository.
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
 
 ### Initial Setup for DAOS Cluster
 
-Before provisioning any infrastructure in this project you should follow the
-Toolkit guidance to enable [APIs][apis] and establish minimum resource
-[quotas][quotas]. In particular, the following APIs should be enabled
+Before provisioning the DAOS cluster you must follow the steps listed in the [Google Cloud DAOS Pre-deployment Guide][pre-deployment_guide].
 
-- [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
-- [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
+Skip the "Build DAOS Images" step at the end of the [Pre-deployment Guide][pre-deployment_guide]. The [pfs-daos.yaml](pfs-daos.yaml) blueprint will build the images as part of the deployment.
 
-[apis]: ../../../README.md#enable-gcp-apis
-[quotas]: ../../../README.md#gcp-quotas
+The Pre-deployment Guide provides instructions for enabling service accounts, APIs, establishing minimum resource quotas and other necessary steps to prepare your project.
 
-The following available quota is required in the region used by the cluster:
-
-- C2 CPUs: 32 (16 per client node)
-- N2 CPUs: 144 (36 per server node)
-- PD-SSD: 120GB (20GB per client and server)
-- Local SSD: 4 \* 16 \* 375 = 24,000GB (6TB per server)
+[google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
+[pre-deployment_guide]: https://github.com/daos-stack/google-cloud-daos/blob/main/docs/pre-deployment_guide.md
 
 ### Deploy the DAOS Cluster
 
-Use `ghpc` to provision the blueprint
+After completing the steps in the [Pre-deployment Guide][pre-deployment_guide] use `ghpc` to provision the blueprint
 
 ```text
 ghpc create community/examples/intel/pfs-daos.yaml  \
@@ -228,18 +214,15 @@ ghpc create community/examples/intel/pfs-daos.yaml  \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
 
-This will create a set of directories containing Terraform modules and Packer
-templates.
+This will create the deployment directory containing Terraform modules and
+Packer templates. The `--backend-config` option is not required but recommended.
+It will save the terraform state in a pre-existing [Google Cloud Storage
+bucket][bucket]. For more information see [Setting up a remote terraform
+state][backend]. Use `ghpc deploy` to provision your DAOS storage cluster:
 
-The `--backend-config` option is not required but recommended. It will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket]. For more information see [Setting up a remote terraform state][backend].
-
-Follow `ghpc` instructions to deploy the environment
-
-  ```shell
-  terraform -chdir=pfs-daos/primary init
-  terraform -chdir=pfs-daos/primary validate
-  terraform -chdir=pfs-daos/primary apply
-  ```
+```text
+ghpc deploy pfs-daos --auto-approve
+```
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
 [bucket]: https://cloud.google.com/storage/docs/creating-buckets
@@ -366,9 +349,8 @@ The `cont1` container is now mounted on `${HOME}/daos/cont1`
 Create a 20GiB file which will be stored in the DAOS filesystem.
 
 ```bash
-pushd ${HOME}/daos/cont1
 time LD_PRELOAD=/usr/lib64/libioil.so \
-dd if=/dev/zero of=./test20GiB.img iflag=fullblock bs=1G count=20
+dd if=/dev/zero of="${HOME}/daos/cont1/test20GiB.img" iflag=fullblock bs=1G count=20
 ```
 
 See the [File System](https://docs.daos.io/v2.2/user/filesystem/) section of the DAOS User Guide for more information about DFuse.
@@ -396,7 +378,7 @@ See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.2/user/filesystem/?h=dfuse#d
 Delete the remaining infrastructure
 
 ```shell
-terraform -chdir=pfs-daos/primary destroy
+ghpc destroy pfs-daos --auto-approve
 ```
 
 ## DAOS Server with Slurm cluster
@@ -409,39 +391,35 @@ The blueprint uses modules from
 - [community/modules/scheduler/SchedMD-slurm-on-gcp-login-node][SchedMD-slurm-on-gcp-login-node]
 - [community/modules/compute/SchedMD-slurm-on-gcp-partition][SchedMD-slurm-on-gcp-partition]
 
-> **_NOTE:_** The [pre-deployment steps in the google-cloud-daos/README.md][pre-deployment] must be completed prior to running this HPC Toolkit example.
-
-[mig]: https://cloud.google.com/compute/docs/instance-groups
-[google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
-[pre-deployment]: https://github.com/daos-stack/google-cloud-daos#pre-deployment-steps
-[apis]: ../../../README.md#enable-gcp-apis
-[SchedMD-slurm-on-gcp-controller]: ../../modules/scheduler/SchedMD-slurm-on-gcp-controller
-[SchedMD-slurm-on-gcp-login-node]: ../../modules/scheduler/SchedMD-slurm-on-gcp-login-node
-[SchedMD-slurm-on-gcp-partition]: ../../modules/compute/SchedMD-slurm-on-gcp-partition
+The blueprint also uses a Packer template from the [Google Cloud DAOS][google-cloud-daos] repository.
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
 
 ### Initial Setup for the DAOS/Slurm cluster
 
-Before provisioning any infrastructure in this project you should follow the
-Toolkit guidance to enable [APIs][apis] and establish minimum resource
-[quotas][quotas]. In particular, the following APIs should be enabled
+Before provisioning the DAOS cluster you must follow the steps listed in the [Google Cloud DAOS Pre-deployment Guide][pre-deployment_guide].
 
-- [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
-- [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
+Skip the "Build DAOS Images" step at the end of the [Pre-deployment Guide][pre-deployment_guide]. The [hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) blueprint will build the DAOS server image as part of the deployment.
+
+The Pre-deployment Guide provides instructions for enabling service accounts, APIs, establishing minimum resource quotas and other necessary steps to prepare your project for DAOS server deployment.
+
+[google-cloud-daos]: https://github.com/daos-stack/google-cloud-daos
+[pre-deployment_guide]: https://github.com/daos-stack/google-cloud-daos/blob/main/docs/pre-deployment_guide.md
+
+[packer-template]: https://github.com/daos-stack/google-cloud-daos/blob/main/images/daos.pkr.hcl
+[apis]: ../../../README.md#enable-gcp-apis
+[SchedMD-slurm-on-gcp-controller]: ../../modules/scheduler/SchedMD-slurm-on-gcp-controller
+[SchedMD-slurm-on-gcp-login-node]: ../../modules/scheduler/SchedMD-slurm-on-gcp-login-node
+[SchedMD-slurm-on-gcp-partition]: ../../modules/compute/SchedMD-slurm-on-gcp-partition
+
+Follow the Toolkit guidance to enable [APIs][apis] and establish minimum resource [quotas][quotas] for Slurm.
 
 [apis]: ../../../README.md#enable-gcp-apis
 [quotas]: ../../../README.md#gcp-quotas
 
-And the following available quota is required in the region used by the cluster:
+The following available quota is required in the region used by Slurm:
 
-For DAOS:
-- N2 CPUs: 64 (16 per server node)
-- PD-SSD: 80GB (20GB per server)
-- Local SSD: 4 \* 4 \* 375 = 6,000GB (1.5TB per server)
-
-For Slurm:
 - Filestore: 2560GB
 - C2 CPUs: 6000 (fully-scaled "compute" partition)
   - This quota is not necessary at initial deployment, but will be required to
@@ -465,11 +443,9 @@ The `--backend-config` option is not required but recommended. It will save the 
 
 Follow `ghpc` instructions to deploy the environment
 
-  ```shell
-  terraform -chdir=daos-slurm/primary init
-  terraform -chdir=daos-slurm/primary validate
-  terraform -chdir=daos-slurm/primary apply
-  ```
+```text
+ghpc deploy daos-slurm --auto-approve
+```
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
 [bucket]: https://cloud.google.com/storage/docs/creating-buckets
@@ -609,5 +585,5 @@ have been shutdown and deleted by the Slurm autoscaler. Delete the remaining
 infrastructure with `terraform`:
 
 ```shell
-terraform -chdir=daos-slurm/primary destroy
+ghpc destroy daos-slurm --auto-approve
 ```

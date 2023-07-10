@@ -65,7 +65,7 @@ deployment_groups:
       machine_type: c2-standard-30
       instance_image:
         family: slurm-gcp-5-7-debian-11
-        project: projects/schedmd-slurm-public/global/images/family
+        project: schedmd-slurm-public
 
   - id: node_group2
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
@@ -74,7 +74,7 @@ deployment_groups:
       machine_type: c2-standard-60
       instance_image:
         name: slurm-gcp-dev-hpc-centos-7-1684970018
-        project: projects/schedmd-slurm-public/global/images
+        project: schedmd-slurm-public
 
   - id: node_group3
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
@@ -83,7 +83,7 @@ deployment_groups:
       machine_type: c2d-standard-112
       instance_image:
         family: slurm-gcp-5-7-hpc-centos-7
-        project: projects/schedmd-slurm-public/global/images/family
+        project: schedmd-slurm-public
       enable_smt: true
 
   - id: node_group4

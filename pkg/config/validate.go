@@ -28,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v3"
 )
 
@@ -50,24 +49,18 @@ func (err *InvalidSettingError) Error() string {
 }
 
 // validate is the top-level function for running the validation suite.
-func (dc DeploymentConfig) validate() {
-	// Drop the flags for log to improve readability only for running the validation suite
-	log.SetFlags(0)
-
+func (dc DeploymentConfig) validate() error {
 	// variables should be validated before running validators
 	if err := dc.executeValidators(); err != nil {
-		log.Fatal(err)
+		return err
 	}
-
 	if err := dc.validateModules(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err := dc.validateModuleSettings(); err != nil {
-		log.Fatal(err)
+		return err
 	}
-
-	// Set it back to the initial value
-	log.SetFlags(log.LstdFlags)
+	return nil
 }
 
 // performs validation of global variables
@@ -212,10 +205,6 @@ func validateModule(c Module) error {
 	return nil
 }
 
-func hasIllegalChars(name string) bool {
-	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
-}
-
 func validateOutputs(mod Module) error {
 	modInfo := mod.InfoOrDie()
 	// Only get the map if needed
@@ -322,67 +311,26 @@ func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) err
 	return allValidators
 }
 
-// The expected use case of this function is to merge blueprint requirements
-// that are maps from project_id to string slices containing APIs or IAM roles
-// required for provisioning. It will remove duplicate elements and ensure that
-// the output is sorted for easy visual and automatic comparison.
-// Solution: merge []string of new[key] into []string of base[key], removing
-// duplicate elements and sorting the result
-func mergeBlueprintRequirements(base map[string][]string, new map[string][]string) map[string][]string {
-	dest := make(map[string][]string)
-	maps.Copy(dest, base)
-
-	// sort each value in dest in-place to ensure output is sorted when new map
-	// does not contain all keys in base
-	for _, v := range dest {
-		slices.Sort(v)
-	}
-
-	for newProject, newRequirements := range new {
-		// this code is safe even if dest[newProject] has not yet been populated
-		dest[newProject] = append(dest[newProject], newRequirements...)
-		slices.Sort(dest[newProject])
-		dest[newProject] = slices.Compact(dest[newProject])
-	}
-	return dest
-}
-
 func (dc *DeploymentConfig) testApisEnabled(c validatorConfig) error {
 	if err := c.check(testApisEnabledName, []string{}); err != nil {
 		return err
 	}
 
-	requiredApis := make(map[string][]string)
-	for _, grp := range dc.Config.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			requiredApis = mergeBlueprintRequirements(requiredApis, mod.RequiredApis)
-		}
+	pv := dc.Config.Vars.Get("project_id")
+	if pv.Type() != cty.String {
+		return fmt.Errorf("the deployment variable `project_id` is either not set or is not a string")
 	}
 
-	var errored bool
-	for project, apis := range requiredApis {
-		if hasVariable(project) {
-			expr, err := SimpleVarToExpression(project)
-			if err != nil {
-				return err
-			}
-			v, err := expr.Eval(dc.Config)
-			if err != nil {
-				return err
-			}
-			if v.Type() != cty.String {
-				return fmt.Errorf("the deployment variable %s is not a string", project)
-			}
-			project = v.AsString()
+	apis := map[string]bool{}
+	dc.Config.WalkModules(func(m *Module) error {
+		for _, api := range m.InfoOrDie().RequiredApis {
+			apis[api] = true
 		}
-		err := validators.TestApisEnabled(project, apis)
-		if err != nil {
-			log.Println(err)
-			errored = true
-		}
-	}
+		return nil
+	})
 
-	if errored {
+	if err := validators.TestApisEnabled(pv.AsString(), maps.Keys(apis)); err != nil {
+		log.Println(err)
 		return fmt.Errorf(funcErrorMsgTemplate, testApisEnabledName.String())
 	}
 	return nil

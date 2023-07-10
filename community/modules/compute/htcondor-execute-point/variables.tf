@@ -65,14 +65,14 @@ variable "network_storage" {
   default = []
 }
 
-variable "image" {
+variable "instance_image" {
   description = "HTCondor execute point VM image"
   type = object({
     family  = string,
     project = string
   })
   default = {
-    family  = "hpc-centos-7"
+    family  = "hpc-rocky-linux-8"
     project = "cloud-hpc-image-public"
   }
 }

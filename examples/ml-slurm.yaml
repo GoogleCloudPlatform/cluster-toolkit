@@ -27,6 +27,14 @@ vars:
   new_image_family: ml-slurm
   disk_size_gb: 200
 
+# Recommended to use GCS backend for Terraform state
+# See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
+#
+# terraform_backend_defaults:
+#  type: gcs
+#  configuration:
+#    bucket: <<BUCKET_NAME>>
+
 deployment_groups:
 - group: primary
   modules:

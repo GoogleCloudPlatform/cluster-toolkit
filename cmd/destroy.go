@@ -64,7 +64,7 @@ func parseDestroyArgs(cmd *cobra.Command, args []string) error {
 
 func runDestroyCmd(cmd *cobra.Command, args []string) error {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}

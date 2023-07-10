@@ -25,7 +25,7 @@ vars:
     # Please refer to the following link for the latest images:
     # https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
     family: slurm-gcp-5-7-ubuntu-2004-lts
-    project: projects/schedmd-slurm-public/global/images/family
+    project: schedmd-slurm-public
 
 
 deployment_groups:

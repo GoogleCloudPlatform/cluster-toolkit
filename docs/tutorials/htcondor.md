@@ -20,7 +20,7 @@ Talk with your tutorial leader to see if Google Cloud credits are available.
 
 ## Enable APIs & Permissions
 
-In a new Google Cloud project there are several apis that must be enabled to
+In a new Google Cloud project there are several APIs that must be enabled to
 deploy your HPC cluster. These will be caught when you perform `terraform apply`
 but you can save time by enabling them now by running:
 
@@ -63,8 +63,8 @@ a basic auto-scaling HTCondor pool.
 * a new VPC network secured from the public internet
 * an HTCondor Access Point for users to submit jobs
 * an HTCondor Central Manager that will operate the pool
-* a Managed Instance Group to scale a pool of HTCondor Execute Points to serve
-  new jobs as they are submitted
+* 2 Managed Instance Groups for HTCondor Execute Points: 1 is configured with
+  Spot pricing and the other with On-Demand pricing
 
 The blueprint `community/examples/htc-htcondor.yaml` should be open in the Cloud
 Shell Editor (on the left).
@@ -89,15 +89,13 @@ contains the terraform needed to deploy your cluster.
 Use the following commands to run terraform and deploy your cluster.
 
 ```bash
-terraform -chdir=htcondor-001/htcondor init
-terraform -chdir=htcondor-001/htcondor validate
-terraform -chdir=htcondor-001/htcondor apply -auto-approve
+./ghpc deploy htcondor-pool --auto-approve
 ```
 
-If you receive any errors during `apply`, you may re-run it to resolve them.
-The deployment will take about 3 minutes. There should be regular status updates
-in the terminal. If the `apply` is successful, a message similar to the
-following will be displayed:
+The Toolkit will automatically approve provisioning a network, building a VM
+image with HTCondor and, finally, the HTCondor pool itself. There will be
+regular status updates in the terminal. At the conclusion, a message similar to
+the following will be displayed:
 
 <!-- Note: Bash blocks give "copy to cloud shell" option.  -->
 <!-- "shell" or "text" is used in places where command should not be run in cloud shell. -->
@@ -111,10 +109,10 @@ Apply complete! Resources: xx added, 0 changed, 0 destroyed.
 Once terraform has finished, you may SSH to the HTCondor Access Point:
 
 ```bash
-gcloud compute ssh htcondor001-ap-0 --tunnel-through-iap --project <walkthrough-project-id/> --zone us-central1-c
+gcloud compute ssh htcondor-pool-ap-0 --tunnel-through-iap --project <walkthrough-project-id/> --zone us-central1-c
 ```
 
-Alternatively, you may browse to the `htcondor001-ap-0` VM and click on "SSH" in
+Alternatively, you may browse to the `htcondor-pool-ap-0` VM and click on "SSH" in
 the Cloud Console at this address:
 
 ```text
@@ -142,7 +140,7 @@ connect"). Installation may take 5 minutes or more. When it succeeds, you will
 observe output similar to
 
 ```text
-htcondor001-ap-0.us-central1-c.c.<walkthrough-project-id/>.internal
+htcondor-pool-ap-0.us-central1-c.c.<walkthrough-project-id/>.internal
 ```
 
 ## Submit an example job
@@ -224,7 +222,7 @@ You should be returned to the Cloud Shell console. You may then destroy your
 HTCondor pool:
 
 ```bash
-terraform -chdir=htcondor-001/htcondor destroy -auto-approve
+./ghpc destroy htcondor-pool --auto-approve
 ```
 
 When complete you should see output similar to:

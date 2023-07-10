@@ -64,7 +64,7 @@ module "service_account" {
 
 module "control_bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
-  version = "~> 2.2"
+  version = "~> 4.0"
 
   project_id = var.project_id
   names      = ["storage"]
@@ -109,7 +109,7 @@ resource "google_storage_bucket_object" "config_file" {
 
 module "pubsub" {
   source  = "terraform-google-modules/pubsub/google"
-  version = "~> 1.8"
+  version = "~> 5.0"
 
   topic               = var.deployment_name
   project_id          = var.project_id

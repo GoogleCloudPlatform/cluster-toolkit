@@ -127,6 +127,12 @@ variable "enable_persistent_disk_csi" {
   default     = true
 }
 
+variable "system_node_pool_enabled" {
+  description = "Create a system node pool."
+  type        = bool
+  default     = true
+}
+
 variable "system_node_pool_name" {
   description = "Name of the system node pool."
   type        = string
@@ -198,16 +204,16 @@ variable "master_authorized_networks" {
   default = []
 }
 
-variable "service_account" {
-  description = "Service account to use with the system node pool"
-  type = object({
-    email  = string,
-    scopes = set(string)
-  })
-  default = {
-    email  = null
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-  }
+variable "service_account_email" {
+  description = "Service account e-mail address to use with the system node pool"
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to to use with the system node pool."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
 }
 
 variable "autoscaling_profile" {
@@ -231,4 +237,30 @@ variable "enable_dataplane_v2" {
 variable "labels" {
   description = "GCE resource labels to be applied to resources. Key-value pairs."
   type        = map(string)
+}
+
+variable "timeout_create" {
+  description = "Timeout for creating a node pool"
+  type        = string
+  default     = null
+}
+
+variable "timeout_update" {
+  description = "Timeout for updating a node pool"
+  type        = string
+  default     = null
+}
+
+# Deprecated
+variable "service_account" {
+  description = "DEPRECATED: use service_account_email and scopes."
+  type = object({
+    email  = string,
+    scopes = set(string)
+  })
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "service_account is deprecated and replaced with service_account_email and scopes."
+  }
 }

@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 	"gopkg.in/yaml.v3"
 )
@@ -72,16 +71,6 @@ func Test(t *testing.T) {
 	TestingT(t)
 }
 
-// modulereader.go
-func (s *MySuite) TestIsValidKind(c *C) {
-	c.Assert(IsValidReaderKind(pkrKindString), Equals, true)
-	c.Assert(IsValidReaderKind(tfKindString), Equals, true)
-	c.Assert(IsValidReaderKind("Packer"), Equals, false)
-	c.Assert(IsValidReaderKind("Terraform"), Equals, false)
-	c.Assert(IsValidReaderKind("META"), Equals, false)
-	c.Assert(IsValidReaderKind(""), Equals, false)
-}
-
 func (s *MySuite) TestGetOutputsAsMap(c *C) {
 	// Simple: empty outputs
 	modInfo := ModuleInfo{}
@@ -122,7 +111,7 @@ func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
 	// Invalid: Unsupported Module Source
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	moduleInfo, err = GetModuleInfo(badSource, tfKindString)
-	expectedErr = "Source is not valid: .*"
+	expectedErr = "source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
 
@@ -137,7 +126,7 @@ func (s *MySuite) TestGetModuleInfo_Git(c *C) {
 	// Invalid: Unsupported Module Source
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	_, err = GetModuleInfo(badSource, tfKindString)
-	expectedErr = "Source is not valid: .*"
+	expectedErr = "source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
 
@@ -158,17 +147,8 @@ func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 	// Invalid: Unsupported Module Source
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	moduleInfo, err = GetModuleInfo(badSource, tfKindString)
-	expectedErr = "Source is not valid: .*"
+	expectedErr = "source is not valid: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
-}
-
-// hcl_utils.go
-func getTestFS() afero.IOFS {
-	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("modules/network/vpc", 0755)
-	afero.WriteFile(
-		aferoFS, "modules/network/vpc/main.tf", []byte(testMainTf), 0644)
-	return afero.NewIOFS(aferoFS)
 }
 
 func (s *MySuite) TestGetHCLInfo(c *C) {

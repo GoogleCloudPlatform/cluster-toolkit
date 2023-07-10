@@ -16,12 +16,15 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/function"
+	"github.com/zclconf/go-cty/cty/function/stdlib"
 )
 
 // Reference is data struct that represents a reference to a variable.
@@ -253,6 +256,7 @@ type BaseExpression struct {
 func (e BaseExpression) Eval(bp Blueprint) (cty.Value, error) {
 	ctx := hcl.EvalContext{
 		Variables: map[string]cty.Value{"var": bp.Vars.AsObject()},
+		Functions: functions(),
 	}
 	v, diag := e.e.Value(&ctx)
 	if diag.HasErrors() {
@@ -347,4 +351,86 @@ func HasMark[T any](val cty.Value) (T, bool) {
 		found, tgt = true, t
 	}
 	return tgt, found
+}
+
+func escapeBlueprintVariables(s string) string {
+	// Convert \$(not.variable) to $(not.variable)
+	re := regexp.MustCompile(`\\\$\(`)
+	return re.ReplaceAllString(s, `$(`)
+}
+
+func escapeLiteralVariables(s string) string {
+	// Convert \((not.variable)) to ((not.variable))
+	re := regexp.MustCompile(`\\\(\(`)
+	return re.ReplaceAllString(s, `((`)
+}
+
+// TokensForValue is a modification of hclwrite.TokensForValue.
+// The only difference in behavior is handling "HCL literal" strings.
+func TokensForValue(val cty.Value) hclwrite.Tokens {
+	if val.IsNull() { // terminate early as Null value can has any type (e.g. String)
+		return hclwrite.TokensForValue(val)
+	}
+
+	// We need to handle both cases, until all "expression" users are moved to Expression
+	if e, is := IsExpressionValue(val); is {
+		return e.Tokenize()
+	}
+	val, _ = val.Unmark()                          // remove marks, as we don't need them anymore
+	if s, is := IsYamlExpressionLiteral(val); is { // return it "as is"
+		return hclwrite.TokensForIdentifier(s)
+	}
+
+	ty := val.Type()
+	if ty == cty.String {
+		s := val.AsString()
+		// The order of application matters, for an edge cases like: `\$\((` -> `$((`
+		s = escapeLiteralVariables(s)
+		s = escapeBlueprintVariables(s)
+		return hclwrite.TokensForValue(cty.StringVal(s))
+	}
+
+	if ty.IsListType() || ty.IsSetType() || ty.IsTupleType() {
+		tl := []hclwrite.Tokens{}
+		for it := val.ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			tl = append(tl, TokensForValue(v))
+		}
+		return hclwrite.TokensForTuple(tl)
+	}
+	if ty.IsMapType() || ty.IsObjectType() {
+		tl := []hclwrite.ObjectAttrTokens{}
+		for it := val.ElementIterator(); it.Next(); {
+			k, v := it.Element()
+			kt := hclwrite.TokensForIdentifier(k.AsString())
+			if !hclsyntax.ValidIdentifier(k.AsString()) {
+				kt = TokensForValue(k)
+			}
+			vt := TokensForValue(v)
+			tl = append(tl, hclwrite.ObjectAttrTokens{Name: kt, Value: vt})
+		}
+		return hclwrite.TokensForObject(tl)
+
+	}
+	return hclwrite.TokensForValue(val) // rely on hclwrite implementation
+}
+
+// FunctionCallExpression is a helper to build function call expression.
+func FunctionCallExpression(n string, args ...cty.Value) Expression {
+	if _, ok := functions()[n]; !ok {
+		panic("unknown function " + n)
+	}
+	ta := make([]hclwrite.Tokens, len(args))
+	for i, a := range args {
+		ta[i] = TokensForValue(a)
+	}
+	toks := hclwrite.TokensForFunctionCall(n, ta...)
+	return MustParseExpression(string(toks.Bytes()))
+}
+
+func functions() map[string]function.Function {
+	return map[string]function.Function{
+		"flatten": stdlib.FlattenFunc,
+		"merge":   stdlib.MergeFunc,
+	}
 }

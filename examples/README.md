@@ -30,6 +30,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
+  * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
@@ -119,7 +120,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.3/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.4/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -524,7 +525,7 @@ For this example the following is needed in the selected region:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.3/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.4/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -808,6 +809,25 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 [ml-gke.yaml]: ../community/examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
+
+### [storage-gke.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint shows how to use different storage options with GKE in the toolkit.
+
+The blueprint contains the following:
+
+* A K8s Job that uses a Filestore as a shared file system between pods.
+* More coming in the future...
+
+> **Note**: The Kubernetes API server will only allow requests from authorized
+> networks. The `gke-persistent-volume` module needs access to the Kubernetes
+> API server to create a Persistent Volume and a Persistent Volume Claim. **You
+> must use the `authorized_cidr` variable to supply an authorized network which
+> contains the IP address of the machine deploying the blueprint, for example
+> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
+> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+[storage-gke.yaml]: ../community/examples/storage-gke.yaml
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 

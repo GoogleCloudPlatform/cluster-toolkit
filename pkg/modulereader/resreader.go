@@ -25,6 +25,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/hashicorp/go-getter"
 	"gopkg.in/yaml.v3"
 )
 
@@ -135,17 +136,25 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 		if err != nil {
 			return ModuleInfo{}, err
 		}
-		modPath = path.Join(tmpDir, "module")
-		sourceReader := sourcereader.Factory(source)
-		if err = sourceReader.GetModule(source, modPath); err != nil {
-			return ModuleInfo{}, fmt.Errorf("failed to clone git module at %s: %v", source, err)
+		pkgAddr, subDir := getter.SourceDirSubdir(source)
+		pkgPath := path.Join(tmpDir, "module")
+		modPath = path.Join(pkgPath, subDir)
+		sourceReader := sourcereader.Factory(pkgAddr)
+		if err = sourceReader.GetModule(pkgAddr, pkgPath); err != nil {
+			if subDir == "" {
+				return ModuleInfo{}, err
+			}
+			return ModuleInfo{},
+				fmt.Errorf("module source %s included \"//\" package syntax; "+
+					"the \"//\" should typically be placed at the root of the repository:\n%s",
+					source, err.Error())
 		}
 
 	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
 		modPath = source
 
 	default:
-		return ModuleInfo{}, fmt.Errorf("Source is not valid: %s", source)
+		return ModuleInfo{}, fmt.Errorf("source is not valid: %s", source)
 	}
 
 	reader := Factory(kind)
@@ -185,25 +194,13 @@ var kinds = map[string]ModReader{
 	"packer":    NewPackerReader(),
 }
 
-// IsValidReaderKind returns true if the kind input is valid
-func IsValidReaderKind(input string) bool {
-	for k := range kinds {
-		if k == input {
-			return true
-		}
-	}
-	return false
-}
-
 // Factory returns a ModReader of type 'kind'
 func Factory(kind string) ModReader {
-	for k, v := range kinds {
-		if kind == k {
-			return v
-		}
+	r, ok := kinds[kind]
+	if !ok {
+		log.Fatalf("Invalid request to create a reader of kind %s", kind)
 	}
-	log.Fatalf("Invalid request to create a reader of kind %s", kind)
-	return nil
+	return r
 }
 
 func defaultAPIList(source string) []string {

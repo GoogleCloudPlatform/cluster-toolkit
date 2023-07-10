@@ -16,26 +16,17 @@ blueprint_name: text_escape
 ghpc_version: golden
 validators:
   - validator: test_project_exists
-    inputs: {}
     skip: true
   - validator: test_apis_enabled
-    inputs: {}
     skip: true
   - validator: test_region_exists
-    inputs: {}
     skip: true
   - validator: test_zone_exists
-    inputs: {}
     skip: true
   - validator: test_zone_in_region
-    inputs: {}
     skip: true
   - validator: test_module_not_used
-    inputs: {}
-    skip: false
   - validator: test_deployment_variable_not_used
-    inputs: {}
-    skip: false
 vars:
   deployment_name: golden_copy_deployment
   labels:
@@ -46,33 +37,21 @@ vars:
   zone: us-east4-c
 deployment_groups:
   - group: zero
-    terraform_backend:
-      type: ""
-      configuration: {}
     modules:
       - source: modules/packer/custom-image
         kind: packer
         id: lime
-        use: []
-        wrapsettingswith: {}
         settings:
           deployment_name: ((var.deployment_name))
           image_family: \$(zebra/to(ad
           image_name: \((cat /dog))
-          labels:
-            brown: \$(fox)
-            ghpc_blueprint: text_escape
-            ghpc_deployment: golden_copy_deployment
-            ghpc_role: packer
-            ñred: ñblue
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "packer"
+              }, {
+              brown = "$(fox)"
+            })))
           project_id: ((var.project_id))
           subnetwork_name: \$(purple
           zone: ((var.zone))
-        required_apis:
-          $(vars.project_id):
-            - compute.googleapis.com
-            - storage.googleapis.com
     kind: packer
-terraform_backend_defaults:
-  type: ""
-  configuration: {}

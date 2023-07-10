@@ -1,12 +1,14 @@
 ## Description
 
 This module creates a Toolkit runner that will install HTCondor on RedHat 7 or
-derivative operating systems such as the CentOS 7 release in the [HPC VM
-Image][hpcvmimage]. It should also function on RedHat or Rocky Linux releases 8
-and 9, however it is not yet supported. Please report any [issues] on these
-platforms.
+8 and its derivative operating systems. These include the CentOS 7 and Rocky
+Linux 8 releases of the [HPC VM Image][hpcvmimage]. It may also function on
+RedHat 9 and derivatives, however it is not yet supported. Please report any
+[issues] on these 3 distributions or open a [discussion] to request support on
+Debian or Ubuntu distributions.
 
 [issues]: https://github.com/GoogleCloudPlatform/hpc-toolkit/issues
+[discussion]: https://github.com/GoogleCloudPlatform/hpc-toolkit/discussions
 
 It also exports a list of Google Cloud APIs which must be enabled prior to
 provisioning an HTCondor Pool.
@@ -124,6 +126,7 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_condor_version"></a> [condor\_version](#input\_condor\_version) | Yum/DNF-compatible version string; leave unset to default to 10.x series (examples: "10.5.1","10.*")) | `string` | `"10.*"` | no |
 | <a name="input_enable_docker"></a> [enable\_docker](#input\_enable\_docker) | Install and enable docker daemon alongside HTCondor | `bool` | `true` | no |
 
 ## Outputs

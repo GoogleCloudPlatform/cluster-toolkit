@@ -15,10 +15,12 @@
   */
 
 module "network0" {
-  source          = "./modules/embedded/modules/network/vpc"
-  deployment_name = var.deployment_name
-  project_id      = var.project_id
-  region          = var.region
+  source                   = "./modules/embedded/modules/network/vpc"
+  deployment_name          = var.deployment_name
+  enable_iap_rdp_ingress   = true
+  enable_iap_winrm_ingress = true
+  project_id               = var.project_id
+  region                   = var.region
 }
 
 module "homefs" {
@@ -60,4 +62,9 @@ module "script" {
     destination = "hello.sh"
     type        = "shell"
   }]
+}
+
+module "windows_startup" {
+  source                = "./modules/embedded/community/modules/scripts/windows-startup-script"
+  install_nvidia_driver = true
 }

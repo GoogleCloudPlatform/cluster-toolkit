@@ -23,7 +23,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
 	"log"
-	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -77,19 +77,27 @@ var (
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
-	if err := modulewriter.WriteDeployment(dc, outputDir, overwriteDeployment); err != nil {
-		var target *modulewriter.OverwriteDeniedError
-		if errors.As(err, &target) {
-			fmt.Printf("\n%s\n", err.Error())
-			os.Exit(1)
-		} else {
-			log.Fatal(err)
-		}
-	}
+	deplName, err := dc.Config.DeploymentName()
+	cobra.CheckErr(err)
+	deplDir := filepath.Join(outputDir, deplName)
+	cobra.CheckErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
+
+	fmt.Println("To deploy your infrastructure please run:")
+	fmt.Println()
+	fmt.Printf("./ghpc deploy %s\n", deplDir)
+	fmt.Println()
+	printAdvancedInstructionsMessage(deplDir)
+}
+
+func printAdvancedInstructionsMessage(deplDir string) {
+	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
+	fmt.Println("deployment instructions at:")
+	fmt.Println()
+	fmt.Printf("%s\n", modulewriter.InstructionsPath(deplDir))
 }
 
 func expandOrDie(path string) config.DeploymentConfig {
-	dc, err := config.NewDeploymentConfig(path)
+	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -113,10 +121,28 @@ func expandOrDie(path string) config.DeploymentConfig {
 
 	// Expand the blueprint
 	if err := dc.ExpandConfig(); err != nil {
-		log.Fatal(err)
+		log.Fatal(renderError(err, ctx))
 	}
 
 	return dc
+}
+
+func renderError(err error, ctx config.YamlCtx) string {
+	var be config.BpError
+	if errors.As(err, &be) {
+		if pos, ok := ctx.Pos(be.Path); ok {
+			return renderRichError(be.Err, pos, ctx)
+		}
+	}
+	return err.Error()
+}
+
+func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
+	return fmt.Sprintf(`
+Error: %s
+on line %d, column %d:
+%d: %s
+`, err, pos.Line, pos.Column, pos.Line, ctx.Lines[pos.Line-1])
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {

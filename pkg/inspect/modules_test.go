@@ -15,6 +15,7 @@
 package inspect_test
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/inspect"
 	"hpc-toolkit/pkg/modulereader"
 	"log"
@@ -147,7 +148,7 @@ func TestLabelsType(t *testing.T) {
 }
 
 func TestNetworkStorage(t *testing.T) {
-	expected := `list(object({
+	obj := modulereader.NormalizeType(`object({
 		server_ip             = string
 		remote_mount          = string
 		local_mount           = string
@@ -155,12 +156,15 @@ func TestNetworkStorage(t *testing.T) {
 		mount_options         = string
 		client_install_runner = map(string)
 		mount_runner          = map(string)
-	  }))`
-	for _, mod := range notEmpty(query(hasInput("network_storage")), t) {
-		checkInputType(t, mod, "network_storage", expected)
-	}
+	  })`)
+	lst := modulereader.NormalizeType(fmt.Sprintf("list(%s)", obj))
 
-	for _, mod := range query(all(ofRole("file-system"), not(hasOutput("network_storage")))) {
-		t.Errorf("%q does not output 'network_storage'", mod.Source)
+	for _, mod := range notEmpty(query(hasInput("network_storage")), t) {
+		i, _ := mod.Input("network_storage")
+		got := modulereader.NormalizeType(i.Type)
+		if got != obj && got != lst {
+			t.Errorf("%s `network_storage` has unexpected type expected:\n%#v\nor\n%#v\ngot:\n%#v",
+				mod.Source, obj, lst, got)
+		}
 	}
 }

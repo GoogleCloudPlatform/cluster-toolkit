@@ -165,25 +165,25 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
 	testDC := getDeploymentConfigForTest()
 	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_prep_dir"))
-	realDepDir := filepath.Join(testDir, "test_prep_dir")
+	depDir := filepath.Join(testDir, "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
-	WriteDeployment(testDC, testDir, false /* overwrite */)
+	WriteDeployment(testDC, depDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
-	files, _ := ioutil.ReadDir(realDepDir)
+	files, _ := ioutil.ReadDir(depDir)
 	c.Check(len(files) > 1, Equals, true)
 
-	err := prepDepDir(realDepDir, true /* overwrite */)
+	err := prepDepDir(depDir, true /* overwrite */)
 	c.Check(err, IsNil)
-	c.Check(isDeploymentDirPrepped(realDepDir), IsNil)
+	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(testDir, "test_prep_dir", HiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(depDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
 	files1, _ := ioutil.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
-	files2, _ := ioutil.ReadDir(realDepDir)
+	files2, _ := ioutil.ReadDir(depDir)
 	c.Check(len(files2), Equals, 3) // .ghpc, .gitignore, and instructions file
 }
 
@@ -236,16 +236,16 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	afero.WriteFile(aferoFS, "community/modules/green/lime/main.tf", []byte("lime"), 0644)
 	sourcereader.ModuleFS = afero.NewIOFS(aferoFS)
 
-	testDC := getDeploymentConfigForTest()
+	dc := getDeploymentConfigForTest()
+	dir := filepath.Join(testDir, "test_write_deployment")
 
-	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_write_deployment"))
-	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
+	err := WriteDeployment(dc, dir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
 	// Overwriting the deployment fails
-	err = WriteDeployment(testDC, testDir, false /* overwriteFlag */)
+	err = WriteDeployment(dc, dir, false /* overwriteFlag */)
 	c.Check(err, NotNil)
 	// Overwriting the deployment succeeds with flag
-	err = WriteDeployment(testDC, testDir, true /* overwriteFlag */)
+	err = WriteDeployment(dc, dir, true /* overwriteFlag */)
 	c.Check(err, IsNil)
 }
 
@@ -305,15 +305,6 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 	// deployment group(s) already exists
 	err = createGroupDirs(testDeployDir, &testDepGroups)
 	c.Check(err, IsNil)
-}
-
-func (s *MySuite) TestWriteDeployment_BadDeploymentName(c *C) {
-	testDC := getDeploymentConfigForTest()
-	var e *config.InputValueError
-
-	testDC.Config.Vars.Set("deployment_name", cty.NumberIntVal(100))
-	err := WriteDeployment(testDC, testDir, false /* overwriteFlag */)
-	c.Check(errors.As(err, &e), Equals, true)
 }
 
 // tfwriter.go
@@ -491,7 +482,9 @@ func (s *MySuite) TestWriteMain(c *C) {
 
 	// Test with modules
 	testModule := config.Module{
-		ID: "test_module",
+		ID:     "test_module",
+		Kind:   config.TerraformKind,
+		Source: "modules/network/vpc",
 		Settings: config.NewDict(map[string]cty.Value{
 			"testSetting": cty.StringVal("testValue"),
 			"passthrough": config.MustParseExpression(`"${var.deployment_name}-allow"`).AsValue(),
@@ -519,25 +512,6 @@ func (s *MySuite) TestWriteMain(c *C) {
 	err = writeMain(testModules, testBackend, testMainDir)
 	c.Assert(err, IsNil)
 	exists, err = stringExistsInFile("a_bucket", mainFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
-
-	// Test with WrapSettingsWith
-	testModuleWithWrap := config.Module{
-		ID: "test_module_with_wrap",
-		WrapSettingsWith: map[string][]string{
-			"wrappedSetting": {"list(flatten(", "))"},
-		},
-		Settings: config.NewDict(map[string]cty.Value{
-			"wrappedSetting": cty.TupleVal([]cty.Value{
-				cty.StringVal("val1"),
-				cty.StringVal("val2")}),
-		}),
-	}
-	testModules = append(testModules, testModuleWithWrap)
-	err = writeMain(testModules, testBackend, testMainDir)
-	c.Assert(err, IsNil)
-	exists, err = stringExistsInFile("list(flatten(", mainFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
 }
@@ -687,9 +661,8 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	}
 
 	testPackerModule := config.Module{
-		Kind:             config.PackerKind,
-		ID:               "testPackerModule",
-		DeploymentSource: "testPackerModule",
+		Kind: config.PackerKind,
+		ID:   "testPackerModule",
 	}
 	testDeploymentGroup := config.DeploymentGroup{
 		Name:    "packerGroup",
@@ -740,7 +713,7 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 
 func (s *MySuite) TestStringEscape(c *C) {
 	f := func(s string) string {
-		toks := TokensForValue(cty.StringVal(s))
+		toks := config.TokensForValue(cty.StringVal(s))
 		return string(toks.Bytes())
 	}
 	// LiteralVariables
@@ -769,44 +742,76 @@ func TestMain(m *testing.M) {
 func (s *MySuite) TestDeploymentSource(c *C) {
 	{ // git
 		m := config.Module{Kind: config.TerraformKind, Source: "github.com/x/y.git"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "github.com/x/y.git")
 	}
 	{ // packer
-		m := config.Module{Kind: config.PackerKind, Source: "modules/packer/custom-image", ID: "custom-image"}
-		s, err := deploymentSource(m)
+		m := config.Module{Kind: config.PackerKind, Source: "modules/packer/custom-image", ID: "image-id"}
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
-		c.Check(s, Equals, "custom-image")
+		c.Check(s, Equals, "image-id")
+	}
+	{ // remote packer non-package
+		m := config.Module{Kind: config.PackerKind, Source: "github.com/GoogleCloudPlatform/modules/packer/custom-image", ID: "image-id"}
+		s, err := DeploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "image-id")
+	}
+	{ // remote packer package
+		m := config.Module{Kind: config.PackerKind, Source: "github.com/GoogleCloudPlatform//modules/packer/custom-image?ref=main", ID: "image-id"}
+		s, err := DeploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "image-id/modules/packer/custom-image")
 	}
 	{ // embedded core
 		m := config.Module{Kind: config.TerraformKind, Source: "modules/x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "./modules/embedded/modules/x/y")
 	}
 	{ // embedded community
 		m := config.Module{Kind: config.TerraformKind, Source: "community/modules/x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "./modules/embedded/community/modules/x/y")
 	}
 	{ // local rel in repo
 		m := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
 	{ // local rel
 		m := config.Module{Kind: config.TerraformKind, Source: "./../../../../x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
 	{ // local abs
 		m := config.Module{Kind: config.TerraformKind, Source: "/tmp/x/y"}
-		s, err := deploymentSource(m)
+		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
+}
+
+func (s *MySuite) TestSubstituteIgcReferencesInModule(c *C) {
+	d := config.Dict{}
+	d.Set("fold", cty.TupleVal([]cty.Value{
+		cty.StringVal("zebra"),
+		config.MustParseExpression(`module.golf.red + 6 + module.golf.green`).AsValue(),
+		config.MustParseExpression(`module.tennis.brown`).AsValue(),
+	}))
+	m := SubstituteIgcReferencesInModule(
+		config.Module{Settings: d},
+		map[config.Reference]modulereader.VarInfo{
+			config.ModuleRef("golf", "red"):   {Name: "pink"},
+			config.ModuleRef("golf", "green"): {Name: "lime"},
+		})
+	c.Check(m.Settings.Items(), DeepEquals, map[string]cty.Value{"fold": cty.TupleVal([]cty.Value{
+		cty.StringVal("zebra"),
+		config.MustParseExpression(`var.pink + 6 + var.lime`).AsValue(),
+		config.MustParseExpression(`module.tennis.brown`).AsValue(),
+	})})
 }

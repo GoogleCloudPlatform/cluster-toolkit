@@ -13,10 +13,18 @@
 # limitations under the License.
 
 ---
-- name: Ensure schedd has joined pool
+- name: Ensure schedd has joined the pool
   ansible.builtin.command: condor_status -schedd -autof Name
   register: schedd_status
   changed_when: False
-  until: ansible_fqdn == schedd_status.stdout
+  until: schedd_status.stdout == ansible_fqdn
   retries: 8
+  delay: 15
+- name: Ensure execute points have joined the pool
+  ansible.builtin.command: condor_status -collector -autoformat HostsTotal
+  register: hosts_total
+  changed_when: False
+  # must match total min_idle settings of execute-point modules in blueprint
+  until: hosts_total.stdout == "2"
+  retries: 20
   delay: 15

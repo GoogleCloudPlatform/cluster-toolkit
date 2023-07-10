@@ -16,10 +16,8 @@ package deploymentio
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/otiai10/copy"
 )
@@ -35,18 +33,6 @@ func mkdirWrapper(directory string) error {
 	return nil
 }
 
-func getAbsSourcePath(sourcePath string) string {
-	if strings.HasPrefix(sourcePath, "/") { // Absolute Path Already
-		return sourcePath
-	}
-	// Otherwise base it off of the CWD
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("deploymentio: %v", err)
-	}
-	return filepath.Join(cwd, sourcePath)
-}
-
 // CreateDirectory creates the directory
 func (b *Local) CreateDirectory(directory string) error {
 	if _, err := os.Stat(directory); !os.IsNotExist(err) {
@@ -58,9 +44,12 @@ func (b *Local) CreateDirectory(directory string) error {
 	return mkdirWrapper(directory)
 }
 
-// CopyFromPath copyes the source file to the destination file
+// CopyFromPath copies the source file to the destination file
 func (b *Local) CopyFromPath(src string, dst string) error {
-	absPath := getAbsSourcePath(src)
+	absPath, err := filepath.Abs(src)
+	if err != nil {
+		return err
+	}
 	return copy.Copy(absPath, dst)
 }
 
