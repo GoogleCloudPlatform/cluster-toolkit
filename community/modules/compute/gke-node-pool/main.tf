@@ -89,6 +89,10 @@ resource "google_container_node_pool" "node_pool" {
       local_ssd_count = var.local_ssd_count_ephemeral_storage
     }
 
+    local_nvme_ssd_block_config {
+      local_ssd_count = var.local_ssd_count_nvme_block
+    }
+
     shielded_instance_config {
       enable_secure_boot          = true
       enable_integrity_monitoring = true
