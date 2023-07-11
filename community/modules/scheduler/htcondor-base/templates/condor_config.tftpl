@@ -18,8 +18,6 @@
 
 use role:${htcondor_role}
 CONDOR_HOST = ${join(",", central_manager_ips)}
-UID_DOMAIN = ${trust_domain}
-TRUST_DOMAIN = ${trust_domain}
 
 %{ if htcondor_role == "get_htcondor_central_manager" ~}
 # Central Manager configuraition settings

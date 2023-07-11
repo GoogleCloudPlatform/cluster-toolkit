@@ -14,62 +14,43 @@
  * limitations under the License.
  */
 
-output "access_point_service_account" {
+output "access_point_service_account_email" {
   description = "HTCondor Access Point Service Account (e-mail format)"
   value       = module.access_point_service_account.email
   depends_on = [
-    google_secret_manager_secret_iam_member.access_point,
     module.access_point_service_account
   ]
 }
 
-output "central_manager_service_account" {
+output "central_manager_service_account_email" {
   description = "HTCondor Central Manager Service Account (e-mail format)"
   value       = module.central_manager_service_account.email
   depends_on = [
-    google_secret_manager_secret_iam_member.central_manager_idtoken,
-    google_secret_manager_secret_iam_member.central_manager_password,
     module.central_manager_service_account
   ]
 }
 
-output "execute_point_service_account" {
+output "execute_point_service_account_email" {
   description = "HTCondor Execute Point Service Account (e-mail format)"
   value       = module.execute_point_service_account.email
   depends_on = [
-    google_secret_manager_secret_iam_member.execute_point,
     module.execute_point_service_account
   ]
-}
-
-output "pool_password_secret_id" {
-  description = "Google Cloud Secret Manager ID containing HTCondor Pool Password"
-  value       = google_secret_manager_secret.pool_password.secret_id
-  sensitive   = true
 }
 
 output "central_manager_runner" {
   description = "Toolkit Runner to configure an HTCondor Central Manager"
   value       = local.runner_cm
-  depends_on = [
-    google_secret_manager_secret_version.pool_password
-  ]
 }
 
 output "access_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Access Point"
   value       = local.runner_access
-  depends_on = [
-    google_secret_manager_secret_version.pool_password
-  ]
 }
 
 output "execute_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Execute Point"
   value       = local.runner_execute
-  depends_on = [
-    google_secret_manager_secret_version.pool_password
-  ]
 }
 
 output "central_manager_internal_ip" {

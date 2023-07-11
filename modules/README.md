@@ -153,8 +153,11 @@ Modules that are still in development and less stable are labeled with the
   Creates a Slurm login node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
-* **[htcondor-base]** ![community-badge] ![experimental-badge] : Creates
-  Toolkit runners and service accounts to configure an HTCondor pool.
+* **[htcondor-base]** ![community-badge] ![experimental-badge] : Creates the
+  base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
+* **[htcondor-pool-secrets]** ![community-badge] ![experimental-badge] : Creates
+  and manages access to the secrets necessary for secure operation of an
+  HTCondor pool.
 * **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
   a client host for submitting jobs to a PBS Professional cluster.
 * **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates

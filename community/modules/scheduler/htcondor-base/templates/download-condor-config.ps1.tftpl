@@ -1,7 +1,3 @@
-# obtain IDTOKEN for authentication by StartD to Central Manager
-gcloud secrets versions access latest --secret ${xp_idtoken_secret_id} `
-    --out-file C:\condor\tokens.d\condor@${trust_domain}
-
 # create directory for local condor_config customizations
 $config_dir = 'C:\Condor\config'
 if(!(test-path -PathType container -Path $config_dir)) {

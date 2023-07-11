@@ -28,20 +28,7 @@
     ansible.builtin.assert:
       that:
       - htcondor_role is defined
-      - password_id is defined
-      - trust_domain is defined
       - config_object is defined
-  - name: Set HTCondor Pool password (token signing key)
-    when: htcondor_role != 'get_htcondor_execute'
-    ansible.builtin.shell: |
-      set -e -o pipefail
-      TMPFILE=$(mktemp)
-      gcloud secrets versions access latest --out-file "$TMPFILE" --secret={{ password_id }}
-      condor_store_cred add -c -i "$TMPFILE"
-      rm -f "$TMPFILE"
-    args:
-      creates: "{{ condor_config_root }}/passwords.d/POOL"
-      executable: /bin/bash
   - name: Remove default HTCondor configuration
     ansible.builtin.file:
       path: "{{ condor_config_root }}/config.d/00-htcondor-9.0.config"
@@ -70,29 +57,6 @@
       fi
     args:
       executable: /bin/bash
-  - name: Configure HTCondor Central Manager
-    when: htcondor_role == 'get_htcondor_central_manager'
-    block:
-    - name: Create IDTOKEN for Central Manager
-      ansible.builtin.shell: |
-        umask 0077
-        TRUST_DOMAIN=$(condor_config_val TRUST_DOMAIN)
-        # do not restrict Central Manager authz scopes!
-        condor_token_create -identity condor@{{ trust_domain }} \
-          -token condor@{{ trust_domain }}
-      args:
-        creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
-    - name: Create IDTOKEN secret for Execute Points
-      changed_when: true
-      ansible.builtin.shell: |
-        umask 0077
-        TRUST_DOMAIN=$(condor_config_val TRUST_DOMAIN)
-        TMPFILE=$(mktemp)
-        condor_token_create -authz READ -authz ADVERTISE_MASTER \
-            -authz ADVERTISE_STARTD -identity condor@{{ trust_domain }} > "$TMPFILE"
-        gcloud secrets versions add --data-file "$TMPFILE" {{ xp_idtoken_secret_id }}
-        rm -f "$TMPFILE"
-      when: xp_idtoken_secret_id | length > 0
   - name: Configure HTCondor SchedD
     when: htcondor_role == 'get_htcondor_submit'
     block:
@@ -103,17 +67,6 @@
         owner: condor
         group: condor
         mode: 0755
-    - name: Create IDTOKEN to advertise access point
-      ansible.builtin.shell: |
-        umask 0077
-        # DAEMON authorization can likely be removed in future when scopes
-        # needed to trigger a negotiation cycle are changed. Suggest review
-        # https://opensciencegrid.atlassian.net/jira/software/c/projects/HTCONDOR/issues/?filter=allissues
-        condor_token_create -authz READ -authz ADVERTISE_MASTER \
-          -authz ADVERTISE_SCHEDD -authz DAEMON -identity condor@{{ trust_domain }} \
-          -token condor@{{ trust_domain }}
-      args:
-        creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
     - name: Enable SchedD high availability
       when: job_queue_ha | bool
       block:
@@ -164,26 +117,6 @@
           state: absent
         notify:
         - Reload SystemD
-  - name: Configure HTCondor StartD
-    when: htcondor_role == 'get_htcondor_execute'
-    block:
-    - name: Create SystemD override directory for HTCondor Execute Point
-      ansible.builtin.file:
-        path: /etc/systemd/system/condor.service.d
-        state: directory
-        owner: root
-        group: root
-        mode: 0755
-    - name: Fetch IDTOKEN to advertise execute point
-      ansible.builtin.copy:
-        dest: "/etc/systemd/system/condor.service.d/htcondor-token-fetcher.conf"
-        mode: 0644
-        content: |
-          [Service]
-          ExecStartPre=gcloud secrets versions access latest --secret {{ xp_idtoken_secret_id }} \
-              --out-file {{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}
-      notify:
-      - Reload SystemD
   handlers:
   - name: Reload SystemD
     ansible.builtin.systemd:
