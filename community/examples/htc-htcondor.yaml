@@ -151,14 +151,15 @@ deployment_groups:
         destination: /var/tmp/helloworld.sub
         content: |
           universe       = vanilla
-          executable     = /bin/echo
-          arguments      = "Hello, World!"
+          executable     = /bin/sleep
+          arguments      = 1000
           output         = out.\$(ClusterId).\$(ProcId)
           error          = err.\$(ClusterId).\$(ProcId)
           log            = log.\$(ClusterId).\$(ProcId)
           request_cpus   = 1
           request_memory = 100MB
-          +RequireSpot   = true # if unset, defaults to false
+          # if unset, defaults to false
+          +RequireSpot   = true
           queue
 
   - id: htcondor_access
