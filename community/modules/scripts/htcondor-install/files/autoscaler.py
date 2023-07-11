@@ -21,6 +21,7 @@
 from absl import app
 from absl import flags
 from collections import OrderedDict
+from datetime import datetime
 from pprint import pprint
 from googleapiclient import discovery
 from oauth2client.client import GoogleCredentials
@@ -224,7 +225,7 @@ class AutoScaler:
             print(f"The negotiator has not yet started a match cycle. Exiting auto-scaling.")
             exit()
 
-        print(f"Last negotiation cycle occurred at: {last_negotiation_cycle_time}")
+        print(f"Last negotiation cycle occurred at: {datetime.fromtimestamp(last_negotiation_cycle_time)}")
         idle_job_query = classad.ExprTree(f"JobStatus == 1 && QDate < {last_negotiation_cycle_time}")
         idle_job_ads = schedd.query(constraint=idle_job_query.and_(spot_query),
                                     projection=job_attributes)
