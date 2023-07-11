@@ -104,7 +104,7 @@ type DeploymentGroup struct {
 // Module return the module with the given ID
 func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	var mod *Module
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(_ modulePath, m *Module) error {
 		if m.ID == id {
 			mod = m
 		}
@@ -379,7 +379,7 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 		"deployment_name": true,
 	}
 
-	dc.Config.WalkModules(func(m *Module) error {
+	dc.Config.WalkModules(func(_ modulePath, m *Module) error {
 		for _, v := range GetUsedDeploymentVars(m.Settings.AsObject()) {
 			usedVars[v] = true
 		}
@@ -397,17 +397,19 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 }
 
 func (bp Blueprint) checkMovedModules() error {
-	var err error
-	bp.WalkModules(func(m *Module) error {
+	errs := MultiError{}
+
+	bp.WalkModules(func(p modulePath, m *Module) error {
 		if replacement, ok := movedModules[strings.Trim(m.Source, "./")]; ok {
-			err = fmt.Errorf("the blueprint references modules that have moved")
-			fmt.Printf(
-				"A module you are using has moved. %s has been replaced with %s. Please update the source in your blueprint and try again.\n",
+			err := fmt.Errorf(
+				"a module has moved. %s has been replaced with %s. Please update the source in your blueprint and try again",
 				m.Source, replacement)
+			errs.Add(BpError{p.Source, err})
 		}
 		return nil
 	})
-	return err
+
+	return errs.OrNil()
 }
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
@@ -450,7 +452,7 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 
 // addKindToModules sets the kind to 'terraform' when empty.
 func (bp *Blueprint) addKindToModules() {
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(_ modulePath, m *Module) error {
 		if m.Kind == UnknownKind {
 			m.Kind = TerraformKind
 		}
@@ -461,10 +463,14 @@ func (bp *Blueprint) addKindToModules() {
 // checkModulesInfo ensures each module in the blueprint has known detailed
 // metadata (inputs, outputs)
 func (bp *Blueprint) checkModulesInfo() error {
-	return bp.WalkModules(func(m *Module) error {
-		_, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
-		return err
+	errs := MultiError{}
+	bp.WalkModules(func(p modulePath, m *Module) error {
+		if _, err := modulereader.GetModuleInfo(m.Source, m.Kind.String()); err != nil {
+			errs.Add(BpError{p.Source, err})
+		}
+		return nil
 	})
+	return errs.OrNil()
 }
 
 // checkModulesAndGroups ensures:
@@ -515,14 +521,16 @@ func checkModulesAndGroups(groups []DeploymentGroup) error {
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
 func checkUsedModuleNames(bp Blueprint) error {
-	return bp.WalkModules(func(mod *Module) error {
-		for _, used := range mod.Use {
+	errs := MultiError{}
+	bp.WalkModules(func(p modulePath, mod *Module) error {
+		for iu, used := range mod.Use {
 			if err := validateModuleReference(bp, *mod, used); err != nil {
-				return err
+				errs.Add(BpError{p.Use.At(iu), err})
 			}
 		}
 		return nil
 	})
+	return errs.OrNil()
 }
 
 func checkBackend(b TerraformBackend) error {
@@ -732,12 +740,13 @@ func IsProductOfModuleUse(v cty.Value) []ModuleID {
 }
 
 // WalkModules walks all modules in the blueprint and calls the walker function
-func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
+func (bp *Blueprint) WalkModules(walker func(modulePath, *Module) error) error {
 	for ig := range bp.DeploymentGroups {
 		g := &bp.DeploymentGroups[ig]
 		for im := range g.Modules {
+			p := Root.Groups.At(ig).Modules.At(im)
 			m := &g.Modules[im]
-			if err := walker(m); err != nil {
+			if err := walker(p, m); err != nil {
 				return err
 			}
 		}
@@ -747,14 +756,19 @@ func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
 
 // validate every module setting in the blueprint containing a reference
 func checkModuleSettings(bp Blueprint) error {
-	return bp.WalkModules(func(m *Module) error {
-		for _, r := range valueReferences(m.Settings.AsObject()) {
-			if err := validateModuleSettingReference(bp, *m, r); err != nil {
-				return err
+	errs := MultiError{}
+	bp.WalkModules(func(p modulePath, m *Module) error {
+		for k, v := range m.Settings.Items() {
+			for _, r := range valueReferences(v) {
+				if err := validateModuleSettingReference(bp, *m, r); err != nil {
+					// TODO: add a cty.Path suffix to the errors path for better location
+					errs.Add(BpError{p.Settings.Dot(k), err})
+				}
 			}
 		}
 		return nil
 	})
+	return errs.OrNil()
 }
 
 func checkPackerGroups(groups []DeploymentGroup) error {
