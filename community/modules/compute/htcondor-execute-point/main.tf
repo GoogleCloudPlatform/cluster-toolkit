@@ -28,7 +28,12 @@ locals {
   }
   enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 
-  metadata = merge(var.metadata, local.network_storage_metadata, local.enable_oslogin)
+  is_windows_image = anytrue([for l in data.google_compute_image.htcondor.licenses : length(regexall("windows-cloud", l)) > 0])
+  windows_startup_metadata = local.is_windows_image && var.windows_startup_ps1 != null ? {
+    windows-startup-script-ps1 = var.windows_startup_ps1
+  } : {}
+
+  metadata = merge(local.windows_startup_metadata, local.network_storage_metadata, local.enable_oslogin, var.metadata)
 
   configure_autoscaler_role = {
     "type"        = "ansible-local"
@@ -47,6 +52,13 @@ locals {
   hostnames = var.spot ? "${var.deployment_name}-spot-xp" : "${var.deployment_name}-xp"
 }
 
+
+data "google_compute_image" "htcondor" {
+  family  = var.instance_image.family
+  project = var.instance_image.project
+}
+
+
 module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "~> 8.0"
@@ -58,13 +70,12 @@ module "execute_point_instance_template" {
   service_account = var.service_account
   labels          = local.labels
 
-  machine_type         = var.machine_type
-  disk_size_gb         = var.disk_size_gb
-  preemptible          = var.spot
-  startup_script       = var.startup_script
-  metadata             = local.metadata
-  source_image_family  = var.instance_image.family
-  source_image_project = var.instance_image.project
+  machine_type   = var.machine_type
+  disk_size_gb   = var.disk_size_gb
+  preemptible    = var.spot
+  startup_script = local.is_windows_image ? null : var.startup_script
+  metadata       = local.metadata
+  source_image   = data.google_compute_image.htcondor.self_link
 }
 
 module "mig" {

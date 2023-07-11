@@ -46,7 +46,7 @@ variable "machine_type" {
 }
 
 variable "startup_script" {
-  description = "Startup script to run at boot-time for HTCondor execute points"
+  description = "Startup script to run at boot-time for Linux HTCondor execute points"
   type        = string
   default     = null
 }
@@ -151,4 +151,10 @@ variable "disk_size_gb" {
   description = "Boot disk size in GB"
   type        = number
   default     = 100
+}
+
+variable "windows_startup_ps1" {
+  description = "Startup script to run at boot-time for Windows-based HTCondor execute points"
+  type        = string
+  default     = null
 }
