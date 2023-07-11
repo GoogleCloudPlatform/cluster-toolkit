@@ -214,11 +214,12 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.1 |
+| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.2 |
 | <a name="module_address"></a> [address](#module\_address) | terraform-google-modules/address/google | ~> 3.0 |
-| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.1 |
-| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.1 |
+| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.2 |
+| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.2 |
 | <a name="module_health_check_firewall_rule"></a> [health\_check\_firewall\_rule](#module\_health\_check\_firewall\_rule) | terraform-google-modules/network/google//modules/firewall-rules | ~> 6.0 |
+| <a name="module_htcondor_bucket"></a> [htcondor\_bucket](#module\_htcondor\_bucket) | terraform-google-modules/cloud-storage/google | ~> 4.0 |
 
 ## Resources
 
@@ -229,6 +230,9 @@ limitations under the License.
 | [google_secret_manager_secret_iam_member.central_manager](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_iam_member.execute_point](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_version.pool_password](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
+| [google_storage_bucket_object.ap_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [google_storage_bucket_object.cm_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [google_storage_bucket_object.execute_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [random_password.pool](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 | [google_compute_subnetwork.htcondor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
 
