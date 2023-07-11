@@ -92,12 +92,7 @@ func (d Dict) IsZero() bool {
 func (d Dict) Eval(bp Blueprint) (Dict, error) {
 	var res Dict
 	for k, v := range d.Items() {
-		r, err := cty.Transform(v, func(p cty.Path, v cty.Value) (cty.Value, error) {
-			if e, is := IsExpressionValue(v); is {
-				return e.Eval(bp)
-			}
-			return v, nil
-		})
+		r, err := evalValue(v, bp)
 		if err != nil {
 			return Dict{}, fmt.Errorf("error while trying to evaluate %#v: %w", k, err)
 		}

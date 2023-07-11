@@ -26,7 +26,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
-	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -363,19 +362,13 @@ func (m Module) listUnusedModules() ModuleIDs {
 
 // GetUsedDeploymentVars returns a list of deployment vars used in the given value
 func GetUsedDeploymentVars(val cty.Value) []string {
-	res := map[string]bool{}
-	// Recurse through objects/maps/lists gathering used references to deployment variables.
-	cty.Walk(val, func(path cty.Path, val cty.Value) (bool, error) {
-		if ex, is := IsExpressionValue(val); is {
-			for _, r := range ex.References() {
-				if r.GlobalVar {
-					res[r.Name] = true
-				}
-			}
+	res := []string{}
+	for _, ref := range valueReferences(val) {
+		if ref.GlobalVar {
+			res = append(res, ref.Name)
 		}
-		return true, nil
-	})
-	return maps.Keys(res)
+	}
+	return res
 }
 
 func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
@@ -755,16 +748,12 @@ func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
 // validate every module setting in the blueprint containing a reference
 func checkModuleSettings(bp Blueprint) error {
 	return bp.WalkModules(func(m *Module) error {
-		return cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
-			if e, is := IsExpressionValue(v); is {
-				for _, r := range e.References() {
-					if err := validateModuleSettingReference(bp, *m, r); err != nil {
-						return false, err
-					}
-				}
+		for _, r := range valueReferences(m.Settings.AsObject()) {
+			if err := validateModuleSettingReference(bp, *m, r); err != nil {
+				return err
 			}
-			return true, nil
-		})
+		}
+		return nil
 	})
 }
 
@@ -774,5 +763,55 @@ func checkPackerGroups(groups []DeploymentGroup) error {
 			return fmt.Errorf("group %s is \"kind: packer\" but has more than 1 module; separate each packer module into its own deployment group", group.Name)
 		}
 	}
+	return nil
+}
+
+func (bp *Blueprint) evalVars() error {
+	// 0 - unvisited
+	// 1 - on stack
+	// 2 - done
+	used := map[string]int{}
+	res := Dict{}
+
+	// walk vars in reverse topological order, and evaluate them
+	var dfs func(string) error
+	dfs = func(n string) error {
+		used[n] = 1 // put on stack
+		v := bp.Vars.Get(n)
+		for _, ref := range valueReferences(v) {
+			if !ref.GlobalVar {
+				return BpError{
+					Root.Vars.Dot(n),
+					fmt.Errorf("non-global variable %q referenced in expression", ref.Name),
+				}
+			}
+			if used[ref.Name] == 1 {
+				return BpError{
+					Root.Vars.Dot(n),
+					fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name),
+				}
+			}
+			if used[ref.Name] == 0 {
+				if err := dfs(ref.Name); err != nil {
+					return err
+				}
+			}
+		}
+
+		used[n] = 2 // remove from stack and evaluate
+		ev, err := evalValue(v, Blueprint{Vars: res})
+		res.Set(n, ev)
+		return err
+	}
+
+	for n := range bp.Vars.Items() {
+		if used[n] == 0 { // unvisited
+			if err := dfs(n); err != nil {
+				return err
+			}
+		}
+	}
+
+	bp.Vars = res
 	return nil
 }
