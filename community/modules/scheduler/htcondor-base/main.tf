@@ -30,30 +30,23 @@ locals {
   central_manager_count    = var.central_manager_high_availability ? 2 : 1
   central_manager_ip_names = [for i in range(local.central_manager_count) : "${var.deployment_name}-cm-ip-${i}"]
 
-  pool_password = coalesce(var.pool_password, random_password.pool.result)
-  trust_domain  = "c.${var.project_id}.internal"
-
   cm_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_central_manager",
     central_manager_ips = module.address.addresses,
-    trust_domain        = local.trust_domain,
     spool_dir           = "${var.spool_parent_dir}/spool",
   })
 
   execute_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_execute",
     central_manager_ips = module.address.addresses,
-    trust_domain        = local.trust_domain,
     spool_dir           = "${var.spool_parent_dir}/spool",
   })
 
   ap_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_submit",
     central_manager_ips = module.address.addresses,
-    trust_domain        = local.trust_domain,
     spool_dir           = "${var.spool_parent_dir}/spool",
   })
-
 
   cm_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.cm_config.output_name}"
   runner_cm = {
@@ -63,9 +56,6 @@ locals {
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_central_manager",
       "-e config_object=${local.cm_object}",
-      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
-      "-e xp_idtoken_secret_id=${google_secret_manager_secret.execute_point_idtoken.secret_id}",
-      "-e trust_domain=${local.trust_domain}",
     ])
   }
 
@@ -77,8 +67,6 @@ locals {
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_submit",
       "-e config_object=${local.ap_object}",
-      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
-      "-e trust_domain=${local.trust_domain}",
       "-e job_queue_ha=${var.job_queue_high_availability}",
       "-e spool_dir=${var.spool_parent_dir}/spool",
     ])
@@ -92,17 +80,12 @@ locals {
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_execute",
       "-e config_object=${local.execute_object}",
-      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
-      "-e xp_idtoken_secret_id=${google_secret_manager_secret.execute_point_idtoken.secret_id}",
-      "-e trust_domain=${local.trust_domain}",
     ])
   }
   windows_startup_ps1 = templatefile(
     "${path.module}/templates/download-condor-config.ps1.tftpl",
     {
-      config_object        = local.execute_object,
-      trust_domain         = local.trust_domain,
-      xp_idtoken_secret_id = google_secret_manager_secret.execute_point_idtoken.secret_id,
+      config_object = local.execute_object,
     }
   )
 }
@@ -177,62 +160,6 @@ module "central_manager_service_account" {
   names         = ["cm"]
   display_name  = local.central_manager_display_name
   project_roles = local.central_manager_roles
-}
-
-resource "random_password" "pool" {
-  length           = 24
-  special          = true
-  override_special = "_-#=."
-}
-
-resource "google_secret_manager_secret" "pool_password" {
-  secret_id = "${var.deployment_name}-pool-password"
-
-  labels = local.labels
-
-  replication {
-    automatic = true
-  }
-}
-
-resource "google_secret_manager_secret_version" "pool_password" {
-  secret      = google_secret_manager_secret.pool_password.id
-  secret_data = local.pool_password
-}
-
-# this secret will be populated by the Central Manager
-resource "google_secret_manager_secret" "execute_point_idtoken" {
-  secret_id = "${var.deployment_name}-execute-point-idtoken"
-
-  labels = local.labels
-
-  replication {
-    automatic = true
-  }
-}
-
-resource "google_secret_manager_secret_iam_member" "central_manager_password" {
-  secret_id = google_secret_manager_secret.pool_password.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = module.central_manager_service_account.iam_email
-}
-
-resource "google_secret_manager_secret_iam_member" "central_manager_idtoken" {
-  secret_id = google_secret_manager_secret.execute_point_idtoken.id
-  role      = "roles/secretmanager.secretVersionManager"
-  member    = module.central_manager_service_account.iam_email
-}
-
-resource "google_secret_manager_secret_iam_member" "access_point" {
-  secret_id = google_secret_manager_secret.pool_password.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = module.access_point_service_account.iam_email
-}
-
-resource "google_secret_manager_secret_iam_member" "execute_point" {
-  secret_id = google_secret_manager_secret.execute_point_idtoken.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = module.execute_point_service_account.iam_email
 }
 
 module "address" {
