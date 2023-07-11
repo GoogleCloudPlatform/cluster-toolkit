@@ -100,7 +100,9 @@ locals {
   windows_startup_ps1 = templatefile(
     "${path.module}/templates/download-condor-config.ps1.tftpl",
     {
-      config_object = local.execute_object
+      config_object        = local.execute_object,
+      trust_domain         = local.trust_domain,
+      xp_idtoken_secret_id = google_secret_manager_secret.execute_point_idtoken.secret_id,
     }
   )
 }
