@@ -70,13 +70,6 @@ variable "execute_point_roles" {
   ]
 }
 
-variable "pool_password" {
-  description = "HTCondor Pool Password"
-  type        = string
-  sensitive   = true
-  default     = null
-}
-
 variable "central_manager_high_availability" {
   description = "Provision HTCondor central manager in high availability mode"
   type        = bool

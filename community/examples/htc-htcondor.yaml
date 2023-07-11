@@ -64,10 +64,16 @@ deployment_groups:
     use:
     - network1
 
+  - id: htcondor_secrets
+    source: community/modules/scheduler/htcondor-pool-secrets
+    use:
+    - htcondor_base
+
   - id: htcondor_startup_central_manager
     source: modules/scripts/startup-script
     settings:
       runners:
+      - $(htcondor_secrets.central_manager_runner)
       - $(htcondor_base.central_manager_runner)
 
   - id: htcondor_cm
@@ -83,7 +89,7 @@ deployment_groups:
       machine_type: c2-standard-4
       disable_public_ips: true
       service_account:
-        email: $(htcondor_base.central_manager_service_account)
+        email: $(htcondor_base.central_manager_service_account_email)
         scopes:
         - cloud-platform
       network_interfaces:
@@ -104,6 +110,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
+      - $(htcondor_secrets.execute_point_runner)
       - $(htcondor_base.execute_point_runner)
 
   # the HTCondor modules support up to 2 execute points per blueprint
@@ -120,7 +127,7 @@ deployment_groups:
         family: $(vars.new_image_family)
       min_idle: 2
       service_account:
-        email: $(htcondor_base.execute_point_service_account)
+        email: $(htcondor_base.execute_point_service_account_email)
         scopes:
         - cloud-platform
 
@@ -135,7 +142,7 @@ deployment_groups:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
       service_account:
-        email: $(htcondor_base.execute_point_service_account)
+        email: $(htcondor_base.execute_point_service_account_email)
         scopes:
         - cloud-platform
 
@@ -144,6 +151,7 @@ deployment_groups:
     settings:
       runners:
       - $(htcondor_install.install_autoscaler_runner)
+      - $(htcondor_secrets.access_point_runner)
       - $(htcondor_base.access_point_runner)
       - $(htcondor_execute_point.configure_autoscaler_runner)
       - $(htcondor_execute_point_spot.configure_autoscaler_runner)
@@ -175,7 +183,7 @@ deployment_groups:
       add_deployment_name_before_prefix: true
       machine_type: c2-standard-4
       service_account:
-        email: $(htcondor_base.access_point_service_account)
+        email: $(htcondor_base.access_point_service_account_email)
         scopes:
         - cloud-platform
     outputs:
