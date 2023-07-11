@@ -80,3 +80,8 @@ output "central_manager_secondary_internal_ip" {
   description = "Reserved internal IP address for use by failover Central Manager"
   value       = try(module.address.addresses[1], null)
 }
+
+output "windows_startup_ps1" {
+  description = "Windows PowerShell script to update HTCondor configuration file"
+  value       = local.windows_startup_ps1
+}
