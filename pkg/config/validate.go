@@ -173,17 +173,6 @@ func (dc DeploymentConfig) validateVars() error {
 			return fmt.Errorf(nilErr, key)
 		}
 	}
-
-	err := cty.Walk(vars.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
-		if e, is := IsExpressionValue(v); is {
-			return false, fmt.Errorf("can not use expressions in vars block, got %#v", e.makeYamlExpressionValue().AsString())
-		}
-		return true, nil
-	})
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 

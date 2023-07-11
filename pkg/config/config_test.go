@@ -1055,3 +1055,54 @@ func (s *MySuite) TestGroupNameValidate(c *C) {
 	c.Check(GroupName("1").Validate(), IsNil)
 	c.Check(GroupName("12g").Validate(), IsNil)
 }
+
+func (s *MySuite) TestEvalVars(c *C) {
+	{ // OK
+		vars := NewDict(map[string]cty.Value{
+			"a":  cty.StringVal("A"),
+			"b":  MustParseExpression(`"${var.a}_B"`).AsValue(),
+			"c":  MustParseExpression(`"${var.b}_C"`).AsValue(),
+			"bc": MustParseExpression(`"${var.b}|${var.c}"`).AsValue(),
+		})
+		bp := Blueprint{Vars: vars}
+		c.Check(bp.evalVars(), IsNil)
+		c.Check(bp.Vars.Items(), DeepEquals, map[string]cty.Value{
+			"a":  cty.StringVal("A"),
+			"b":  cty.StringVal("A_B"),
+			"c":  cty.StringVal("A_B_C"),
+			"bc": cty.StringVal("A_B|A_B_C"),
+		})
+	}
+	{ // Non global ref
+		vars := NewDict(map[string]cty.Value{
+			"a": cty.StringVal("A"),
+			"b": MustParseExpression(`"${var.a}_${module.foo.ko}"`).AsValue(),
+		})
+		bp := Blueprint{Vars: vars}
+		err := bp.evalVars()
+		var berr BpError
+		if errors.As(err, &berr) {
+			c.Check(berr.Path.String(), Equals, "vars.b")
+		} else {
+			c.Error(err, " should be BpError")
+		}
+	}
+
+	{ // Cycle
+		vars := NewDict(map[string]cty.Value{
+			"uro": MustParseExpression(`"uro_${var.bo}_${var.ros}"`).AsValue(),
+			"bo":  cty.StringVal("===="),
+			"ros": MustParseExpression(`"${var.uro}_${var.bo}_ros"`).AsValue(),
+		})
+		bp := Blueprint{Vars: vars}
+		err := bp.evalVars()
+		var berr BpError
+		if errors.As(err, &berr) {
+			if berr.Path.String() != "vars.uro" && berr.Path.String() != "vars.ros" {
+				c.Error(berr, " should point to vars.uro or vars.ros")
+			}
+		} else {
+			c.Error(err, " should be BpError")
+		}
+	}
+}
