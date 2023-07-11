@@ -155,6 +155,7 @@ variable "disk_size_gb" {
 
 variable "windows_startup_ps1" {
   description = "Startup script to run at boot-time for Windows-based HTCondor execute points"
-  type        = string
-  default     = null
+  type        = list(string)
+  default     = []
+  nullable    = false
 }
