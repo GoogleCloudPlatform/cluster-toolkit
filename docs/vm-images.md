@@ -25,7 +25,7 @@ Exceptions:
 The HPC Toolkit officially supports Ubuntu based VM images in the majority of
 our modules, with a couple exceptions:
 
-* [htcondor-configure]: Only provides support for the HPC CentOS 7 image.
+* [htcondor-base]: Only provides support for the HPC CentOS 7 image.
 * [nfs-server]: Only provides support for CentOS 7 images for the server itself.
 * [DDN-EXAScaler]: The underlying terraform module has a limitted set of
   supported images [documented][exascalerimages] in the exascaler-cloud-terraform
@@ -51,7 +51,7 @@ settings:
     project: ubuntu-os-cloud
 ```
 
-[htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
+[htcondor-base]: ../community/modules/scheduler/htcondor-configure/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [DDN-EXAScaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [exascalerimages]: https://github.com/DDNStorage/exascaler-cloud-terraform/blob/master/gcp/README.md#boot-image-options
