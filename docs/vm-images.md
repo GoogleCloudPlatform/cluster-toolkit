@@ -25,7 +25,7 @@ Exceptions:
 The HPC Toolkit officially supports Ubuntu based VM images in the majority of
 our modules, with a couple exceptions:
 
-* [htcondor-base]: Only provides support for the HPC CentOS 7 image.
+* [htcondor-base]: Only provides support for the HPC CentOS 7 and Rocky 8 images.
 * [nfs-server]: Only provides support for CentOS 7 images for the server itself.
 * [DDN-EXAScaler]: The underlying terraform module has a limitted set of
   supported images [documented][exascalerimages] in the exascaler-cloud-terraform
