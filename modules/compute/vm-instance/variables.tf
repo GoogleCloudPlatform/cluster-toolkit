@@ -136,9 +136,9 @@ variable "service_account" {
 }
 
 variable "network_self_link" {
-  description = "The self link of the network to attach the VM."
+  description = "The self link of the network to attach the VM. Can use \"default\" for the default network."
   type        = string
-  default     = "default"
+  default     = null
 }
 
 variable "subnetwork_self_link" {
