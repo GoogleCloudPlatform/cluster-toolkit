@@ -19,6 +19,7 @@ locals {
   labels = merge(var.labels, { ghpc_module = "htcondor-execute-point" })
 }
 
+
 locals {
   network_storage_metadata = var.network_storage == null ? {} : { network_storage = jsonencode(var.network_storage) }
 
@@ -28,9 +29,11 @@ locals {
   }
   enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 
+  windows_startup_ps1 = join("\n\n", var.windows_startup_ps1)
+
   is_windows_image = anytrue([for l in data.google_compute_image.htcondor.licenses : length(regexall("windows-cloud", l)) > 0])
-  windows_startup_metadata = local.is_windows_image && var.windows_startup_ps1 != null ? {
-    windows-startup-script-ps1 = var.windows_startup_ps1
+  windows_startup_metadata = local.is_windows_image && local.windows_startup_ps1 != "" ? {
+    windows-startup-script-ps1 = local.windows_startup_ps1
   } : {}
 
   metadata = merge(local.windows_startup_metadata, local.network_storage_metadata, local.enable_oslogin, var.metadata)
