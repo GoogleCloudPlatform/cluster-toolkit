@@ -64,6 +64,7 @@ locals {
       "-e htcondor_role=get_htcondor_central_manager",
       "-e config_object=${local.cm_object}",
       "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e xp_idtoken_secret_id=${google_secret_manager_secret.execute_point_idtoken.secret_id}",
       "-e trust_domain=${local.trust_domain}",
     ])
   }
@@ -92,6 +93,7 @@ locals {
       "-e htcondor_role=get_htcondor_execute",
       "-e config_object=${local.execute_object}",
       "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e xp_idtoken_secret_id=${google_secret_manager_secret.execute_point_idtoken.secret_id}",
       "-e trust_domain=${local.trust_domain}",
     ])
   }
@@ -196,9 +198,26 @@ resource "google_secret_manager_secret_version" "pool_password" {
   secret_data = local.pool_password
 }
 
-resource "google_secret_manager_secret_iam_member" "central_manager" {
+# this secret will be populated by the Central Manager
+resource "google_secret_manager_secret" "execute_point_idtoken" {
+  secret_id = "${var.deployment_name}-execute-point-idtoken"
+
+  labels = local.labels
+
+  replication {
+    automatic = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "central_manager_password" {
   secret_id = google_secret_manager_secret.pool_password.id
   role      = "roles/secretmanager.secretAccessor"
+  member    = module.central_manager_service_account.iam_email
+}
+
+resource "google_secret_manager_secret_iam_member" "central_manager_idtoken" {
+  secret_id = google_secret_manager_secret.execute_point_idtoken.id
+  role      = "roles/secretmanager.secretVersionManager"
   member    = module.central_manager_service_account.iam_email
 }
 
@@ -209,7 +228,7 @@ resource "google_secret_manager_secret_iam_member" "access_point" {
 }
 
 resource "google_secret_manager_secret_iam_member" "execute_point" {
-  secret_id = google_secret_manager_secret.pool_password.id
+  secret_id = google_secret_manager_secret.execute_point_idtoken.id
   role      = "roles/secretmanager.secretAccessor"
   member    = module.execute_point_service_account.iam_email
 }

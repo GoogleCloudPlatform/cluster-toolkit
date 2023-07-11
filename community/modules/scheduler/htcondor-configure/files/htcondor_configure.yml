@@ -32,10 +32,13 @@
       - trust_domain is defined
       - config_object is defined
   - name: Set HTCondor Pool password (token signing key)
+    when: htcondor_role != 'get_htcondor_execute'
     ansible.builtin.shell: |
       set -e -o pipefail
-      POOL_PASSWORD=$(gcloud secrets versions access latest --secret={{ password_id }})
-      echo -n "$POOL_PASSWORD" | sh -c "condor_store_cred add -c -i -"
+      TMPFILE=$(mktemp)
+      gcloud secrets versions access latest --out-file "$TMPFILE" --secret={{ password_id }}
+      condor_store_cred add -c -i "$TMPFILE"
+      rm -f "$TMPFILE"
     args:
       creates: "{{ condor_config_root }}/passwords.d/POOL"
       executable: /bin/bash
@@ -79,6 +82,17 @@
           -token condor@{{ trust_domain }}
       args:
         creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
+    - name: Create IDTOKEN secret for Execute Points
+      changed_when: true
+      ansible.builtin.shell: |
+        umask 0077
+        TRUST_DOMAIN=$(condor_config_val TRUST_DOMAIN)
+        TMPFILE=$(mktemp)
+        condor_token_create -authz READ -authz ADVERTISE_MASTER \
+            -authz ADVERTISE_STARTD -identity condor@{{ trust_domain }} > "$TMPFILE"
+        gcloud secrets versions add --data-file "$TMPFILE" {{ xp_idtoken_secret_id }}
+        rm -f "$TMPFILE"
+      when: xp_idtoken_secret_id | length > 0
   - name: Configure HTCondor SchedD
     when: htcondor_role == 'get_htcondor_submit'
     block:
@@ -134,7 +148,7 @@
             [Unit]
             RequiresMountsFor={{ spool_dir }}
         notify:
-        - Reload HTCondor SystemD unit
+        - Reload SystemD
     - name: Disable SchedD high availability
       when: not job_queue_ha | bool
       block:
@@ -149,20 +163,29 @@
           path: /etc/systemd/system/condor.service.d/mount-spool.conf
           state: absent
         notify:
-        - Reload HTCondor SystemD unit
+        - Reload SystemD
   - name: Configure HTCondor StartD
     when: htcondor_role == 'get_htcondor_execute'
     block:
-    - name: Create IDTOKEN to advertise execute point
-      ansible.builtin.shell: |
-        umask 0077
-        condor_token_create -authz READ -authz ADVERTISE_MASTER \
-          -authz ADVERTISE_STARTD -identity condor@{{ trust_domain }} \
-          -token condor@{{ trust_domain }}
-      args:
-        creates: "{{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}"
+    - name: Create SystemD override directory for HTCondor Execute Point
+      ansible.builtin.file:
+        path: /etc/systemd/system/condor.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+    - name: Fetch IDTOKEN to advertise execute point
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/condor.service.d/htcondor-token-fetcher.conf"
+        mode: 0644
+        content: |
+          [Service]
+          ExecStartPre=gcloud secrets versions access latest --secret {{ xp_idtoken_secret_id }} \
+              --out-file {{ condor_config_root }}/tokens.d/condor@{{ trust_domain }}
+      notify:
+      - Reload SystemD
   handlers:
-  - name: Reload HTCondor SystemD unit
+  - name: Reload SystemD
     ansible.builtin.systemd:
       daemon_reload: true
   - name: Restart HTCondor

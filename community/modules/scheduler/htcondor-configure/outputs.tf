@@ -27,7 +27,8 @@ output "central_manager_service_account" {
   description = "HTCondor Central Manager Service Account (e-mail format)"
   value       = module.central_manager_service_account.email
   depends_on = [
-    google_secret_manager_secret_iam_member.central_manager,
+    google_secret_manager_secret_iam_member.central_manager_idtoken,
+    google_secret_manager_secret_iam_member.central_manager_password,
     module.central_manager_service_account
   ]
 }
