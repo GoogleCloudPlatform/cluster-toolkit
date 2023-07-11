@@ -276,11 +276,11 @@ class AutoScaler:
             constraint=filter_idle_vms.and_(filter_mig),
             projection=["Machine", "CloudZone"])
 
-        NODENAME_ATTRIBUTE = "UtsnameNodename"
+        NODENAME_ATTRIBUTE = "Machine"
         claimed_node_ads = coll.query(htcondor.AdTypes.Startd,
             constraint=filter_claimed_vms.and_(filter_mig),
             projection=[NODENAME_ATTRIBUTE])
-        claimed_nodes = [ ad[NODENAME_ATTRIBUTE] for ad in claimed_node_ads]
+        claimed_nodes = [ ad[NODENAME_ATTRIBUTE].split(".")[0] for ad in claimed_node_ads]
 
         # treat OrderedDict as a set by ignoring key values; this set will
         # contain VMs we would consider deleting, in inverse order of
