@@ -13,18 +13,18 @@ Debian or Ubuntu distributions.
 It also exports a list of Google Cloud APIs which must be enabled prior to
 provisioning an HTCondor Pool.
 
-It is expected to be used with the [htcondor-configure] and
+It is expected to be used with the [htcondor-base] and
 [htcondor-execute-point] modules.
 
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[htcondor-configure]: ../../scheduler/htcondor-configure/README.md
+[htcondor-base]: ../../scheduler/htcondor-configure/README.md
 [htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
 
 ### Example
 
 The following code snippet uses this module to create startup scripts that
 install the HTCondor software and adds custom configurations using
-[htcondor-configure] and [htcondor-execute-point].
+[htcondor-base] and [htcondor-execute-point].
 
 ```yaml
 - id: htcondor_install
