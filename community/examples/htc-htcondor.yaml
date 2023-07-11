@@ -60,7 +60,7 @@ deployment_groups:
 - group: pool
   modules:
   - id: htcondor_configure
-    source: community/modules/scheduler/htcondor-configure
+    source: community/modules/scheduler/htcondor-base
     use:
     - network1
 
