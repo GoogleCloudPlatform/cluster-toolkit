@@ -49,7 +49,7 @@ output "pool_password_secret_id" {
 
 output "central_manager_runner" {
   description = "Toolkit Runner to configure an HTCondor Central Manager"
-  value       = local.runner_cm_role
+  value       = local.runner_cm
   depends_on = [
     google_secret_manager_secret_version.pool_password
   ]
@@ -57,7 +57,7 @@ output "central_manager_runner" {
 
 output "access_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Access Point"
-  value       = local.runner_access_role
+  value       = local.runner_access
   depends_on = [
     google_secret_manager_secret_version.pool_password
   ]
@@ -65,7 +65,7 @@ output "access_point_runner" {
 
 output "execute_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Execute Point"
-  value       = local.runner_execute_role
+  value       = local.runner_execute
   depends_on = [
     google_secret_manager_secret_version.pool_password
   ]

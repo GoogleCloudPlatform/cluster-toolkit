@@ -30,50 +30,115 @@ locals {
   central_manager_count    = var.central_manager_high_availability ? 2 : 1
   central_manager_ip_names = [for i in range(local.central_manager_count) : "${var.deployment_name}-cm-ip-${i}"]
 
-  pool_password = var.pool_password == null ? random_password.pool.result : var.pool_password
+  pool_password = coalesce(var.pool_password, random_password.pool.result)
+  trust_domain  = "c.${var.project_id}.internal"
 
-  runner_cm_role = {
+  cm_config = templatefile("${path.module}/templates/htcondor.tftpl", {
+    htcondor_role       = "get_htcondor_central_manager",
+    central_manager_ips = module.address.addresses,
+    trust_domain        = local.trust_domain,
+    spool_dir           = "${var.spool_parent_dir}/spool",
+  })
+
+  execute_config = templatefile("${path.module}/templates/htcondor.tftpl", {
+    htcondor_role       = "get_htcondor_execute",
+    central_manager_ips = module.address.addresses,
+    trust_domain        = local.trust_domain,
+    spool_dir           = "${var.spool_parent_dir}/spool",
+  })
+
+  ap_config = templatefile("${path.module}/templates/htcondor.tftpl", {
+    htcondor_role       = "get_htcondor_submit",
+    central_manager_ips = module.address.addresses,
+    trust_domain        = local.trust_domain,
+    spool_dir           = "${var.spool_parent_dir}/spool",
+  })
+
+
+  cm_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.cm_config.output_name}"
+  runner_cm = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_central_manager",
-      "-e htcondor_central_manager_ips=${join(",", module.address.addresses)}",
+      "-e config_object=${local.cm_object}",
       "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
-      "-e project_id=${var.project_id}",
+      "-e trust_domain=${local.trust_domain}",
     ])
   }
 
-  runner_access_role = {
+  ap_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.ap_config.output_name}"
+  runner_access = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_submit",
-      "-e htcondor_central_manager_ips=${join(",", module.address.addresses)}",
+      "-e config_object=${local.ap_object}",
+      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
+      "-e trust_domain=${local.trust_domain}",
       "-e job_queue_ha=${var.job_queue_high_availability}",
       "-e spool_dir=${var.spool_parent_dir}/spool",
-      "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
-      "-e project_id=${var.project_id}",
     ])
   }
 
-  runner_execute_role = {
+  execute_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.execute_config.output_name}"
+  runner_execute = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure.yml")
     "destination" = "htcondor_configure.yml"
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_execute",
-      "-e htcondor_central_manager_ips=${join(",", module.address.addresses)}",
+      "-e config_object=${local.execute_object}",
       "-e password_id=${google_secret_manager_secret.pool_password.secret_id}",
-      "-e project_id=${var.project_id}",
+      "-e trust_domain=${local.trust_domain}",
     ])
   }
 }
 
+module "htcondor_bucket" {
+  source  = "terraform-google-modules/cloud-storage/google"
+  version = "~> 4.0"
+
+  project_id       = var.project_id
+  location         = var.region
+  prefix           = var.deployment_name
+  names            = ["htcondor-config"]
+  randomize_suffix = true
+  labels           = local.labels
+
+  bucket_viewers = {
+    "htcondor-config" = join(",", [
+      module.access_point_service_account.iam_email,
+      module.central_manager_service_account.iam_email,
+      module.execute_point_service_account.iam_email,
+    ])
+  }
+  set_viewer_roles = true
+}
+
+resource "google_storage_bucket_object" "cm_config" {
+  name    = "${var.deployment_name}-cm-config"
+  content = local.cm_config
+  bucket  = module.htcondor_bucket.name
+}
+
+resource "google_storage_bucket_object" "execute_config" {
+  name    = "${var.deployment_name}-execute-config"
+  content = local.execute_config
+  bucket  = module.htcondor_bucket.name
+}
+
+resource "google_storage_bucket_object" "ap_config" {
+  name    = "${var.deployment_name}-ap-config"
+  content = local.ap_config
+  bucket  = module.htcondor_bucket.name
+}
+
 module "access_point_service_account" {
   source     = "terraform-google-modules/service-accounts/google"
-  version    = "~> 4.1"
+  version    = "~> 4.2"
   project_id = var.project_id
   prefix     = var.deployment_name
 
@@ -84,7 +149,7 @@ module "access_point_service_account" {
 
 module "execute_point_service_account" {
   source     = "terraform-google-modules/service-accounts/google"
-  version    = "~> 4.1"
+  version    = "~> 4.2"
   project_id = var.project_id
   prefix     = var.deployment_name
 
@@ -95,7 +160,7 @@ module "execute_point_service_account" {
 
 module "central_manager_service_account" {
   source     = "terraform-google-modules/service-accounts/google"
-  version    = "~> 4.1"
+  version    = "~> 4.2"
   project_id = var.project_id
   prefix     = var.deployment_name
 
