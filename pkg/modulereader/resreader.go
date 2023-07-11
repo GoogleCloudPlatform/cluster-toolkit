@@ -268,6 +268,7 @@ func defaultAPIList(source string) []string {
 		"community/modules/scheduler/htcondor-base": {
 			"iam.googleapis.com",
 			"secretmanager.googleapis.com",
+			"storage.googleapis.com",
 		},
 		"community/modules/scheduler/pbspro-client": {
 			"compute.googleapis.com",
