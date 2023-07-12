@@ -173,10 +173,10 @@ func useModule(mod *Module, use Module) {
 // applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
 func (dc *DeploymentConfig) applyUseModules() error {
-	return dc.Config.WalkModules(func(m *Module) error {
+	return dc.Config.WalkModules(func(_ modulePath, m *Module) error {
 		for _, u := range m.Use {
 			used, err := dc.Config.Module(u)
-			if err != nil {
+			if err != nil { // should never happen
 				return err
 			}
 			useModule(m, *used)
@@ -223,7 +223,7 @@ func (dc *DeploymentConfig) combineLabels() {
 	gl := mergeMaps(defaults, vars.Get(labels).AsValueMap())
 	vars.Set(labels, cty.ObjectVal(gl))
 
-	dc.Config.WalkModules(func(mod *Module) error {
+	dc.Config.WalkModules(func(_ modulePath, mod *Module) error {
 		combineModuleLabels(mod, *dc)
 		return nil
 	})
@@ -291,7 +291,7 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to module settings if not already set.
 func (dc *DeploymentConfig) applyGlobalVariables() error {
-	return dc.Config.WalkModules(func(mod *Module) error {
+	return dc.Config.WalkModules(func(_ modulePath, mod *Module) error {
 		return dc.Config.applyGlobalVarsInModule(mod)
 	})
 }
@@ -465,7 +465,7 @@ func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference
 // find all intergroup references and add them to source Module.Outputs
 func (bp *Blueprint) populateOutputs() {
 	refs := map[Reference]bool{}
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(_ modulePath, m *Module) error {
 		rs := FindIntergroupReferences(m.Settings.AsObject(), *m, *bp)
 		for _, r := range rs {
 			refs[r] = true
@@ -473,7 +473,7 @@ func (bp *Blueprint) populateOutputs() {
 		return nil
 	})
 
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(_ modulePath, m *Module) error {
 		for r := range refs {
 			if r.Module != m.ID {
 				continue // find IGC references pointing to this module
