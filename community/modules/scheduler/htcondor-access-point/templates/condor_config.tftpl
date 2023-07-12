@@ -1,0 +1,55 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# this file is managed by the HPC Toolkit; do not edit it manually
+# override settings with a higher priority (last lexically) named file
+# https://htcondor.readthedocs.io/en/latest/admin-manual/introduction-to-configuration.html?#ordered-evaluation-to-set-the-configuration
+
+use role:${htcondor_role}
+CONDOR_HOST = ${join(",", central_manager_ips)}
+
+SPOOL = ${spool_dir}
+SCHEDD_INTERVAL = 30
+TRUST_UID_DOMAIN = True
+SUBMIT_ATTRS = RunAsOwner
+RunAsOwner = True
+
+# When a job matches to a machine, add machine attributes to the job for
+# condor_history (e.g. VM Instance ID)
+use feature:JobsHaveInstanceIDs
+SYSTEM_JOB_MACHINE_ATTRS = $(SYSTEM_JOB_MACHINE_ATTRS) \
+  CloudVMType CloudZone CloudInterruptible
+SYSTEM_JOB_MACHINE_ATTRS_HISTORY_LENGTH = 10
+
+# Add Cloud attributes to SchedD ClassAd
+use feature:ScheddCronOneShot(cloud, $(LIBEXEC)/common-cloud-attributes-google.py)
+SCHEDD_CRON_cloud_PREFIX = Cloud
+
+# the sequence of job transforms and submit requirements below set
+# a default job attribute RequireSpot to False but allow the user to
+# specify *only* a boolean value with +RequireSpot = True in their job
+# submit file; the requirements of the job are transformed to filter
+# on +RequireSpot unless job has explicit CloudInterruptible requirements
+JOB_TRANSFORM_NAMES = SPOT_DEFAULT, SPOT_REQS
+JOB_TRANSFORM_SPOT_DEFAULT @=end
+   DEFAULT RequireSpot False
+@end
+# Unless explicit, set CloudInterruptible requirements to job RequireSpot attribute
+JOB_TRANSFORM_SPOT_REQS @=end
+   REQUIREMENTS ! unresolved(Requirements, "^CloudInterruptible$")
+   SET Requirements $(MY.Requirements) && (CloudInterruptible is My.RequireSpot)
+@end
+SUBMIT_REQUIREMENT_NAMES = REQSPOT
+SUBMIT_REQUIREMENT_REQSPOT = isBoolean(RequireSpot)
+SUBMIT_REQUIREMENT_REQSPOT_REASON = "Jobs must set +RequireSpot to either True or False"
