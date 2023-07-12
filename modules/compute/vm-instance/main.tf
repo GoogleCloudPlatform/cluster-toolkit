@@ -120,14 +120,16 @@ resource "google_compute_disk" "boot_disk" {
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
-  project = var.project_id
+  project  = var.project_id
+  provider = google-beta
 
   count = var.placement_policy != null ? 1 : 0
   name  = "${local.resource_prefix}-vm-instance-placement"
   group_placement_policy {
-    vm_count                  = var.placement_policy.vm_count
-    availability_domain_count = var.placement_policy.availability_domain_count
-    collocation               = var.placement_policy.collocation
+    vm_count                  = try(var.placement_policy.vm_count, null)
+    availability_domain_count = try(var.placement_policy.availability_domain_count, null)
+    collocation               = try(var.placement_policy.collocation, null)
+    max_distance              = try(var.placement_policy.max_distance, null)
   }
 }
 
