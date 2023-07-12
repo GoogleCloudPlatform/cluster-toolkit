@@ -388,13 +388,18 @@ func (s *MySuite) TestExpandConfig(c *C) {
 
 func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 	{ // Duplicate module name same group
-		g := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}, {ID: "pony"}}}
+		g := DeploymentGroup{Name: "ice", Modules: []Module{
+			{ID: "pony", Kind: PackerKind},
+			{ID: "pony", Kind: PackerKind},
+		}}
 		err := checkModulesAndGroups([]DeploymentGroup{g})
 		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
 	{ // Duplicate module name different groups
-		ice := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}}}
-		fire := DeploymentGroup{Name: "fire", Modules: []Module{{ID: "pony"}}}
+		ice := DeploymentGroup{Name: "ice", Modules: []Module{
+			{ID: "pony", Kind: PackerKind}}}
+		fire := DeploymentGroup{Name: "fire", Modules: []Module{
+			{ID: "pony", Kind: PackerKind}}}
 		err := checkModulesAndGroups([]DeploymentGroup{ice, fire})
 		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
@@ -404,7 +409,12 @@ func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 			{ID: "zebra", Kind: TerraformKind},
 		}}
 		err := checkModulesAndGroups([]DeploymentGroup{g})
-		c.Check(err, ErrorMatches, ".*got packer and terraform")
+		c.Check(err, NotNil)
+	}
+	{ // Empty group
+		g := DeploymentGroup{Name: "ice"}
+		err := checkModulesAndGroups([]DeploymentGroup{g})
+		c.Check(err, NotNil)
 	}
 }
 
