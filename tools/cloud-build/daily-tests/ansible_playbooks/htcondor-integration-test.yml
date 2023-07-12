@@ -52,7 +52,9 @@
         executable: /bin/bash
       ansible.builtin.shell: |
         set -e -o pipefail
-        terraform output -json external_ip_htcondor_access | jq -r '.[0]'
+        sleep 60
+        gcloud compute instances list --filter="labels.ghpc_deployment={{ deployment_name }} AND labels.ghpc_module=htcondor-access-point" \
+            --format='csv[no-heading](networkInterfaces.accessConfigs[0].natIP)' --limit 1
     - name: Add Login node as host
       ansible.builtin.add_host:
         hostname: "{{ access_ip.stdout }}"
