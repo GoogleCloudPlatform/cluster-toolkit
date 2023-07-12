@@ -15,32 +15,32 @@
  */
 
 locals {
-  runner_install_htcondor = {
-    "type"        = "ansible-local"
-    "source"      = "${path.module}/files/install-htcondor.yaml"
-    "destination" = "install-htcondor.yaml"
-    "args" = join(" ", [
-      "-e enable_docker=${var.enable_docker}",
-      "-e condor_version=${var.condor_version}",
-    ])
-  }
+  runners = [
+    {
+      "type"        = "ansible-local"
+      "source"      = "${path.module}/files/install-htcondor.yaml"
+      "destination" = "install-htcondor.yaml"
+      "args" = join(" ", [
+        "-e enable_docker=${var.enable_docker}",
+        "-e condor_version=${var.condor_version}",
+      ])
+    },
+    {
+      "type"        = "ansible-local"
+      "content"     = file("${path.module}/files/install-htcondor-autoscaler-deps.yml")
+      "destination" = "install-htcondor-autoscaler-deps.yml"
+    },
+    {
+      "type"        = "data"
+      "content"     = file("${path.module}/files/autoscaler.py")
+      "destination" = "/usr/local/htcondor/bin/autoscaler.py"
+    },
+  ]
 
   install_htcondor_ps1 = templatefile(
     "${path.module}/templates/install-htcondor.ps1.tftpl", {
       condor_version = var.condor_version
   })
-
-  runner_install_autoscaler_deps = {
-    "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/install-htcondor-autoscaler-deps.yml")
-    "destination" = "install-htcondor-autoscaler-deps.yml"
-  }
-
-  runner_install_autoscaler = {
-    "type"        = "data"
-    "content"     = file("${path.module}/files/autoscaler.py")
-    "destination" = "/usr/local/htcondor/bin/autoscaler.py"
-  }
 
   required_apis = [
     "compute.googleapis.com",

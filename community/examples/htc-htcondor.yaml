@@ -39,10 +39,8 @@ deployment_groups:
 
   - id: htcondor_install_script
     source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_install.install_htcondor_runner)
-      - $(htcondor_install.install_autoscaler_deps_runner)
+    use:
+    - htcondor_install
 
 - group: packer
   modules:
@@ -150,7 +148,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(htcondor_install.install_autoscaler_runner)
       - $(htcondor_secrets.access_point_runner)
       - $(htcondor_base.access_point_runner)
       - $(htcondor_execute_point.configure_autoscaler_runner)
