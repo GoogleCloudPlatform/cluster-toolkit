@@ -39,7 +39,7 @@ const (
 
 // validate is the top-level function for running the validation suite.
 func (dc DeploymentConfig) validate() error {
-	errs := MultiError{}
+	errs := Errors{}
 	return errs.
 		Add(dc.executeValidators()).
 		Add(dc.validateModules()).OrNil()
@@ -112,62 +112,67 @@ func (dc DeploymentConfig) executeValidators() error {
 	return nil
 }
 
+func validateGlobalLabels(bp Blueprint) error {
+	if !bp.Vars.Has("labels") {
+		return nil
+	}
+	p := Root.Vars.Dot("labels")
+	labels := bp.Vars.Get("labels")
+	ty := labels.Type()
+
+	if !ty.IsObjectType() && !ty.IsMapType() {
+		return BpError{
+			p, errors.New("vars.labels must be a map of strings")} // skip further validation
+	}
+	errs := Errors{}
+	if labels.LengthInt() > maxLabels {
+		// GCP resources cannot have more than 64 labels, so enforce this upper bound here
+		// to do some early validation. Modules may add more labels, leading to potential
+		// deployment failures.
+		errs.At(p, errors.New("vars.labels cannot have more than 64 labels"))
+	}
+	for k, v := range labels.AsValueMap() {
+		// TODO: Use cty.Path to point to the specific label that is invalid
+		if v.Type() != cty.String {
+			errs.At(p, errors.New("vars.labels must be a map of strings"))
+		}
+		s := v.AsString()
+
+		// Check that label names are valid
+		if !isValidLabelName(k) {
+			errs.At(p, errors.Errorf("%s: '%s: %s'", errorMessages["labelNameReqs"], k, s))
+		}
+		// Check that label values are valid
+		if !isValidLabelValue(s) {
+			errs.At(p, errors.Errorf("%s: '%s: %s'", errorMessages["labelValueReqs"], k, s))
+		}
+	}
+	return errs.OrNil()
+}
+
 // validateVars checks the global variables for viable types
 func (dc DeploymentConfig) validateVars() error {
-	vars := dc.Config.Vars
-	nilErr := "deployment variable %s was not set"
-
-	// Check type of labels (if they are defined)
-	if vars.Has("labels") {
-		labels := vars.Get("labels")
-		ty := labels.Type()
-		if !ty.IsObjectType() && !ty.IsMapType() {
-			return errors.New("vars.labels must be a map of strings")
-		}
-		if labels.LengthInt() > maxLabels {
-			// GCP resources cannot have more than 64 labels, so enforce this upper bound here
-			// to do some early validation. Modules may add more labels, leading to potential
-			// deployment failures.
-			return errors.New("vars.labels cannot have more than 64 labels")
-		}
-		for labelName, v := range labels.AsValueMap() {
-			if v.Type() != cty.String {
-				return errors.New("vars.labels must be a map of strings")
-			}
-			labelValue := v.AsString()
-
-			// Check that label names are valid
-			if !isValidLabelName(labelName) {
-				return errors.Errorf("%s: '%s: %s'",
-					errorMessages["labelNameReqs"], labelName, labelValue)
-			}
-			// Check that label values are valid
-			if !isValidLabelValue(labelValue) {
-				return errors.Errorf("%s: '%s: %s'",
-					errorMessages["labelValueReqs"], labelName, labelValue)
-			}
-		}
-	}
-
+	errs := Errors{}
+	errs.Add(validateGlobalLabels(dc.Config))
 	// Check for any nil values
-	for key, val := range vars.Items() {
+	for key, val := range dc.Config.Vars.Items() {
 		if val.IsNull() {
-			return fmt.Errorf(nilErr, key)
+			errs.At(Root.Vars.Dot(key), fmt.Errorf("deployment variable %s was not set", key))
 		}
 	}
-	return nil
+	return errs.OrNil()
 }
 
 func validateModule(p modulePath, m Module) error {
-	errs := MultiError{}
+	errs := Errors{}
 	if m.ID == "" {
-		errs.Add(BpError{p.ID, fmt.Errorf(errorMessages["emptyID"])})
+		errs.At(p.ID, fmt.Errorf(errorMessages["emptyID"]))
 	}
 	if m.Source == "" {
-		errs.Add(BpError{p.Source, fmt.Errorf(errorMessages["emptySource"])})
+		errs.At(p.Source, fmt.Errorf(errorMessages["emptySource"]))
 	}
 	if !IsValidModuleKind(m.Kind.String()) {
-		errs.Add(BpError{p.Kind, fmt.Errorf(errorMessages["wrongKind"])})
+		errs.At(p.Kind, fmt.Errorf(errorMessages["wrongKind"]))
 	}
 
 	info, err := modulereader.GetModuleInfo(m.Source, m.Kind.kind)
@@ -175,20 +180,21 @@ func validateModule(p modulePath, m Module) error {
 		return errs.Add(err)
 	}
 
-	errs.Add(validateSettings(p, m, info))
-	errs.Add(validateOutputs(p, m, info))
-	return errs.OrNil()
+	return errs.
+		Add(validateSettings(p, m, info)).
+		Add(validateOutputs(p, m, info)).
+		OrNil()
 }
 
 func validateOutputs(p modulePath, mod Module, info modulereader.ModuleInfo) error {
-	errs := MultiError{}
+	errs := Errors{}
 	outputs := info.GetOutputsAsMap()
 
 	// Ensure output exists in the underlying modules
 	for io, output := range mod.Outputs {
 		if _, ok := outputs[output.Name]; !ok {
 			err := fmt.Errorf("%s, module: %s output: %s", errorMessages["invalidOutput"], mod.ID, output.Name)
-			errs.Add(BpError{p.Outputs.At(io), err})
+			errs.At(p.Outputs.At(io), err)
 		}
 	}
 	return errs.OrNil()
@@ -196,7 +202,7 @@ func validateOutputs(p modulePath, mod Module, info modulereader.ModuleInfo) err
 
 // validateModules ensures parameters set in modules are set correctly.
 func (dc DeploymentConfig) validateModules() error {
-	errs := MultiError{}
+	errs := Errors{}
 	dc.Config.WalkModules(func(p modulePath, m *Module) error {
 		errs.Add(validateModule(p, *m))
 		return nil
@@ -222,7 +228,7 @@ func validateSettings(
 	for _, input := range info.Inputs {
 		cVars.Inputs[input.Name] = input.Required
 	}
-	errs := MultiError{}
+	errs := Errors{}
 	for k := range mod.Settings.Items() {
 		sp := p.Settings.Dot(k)
 		// Setting name included a period
@@ -230,17 +236,17 @@ func validateSettings(
 		// HCL does not support periods in variables names either:
 		// https://hcl.readthedocs.io/en/latest/language_design.html#language-keywords-and-identifiers
 		if strings.Contains(k, ".") {
-			errs.Add(BpError{sp, errors.New(errorMessages["settingWithPeriod"])})
+			errs.At(sp, errors.New(errorMessages["settingWithPeriod"]))
 			continue // do not perform other validations
 		}
 		// Setting includes invalid characters
 		if !regexp.MustCompile(`^[a-zA-Z-_][a-zA-Z0-9-_]*$`).MatchString(k) {
-			errs.Add(BpError{sp, errors.New(errorMessages["settingInvalidChar"])})
+			errs.At(sp, errors.New(errorMessages["settingInvalidChar"]))
 			continue // do not perform other validations
 		}
 		// Setting not found
 		if _, ok := cVars.Inputs[k]; !ok {
-			errs.Add(BpError{sp, errors.New(errorMessages["extraSetting"])})
+			errs.At(sp, errors.New(errorMessages["extraSetting"]))
 			continue // do not perform other validations
 		}
 

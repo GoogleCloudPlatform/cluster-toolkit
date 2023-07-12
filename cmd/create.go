@@ -137,7 +137,7 @@ func findPos(path config.Path, ctx config.YamlCtx) (config.Pos, bool) {
 }
 
 func renderError(err error, ctx config.YamlCtx) string {
-	var me config.MultiError
+	var me config.Errors
 	if errors.As(err, &me) {
 		var sb strings.Builder
 		for _, e := range me.Errors {
