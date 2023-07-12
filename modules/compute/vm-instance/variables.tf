@@ -289,7 +289,7 @@ variable "placement_policy" {
     condition     = var.placement_policy == null ? true : try(keys(var.placement_policy), null) != null
     error_message = <<-EOT
     The var.placement_policy should be either unset/null or be a map/object with 
-    fields: vm_count, availability_domain_count, collocation, max_distance.
+    fields: vm_count (number), availability_domain_count (number), collocation (string), max_distance (number).
     EOT
   }
 
@@ -300,7 +300,7 @@ variable "placement_policy" {
     ])
     error_message = <<-EOT
     The supported fields for var.placement_policy are:
-    vm_count, availability_domain_count, collocation, max_distance.
+    vm_count (number), availability_domain_count (number), collocation (string), max_distance (number).
     EOT
   }
 }
