@@ -54,7 +54,6 @@ locals {
     var.autoscaler_runner,
     [local.example_runner]
   )
-  disk_size_gb = max(var.disk_size_gb, data.google_compute_image.htcondor.disk_size_gb)
 
   ap_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_submit",
@@ -64,10 +63,10 @@ locals {
 
   ap_object = "gs://${var.htcondor_bucket_name}/${google_storage_bucket_object.ap_config.output_name}"
   schedd_runner = {
-    "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/htcondor_configure.yml")
-    "destination" = "htcondor_configure.yml"
-    "args" = join(" ", [
+    type        = "ansible-local"
+    content     = file("${path.module}/files/htcondor_configure.yml")
+    destination = "htcondor_configure.yml"
+    args = join(" ", [
       "-e htcondor_role=get_htcondor_submit",
       "-e config_object=${local.ap_object}",
       "-e job_queue_ha=${var.enable_high_availability}",
@@ -81,6 +80,13 @@ locals {
 data "google_compute_image" "htcondor" {
   family  = var.instance_image.family
   project = var.instance_image.project
+
+  lifecycle {
+    postcondition {
+      condition     = self.disk_size_gb <= var.disk_size_gb
+      error_message = "var.disk_size_gb must be set to at least the size of the image (${self.disk_size_gb})"
+    }
+  }
 }
 
 data "google_compute_zones" "available" {
@@ -124,7 +130,7 @@ module "access_point_instance_template" {
   labels = local.labels
 
   machine_type   = var.machine_type
-  disk_size_gb   = local.disk_size_gb
+  disk_size_gb   = var.disk_size_gb
   preemptible    = false
   startup_script = module.startup_script.startup_script
   metadata       = local.metadata
