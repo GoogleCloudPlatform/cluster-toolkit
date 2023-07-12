@@ -102,7 +102,7 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     gvnic {
-      enabled = true
+      enabled = var.image_type == "COS_CONTAINERD" ? true : false
     }
 
     dynamic "advanced_machine_features" {
