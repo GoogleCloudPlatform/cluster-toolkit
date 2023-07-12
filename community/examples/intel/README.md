@@ -188,7 +188,10 @@ The [pfs-daos.yaml](pfs-daos.yaml) blueprint describes an environment with
 - Two DAOS server instances
 - Two DAOS client instances
 
-The [pfs-daos.yaml](pfs-daos.yaml) blueprint uses a Packer template and Terraform modules from the [Google Cloud DAOS][google-cloud-daos] repository.
+The [pfs-daos.yaml](pfs-daos.yaml) blueprint uses a Packer template and
+Terraform modules from the [Google Cloud DAOS][google-cloud-daos] repository.
+Please review the [introduction to image building](../../../docs/image-building.md)
+for general information on building custom images using the Toolkit.
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
@@ -391,7 +394,10 @@ The blueprint uses modules from
 - [community/modules/scheduler/SchedMD-slurm-on-gcp-login-node][SchedMD-slurm-on-gcp-login-node]
 - [community/modules/compute/SchedMD-slurm-on-gcp-partition][SchedMD-slurm-on-gcp-partition]
 
-The blueprint also uses a Packer template from the [Google Cloud DAOS][google-cloud-daos] repository.
+The blueprint also uses a Packer template from the [Google Cloud
+DAOS][google-cloud-daos] repository. Please review the [introduction to image
+building](../../../docs/image-building.md) for general information on building
+custom images using the Toolkit.
 
 Identify a project to work in and substitute its unique id wherever you see
 `<<PROJECT_ID>>` in the instructions below.
