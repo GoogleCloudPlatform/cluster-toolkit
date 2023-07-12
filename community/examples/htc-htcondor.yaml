@@ -94,7 +94,7 @@ deployment_groups:
       - network: null
         subnetwork: $(network1.subnetwork_self_link)
         subnetwork_project: $(vars.project_id)
-        network_ip: $(htcondor_base.central_manager_internal_ip)
+        network_ip: $(htcondor_base.central_manager_ips[0])
         stack_type: null
         access_config: []
         ipv6_access_config: []
@@ -144,45 +144,18 @@ deployment_groups:
         scopes:
         - cloud-platform
 
-  - id: htcondor_startup_access_point
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_secrets.access_point_runner)
-      - $(htcondor_base.access_point_runner)
-      - $(htcondor_execute_point.configure_autoscaler_runner)
-      - $(htcondor_execute_point_spot.configure_autoscaler_runner)
-      - type: data
-        destination: /var/tmp/helloworld.sub
-        content: |
-          universe       = vanilla
-          executable     = /bin/sleep
-          arguments      = 1000
-          output         = out.\$(ClusterId).\$(ProcId)
-          error          = err.\$(ClusterId).\$(ProcId)
-          log            = log.\$(ClusterId).\$(ProcId)
-          request_cpus   = 1
-          request_memory = 100MB
-          # if unset, defaults to false
-          +RequireSpot   = true
-          queue
-
   - id: htcondor_access
-    source: modules/compute/vm-instance
+    source: community/modules/scheduler/htcondor-access-point
     use:
     - network1
-    - htcondor_startup_access_point
+    - htcondor_secrets
+    - htcondor_base
+    - htcondor_execute_point
+    - htcondor_execute_point_spot
     settings:
-      name_prefix: ap
+      enable_public_ips: true
       instance_image:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
-      add_deployment_name_before_prefix: true
-      machine_type: c2-standard-4
-      service_account:
-        email: $(htcondor_base.access_point_service_account_email)
-        scopes:
-        - cloud-platform
     outputs:
-    - internal_ip
-    - external_ip
+    - list_instances_command

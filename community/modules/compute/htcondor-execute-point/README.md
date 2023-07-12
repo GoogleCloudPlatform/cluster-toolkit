@@ -210,5 +210,5 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_configure_autoscaler_runner"></a> [configure\_autoscaler\_runner](#output\_configure\_autoscaler\_runner) | Toolkit runner to configure the HTCondor autoscaler |
+| <a name="output_autoscaler_runner"></a> [autoscaler\_runner](#output\_autoscaler\_runner) | Toolkit runner to configure the HTCondor autoscaler |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

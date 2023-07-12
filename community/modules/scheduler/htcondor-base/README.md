@@ -223,7 +223,6 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
-| [google_storage_bucket_object.ap_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.cm_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.execute_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_compute_subnetwork.htcondor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
@@ -237,24 +236,21 @@ limitations under the License.
 | <a name="input_central_manager_roles"></a> [central\_manager\_roles](#input\_central\_manager\_roles) | Project-wide roles for HTCondor Central Manager service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_execute_point_roles"></a> [execute\_point\_roles](#input\_execute\_point\_roles) | Project-wide roles for HTCondor Execute Point service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
-| <a name="input_job_queue_high_availability"></a> [job\_queue\_high\_availability](#input\_job\_queue\_high\_availability) | Provision HTCondor access points in high availability mode (experimental: see README) | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Default region for creating resources | `string` | n/a | yes |
-| <a name="input_spool_parent_dir"></a> [spool\_parent\_dir](#input\_spool\_parent\_dir) | HTCondor access point configuration SPOOL will be set to subdirectory named "spool" | `string` | `"/var/lib/condor"` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork in which Central Managers will be placed. | `string` | n/a | yes |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_access_point_runner"></a> [access\_point\_runner](#output\_access\_point\_runner) | Toolkit Runner to configure an HTCondor Access Point |
 | <a name="output_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#output\_access\_point\_service\_account\_email) | HTCondor Access Point Service Account (e-mail format) |
-| <a name="output_central_manager_internal_ip"></a> [central\_manager\_internal\_ip](#output\_central\_manager\_internal\_ip) | Reserved internal IP address for use by Central Manager |
+| <a name="output_central_manager_ips"></a> [central\_manager\_ips](#output\_central\_manager\_ips) | Reserved internal IP address for use by Central Manager |
 | <a name="output_central_manager_runner"></a> [central\_manager\_runner](#output\_central\_manager\_runner) | Toolkit Runner to configure an HTCondor Central Manager |
-| <a name="output_central_manager_secondary_internal_ip"></a> [central\_manager\_secondary\_internal\_ip](#output\_central\_manager\_secondary\_internal\_ip) | Reserved internal IP address for use by failover Central Manager |
 | <a name="output_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#output\_central\_manager\_service\_account\_email) | HTCondor Central Manager Service Account (e-mail format) |
 | <a name="output_execute_point_runner"></a> [execute\_point\_runner](#output\_execute\_point\_runner) | Toolkit Runner to configure an HTCondor Execute Point |
 | <a name="output_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#output\_execute\_point\_service\_account\_email) | HTCondor Execute Point Service Account (e-mail format) |
+| <a name="output_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#output\_htcondor\_bucket\_name) | Name of the HTCondor configuration bucket |
 | <a name="output_windows_startup_ps1"></a> [windows\_startup\_ps1](#output\_windows\_startup\_ps1) | Windows PowerShell script to update HTCondor configuration file |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
