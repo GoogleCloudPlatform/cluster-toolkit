@@ -33,19 +33,11 @@ locals {
   cm_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_central_manager",
     central_manager_ips = module.address.addresses,
-    spool_dir           = "${var.spool_parent_dir}/spool",
   })
 
   execute_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_execute",
     central_manager_ips = module.address.addresses,
-    spool_dir           = "${var.spool_parent_dir}/spool",
-  })
-
-  ap_config = templatefile("${path.module}/templates/condor_config.tftpl", {
-    htcondor_role       = "get_htcondor_submit",
-    central_manager_ips = module.address.addresses,
-    spool_dir           = "${var.spool_parent_dir}/spool",
   })
 
   cm_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.cm_config.output_name}"
@@ -56,19 +48,6 @@ locals {
     "args" = join(" ", [
       "-e htcondor_role=get_htcondor_central_manager",
       "-e config_object=${local.cm_object}",
-    ])
-  }
-
-  ap_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.ap_config.output_name}"
-  runner_access = {
-    "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/htcondor_configure.yml")
-    "destination" = "htcondor_configure.yml"
-    "args" = join(" ", [
-      "-e htcondor_role=get_htcondor_submit",
-      "-e config_object=${local.ap_object}",
-      "-e job_queue_ha=${var.job_queue_high_availability}",
-      "-e spool_dir=${var.spool_parent_dir}/spool",
     ])
   }
 
@@ -112,20 +91,14 @@ module "htcondor_bucket" {
 }
 
 resource "google_storage_bucket_object" "cm_config" {
-  name    = "${var.deployment_name}-cm-config"
+  name    = "${var.deployment_name}-cm-config-${substr(md5(local.cm_config), 0, 4)}"
   content = local.cm_config
   bucket  = module.htcondor_bucket.name
 }
 
 resource "google_storage_bucket_object" "execute_config" {
-  name    = "${var.deployment_name}-execute-config"
+  name    = "${var.deployment_name}-execute-config-${substr(md5(local.execute_config), 0, 4)}"
   content = local.execute_config
-  bucket  = module.htcondor_bucket.name
-}
-
-resource "google_storage_bucket_object" "ap_config" {
-  name    = "${var.deployment_name}-ap-config"
-  content = local.ap_config
   bucket  = module.htcondor_bucket.name
 }
 

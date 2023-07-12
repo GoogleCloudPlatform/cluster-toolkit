@@ -49,44 +49,6 @@ HAD_USE_REPLICATION = True
 MASTER_HAD_BACKOFF_CONSTANT = 360
 %{ endif ~}
 
-%{ if htcondor_role == "get_htcondor_submit" ~}
-# SchedD configuration settings
-SPOOL = ${spool_dir}
-SCHEDD_INTERVAL = 30
-TRUST_UID_DOMAIN = True
-SUBMIT_ATTRS = RunAsOwner
-RunAsOwner = True
-
-# When a job matches to a machine, add machine attributes to the job for
-# condor_history (e.g. VM Instance ID)
-use feature:JobsHaveInstanceIDs
-SYSTEM_JOB_MACHINE_ATTRS = $(SYSTEM_JOB_MACHINE_ATTRS) \
-  CloudVMType CloudZone CloudInterruptible
-SYSTEM_JOB_MACHINE_ATTRS_HISTORY_LENGTH = 10
-
-# Add Cloud attributes to SchedD ClassAd
-use feature:ScheddCronOneShot(cloud, $(LIBEXEC)/common-cloud-attributes-google.py)
-SCHEDD_CRON_cloud_PREFIX = Cloud
-
-# the sequence of job transforms and submit requirements below set
-# a default job attribute RequireSpot to False but allow the user to
-# specify *only* a boolean value with +RequireSpot = True in their job
-# submit file; the requirements of the job are transformed to filter
-# on +RequireSpot unless job has explicit CloudInterruptible requirements
-JOB_TRANSFORM_NAMES = SPOT_DEFAULT, SPOT_REQS
-JOB_TRANSFORM_SPOT_DEFAULT @=end
-   DEFAULT RequireSpot False
-@end
-# Unless explicit, set CloudInterruptible requirements to job RequireSpot attribute
-JOB_TRANSFORM_SPOT_REQS @=end
-   REQUIREMENTS ! unresolved(Requirements, "^CloudInterruptible$")
-   SET Requirements $(MY.Requirements) && (CloudInterruptible is My.RequireSpot)
-@end
-SUBMIT_REQUIREMENT_NAMES = REQSPOT
-SUBMIT_REQUIREMENT_REQSPOT = isBoolean(RequireSpot)
-SUBMIT_REQUIREMENT_REQSPOT_REASON = "Jobs must set +RequireSpot to either True or False"
-%{ endif ~}
-
 %{ if htcondor_role == "get_htcondor_execute" ~}
 # StartD configuration settings
 use feature:PartitionableSlot

@@ -38,7 +38,7 @@ locals {
 
   metadata = merge(local.windows_startup_metadata, local.network_storage_metadata, local.enable_oslogin, var.metadata)
 
-  configure_autoscaler_role = {
+  autoscaler_runner = {
     "type"        = "ansible-local"
     "content"     = file("${path.module}/files/htcondor_configure_autoscaler.yml")
     "destination" = "htcondor_configure_autoscaler_${module.mig.instance_group_manager.name}.yml"
