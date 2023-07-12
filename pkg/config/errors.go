@@ -43,12 +43,12 @@ func (err *InvalidSettingError) Error() string {
 	return fmt.Sprintf("invalid setting provided to a module, cause: %v", err.cause)
 }
 
-// MultiError is an error wrapper to combine multiple errors
-type MultiError struct {
+// Errors is an error wrapper to combine multiple errors
+type Errors struct {
 	Errors []error
 }
 
-func (e MultiError) Error() string {
+func (e Errors) Error() string {
 	errs := make([]string, len(e.Errors))
 	for i, err := range e.Errors {
 		errs[i] = err.Error()
@@ -57,7 +57,7 @@ func (e MultiError) Error() string {
 }
 
 // OrNil returns nil if there are no errors, otherwise returns itself
-func (e MultiError) OrNil() error {
+func (e Errors) OrNil() error {
 	switch len(e.Errors) {
 	case 0:
 		return nil
@@ -68,15 +68,24 @@ func (e MultiError) OrNil() error {
 	}
 }
 
-// Add adds an error to the MultiError and returns itself
-func (e *MultiError) Add(err error) *MultiError {
+// Add adds an error to the Errors and returns itself
+func (e *Errors) Add(err error) *Errors {
 	if err == nil {
 		return e
 	}
-	if multi, ok := err.(*MultiError); ok {
+	if multi, ok := err.(*Errors); ok {
 		e.Errors = append(e.Errors, multi.Errors...)
 	} else {
 		e.Errors = append(e.Errors, err)
 	}
 	return e
+}
+
+// At is convenience method to conditionally add an error, if one is not nil,
+// augmented with a supplied Path.
+func (e *Errors) At(path Path, err error) *Errors {
+	if err == nil {
+		return e
+	}
+	return e.Add(BpError{Path: path, Err: err})
 }

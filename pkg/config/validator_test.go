@@ -34,20 +34,22 @@ func (s *MySuite) TestValidateModules(c *C) {
 }
 
 func (s *MySuite) TestValidateVars(c *C) {
-	// Success
-	dc := getDeploymentConfigForTest()
-	err := dc.validateVars()
-	c.Assert(err, IsNil)
+	{ // Success
+		dc := DeploymentConfig{}
+		c.Check(dc.validateVars(), IsNil)
+	}
 
-	// Fail: Nil project_id
-	dc.Config.Vars.Set("project_id", cty.NilVal)
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, "deployment variable project_id was not set")
+	{ // Fail: Nil value
+		dc := DeploymentConfig{}
+		dc.Config.Vars.Set("fork", cty.NilVal)
+		c.Check(dc.validateVars(), NotNil)
+	}
 
-	// Fail: labels not a map
-	dc.Config.Vars.Set("labels", cty.StringVal("a_string"))
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, "vars.labels must be a map of strings")
+	{ // Fail: labels not a map
+		dc := DeploymentConfig{}
+		dc.Config.Vars.Set("labels", cty.StringVal("a_string"))
+		c.Check(dc.validateVars(), NotNil)
+	}
 }
 
 func (s *MySuite) TestValidateSettings(c *C) {

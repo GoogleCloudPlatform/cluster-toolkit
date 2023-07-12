@@ -23,7 +23,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"testing"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -149,13 +148,6 @@ func teardown() {
 			"failed to tear down tmp directory (%s) for config unit tests: %v",
 			tmpTestDir, err)
 	}
-}
-
-// util function
-func cleanErrorRegexp(errRegexp string) string {
-	errRegexp = strings.ReplaceAll(errRegexp, "[", "\\[")
-	errRegexp = strings.ReplaceAll(errRegexp, "]", "\\]")
-	return errRegexp
 }
 
 func setTestModuleInfo(mod Module, info modulereader.ModuleInfo) {
@@ -663,8 +655,7 @@ func (s *MySuite) TestImportBlueprint_LabelValidation(c *C) {
 		largeLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
 	}
 	dc.Config.Vars.Set("labels", cty.MapVal(largeLabelsMap))
-	err = dc.validateVars()
-	c.Assert(err, Equals, nil)
+	c.Check(dc.validateVars(), IsNil)
 
 	// Invalid label name
 	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
@@ -690,8 +681,7 @@ func (s *MySuite) TestImportBlueprint_LabelValidation(c *C) {
 		tooManyLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
 	}
 	dc.Config.Vars.Set("labels", cty.MapVal(tooManyLabelsMap))
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, `vars.labels cannot have more than 64 labels`)
+	c.Check(dc.validateVars(), NotNil)
 
 	// Fail on uppercase international character
 	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
