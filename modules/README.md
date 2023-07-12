@@ -158,6 +158,9 @@ Modules that are still in development and less stable are labeled with the
 * **[htcondor-pool-secrets]** ![community-badge] ![experimental-badge] : Creates
   and manages access to the secrets necessary for secure operation of an
   HTCondor pool.
+* **[htcondor-access-point]** ![community-badge] ![experimental-badge] : Creates
+  a regional instance group managing a highly available HTCondor access point
+  (login node).
 * **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
   a client host for submitting jobs to a PBS Professional cluster.
 * **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
@@ -170,7 +173,9 @@ Modules that are still in development and less stable are labeled with the
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
 [gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
-[htcondor-base]: ../community/modules/scheduler/htcondor-configure/README.md
+[htcondor-base]: ../community/modules/scheduler/htcondor-base/README.md
+[htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
+[htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md

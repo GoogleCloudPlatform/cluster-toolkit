@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-output "autoscaler_runner" {
-  value       = local.autoscaler_runner
-  description = "Toolkit runner to configure the HTCondor autoscaler"
+output "list_instances_command" {
+  description = "Command to list Access Points provisioned by this module"
+  value       = local.list_instances_command
 }

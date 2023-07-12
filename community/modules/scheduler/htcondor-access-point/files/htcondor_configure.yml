@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-- name: Configure HTCondor Role
+- name: Configure HTCondor Access Point
   hosts: localhost
   become: true
   vars:
@@ -21,6 +21,7 @@
     spool_dir: /var/lib/condor/spool
     condor_config_root: /etc/condor
     ghpc_config_file: 50-ghpc-managed
+    schedd_ha_config_file: 51-ghpc-schedd-high-availability
   tasks:
   - name: Ensure necessary variables are set
     ansible.builtin.assert:
@@ -55,8 +56,66 @@
       fi
     args:
       executable: /bin/bash
-    notify:
-    - Reload HTCondor
+  - name: Configure HTCondor SchedD
+    when: htcondor_role == 'get_htcondor_submit'
+    block:
+    - name: Setup Spool directory
+      ansible.builtin.file:
+        path: "{{ spool_dir }}"
+        state: directory
+        owner: condor
+        group: condor
+        mode: 0755
+    - name: Enable SchedD high availability
+      when: job_queue_ha | bool
+      block:
+      - name: Set SchedD HA configuration (requires restart)
+        ansible.builtin.copy:
+          dest: "{{ condor_config_root }}/config.d/{{ schedd_ha_config_file }}"
+          mode: 0644
+          content: |
+            MASTER_HA_LIST=SCHEDD
+            HA_LOCK_URL=file:{{ spool_dir }}
+            VALID_SPOOL_FILES=$(VALID_SPOOL_FILES), SCHEDD.lock
+            HA_POLL_PERIOD=30
+            SCHEDD_NAME=had-schedd@
+        notify:
+        - Restart HTCondor
+      # although HTCondor is guaranteed to start after mounting remote
+      # filesystems is *attempted*, it does not guarantee successful mounts;
+      # this additional SystemD setting will refuse to start HTCondor if the
+      # spool shared filesystem has not been mounted
+      - name: Create SystemD override directory for HTCondor
+        ansible.builtin.file:
+          path: /etc/systemd/system/condor.service.d
+          state: directory
+          owner: root
+          group: root
+          mode: 0755
+      - name: Ensure HTCondor starts after shared filesystem is mounted
+        ansible.builtin.copy:
+          dest: /etc/systemd/system/condor.service.d/mount-spool.conf
+          mode: 0644
+          content: |
+            [Unit]
+            RequiresMountsFor={{ spool_dir }}
+        notify:
+        - Reload SystemD
+    - name: Disable SchedD high availability
+      when: not job_queue_ha | bool
+      block:
+      - name: Remove SchedD HA configuration file
+        ansible.builtin.file:
+          path: "{{ condor_config_root }}/config.d/{{ schedd_ha_config_file }}"
+          state: absent
+        notify:
+        - Restart HTCondor
+      - name: Remove HTCondor SystemD override
+        ansible.builtin.file:
+          path: /etc/systemd/system/condor.service.d/mount-spool.conf
+          state: absent
+        notify:
+        - Reload SystemD
   handlers:
   - name: Reload SystemD
     ansible.builtin.systemd:

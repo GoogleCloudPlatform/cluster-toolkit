@@ -43,27 +43,22 @@ output "central_manager_runner" {
   value       = local.runner_cm
 }
 
-output "access_point_runner" {
-  description = "Toolkit Runner to configure an HTCondor Access Point"
-  value       = local.runner_access
-}
-
 output "execute_point_runner" {
   description = "Toolkit Runner to configure an HTCondor Execute Point"
   value       = local.runner_execute
 }
 
-output "central_manager_internal_ip" {
+output "central_manager_ips" {
   description = "Reserved internal IP address for use by Central Manager"
-  value       = try(module.address.addresses[0], null)
-}
-
-output "central_manager_secondary_internal_ip" {
-  description = "Reserved internal IP address for use by failover Central Manager"
-  value       = try(module.address.addresses[1], null)
+  value       = module.address.addresses
 }
 
 output "windows_startup_ps1" {
   description = "Windows PowerShell script to update HTCondor configuration file"
   value       = local.windows_startup_ps1
+}
+
+output "htcondor_bucket_name" {
+  description = "Name of the HTCondor configuration bucket"
+  value       = module.htcondor_bucket.name
 }
