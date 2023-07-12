@@ -5,6 +5,9 @@
 * [Windows](#windows)
 * [Other Images](#other-images)
 
+For information on customizing VM images with extra software and configuration
+settings, see [Building Images](image-building.md).
+
 ## HPC CentOS 7 VM Image
 The HPC Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage] as the
 primary VM image for HPC workloads on Google Cloud since it's release. Since the
@@ -60,17 +63,8 @@ settings:
 
 ## Windows
 
-The HPC Toolkit provides limited support for building custom VM images based on
-the [Windows images][windows-images] published by Google. The custom VM images
-can be used in blueprints so long as the underlying scheduler and workload
-supports Windows. Windows solutions do not receive the same level of testing as
-Linux solutions so you should anticipate that there will not be functionality
-parity. Please file [issues] when encountering specific problems and [feature
-requests][features] when requesting new functionality.
-
-[windows-images]: https://cloud.google.com/compute/docs/images/os-details#windows_server
-[issues]: https://github.com/GoogleCloudPlatform/hpc-toolkit/issues
-[features]: https://github.com/GoogleCloudPlatform/hpc-toolkit/discussions/categories/ideas-and-feature-requests
+See [building Windows images](image-building.md#windows-support) for
+a description of our support for Windows images.
 
 ## Other Images
 
