@@ -14,24 +14,14 @@
  * limitations under the License.
  */
 
-output "install_htcondor_runner" {
+output "runners" {
   description = "Runner to install HTCondor using startup-scripts"
-  value       = local.runner_install_htcondor
+  value       = local.runners
 }
 
 output "windows_startup_ps1" {
   description = "Windows PowerShell script to install HTCondor"
   value       = local.install_htcondor_ps1
-}
-
-output "install_autoscaler_deps_runner" {
-  description = "Toolkit Runner to install HTCondor autoscaler dependencies"
-  value       = local.runner_install_autoscaler_deps
-}
-
-output "install_autoscaler_runner" {
-  description = "Toolkit Runner to install HTCondor autoscaler"
-  value       = local.runner_install_autoscaler
 }
 
 output "gcp_service_list" {
