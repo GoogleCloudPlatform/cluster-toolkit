@@ -136,9 +136,9 @@ variable "service_account" {
 }
 
 variable "network_self_link" {
-  description = "The self link of the network to attach the VM."
+  description = "The self link of the network to attach the VM. Can use \"default\" for the default network."
   type        = string
-  default     = "default"
+  default     = null
 }
 
 variable "subnetwork_self_link" {
@@ -278,13 +278,31 @@ variable "bandwidth_tier" {
 }
 
 variable "placement_policy" {
-  description = "Control where your VM instances are physically located relative to each other within a zone."
-  type = object({
-    vm_count                  = number,
-    availability_domain_count = number,
-    collocation               = string,
-  })
+  description = <<-EOT
+  Control where your VM instances are physically located relative to each other within a zone.
+  See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy#nested_group_placement_policy
+  EOT
+
+  type    = any # It's a workaround of lack of `optional` in Terraform 1.2
   default = null
+  validation {
+    condition     = var.placement_policy == null ? true : try(keys(var.placement_policy), null) != null
+    error_message = <<-EOT
+    The var.placement_policy should be either unset/null or be a map/object with 
+    fields: vm_count (number), availability_domain_count (number), collocation (string), max_distance (number).
+    EOT
+  }
+
+  validation {
+    condition = alltrue([
+      for k in try(keys(var.placement_policy), []) : contains([
+      "vm_count", "availability_domain_count", "collocation", "max_distance"], k)
+    ])
+    error_message = <<-EOT
+    The supported fields for var.placement_policy are:
+    vm_count (number), availability_domain_count (number), collocation (string), max_distance (number).
+    EOT
+  }
 }
 
 variable "spot" {

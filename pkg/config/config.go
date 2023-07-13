@@ -26,7 +26,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
-	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -105,7 +104,7 @@ type DeploymentGroup struct {
 // Module return the module with the given ID
 func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	var mod *Module
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(_ modulePath, m *Module) error {
 		if m.ID == id {
 			mod = m
 		}
@@ -363,19 +362,13 @@ func (m Module) listUnusedModules() ModuleIDs {
 
 // GetUsedDeploymentVars returns a list of deployment vars used in the given value
 func GetUsedDeploymentVars(val cty.Value) []string {
-	res := map[string]bool{}
-	// Recurse through objects/maps/lists gathering used references to deployment variables.
-	cty.Walk(val, func(path cty.Path, val cty.Value) (bool, error) {
-		if ex, is := IsExpressionValue(val); is {
-			for _, r := range ex.References() {
-				if r.GlobalVar {
-					res[r.Name] = true
-				}
-			}
+	res := []string{}
+	for _, ref := range valueReferences(val) {
+		if ref.GlobalVar {
+			res = append(res, ref.Name)
 		}
-		return true, nil
-	})
-	return maps.Keys(res)
+	}
+	return res
 }
 
 func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
@@ -386,7 +379,7 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 		"deployment_name": true,
 	}
 
-	dc.Config.WalkModules(func(m *Module) error {
+	dc.Config.WalkModules(func(_ modulePath, m *Module) error {
 		for _, v := range GetUsedDeploymentVars(m.Settings.AsObject()) {
 			usedVars[v] = true
 		}
@@ -404,17 +397,19 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 }
 
 func (bp Blueprint) checkMovedModules() error {
-	var err error
-	bp.WalkModules(func(m *Module) error {
+	errs := Errors{}
+
+	bp.WalkModules(func(p modulePath, m *Module) error {
 		if replacement, ok := movedModules[strings.Trim(m.Source, "./")]; ok {
-			err = fmt.Errorf("the blueprint references modules that have moved")
-			fmt.Printf(
-				"A module you are using has moved. %s has been replaced with %s. Please update the source in your blueprint and try again.\n",
+			err := fmt.Errorf(
+				"a module has moved. %s has been replaced with %s. Please update the source in your blueprint and try again",
 				m.Source, replacement)
+			errs.At(p.Source, err)
 		}
 		return nil
 	})
-	return err
+
+	return errs.OrNil()
 }
 
 // NewDeploymentConfig is a constructor for DeploymentConfig
@@ -457,7 +452,7 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 
 // addKindToModules sets the kind to 'terraform' when empty.
 func (bp *Blueprint) addKindToModules() {
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(_ modulePath, m *Module) error {
 		if m.Kind == UnknownKind {
 			m.Kind = TerraformKind
 		}
@@ -468,10 +463,13 @@ func (bp *Blueprint) addKindToModules() {
 // checkModulesInfo ensures each module in the blueprint has known detailed
 // metadata (inputs, outputs)
 func (bp *Blueprint) checkModulesInfo() error {
-	return bp.WalkModules(func(m *Module) error {
+	errs := Errors{}
+	bp.WalkModules(func(p modulePath, m *Module) error {
 		_, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
-		return err
+		errs.At(p.Source, err)
+		return nil
 	})
+	return errs.OrNil()
 }
 
 // checkModulesAndGroups ensures:
@@ -485,21 +483,22 @@ func (bp *Blueprint) checkModulesInfo() error {
 func checkModulesAndGroups(groups []DeploymentGroup) error {
 	seenMod := map[ModuleID]bool{}
 	seenGroups := map[GroupName]bool{}
+	errs := Errors{}
+
 	for ig := range groups {
-		grp := &groups[ig]
-		if err := grp.Name.Validate(); err != nil {
-			return err
-		}
 		pg := Root.Groups.At(ig)
+		grp := &groups[ig]
+		errs.At(pg.Name, grp.Name.Validate())
+
 		if seenGroups[grp.Name] {
-			return BpError{pg.Name, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name)}
+			errs.At(pg.Name, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name))
 		}
 		seenGroups[grp.Name] = true
 
 		for im, mod := range grp.Modules {
 			pm := pg.Modules.At(im)
 			if seenMod[mod.ID] {
-				return BpError{pm.ID, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID)}
+				errs.At(pm.ID, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID))
 			}
 			seenMod[mod.ID] = true
 
@@ -508,28 +507,27 @@ func checkModulesAndGroups(groups []DeploymentGroup) error {
 				grp.Kind = mod.Kind
 			}
 			if grp.Kind != mod.Kind {
-				return BpError{
-					pm.Kind,
+				errs.At(pm.Kind,
 					fmt.Errorf(
 						"mixing modules of differing kinds in a deployment group is not supported: deployment group %s, got %s and %s",
-						grp.Name, grp.Kind, mod.Kind)}
+						grp.Name, grp.Kind, mod.Kind))
 			}
 		}
 	}
-	return nil
+	return errs.OrNil()
 }
 
 // checkUsedModuleNames verifies that any used modules have valid names and
 // are in the correct group
 func checkUsedModuleNames(bp Blueprint) error {
-	return bp.WalkModules(func(mod *Module) error {
-		for _, used := range mod.Use {
-			if err := validateModuleReference(bp, *mod, used); err != nil {
-				return err
-			}
+	errs := Errors{}
+	bp.WalkModules(func(p modulePath, mod *Module) error {
+		for iu, used := range mod.Use {
+			errs.At(p.Use.At(iu), validateModuleReference(bp, *mod, used))
 		}
 		return nil
 	})
+	return errs.OrNil()
 }
 
 func checkBackend(b TerraformBackend) error {
@@ -550,15 +548,12 @@ func checkBackend(b TerraformBackend) error {
 }
 
 func checkBackends(bp Blueprint) error {
-	if err := checkBackend(bp.TerraformBackendDefaults); err != nil {
-		return err
+	errs := Errors{}
+	errs.At(Root.Backend, checkBackend(bp.TerraformBackendDefaults))
+	for ig, g := range bp.DeploymentGroups {
+		errs.At(Root.Groups.At(ig).Backend, checkBackend(g.TerraformBackend))
 	}
-	for _, g := range bp.DeploymentGroups {
-		if err := checkBackend(g.TerraformBackend); err != nil {
-			return err
-		}
-	}
-	return nil
+	return errs.OrNil()
 }
 
 // validateConfig runs a set of simple early checks on the imported input YAML
@@ -739,12 +734,13 @@ func IsProductOfModuleUse(v cty.Value) []ModuleID {
 }
 
 // WalkModules walks all modules in the blueprint and calls the walker function
-func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
+func (bp *Blueprint) WalkModules(walker func(modulePath, *Module) error) error {
 	for ig := range bp.DeploymentGroups {
 		g := &bp.DeploymentGroups[ig]
 		for im := range g.Modules {
+			p := Root.Groups.At(ig).Modules.At(im)
 			m := &g.Modules[im]
-			if err := walker(m); err != nil {
+			if err := walker(p, m); err != nil {
 				return err
 			}
 		}
@@ -754,25 +750,76 @@ func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
 
 // validate every module setting in the blueprint containing a reference
 func checkModuleSettings(bp Blueprint) error {
-	return bp.WalkModules(func(m *Module) error {
-		return cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
-			if e, is := IsExpressionValue(v); is {
-				for _, r := range e.References() {
-					if err := validateModuleSettingReference(bp, *m, r); err != nil {
-						return false, err
-					}
-				}
+	errs := Errors{}
+	bp.WalkModules(func(p modulePath, m *Module) error {
+		for k, v := range m.Settings.Items() {
+			for _, r := range valueReferences(v) {
+				// TODO: add a cty.Path suffix to the errors path for better location
+				errs.At(p.Settings.Dot(k), validateModuleSettingReference(bp, *m, r))
 			}
-			return true, nil
-		})
+		}
+		return nil
 	})
+	return errs.OrNil()
 }
 
 func checkPackerGroups(groups []DeploymentGroup) error {
-	for _, group := range groups {
+	errs := Errors{}
+	for ig, group := range groups {
 		if group.Kind == PackerKind && len(group.Modules) != 1 {
-			return fmt.Errorf("group %s is \"kind: packer\" but has more than 1 module; separate each packer module into its own deployment group", group.Name)
+			errs.At(Root.Groups.At(ig),
+				fmt.Errorf("group %s is \"kind: packer\" but has more than 1 module; separate each packer module into its own deployment group", group.Name))
 		}
 	}
+	return errs.OrNil()
+}
+
+func (bp *Blueprint) evalVars() error {
+	// 0 - unvisited
+	// 1 - on stack
+	// 2 - done
+	used := map[string]int{}
+	res := Dict{}
+
+	// walk vars in reverse topological order, and evaluate them
+	var dfs func(string) error
+	dfs = func(n string) error {
+		used[n] = 1 // put on stack
+		v := bp.Vars.Get(n)
+		for _, ref := range valueReferences(v) {
+			if !ref.GlobalVar {
+				return BpError{
+					Root.Vars.Dot(n),
+					fmt.Errorf("non-global variable %q referenced in expression", ref.Name),
+				}
+			}
+			if used[ref.Name] == 1 {
+				return BpError{
+					Root.Vars.Dot(n),
+					fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name),
+				}
+			}
+			if used[ref.Name] == 0 {
+				if err := dfs(ref.Name); err != nil {
+					return err
+				}
+			}
+		}
+
+		used[n] = 2 // remove from stack and evaluate
+		ev, err := evalValue(v, Blueprint{Vars: res})
+		res.Set(n, ev)
+		return err
+	}
+
+	for n := range bp.Vars.Items() {
+		if used[n] == 0 { // unvisited
+			if err := dfs(n); err != nil {
+				return err
+			}
+		}
+	}
+
+	bp.Vars = res
 	return nil
 }
