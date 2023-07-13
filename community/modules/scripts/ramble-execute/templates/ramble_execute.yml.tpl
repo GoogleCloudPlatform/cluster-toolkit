@@ -23,7 +23,7 @@
     block:
     - name: Print commands to be executed
       ansible.builtin.debug:
-        msg: "{{ commands.split('\n') }}"
+        msg: "{{ commands.split('\n') | ansible.builtin.to_nice_yaml }}"
 
     - name: Execute commands
       ansible.builtin.shell: |
@@ -33,14 +33,10 @@
         echo " === Starting commands ==="
         {{ commands }}
         echo " === Finished commands ==="
-        } | tee -a {{ log_file }}
+        } 2>&1 | tee -a {{ log_file }}
       register: output
 
     always:
-    - name: Print commands output to stderr
-      ansible.builtin.debug:
-        var: output.stderr_lines
-
-    - name: Print commands output to stdout
+    - name: Print commands output
       ansible.builtin.debug:
         var: output.stdout_lines
