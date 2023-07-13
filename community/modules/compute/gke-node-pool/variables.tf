@@ -60,6 +60,12 @@ variable "enable_gcfs" {
   default     = false
 }
 
+variable "enable_secure_boot" {
+  description = "Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info."
+  type        = bool
+  default     = true
+}
+
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
