@@ -80,9 +80,7 @@ Use the following settings for compact placement:
     instance_count: 4
     machine_type: c2-standard-60
     placement_policy:
-      vm_count: null
       collocation: "COLLOCATED"
-      availability_domain_count: null
 ```
 
 When `vm_count` is not set, as shown in the example above, then the VMs will be
@@ -107,8 +105,6 @@ Use the following settings for spread placement:
     instance_count: 4
     machine_type: n2-standard-4
     placement_policy:
-      vm_count: null
-      collocation: null
       availability_domain_count: 2
 ```
 
