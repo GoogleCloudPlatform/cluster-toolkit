@@ -146,6 +146,10 @@ resource "google_container_node_pool" "node_pool" {
       condition     = !local.static_node_set || !local.autoscale_set
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
     }
+    precondition {
+      condition     = !(var.local_ssd_count_ephemeral_storage > 0 && var.local_ssd_count_nvme_block > 0)
+      error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
+    }
   }
 }
 
