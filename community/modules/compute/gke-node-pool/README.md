@@ -31,10 +31,10 @@ more info.
 ### Local SSD Storage
 GKE offers two options for managing locally attached SSDs.  
 
-The first, and recommended, option is for GKE to manage this storage space
-ephemeral storage space on the node, which will then be automatically
-attached to pods which request an `emptyDir` volume. This can be accomplished
-using the [`local_ssd_count_ephemeral_storage`] variable.
+The first, and recommended, option is for GKE to manage the ephemeral storage
+space on the node, which will then be automatically attached to pods which
+request an `emptyDir` volume. This can be accomplished using the
+[`local_ssd_count_ephemeral_storage`] variable.
 
 The second, more complex, option is for GCP to attach these nodes as raw block
 storage. In this case, the cluster administrator is responible for software
