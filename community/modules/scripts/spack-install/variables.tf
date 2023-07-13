@@ -103,7 +103,7 @@ variable "spack_cache_url" {
   description = <<-EOT
   DEPRECATED
 
-  The following `commands` can be used to add a build cache:
+  Use [spack-execute](../spack-execute/) module with the following `commands` can be used to add a build cache:
 
   ```
   spack mirror add --scope site <mirror name> gs://my-build-cache
@@ -119,7 +119,7 @@ variable "spack_cache_url" {
   default = null
   validation {
     condition     = var.spack_cache_url == null
-    error_message = "spack_cache_url is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+    error_message = "spack_cache_url is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
 
@@ -127,7 +127,7 @@ variable "configs" {
   description = <<-EOT
   DEPRECATED
 
-  The following `commands` can be used to add a single config:
+  Use [spack-execute](../spack-execute/) module with the following `commands` can be used to add a single config:
 
   ```
   spack config --scope defaults add config:default:true
@@ -141,7 +141,7 @@ variable "configs" {
   type        = list(map(any))
   validation {
     condition     = var.configs == null
-    error_message = "configs is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+    error_message = "configs is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
 
@@ -149,7 +149,7 @@ variable "compilers" {
   description = <<-EOT
   DEPRECATED
 
-  The following `commands` can be used to install compilers:
+  Use [spack-execute](../spack-execute/) module with the following `commands` can be used to install compilers:
 
   ```
   spack install gcc@10.3.0 target=x86_64
@@ -165,7 +165,7 @@ variable "compilers" {
   default     = null
   validation {
     condition     = var.compilers == null
-    error_message = "compilers is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+    error_message = "compilers is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
 
@@ -192,7 +192,7 @@ variable "licenses" {
   }))
   validation {
     condition     = var.licenses == null
-    error_message = "licenses is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+    error_message = "licenses is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
 
@@ -200,7 +200,7 @@ variable "packages" {
   description = <<-EOT
   DEPRECATED
 
-  The following `commands` can be used to install a package:
+  Use [spack-execute](../spack-execute/) module with the following `commands` can be used to install a package:
 
   ```
   spack install intel-mpi@2018.4.274 %gcc@10.3.0
@@ -212,7 +212,7 @@ variable "packages" {
   default     = null
   validation {
     condition     = var.packages == null
-    error_message = "packages is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+    error_message = "packages is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
 
@@ -240,7 +240,7 @@ variable "gpg_keys" {
   description = <<EOT
   DEPRECATED
 
-  The following `commands` can be used to create a new GPG key:
+  Use [spack-execute](../spack-execute/) module with the following `commands` can be used to create a new GPG key:
 
   ```
   spack gpg init
@@ -255,7 +255,7 @@ EOT
   type        = list(map(any))
   validation {
     condition     = var.gpg_keys == null
-    error_message = "gpg_keys is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+    error_message = "gpg_keys is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
 
@@ -263,7 +263,7 @@ variable "caches_to_populate" {
   description = <<-EOT
   DEPRECATED
 
-  The following `commands` can be used to populate a cache:
+  Use [spack-execute](../spack-execute/) module with the following `commands` can be used to populate a cache:
 
   ```
   MIRROR_URL=gs://my-bucket
@@ -285,7 +285,7 @@ EOT
   type        = list(map(any))
   validation {
     condition     = var.caches_to_populate == null
-    error_message = "caches_to_populate is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+    error_message = "caches_to_populate is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
 
@@ -293,7 +293,7 @@ variable "environments" {
   description = <<-EOT
   DEPRECATED
 
-  The following `commands` can be used to configure an environment:
+  Use [spack-execute](../spack-execute/) module with the following `commands` can be used to configure an environment:
 
   ```
   if ! spack env list \| grep -q my-env; then
@@ -313,6 +313,6 @@ EOT
   type        = any
   validation {
     condition     = var.environments == null
-    error_message = "environments is deprecated. Use commands instead. See variable documentation for proposed alternative commands."
+    error_message = "environments is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
