@@ -73,7 +73,6 @@ deployment_groups:
   - id: htcondor_cm
     source: modules/compute/vm-instance
     use:
-    - network1
     - htcondor_startup_central_manager
     settings:
       name_prefix: cm

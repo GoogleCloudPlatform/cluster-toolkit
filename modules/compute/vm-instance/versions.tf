@@ -18,22 +18,22 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 4.42"
+      version = ">= 4.73.0"
     }
 
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = ">= 4.12"
+      version = ">= 4.73.0"
     }
     null = {
       version = ">= 1.0"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.19.1"
+    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.20.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.19.1"
+    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.20.0"
   }
 
   required_version = ">= 1.2.0"

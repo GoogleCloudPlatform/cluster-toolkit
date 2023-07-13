@@ -270,12 +270,16 @@ func (y *YamlValue) unmarshalTuple(n *yaml.Node) error {
 
 // UnmarshalYAML implements custom YAML unmarshaling.
 func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
-	var m map[string]YamlValue
-	if err := n.Decode(&m); err != nil {
+	var v YamlValue
+	if err := n.Decode(&v); err != nil {
 		return err
 	}
-	for k, y := range m {
-		d.Set(k, y.v)
+	ty := v.v.Type()
+	if !ty.IsObjectType() {
+		return fmt.Errorf("line %d: must be a mapping, got %s", n.Line, ty.FriendlyName())
+	}
+	for k, w := range v.v.AsValueMap() {
+		d.Set(k, w)
 	}
 	return nil
 }

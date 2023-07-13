@@ -152,8 +152,7 @@ vars:
 		got := renderError(err, ctx)
 		c.Check(got, Equals, `
 Error: arbuz
-on line 3, column 9:
 3:   kale: dos
-`)
+           ^`)
 	}
 }

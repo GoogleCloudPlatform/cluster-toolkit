@@ -76,3 +76,32 @@ func TestPath(t *testing.T) {
 		})
 	}
 }
+
+func TestPathParent(t *testing.T) {
+	type test struct {
+		p    Path
+		want Path
+	}
+	r := Root
+	tests := []test{
+		{r, nil},
+		{r.Groups, r},
+		{r.Groups.At(3), r.Groups},
+		{r.Groups.At(3).Modules, r.Groups.At(3)},
+		{r.Vars.Dot("red"), r.Vars},
+	}
+	for _, tc := range tests {
+		t.Run(tc.p.String(), func(t *testing.T) {
+			got := tc.p.Parent()
+			if (got == nil) || (tc.want == nil) {
+				if got != tc.want {
+					t.Errorf("\ngot : %#v\nwant: %#v", got, tc.want)
+				}
+				return
+			}
+			if got.String() != tc.want.String() {
+				t.Errorf("\ngot : %q\nwant: %q", got.String(), tc.want.String())
+			}
+		})
+	}
+}
