@@ -59,38 +59,25 @@ locals {
     "content"     = local.script_content
     "destination" = "install_spack.yml"
   }
-}
 
-locals {
-  commands_content = var.commands == null ? "echo 'no spack commands provided'" : indent(4, yamlencode(var.commands))
+  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 4)
+  bucket_name = "spack-scripts-${local.bucket_md5}"
+  runners     = [local.install_spack_deps_runner, local.install_spack_runner]
 
-  execute_contents = templatefile(
-    "${path.module}/templates/execute_commands.yml.tpl",
-    {
-      pre_script = ". /etc/profile.d/spack.sh"
-      log_file   = var.log_file
-      commands   = local.commands_content
-    }
-  )
-
-  data_runners = [for data_file in var.data_files : merge(data_file, { type = "data" })]
-
-  execute_md5 = substr(md5(local.execute_contents), 0, 4)
-  execute_runner = {
-    "type"        = "ansible-local"
-    "content"     = local.execute_contents
-    "destination" = "spack_execute_${local.execute_md5}.yml"
-  }
-
-  runners = concat([local.install_spack_runner], local.data_runners, [local.execute_runner])
-
-  combined_unique_string = join("\n", [for runner in local.runners : try(runner["content"], runner["source"])])
-  combined_md5           = substr(md5(local.combined_unique_string), 0, 4)
-  combined_install_execute_runner = {
+  combined_runner = {
     "type"        = "shell"
     "content"     = module.startup_script.startup_script
-    "destination" = "combined_install_spack_${local.combined_md5}.sh"
+    "destination" = "spack-install-and-setup.sh"
   }
+}
+
+resource "google_storage_bucket" "bucket" {
+  project                     = var.project_id
+  name                        = local.bucket_name
+  uniform_bucket_level_access = true
+  location                    = var.region
+  storage_class               = "REGIONAL"
+  labels                      = local.labels
 }
 
 module "startup_script" {
@@ -101,14 +88,10 @@ module "startup_script" {
   deployment_name = var.deployment_name
   region          = var.region
   runners         = local.runners
+  gcs_bucket_path = "gs://${google_storage_bucket.bucket.name}"
 }
 
 resource "local_file" "debug_file_shell_install" {
   content  = local.script_content
   filename = "${path.module}/debug_install.yml"
-}
-
-resource "local_file" "debug_file_ansible_execute" {
-  content  = local.execute_contents
-  filename = "${path.module}/debug_execute_${local.execute_md5}.yml"
 }

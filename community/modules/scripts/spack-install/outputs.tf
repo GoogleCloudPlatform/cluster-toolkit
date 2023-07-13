@@ -40,7 +40,7 @@ output "install_spack_deps_runner" {
 
 output "install_spack_runner" {
   description = "Runner to install Spack using the startup-script module"
-  value       = local.combined_install_execute_runner
+  value       = local.combined_runner
 }
 
 output "setup_spack_runner" {
@@ -60,4 +60,14 @@ output "setup_spack_runner" {
 output "spack_path" {
   description = "Path to the root of the spack installation"
   value       = var.install_dir
+}
+
+output "spack_runner" {
+  description = "Runner to install Spack using the startup-script module"
+  value       = local.combined_runner
+}
+
+output "gcs_bucket_path" {
+  description = "Bucket containing the startup scripts for spack, to be reused by spack-execute module."
+  value       = "gs://${google_storage_bucket.bucket.name}"
 }

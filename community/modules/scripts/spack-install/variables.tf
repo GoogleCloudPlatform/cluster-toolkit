@@ -67,48 +67,6 @@ variable "spack_virtualenv_path" {
   type        = string
 }
 
-# spack-build variables
-
-variable "log_file" {
-  description = "Defines the logfile that script output will be written to"
-  default     = "/var/log/spack.log"
-  type        = string
-}
-
-variable "data_files" {
-  description = <<-EOT
-    A list of files to be transferred prior to running commands. 
-    It must specify one of 'source' (absolute local file path) or 'content' (string).
-    It must specify a 'destination' with absolute path where file should be placed.
-  EOT
-  type        = list(map(string))
-  default     = []
-  validation {
-    condition     = alltrue([for r in var.data_files : substr(r["destination"], 0, 1) == "/"])
-    error_message = "All destinations must be absolute paths and start with '/'."
-  }
-  validation {
-    condition = alltrue([
-      for r in var.data_files :
-      can(r["content"]) != can(r["source"])
-    ])
-    error_message = "A data_file must specify either 'content' or 'source', but never both."
-  }
-  validation {
-    condition = alltrue([
-      for r in var.data_files :
-      lookup(r, "content", lookup(r, "source", null)) != null
-    ])
-    error_message = "A data_file must specify a non-null 'content' or 'source'."
-  }
-}
-
-variable "commands" {
-  description = "String of commands to run within this module"
-  type        = string
-  default     = null
-}
-
 variable "deployment_name" {
   description = "Name of deployment, used to name bucket containing startup script."
   type        = string
@@ -125,6 +83,21 @@ variable "labels" {
 }
 
 # variables to be deprecated
+
+variable "log_file" {
+  description = <<-EOT
+  DEPRECATED 
+  
+  All install logs are printed to stdout/stderr.
+  Execution log_file location can be set on spack-execute module.
+  EOT
+  default     = null
+  type        = string
+  validation {
+    condition     = var.log_file == null
+    error_message = "log_file is deprecated. See spack-execute module for similar functionality."
+  }
+}
 
 variable "spack_cache_url" {
   description = <<-EOT
@@ -200,7 +173,7 @@ variable "licenses" {
   description = <<-EOT
   DEPRECATED
 
-  Use `data_files` variable to install license files:
+  Use [spack-execute](../spack-execute/) module with `data_files` variable to install license files:
 
   ```
   data_files = [{
@@ -244,7 +217,7 @@ variable "packages" {
 }
 
 variable "install_flags" {
-  description = "DEPRECATED - spack install is now performed using the `commands` variable."
+  description = "DEPRECATED - spack install is now performed using the [spack-execute](../spack-execute/) module `commands` variable."
   default     = null
   type        = string
   validation {
@@ -254,7 +227,7 @@ variable "install_flags" {
 }
 
 variable "concretize_flags" {
-  description = "DEPRECATED - spack concretize is now performed using the `commands` variable."
+  description = "DEPRECATED - spack concretize is now performed using the [spack-execute](../spack-execute/) module `commands` variable."
   default     = null
   type        = string
   validation {
