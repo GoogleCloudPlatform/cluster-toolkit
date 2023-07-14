@@ -48,13 +48,3 @@ DAEMON_LIST = $(DAEMON_LIST), HAD, REPLICATION
 HAD_USE_REPLICATION = True
 MASTER_HAD_BACKOFF_CONSTANT = 360
 %{ endif ~}
-
-%{ if htcondor_role == "get_htcondor_execute" ~}
-# StartD configuration settings
-use feature:PartitionableSlot
-use feature:CommonCloudAttributesGoogle("-c created-by")
-UPDATE_INTERVAL = 30
-TRUST_UID_DOMAIN = True
-STARTER_ALLOW_RUNAS_OWNER = True
-RUNBENCHMARKS = False
-%{ endif ~}
