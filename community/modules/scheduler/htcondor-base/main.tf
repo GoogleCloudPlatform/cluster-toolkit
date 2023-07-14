@@ -35,11 +35,6 @@ locals {
     central_manager_ips = module.address.addresses,
   })
 
-  execute_config = templatefile("${path.module}/templates/condor_config.tftpl", {
-    htcondor_role       = "get_htcondor_execute",
-    central_manager_ips = module.address.addresses,
-  })
-
   cm_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.cm_config.output_name}"
   runner_cm = {
     "type"        = "ansible-local"
@@ -50,23 +45,6 @@ locals {
       "-e config_object=${local.cm_object}",
     ])
   }
-
-  execute_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.execute_config.output_name}"
-  runner_execute = {
-    "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/htcondor_configure.yml")
-    "destination" = "htcondor_configure.yml"
-    "args" = join(" ", [
-      "-e htcondor_role=get_htcondor_execute",
-      "-e config_object=${local.execute_object}",
-    ])
-  }
-  windows_startup_ps1 = templatefile(
-    "${path.module}/templates/download-condor-config.ps1.tftpl",
-    {
-      config_object = local.execute_object,
-    }
-  )
 }
 
 module "htcondor_bucket" {
@@ -93,12 +71,6 @@ module "htcondor_bucket" {
 resource "google_storage_bucket_object" "cm_config" {
   name    = "${var.deployment_name}-cm-config-${substr(md5(local.cm_config), 0, 4)}"
   content = local.cm_config
-  bucket  = module.htcondor_bucket.name
-}
-
-resource "google_storage_bucket_object" "execute_config" {
-  name    = "${var.deployment_name}-execute-config-${substr(md5(local.execute_config), 0, 4)}"
-  content = local.execute_config
   bucket  = module.htcondor_bucket.name
 }
 
