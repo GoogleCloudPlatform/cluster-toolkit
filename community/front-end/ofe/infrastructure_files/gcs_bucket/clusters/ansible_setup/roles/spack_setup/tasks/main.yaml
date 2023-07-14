@@ -13,9 +13,19 @@
 # limitations under the License.
 
 ---
+- name: Install OpenMPI
+  ansible.builtin.yum:
+    name: openmpi
+    state: present
+  when: ansible_distribution == 'Rocky'
+
 - name: Load openmpi module
   ansible.builtin.shell: ". /usr/share/Modules/init/sh;module load openmpi"
-  when: True
+  when: ansible_distribution == 'Centos'
+
+- name: Load openmpi module
+  ansible.builtin.shell: ". /usr/share/Modules/init/sh;module load mpi"
+  when: ansible_distribution == 'Rocky'
 
 - name: Spack find system modules
   ansible.builtin.command: "{{ spack_dir }}/bin/spack external find --scope=system --not-buildable"

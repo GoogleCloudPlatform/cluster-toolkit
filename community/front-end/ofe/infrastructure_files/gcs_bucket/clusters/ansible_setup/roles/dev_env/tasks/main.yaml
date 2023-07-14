@@ -26,7 +26,7 @@
     - cmake
     - python2-devel
     - python36-devel
-  when: ansible_distribution == 'CentOS'
+  when: ansible_distribution in ['CentOS', 'Rocky']
 
 
 - name: Add DevTools to default shells
@@ -37,7 +37,7 @@
     owner: root
     mode: 0755
     force: False
-  when: ansible_distribution == 'CentOS'
+  when: ansible_distribution in ['CentOS', 'Rocky']
 
 - name: Install Debian Dev tools
   ansible.builtin.apt:

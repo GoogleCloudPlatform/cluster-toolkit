@@ -228,6 +228,7 @@ class ImageDeleteView(UserPassesTestMixin, generic.View):
         response = {'success': True}
         return JsonResponse(response)
     
+    
 class ImageStatusView(LoginRequiredMixin, generic.View):
     """Custom view for Image model that returns Image status"""
 

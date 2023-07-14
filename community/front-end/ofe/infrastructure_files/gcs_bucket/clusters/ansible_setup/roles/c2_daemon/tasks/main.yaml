@@ -13,6 +13,26 @@
 # limitations under the License.
 
 ---
+- name: Set most recent Python version as default
+  ansible.builtin.shell:
+    cmd: |
+      latest_version=$(ls -1 /usr/bin/python3* | awk -F/ '{print $NF}' | grep -E 'python[0-9]+\.[0-9]+$' | sort -V | tail -1)
+      alternatives --set python3 /usr/bin/$latest_version
+  when: ansible_distribution == 'Rocky'
+
+- name: Install pip3
+  ansible.builtin.package:
+    name: python3-pip
+    state: present
+  become: true
+  when: ansible_distribution == 'Rocky'
+
+- name: Install setuptools for Python 3.11
+  ansible.builtin.command:
+    cmd: /usr/bin/python3.11 -m ensurepip --upgrade
+  become: true
+  when: ansible_distribution == 'Rocky'
+
 - name: Upgrade PIP3
   ansible.builtin.pip:
     executable: pip3
@@ -29,6 +49,10 @@
     - pexpect
     - google-cloud-storage
     - google-cloud-pubsub
+    - addict
+    - google-api-python-client
+    - google-cloud-secret-manager
+    - prometheus_client
     state: present
 
 - name: Install FE C&C Daemon

@@ -339,13 +339,13 @@ deployment_groups:
         - https://www.googleapis.com/auth/logging.write
         - https://www.googleapis.com/auth/devstorage.read_write
         - https://www.googleapis.com/auth/pubsub
-        controller_startup_script: |
-          #!/bin/bash
-          echo "******************************************** CALLING CONTROLLER STARTUP"
-          gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_controller.sh - | bash
-        compute_startup_script: |
-          #!/bin/bash
-          gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
+      controller_startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING CONTROLLER STARTUP"
+        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_controller.sh - | bash
+       compute_startup_script: |
+        #!/bin/bash
+        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
 #TODO:     enable_cleanup_compute: True
 #TODO:     enable_cleanup_subscriptions: True
     use:
