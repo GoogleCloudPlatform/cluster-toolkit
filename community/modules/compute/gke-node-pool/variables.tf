@@ -83,16 +83,24 @@ variable "image_type" {
 variable "local_ssd_count_ephemeral_storage" {
   description = <<-EOT
   The number of local SSDs to attach to each node to back ephemeral storage.  
-  Uses NVMe interfaces.  Must be supported by `machine_type` - see 
-  https://cloud.google.com/compute/docs/disks#local_ssd_machine_type_restrictions
-  The suggested use for this storage is to be assigned to a pod using an
-  `emptyDir` volume.  See 
-  https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/local-ssd#example_ephemeral
-  for more information.
+  Uses NVMe interfaces.  Must be supported by `machine_type`.
+  [See above](#local-ssd-storage) for more info.
   EOT 
   type        = number
   default     = 0
 }
+
+variable "local_ssd_count_nvme_block" {
+  description = <<-EOT
+  The number of local SSDs to attach to each node to back block storage.  
+  Uses NVMe interfaces.  Must be supported by `machine_type`.
+  [See above](#local-ssd-storage) for more info.
+  
+  EOT 
+  type        = number
+  default     = 0
+}
+
 
 variable "autoscaling_total_min_nodes" {
   description = "Total minimum number of nodes in the NodePool."
