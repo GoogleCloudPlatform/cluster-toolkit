@@ -54,4 +54,3 @@ deployment_groups:
           project_id: ((var.project_id))
           subnetwork_name: \$(purple
           zone: ((var.zone))
-    kind: packer

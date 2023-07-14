@@ -111,7 +111,6 @@ type groupPath struct {
 	Name    basePath              `path:".group"`
 	Backend backendPath           `path:".terraform_backend"`
 	Modules arrayPath[modulePath] `path:".modules"`
-	Kind    basePath              `path:".kind"`
 }
 
 type modulePath struct {

@@ -98,7 +98,23 @@ type DeploymentGroup struct {
 	Name             GroupName        `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend,omitempty"`
 	Modules          []Module         `yaml:"modules"`
-	Kind             ModuleKind
+	// DEPRECATED fields, keep in the struct for backwards compatibility
+	deprecatedKind interface{} `yaml:"kind,omitempty"`
+}
+
+// Kind returns the kind of all the modules in the group.
+// If the group contains modules of different kinds, it returns UnknownKind
+func (g DeploymentGroup) Kind() ModuleKind {
+	if len(g.Modules) == 0 {
+		return UnknownKind
+	}
+	k := g.Modules[0].Kind
+	for _, m := range g.Modules {
+		if m.Kind != k {
+			return UnknownKind
+		}
+	}
+	return k
 }
 
 // Module return the module with the given ID
@@ -495,23 +511,18 @@ func checkModulesAndGroups(groups []DeploymentGroup) error {
 		}
 		seenGroups[grp.Name] = true
 
+		if len(grp.Modules) == 0 {
+			errs.At(pg.Modules, errors.New("deployment group must have at least one module"))
+		} else if grp.Kind() == UnknownKind {
+			errs.At(pg.Modules, errors.New("mixing modules of differing kinds in a deployment group is not supported"))
+		}
+
 		for im, mod := range grp.Modules {
 			pm := pg.Modules.At(im)
 			if seenMod[mod.ID] {
 				errs.At(pm.ID, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID))
 			}
 			seenMod[mod.ID] = true
-
-			// Verify Module Kind matches group Kind
-			if grp.Kind == UnknownKind {
-				grp.Kind = mod.Kind
-			}
-			if grp.Kind != mod.Kind {
-				errs.At(pm.Kind,
-					fmt.Errorf(
-						"mixing modules of differing kinds in a deployment group is not supported: deployment group %s, got %s and %s",
-						grp.Name, grp.Kind, mod.Kind))
-			}
 		}
 	}
 	return errs.OrNil()
@@ -766,7 +777,7 @@ func checkModuleSettings(bp Blueprint) error {
 func checkPackerGroups(groups []DeploymentGroup) error {
 	errs := Errors{}
 	for ig, group := range groups {
-		if group.Kind == PackerKind && len(group.Modules) != 1 {
+		if group.Kind() == PackerKind && len(group.Modules) != 1 {
 			errs.At(Root.Groups.At(ig),
 				fmt.Errorf("group %s is \"kind: packer\" but has more than 1 module; separate each packer module into its own deployment group", group.Name))
 		}

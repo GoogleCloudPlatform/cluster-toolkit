@@ -104,7 +104,6 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 	testDeploymentGroups := []config.DeploymentGroup{
 		{
 			Name:    "test_resource_group",
-			Kind:    config.TerraformKind,
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}

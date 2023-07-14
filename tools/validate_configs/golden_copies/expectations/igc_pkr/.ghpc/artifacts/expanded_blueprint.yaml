@@ -113,7 +113,6 @@ deployment_groups:
             sensitive: true
         settings:
           install_nvidia_driver: true
-    kind: terraform
   - group: one
     modules:
       - source: modules/packer/custom-image
@@ -134,4 +133,3 @@ deployment_groups:
           subnetwork_name: ((module.network0.subnetwork_name))
           windows_startup_ps1: ((flatten([module.windows_startup.windows_startup_ps1])))
           zone: ((var.zone ))
-    kind: packer
