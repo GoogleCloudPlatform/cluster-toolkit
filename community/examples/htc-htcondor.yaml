@@ -145,4 +145,5 @@ deployment_groups:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
     outputs:
-    - list_instances_command
+    - access_point_ips
+    - access_point_name
