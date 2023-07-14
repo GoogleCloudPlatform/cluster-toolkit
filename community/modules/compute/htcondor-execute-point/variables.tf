@@ -45,10 +45,10 @@ variable "machine_type" {
   default     = "n2-standard-4"
 }
 
-variable "startup_script" {
-  description = "Startup script to run at boot-time for Linux HTCondor execute points"
-  type        = string
-  default     = null
+variable "execute_point_runner" {
+  description = "A list of Toolkit runners for configuring an HTCondor execute point"
+  type        = list(map(string))
+  default     = []
 }
 
 variable "network_storage" {
@@ -77,18 +77,17 @@ variable "instance_image" {
   }
 }
 
-variable "service_account" {
-  description = "Service account to attach to HTCondor execute points"
-  type = object({
-    email  = string,
-    scopes = set(string)
-  })
-  default = {
-    email = null
-    scopes = [
-      "https://www.googleapis.com/auth/cloud-platform",
-    ]
-  }
+variable "execute_point_service_account_email" {
+  description = "Service account for HTCondor execute point (e-mail format)"
+  type        = string
+}
+
+variable "service_account_scopes" {
+  description = "Scopes by which to limit service account attached to central manager."
+  type        = set(string)
+  default = [
+    "https://www.googleapis.com/auth/cloud-platform",
+  ]
 }
 
 variable "network_self_link" {
@@ -158,4 +157,14 @@ variable "windows_startup_ps1" {
   type        = list(string)
   default     = []
   nullable    = false
+}
+
+variable "central_manager_ips" {
+  description = "List of IP addresses of HTCondor Central Managers"
+  type        = list(string)
+}
+
+variable "htcondor_bucket_name" {
+  description = "Name of HTCondor configuration bucket"
+  type        = string
 }
