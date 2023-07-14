@@ -28,6 +28,7 @@ locals {
   enable_oslogin_metadata = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
   metadata                = merge(local.network_storage_metadata, local.enable_oslogin_metadata, var.metadata)
 
+  host_count  = var.enable_high_availability ? 2 : 1
   name_prefix = "${var.deployment_name}-ap"
 
   example_runner = {
@@ -74,7 +75,8 @@ locals {
     ])
   }
 
-  list_instances_command = "gcloud compute instance-groups list-instances ${data.google_compute_region_instance_group.ap.name} --region ${var.region} --project ${var.project_id}"
+  access_point_ips  = [data.google_compute_instance.ap.network_interface[0].network_ip]
+  access_point_name = data.google_compute_instance.ap.name
 }
 
 data "google_compute_image" "htcondor" {
@@ -95,7 +97,17 @@ data "google_compute_zones" "available" {
 }
 
 data "google_compute_region_instance_group" "ap" {
-  self_link = module.htcondor_ap.self_link
+  self_link = time_sleep.mig_warmup.triggers.self_link
+  lifecycle {
+    postcondition {
+      condition     = length(self.instances) == local.host_count
+      error_message = "There should be ${local.host_count} access points found"
+    }
+  }
+}
+
+data "google_compute_instance" "ap" {
+  self_link = data.google_compute_region_instance_group.ap.instances[0].instance
 }
 
 resource "google_storage_bucket_object" "ap_config" {
@@ -143,7 +155,7 @@ module "htcondor_ap" {
 
   project_id        = var.project_id
   region            = var.region
-  target_size       = var.enable_high_availability ? 2 : 1
+  target_size       = local.host_count
   hostname          = local.name_prefix
   instance_template = module.access_point_instance_template.self_link
 
@@ -181,4 +193,12 @@ module "htcondor_ap" {
     delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
     is_external    = var.enable_public_ips
   }]
+}
+
+resource "time_sleep" "mig_warmup" {
+  create_duration = "120s"
+
+  triggers = {
+    self_link = module.htcondor_ap.self_link
+  }
 }

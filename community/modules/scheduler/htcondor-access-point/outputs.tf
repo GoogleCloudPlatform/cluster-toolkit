@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-output "list_instances_command" {
-  description = "Command to list Access Points provisioned by this module"
-  value       = local.list_instances_command
+output "access_point_ips" {
+  description = "IP addresses of the access points provisioned by this module"
+  value       = local.access_point_ips
+}
+
+output "access_point_name" {
+  description = "Name of the access point provisioned by this module"
+  value       = local.access_point_name
 }
