@@ -42,10 +42,15 @@ deployment_groups:
       image: rocky-linux-cloud/rocky-linux-8
       auto_delete_disk: true
 
-  - id: spack
+  - id: spack-setup
     source: ./community//modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
       commands: |
         spack install gcc@10.3.0 target=x86_64
         spack load gcc@10.3.0 target=x86_64
@@ -67,10 +72,7 @@ deployment_groups:
           echo $2
           tar zxvf /tmp/$1 -C /
         args: "foo.tgz 'Expanding the file'"
-      - $(spack.install_spack_deps_runner)
-      - type: shell
-        content: $(spack.startup_script)
-        destination: "/apps/spack-install.sh"
+      - $(spack-execute.spack_runner)
 
   - id: instance
     source: ./modules/compute/vm-instance

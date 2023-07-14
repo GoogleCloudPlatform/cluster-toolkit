@@ -35,10 +35,15 @@ deployment_groups:
     source: modules/network/vpc
 
   ## Install Scripts
-  - id: spack
+  - id: spack-install
     source: community/modules/scripts/spack-install
     settings:
       install_dir: /opt/apps/spack
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-install]
+    settings:
       log_file: /var/log/spack.log
       commands: |
         # Un-comment and update mirror_url to install from spack cache
@@ -55,7 +60,7 @@ deployment_groups:
 
   - id: ramble-execute
     source: community/modules/scripts/ramble-execute
-    use: [spack, ramble-setup]
+    use: [spack-install, ramble-setup]
     settings:
       commands: |
         ramble workspace create gromacs -c /opt/apps/gromacs_scaling.yaml -t /opt/apps/execute_experiment.tpl
@@ -66,8 +71,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack-execute.spack_runner)
       - type: data
         destination: /opt/apps/gromacs_scaling.yaml
         content: |

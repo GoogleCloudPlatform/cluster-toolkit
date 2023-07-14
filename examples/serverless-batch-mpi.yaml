@@ -34,11 +34,16 @@ deployment_groups:
     settings:
       local_mount: /share
 
-  - id: spack
+  - id: spack-setup
     source: community/modules/scripts/spack-install
     settings:
       spack_ref: v0.19.0
       install_dir: /share/spack
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
       data_files:
       - destination: /tmp/projections-config.yaml
         content: |
@@ -92,8 +97,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack-execute.spack_runner)
       - type: shell
         destination: wrfv3_setup.sh
         content: |
@@ -153,7 +157,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.setup_spack_runner)
+      - $(spack-setup.setup_spack_runner)
 
   - id: batch-login
     source: modules/scheduler/batch-login-node
