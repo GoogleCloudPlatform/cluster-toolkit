@@ -48,12 +48,14 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
+| <a name="requirement_time"></a> [time](#requirement\_time) | ~> 0.9 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+| <a name="provider_time"></a> [time](#provider\_time) | ~> 0.9 |
 
 ## Modules
 
@@ -68,7 +70,9 @@ limitations under the License.
 | Name | Type |
 |------|------|
 | [google_storage_bucket_object.ap_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [time_sleep.mig_warmup](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 | [google_compute_image.htcondor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
+| [google_compute_instance.ap](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_instance) | data source |
 | [google_compute_region_instance_group.ap](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_region_instance_group) | data source |
 | [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 
@@ -102,5 +106,6 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_list_instances_command"></a> [list\_instances\_command](#output\_list\_instances\_command) | Command to list Access Points provisioned by this module |
+| <a name="output_access_point_ips"></a> [access\_point\_ips](#output\_access\_point\_ips) | IP addresses of the access points provisioned by this module |
+| <a name="output_access_point_name"></a> [access\_point\_name](#output\_access\_point\_name) | Name of the access point provisioned by this module |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
