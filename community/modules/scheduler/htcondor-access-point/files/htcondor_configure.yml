@@ -56,6 +56,8 @@
       fi
     args:
       executable: /bin/bash
+    notify:
+    - Reload HTCondor
   - name: Configure HTCondor SchedD
     when: htcondor_role == 'get_htcondor_submit'
     block:
