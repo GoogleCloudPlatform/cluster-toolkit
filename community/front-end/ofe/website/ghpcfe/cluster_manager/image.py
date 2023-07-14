@@ -99,7 +99,7 @@ vars:
   network_name: {"image-"+ str(self.image.id) + "-network"}
   subnetwork_name: {"image" + str(self.image.id) + "-subnetwork"}
   image_name: {"image-" + self.image.name}
-  image_family: {"image" + self.image.family}
+  image_family: {"image-" + self.image.family}
   tag: ofe-created
 
 deployment_groups:

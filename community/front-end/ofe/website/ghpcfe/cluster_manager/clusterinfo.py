@@ -174,7 +174,7 @@ class ClusterInfo:
             part_id = f"partition_{count}"
             if part.image is not None:
                 instance_image_yaml = f"""instance_image:
-        family: {part.image.family}
+        family: image-{part.image.family}
         project: {self.cluster.project_id}"""
             else:
                 instance_image_yaml = ""
@@ -264,14 +264,14 @@ class ClusterInfo:
 
                 if self.cluster.login_node_image is not None:
                     login_image_yaml = f"""instance_image:
-                family: {self.cluster.login_node_image.family}
+                family: image-{self.cluster.login_node_image.family}
                 project: {self.cluster.project_id}"""
                 else:
                     login_image_yaml = ""
 
                 if self.cluster.controller_node_image is not None:
                     controller_image_yaml = f"""instance_image:
-                family: {self.cluster.controller_node_image.family}
+                family: image-{self.cluster.controller_node_image.family}
                 project: {self.cluster.project_id}
                 """
                 else:
