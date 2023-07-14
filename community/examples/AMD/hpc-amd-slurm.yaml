@@ -39,11 +39,16 @@ deployment_groups:
     settings:
       local_mount: /sw
 
-  - id: spack
+  - id: spack-setup
     source: community/modules/scripts/spack-install
     settings:
       install_dir: /sw/spack
       spack_ref: v0.18.1
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
       log_file: /var/log/spack.log
       data_files:
       - destination: /tmp/projections-config.yaml
@@ -113,8 +118,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack-execute.spack_runner)
       - type: shell
         destination: shutdown.sh
         content: |
@@ -128,7 +132,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.setup_spack_runner)
+      - $(spack-setup.setup_spack_runner)
       # the following installation of AOCC may be automated in the future
       # with a clear direction to the user to read the EULA at
       # https://developer.amd.com/aocc-compiler-eula/

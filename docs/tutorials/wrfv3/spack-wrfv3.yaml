@@ -32,10 +32,15 @@ deployment_groups:
     source: modules/monitoring/dashboard
 
   ## Install Scripts
-  - id: spack
+  - id: spack-setup
     source: community/modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
       log_file: /var/log/spack.log
       data_files:
       - destination: /tmp/projections-config.yaml
@@ -99,8 +104,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack-execute.spack_runner)
       - type: shell
         destination: wrfv3_setup.sh
         content: |

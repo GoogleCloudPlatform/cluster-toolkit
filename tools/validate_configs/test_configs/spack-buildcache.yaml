@@ -28,10 +28,15 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
-  - id: spack
+  - id: spack-setup
     source: ./community/modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
       log_file: /var/log/spack.log
       data_files:
       - source: /path/to/local/spack_gpg_key.pub
@@ -70,9 +75,7 @@ deployment_groups:
       - type: ansible-local
         source: modules/spack-install/scripts/install_spack_deps.yml
         destination: install_spack_deps.yml
-      - type: shell
-        content: $(spack.startup_script)
-        destination: install_spack.sh
+      - $(spack-execute.spack_runner)
       - type: shell
         destination: shutdown.sh
         content: shutdown -h

@@ -113,10 +113,15 @@ deployment_groups:
 
   ### Software ###
 
-  - id: spack
+  - id: spack-setup
     source: community/modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
       data_files:
       - destination: /tmp/projections-config.yaml
         content: |
@@ -185,7 +190,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
+      - $(spack-execute.spack_runner)
 
       - type: data
         destination: /tmp/install_spack.sh
