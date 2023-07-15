@@ -20,6 +20,7 @@ use warnings;
 my $min = 80;
 my $cmdmin = 40;
 my $shellmin = 0;
+my $validatorsmin = 25;
 my $failed_coverage = 0;
 
 while (<>){
@@ -28,6 +29,8 @@ while (<>){
     $failed_coverage++ if ($1 < $cmdmin);
   } elsif ( $_ =~ /hpc-toolkit\/pkg\/shell.*coverage: (\d+\.\d)%/) {
     $failed_coverage++ if ($1 < $shellmin);
+  } elsif ( $_ =~ /hpc-toolkit\/pkg\/validators.*coverage: (\d+\.\d)%/) {
+    $failed_coverage++ if ($1 < $validatorsmin);  
   } elsif ( $_ =~ /coverage: (\d+\.\d)%/ ) {
     $failed_coverage++ if ($1 < $min);
   }
