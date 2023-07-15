@@ -16,35 +16,11 @@
 # override settings with a higher priority (last lexically) named file
 # https://htcondor.readthedocs.io/en/latest/admin-manual/introduction-to-configuration.html?#ordered-evaluation-to-set-the-configuration
 
-use role:${htcondor_role}
-CONDOR_HOST = ${join(",", central_manager_ips)}
+use role:get_htcondor_central_manager
+CONDOR_HOST = $(IPV4_ADDRESS)
 
-%{ if htcondor_role == "get_htcondor_central_manager" ~}
-# Central Manager configuraition settings
+# Central Manager configuration settings
 COLLECTOR_UPDATE_INTERVAL = 30
 NEGOTIATOR_UPDATE_INTERVAL = 30
 NEGOTIATOR_DEPTH_FIRST = True
 NEGOTIATOR_UPDATE_AFTER_CYCLE = True
-%{ endif ~}
-
-%{ if htcondor_role == "get_htcondor_central_manager" && length(central_manager_ips) > 1 ~}
-# Central Manager high availability configuration settings
-# following https://htcondor.readthedocs.io/en/latest/admin-manual/high-availability.html#high-availability-of-the-central-manager
-CM_LIST = \
-  ${central_manager_ips[0]}:$(SHARED_PORT_PORT), \
-  ${central_manager_ips[1]}:$(SHARED_PORT_PORT)
-
-HAD_USE_SHARED_PORT = True
-HAD_LIST = $(CM_LIST)
-
-REPLICATION_USE_SHARED_PORT = True
-REPLICATION_LIST = $(CM_LIST)
-
-HAD_USE_PRIMARY = True
-HAD_CONTROLLEE = NEGOTIATOR
-MASTER_NEGOTIATOR_CONTROLLER = HAD
-
-DAEMON_LIST = $(DAEMON_LIST), HAD, REPLICATION
-HAD_USE_REPLICATION = True
-MASTER_HAD_BACKOFF_CONSTANT = 360
-%{ endif ~}

@@ -26,25 +26,6 @@ locals {
   access_point_roles           = [for role in var.access_point_roles : "${var.project_id}=>${role}"]
   central_manager_display_name = "HTCondor Central Manager (${var.deployment_name})"
   central_manager_roles        = [for role in var.central_manager_roles : "${var.project_id}=>${role}"]
-
-  central_manager_count    = var.central_manager_high_availability ? 2 : 1
-  central_manager_ip_names = [for i in range(local.central_manager_count) : "${var.deployment_name}-cm-ip-${i}"]
-
-  cm_config = templatefile("${path.module}/templates/condor_config.tftpl", {
-    htcondor_role       = "get_htcondor_central_manager",
-    central_manager_ips = module.address.addresses,
-  })
-
-  cm_object = "gs://${module.htcondor_bucket.name}/${google_storage_bucket_object.cm_config.output_name}"
-  runner_cm = {
-    "type"        = "ansible-local"
-    "content"     = file("${path.module}/files/htcondor_configure.yml")
-    "destination" = "htcondor_configure.yml"
-    "args" = join(" ", [
-      "-e htcondor_role=get_htcondor_central_manager",
-      "-e config_object=${local.cm_object}",
-    ])
-  }
 }
 
 module "htcondor_bucket" {
@@ -66,12 +47,6 @@ module "htcondor_bucket" {
     ])
   }
   set_viewer_roles = true
-}
-
-resource "google_storage_bucket_object" "cm_config" {
-  name    = "${var.deployment_name}-cm-config-${substr(md5(local.cm_config), 0, 4)}"
-  content = local.cm_config
-  bucket  = module.htcondor_bucket.name
 }
 
 module "access_point_service_account" {
@@ -105,15 +80,6 @@ module "central_manager_service_account" {
   names         = ["cm"]
   display_name  = local.central_manager_display_name
   project_roles = local.central_manager_roles
-}
-
-module "address" {
-  source     = "terraform-google-modules/address/google"
-  version    = "~> 3.0"
-  project_id = var.project_id
-  region     = var.region
-  subnetwork = var.subnetwork_self_link
-  names      = local.central_manager_ip_names
 }
 
 data "google_compute_subnetwork" "htcondor" {

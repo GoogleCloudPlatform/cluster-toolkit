@@ -67,42 +67,18 @@ deployment_groups:
     use:
     - htcondor_base
 
-  - id: htcondor_startup_central_manager
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_secrets.central_manager_runner)
-      - $(htcondor_base.central_manager_runner)
-
   - id: htcondor_cm
-    source: modules/compute/vm-instance
+    source: community/modules/scheduler/htcondor-central-manager
     use:
-    - htcondor_startup_central_manager
+    - network1
+    - htcondor_secrets
+    - htcondor_base
     settings:
-      name_prefix: cm
       instance_image:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
-      add_deployment_name_before_prefix: true
-      machine_type: c2-standard-4
-      disable_public_ips: true
-      service_account:
-        email: $(htcondor_base.central_manager_service_account_email)
-        scopes:
-        - cloud-platform
-      network_interfaces:
-      - network: null
-        subnetwork: $(network1.subnetwork_self_link)
-        subnetwork_project: $(vars.project_id)
-        network_ip: $(htcondor_base.central_manager_ips[0])
-        stack_type: null
-        access_config: []
-        ipv6_access_config: []
-        alias_ip_range: []
-        nic_type: VIRTIO_NET
-        queue_count: null
     outputs:
-    - internal_ip
+    - central_manager_name
 
   # the HTCondor modules support up to 2 execute points per blueprint
   # if using 1, it may use Spot or On-demand pricing
@@ -113,6 +89,7 @@ deployment_groups:
     - network1
     - htcondor_secrets
     - htcondor_base
+    - htcondor_cm
     settings:
       instance_image:
         project: $(vars.project_id)
@@ -125,6 +102,7 @@ deployment_groups:
     - network1
     - htcondor_secrets
     - htcondor_base
+    - htcondor_cm
     settings:
       instance_image:
         project: $(vars.project_id)
@@ -137,6 +115,7 @@ deployment_groups:
     - network1
     - htcondor_secrets
     - htcondor_base
+    - htcondor_cm
     - htcondor_execute_point
     - htcondor_execute_point_spot
     settings:

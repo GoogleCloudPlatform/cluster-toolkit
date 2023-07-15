@@ -69,9 +69,3 @@ variable "execute_point_roles" {
     "roles/storage.objectViewer",
   ]
 }
-
-variable "central_manager_high_availability" {
-  description = "Provision HTCondor central manager in high availability mode"
-  type        = bool
-  default     = false
-}
