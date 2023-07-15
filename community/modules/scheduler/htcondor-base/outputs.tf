@@ -38,16 +38,6 @@ output "execute_point_service_account_email" {
   ]
 }
 
-output "central_manager_runner" {
-  description = "Toolkit Runner to configure an HTCondor Central Manager"
-  value       = local.runner_cm
-}
-
-output "central_manager_ips" {
-  description = "Reserved internal IP address for use by Central Manager"
-  value       = module.address.addresses
-}
-
 output "htcondor_bucket_name" {
   description = "Name of the HTCondor configuration bucket"
   value       = module.htcondor_bucket.name
