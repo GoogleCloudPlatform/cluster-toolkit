@@ -213,7 +213,6 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.2 |
-| <a name="module_address"></a> [address](#module\_address) | terraform-google-modules/address/google | ~> 3.0 |
 | <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.2 |
 | <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.2 |
 | <a name="module_health_check_firewall_rule"></a> [health\_check\_firewall\_rule](#module\_health\_check\_firewall\_rule) | terraform-google-modules/network/google//modules/firewall-rules | ~> 6.0 |
@@ -223,7 +222,6 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
-| [google_storage_bucket_object.cm_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_compute_subnetwork.htcondor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
 
 ## Inputs
@@ -231,7 +229,6 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_access_point_roles"></a> [access\_point\_roles](#input\_access\_point\_roles) | Project-wide roles for HTCondor Access Point service account | `list(string)` | <pre>[<br>  "roles/compute.instanceAdmin",<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
-| <a name="input_central_manager_high_availability"></a> [central\_manager\_high\_availability](#input\_central\_manager\_high\_availability) | Provision HTCondor central manager in high availability mode | `bool` | `false` | no |
 | <a name="input_central_manager_roles"></a> [central\_manager\_roles](#input\_central\_manager\_roles) | Project-wide roles for HTCondor Central Manager service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_execute_point_roles"></a> [execute\_point\_roles](#input\_execute\_point\_roles) | Project-wide roles for HTCondor Execute Point service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
@@ -245,8 +242,6 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#output\_access\_point\_service\_account\_email) | HTCondor Access Point Service Account (e-mail format) |
-| <a name="output_central_manager_ips"></a> [central\_manager\_ips](#output\_central\_manager\_ips) | Reserved internal IP address for use by Central Manager |
-| <a name="output_central_manager_runner"></a> [central\_manager\_runner](#output\_central\_manager\_runner) | Toolkit Runner to configure an HTCondor Central Manager |
 | <a name="output_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#output\_central\_manager\_service\_account\_email) | HTCondor Central Manager Service Account (e-mail format) |
 | <a name="output_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#output\_execute\_point\_service\_account\_email) | HTCondor Execute Point Service Account (e-mail format) |
 | <a name="output_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#output\_htcondor\_bucket\_name) | Name of the HTCondor configuration bucket |

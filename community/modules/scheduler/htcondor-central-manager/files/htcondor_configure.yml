@@ -13,19 +13,16 @@
 # limitations under the License.
 
 ---
-- name: Configure HTCondor Role
+- name: Configure HTCondor central manager
   hosts: localhost
   become: true
   vars:
-    job_queue_ha: false
-    spool_dir: /var/lib/condor/spool
     condor_config_root: /etc/condor
     ghpc_config_file: 50-ghpc-managed
   tasks:
   - name: Ensure necessary variables are set
     ansible.builtin.assert:
       that:
-      - htcondor_role is defined
       - config_object is defined
   - name: Remove default HTCondor configuration
     ansible.builtin.file:
