@@ -206,7 +206,6 @@ class ClusterInfo:
             if part.image:
                 yaml[-1] += (
                     f"""\
-      source_image: {part.image}
 """
                 )
 
@@ -343,7 +342,7 @@ deployment_groups:
         #!/bin/bash
         echo "******************************************** CALLING CONTROLLER STARTUP"
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_controller.sh - | bash
-       compute_startup_script: |
+      compute_startup_script: |
         #!/bin/bash
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
 #TODO:     enable_cleanup_compute: True
