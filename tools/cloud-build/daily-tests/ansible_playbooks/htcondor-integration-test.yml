@@ -131,6 +131,9 @@
       args:
         chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
         executable: /bin/bash
+    - name: Trigger Cloud Build failure (rescue blocks otherwise revert failures)
+      ansible.builtin.fail:
+        msg: "Failed while setting up test infrastructure"
 
 - name: Run Integration Tests
   hosts: remote_host
