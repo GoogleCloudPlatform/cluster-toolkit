@@ -49,7 +49,6 @@ deployment_groups:
     type: yam
     configuration:
       carrot: rust
-  kind: terraform
   modules:
   - id: tan
     source: oatmeal
@@ -108,36 +107,35 @@ terraform_backend_defaults:
 		{Root.Groups.At(0).Backend.Type, Pos{22, 11}},
 		{Root.Groups.At(0).Backend.Configuration, Pos{24, 7}},
 		{Root.Groups.At(0).Backend.Configuration.Dot("carrot"), Pos{24, 15}},
-		{Root.Groups.At(0).Kind, Pos{25, 9}},
 
-		{Root.Groups.At(0).Modules, Pos{27, 3}},
-		{Root.Groups.At(0).Modules.At(0), Pos{27, 5}},
-		{Root.Groups.At(0).Modules.At(0).ID, Pos{27, 9}},
-		{Root.Groups.At(0).Modules.At(0).Source, Pos{28, 13}},
-		{Root.Groups.At(0).Modules.At(0).Kind, Pos{29, 11}},
-		{Root.Groups.At(0).Modules.At(0).Use, Pos{30, 10}},
-		{Root.Groups.At(0).Modules.At(0).Use.At(0), Pos{30, 11}},
-		{Root.Groups.At(0).Modules.At(0).Use.At(1), Pos{30, 18}},
-		{Root.Groups.At(0).Modules.At(0).Outputs, Pos{32, 5}},
-		{Root.Groups.At(0).Modules.At(0).Outputs.At(0), Pos{32, 7}},
-		{Root.Groups.At(0).Modules.At(0).Outputs.At(0).Name, Pos{32, 7}}, // synthetic
-		{Root.Groups.At(0).Modules.At(0).Outputs.At(1), Pos{33, 7}},
-		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Name, Pos{33, 13}},
-		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Description, Pos{34, 20}},
-		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Sensitive, Pos{35, 18}},
-		{Root.Groups.At(0).Modules.At(0).Settings, Pos{37, 7}},
-		{Root.Groups.At(0).Modules.At(0).Settings.Dot("dijon"), Pos{37, 14}},
+		{Root.Groups.At(0).Modules, Pos{26, 3}},
+		{Root.Groups.At(0).Modules.At(0), Pos{26, 5}},
+		{Root.Groups.At(0).Modules.At(0).ID, Pos{26, 9}},
+		{Root.Groups.At(0).Modules.At(0).Source, Pos{27, 13}},
+		{Root.Groups.At(0).Modules.At(0).Kind, Pos{28, 11}},
+		{Root.Groups.At(0).Modules.At(0).Use, Pos{29, 10}},
+		{Root.Groups.At(0).Modules.At(0).Use.At(0), Pos{29, 11}},
+		{Root.Groups.At(0).Modules.At(0).Use.At(1), Pos{29, 18}},
+		{Root.Groups.At(0).Modules.At(0).Outputs, Pos{31, 5}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(0), Pos{31, 7}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(0).Name, Pos{31, 7}}, // synthetic
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(1), Pos{32, 7}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Name, Pos{32, 13}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Description, Pos{33, 20}},
+		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Sensitive, Pos{34, 18}},
+		{Root.Groups.At(0).Modules.At(0).Settings, Pos{36, 7}},
+		{Root.Groups.At(0).Modules.At(0).Settings.Dot("dijon"), Pos{36, 14}},
 
-		{Root.Groups.At(1), Pos{39, 3}},
-		{Root.Groups.At(1).Name, Pos{39, 10}},
-		{Root.Groups.At(1).Modules, Pos{41, 3}},
-		{Root.Groups.At(1).Modules.At(0), Pos{41, 5}},
-		{Root.Groups.At(1).Modules.At(0).ID, Pos{41, 9}},
-		{Root.Groups.At(1).Modules.At(1), Pos{42, 5}},
-		{Root.Groups.At(1).Modules.At(1).ID, Pos{42, 9}},
+		{Root.Groups.At(1), Pos{38, 3}},
+		{Root.Groups.At(1).Name, Pos{38, 10}},
+		{Root.Groups.At(1).Modules, Pos{40, 3}},
+		{Root.Groups.At(1).Modules.At(0), Pos{40, 5}},
+		{Root.Groups.At(1).Modules.At(0).ID, Pos{40, 9}},
+		{Root.Groups.At(1).Modules.At(1), Pos{41, 5}},
+		{Root.Groups.At(1).Modules.At(1).ID, Pos{41, 9}},
 
-		{Root.Backend, Pos{45, 3}},
-		{Root.Backend.Type, Pos{45, 9}},
+		{Root.Backend, Pos{44, 3}},
+		{Root.Backend.Type, Pos{44, 9}},
 	}
 
 	ctx := NewYamlCtx([]byte(data))

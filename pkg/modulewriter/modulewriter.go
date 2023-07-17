@@ -90,10 +90,10 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwrite
 	fmt.Fprintln(f, "================================")
 
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
-		writer, ok := kinds[grp.Kind.String()]
+		writer, ok := kinds[grp.Kind().String()]
 		if !ok {
 			return fmt.Errorf(
-				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
+				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind())
 		}
 
 		err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir, f)
@@ -420,10 +420,10 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
 		grp := dc.Config.DeploymentGroups[grpIdx]
 		grpPath := filepath.Join(deploymentDir, string(grp.Name))
-		if grp.Kind == config.TerraformKind {
+		if grp.Kind() == config.TerraformKind {
 			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)
 		}
-		if grp.Kind == config.PackerKind {
+		if grp.Kind() == config.PackerKind {
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
 
 		}

@@ -45,7 +45,6 @@ func TestPath(t *testing.T) {
 
 		{r.Groups.At(3), "deployment_groups[3]"},
 		{r.Groups.At(3).Name, "deployment_groups[3].group"},
-		{r.Groups.At(3).Kind, "deployment_groups[3].kind"},
 		{r.Groups.At(3).Backend, "deployment_groups[3].terraform_backend"},
 		{r.Groups.At(3).Modules, "deployment_groups[3].modules"},
 		{r.Groups.At(3).Modules.At(1), "deployment_groups[3].modules[1]"},
