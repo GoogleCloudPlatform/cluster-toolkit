@@ -777,7 +777,7 @@ class Cluster(CloudResource):
         blank=True,
         null=True,
         default=None,
-        on_delete=models.RESTRICT,
+        on_delete=models.SET_NULL
     )
     controller_node_image = models.ForeignKey(
         Image,
@@ -786,7 +786,7 @@ class Cluster(CloudResource):
         blank=True,
         null=True,
         default=None,
-        on_delete=models.RESTRICT
+        on_delete=models.SET_NULL,
     )
 
     def get_access_key(self):
@@ -872,7 +872,7 @@ class ClusterPartition(models.Model):
         blank=True,
         null=True,
         default=None,
-        on_delete=models.RESTRICT,
+        on_delete=models.SET_NULL,
     )
     max_node_count = models.PositiveIntegerField(
         validators=[MinValueValidator(1)],
