@@ -62,8 +62,16 @@ When a GPU is attached to a node an additional taint is automatically added:
 equivalent toleration is required. The `gke-job-template` module will
 automatically apply this toleration when using a node pool with GPUs.
 
-Nvidia GPU drivers must be installed by applying a DaemonSet to the cluster. See
+Nvidia GPU drivers must be installed.  The recommended approach for GKE to install
+GPU dirvers is by applying a DaemonSet to the cluster. See
 [these instructions](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus#cos).
+
+However, in some cases it may be desired to compile a different driver (such as
+a desire to install a newer version, compatibility with the
+[Nvidia GPU-operator](https://github.com/NVIDIA/gpu-operator) or other
+use-cases). In this case, ensure that you turn off the
+[enable_secure_boot](#input\_enable\_secure\_boot) option to allow unsigned
+kernel modules to be loaded.
 
 ### GPUs Examples
 
@@ -208,6 +216,7 @@ No modules.
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for each node. | `number` | `100` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `"pd-standard"` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
+| <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type               = string<br>    count              = number<br>    gpu_partition_size = string<br>    gpu_sharing_config = list(object({<br>      gpu_sharing_strategy       = string<br>      max_shared_clients_per_gpu = number<br>    }))<br>  }))</pre> | `null` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
