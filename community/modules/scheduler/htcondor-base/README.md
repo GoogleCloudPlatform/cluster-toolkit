@@ -1,12 +1,19 @@
 ## Description
 
-This module performs the following tasks:
+This module creates the basic security infrastructure of an HTCondor pool in
+Google Cloud.
+
+> **_NOTE:_** This module was previously named htcondor-configure. The interface
+> and responsibilities of this module have changed significantly. Please review
+> the [example](#example) and modify your blueprints accordingly.
+
+## Security setup
+
+This module will take the following actions:
 
 - store an HTCondor Pool password in Google Cloud Secret Manager
   - will generate a new password if one is not supplied
 - create service accounts for an HTCondor Access Point and Central Manager
-- create a Toolkit runner for an Access Point
-- create a Toolkit runner for a Central Manager
 
 It is expected to be used with the [htcondor-install] and
 [htcondor-execute-point] modules.
