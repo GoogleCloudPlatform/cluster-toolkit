@@ -7,8 +7,9 @@ Instance Group (MIG)][mig] with auto-healing.
 
 ## Usage
 
-Although this provisions an HTCondor central manager with standard configuration,
-for a functioning node, you must supply Toolkit runners as described below:
+This module provisions an HTCondor central manager with a standard
+configuration. For the node to function correctly, you must supply the input
+variable described below:
 
 - [var.central_manager_runner](#input_central_manager_runner)
   - Runner must download a POOL password / signing key and create an [IDTOKEN]
@@ -22,6 +23,45 @@ duplicate the functionality in the references. Usage is demonstrated in the
 [htc-example]: ../../../../examples/README.md#htc-htcondoryaml--
 [htcondor-pool-secrets]: ../htcondor-pool-secrets/README.md
 [IDTOKEN]: https://htcondor.readthedocs.io/en/latest/admin-manual/security.html#introducing-idtokens
+
+## Behavior of Managed Instance Group (MIG)
+
+A regional [MIG][mig] is used to provision the central manager, although only
+1 node will ever be active at a time. By default, the node will be provisioned
+in any of the zones available in that region, however, it can be constrained to
+run in fewer zones (or a single zone) using [var.zones](#input_zones).
+
+The VM replacement policy is set to [opportunistic]. In practice, this means
+that an active VM will not be replaced by Terraform actions, but may be
+replaced when either:
+
+- intentionally by issuing an update via Cloud Console or using gcloud (below)
+- the VM becomes unhealthy or is otherwise automatically replaced (e.g. regular
+  Google Cloud maintenance)
+
+For example, to manually update all instances in a MIG:
+
+```text
+gcloud compute instance-groups managed update-instances \
+   <<NAME-OF-MIG>> --all-instances --region <<REGION>> \
+   --project <<PROJECT_ID>> --minimal-action replace
+```
+
+[opportunistic]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
+
+## Limiting inter-zone egress
+
+Because all the elements of the HTCondor pool use regional MIGs, they may be
+subject to [interzone egress fees][network-pricing]. The primary traffic between
+nodes of an HTCondor pool running embarrassingly parallel jobs is expected to
+be limited to API traffic for job scheduling and monitoring. Please review the
+[network pricing][network-pricing] documentation and determine if this cost is
+a concern. If it is, use [var.zones](#input_zones) to constrain each node within
+your HTCondor pool to operate within a single zone.
+
+[network-pricing]: https://cloud.google.com/vpc/network-pricing
+
+## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
@@ -42,7 +82,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.1.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_time"></a> [time](#requirement\_time) | ~> 0.9 |
 
@@ -77,21 +117,22 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_central_manager_runner"></a> [central\_manager\_runner](#input\_central\_manager\_runner) | A list of Toolkit runners for configuring an HTCondor central manager | `list(map(string))` | `[]` | no |
-| <a name="input_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#input\_central\_manager\_service\_account\_email) | Service account for central manager (e-mail format) | `string` | n/a | yes |
+| <a name="input_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#input\_central\_manager\_service\_account\_email) | Service account e-mail for central manager (can be supplied by htcondor-base module) | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
-| <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `number` | `null` | no |
+| <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `number` | `20` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
 | <a name="input_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#input\_htcondor\_bucket\_name) | Name of HTCondor configuration bucket | `string` | n/a | yes |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Custom VM image with HTCondor and Toolkit support installed. | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | n/a | yes |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Custom VM image with HTCondor installed using the htcondor-install module. | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor central managers | `string` | `"c2-standard-4"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor central managers | `map(string)` | `{}` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network in which the HTCondor central manager will be created. | `string` | `null` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor central manager will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Default region for creating resources | `string` | n/a | yes |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes by which to limit service account attached to central manager. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork in which the HTCondor central manager will be created. | `string` | `null` | no |
+| <a name="input_zones"></a> [zones](#input\_zones) | Zone(s) in which central manager may be created. If not supplied, will default to all zones in var.region. | `list(string)` | `[]` | no |
 
 ## Outputs
 

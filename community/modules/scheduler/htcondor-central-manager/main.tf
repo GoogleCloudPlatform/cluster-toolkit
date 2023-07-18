@@ -30,8 +30,6 @@ locals {
 
   name_prefix = "${var.deployment_name}-cm"
 
-  all_runners = flatten([var.central_manager_runner, local.schedd_runner])
-
   cm_config = templatefile("${path.module}/templates/condor_config.tftpl", {})
 
   cm_object = "gs://${var.htcondor_bucket_name}/${google_storage_bucket_object.cm_config.output_name}"
@@ -43,11 +41,14 @@ locals {
       "-e config_object=${local.cm_object}",
     ])
   }
+  all_runners = flatten([var.central_manager_runner, local.schedd_runner])
 
   central_manager_ips  = [data.google_compute_instance.cm.network_interface[0].network_ip]
   central_manager_name = data.google_compute_instance.cm.name
 
   list_instances_command = "gcloud compute instance-groups list-instances ${data.google_compute_region_instance_group.cm.name} --region ${var.region} --project ${var.project_id}"
+
+  zones = coalescelist(var.zones, data.google_compute_zones.available.names)
 }
 
 data "google_compute_image" "htcondor" {
@@ -69,6 +70,12 @@ data "google_compute_zones" "available" {
 
 data "google_compute_region_instance_group" "cm" {
   self_link = time_sleep.mig_warmup.triggers.self_link
+  lifecycle {
+    postcondition {
+      condition     = length(self.instances) == 1
+      error_message = "There should only be 1 central manager found"
+    }
+  }
 }
 
 data "google_compute_instance" "cm" {
@@ -118,11 +125,12 @@ module "htcondor_cm" {
   # tflint-ignore: terraform_module_pinned_source
   source = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=84d7959"
 
-  project_id        = var.project_id
-  region            = var.region
-  target_size       = 1
-  hostname          = local.name_prefix
-  instance_template = module.central_manager_instance_template.self_link
+  project_id                = var.project_id
+  region                    = var.region
+  distribution_policy_zones = local.zones
+  target_size               = 1
+  hostname                  = local.name_prefix
+  instance_template         = module.central_manager_instance_template.self_link
 
   health_check_name = "health-${local.name_prefix}"
   health_check = {
@@ -144,8 +152,8 @@ module "htcondor_cm" {
   update_policy = [{
     instance_redistribution_type = "NONE"
     replacement_method           = "SUBSTITUTE"
-    max_surge_fixed              = length(data.google_compute_zones.available.names)
-    max_unavailable_fixed        = length(data.google_compute_zones.available.names)
+    max_surge_fixed              = length(local.zones)
+    max_unavailable_fixed        = length(local.zones)
     max_surge_percent            = null
     max_unavailable_percent      = null
     min_ready_sec                = 300

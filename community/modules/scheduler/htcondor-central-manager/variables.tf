@@ -15,7 +15,7 @@
  */
 
 variable "project_id" {
-  description = "Project in which HTCondor pool will be created"
+  description = "Project in which HTCondor central manager will be created"
   type        = string
 }
 
@@ -34,6 +34,13 @@ variable "region" {
   type        = string
 }
 
+variable "zones" {
+  description = "Zone(s) in which central manager may be created. If not supplied, will default to all zones in var.region."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "network_self_link" {
   description = "The self link of the network in which the HTCondor central manager will be created."
   type        = string
@@ -41,7 +48,7 @@ variable "network_self_link" {
 }
 
 variable "central_manager_service_account_email" {
-  description = "Service account for central manager (e-mail format)"
+  description = "Service account e-mail for central manager (can be supplied by htcondor-base module)"
   type        = string
 }
 
@@ -70,7 +77,8 @@ variable "network_storage" {
 variable "disk_size_gb" {
   description = "Boot disk size in GB"
   type        = number
-  default     = null
+  default     = 20
+  nullable    = false
 }
 
 variable "metadata" {
@@ -97,7 +105,7 @@ variable "subnetwork_self_link" {
 }
 
 variable "instance_image" {
-  description = "Custom VM image with HTCondor and Toolkit support installed."
+  description = "Custom VM image with HTCondor installed using the htcondor-install module."
   type = object({
     family  = string,
     project = string
