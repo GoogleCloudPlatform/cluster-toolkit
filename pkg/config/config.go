@@ -75,6 +75,7 @@ var errorMessages = map[string]string{
 var movedModules = map[string]string{
 	"community/modules/scheduler/cloud-batch-job":        "modules/scheduler/batch-job-template",
 	"community/modules/scheduler/cloud-batch-login-node": "modules/scheduler/batch-login-node",
+	"community/modules/scheduler/htcondor-configure":     "community/modules/scheduler/htcondor-base",
 }
 
 // GroupName is the name of a deployment group
@@ -417,9 +418,9 @@ func (bp Blueprint) checkMovedModules() error {
 
 	bp.WalkModules(func(p modulePath, m *Module) error {
 		if replacement, ok := movedModules[strings.Trim(m.Source, "./")]; ok {
-			err := fmt.Errorf(
-				"a module has moved. %s has been replaced with %s. Please update the source in your blueprint and try again",
-				m.Source, replacement)
+			err := fmt.Errorf("a module has moved. %s has been replaced with %s; "+
+				"update the source in your blueprint and read %s/README.md for migration instructions",
+				m.Source, replacement, replacement)
 			errs.At(p.Source, err)
 		}
 		return nil
