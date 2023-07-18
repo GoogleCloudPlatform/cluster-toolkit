@@ -28,27 +28,22 @@ const (
 	undefinedGlobalVariableRegex = ".* was not defined$"
 )
 
-func (s *MySuite) TestValidateModules(c *C) {
-	dc := getDeploymentConfigForTest()
-	dc.validateModules()
-}
-
 func (s *MySuite) TestValidateVars(c *C) {
 	{ // Success
-		dc := DeploymentConfig{}
-		c.Check(dc.validateVars(), IsNil)
+		vars := Dict{}
+		c.Check(validateVars(vars), IsNil)
 	}
 
 	{ // Fail: Nil value
-		dc := DeploymentConfig{}
-		dc.Config.Vars.Set("fork", cty.NilVal)
-		c.Check(dc.validateVars(), NotNil)
+		vars := Dict{}
+		vars.Set("fork", cty.NilVal)
+		c.Check(validateVars(vars), NotNil)
 	}
 
 	{ // Fail: labels not a map
-		dc := DeploymentConfig{}
-		dc.Config.Vars.Set("labels", cty.StringVal("a_string"))
-		c.Check(dc.validateVars(), NotNil)
+		vars := Dict{}
+		vars.Set("labels", cty.StringVal("a_string"))
+		c.Check(validateVars(vars), NotNil)
 	}
 }
 
@@ -98,14 +93,15 @@ func (s *MySuite) TestValidateSettings(c *C) {
 
 func (s *MySuite) TestValidateModule(c *C) {
 	p := Root.Groups.At(2).Modules.At(1)
+	dummyBp := Blueprint{}
 
 	{ // Catch no ID
-		err := validateModule(p, Module{Source: "green"})
+		err := validateModule(p, Module{Source: "green"}, dummyBp)
 		c.Check(err, NotNil)
 	}
 
 	{ // Catch no Source
-		err := validateModule(p, Module{ID: "bond"})
+		err := validateModule(p, Module{ID: "bond"}, dummyBp)
 		c.Check(err, NotNil)
 	}
 
@@ -114,7 +110,7 @@ func (s *MySuite) TestValidateModule(c *C) {
 			ID:     "bond",
 			Source: "green",
 			Kind:   ModuleKind{kind: "mean"},
-		})
+		}, dummyBp)
 		c.Check(err, NotNil)
 	}
 
@@ -125,7 +121,7 @@ func (s *MySuite) TestValidateModule(c *C) {
 			Kind:   TerraformKind,
 		}
 		modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), modulereader.ModuleInfo{})
-		err := validateModule(p, mod)
+		err := validateModule(p, mod, dummyBp)
 		c.Check(err, IsNil)
 	}
 }

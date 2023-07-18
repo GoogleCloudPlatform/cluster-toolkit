@@ -387,33 +387,37 @@ func (s *MySuite) TestExpandConfig(c *C) {
 }
 
 func (s *MySuite) TestCheckModulesAndGroups(c *C) {
-	{ // Duplicate module name same group
-		g := DeploymentGroup{Name: "ice", Modules: []Module{
-			{ID: "pony", Kind: PackerKind},
-			{ID: "pony", Kind: PackerKind},
-		}}
-		err := checkModulesAndGroups([]DeploymentGroup{g})
+	pony := Module{ID: "pony", Kind: TerraformKind, Source: "./ponyshop"}
+	zebra := Module{ID: "zebra", Kind: PackerKind, Source: "./zebrashop"}
+
+	setTestModuleInfo(pony, modulereader.ModuleInfo{})
+	setTestModuleInfo(zebra, modulereader.ModuleInfo{})
+
+	{ // Duplicate module id same group
+		g := DeploymentGroup{Name: "ice", Modules: []Module{pony, pony}}
+		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{g}})
 		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
-	{ // Duplicate module name different groups
-		ice := DeploymentGroup{Name: "ice", Modules: []Module{
-			{ID: "pony", Kind: PackerKind}}}
-		fire := DeploymentGroup{Name: "fire", Modules: []Module{
-			{ID: "pony", Kind: PackerKind}}}
-		err := checkModulesAndGroups([]DeploymentGroup{ice, fire})
+	{ // Duplicate module id different groups
+		ice := DeploymentGroup{Name: "ice", Modules: []Module{pony}}
+		fire := DeploymentGroup{Name: "fire", Modules: []Module{pony}}
+		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{ice, fire}})
 		c.Check(err, ErrorMatches, ".*pony used more than once")
+	}
+	{ // Duplicate group name
+		ice := DeploymentGroup{Name: "ice", Modules: []Module{pony}}
+		ice9 := DeploymentGroup{Name: "ice", Modules: []Module{zebra}}
+		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{ice, ice9}})
+		c.Check(err, ErrorMatches, ".*ice used more than once")
 	}
 	{ // Mixing module kinds
-		g := DeploymentGroup{Name: "ice", Modules: []Module{
-			{ID: "pony", Kind: PackerKind},
-			{ID: "zebra", Kind: TerraformKind},
-		}}
-		err := checkModulesAndGroups([]DeploymentGroup{g})
+		g := DeploymentGroup{Name: "ice", Modules: []Module{pony, zebra}}
+		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{g}})
 		c.Check(err, NotNil)
 	}
 	{ // Empty group
 		g := DeploymentGroup{Name: "ice"}
-		err := checkModulesAndGroups([]DeploymentGroup{g})
+		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{g}})
 		c.Check(err, NotNil)
 	}
 }
@@ -619,8 +623,7 @@ func (s *MySuite) TestImportBlueprint(c *C) {
 		Equals, expectedSimpleBlueprint.DeploymentGroups[0].Modules[0].ID)
 }
 
-func (s *MySuite) TestImportBlueprint_LabelValidation(c *C) {
-	dc := getDeploymentConfigForTest()
+func (s *MySuite) TestValidateGlobalLabels(c *C) {
 
 	labelName := "my_test_label_name"
 	labelValue := "my-valid-label-value"
@@ -629,87 +632,106 @@ func (s *MySuite) TestImportBlueprint_LabelValidation(c *C) {
 
 	maxLabels := 64
 
-	var err error
-
-	// Simple success case
-	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
-		labelName: cty.StringVal(labelValue),
-	}))
-	err = dc.validateVars()
-	c.Assert(err, Equals, nil)
-
-	// Succeed on empty value
-	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
-		labelName: cty.StringVal(""),
-	}))
-	err = dc.validateVars()
-	c.Assert(err, Equals, nil)
-
-	// Succeed on lowercase international character
-	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
-		"ñ" + labelName: cty.StringVal("ñ"),
-	}))
-	err = dc.validateVars()
-	c.Assert(err, Equals, nil)
-
-	// Succeed on case-less international character
-	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
-		"ƿ" + labelName: cty.StringVal("ƿ"), // Unicode 01BF, latin character "wynn"
-	}))
-	err = dc.validateVars()
-	c.Assert(err, Equals, nil)
-
-	// Succeed on max number of labels
-	largeLabelsMap := map[string]cty.Value{}
-	for i := 0; i < maxLabels; i++ {
-		largeLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
+	{ // No labels
+		vars := Dict{}
+		c.Check(validateGlobalLabels(vars), IsNil)
 	}
-	dc.Config.Vars.Set("labels", cty.MapVal(largeLabelsMap))
-	c.Check(dc.validateVars(), IsNil)
 
-	// Invalid label name
-	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
-		invalidLabelName: cty.StringVal(labelValue),
-	}))
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, fmt.Sprintf(`.*name.*'%s: %s'.*`,
-		regexp.QuoteMeta(invalidLabelName),
-		regexp.QuoteMeta(labelValue)))
-
-	// Invalid label value
-	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
-		labelName: cty.StringVal(invalidLabelValue),
-	}))
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, fmt.Sprintf(`.*value.*'%s: %s'.*`,
-		regexp.QuoteMeta(labelName),
-		regexp.QuoteMeta(invalidLabelValue)))
-
-	// Too many labels
-	tooManyLabelsMap := map[string]cty.Value{}
-	for i := 0; i < maxLabels+1; i++ {
-		tooManyLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
+	{ // Simple success case
+		vars := Dict{}
+		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+			labelName: cty.StringVal(labelValue),
+		}))
+		c.Check(validateGlobalLabels(vars), IsNil)
 	}
-	dc.Config.Vars.Set("labels", cty.MapVal(tooManyLabelsMap))
-	c.Check(dc.validateVars(), NotNil)
 
-	// Fail on uppercase international character
-	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
-		labelName: cty.StringVal("Ñ"),
-	}))
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, fmt.Sprintf(`.*value.*'%s: %s'.*`,
-		regexp.QuoteMeta(labelName),
-		regexp.QuoteMeta("Ñ")))
+	{ // Succeed on empty value
+		vars := Dict{}
+		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+			labelName: cty.StringVal(""),
+		}))
+		c.Check(validateGlobalLabels(vars), IsNil)
+	}
 
-	// Fail on empty name
-	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
-		"": cty.StringVal(labelValue),
-	}))
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, fmt.Sprintf(`.*name.*'%s: %s'.*`,
-		"",
-		regexp.QuoteMeta(labelValue)))
+	{ // Succeed on lowercase international character
+		vars := Dict{}
+		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+			"ñ" + labelName: cty.StringVal("ñ"),
+		}))
+		c.Check(validateGlobalLabels(vars), IsNil)
+	}
+
+	{ // Succeed on case-less international character
+		vars := Dict{}
+		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+			"ƿ" + labelName: cty.StringVal("ƿ"), // Unicode 01BF, latin character "wynn"
+		}))
+		c.Check(validateGlobalLabels(vars), IsNil)
+	}
+
+	{ // Succeed on max number of labels
+		vars := Dict{}
+		largeLabelsMap := map[string]cty.Value{}
+		for i := 0; i < maxLabels; i++ {
+			largeLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
+		}
+		vars.Set("labels", cty.MapVal(largeLabelsMap))
+		c.Check(validateGlobalLabels(vars), IsNil)
+	}
+
+	{ // Invalid label name
+		vars := Dict{}
+		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+			invalidLabelName: cty.StringVal(labelValue),
+		}))
+		err := validateGlobalLabels(vars)
+		c.Check(err, ErrorMatches, fmt.Sprintf(`.*name.*'%s: %s'.*`,
+			regexp.QuoteMeta(invalidLabelName),
+			regexp.QuoteMeta(labelValue)))
+	}
+
+	{ // Invalid label value
+		vars := Dict{}
+		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+			labelName: cty.StringVal(invalidLabelValue),
+		}))
+		err := validateGlobalLabels(vars)
+		c.Check(err, ErrorMatches, fmt.Sprintf(`.*value.*'%s: %s'.*`,
+			regexp.QuoteMeta(labelName),
+			regexp.QuoteMeta(invalidLabelValue)))
+	}
+
+	{ // Too many labels
+		vars := Dict{}
+		tooManyLabelsMap := map[string]cty.Value{}
+		for i := 0; i < maxLabels+1; i++ {
+			tooManyLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
+		}
+		vars.Set("labels", cty.MapVal(tooManyLabelsMap))
+		c.Check(validateGlobalLabels(vars), NotNil)
+	}
+
+	{ // Fail on uppercase international character
+		vars := Dict{}
+		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+			labelName: cty.StringVal("Ñ"),
+		}))
+		err := validateGlobalLabels(vars)
+		c.Check(err, ErrorMatches, fmt.Sprintf(`.*value.*'%s: %s'.*`,
+			regexp.QuoteMeta(labelName),
+			regexp.QuoteMeta("Ñ")))
+	}
+
+	{ // Fail on empty name
+		vars := Dict{}
+		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+			"": cty.StringVal(labelValue),
+		}))
+		err := validateGlobalLabels(vars)
+		c.Check(err, ErrorMatches, fmt.Sprintf(`.*name.*'%s: %s'.*`,
+			"",
+			regexp.QuoteMeta(labelValue)))
+	}
 }
 
 func (s *MySuite) TestImportBlueprint_ExtraField_ThrowsError(c *C) {
@@ -756,21 +778,14 @@ func (s *MySuite) TestValidationLevels(c *C) {
 }
 
 func (s *MySuite) TestCheckMovedModules(c *C) {
-	bp := Blueprint{
-		DeploymentGroups: []DeploymentGroup{
-			{Modules: []Module{
-				{Source: "some/module/that/has/not/moved"}}}}}
-
 	// base case should not err
-	c.Assert(bp.checkMovedModules(), IsNil)
+	c.Check(checkMovedModule("some/module/that/has/not/moved"), IsNil)
 
 	// embedded moved
-	bp.DeploymentGroups[0].Modules[0].Source = "community/modules/scheduler/cloud-batch-job"
-	c.Assert(bp.checkMovedModules(), NotNil)
+	c.Check(checkMovedModule("community/modules/scheduler/cloud-batch-job"), NotNil)
 
 	// local moved
-	bp.DeploymentGroups[0].Modules[0].Source = "./community/modules/scheduler/cloud-batch-job"
-	c.Assert(bp.checkMovedModules(), NotNil)
+	c.Assert(checkMovedModule("./community/modules/scheduler/cloud-batch-job"), NotNil)
 }
 
 func (s *MySuite) TestValidatorConfigCheck(c *C) {
@@ -1022,18 +1037,16 @@ func (s *MySuite) TestValidateModuleSettingReference(c *C) {
 	c.Check(vld(bp, mod21, ModuleRef("pkr", "outPkr")), NotNil)
 }
 
-func (s *MySuite) TestCheckModuleSettings(c *C) {
+func (s *MySuite) TestValidateModuleSettingReferences(c *C) {
 	m := Module{ID: "m"}
 	m.Settings.Set("white", GlobalRef("zebra").AsExpression().AsValue())
-	bp := Blueprint{
-		DeploymentGroups: []DeploymentGroup{
-			{Name: "g", Modules: []Module{m}},
-		}}
+	bp := Blueprint{}
+	p := Root.Groups.At(0).Modules.At(0)
 
-	c.Check(checkModuleSettings(bp), NotNil)
+	c.Check(validateModuleSettingReferences(p, m, bp), NotNil)
 
 	bp.Vars.Set("zebra", cty.StringVal("stripes"))
-	c.Check(checkModuleSettings(bp), IsNil)
+	c.Check(validateModuleSettingReferences(p, m, bp), IsNil)
 }
 
 func (s *MySuite) TestGroupNameValidate(c *C) {
