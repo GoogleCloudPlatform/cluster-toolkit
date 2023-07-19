@@ -34,6 +34,13 @@ variable "region" {
   type        = string
 }
 
+variable "zones" {
+  description = "Zone(s) in which access point may be created. If not supplied, will default to all zones in var.region."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "network_self_link" {
   description = "The self link of the network in which the HTCondor central manager will be created."
   type        = string

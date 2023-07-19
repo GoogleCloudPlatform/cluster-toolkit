@@ -77,6 +77,8 @@ locals {
 
   access_point_ips  = [data.google_compute_instance.ap.network_interface[0].network_ip]
   access_point_name = data.google_compute_instance.ap.name
+
+  zones = coalescelist(var.zones, data.google_compute_zones.available.names)
 }
 
 data "google_compute_image" "htcondor" {
@@ -153,11 +155,12 @@ module "htcondor_ap" {
   # tflint-ignore: terraform_module_pinned_source
   source = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=84d7959"
 
-  project_id        = var.project_id
-  region            = var.region
-  target_size       = local.host_count
-  hostname          = local.name_prefix
-  instance_template = module.access_point_instance_template.self_link
+  project_id                = var.project_id
+  region                    = var.region
+  distribution_policy_zones = local.zones
+  target_size               = local.host_count
+  hostname                  = local.name_prefix
+  instance_template         = module.access_point_instance_template.self_link
 
   health_check_name = "health-${local.name_prefix}"
   health_check = {
@@ -179,8 +182,8 @@ module "htcondor_ap" {
   update_policy = [{
     instance_redistribution_type = "NONE"
     replacement_method           = "SUBSTITUTE"
-    max_surge_fixed              = length(data.google_compute_zones.available.names)
-    max_unavailable_fixed        = length(data.google_compute_zones.available.names)
+    max_surge_fixed              = length(local.zones)
+    max_unavailable_fixed        = length(local.zones)
     max_surge_percent            = null
     max_unavailable_percent      = null
     min_ready_sec                = 300
