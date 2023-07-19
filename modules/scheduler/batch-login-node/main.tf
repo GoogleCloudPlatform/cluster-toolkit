@@ -118,6 +118,7 @@ resource "google_compute_instance_from_template" "batch_login" {
   name                     = "${var.deployment_name}-batch-login"
   source_instance_template = var.instance_template
   project                  = var.project_id
+  zone                     = var.zone
   metadata                 = local.login_metadata
 
   service_account {
