@@ -20,6 +20,9 @@ use role:${htcondor_role}
 CONDOR_HOST = ${join(",", central_manager_ips)}
 
 # StartD configuration settings
+%{ if length(guest_accelerator) > 0 ~}
+use feature:GPUs
+%{ endif ~}
 use feature:PartitionableSlot
 use feature:CommonCloudAttributesGoogle("-c created-by")
 UPDATE_INTERVAL = 30
