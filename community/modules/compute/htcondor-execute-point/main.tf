@@ -97,7 +97,7 @@ data "google_compute_zones" "available" {
 }
 
 resource "google_storage_bucket_object" "execute_config" {
-  name    = "${var.deployment_name}-execute-config-${substr(md5(local.execute_config), 0, 4)}"
+  name    = "${local.hostnames}-config-${substr(md5(local.execute_config), 0, 4)}"
   content = local.execute_config
   bucket  = var.htcondor_bucket_name
 }

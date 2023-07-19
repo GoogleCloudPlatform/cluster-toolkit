@@ -113,7 +113,7 @@ data "google_compute_instance" "ap" {
 }
 
 resource "google_storage_bucket_object" "ap_config" {
-  name    = "${var.deployment_name}-ap-config-${substr(md5(local.ap_config), 0, 4)}"
+  name    = "${local.name_prefix}-config-${substr(md5(local.ap_config), 0, 4)}"
   content = local.ap_config
   bucket  = var.htcondor_bucket_name
 }
