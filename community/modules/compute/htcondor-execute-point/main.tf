@@ -76,7 +76,7 @@ locals {
     }
   )
 
-  hostnames = var.spot ? "${var.deployment_name}-spot-xp" : "${var.deployment_name}-xp"
+  hostnames = var.spot ? "${var.deployment_name}-spot-ep" : "${var.deployment_name}-ep"
 }
 
 data "google_compute_image" "htcondor" {
