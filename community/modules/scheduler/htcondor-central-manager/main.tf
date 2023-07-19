@@ -83,7 +83,7 @@ data "google_compute_instance" "cm" {
 }
 
 resource "google_storage_bucket_object" "cm_config" {
-  name    = "${var.deployment_name}-cm-config-${substr(md5(local.cm_config), 0, 4)}"
+  name    = "${local.name_prefix}-config-${substr(md5(local.cm_config), 0, 4)}"
   content = local.cm_config
   bucket  = var.htcondor_bucket_name
 }
