@@ -24,9 +24,11 @@ variable "region" {
   type        = string
 }
 
-variable "zone" {
-  description = "The default zone in which resources will be created"
-  type        = string
+variable "zones" {
+  description = "Zone(s) in which execute points may be created. If not supplied, will default to all zones in var.region."
+  type        = list(string)
+  default     = []
+  nullable    = false
 }
 
 variable "deployment_name" {
