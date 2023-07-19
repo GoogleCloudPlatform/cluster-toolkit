@@ -101,6 +101,7 @@ limitations under the License.
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes by which to limit service account attached to central manager. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
 | <a name="input_spool_parent_dir"></a> [spool\_parent\_dir](#input\_spool\_parent\_dir) | HTCondor access point configuration SPOOL will be set to subdirectory named "spool" | `string` | `"/var/lib/condor"` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork in which the HTCondor central manager will be created. | `string` | `null` | no |
+| <a name="input_zones"></a> [zones](#input\_zones) | Zone(s) in which access point may be created. If not supplied, will default to all zones in var.region. | `list(string)` | `[]` | no |
 
 ## Outputs
 
