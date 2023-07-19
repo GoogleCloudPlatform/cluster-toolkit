@@ -210,7 +210,7 @@ limitations under the License.
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork HTCondor execute points will join | `string` | `null` | no |
 | <a name="input_target_size"></a> [target\_size](#input\_target\_size) | Initial size of the HTCondor execute point pool; set to null (default) to avoid Terraform management of size. | `number` | `null` | no |
 | <a name="input_windows_startup_ps1"></a> [windows\_startup\_ps1](#input\_windows\_startup\_ps1) | Startup script to run at boot-time for Windows-based HTCondor execute points | `list(string)` | `[]` | no |
-| <a name="input_zone"></a> [zone](#input\_zone) | The default zone in which resources will be created | `string` | n/a | yes |
+| <a name="input_zones"></a> [zones](#input\_zones) | Zone(s) in which execute points may be created. If not supplied, will default to all zones in var.region. | `list(string)` | `[]` | no |
 
 ## Outputs
 
