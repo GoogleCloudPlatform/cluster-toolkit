@@ -19,8 +19,8 @@ locals {
   labels = merge(var.labels, { ghpc_module = "htcondor-execute-point" })
 }
 
-
 locals {
+  zones                    = coalescelist(var.zones, data.google_compute_zones.available.names)
   network_storage_metadata = var.network_storage == null ? {} : { network_storage = jsonencode(var.network_storage) }
 
   oslogin_api_values = {
@@ -45,7 +45,7 @@ locals {
     "args" = join(" ", [
       "-e project_id=${var.project_id}",
       "-e region=${var.region}",
-      "-e zone=${var.zone}",
+      "-e zone=${local.zones[0]}", # this value is required, but ignored by regional MIG autoscaler
       "-e mig_id=${module.mig.instance_group_manager.name}",
       "-e max_size=${var.max_size}",
       "-e min_idle=${var.min_idle}",
@@ -91,6 +91,11 @@ data "google_compute_image" "htcondor" {
   }
 }
 
+data "google_compute_zones" "available" {
+  project = var.project_id
+  region  = var.region
+}
+
 resource "google_storage_bucket_object" "execute_config" {
   name    = "${var.deployment_name}-execute-config-${substr(md5(local.execute_config), 0, 4)}"
   content = local.execute_config
@@ -131,19 +136,15 @@ module "execute_point_instance_template" {
   source_image   = data.google_compute_image.htcondor.self_link
 }
 
-data "google_compute_zones" "available" {
-  project = var.project_id
-  region  = var.region
-}
-
 module "mig" {
-  source            = "terraform-google-modules/vm/google//modules/mig"
-  version           = "~> 8.0"
-  project_id        = var.project_id
-  region            = var.region
-  target_size       = var.target_size
-  hostname          = local.hostnames
-  instance_template = module.execute_point_instance_template.self_link
+  source                    = "terraform-google-modules/vm/google//modules/mig"
+  version                   = "~> 8.0"
+  project_id                = var.project_id
+  region                    = var.region
+  distribution_policy_zones = local.zones
+  target_size               = var.target_size
+  hostname                  = local.hostnames
+  instance_template         = module.execute_point_instance_template.self_link
 
   health_check_name = "health-htcondor-${local.hostnames}"
   health_check = {
@@ -165,8 +166,8 @@ module "mig" {
   update_policy = [{
     instance_redistribution_type = "NONE"
     replacement_method           = "SUBSTITUTE"
-    max_surge_fixed              = length(data.google_compute_zones.available.names)
-    max_unavailable_fixed        = length(data.google_compute_zones.available.names)
+    max_surge_fixed              = length(local.zones)
+    max_unavailable_fixed        = length(local.zones)
     max_surge_percent            = null
     max_unavailable_percent      = null
     min_ready_sec                = 300
