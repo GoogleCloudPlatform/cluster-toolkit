@@ -168,3 +168,18 @@ variable "htcondor_bucket_name" {
   description = "Name of HTCondor configuration bucket"
   type        = string
 }
+
+variable "guest_accelerator" {
+  description = "List of the type and count of accelerator cards attached to the instance."
+  type = list(object({
+    type  = string,
+    count = number
+  }))
+  default  = []
+  nullable = false
+
+  validation {
+    condition     = length(var.guest_accelerator) <= 1
+    error_message = "The HTCondor module supports 0 or 1 models of accelerator card on each execute point"
+  }
+}

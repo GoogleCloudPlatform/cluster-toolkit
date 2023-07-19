@@ -54,7 +54,8 @@ locals {
 
   execute_config = templatefile("${path.module}/templates/condor_config.tftpl", {
     htcondor_role       = "get_htcondor_execute",
-    central_manager_ips = var.central_manager_ips
+    central_manager_ips = var.central_manager_ips,
+    guest_accelerator   = local.guest_accelerator,
   })
 
   execute_object = "gs://${var.htcondor_bucket_name}/${google_storage_bucket_object.execute_config.output_name}"
@@ -123,6 +124,7 @@ module "execute_point_instance_template" {
 
   machine_type   = var.machine_type
   disk_size_gb   = var.disk_size_gb
+  gpu            = one(local.guest_accelerator)
   preemptible    = var.spot
   startup_script = local.is_windows_image ? null : module.startup_script.startup_script
   metadata       = local.metadata

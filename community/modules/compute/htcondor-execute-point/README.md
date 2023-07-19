@@ -193,6 +193,7 @@ limitations under the License.
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
 | <a name="input_execute_point_runner"></a> [execute\_point\_runner](#input\_execute\_point\_runner) | A list of Toolkit runners for configuring an HTCondor execute point | `list(map(string))` | `[]` | no |
 | <a name="input_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#input\_execute\_point\_service\_account\_email) | Service account for HTCondor execute point (e-mail format) | `string` | n/a | yes |
+| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `[]` | no |
 | <a name="input_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#input\_htcondor\_bucket\_name) | Name of HTCondor configuration bucket | `string` | n/a | yes |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | HTCondor execute point VM image | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-rocky-linux-8",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to HTConodr execute points | `map(string)` | n/a | yes |
