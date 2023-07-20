@@ -22,7 +22,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-base/v1.20.0"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-setup/v1.20.0"
   }
 
   required_version = ">= 0.13.0"

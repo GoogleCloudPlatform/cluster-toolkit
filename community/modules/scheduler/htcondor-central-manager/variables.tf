@@ -48,7 +48,7 @@ variable "network_self_link" {
 }
 
 variable "central_manager_service_account_email" {
-  description = "Service account e-mail for central manager (can be supplied by htcondor-base module)"
+  description = "Service account e-mail for central manager (can be supplied by htcondor-setup module)"
   type        = string
 }
 

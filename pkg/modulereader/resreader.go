@@ -265,7 +265,7 @@ func defaultAPIList(source string) []string {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
 		},
-		"community/modules/scheduler/htcondor-base": {
+		"community/modules/scheduler/htcondor-setup": {
 			"iam.googleapis.com",
 			"secretmanager.googleapis.com",
 			"storage.googleapis.com",
