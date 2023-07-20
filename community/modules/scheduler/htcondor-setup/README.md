@@ -19,7 +19,7 @@ It is expected to be used with the [htcondor-install] and
 [htcondor-execute-point] modules.
 
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[htcondor-install]: ../../scripts/htcondor-base/README.md
+[htcondor-install]: ../../scripts/htcondor-setup/README.md
 [htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
 
 [htcrole]: https://htcondor.readthedocs.io/en/latest/getting-htcondor/admin-quick-start.html#what-get-htcondor-does-to-configure-a-role
@@ -40,7 +40,7 @@ example can be found in the [examples README][htc-example].
   source: community/modules/scripts/htcondor-install
 
 - id: htcondor_configure
-  source: community/modules/scheduler/htcondor-base
+  source: community/modules/scheduler/htcondor-setup
   use:
   - network1
 
@@ -101,7 +101,7 @@ vars:
   zone_secondary: us-central1-f
 
 - id: htcondor_configure
-  source: community/modules/scheduler/htcondor-base
+  source: community/modules/scheduler/htcondor-setup
   use:
   - network1
   settings:

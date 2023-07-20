@@ -75,7 +75,7 @@ var errorMessages = map[string]string{
 var movedModules = map[string]string{
 	"community/modules/scheduler/cloud-batch-job":        "modules/scheduler/batch-job-template",
 	"community/modules/scheduler/cloud-batch-login-node": "modules/scheduler/batch-login-node",
-	"community/modules/scheduler/htcondor-configure":     "community/modules/scheduler/htcondor-base",
+	"community/modules/scheduler/htcondor-configure":     "community/modules/scheduler/htcondor-setup",
 }
 
 // GroupName is the name of a deployment group
