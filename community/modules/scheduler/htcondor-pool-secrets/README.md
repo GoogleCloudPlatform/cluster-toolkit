@@ -20,7 +20,7 @@ It is expected to be used with the [htcondor-install] and
 [htcondor-execute-point] modules.
 
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[htcondor-install]: ../../scripts/htcondor-base/README.md
+[htcondor-install]: ../../scripts/htcondor-setup/README.md
 [htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
 
 [htcrole]: https://htcondor.readthedocs.io/en/latest/getting-htcondor/admin-quick-start.html#what-get-htcondor-does-to-configure-a-role
@@ -40,15 +40,15 @@ example can be found in the [examples README][htc-example].
 - id: htcondor_install
   source: community/modules/scripts/htcondor-install
 
-- id: htcondor_base
-  source: community/modules/scheduler/htcondor-base
+- id: htcondor_setup
+  source: community/modules/scheduler/htcondor-setup
   use:
   - network1
 
 - id: htcondor_secrets
   source: community/modules/scheduler/htcondor-pool-secrets
   use:
-  - htcondor_base 
+  - htcondor_setup 
 
   - id: htcondor_startup_central_manager
     source: modules/scripts/startup-script
@@ -56,7 +56,7 @@ example can be found in the [examples README][htc-example].
       runners:
       - $(htcondor_install.install_htcondor_runner)
       - $(htcondor_secrets.central_manager_runner)
-      - $(htcondor_base.central_manager_runner)
+      - $(htcondor_setup.central_manager_runner)
 
 - id: htcondor_cm
   source: modules/compute/vm-instance
@@ -68,14 +68,14 @@ example can be found in the [examples README][htc-example].
     machine_type: c2-standard-4
     disable_public_ips: true
     service_account:
-      email: $(htcondor_base.central_manager_service_account)
+      email: $(htcondor_setup.central_manager_service_account)
       scopes:
       - cloud-platform
     network_interfaces:
     - network: null
       subnetwork: $(network1.subnetwork_self_link)
       subnetwork_project: $(vars.project_id)
-      network_ip: $(htcondor_base.central_manager_internal_ip)
+      network_ip: $(htcondor_setup.central_manager_internal_ip)
       stack_type: null
       access_config: []
       ipv6_access_config: []

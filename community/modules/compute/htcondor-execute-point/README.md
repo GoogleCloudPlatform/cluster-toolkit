@@ -6,11 +6,11 @@ This module performs the following tasks:
 - create a managed instance group (MIG) for execute points
 - create a Toolkit runner to configure the autoscaler to scale the MIG
 
-It is expected to be used with the [htcondor-install] and [htcondor-base]
+It is expected to be used with the [htcondor-install] and [htcondor-setup]
 modules.
 
 [htcondor-install]: ../../scripts/htcondor-install/README.md
-[htcondor-base]: ../../scheduler/htcondor-configure/README.md
+[htcondor-setup]: ../../scheduler/htcondor-configure/README.md
 
 ### Known limitations
 

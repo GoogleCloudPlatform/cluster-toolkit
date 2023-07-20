@@ -57,22 +57,22 @@ deployment_groups:
 
 - group: pool
   modules:
-  - id: htcondor_base
-    source: community/modules/scheduler/htcondor-base
+  - id: htcondor_setup
+    source: community/modules/scheduler/htcondor-setup
     use:
     - network1
 
   - id: htcondor_secrets
     source: community/modules/scheduler/htcondor-pool-secrets
     use:
-    - htcondor_base
+    - htcondor_setup
 
   - id: htcondor_cm
     source: community/modules/scheduler/htcondor-central-manager
     use:
     - network1
     - htcondor_secrets
-    - htcondor_base
+    - htcondor_setup
     settings:
       instance_image:
         project: $(vars.project_id)
@@ -88,7 +88,7 @@ deployment_groups:
     use:
     - network1
     - htcondor_secrets
-    - htcondor_base
+    - htcondor_setup
     - htcondor_cm
     settings:
       instance_image:
@@ -101,7 +101,7 @@ deployment_groups:
     use:
     - network1
     - htcondor_secrets
-    - htcondor_base
+    - htcondor_setup
     - htcondor_cm
     settings:
       instance_image:
@@ -114,7 +114,7 @@ deployment_groups:
     use:
     - network1
     - htcondor_secrets
-    - htcondor_base
+    - htcondor_setup
     - htcondor_cm
     - htcondor_execute_point
     - htcondor_execute_point_spot

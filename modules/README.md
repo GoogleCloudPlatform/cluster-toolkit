@@ -45,7 +45,7 @@ Modules that are still in development and less stable are labeled with the
   Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
-  pool][htcondor-base].
+  pool][htcondor-setup].
 * **[pbspro-execution]** ![community-badge] ![experimental-badge] :
   Creates execution hosts for use in a PBS Professional cluster.
 * **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
@@ -153,7 +153,7 @@ Modules that are still in development and less stable are labeled with the
   Creates a Slurm login node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
-* **[htcondor-base]** ![community-badge] ![experimental-badge] : Creates the
+* **[htcondor-setup]** ![community-badge] ![experimental-badge] : Creates the
   base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
 * **[htcondor-pool-secrets]** ![community-badge] ![experimental-badge] : Creates
   and manages access to the secrets necessary for secure operation of an
@@ -173,7 +173,7 @@ Modules that are still in development and less stable are labeled with the
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
 [gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
-[htcondor-base]: ../community/modules/scheduler/htcondor-base/README.md
+[htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
