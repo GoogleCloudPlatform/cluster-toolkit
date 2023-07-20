@@ -256,6 +256,12 @@ func defaultAPIList(source string) []string {
 		"community/modules/scheduler/SchedMD-slurm-on-gcp-login-node": {
 			"compute.googleapis.com",
 		},
+		"community/modules/compute/gke-node-pool": {
+			"container.googleapis.com",
+		},
+		"community/modules/scheduler/gke-cluster": {
+			"container.googleapis.com",
+		},
 		"modules/scheduler/batch-job-template": {
 			"batch.googleapis.com",
 			"compute.googleapis.com",
