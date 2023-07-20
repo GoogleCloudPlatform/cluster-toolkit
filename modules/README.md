@@ -44,8 +44,7 @@ Modules that are still in development and less stable are labeled with the
 * **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
-  Manages a group of execute points for use in an [HTCondor
-  pool][htcondor-setup].
+  Manages a group of execute points for use in an [HTCondor pool][htcondor-setup].
 * **[pbspro-execution]** ![community-badge] ![experimental-badge] :
   Creates execution hosts for use in a PBS Professional cluster.
 * **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
@@ -155,12 +154,14 @@ Modules that are still in development and less stable are labeled with the
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
 * **[htcondor-setup]** ![community-badge] ![experimental-badge] : Creates the
   base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
-* **[htcondor-pool-secrets]** ![community-badge] ![experimental-badge] : Creates
-  and manages access to the secrets necessary for secure operation of an
-  HTCondor pool.
-* **[htcondor-access-point]** ![community-badge] ![experimental-badge] : Creates
-  a regional instance group managing a highly available HTCondor access point
-  (login node).
+* **[htcondor-pool-secrets]** ![community-badge] : Creates and manages access to
+  the secrets necessary for secure operation of an HTCondor pool.
+* **[htcondor-access-point]** ![community-badge] : Creates an HTCondor access
+  point (responsible for job queue) using a regional instance group to ensure
+  high availability.
+* **[htcondor-central-manager]** ![community-badge] : Creates an HTCondor central
+  manager (responsible for job matching) using a regional instance group to
+  ensure high availability.
 * **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
   a client host for submitting jobs to a PBS Professional cluster.
 * **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
@@ -176,6 +177,7 @@ Modules that are still in development and less stable are labeled with the
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
+[htcondor-central-manager]: ../community/modules/scheduler/htcondor-central-manager/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
