@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,20 @@
  * limitations under the License.
  */
 
-output "autoscaler_runner" {
-  value       = local.autoscaler_runner
-  description = "Toolkit runner to configure the HTCondor autoscaler"
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 3.83"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.9"
+    }
+  }
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-access-point/v1.20.0"
+  }
+
+  required_version = ">= 0.13.0"
 }
