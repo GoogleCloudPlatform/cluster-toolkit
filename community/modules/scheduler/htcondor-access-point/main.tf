@@ -38,9 +38,9 @@ locals {
       universe       = vanilla
       executable     = /bin/sleep
       arguments      = 1000
-      output         = out.\$(ClusterId).\$(ProcId)
-      error          = err.\$(ClusterId).\$(ProcId)
-      log            = log.\$(ClusterId).\$(ProcId)
+      output         = out.$(ClusterId).$(ProcId)
+      error          = err.$(ClusterId).$(ProcId)
+      log            = log.$(ClusterId).$(ProcId)
       request_cpus   = 1
       request_memory = 100MB
       # if unset, defaults to false
