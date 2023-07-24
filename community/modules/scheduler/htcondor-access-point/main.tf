@@ -60,6 +60,8 @@ locals {
     htcondor_role       = "get_htcondor_submit",
     central_manager_ips = var.central_manager_ips
     spool_dir           = "${var.spool_parent_dir}/spool",
+    mig_ids             = var.mig_id,
+    default_mig_id      = var.default_mig_id
   })
 
   ap_object = "gs://${var.htcondor_bucket_name}/${google_storage_bucket_object.ap_config.output_name}"
@@ -116,6 +118,13 @@ resource "google_storage_bucket_object" "ap_config" {
   name    = "${local.name_prefix}-config-${substr(md5(local.ap_config), 0, 4)}"
   content = local.ap_config
   bucket  = var.htcondor_bucket_name
+
+  lifecycle {
+    precondition {
+      condition     = var.default_mig_id == "" || contains(var.mig_id, var.default_mig_id)
+      error_message = "If set, var.default_mig_id must be an element in var.mig_id"
+    }
+  }
 }
 
 module "startup_script" {

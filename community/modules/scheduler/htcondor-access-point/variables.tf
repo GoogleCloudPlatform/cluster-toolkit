@@ -156,3 +156,22 @@ variable "enable_public_ips" {
   type        = bool
   default     = false
 }
+
+variable "mig_id" {
+  description = "List of Managed Instance Group IDs containing execute points in this pool (supplied by htcondor-execute-point module)"
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = length(var.mig_id) > 0
+    error_message = "At least 1 MIG containing execute points must be provided to this module"
+  }
+}
+
+variable "default_mig_id" {
+  description = "Default MIG ID for HTCondor jobs; if unset, jobs must specify MIG id"
+  type        = string
+  default     = ""
+  nullable    = false
+}

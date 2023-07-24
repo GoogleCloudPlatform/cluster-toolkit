@@ -46,7 +46,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.1 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_time"></a> [time](#requirement\_time) | ~> 0.9 |
 
@@ -84,6 +84,7 @@ limitations under the License.
 | <a name="input_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#input\_access\_point\_service\_account\_email) | Service account for access point (e-mail format) | `string` | n/a | yes |
 | <a name="input_autoscaler_runner"></a> [autoscaler\_runner](#input\_autoscaler\_runner) | A list of Toolkit runners for configuring autoscaling daemons | `list(map(string))` | `[]` | no |
 | <a name="input_central_manager_ips"></a> [central\_manager\_ips](#input\_central\_manager\_ips) | List of IP addresses of HTCondor Central Managers | `list(string)` | n/a | yes |
+| <a name="input_default_mig_id"></a> [default\_mig\_id](#input\_default\_mig\_id) | Default MIG ID for HTCondor jobs; if unset, jobs must specify MIG id | `string` | `""` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `number` | `null` | no |
 | <a name="input_enable_high_availability"></a> [enable\_high\_availability](#input\_enable\_high\_availability) | Provision HTCondor access point in high availability mode | `bool` | `false` | no |
@@ -94,6 +95,7 @@ limitations under the License.
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor central managers | `string` | `"c2-standard-4"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor central managers | `map(string)` | `{}` | no |
+| <a name="input_mig_id"></a> [mig\_id](#input\_mig\_id) | List of Managed Instance Group IDs containing execute points in this pool (supplied by htcondor-execute-point module) | `list(string)` | `[]` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network in which the HTCondor central manager will be created. | `string` | `null` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |

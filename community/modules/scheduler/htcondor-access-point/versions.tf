@@ -29,5 +29,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:htcondor-access-point/v1.20.0"
   }
 
-  required_version = ">= 0.13.0"
+  required_version = ">= 1.1"
 }
