@@ -312,7 +312,8 @@ variable "guest_accelerator" {
     type  = string,
     count = number
   }))
-  default = null
+  default  = []
+  nullable = false
 }
 
 variable "labels" {
