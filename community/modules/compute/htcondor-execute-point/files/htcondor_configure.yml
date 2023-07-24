@@ -17,7 +17,6 @@
   hosts: localhost
   become: true
   vars:
-    job_queue_ha: false
     spool_dir: /var/lib/condor/spool
     condor_config_root: /etc/condor
     ghpc_config_file: 50-ghpc-managed

@@ -43,9 +43,9 @@ attribute is false. A job submit file may override this value as shown below.
 universe       = vanilla
 executable     = /bin/echo
 arguments      = "Hello, World!"
-output         = out.\$(ClusterId).\$(ProcId)
-error          = err.\$(ClusterId).\$(ProcId)
-log            = log.\$(ClusterId).\$(ProcId)
+output         = out.$(ClusterId).$(ProcId)
+error          = err.$(ClusterId).$(ProcId)
+log            = log.$(ClusterId).$(ProcId)
 request_cpus   = 1
 request_memory = 100MB
 +RequireSpot   = true
