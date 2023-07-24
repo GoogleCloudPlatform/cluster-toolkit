@@ -10,7 +10,7 @@ It is expected to be used with the [htcondor-install] and [htcondor-setup]
 modules.
 
 [htcondor-install]: ../../scripts/htcondor-install/README.md
-[htcondor-setup]: ../../scheduler/htcondor-configure/README.md
+[htcondor-setup]: ../../scheduler/htcondor-setup/README.md
 
 ### Known limitations
 
@@ -30,14 +30,16 @@ including all pricing options.
 │ This was checked by the validation rule at modules/startup-script/variables.tf:72,3-13.
 ```
 
-### How to run HTCondor jobs on Spot VMs
+### How to configure jobs to select execute points
 
 HTCondor access points provisioned by the Toolkit are specially configured to
-add an attribute named `RequireSpot` to each [Job ClassAd][jobad]. When this
-value is true, a job's `requirements` are automatically updated to require
-that it run on a Spot VM. When this value is false, the `requirements` are
-similarly updated to run only on On-Demand VMs. The default value of this
-attribute is false. A job submit file may override this value as shown below.
+honor an attribute named `RequireId` in each [Job ClassAd][jobad]. This value
+must be set to the ID of a MIG created by an instance of this module. The
+[htcondor-access-point] module includes a setting `var.default_mig_id` that will
+set this value automatically to the MIG ID corresponding to the module's
+execute points. If this setting is left unset each job must specify `+RequireId`
+explicitly. In all cases, the default value can be overridden explicitly as shown
+below:
 
 ```text
 universe       = vanilla
@@ -48,10 +50,11 @@ error          = err.$(ClusterId).$(ProcId)
 log            = log.$(ClusterId).$(ProcId)
 request_cpus   = 1
 request_memory = 100MB
-+RequireSpot   = true
++RequireId     = "htcondor-pool-ep-mig"
 queue
 ```
 
+[htcondor-access-point]: ../../scheduler/htcondor-access-point/README.md
 [jobad]: https://htcondor.readthedocs.io/en/latest/users-manual/matchmaking-with-classads.html
 
 ### Example
@@ -69,47 +72,46 @@ a startup script and network created in previous steps.
   source: community/modules/compute/htcondor-execute-point
   use:
   - network1
-  - htcondor_configure_execute_point
+  - htcondor_secrets
+  - htcondor_setup
+  - htcondor_cm
   settings:
-    service_account:
-      email: $(htcondor_configure.execute_point_service_account)
-      scopes:
-      - cloud-platform
+    instance_image:
+      project: $(vars.project_id)
+      family: $(vars.new_image_family)
+    min_idle: 2
 
 - id: htcondor_execute_point_spot
   source: community/modules/compute/htcondor-execute-point
   use:
   - network1
-  - htcondor_configure_execute_point
+  - htcondor_secrets
+  - htcondor_setup
+  - htcondor_cm
   settings:
-    service_account:
-      email: $(htcondor_configure.execute_point_service_account)
-      scopes:
-      - cloud-platform
+    instance_image:
+      project: $(vars.project_id)
+      family: $(vars.new_image_family)
+    spot: true
 
-  - id: htcondor_startup_access_point
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_install.install_htcondor_runner)
-      - $(htcondor_install.install_autoscaler_deps_runner)
-      - $(htcondor_install.install_autoscaler_runner)
-      - $(htcondor_configure.access_point_runner)
-      - $(htcondor_execute_point.configure_autoscaler_runner)
-      - $(htcondor_execute_point_spot.configure_autoscaler_runner)
-
-  - id: htcondor_access
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - htcondor_startup_access_point
-    settings:
-      name_prefix: access-point
-      machine_type: c2-standard-4
-      service_account:
-        email: $(htcondor_configure.access_point_service_account)
-        scopes:
-        - cloud-platform
+- id: htcondor_access
+  source: community/modules/scheduler/htcondor-access-point
+  use:
+  - network1
+  - htcondor_secrets
+  - htcondor_setup
+  - htcondor_cm
+  - htcondor_execute_point
+  - htcondor_execute_point_spot
+  settings:
+    default_mig_id: $(htcondor_execute_point.mig_id)
+    enable_public_ips: true
+    instance_image:
+      project: $(vars.project_id)
+      family: $(vars.new_image_family)
+  outputs:
+  - access_point_ips
+  - access_point_name
 ```
 
 ## Support
@@ -217,4 +219,5 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_autoscaler_runner"></a> [autoscaler\_runner](#output\_autoscaler\_runner) | Toolkit runner to configure the HTCondor autoscaler |
+| <a name="output_mig_id"></a> [mig\_id](#output\_mig\_id) | ID of the managed instance group containing the execute points |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

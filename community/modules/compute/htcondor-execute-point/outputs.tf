@@ -18,3 +18,8 @@ output "autoscaler_runner" {
   value       = local.autoscaler_runner
   description = "Toolkit runner to configure the HTCondor autoscaler"
 }
+
+output "mig_id" {
+  value       = module.mig.instance_group_manager.name
+  description = "ID of the managed instance group containing the execute points"
+}

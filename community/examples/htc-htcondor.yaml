@@ -119,6 +119,7 @@ deployment_groups:
     - htcondor_execute_point
     - htcondor_execute_point_spot
     settings:
+      default_mig_id: $(htcondor_execute_point.mig_id)
       enable_public_ips: true
       instance_image:
         project: $(vars.project_id)
