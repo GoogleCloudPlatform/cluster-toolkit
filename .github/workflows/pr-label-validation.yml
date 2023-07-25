@@ -23,6 +23,10 @@ on:
     - opened
     - labeled
     - unlabeled
+    - synchronize
+    - edited
+    - ready_for_review
+    - unlocked
     branches:
     - develop
 
