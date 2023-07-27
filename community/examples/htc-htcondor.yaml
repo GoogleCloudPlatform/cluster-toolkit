@@ -91,6 +91,7 @@ deployment_groups:
     - htcondor_setup
     - htcondor_cm
     settings:
+      name_prefix: grp1
       instance_image:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
@@ -104,6 +105,7 @@ deployment_groups:
     - htcondor_setup
     - htcondor_cm
     settings:
+      name_prefix: spot
       instance_image:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
