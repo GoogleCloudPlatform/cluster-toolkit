@@ -47,7 +47,7 @@ cannot be determined automatically like with `a2`.
 [login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-login
 [omnia-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/omnia-install
 [htcondor-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/htcondor-install
-[htcondor-setup]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/htcondor-configure
+[htcondor-setup]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/htcondor-setup
 [htcondor-execute-point]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/htcondor-execute-point
 
 ## Troubleshooting and tips
