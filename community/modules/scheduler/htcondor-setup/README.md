@@ -21,7 +21,6 @@ It is expected to be used with the [htcondor-install] and
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [htcondor-install]: ../../scripts/htcondor-setup/README.md
 [htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
-
 [htcrole]: https://htcondor.readthedocs.io/en/latest/getting-htcondor/admin-quick-start.html#what-get-htcondor-does-to-configure-a-role
 
 ### Example
@@ -39,140 +38,39 @@ example can be found in the [examples README][htc-example].
 - id: htcondor_install
   source: community/modules/scripts/htcondor-install
 
-- id: htcondor_configure
+- id: htcondor_setup
   source: community/modules/scheduler/htcondor-setup
   use:
   - network1
 
-- id: htcondor_central_manager_startup
-  source: modules/scripts/startup-script
-  settings:
-    runners:
-    - $(htcondor_install.install_htcondor_runner)
-    - $(htcondor_configure.central_manager_runner)
+- id: htcondor_secrets
+  source: community/modules/scheduler/htcondor-pool-secrets
+  use:
+  - htcondor_setup
 
 - id: htcondor_cm
-  source: modules/compute/vm-instance
+  source: community/modules/scheduler/htcondor-central-manager
   use:
   - network1
-  - htcondor_central_manager_startup
+  - htcondor_secrets
+  - htcondor_setup
   settings:
-    name_prefix: cm0
-    machine_type: c2-standard-4
-    disable_public_ips: true
-    service_account:
-      email: $(htcondor_configure.central_manager_service_account)
-      scopes:
-      - cloud-platform
-    network_interfaces:
-    - network: null
-      subnetwork: $(network1.subnetwork_self_link)
-      subnetwork_project: $(vars.project_id)
-      network_ip: $(htcondor_configure.central_manager_internal_ip)
-      stack_type: null
-      access_config: []
-      ipv6_access_config: []
-      alias_ip_range: []
-      nic_type: VIRTIO_NET
-      queue_count: null
+    instance_image:
+      project: $(vars.project_id)
+      family: $(vars.new_image_family)
   outputs:
-  - internal_ip
+  - central_manager_name
 ```
 
 ## High Availability
 
 This module supports high availability modes of the HTCondor Central Manager and
-of the Access Points. In these modes, the services can be resiliant against
-zonal failures by distributing the services across two zones. Modify the above
-example by setting `central_manager_high_availability` to `true` and adding a
-new deployment variable `zone_secondary` set to another zone in the same region.
-The 2 VMs can use the same startup script, but should differ by setting:
+of the Access Points via [Managed Instance Groups (MIG)][mig]. Please see
+[htcondor-central-manager] and [htcondor-access-point] for details.
 
-- primary and secondary zones defined in deployment variables
-- primary and secondary IP addresses created by this module
-- differing name prefixes
-
-```yaml
-vars:
-  # add typical settings (deployment_name, project_id, etc.)
-  # select a region and 2 different zones within the region
-  region: us-central1
-  zone: us-central1-c
-  zone_secondary: us-central1-f
-
-- id: htcondor_configure
-  source: community/modules/scheduler/htcondor-setup
-  use:
-  - network1
-  settings:
-    central_manager_high_availability: true
-
-- id: htcondor_cm_primary
-  source: modules/compute/vm-instance
-  use:
-  - network1
-  - htcondor_central_manager_startup
-  settings:
-    name_prefix: cm0
-    machine_type: c2-standard-4
-    disable_public_ips: true
-    service_account:
-      email: $(htcondor_configure.central_manager_service_account)
-      scopes:
-      - cloud-platform
-    network_interfaces:
-    - network: null
-      subnetwork: $(network1.subnetwork_self_link)
-      subnetwork_project: $(vars.project_id)
-      network_ip: $(htcondor_configure.central_manager_internal_ip)
-      stack_type: null
-      access_config: []
-      ipv6_access_config: []
-      alias_ip_range: []
-      nic_type: VIRTIO_NET
-      queue_count: null
-  outputs:
-  - internal_ip
-
-- id: htcondor_cm_secondary
-  source: modules/compute/vm-instance
-  use:
-  - network1
-  - htcondor_central_manager_startup
-  settings:
-    name_prefix: cm1
-    machine_type: c2-standard-4
-    zone: $(vars.zone_secondary)
-    disable_public_ips: true
-    service_account:
-      email: $(htcondor_configure.central_manager_service_account)
-      scopes:
-      - cloud-platform
-    network_interfaces:
-    - network: null
-      subnetwork: $(network1.subnetwork_self_link)
-      subnetwork_project: $(vars.project_id)
-      network_ip: $(htcondor_configure.central_manager_secondary_internal_ip)
-      stack_type: null
-      access_config: []
-      ipv6_access_config: []
-      alias_ip_range: []
-      nic_type: VIRTIO_NET
-      queue_count: null
-  outputs:
-  - internal_ip
-
-```
-
-Access Point high availability is impacted by known issues [HTCONDOR-1590] and
-[HTCONDOR-1594]. These are anticipated to be resolved in LTS release 10.0.3 and
-above or feature release 10.4 and above. Please see [HTCondor version
-numbering][htcver] and [release notes][htcnotes] for details.
-
-[htcver]: https://htcondor.readthedocs.io/en/latest/version-history/introduction-version-history.html#types-of-releases
-[htcnotes]: https://htcondor.readthedocs.io/en/latest/version-history/index.html
-[HTCONDOR-1590]: https://opensciencegrid.atlassian.net/jira/software/c/projects/HTCONDOR/issues/HTCONDOR-1590
-[HTCONDOR-1594]: https://opensciencegrid.atlassian.net/jira/software/c/projects/HTCONDOR/issues/HTCONDOR-1594
+[mig]: https://cloud.google.com/compute/docs/instance-groups
+[htcondor-central-manager]: ../htcondor-central-manager/README.md
+[htcondor-access-point]: ../htcondor-access-point/README.md
 
 ## Support
 
