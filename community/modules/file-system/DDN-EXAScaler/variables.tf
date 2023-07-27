@@ -425,7 +425,7 @@ variable "cls" {
     node_cpu   = "Intel Cascade Lake"
     nic_type   = "GVNIC"
     public_ip  = true
-    node_count = 1
+    node_count = 0
   }
 }
 # Compute client target properties
