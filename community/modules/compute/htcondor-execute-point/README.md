@@ -14,20 +14,22 @@ modules.
 
 ### Known limitations
 
-This module may be used exactly 1 or 2 times in a blueprint to create sets of
-execute points in an HTCondor pool. If using 1 set, it may use either Spot or
-On-demand pricing. If using 2 sets, one must use Spot and the other must
-use On-demand pricing. If you do not follow this constraint, you will likely
-receive an error while running `terraform apply` similar to that shown below.
-Future development is planned to support more than 2 sets of VM configurations,
-including all pricing options.
+This module may be used multiple times in a blueprint to create sets of
+execute points in an HTCondor pool. If used more than 1 time, the setting
+[name_prefix](#input_name_prefix) must be set to a value that is unique across
+all uses of the htcondor-execute-point module. If you do not follow this
+constraint, you will likely receive an error while running `terraform apply`
+similar to that shown below.
 
 ```text
-│     │ var.runners is list of map of string with 7 elements
-│
-│ All startup-script runners must have a unique destination.
-│
-│ This was checked by the validation rule at modules/startup-script/variables.tf:72,3-13.
+Error: Invalid value for variable
+
+  on modules/embedded/community/modules/scheduler/htcondor-access-point/main.tf line 136, in module "startup_script":
+ 136:   runners = local.all_runners
+    ├────────────────
+    │ var.runners is list of map of string with 5 elements
+
+All startup-script runners must have a unique destination.
 ```
 
 ### How to configure jobs to select execute points
@@ -203,6 +205,7 @@ limitations under the License.
 | <a name="input_max_size"></a> [max\_size](#input\_max\_size) | Maximum size of the HTCondor execute point pool. | `number` | `100` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor execute points | `map(string)` | `{}` | no |
 | <a name="input_min_idle"></a> [min\_idle](#input\_min\_idle) | Minimum number of idle VMs in the HTCondor pool (if pool reaches var.max\_size, this minimum is not guaranteed); set to ensure jobs beginning run more quickly. | `number` | `0` | no |
+| <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name prefix given to hostnames in this group of execute points; must be unique across all instances of this module | `string` | n/a | yes |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network HTCondor execute points will join | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HTCondor execute points will be created | `string` | n/a | yes |

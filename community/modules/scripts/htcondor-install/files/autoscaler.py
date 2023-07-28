@@ -208,7 +208,7 @@ class AutoScaler:
         # this query will constrain the search for jobs to those that either
         # require spot VMs or do not require Spot VMs based on whether the
         # VM instance template is configured for Spot pricing
-        spot_query = classad.ExprTree(f"RequireSpot == {self.is_spot}")
+        spot_query = classad.ExprTree(f"RequireId == \"{self.instance_group_manager}\"")
 
         # For purpose of scaling a Managed Instance Group, count only jobs that
         # are idle and likely participated in a negotiation cycle (there does

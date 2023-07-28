@@ -43,8 +43,6 @@ locals {
       log            = log.$(ClusterId).$(ProcId)
       request_cpus   = 1
       request_memory = 100MB
-      # if unset, defaults to false
-      +RequireSpot   = true
       queue
     EOT
   }

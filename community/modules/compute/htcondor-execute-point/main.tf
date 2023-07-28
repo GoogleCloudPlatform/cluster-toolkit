@@ -76,7 +76,7 @@ locals {
     }
   )
 
-  hostnames = var.spot ? "${var.deployment_name}-spot-ep" : "${var.deployment_name}-ep"
+  name_prefix = "${var.deployment_name}-${var.name_prefix}-ep"
 }
 
 data "google_compute_image" "htcondor" {
@@ -97,7 +97,7 @@ data "google_compute_zones" "available" {
 }
 
 resource "google_storage_bucket_object" "execute_config" {
-  name    = "${local.hostnames}-config-${substr(md5(local.execute_config), 0, 4)}"
+  name    = "${local.name_prefix}-config-${substr(md5(local.execute_config), 0, 4)}"
   content = local.execute_config
   bucket  = var.htcondor_bucket_name
 }
@@ -117,7 +117,7 @@ module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "~> 8.0"
 
-  name_prefix = local.hostnames
+  name_prefix = local.name_prefix
   project_id  = var.project_id
   network     = var.network_self_link
   subnetwork  = var.subnetwork_self_link
@@ -143,10 +143,11 @@ module "mig" {
   region                    = var.region
   distribution_policy_zones = local.zones
   target_size               = var.target_size
-  hostname                  = local.hostnames
+  hostname                  = local.name_prefix
+  mig_name                  = local.name_prefix
   instance_template         = module.execute_point_instance_template.self_link
 
-  health_check_name = "health-htcondor-${local.hostnames}"
+  health_check_name = "health-htcondor-${local.name_prefix}"
   health_check = {
     type                = "tcp"
     initial_delay_sec   = 600

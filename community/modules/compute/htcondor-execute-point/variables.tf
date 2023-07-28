@@ -185,3 +185,13 @@ variable "guest_accelerator" {
     error_message = "The HTCondor module supports 0 or 1 models of accelerator card on each execute point"
   }
 }
+
+variable "name_prefix" {
+  description = "Name prefix given to hostnames in this group of execute points; must be unique across all instances of this module"
+  type        = string
+  nullable    = false
+  validation {
+    condition     = length(var.name_prefix) > 0
+    error_message = "var.name_prefix must be a set to a non-empty string and must also be unique across all instances of htcondor-execute-point"
+  }
+}

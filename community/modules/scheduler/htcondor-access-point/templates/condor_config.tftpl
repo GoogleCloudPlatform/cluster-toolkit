@@ -38,8 +38,8 @@ SCHEDD_CRON_cloud_PREFIX = Cloud
 
 # aid the user by automatically using RequireSpot in their Requirements, unless
 # the user has explicitly used CloudInterruptible
-JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) SPOT_REQS
-JOB_TRANSFORM_SPOT_REQS @=end
+JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) SPOT
+JOB_TRANSFORM_SPOT @=end
   REQUIREMENTS ! isUndefined(RequireSpot) && ! unresolved(Requirements, "^CloudInterruptible$")
   SET Requirements ($(MY.Requirements)) && (CloudInterruptible is My.RequireSpot)
 @end
@@ -62,8 +62,8 @@ SUBMIT_REQUIREMENT_NAMES = $(SUBMIT_REQUIREMENT_NAMES) MIGID
 SUBMIT_REQUIREMENT_MIGID = !isUndefined(RequireId) && member(RequireId, $(MIG_ID_LIST))
 SUBMIT_REQUIREMENT_MIGID_REASON = strcat("Jobs must set +RequireId to one of following values surrounded by quotation marks:\n", $(MIG_IDS))
 
-JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) SPOT_REQS
-JOB_TRANSFORM_SPOT_REQS @=end
+JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) MIGID
+JOB_TRANSFORM_MIGID @=end
   REQUIREMENTS ! isUndefined(RequireId) && ! unresolved(Requirements, "^CloudCreatedBy$")
   SET Requirements ($(MY.Requirements)) && regexp(strcat("/", My.RequireId, "$"), CloudCreatedBy)
 @end
