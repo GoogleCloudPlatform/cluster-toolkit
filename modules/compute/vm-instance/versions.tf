@@ -26,14 +26,15 @@ terraform {
       version = ">= 4.73.0"
     }
     null = {
+      source  = "hashicorp/null"
       version = ">= 1.0"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.20.0"
+    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.21.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.20.0"
+    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.21.0"
   }
 
   required_version = ">= 1.2.0"
