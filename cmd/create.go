@@ -18,6 +18,7 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
@@ -96,7 +97,7 @@ func printAdvancedInstructionsMessage(deplDir string) {
 }
 
 func expandOrDie(path string) config.DeploymentConfig {
-	dc, err := config.NewDeploymentConfig(path)
+	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,10 +121,48 @@ func expandOrDie(path string) config.DeploymentConfig {
 
 	// Expand the blueprint
 	if err := dc.ExpandConfig(); err != nil {
-		log.Fatal(err)
+		log.Fatal(renderError(err, ctx))
 	}
 
 	return dc
+}
+
+func findPos(path config.Path, ctx config.YamlCtx) (config.Pos, bool) {
+	pos, ok := ctx.Pos(path)
+	for !ok && path.Parent() != nil {
+		path = path.Parent()
+		pos, ok = ctx.Pos(path)
+	}
+	return pos, ok
+}
+
+func renderError(err error, ctx config.YamlCtx) string {
+	var me config.Errors
+	if errors.As(err, &me) {
+		var sb strings.Builder
+		for _, e := range me.Errors {
+			sb.WriteString(renderError(e, ctx))
+			sb.WriteString("\n")
+		}
+		return sb.String()
+	}
+
+	var be config.BpError
+	if errors.As(err, &be) {
+		if pos, ok := findPos(be.Path, ctx); ok {
+			return renderRichError(be.Err, pos, ctx)
+		}
+	}
+	return err.Error()
+}
+
+func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
+	pref := fmt.Sprintf("%d: ", pos.Line)
+	arrow := strings.Repeat(" ", len(pref)+pos.Column-1) + "^"
+	return fmt.Sprintf(`
+Error: %s
+%s%s
+%s`, err, pref, ctx.Lines[pos.Line-1], arrow)
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {
@@ -178,7 +217,7 @@ func setValidationLevel(bp *config.Blueprint, s string) error {
 	case "IGNORE":
 		bp.ValidationLevel = config.ValidationIgnore
 	default:
-		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
+		return errors.New("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
 	}
 	return nil
 }

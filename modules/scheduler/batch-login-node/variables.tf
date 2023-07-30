@@ -29,6 +29,11 @@ variable "region" {
   type        = string
 }
 
+variable "zone" {
+  description = "The zone in which to create the login node"
+  type        = string
+}
+
 variable "labels" {
   description = "Labels to add to the login node. Key-value pairs"
   type        = map(string)

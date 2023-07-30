@@ -21,7 +21,7 @@ locals {
   # default to explicit var.communicator, otherwise in-order: ssh/winrm/none
   shell_script_communicator      = length(var.shell_scripts) > 0 ? "ssh" : ""
   ansible_playbook_communicator  = length(var.ansible_playbooks) > 0 ? "ssh" : ""
-  powershell_script_communicator = length(var.powershell_scripts) > 0 ? "winrm" : ""
+  powershell_script_communicator = length(var.windows_startup_ps1) > 0 ? "winrm" : ""
   communicator = coalesce(
     var.communicator,
     local.shell_script_communicator,
@@ -47,7 +47,10 @@ locals {
   windows_packer_user = "packer_user"
   windows_user_metadata = {
     sysprep-specialize-script-cmd = "winrm quickconfig -quiet & net user /add ${local.windows_packer_user} & net localgroup administrators ${local.windows_packer_user} /add & winrm set winrm/config/service/auth @{Basic=\\\"true\\\"}"
-    windows-shutdown-script-cmd   = "net user /delete ${local.windows_packer_user}"
+    windows-shutdown-script-cmd   = <<-EOT
+      net user /delete ${local.windows_packer_user}
+      GCESysprep -no_shutdown
+      EOT
   }
   user_metadata = local.communicator == "winrm" ? local.windows_user_metadata : local.linux_user_metadata
 
@@ -134,9 +137,9 @@ build {
   # provisioner "powershell" blocks
   dynamic "provisioner" {
     labels   = ["powershell"]
-    for_each = var.powershell_scripts
+    for_each = var.windows_startup_ps1
     content {
-      script = provisioner.value
+      inline = split("\n", provisioner.value)
     }
   }
 

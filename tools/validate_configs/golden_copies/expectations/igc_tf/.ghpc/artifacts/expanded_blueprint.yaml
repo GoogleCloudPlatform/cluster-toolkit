@@ -51,7 +51,6 @@ deployment_groups:
           deployment_name: ((var.deployment_name ))
           project_id: ((var.project_id ))
           region: ((var.region ))
-    kind: terraform
   - group: one
     modules:
       - source: modules/file-system/filestore
@@ -71,4 +70,3 @@ deployment_groups:
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))
-    kind: terraform

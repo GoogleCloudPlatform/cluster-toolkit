@@ -159,29 +159,27 @@ variable "gpu" {
     type  = string
     count = number
   })
-  description = <<-EOD
-    GPU information. Type and count of GPU to attach to the instance template. See
-    https://cloud.google.com/compute/docs/gpus more details.
-    - type : the GPU type, e.g. nvidia-tesla-t4, nvidia-a100-80gb, nvidia-tesla-a100, etc
-    - count : number of GPUs
-
-    If both 'var.gpu' and 'var.guest_accelerator' are set, 'var.gpu' will be used.
-    EOD
+  description = "DEPRECATED: use var.guest_accelerator"
   default     = null
+  validation {
+    condition     = var.gpu == null
+    error_message = "var.gpu is deprecated. Use var.guest_accelerator."
+  }
 }
 
 variable "guest_accelerator" {
-  description = <<-EOD
-    Alternative method of providing 'var.gpu' with a consistent naming scheme to
-    other HPC Toolkit modules.
-
-    If both 'var.gpu' and 'var.guest_accelerator' are set, 'var.gpu' will be used.
-    EOD
+  description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
     type  = string,
     count = number
   }))
-  default = null
+  default  = []
+  nullable = false
+
+  validation {
+    condition     = length(var.guest_accelerator) <= 1
+    error_message = "The Slurm modules supports 0 or 1 models of accelerator card on each node."
+  }
 }
 
 variable "service_account" {
@@ -283,9 +281,7 @@ variable "instance_template" {
 
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the Slurm login node VM instances. This
-    value is overridden if any of `source_image`, `source_image_family` or
-    `source_image_project` are set.
+    Defines the image that will be used in the Slurm login node VM instances. 
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -298,7 +294,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     family  = "slurm-gcp-5-7-hpc-centos-7"
-    project = "projects/schedmd-slurm-public/global/images/family"
+    project = "schedmd-slurm-public"
   }
 
   validation {
@@ -314,30 +310,42 @@ variable "instance_image" {
 
 variable "source_image_project" {
   type        = string
-  description = "The hosting the custom VM image. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image_project == null
+    error_message = "Variable `source_image_project` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "source_image_family" {
   type        = string
-  description = "The custom VM image family. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image_family == null
+    error_message = "Variable `source_image_family` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "source_image" {
   type        = string
-  description = "The custom VM image. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image == null
+    error_message = "Variable `source_image` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "disk_type" {
   type        = string
-  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
+  description = "Boot disk type, can be either pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   default     = "pd-standard"
 
   validation {
-    condition     = contains(["pd-ssd", "local-ssd", "pd-standard"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, local-ssd, or pd-standard."
+    condition     = contains(["pd-ssd", "pd-standard", "pd-balanced", "pd-extreme"], var.disk_type)
+    error_message = "Variable disk_type must be one of pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   }
 }
 

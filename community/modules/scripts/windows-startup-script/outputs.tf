@@ -14,20 +14,7 @@
  * limitations under the License.
  */
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 3.83"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = ">= 3.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-configure/v1.19.1"
-  }
-
-  required_version = ">= 0.13.0"
+output "windows_startup_ps1" {
+  description = "A string list of scripts selected by this module"
+  value       = local.startup_ps1
 }

@@ -40,19 +40,6 @@ func (s *MySuite) TestCreateDirectoryLocal(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestGetAbsSourcePath(c *C) {
-	// Already abs path
-	gotPath := getAbsSourcePath(testDir)
-	c.Assert(gotPath, Equals, testDir)
-
-	// Relative path
-	relPath := "relative/path"
-	cwd, err := os.Getwd()
-	c.Assert(err, IsNil)
-	gotPath = getAbsSourcePath(relPath)
-	c.Assert(gotPath, Equals, filepath.Join(cwd, relPath))
-}
-
 func (s *MySuite) TestCopyFromPathLocal(c *C) {
 	deploymentio := GetDeploymentioLocal()
 	testSrcFilename := filepath.Join(testDir, "testSrc")

@@ -116,6 +116,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region in which to create the login node | `string` | n/a | yes |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script run before Google Cloud Batch job starts. Typically supplied by a batch-job-template module. | `string` | `null` | no |
+| <a name="input_zone"></a> [zone](#input\_zone) | The zone in which to create the login node | `string` | n/a | yes |
 
 ## Outputs
 

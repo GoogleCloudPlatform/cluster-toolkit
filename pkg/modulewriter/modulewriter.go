@@ -28,7 +28,6 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -48,8 +47,6 @@ const (
 
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
-	getNumModules() int
-	addNumModules(int)
 	writeDeploymentGroup(
 		dc config.DeploymentConfig,
 		grpIdx int,
@@ -67,16 +64,6 @@ var kinds = map[string]ModuleWriter{
 
 //go:embed *.tmpl
 var templatesFS embed.FS
-
-func factory(kind string) ModuleWriter {
-	writer, exists := kinds[kind]
-	if !exists {
-		log.Fatalf(
-			"modulewriter: Module kind (%s) is not valid. "+
-				"kind must be in (terraform, packer).", kind)
-	}
-	return writer
-}
 
 // WriteDeployment writes a deployment directory using modules defined the
 // environment blueprint.
@@ -103,10 +90,10 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwrite
 	fmt.Fprintln(f, "================================")
 
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
-		writer, ok := kinds[grp.Kind.String()]
+		writer, ok := kinds[grp.Kind().String()]
 		if !ok {
 			return fmt.Errorf(
-				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
+				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind())
 		}
 
 		err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir, f)
@@ -122,10 +109,8 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwrite
 	}
 
 	for _, writer := range kinds {
-		if writer.getNumModules() > 0 {
-			if err := writer.restoreState(deploymentDir); err != nil {
-				return fmt.Errorf("error trying to restore terraform state: %w", err)
-			}
+		if err := writer.restoreState(deploymentDir); err != nil {
+			return fmt.Errorf("error trying to restore terraform state: %w", err)
 		}
 	}
 	return nil
@@ -153,28 +138,28 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 // DeploymentSource returns module source within deployment group
 // Rules are following:
 //   - git source
-//     => keep the same source
+//   - terraform => <mod.Source>
+//   - packer    => <mod.ID>/<package_subdir>
 //   - packer
 //     => <mod.ID>
 //   - embedded (source starts with "modules" or "comunity/modules")
-//     => ./modules/embedded/<source>
+//     => ./modules/embedded/<mod.Source>
 //   - other
-//     => ./modules/<basename(source)>-<hash(abs(source))>
+//     => ./modules/<basename(mod.Source)>-<hash(abs(mod.Source))>
 func DeploymentSource(mod config.Module) (string, error) {
-	if mod.Kind != config.PackerKind && mod.Kind != config.TerraformKind {
+	switch mod.Kind {
+	case config.TerraformKind:
+		return tfDeploymentSource(mod)
+	case config.PackerKind:
+		return packerDeploymentSource(mod), nil
+	default:
 		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
 	}
+}
+
+func tfDeploymentSource(mod config.Module) (string, error) {
 	if sourcereader.IsGitPath(mod.Source) {
-		switch mod.Kind {
-		case config.TerraformKind:
-			return mod.Source, nil
-		case config.PackerKind:
-			_, subDir := getter.SourceDirSubdir(mod.Source)
-			return filepath.Join(string(mod.ID), subDir), nil
-		}
-	}
-	if mod.Kind == config.PackerKind {
-		return string(mod.ID), nil
+		return mod.Source, nil
 	}
 	if sourcereader.IsEmbeddedPath(mod.Source) {
 		return "./modules/" + filepath.Join("embedded", mod.Source), nil
@@ -182,13 +167,20 @@ func DeploymentSource(mod config.Module) (string, error) {
 	if !sourcereader.IsLocalPath(mod.Source) {
 		return "", fmt.Errorf("unexpected module source %s", mod.Source)
 	}
-
 	abs, err := filepath.Abs(mod.Source)
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute path for %#v: %v", mod.Source, err)
 	}
 	base := filepath.Base(mod.Source)
 	return fmt.Sprintf("./modules/%s-%s", base, shortHash(abs)), nil
+}
+
+func packerDeploymentSource(mod config.Module) string {
+	if sourcereader.IsGitPath(mod.Source) {
+		_, subDir := getter.SourceDirSubdir(mod.Source)
+		return filepath.Join(string(mod.ID), subDir)
+	}
+	return string(mod.ID)
 }
 
 // Returns first 4 characters of md5 sum in hex form
@@ -220,37 +212,35 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 		var copyEmbedded = false
 		for iMod := range grp.Modules {
 			mod := &grp.Modules[iMod]
-
-			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
-				continue // do not download
+			deplSource, err := DeploymentSource(*mod)
+			if err != nil {
+				return err
 			}
-			factory(mod.Kind.String()).addNumModules(1)
+
+			if sourcereader.IsGitPath(deplSource) {
+				continue // remote deployment source means that terraform will download it, no op
+			}
 			if sourcereader.IsEmbeddedPath(mod.Source) && mod.Kind == config.TerraformKind {
 				copyEmbedded = true
 				continue // all embedded terraform modules fill be copied at once
 			}
 
 			/* Copy source files */
-			var modPath string
-			var dst string
-			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.PackerKind {
-				modPath, _ = getter.SourceDirSubdir(mod.Source)
-				dst = filepath.Join(basePath, string(mod.ID))
+			var src, dst string
 
+			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.PackerKind {
+				src, _ = getter.SourceDirSubdir(mod.Source)
+				dst = filepath.Join(basePath, string(mod.ID))
 			} else {
-				modPath = mod.Source
-				ds, err := DeploymentSource(*mod)
-				if err != nil {
-					return err
-				}
-				dst = filepath.Join(basePath, ds)
+				src = mod.Source
+				dst = filepath.Join(basePath, deplSource)
 			}
 			if _, err := os.Stat(dst); err == nil {
 				continue
 			}
-			reader := sourcereader.Factory(modPath)
-			if err := reader.GetModule(modPath, dst); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", modPath, dst, err)
+			reader := sourcereader.Factory(src)
+			if err := reader.GetModule(src, dst); err != nil {
+				return fmt.Errorf("failed to get module from %s to %s: %v", src, dst, err)
 			}
 			// remove .git directory if one exists; we do not want submodule
 			// git history in deployment directory
@@ -430,10 +420,10 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
 		grp := dc.Config.DeploymentGroups[grpIdx]
 		grpPath := filepath.Join(deploymentDir, string(grp.Name))
-		if grp.Kind == config.TerraformKind {
+		if grp.Kind() == config.TerraformKind {
 			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)
 		}
-		if grp.Kind == config.PackerKind {
+		if grp.Kind() == config.PackerKind {
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
 
 		}

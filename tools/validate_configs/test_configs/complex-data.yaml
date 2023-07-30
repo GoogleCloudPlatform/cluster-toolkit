@@ -72,7 +72,7 @@ deployment_groups:
         ghpc_role: license
       disable_public_ips: true
       service_account:
-        email:
+        email: null
         scopes:
         - "https://www.googleapis.com/auth/devstorage.read_only"
         - "https://www.googleapis.com/auth/logging.write"

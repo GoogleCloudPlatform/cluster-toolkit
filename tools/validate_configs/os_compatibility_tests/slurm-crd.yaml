@@ -1,0 +1,108 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: test-slurm-crd
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: test
+  region: us-central1
+  zone: us-central1-a
+  machine_type: n1-standard-2
+  instance_image:
+    # Please refer to the following link for the latest images:
+    # https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
+    family: slurm-gcp-5-7-debian-11
+    project: schedmd-slurm-public
+  guest_accelerator:
+  - type: nvidia-tesla-t4-vws
+    count: 1
+
+deployment_groups:
+- group: primary
+  modules:
+
+  ###########
+  # Network #
+  ###########
+
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
+  - id: network1
+    source: modules/network/vpc
+
+  ###########
+  # Startup #
+  ###########
+
+  - id: remote-desktop
+    source: community/modules/remote-desktop/chrome-remote-desktop
+    use:
+    - network1
+    settings:
+      name_prefix: crd
+      install_nvidia_driver: true
+      # instance_count: 0 will create installation scripts only
+      # which can be used with slurm node provisioning
+      instance_count: 0
+
+  #############
+  # Slurm VMs #
+  #############
+  - id: debug_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 3
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - debug_node_group
+    - remote-desktop
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      enable_placement: false # the default is: true
+      is_default: true
+      partition_startup_scripts_timeout: 900
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    use:
+    - network1
+    - debug_partition
+    settings:
+      disable_controller_public_ips: false
+      compute_startup_script: $(remote-desktop.startup_script)
+      controller_startup_script: $(remote-desktop.startup_script)
+      compute_startup_scripts_timeout: 900
+      controller_startup_scripts_timeout: 900
+      login_startup_scripts_timeout: 900
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.slurm_controller.controller_instance_id))
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - network1
+    - slurm_controller
+    - remote-desktop
+    settings:
+      disable_login_public_ips: false

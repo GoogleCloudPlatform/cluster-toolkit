@@ -1,0 +1,116 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: test-workstation-filestore
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: test
+  region: us-central1
+  zone: us-central1-a
+  machine_type: n1-standard-2
+
+deployment_groups:
+- group: primary
+  modules:
+
+  ###########
+  # Network #
+  ###########
+
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
+  - id: network1
+    source: modules/network/vpc
+
+  ###########
+  # Storage #
+  ###########
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      local_mount: /home
+
+  #############
+  # Simple VM #
+  #############
+
+  - id: workstation_ubuntu
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - homefs
+    settings:
+      instance_image:
+        family: ubuntu-2004-lts
+        project: ubuntu-os-cloud
+      name_prefix: workstation-ubuntu
+      instance_count: 1
+  - id: wait_ubuntu
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.workstation_ubuntu.name[0]))
+
+  - id: workstation_centos
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - homefs
+    settings:
+      instance_image:
+        family: centos-7
+        project: centos-cloud
+      name_prefix: workstation-centos
+      instance_count: 1
+  - id: wait_centos
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.workstation_centos.name[0]))
+
+  - id: workstation_rocky
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - homefs
+    settings:
+      instance_image:
+        family: rocky-linux-8
+        project: rocky-linux-cloud
+      name_prefix: workstation-rocky
+      instance_count: 1
+  - id: wait_rocky
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.workstation_rocky.name[0]))
+
+  - id: workstation_debian
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - homefs
+    settings:
+      instance_image:
+        family: debian-11
+        project: debian-cloud
+      name_prefix: workstation-debian
+      instance_count: 1
+  - id: wait_debian
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.workstation_debian.name[0]))

@@ -288,7 +288,7 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
 	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
 
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
@@ -326,7 +326,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	}
 
 	var outfile string
-	switch g.Kind {
+	switch g.Kind() {
 	case config.TerraformKind:
 		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", g.Name))
 	case config.PackerKind:

@@ -45,12 +45,12 @@ var (
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() error {
-	dc.expandBackends()
-	dc.addDefaultValidators()
-
-	if err := dc.combineLabels(); err != nil {
+	if err := dc.Config.evalVars(); err != nil {
 		return err
 	}
+	dc.expandBackends()
+	dc.addDefaultValidators()
+	dc.combineLabels()
 
 	if err := dc.applyUseModules(); err != nil {
 		return err
@@ -134,45 +134,38 @@ func (mod *Module) addListValue(settingName string, value cty.Value) {
 // a list, in which case output values are appended and flattened using HCL.
 //
 //	mod: "using" module as defined above
-//	useMod: "used" module as defined above
-//	settingsToIgnore: a list of module settings not to modify for any reason;
-//	 typical usage will be to leave explicit blueprint settings unmodified
-func useModule(
-	mod *Module,
-	useMod Module,
-	settingsToIgnore []string,
-) {
+//	use: "used" module as defined above
+func useModule(mod *Module, use Module) {
 	modInputsMap := getModuleInputMap(mod.InfoOrDie().Inputs)
-	for _, useOutput := range useMod.InfoOrDie().Outputs {
-		settingName := useOutput.Name
-
-		// explicitly ignore these settings (typically those in blueprint)
-		if slices.Contains(settingsToIgnore, settingName) {
-			continue
-		}
+	for _, useOutput := range use.InfoOrDie().Outputs {
+		setting := useOutput.Name
 
 		// Skip settings that do not have matching module inputs
-		inputType, ok := modInputsMap[settingName]
+		inputType, ok := modInputsMap[setting]
 		if !ok {
 			continue
 		}
 
+		alreadySet := mod.Settings.Has(setting)
+		if alreadySet && len(IsProductOfModuleUse(mod.Settings.Get(setting))) == 0 {
+			continue // set explicitly, skip
+		}
+
 		// skip settings that are not of list type, but already have a value
 		// these were probably added by a previous call to this function
-		alreadySet := mod.Settings.Has(settingName)
 		isList := strings.HasPrefix(inputType, "list")
 		if alreadySet && !isList {
 			continue
 		}
 
 		v := AsProductOfModuleUse(
-			ModuleRef(useMod.ID, settingName).AsExpression().AsValue(),
-			useMod.ID)
+			ModuleRef(use.ID, setting).AsExpression().AsValue(),
+			use.ID)
 
 		if !isList {
-			mod.Settings.Set(settingName, v)
+			mod.Settings.Set(setting, v)
 		} else {
-			mod.addListValue(settingName, v)
+			mod.addListValue(setting, v)
 		}
 	}
 }
@@ -181,13 +174,12 @@ func useModule(
 // when/if applicable
 func (dc *DeploymentConfig) applyUseModules() error {
 	return dc.Config.WalkModules(func(m *Module) error {
-		settingsInBlueprint := maps.Keys(m.Settings.Items())
 		for _, u := range m.Use {
 			used, err := dc.Config.Module(u)
-			if err != nil {
+			if err != nil { // should never happen
 				return err
 			}
-			useModule(m, *used, settingsInBlueprint)
+			useModule(m, *used)
 		}
 		return nil
 	})
@@ -218,7 +210,7 @@ func getRole(source string) string {
 // combineLabels sets defaults for labels based on other variables and merges
 // the global labels defined in Vars with module setting labels. It also
 // determines the role and sets it for each module independently.
-func (dc *DeploymentConfig) combineLabels() error {
+func (dc *DeploymentConfig) combineLabels() {
 	vars := &dc.Config.Vars
 	defaults := map[string]cty.Value{
 		blueprintLabel:  cty.StringVal(dc.Config.BlueprintName),
@@ -231,59 +223,29 @@ func (dc *DeploymentConfig) combineLabels() error {
 	gl := mergeMaps(defaults, vars.Get(labels).AsValueMap())
 	vars.Set(labels, cty.ObjectVal(gl))
 
-	return dc.Config.WalkModules(func(mod *Module) error {
-		return combineModuleLabels(mod, *dc)
+	dc.Config.WalkModules(func(mod *Module) error {
+		combineModuleLabels(mod, *dc)
+		return nil
 	})
 }
 
-func combineModuleLabels(mod *Module, dc DeploymentConfig) error {
+func combineModuleLabels(mod *Module, dc DeploymentConfig) {
 	labels := "labels"
-
 	if !moduleHasInput(*mod, labels) {
-		return nil // no op
+		return // no op
 	}
 
-	cur := mod.Settings.Get(labels)
-	extra := map[string]cty.Value{roleLabel: cty.StringVal(getRole(mod.Source))}
-
-	if mod.Kind == TerraformKind {
-		mod.Settings.Set(labels, mergeLabelsTf(extra, cur))
-	} else if mod.Kind == PackerKind {
-		gl := dc.Config.Vars.Get(labels).AsValueMap()
-		merged, err := mergeLabelsPkr(gl, extra, cur)
-		if err != nil {
-			return err
-		}
-		mod.Settings.Set(labels, merged)
-	}
-	return nil
-}
-
-// Terraform labels are `merge(var.labels, {ghpc_role="foo"}, [module labels])`
-func mergeLabelsTf(extra map[string]cty.Value, cur cty.Value) cty.Value {
+	extra := map[string]cty.Value{
+		roleLabel: cty.StringVal(getRole(mod.Source))}
 	args := []cty.Value{
-		GlobalRef("labels").AsExpression().AsValue(),
+		GlobalRef(labels).AsExpression().AsValue(),
 		cty.ObjectVal(extra),
 	}
-	if !cur.IsNull() {
-		args = append(args, cur)
+	if !mod.Settings.Get(labels).IsNull() {
+		args = append(args, mod.Settings.Get(labels))
 	}
-	return FunctionCallExpression("merge", args...).AsValue()
-}
 
-// Packer doesn't support `merge`, so merge it here.
-func mergeLabelsPkr(global map[string]cty.Value, extra map[string]cty.Value, cur cty.Value) (cty.Value, error) {
-	modLabels := map[string]cty.Value{}
-	if !cur.IsNull() {
-		ty := cur.Type()
-		if !ty.IsObjectType() && !ty.IsMapType() {
-			return cty.NilVal, fmt.Errorf("%s,labels type: %s", errorMessages["settingsLabelType"], ty.FriendlyName())
-		}
-		if cur.AsValueMap() != nil {
-			modLabels = cur.AsValueMap()
-		}
-	}
-	return cty.ObjectVal(mergeMaps(global, extra, modLabels)), nil
+	mod.Settings.Set(labels, FunctionCallExpression("merge", args...).AsValue())
 }
 
 // mergeMaps takes an arbitrary number of maps, and returns a single map that contains
@@ -379,8 +341,11 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	if err := validateModuleReference(bp, mod, r.Module); err != nil {
 		return err
 	}
-	tm, _ := bp.Module(r.Module)
-	mi := tm.InfoOrDie()
+	tm, _ := bp.Module(r.Module) // Shouldn't error if validateModuleReference didn't
+	mi, err := modulereader.GetModuleInfo(tm.Source, tm.Kind.String())
+	if err != nil {
+		return err
+	}
 	found := slices.ContainsFunc(mi.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
 	if !found {
 		return fmt.Errorf("%s: module %s did not have output %s", errorMessages["noOutput"], tm.ID, r.Name)
@@ -491,20 +456,13 @@ func (dg DeploymentGroup) FindAllIntergroupReferences(bp Blueprint) []Reference 
 // FindIntergroupReferences finds all references to other groups used in the given value
 func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference {
 	g := bp.ModuleGroupOrDie(mod.ID)
-	res := map[Reference]bool{}
-	cty.Walk(v, func(p cty.Path, v cty.Value) (bool, error) {
-		e, is := IsExpressionValue(v)
-		if !is {
-			return true, nil
+	res := []Reference{}
+	for _, r := range valueReferences(v) {
+		if !r.GlobalVar && bp.ModuleGroupOrDie(r.Module).Name != g.Name {
+			res = append(res, r)
 		}
-		for _, r := range e.References() {
-			if !r.GlobalVar && bp.ModuleGroupOrDie(r.Module).Name != g.Name {
-				res[r] = true
-			}
-		}
-		return true, nil
-	})
-	return maps.Keys(res)
+	}
+	return res
 }
 
 // find all intergroup references and add them to source Module.Outputs

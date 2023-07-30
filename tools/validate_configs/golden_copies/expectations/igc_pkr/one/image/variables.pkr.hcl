@@ -115,10 +115,7 @@ https://cloud.google.com/compute/docs/access/service-accounts.
 EOD
   type        = list(string)
   default = [
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/compute",
-    "https://www.googleapis.com/auth/devstorage.full_control",
-    "https://www.googleapis.com/auth/logging.write",
+    "https://www.googleapis.com/auth/cloud-platform",
   ]
 }
 
@@ -156,8 +153,8 @@ variable "shell_scripts" {
   default     = []
 }
 
-variable "powershell_scripts" {
-  description = "A list of paths to local powershell scripts which will be uploaded to customize the Windows VM image (requires WinRM communicator)"
+variable "windows_startup_ps1" {
+  description = "A list of strings containing PowerShell scripts which will customize a Windows VM image (requires WinRM communicator)"
   type        = list(string)
   default     = []
 }

@@ -1,0 +1,43 @@
+Set-StrictMode -Version latest
+$ErrorActionPreference = 'Stop'
+
+# Windows 2016 defaults to old TLS protocols, override it
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+
+# do not show progress bar when running Invoke-WebRequest
+$ProgressPreference = 'SilentlyContinue'
+
+# download C Runtime DLL necessary for HTCondor installer
+$runtime_installer = 'C:\vc_redist.x64.exe'
+Invoke-WebRequest https://aka.ms/vs/17/release/vc_redist.x64.exe -OutFile "$runtime_installer"
+Start-Process -FilePath "$runtime_installer" -Wait -ArgumentList "/norestart /quiet /log c:\vc_redist_log.txt"
+Remove-Item "$runtime_installer"
+
+# download HTCondor installer
+$htcondor_installer = 'C:\htcondor.msi'
+%{ if condor_version == "10.*" }
+Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/current/current/condor-Windows-x64.msi -OutFile "$htcondor_installer"
+%{ else ~}
+Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/current/${condor_version}/release/condor-${condor_version}-Windows-x64.msi -OutFile "$htcondor_installer"
+%{ endif ~}
+$args='/qn /l* condor-install-log.txt /i'
+$args=$args + " $htcondor_installer"
+$args=$args + ' NEWPOOL="N"'
+$args=$args + ' RUNJOBS="N"'
+$args=$args + ' SUBMITJOBS="N"'
+$args=$args + ' INSTALLDIR="C:\Condor"'
+Start-Process "msiexec.exe" -Wait -ArgumentList "$args"
+Remove-Item "$htcondor_installer"
+
+# remove settings from condor_config that we want to override in configuration step
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^CONDOR_HOST' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^INSTALL_USER' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^DAEMON_LIST' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^use SECURITY' -NotMatch)
+
+$python_installer = 'C:\python-installer.exe'
+Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.4/python-3.11.4-amd64.exe" -OutFile "$python_installer"
+Start-Process -FilePath "$python_installer" -Wait -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0'
+Start-Process "py.exe" -Wait -ArgumentList "-3.11 -m pip install --no-warn-script-location requests"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/htcondor/htcondor/main/src/condor_scripts/common-cloud-attributes-google.py" -OutFile "C:\Condor\bin\common-cloud-attributes-google.py"
+Remove-Item "$python_installer"

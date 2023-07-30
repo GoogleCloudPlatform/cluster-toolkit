@@ -51,3 +51,7 @@
       args:
         chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
         executable: /bin/bash
+    - name: Trigger Cloud Build failure
+      when: ghpc_destroy.failed or image_deletion.failed
+      ansible.builtin.fail:
+        msg: "Failed while setting up test infrastructure"

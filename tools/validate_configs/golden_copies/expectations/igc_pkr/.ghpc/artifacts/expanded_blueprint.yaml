@@ -47,6 +47,8 @@ deployment_groups:
             sensitive: true
         settings:
           deployment_name: ((var.deployment_name ))
+          enable_iap_rdp_ingress: true
+          enable_iap_winrm_ingress: true
           project_id: ((var.project_id ))
           region: ((var.region ))
       - source: modules/file-system/filestore
@@ -102,7 +104,15 @@ deployment_groups:
                 echo "Hello, World!"
               destination: hello.sh
               type: shell
-    kind: terraform
+      - source: community/modules/scripts/windows-startup-script
+        kind: terraform
+        id: windows_startup
+        outputs:
+          - name: windows_startup_ps1
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          install_nvidia_driver: true
   - group: one
     modules:
       - source: modules/packer/custom-image
@@ -111,14 +121,15 @@ deployment_groups:
         use:
           - network0
           - script
+          - windows_startup
         settings:
           deployment_name: ((var.deployment_name ))
-          labels:
-            ghpc_blueprint: igc
-            ghpc_deployment: golden_copy_deployment
-            ghpc_role: packer
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "packer"
+            })))
           project_id: ((var.project_id ))
           startup_script: ((module.script.startup_script))
           subnetwork_name: ((module.network0.subnetwork_name))
+          windows_startup_ps1: ((flatten([module.windows_startup.windows_startup_ps1])))
           zone: ((var.zone ))
-    kind: packer

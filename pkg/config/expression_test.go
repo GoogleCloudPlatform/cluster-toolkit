@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/zclconf/go-cty-debug/ctydebug"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -181,6 +182,57 @@ func TestTokensForValueWithLiteral(t *testing.T) {
 	got := hclwrite.Format(gotF.Bytes()) // format to normalize whitespace
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestFlattenFunctionCallExpression(t *testing.T) {
+	bp := Blueprint{Vars: NewDict(map[string]cty.Value{
+		"three": cty.NumberIntVal(3),
+	})}
+	expr := FunctionCallExpression("flatten", cty.TupleVal([]cty.Value{
+		cty.TupleVal([]cty.Value{cty.NumberIntVal(1), cty.NumberIntVal(2)}),
+		GlobalRef("three").AsExpression().AsValue(),
+	}))
+
+	want := cty.TupleVal([]cty.Value{
+		cty.NumberIntVal(1),
+		cty.NumberIntVal(2),
+		cty.NumberIntVal(3)})
+
+	got, err := expr.Eval(bp)
+	if err != nil {
+		t.Errorf("got unexpected error: %s", err)
+	}
+	if diff := cmp.Diff(want, got, ctydebug.CmpOptions); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestMergeFunctionCallExpression(t *testing.T) {
+	bp := Blueprint{Vars: NewDict(map[string]cty.Value{
+		"fix": cty.ObjectVal(map[string]cty.Value{
+			"two": cty.NumberIntVal(2),
+		}),
+	})}
+	expr := FunctionCallExpression("merge",
+		cty.ObjectVal(map[string]cty.Value{
+			"one": cty.NumberIntVal(1),
+			"two": cty.NumberIntVal(3),
+		}),
+		GlobalRef("fix").AsExpression().AsValue(),
+	)
+
+	want := cty.ObjectVal(map[string]cty.Value{
+		"one": cty.NumberIntVal(1),
+		"two": cty.NumberIntVal(2),
+	})
+
+	got, err := expr.Eval(bp)
+	if err != nil {
+		t.Errorf("got unexpected error: %s", err)
+	}
+	if diff := cmp.Diff(want, got, ctydebug.CmpOptions); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }

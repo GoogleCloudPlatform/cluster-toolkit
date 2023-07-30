@@ -29,17 +29,7 @@ import (
 const packerAutoVarFilename = "defaults.auto.pkrvars.hcl"
 
 // PackerWriter writes packer to the blueprint folder
-type PackerWriter struct {
-	numModules int
-}
-
-func (w *PackerWriter) getNumModules() int {
-	return w.numModules
-}
-
-func (w *PackerWriter) addNumModules(value int) {
-	w.numModules += value
-}
+type PackerWriter struct{}
 
 func printPackerInstructions(w io.Writer, groupPath string, subPath string, printImportInputs bool) {
 	fmt.Fprintln(w)

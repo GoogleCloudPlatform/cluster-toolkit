@@ -104,7 +104,6 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 	testDeploymentGroups := []config.DeploymentGroup{
 		{
 			Name:    "test_resource_group",
-			Kind:    config.TerraformKind,
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
@@ -619,18 +618,6 @@ func (s *MySuite) TestWriteProviders(c *C) {
 	exists, err = stringExistsInFile("var.region", provFilePath)
 	c.Assert(err, IsNil)
 	c.Assert(exists, Equals, true)
-}
-
-// packerwriter.go
-func (s *MySuite) TestNumModules_PackerWriter(c *C) {
-	testWriter := PackerWriter{}
-	c.Assert(testWriter.getNumModules(), Equals, 0)
-	testWriter.addNumModules(-1)
-	c.Assert(testWriter.getNumModules(), Equals, -1)
-	testWriter.addNumModules(2)
-	c.Assert(testWriter.getNumModules(), Equals, 1)
-	testWriter.addNumModules(0)
-	c.Assert(testWriter.getNumModules(), Equals, 1)
 }
 
 func (s *MySuite) TestKind(c *C) {

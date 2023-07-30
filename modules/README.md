@@ -45,7 +45,7 @@ Modules that are still in development and less stable are labeled with the
   Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
-  pool][htcondor-configure].
+  pool][htcondor-setup].
 * **[pbspro-execution]** ![community-badge] ![experimental-badge] :
   Creates execution hosts for use in a PBS Professional cluster.
 * **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
@@ -153,8 +153,14 @@ Modules that are still in development and less stable are labeled with the
   Creates a Slurm login node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
-* **[htcondor-configure]** ![community-badge] ![experimental-badge] : Creates
-  Toolkit runners and service accounts to configure an HTCondor pool.
+* **[htcondor-setup]** ![community-badge] ![experimental-badge] : Creates the
+  base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
+* **[htcondor-pool-secrets]** ![community-badge] ![experimental-badge] : Creates
+  and manages access to the secrets necessary for secure operation of an
+  HTCondor pool.
+* **[htcondor-access-point]** ![community-badge] ![experimental-badge] : Creates
+  a regional instance group managing a highly available HTCondor access point
+  (login node).
 * **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
   a client host for submitting jobs to a PBS Professional cluster.
 * **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
@@ -167,7 +173,9 @@ Modules that are still in development and less stable are labeled with the
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
 [gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
-[htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
+[htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
+[htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
+[htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
@@ -182,6 +190,9 @@ Modules that are still in development and less stable are labeled with the
 
 * **[startup-script]** ![core-badge] : Creates a customizable startup script
   that can be fed into compute VMs.
+* **[windows-startup-script]** ![community-badge] ![experimental-badge]: Creates
+  Windows PowerShell (PS1) scripts that can be used to customize Windows VMs
+  and VM images.
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
 * **[kubernetes-operations]** ![community-badge] ![experimental-badge] :
@@ -210,6 +221,7 @@ Modules that are still in development and less stable are labeled with the
   successful completion of a startup script on a compute VM.
 
 [startup-script]: scripts/startup-script/README.md
+[windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
 [kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
 [omnia-install]: ../community/modules/scripts/omnia-install/README.md
@@ -237,24 +249,33 @@ at the top level main.tf file.
 
 ### Source (Required)
 
-The source is a path or URL that points to the source files for a module. The
-actual content of those files is determined by the [kind](#kind-may-be-required) of the
-module.
+The source is a path or URL that points to the source files for Packer or
+Terraform modules. A source can either be a filesystem path or a URL to a git
+repository:
 
-A source can be a path which may refer to a module embedded in the `ghpc`
-binary or a local file. It can also be a URL pointing to a GitHub path
-containing a conforming module.
+* Filesystem paths
+  * modules embedded in the `ghpc` executable
+  * modules in the local filesystem
+* Remote modules hosted on github.com or any `git::` repository
+  * when modules are in a subdirectory of the git repository, a special
+  double-slash "//" notation can be required as described below
+
+An important distinction is that git URLs are natively supported by Terraform so
+they are not copied to your deployment directory. Packer does not have native
+support for git-hosted modules so the Toolkit will copy these modules into the
+deployment folder on your behalf.
 
 #### Embedded Modules
 
-Embedded modules are embedded in the ghpc binary during compilation and cannot
+Embedded modules are added to the ghpc binary during compilation and cannot
 be edited. To refer to embedded modules, set the source path to
-`modules/<<MODULE_PATH>>`.
+`modules/<<MODULE_PATH>>` or `community/modules/<<MODULE_PATH>>`.
 
-The paths match the modules in the repository at compilation time. You can
-review the directory structure of [the core modules](./) and
-[community modules](../community/modules/) to determine which path to use. For
-example, the following code is using the embedded pre-existing-vpc module:
+The paths match the modules in the repository structure for [core modules](./)
+and [community modules](../community/modules/). Because the modules are embedded
+during compilation, your local copies may differ unless you recompile ghpc.
+
+For example, this example snippet uses the embedded pre-existing-vpc module:
 
 ```yaml
   - id: network1
@@ -273,16 +294,80 @@ following module definition refers the local pre-existing-vpc modules.
     source: ./modules/network/pre-existing-vpc
 ```
 
-> **_NOTE:_** This example would have to be run from the HPC Toolkit repository
-> directory, otherwise the path would need to be updated to point at the correct
-> directory.
+> **_NOTE:_** Relative paths (beginning with `.` or `..` must be relative to the
+> working directory from which `ghpc` is executed. This example would have to be
+> run from a local copy of the HPC Toolkit repository. An alternative is to use
+> absolute paths to modules.
 
-#### GitHub Modules
+#### GitHub-hosted Modules and Packages
+
+The [Intel DAOS blueprint][pfs-daos.yaml] makes extensive use of GitHub-hosted
+Terraform and Packer modules. You may wish to use it as an example reference for
+this documentation.
 
 To use a Terraform module available on GitHub, set the source to a path starting
-with `github.com` (over HTTPS) or `git@github.com` (over SSH). For instance, the
-following module definitions are sourcing the vpc module by pointing at the HPC
-Toolkit GitHub repository:
+with `github.com` (HTTPS) or `git@github.com` (SSH). For instance, the following
+module definition sources the Toolkit vpc module:
+
+```yaml
+  - id: network1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc
+```
+
+This example uses the [double-slash notation][tfsubdir] (`//`) to indicate that
+the Toolkit is a "package" of multiple modules whose root directory is the root
+of the git repository. The remainder of the path indicates the sub-directory of
+the vpc module.
+
+The example above uses the default `main` branch of the Toolkit. Specific
+[revisions][tfrev] can be selected with any valid [git reference][gitref].
+(git branch, commit hash or tag). If the git reference is a tag or branch, we
+recommend setting `&depth=1` to reduce the data transferred over the network.
+This option cannot be set when the reference is a commit hash. The following
+examples select the vpc module on the active `develop` branch and also an older
+release of the filestore module:
+
+```yaml
+  - id: network1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
+  ...
+  - id: homefs
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.10.0&depth=1
+```
+
+Because Terraform modules natively support this syntax, ghpc will not copy
+GitHub-hosted modules into your deployment folder. Terraform will download them
+into a hidden folder when you run `terraform init`.
+
+[tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
+[gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
+[tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
+[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
+
+##### GitHub-hosted Packer modules
+
+Packer does not natively support GitHub-hosted modules so `ghpc create` will
+copy modules into your deployment folder.
+
+If the module uses `//` package notation, `ghpc create` will copy the entire
+repository to the module path: `deployment_name/group_name/module_id`. However,
+when `ghpc deploy` is invoked, it will run Packer from the subdirectory
+`deployment_name/group_name/module_id/subdirectory/after/double_slash`.
+
+Referring back to the [Intel DAOS blueprint][pfs-daos.yaml], we see that it will
+create 2 deployment groups at `pfs-daos/daos-client-image` and
+`pfs-daos/daos-server-image`. However, Packer will actually be invoked from
+a subdirectories ending in `daos-client-image/images` and
+`daos-server-image/images`.
+
+If the module does not use `//` package notation, `ghpc create` will copy
+only the final directory in the path to `deployment_name/group_name/module_id`.
+
+In all cases, `ghpc create` will remove the `.git` directory from the packer
+module to ensure that you can manage the entire deployment directory with its
+own git versioning.
+
+##### GitHub over SSH
 
 Get module from GitHub over SSH:
 
@@ -291,34 +376,15 @@ Get module from GitHub over SSH:
     source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc
 ```
 
-Get module from GitHub over HTTPS:
+Specific versions can be selected as for HTTPS:
 
 ```yaml
   - id: network1
-    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc
+    source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc?ref=v1.10.0&depth=1
 ```
 
-Both examples above use the [double-slash notation][tfsubdir] (`//`) to indicate
-the root directory of the git repository and the remainder of the path indicates
-the location of the Terraform module.
+##### Generic Git Modules
 
-Additionally, [specific revisions of a remote module][tfrev] can be selected by
-any valid [git reference][gitref]. Typically, these are a git branch, commit
-hash or tag. The [Intel DAOS blueprint][pfs-daos.yaml] makes extensive use
-of this feature. For example, to temporarily point to a development copy of the
-Toolkit vpc module, use:
-
-```yaml
-  - id: network1
-    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
-```
-
-[tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
-[gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
-[tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
-[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
-
-#### Generic Git Modules
 To use a Terraform module available in a non-GitHub git repository such as
 gitlab, set the source to a path starting `git::`. Two Standard git protocols
 are supported, `git::https://` for HTTPS or `git::git@github.com` for SSH.

@@ -81,7 +81,7 @@ Both of these steps are automatically handled with the use of the `use` command
 in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
 
-[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
+[matrix]: ../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 
