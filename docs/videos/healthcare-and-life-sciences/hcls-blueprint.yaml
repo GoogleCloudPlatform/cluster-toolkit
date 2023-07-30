@@ -114,7 +114,7 @@ deployment_groups:
   ### Software ###
 
   - id: spack-setup
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack-setup
     settings:
       install_dir: /apps/spack
 

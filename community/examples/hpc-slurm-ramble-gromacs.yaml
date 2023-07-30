@@ -36,7 +36,7 @@ deployment_groups:
 
   ## Install Scripts
   - id: spack-install
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack-setup
     settings:
       install_dir: /opt/apps/spack
 

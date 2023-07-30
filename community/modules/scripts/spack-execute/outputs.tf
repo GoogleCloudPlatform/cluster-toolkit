@@ -25,7 +25,7 @@ output "controller_startup_script" {
 }
 
 output "spack_runner" {
-  description = "Single runner that combines scripts from this module and any previously chained spack-execute or spack-install modules."
+  description = "Single runner that combines scripts from this module and any previously chained spack-execute or spack-setup modules."
   value       = local.combined_runner
 }
 

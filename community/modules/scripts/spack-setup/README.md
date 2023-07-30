@@ -105,7 +105,7 @@ instal through a shared file system.
 
 ```yaml
   - id: spack
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack-setup
     ...
 
   - id: spack-setup

@@ -40,7 +40,7 @@ deployment_groups:
       local_mount: /sw
 
   - id: spack-setup
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack-setup
     settings:
       install_dir: /sw/spack
       spack_ref: v0.18.1
