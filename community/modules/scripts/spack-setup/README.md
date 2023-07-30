@@ -1,119 +1,86 @@
 ## Description
 
-This module can be used to install spack on a VM. This includes:
+This module can be used to setup and install Spack on a VM. To actually run
+Spack commands to install other software use the
+[spack-execute](../spack-execute/) module.
 
-1. Cloning spack into a predefined directory
-1. Checking out a specific version of spack
-1. Configuring compilers within spack
-1. Installing application licenses that spack packages might depend on
-1. Installing various spack specs.
+This module generates a script that performs the following:
 
-The output of this module is a startup script that is intended to be attached
-to either the login or controller node of a scheduler, or a
-[vm-instance](../../../../modules/compute/vm-instance/README.md). The
-resulting installation of spack can then be mounted across many other VMs to
-share a software stack.
+1. Install system dependencies needed for Spack
+1. Clone Spack into a predefined directory
+1. Check out a specific version of Spack
 
-> **_NOTE:_** This module currently is capable of re-running to install
-> additional packages, but cannot be used to uninstall packages from the VM.
->
-> **_NOTE:_** Currently, license installation is performed by copying a
-> license file from a GCS bucket to a specific directory on the target VM.
->
-> **_NOTE:_** When populating a buildcache with packages, the VM this
-> spack module is running on requires the following scope:
-> https://www.googleapis.com/auth/devstorage.read_write
+There are several options on how to consume the outputs of this module:
 
-## Example
+## Examples
 
-As an example, the below is a possible definition of a spack installation. To
-see this module used in a full blueprint, see the [hpc-slurm-gromacs.yaml] example.
+### `use` `spack-setup` with `spack-execute`
+
+This will prepend the `spack-setup` script to the `spack-execute` commands.
 
 ```yaml
-  - id: spack
-    source: community/modules/scripts/spack-install
+  - id: spack-setup
+    source: modules/scripts/spack-setup
+
+  - id: spack-build
+    source: modules/scripts/spack-execute
+    use: [spack-setup]
     settings:
-      install_dir: /sw/spack
-      spack_url: https://github.com/spack/spack
-      spack_ref: v0.19.0
-      spack_cache_url:
-      - mirror_name: 'gcs_cache'
-        mirror_url: gs://example-buildcache/linux-centos7
-      configs:
-      - type: single-config
-        scope: defaults
-        value: "config:build_stage:/sw/spack/spack-stage"
-      - type: file
-        scope: defaults
-        value: |
-          modules:
-            default:
-              tcl:
-                hash_length: 0
-                all:
-                  conflict:
-                    - '{name}'
-                projections:
-                  all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      compilers:
-      - gcc@10.3.0 target=x86_64
-      packages:
-      - cmake%gcc@10.3.0 target=x86_64
-      environments:
-      - name: main-env
-        packages:
-        - intel-mkl%gcc@10.3.0 target=skylake
-        - intel-mpi@2018.4.274%gcc@10.3.0 target=skylake
-        - fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5 target=x86_64
-      - name: explicit-env
-        content: |
-          spack:
-            definitions:
-            - compilers:
-              - gcc@10.3.0
-            - mpis:
-              - intel-mpi@2018.4.274
-            - packages:
-              - intel-mkl
-            - mpi_packages:
-              - fftw
-            specs:
-            - matrix:
-              - - $packages
-              - - $%compilers
-            - matrix:
-              - - $mpis
-              - - $%compilers
-            - matrix:
-              - - $mpi_packages
-              - - $%compilers
-              - - $^mpis
+      commands: |
+        spack install gcc@10.3.0 target=x86_64
+
+  - id: builder
+    source: modules/compute/vm-instance
+    use: [network1, spack-build]
 ```
 
-Following the above description of this module, it can be added to a Slurm
-deployment via the following:
+### `use` `spack-setup` with `vm-instance` or Slurm module
+
+This will run `spack-setup` scripts on the downstream compute resource.
 
 ```yaml
-- id: slurm_controller
-  source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-  use: [spack]
-  settings:
-    subnetwork_name: $(network1.primary_subnetwork.name)
-    login_node_count: 1
-    partitions:
-    - $(compute_partition.partition)
+  - id: spack-setup
+    source: modules/scripts/spack-setup
+
+  - id: spack-installer
+    source: modules/compute/vm-instance
+    use: [network1, spack-setup]
 ```
 
-Alternatively, it can be added as a startup script via:
+OR
 
 ```yaml
-  - id: startup
+  - id: spack-setup
+    source: modules/scripts/spack-setup
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    use: [network1, partition1, spack-setup]
+```
+
+### Build `starup-script` with `spack-runner` output
+
+This will use the generated `spack-setup` script as one step in `startup-script`.
+
+```yaml
+  - id: spack-setup
+    source: modules/scripts/spack-setup
+
+  - id: startup-script
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack-setup.spack-runner)
+      - type: shell
+        destination: "my-script.sh"
+        content: echo 'hello world'
+
+  - id: workstation
+    source: modules/compute/vm-instance
+    use: [network1, startup-script]
 ```
+
+To see a full example of this module in use, see the [hpc-slurm-gromacs.yaml] example.
 
 [hpc-slurm-gromacs.yaml]: ../../../examples/hpc-slurm-gromacs.yaml
 
@@ -124,10 +91,9 @@ Alternatively, it can be added as a startup script via:
 [Spack installation] produces a setup script that adds `spack` to your `PATH` as
 well as some other command-line integration tools. This script can be found at
 `<install path>/share/spack/setup-env.sh`. This script will be automatically
-added to bash startup by the `install_spack_runner`. In the case that you are
-using Spack on a different machine than the one where Spack was installed, you
-can use the `setup_spack_runner` to make sure Spack is also available on that
-machine.
+added to bash startup by the `spack_runner`. In the case that you are using
+Spack on a different machine than the one where Spack was installed, you can use
+the `setup_spack_runner` to make sure Spack is also available on that machine.
 
 [Spack installation]: https://spack-tutorial.readthedocs.io/en/latest/tutorial_basics.html#installing-spack
 
@@ -168,6 +134,7 @@ sudo -i spack python -m pip install package-name
 
 [SPACK_PYTHON]: https://spack.readthedocs.io/en/latest/getting_started.html#shell-support
 [builds]: https://spack.readthedocs.io/en/latest/binary_caches.html
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
