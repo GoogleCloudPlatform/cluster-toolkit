@@ -1,3 +1,77 @@
+## Description
+
+This module creates a script that defines a software build using Spack and
+performs any additional customization to a Spack installation.
+
+There are two main variable inputs that can be used to define a Spack build:
+`data_files` and `commands`.
+
+- `data_files`: Any files specified will be transferred to the machine running
+  outputted script. Data file `content` can be defined inline in the blueprint
+  or can point to a `source`, an absolute local path of a file. This can be used
+  to transfer environment definition files, config definition files, GPG keys,
+  or software licenses. `data_files` are transferred before `commands` are run.
+- `commands`: A script that is run. This can be used to perform actions such as
+  installation of compilers & packages, environment creation, adding a build
+  cache, and modifying the spack configuration.
+
+## Example
+
+The `spack-execute` module should `use` a `spack-setup` module. This will
+prepend the installation of Spack and its dependencies to the build. Then
+`spack-execute` can be used by a module that takes `startup-script` as an input.
+
+```yaml
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
+
+  - id: spack-build
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
+      commands: |
+        spack install gcc@10.3.0 target=x86_64
+
+  - id: builder-vm
+    source: modules/compute/vm-instance
+    use: [network1, spack-build]
+```
+
+To see a full example of this module in use, see the [hpc-slurm-gromacs.yaml] example.
+
+[hpc-slurm-gromacs.yaml]: ../../../examples/hpc-slurm-gromacs.yaml
+
+### Using with `startup-script` module
+
+The `spack-runner` output can be used by the `startup-script` module.
+
+```yaml
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
+
+  - id: spack-build
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
+      commands: |
+        spack install gcc@10.3.0 target=x86_64
+
+  - id: startup-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack-build.spack-runner)
+      - type: shell
+        destination: "my-script.sh"
+        content: echo 'hello world'
+
+  - id: workstation
+    source: modules/compute/vm-instance
+    use: [network1, startup-script]
+```
+
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
 
