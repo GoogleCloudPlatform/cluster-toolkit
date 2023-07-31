@@ -25,7 +25,7 @@
     chgrp_group: ${chgrp_group}
     finalize_setup_script: ${finalize_setup_script}
   tasks:
-  - name: Print Software Name
+  - name: Print software name
     ansible.builtin.debug:
       msg: "Running installation for software: {{  sw_name  }}"
 
@@ -41,9 +41,13 @@
       path: "{{ install_dir | dirname }}"
       state: directory
 
+  - name: Set lock dir
+    ansible.builtin.set_fact:
+      lock_dir: "{{ install_dir | dirname }}/.install_{{ sw_name }}_lock"
+
   - name: Acquire lock
     ansible.builtin.command:
-      mkdir "{{ install_dir | dirname }}/.install_{{ sw_name }}_lock"
+      mkdir "{{ lock_dir }}"
     register: lock_out
     changed_when: lock_out.rc == 0
     failed_when: false
@@ -61,6 +65,20 @@
       recurse: true
     when: lock_out.rc == 0
 
-  - name: Finalize Setup
+  - name: Finalize setup
     ansible.builtin.shell: "{{ finalize_setup_script }}"
     when: lock_out.rc == 0 and finalize_setup_script
+
+  - name: Release lock
+    ansible.builtin.file:
+      path:  "{{ lock_dir }}/done"
+      state: touch
+    when: lock_out.rc == 0
+
+  - name: Wait for lock
+    ansible.builtin.wait_for:
+      path: "{{ lock_dir }}/done"
+      state: present
+      timeout: 600
+      sleep: 10
+    when: lock_out.rc != 0
