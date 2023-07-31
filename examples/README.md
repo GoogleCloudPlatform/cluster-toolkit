@@ -833,6 +833,16 @@ For more information see:
 
 [htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
 
+### [tutorial-starccm-slurm.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+
+tutorial.
+
+> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-starccm-slurm/run-workload).
+
+[tutorial-starccm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
+
+
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
