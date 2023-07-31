@@ -21,6 +21,7 @@
 from absl import app
 from absl import flags
 from collections import OrderedDict
+from datetime import datetime
 from pprint import pprint
 from googleapiclient import discovery
 from oauth2client.client import GoogleCredentials
@@ -207,7 +208,7 @@ class AutoScaler:
         # this query will constrain the search for jobs to those that either
         # require spot VMs or do not require Spot VMs based on whether the
         # VM instance template is configured for Spot pricing
-        spot_query = classad.ExprTree(f"RequireSpot == {self.is_spot}")
+        spot_query = classad.ExprTree(f"RequireId == \"{self.instance_group_manager}\"")
 
         # For purpose of scaling a Managed Instance Group, count only jobs that
         # are idle and likely participated in a negotiation cycle (there does
@@ -224,7 +225,7 @@ class AutoScaler:
             print(f"The negotiator has not yet started a match cycle. Exiting auto-scaling.")
             exit()
 
-        print(f"Last negotiation cycle occurred at: {last_negotiation_cycle_time}")
+        print(f"Last negotiation cycle occurred at: {datetime.fromtimestamp(last_negotiation_cycle_time)}")
         idle_job_query = classad.ExprTree(f"JobStatus == 1 && QDate < {last_negotiation_cycle_time}")
         idle_job_ads = schedd.query(constraint=idle_job_query.and_(spot_query),
                                     projection=job_attributes)
@@ -275,11 +276,11 @@ class AutoScaler:
             constraint=filter_idle_vms.and_(filter_mig),
             projection=["Machine", "CloudZone"])
 
-        NODENAME_ATTRIBUTE = "UtsnameNodename"
+        NODENAME_ATTRIBUTE = "Machine"
         claimed_node_ads = coll.query(htcondor.AdTypes.Startd,
             constraint=filter_claimed_vms.and_(filter_mig),
             projection=[NODENAME_ATTRIBUTE])
-        claimed_nodes = [ ad[NODENAME_ATTRIBUTE] for ad in claimed_node_ads]
+        claimed_nodes = [ ad[NODENAME_ATTRIBUTE].split(".")[0] for ad in claimed_node_ads]
 
         # treat OrderedDict as a set by ignoring key values; this set will
         # contain VMs we would consider deleting, in inverse order of

@@ -115,10 +115,7 @@ https://cloud.google.com/compute/docs/access/service-accounts.
 EOD
   type        = list(string)
   default = [
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/compute",
-    "https://www.googleapis.com/auth/devstorage.full_control",
-    "https://www.googleapis.com/auth/logging.write",
+    "https://www.googleapis.com/auth/cloud-platform",
   ]
 }
 

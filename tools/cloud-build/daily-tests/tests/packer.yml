@@ -15,7 +15,7 @@
 ---
 
 test_name: packer
-deployment_name: packer-image-{{ build }}
+deployment_name: pkr{{ build }}
 zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/image-builder.yaml"

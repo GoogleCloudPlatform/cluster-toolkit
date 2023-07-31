@@ -24,5 +24,5 @@ terraform {
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v5-node-group/v1.20.0"
   }
-  required_version = ">= 0.13.0"
+  required_version = ">= 1.1"
 }

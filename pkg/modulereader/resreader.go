@@ -212,6 +212,7 @@ func defaultAPIList(source string) []string {
 		},
 		"community/modules/compute/htcondor-execute-point": {
 			"compute.googleapis.com",
+			"storage.googleapis.com",
 		},
 		"community/modules/compute/pbspro-execution": {
 			"compute.googleapis.com",
@@ -256,6 +257,12 @@ func defaultAPIList(source string) []string {
 		"community/modules/scheduler/SchedMD-slurm-on-gcp-login-node": {
 			"compute.googleapis.com",
 		},
+		"community/modules/compute/gke-node-pool": {
+			"container.googleapis.com",
+		},
+		"community/modules/scheduler/gke-cluster": {
+			"container.googleapis.com",
+		},
 		"modules/scheduler/batch-job-template": {
 			"batch.googleapis.com",
 			"compute.googleapis.com",
@@ -265,9 +272,21 @@ func defaultAPIList(source string) []string {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
 		},
-		"community/modules/scheduler/htcondor-configure": {
+		"community/modules/scheduler/htcondor-access-point": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
+		"community/modules/scheduler/htcondor-central-manager": {
+			"compute.googleapis.com",
+			"storage.googleapis.com",
+		},
+		"community/modules/scheduler/htcondor-pool-secrets": {
 			"iam.googleapis.com",
 			"secretmanager.googleapis.com",
+		},
+		"community/modules/scheduler/htcondor-setup": {
+			"iam.googleapis.com",
+			"storage.googleapis.com",
 		},
 		"community/modules/scheduler/pbspro-client": {
 			"compute.googleapis.com",

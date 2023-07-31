@@ -153,7 +153,7 @@ a description of our support for Windows images.
   <th rowspan="1">HTCondor</th>
   <th></th>
   <th></th>
-  <td>✓</td><td></td><td></td><td></td>
+  <td>✓</td><td></td><td>✓</td><td></td>
 </tr>
 
 <tr>
@@ -213,7 +213,7 @@ These instructions apply to the following modules:
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group
 [batch-job]: ../modules/scheduler/batch-job-template
 [batch-login]: ../modules/scheduler/batch-login-node
-[htcondor-configure]: ../community/modules/scheduler/htcondor-configure
+[htcondor-setup]: ../community/modules/scheduler/htcondor-setup
 [omnia-install]: ../community/modules/scripts/omnia-install
 [hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 
