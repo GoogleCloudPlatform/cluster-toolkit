@@ -100,8 +100,11 @@ func runExportCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if group.Kind == config.PackerKind {
+	if group.Kind() == config.PackerKind {
 		return fmt.Errorf("export command is unsupported on Packer modules because they do not have outputs")
+	}
+	if group.Kind() != config.TerraformKind {
+		return fmt.Errorf("export command is supported for Terraform modules only")
 	}
 
 	tf, err := shell.ConfigureTerraform(groupDir)

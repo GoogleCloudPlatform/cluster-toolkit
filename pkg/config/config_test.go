@@ -23,7 +23,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"testing"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -149,13 +148,6 @@ func teardown() {
 			"failed to tear down tmp directory (%s) for config unit tests: %v",
 			tmpTestDir, err)
 	}
-}
-
-// util function
-func cleanErrorRegexp(errRegexp string) string {
-	errRegexp = strings.ReplaceAll(errRegexp, "[", "\\[")
-	errRegexp = strings.ReplaceAll(errRegexp, "]", "\\]")
-	return errRegexp
 }
 
 func setTestModuleInfo(mod Module, info modulereader.ModuleInfo) {
@@ -396,13 +388,18 @@ func (s *MySuite) TestExpandConfig(c *C) {
 
 func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 	{ // Duplicate module name same group
-		g := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}, {ID: "pony"}}}
+		g := DeploymentGroup{Name: "ice", Modules: []Module{
+			{ID: "pony", Kind: PackerKind},
+			{ID: "pony", Kind: PackerKind},
+		}}
 		err := checkModulesAndGroups([]DeploymentGroup{g})
 		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
 	{ // Duplicate module name different groups
-		ice := DeploymentGroup{Name: "ice", Modules: []Module{{ID: "pony"}}}
-		fire := DeploymentGroup{Name: "fire", Modules: []Module{{ID: "pony"}}}
+		ice := DeploymentGroup{Name: "ice", Modules: []Module{
+			{ID: "pony", Kind: PackerKind}}}
+		fire := DeploymentGroup{Name: "fire", Modules: []Module{
+			{ID: "pony", Kind: PackerKind}}}
 		err := checkModulesAndGroups([]DeploymentGroup{ice, fire})
 		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
@@ -412,7 +409,12 @@ func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 			{ID: "zebra", Kind: TerraformKind},
 		}}
 		err := checkModulesAndGroups([]DeploymentGroup{g})
-		c.Check(err, ErrorMatches, ".*got packer and terraform")
+		c.Check(err, NotNil)
+	}
+	{ // Empty group
+		g := DeploymentGroup{Name: "ice"}
+		err := checkModulesAndGroups([]DeploymentGroup{g})
+		c.Check(err, NotNil)
 	}
 }
 
@@ -663,8 +665,7 @@ func (s *MySuite) TestImportBlueprint_LabelValidation(c *C) {
 		largeLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
 	}
 	dc.Config.Vars.Set("labels", cty.MapVal(largeLabelsMap))
-	err = dc.validateVars()
-	c.Assert(err, Equals, nil)
+	c.Check(dc.validateVars(), IsNil)
 
 	// Invalid label name
 	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
@@ -690,8 +691,7 @@ func (s *MySuite) TestImportBlueprint_LabelValidation(c *C) {
 		tooManyLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
 	}
 	dc.Config.Vars.Set("labels", cty.MapVal(tooManyLabelsMap))
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, `vars.labels cannot have more than 64 labels`)
+	c.Check(dc.validateVars(), NotNil)
 
 	// Fail on uppercase international character
 	dc.Config.Vars.Set("labels", cty.MapVal(map[string]cty.Value{
@@ -1054,4 +1054,55 @@ func (s *MySuite) TestGroupNameValidate(c *C) {
 	c.Check(GroupName("g-dd_ff").Validate(), IsNil)
 	c.Check(GroupName("1").Validate(), IsNil)
 	c.Check(GroupName("12g").Validate(), IsNil)
+}
+
+func (s *MySuite) TestEvalVars(c *C) {
+	{ // OK
+		vars := NewDict(map[string]cty.Value{
+			"a":  cty.StringVal("A"),
+			"b":  MustParseExpression(`"${var.a}_B"`).AsValue(),
+			"c":  MustParseExpression(`"${var.b}_C"`).AsValue(),
+			"bc": MustParseExpression(`"${var.b}|${var.c}"`).AsValue(),
+		})
+		bp := Blueprint{Vars: vars}
+		c.Check(bp.evalVars(), IsNil)
+		c.Check(bp.Vars.Items(), DeepEquals, map[string]cty.Value{
+			"a":  cty.StringVal("A"),
+			"b":  cty.StringVal("A_B"),
+			"c":  cty.StringVal("A_B_C"),
+			"bc": cty.StringVal("A_B|A_B_C"),
+		})
+	}
+	{ // Non global ref
+		vars := NewDict(map[string]cty.Value{
+			"a": cty.StringVal("A"),
+			"b": MustParseExpression(`"${var.a}_${module.foo.ko}"`).AsValue(),
+		})
+		bp := Blueprint{Vars: vars}
+		err := bp.evalVars()
+		var berr BpError
+		if errors.As(err, &berr) {
+			c.Check(berr.Path.String(), Equals, "vars.b")
+		} else {
+			c.Error(err, " should be BpError")
+		}
+	}
+
+	{ // Cycle
+		vars := NewDict(map[string]cty.Value{
+			"uro": MustParseExpression(`"uro_${var.bo}_${var.ros}"`).AsValue(),
+			"bo":  cty.StringVal("===="),
+			"ros": MustParseExpression(`"${var.uro}_${var.bo}_ros"`).AsValue(),
+		})
+		bp := Blueprint{Vars: vars}
+		err := bp.evalVars()
+		var berr BpError
+		if errors.As(err, &berr) {
+			if berr.Path.String() != "vars.uro" && berr.Path.String() != "vars.ros" {
+				c.Error(berr, " should point to vars.uro or vars.ros")
+			}
+		} else {
+			c.Error(err, " should be BpError")
+		}
+	}
 }

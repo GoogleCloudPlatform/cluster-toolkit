@@ -120,14 +120,16 @@ resource "google_compute_disk" "boot_disk" {
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
-  project = var.project_id
+  project  = var.project_id
+  provider = google-beta
 
   count = var.placement_policy != null ? 1 : 0
   name  = "${local.resource_prefix}-vm-instance-placement"
   group_placement_policy {
-    vm_count                  = var.placement_policy.vm_count
-    availability_domain_count = var.placement_policy.availability_domain_count
-    collocation               = var.placement_policy.collocation
+    vm_count                  = try(var.placement_policy.vm_count, null)
+    availability_domain_count = try(var.placement_policy.availability_domain_count, null)
+    collocation               = try(var.placement_policy.collocation, null)
+    max_distance              = try(var.placement_policy.max_distance, null)
   }
 }
 
@@ -230,5 +232,14 @@ resource "google_compute_instance" "compute_vm" {
     ignore_changes = [
       metadata["ssh-keys"],
     ]
+
+    precondition {
+      condition     = (length(var.network_interfaces) == 0) != (var.network_self_link == null && var.subnetwork_self_link == null)
+      error_message = "Exactly one of network_interfaces or network_self_link/subnetwork_self_link must be specified."
+    }
+    precondition {
+      condition     = (substr(var.machine_type, 0, 3) != "c3-") || (var.disk_type != "pd-standard")
+      error_message = "A disk_type of pd-standard cannot be used with c3 machines."
+    }
   }
 }

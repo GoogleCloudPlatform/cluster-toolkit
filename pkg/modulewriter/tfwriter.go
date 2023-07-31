@@ -41,19 +41,7 @@ const (
 )
 
 // TFWriter writes terraform to the blueprint folder
-type TFWriter struct {
-	numModules int
-}
-
-// GetNumModules getter for module count of kind terraform
-func (w *TFWriter) getNumModules() int {
-	return w.numModules
-}
-
-// AddNumModules add value to module count
-func (w *TFWriter) addNumModules(value int) {
-	w.numModules += value
-}
+type TFWriter struct{}
 
 // createBaseFile creates a baseline file for all terraform/hcl including a
 // license and any other boilerplate

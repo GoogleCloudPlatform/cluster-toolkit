@@ -15,12 +15,8 @@
 package config
 
 import (
-	"fmt"
-	"path/filepath"
-
 	"hpc-toolkit/pkg/modulereader"
 
-	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 )
@@ -38,39 +34,26 @@ func (s *MySuite) TestValidateModules(c *C) {
 }
 
 func (s *MySuite) TestValidateVars(c *C) {
-	// Success
-	dc := getDeploymentConfigForTest()
-	err := dc.validateVars()
-	c.Assert(err, IsNil)
-
-	// Fail: Nil project_id
-	dc.Config.Vars.Set("project_id", cty.NilVal)
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, "deployment variable project_id was not set")
-
-	// Fail: labels not a map
-	dc.Config.Vars.Set("labels", cty.StringVal("a_string"))
-	err = dc.validateVars()
-	c.Assert(err, ErrorMatches, "vars.labels must be a map of strings")
-}
-
-func (s *MySuite) TestValidateModuleSettings(c *C) {
-	testSource := filepath.Join(tmpTestDir, "module")
-	testSettings := NewDict(map[string]cty.Value{
-		"test_variable": cty.StringVal("test_value"),
-	})
-	testDeploymentGroup := DeploymentGroup{
-		Name:             "",
-		TerraformBackend: TerraformBackend{},
-		Modules:          []Module{{Kind: TerraformKind, Source: testSource, Settings: testSettings}},
+	{ // Success
+		dc := DeploymentConfig{}
+		c.Check(dc.validateVars(), IsNil)
 	}
-	dc := DeploymentConfig{
-		Config: Blueprint{DeploymentGroups: []DeploymentGroup{testDeploymentGroup}},
+
+	{ // Fail: Nil value
+		dc := DeploymentConfig{}
+		dc.Config.Vars.Set("fork", cty.NilVal)
+		c.Check(dc.validateVars(), NotNil)
 	}
-	dc.validateModuleSettings()
+
+	{ // Fail: labels not a map
+		dc := DeploymentConfig{}
+		dc.Config.Vars.Set("labels", cty.StringVal("a_string"))
+		c.Check(dc.validateVars(), NotNil)
+	}
 }
 
 func (s *MySuite) TestValidateSettings(c *C) {
+	path := Root.Groups.At(7).Modules.At(2)
 	testSettingName := "TestSetting"
 	testSettingValue := cty.StringVal("TestValue")
 	validSettingNames := []string{
@@ -79,18 +62,17 @@ func (s *MySuite) TestValidateSettings(c *C) {
 	invalidSettingNames := []string{
 		"", "1", "Test.Setting", "Test$Setting", "1_TestSetting",
 	}
-	var e *InvalidSettingError
 
 	// Succeeds: No settings, no variables
 	mod := Module{}
 	info := modulereader.ModuleInfo{}
-	err := validateSettings(mod, info)
-	c.Assert(err, IsNil)
+	err := validateSettings(path, mod, info)
+	c.Check(err, IsNil)
 
 	// Fails: One required variable, no settings
 	mod.Settings = NewDict(map[string]cty.Value{testSettingName: testSettingValue})
-	err = validateSettings(mod, info)
-	c.Check(errors.As(err, &e), Equals, true)
+	err = validateSettings(path, mod, info)
+	c.Check(err, NotNil)
 
 	// Fails: Invalid setting names
 	for _, name := range invalidSettingNames {
@@ -98,8 +80,8 @@ func (s *MySuite) TestValidateSettings(c *C) {
 			{Name: name, Required: true},
 		}
 		mod.Settings = NewDict(map[string]cty.Value{name: testSettingValue})
-		err = validateSettings(mod, info)
-		c.Check(errors.As(err, &e), Equals, true)
+		err = validateSettings(path, mod, info)
+		c.Check(err, NotNil)
 	}
 
 	// Succeeds: Valid setting names
@@ -108,69 +90,81 @@ func (s *MySuite) TestValidateSettings(c *C) {
 			{Name: name, Required: true},
 		}
 		mod.Settings = NewDict(map[string]cty.Value{name: testSettingValue})
-		err = validateSettings(mod, info)
+		err = validateSettings(path, mod, info)
 		c.Assert(err, IsNil)
 	}
 
 }
 
 func (s *MySuite) TestValidateModule(c *C) {
-	// Catch no ID
-	testModule := Module{
-		ID:     "",
-		Source: "testSource",
+	p := Root.Groups.At(2).Modules.At(1)
+
+	{ // Catch no ID
+		err := validateModule(p, Module{Source: "green"})
+		c.Check(err, NotNil)
 	}
-	err := validateModule(testModule)
-	expectedErrorStr := fmt.Sprintf(
-		"%s\n%s", errorMessages["emptyID"], module2String(testModule))
-	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
 
-	// Catch no Source
-	testModule.ID = "testModule"
-	testModule.Source = ""
-	err = validateModule(testModule)
-	expectedErrorStr = fmt.Sprintf(
-		"%s\n%s", errorMessages["emptySource"], module2String(testModule))
-	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
+	{ // Catch no Source
+		err := validateModule(p, Module{ID: "bond"})
+		c.Check(err, NotNil)
+	}
 
-	// Catch invalid kind
-	testModule.Source = "testSource"
-	testModule.Kind = ModuleKind{kind: "invalidKind"}
-	err = validateModule(testModule)
-	expectedErrorStr = fmt.Sprintf(
-		"%s\n%s", errorMessages["wrongKind"], module2String(testModule))
-	c.Assert(err, ErrorMatches, cleanErrorRegexp(expectedErrorStr))
+	{ // Catch invalid kind
+		err := validateModule(p, Module{
+			ID:     "bond",
+			Source: "green",
+			Kind:   ModuleKind{kind: "mean"},
+		})
+		c.Check(err, NotNil)
+	}
 
-	// Successful validation
-	testModule.Kind = TerraformKind
-	err = validateModule(testModule)
-	c.Assert(err, IsNil)
+	{ // Successful validation
+		mod := Module{
+			ID:     "bond",
+			Source: "green",
+			Kind:   TerraformKind,
+		}
+		modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), modulereader.ModuleInfo{})
+		err := validateModule(p, mod)
+		c.Check(err, IsNil)
+	}
 }
 
 func (s *MySuite) TestValidateOutputs(c *C) {
-	// Simple case, no outputs in either
-	mod := Module{ID: "green", Source: "test::green", Kind: TerraformKind}
-	modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), modulereader.ModuleInfo{
-		Outputs: []modulereader.OutputInfo{}})
-	c.Assert(validateOutputs(mod), IsNil)
+	p := Root.Groups.At(2).Modules.At(1)
 
-	// Output in varInfo, nothing in module
-	modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), modulereader.ModuleInfo{
-		Outputs: []modulereader.OutputInfo{
-			{Name: "velvet"}}})
-	c.Assert(validateOutputs(mod), IsNil)
+	{ // Simple case, no outputs in either
+		mod := Module{}
+		info := modulereader.ModuleInfo{}
+		c.Check(validateOutputs(p, mod, info), IsNil)
+	}
 
-	// Output matches between varInfo and module
-	mod.Outputs = []modulereader.OutputInfo{
-		{Name: "velvet"}}
-	c.Assert(validateOutputs(mod), IsNil)
+	{ // Output in varInfo, nothing in module
+		mod := Module{}
+		info := modulereader.ModuleInfo{
+			Outputs: []modulereader.OutputInfo{
+				{Name: "velvet"}}}
+		c.Check(validateOutputs(p, mod, info), IsNil)
+	}
 
-	// Addition output found in modules, not in varinfo
-	mod.Outputs = []modulereader.OutputInfo{
-		{Name: "velvet"},
-		{Name: "waldo"}}
-	expErr := fmt.Sprintf("%s.*", errorMessages["invalidOutput"])
-	c.Assert(validateOutputs(mod), ErrorMatches, expErr)
+	{ // Output matches between varInfo and module
+		out := modulereader.OutputInfo{Name: "velvet"}
+		mod := Module{
+			Outputs: []modulereader.OutputInfo{out}}
+		info := modulereader.ModuleInfo{
+			Outputs: []modulereader.OutputInfo{out}}
+		c.Check(validateOutputs(p, mod, info), IsNil)
+	}
+
+	{ // Addition output found in modules, not in varinfo
+		out := modulereader.OutputInfo{Name: "velvet"}
+		tuo := modulereader.OutputInfo{Name: "waldo"}
+		mod := Module{
+			Outputs: []modulereader.OutputInfo{out, tuo}}
+		info := modulereader.ModuleInfo{
+			Outputs: []modulereader.OutputInfo{out}}
+		c.Check(validateOutputs(p, mod, info), NotNil)
+	}
 }
 
 func (s *MySuite) TestAddDefaultValidators(c *C) {

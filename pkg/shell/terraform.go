@@ -326,7 +326,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	}
 
 	var outfile string
-	switch g.Kind {
+	switch g.Kind() {
 	case config.TerraformKind:
 		outfile = filepath.Join(deploymentGroupDir, fmt.Sprintf("%s_inputs.auto.tfvars", g.Name))
 	case config.PackerKind:

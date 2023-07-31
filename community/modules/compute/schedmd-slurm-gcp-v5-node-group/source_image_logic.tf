@@ -15,12 +15,9 @@
  */
 
 locals {
-  # Handle VM image format from 2 sources, prioritize source_image* variables
-  # over instance_image
-  source_image_input_used = var.source_image != "" || var.source_image_family != "" || var.source_image_project != ""
-  source_image            = local.source_image_input_used ? var.source_image : lookup(var.instance_image, "name", "")
-  source_image_family     = local.source_image_input_used ? var.source_image_family : lookup(var.instance_image, "family", "")
-  source_image_project    = local.source_image_input_used ? var.source_image_project : lookup(var.instance_image, "project", "")
+  source_image         = lookup(var.instance_image, "name", "")
+  source_image_family  = lookup(var.instance_image, "family", "")
+  source_image_project = lookup(var.instance_image, "project", "")
   source_image_project_normalized = (
     local.source_image != "" || length(regexall("/", local.source_image_project)) > 0
     ? local.source_image_project

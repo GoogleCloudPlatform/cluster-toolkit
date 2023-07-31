@@ -45,7 +45,7 @@ deployment_groups:
     source: ./community//modules/scripts/spack-install
     settings:
       install_dir: /apps/spack
-      spack_cache_url:
+      spack_cache_url: null
       compilers:
       - gcc@10.3.0 target=x86_64
       packages:

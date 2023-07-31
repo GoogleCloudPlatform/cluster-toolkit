@@ -84,7 +84,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		cobra.CheckErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
 
 		var err error
-		switch group.Kind {
+		switch group.Kind() {
 		case config.PackerKind:
 			// Packer groups are enforced to have length 1
 			subPath, e := modulewriter.DeploymentSource(group.Modules[0])
@@ -94,7 +94,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		case config.TerraformKind:
 			err = deployTerraformGroup(groupDir)
 		default:
-			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind.String())
+			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String())
 		}
 		cobra.CheckErr(err)
 	}

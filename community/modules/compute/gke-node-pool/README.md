@@ -28,6 +28,33 @@ can be overridden using the `taints` setting. See
 [docs](https://cloud.google.com/kubernetes-engine/docs/how-to/node-taints) for
 more info.
 
+### Local SSD Storage
+GKE offers two options for managing locally attached SSDs.  
+
+The first, and recommended, option is for GKE to manage the ephemeral storage
+space on the node, which will then be automatically attached to pods which
+request an `emptyDir` volume. This can be accomplished using the
+[`local_ssd_count_ephemeral_storage`] variable.
+
+The second, more complex, option is for GCP to attach these nodes as raw block
+storage. In this case, the cluster administrator is responible for software
+RAID settings, partitioning, formatting and mounting these disks on the host
+OS.  Still, this may be desired behavior in use cases which aren't supported
+by an `emptyDir` volume (for example, a `ReadOnlyMany` or `ReadWriteMany` PV).
+This can be accomplished using the [`local_ssd_count_nvme_block`] variable.
+
+The [`local_ssd_count_ephemeral_storage`] and [`local_ssd_count_nvme_block`]
+variables are mutually exclusive and cannot be mixed together.
+
+Also, the number of SSDs which can be attached to a node depends on the
+[machine type](https://cloud.google.com/compute/docs/disks#local_ssd_machine_type_restrictions).
+
+See [docs](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/local-ssd)
+for more info.
+
+[`local_ssd_count_ephemeral_storage`]: #input\_local\_ssd\_count\_ephemeral\_storage
+[`local_ssd_count_nvme_block`]: #input\_local\_ssd\_count\_nvme\_block
+
 ### Considerations with GPUs
 
 When a GPU is attached to a node an additional taint is automatically added:
@@ -35,8 +62,16 @@ When a GPU is attached to a node an additional taint is automatically added:
 equivalent toleration is required. The `gke-job-template` module will
 automatically apply this toleration when using a node pool with GPUs.
 
-Nvidia GPU drivers must be installed by applying a DaemonSet to the cluster. See
+Nvidia GPU drivers must be installed.  The recommended approach for GKE to install
+GPU dirvers is by applying a DaemonSet to the cluster. See
 [these instructions](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus#cos).
+
+However, in some cases it may be desired to compile a different driver (such as
+a desire to install a newer version, compatibility with the
+[Nvidia GPU-operator](https://github.com/NVIDIA/gpu-operator) or other
+use-cases). In this case, ensure that you turn off the
+[enable_secure_boot](#input\_enable\_secure\_boot) option to allow unsigned
+kernel modules to be loaded.
 
 ### GPUs Examples
 
@@ -141,16 +176,16 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.60.0, < 5.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.60.0, < 5.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.2 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.61.0, <= 4.74.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.61.0, <= 4.74.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 4.60.0, < 5.0 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.60.0, < 5.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.61.0, <= 4.74.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.61.0, <= 4.74.0 |
 
 ## Modules
 
@@ -181,9 +216,13 @@ No modules.
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for each node. | `number` | `100` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `"pd-standard"` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
+| <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type               = string<br>    count              = number<br>    gpu_partition_size = string<br>    gpu_sharing_config = list(object({<br>      gpu_sharing_strategy       = string<br>      max_shared_clients_per_gpu = number<br>    }))<br>  }))</pre> | `null` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
+| <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `0` | no |
+| <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `0` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The name of a Google Compute Engine machine type. | `string` | `"c2-standard-60"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If left blank, will default to the machine type. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |

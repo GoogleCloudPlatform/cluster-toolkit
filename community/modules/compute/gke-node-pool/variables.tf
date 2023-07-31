@@ -60,6 +60,12 @@ variable "enable_gcfs" {
   default     = false
 }
 
+variable "enable_secure_boot" {
+  description = "Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info."
+  type        = bool
+  default     = true
+}
+
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
@@ -79,6 +85,28 @@ variable "image_type" {
   type        = string
   default     = "COS_CONTAINERD"
 }
+
+variable "local_ssd_count_ephemeral_storage" {
+  description = <<-EOT
+  The number of local SSDs to attach to each node to back ephemeral storage.  
+  Uses NVMe interfaces.  Must be supported by `machine_type`.
+  [See above](#local-ssd-storage) for more info.
+  EOT 
+  type        = number
+  default     = 0
+}
+
+variable "local_ssd_count_nvme_block" {
+  description = <<-EOT
+  The number of local SSDs to attach to each node to back block storage.  
+  Uses NVMe interfaces.  Must be supported by `machine_type`.
+  [See above](#local-ssd-storage) for more info.
+  
+  EOT 
+  type        = number
+  default     = 0
+}
+
 
 variable "autoscaling_total_min_nodes" {
   description = "Total minimum number of nodes in the NodePool."
@@ -174,6 +202,15 @@ variable "taints" {
 variable "labels" {
   description = "GCE resource labels to be applied to resources. Key-value pairs."
   type        = map(string)
+}
+
+variable "kubernetes_labels" {
+  description = <<-EOT
+  Kubernetes labels to be applied to each node in the node group. Key-value pairs. 
+  (The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified)
+  EOT
+  type        = map(string)
+  default     = null
 }
 
 variable "timeout_create" {

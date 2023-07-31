@@ -20,22 +20,10 @@ import (
 	"strings"
 )
 
-const (
-	local = iota
-	embedded
-	github
-)
-
 // SourceReader interface for reading modules from a source
 type SourceReader interface {
 	// GetModule copies the source to a provided local destination (the deployment directory).
 	GetModule(modPath string, copyPath string) error
-}
-
-var readers = map[int]SourceReader{
-	local:    LocalSourceReader{},
-	embedded: EmbeddedSourceReader{},
-	github:   GitSourceReader{},
 }
 
 // IsLocalPath checks if a source path is a local FS path
@@ -66,11 +54,11 @@ func Factory(modPath string) SourceReader {
 	}
 	switch {
 	case IsLocalPath(modPath):
-		return readers[local]
+		return LocalSourceReader{}
 	case IsEmbeddedPath(modPath):
-		return readers[embedded]
+		return EmbeddedSourceReader{}
 	case IsGitPath(modPath):
-		return readers[github]
+		return GitSourceReader{}
 	default:
 		log.Fatalf(
 			"Source (%s) not valid, must begin with one of: %s",

@@ -17,4 +17,9 @@
 output "node_groups" {
   description = "Details of the node group. Typically used as input to `schedmd-slurm-gcp-v5-partition`."
   value       = local.node_group
+
+  precondition {
+    condition     = (substr(var.machine_type, 0, 3) != "c3-") || (var.disk_type != "pd-standard")
+    error_message = "A disk_type of pd-standard cannot be used with c3 machines."
+  }
 }

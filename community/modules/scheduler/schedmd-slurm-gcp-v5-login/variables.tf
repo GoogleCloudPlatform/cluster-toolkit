@@ -283,9 +283,7 @@ variable "instance_template" {
 
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the Slurm login node VM instances. This
-    value is overridden if any of `source_image`, `source_image_family` or
-    `source_image_project` are set.
+    Defines the image that will be used in the Slurm login node VM instances. 
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -314,30 +312,42 @@ variable "instance_image" {
 
 variable "source_image_project" {
   type        = string
-  description = "The hosting the custom VM image. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image_project == null
+    error_message = "Variable `source_image_project` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "source_image_family" {
   type        = string
-  description = "The custom VM image family. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image_family == null
+    error_message = "Variable `source_image_family` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "source_image" {
   type        = string
-  description = "The custom VM image. It is recommended to use `instance_image` instead."
-  default     = ""
+  description = "DEPRECATED: Use `instance_image` instead."
+  default     = null
+  validation {
+    condition     = var.source_image == null
+    error_message = "Variable `source_image` is deprecated. Use `instance_image` instead."
+  }
 }
 
 variable "disk_type" {
   type        = string
-  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard."
+  description = "Boot disk type, can be either pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   default     = "pd-standard"
 
   validation {
-    condition     = contains(["pd-ssd", "local-ssd", "pd-standard"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, local-ssd, or pd-standard."
+    condition     = contains(["pd-ssd", "pd-standard", "pd-balanced", "pd-extreme"], var.disk_type)
+    error_message = "Variable disk_type must be one of pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   }
 }
 

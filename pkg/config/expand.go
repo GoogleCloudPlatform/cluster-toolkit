@@ -45,6 +45,9 @@ var (
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() error {
+	if err := dc.Config.evalVars(); err != nil {
+		return err
+	}
 	dc.expandBackends()
 	dc.addDefaultValidators()
 	dc.combineLabels()
@@ -170,10 +173,10 @@ func useModule(mod *Module, use Module) {
 // applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
 func (dc *DeploymentConfig) applyUseModules() error {
-	return dc.Config.WalkModules(func(m *Module) error {
+	return dc.Config.WalkModules(func(_ modulePath, m *Module) error {
 		for _, u := range m.Use {
 			used, err := dc.Config.Module(u)
-			if err != nil {
+			if err != nil { // should never happen
 				return err
 			}
 			useModule(m, *used)
@@ -220,7 +223,7 @@ func (dc *DeploymentConfig) combineLabels() {
 	gl := mergeMaps(defaults, vars.Get(labels).AsValueMap())
 	vars.Set(labels, cty.ObjectVal(gl))
 
-	dc.Config.WalkModules(func(mod *Module) error {
+	dc.Config.WalkModules(func(_ modulePath, mod *Module) error {
 		combineModuleLabels(mod, *dc)
 		return nil
 	})
@@ -288,7 +291,7 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to module settings if not already set.
 func (dc *DeploymentConfig) applyGlobalVariables() error {
-	return dc.Config.WalkModules(func(mod *Module) error {
+	return dc.Config.WalkModules(func(_ modulePath, mod *Module) error {
 		return dc.Config.applyGlobalVarsInModule(mod)
 	})
 }
@@ -450,26 +453,19 @@ func (dg DeploymentGroup) FindAllIntergroupReferences(bp Blueprint) []Reference 
 // FindIntergroupReferences finds all references to other groups used in the given value
 func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference {
 	g := bp.ModuleGroupOrDie(mod.ID)
-	res := map[Reference]bool{}
-	cty.Walk(v, func(p cty.Path, v cty.Value) (bool, error) {
-		e, is := IsExpressionValue(v)
-		if !is {
-			return true, nil
+	res := []Reference{}
+	for _, r := range valueReferences(v) {
+		if !r.GlobalVar && bp.ModuleGroupOrDie(r.Module).Name != g.Name {
+			res = append(res, r)
 		}
-		for _, r := range e.References() {
-			if !r.GlobalVar && bp.ModuleGroupOrDie(r.Module).Name != g.Name {
-				res[r] = true
-			}
-		}
-		return true, nil
-	})
-	return maps.Keys(res)
+	}
+	return res
 }
 
 // find all intergroup references and add them to source Module.Outputs
 func (bp *Blueprint) populateOutputs() {
 	refs := map[Reference]bool{}
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(_ modulePath, m *Module) error {
 		rs := FindIntergroupReferences(m.Settings.AsObject(), *m, *bp)
 		for _, r := range rs {
 			refs[r] = true
@@ -477,7 +473,7 @@ func (bp *Blueprint) populateOutputs() {
 		return nil
 	})
 
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(_ modulePath, m *Module) error {
 		for r := range refs {
 			if r.Module != m.ID {
 				continue // find IGC references pointing to this module

@@ -76,6 +76,7 @@ resource "google_container_node_pool" "node_pool" {
     disk_size_gb      = var.disk_size_gb
     disk_type         = var.disk_type
     resource_labels   = local.labels
+    labels            = var.kubernetes_labels
     service_account   = var.service_account_email
     oauth_scopes      = var.service_account_scopes
     machine_type      = var.machine_type
@@ -84,8 +85,16 @@ resource "google_container_node_pool" "node_pool" {
     image_type        = var.image_type
     guest_accelerator = var.guest_accelerator
 
+    ephemeral_storage_local_ssd_config {
+      local_ssd_count = var.local_ssd_count_ephemeral_storage
+    }
+
+    local_nvme_ssd_block_config {
+      local_ssd_count = var.local_ssd_count_nvme_block
+    }
+
     shielded_instance_config {
-      enable_secure_boot          = true
+      enable_secure_boot          = var.enable_secure_boot
       enable_integrity_monitoring = true
     }
 
@@ -97,7 +106,7 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     gvnic {
-      enabled = true
+      enabled = var.image_type == "COS_CONTAINERD"
     }
 
     dynamic "advanced_machine_features" {
@@ -136,6 +145,10 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !local.static_node_set || !local.autoscale_set
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
+    }
+    precondition {
+      condition     = !(var.local_ssd_count_ephemeral_storage > 0 && var.local_ssd_count_nvme_block > 0)
+      error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
     }
   }
 }

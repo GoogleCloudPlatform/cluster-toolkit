@@ -1,5 +1,8 @@
 # Custom Images in the HPC Toolkit
 
+Please review the [introduction to image building](../../../docs/image-building.md)
+for general information on building custom images using the Toolkit.
+
 ## Introduction
 
 This module uses [Packer](https://www.packer.io/) to create an image within an
