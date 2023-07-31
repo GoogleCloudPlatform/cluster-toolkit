@@ -399,6 +399,7 @@ variable "partition" {
         group_name             = string
         instance_template      = string
         node_conf              = map(string)
+        reservation_name       = string
         spot_instance_config = object({
           termination_action = string
         })

@@ -365,3 +365,9 @@ variable "disable_public_ips" {
   type        = bool
   default     = true
 }
+
+variable "reservation_name" {
+  description = "Name of the reservation to use for the node group instances."
+  type        = string
+  default     = null
+}
