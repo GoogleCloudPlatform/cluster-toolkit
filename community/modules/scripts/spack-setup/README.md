@@ -20,10 +20,10 @@ This will prepend the `spack-setup` script to the `spack-execute` commands.
 
 ```yaml
   - id: spack-setup
-    source: modules/scripts/spack-setup
+    source: community/modules/scripts/spack-setup
 
   - id: spack-build
-    source: modules/scripts/spack-execute
+    source: community/modules/scripts/spack-execute
     use: [spack-setup]
     settings:
       commands: |
@@ -40,7 +40,7 @@ This will run `spack-setup` scripts on the downstream compute resource.
 
 ```yaml
   - id: spack-setup
-    source: modules/scripts/spack-setup
+    source: community/modules/scripts/spack-setup
 
   - id: spack-installer
     source: modules/compute/vm-instance
@@ -51,7 +51,7 @@ OR
 
 ```yaml
   - id: spack-setup
-    source: modules/scripts/spack-setup
+    source: community/modules/scripts/spack-setup
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
@@ -64,7 +64,7 @@ This will use the generated `spack-setup` script as one step in `startup-script`
 
 ```yaml
   - id: spack-setup
-    source: modules/scripts/spack-setup
+    source: community/modules/scripts/spack-setup
 
   - id: startup-script
     source: modules/scripts/startup-script
