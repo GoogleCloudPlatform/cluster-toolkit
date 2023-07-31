@@ -99,7 +99,11 @@ func ApplyChangesChoice(c ProposedChanges) bool {
 	var userResponse string
 
 	for {
-		fmt.Print("Display full proposed changes, Apply proposed changes, Stop and exit, Continue without applying? [d,a,s,c]: ")
+		fmt.Print(`Please select an option below [d,a,s,c]:
+(D)isplay full proposed changes,
+(A)pply proposed changes,
+(S)top and exit,
+(C)ontinue without applying`)
 
 		_, err := fmt.Scanln(&userResponse)
 		if err != nil {
