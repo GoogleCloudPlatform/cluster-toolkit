@@ -35,7 +35,7 @@ deployment_groups:
       local_mount: /share
 
   - id: spack-setup
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack-setup
     settings:
       spack_ref: v0.19.0
       install_dir: /share/spack

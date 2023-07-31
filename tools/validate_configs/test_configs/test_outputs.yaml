@@ -121,7 +121,7 @@ deployment_groups:
       - compute.instanceAdmin.v1
 
   - id: spack
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack-setup
     outputs:
     - startup_script
     - controller_startup_script

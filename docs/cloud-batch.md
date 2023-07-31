@@ -15,7 +15,7 @@ The HPC Toolkit supports Google Cloud Batch through two Toolkit modules:
     Google Cloud Batch API
   - Creates an instance template for the Google Cloud Batch job to use
   - Works with existing Toolkit modules such as `vpc`, `filestore`,
-    `startup-script` & `spack-install`
+    `startup-script` & `spack-setup`
 - [batch-login-node](../modules/scheduler/batch-login-node/README.md)
   - Creates a login node VM for Google Cloud Batch job submission
 

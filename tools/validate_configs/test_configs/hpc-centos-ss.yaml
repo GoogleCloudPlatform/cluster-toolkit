@@ -42,7 +42,7 @@ deployment_groups:
       auto_delete_disk: true
 
   - id: spack-setup
-    source: ./community//modules/scripts/spack-install
+    source: ./community/modules/scripts/spack-setup
     settings:
       install_dir: /apps/spack
 

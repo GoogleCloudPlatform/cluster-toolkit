@@ -317,7 +317,9 @@ func defaultAPIList(source string) []string {
 		},
 		"community/modules/scripts/pbspro-install": {},
 		"community/modules/scripts/pbspro-qmgr":    {},
-		"community/modules/scripts/spack-install":  {},
+		"community/modules/scripts/spack-setup": {
+			"storage.googleapis.com",
+		},
 		"community/modules/scripts/wait-for-startup": {
 			"compute.googleapis.com",
 		},
