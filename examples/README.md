@@ -841,7 +841,7 @@ tutorial.
 
 > The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-starccm-slurm/run-workload).
 
-[tutorial-starccm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
+[tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
 
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
