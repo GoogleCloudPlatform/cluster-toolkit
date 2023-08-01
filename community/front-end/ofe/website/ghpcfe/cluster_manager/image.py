@@ -255,11 +255,17 @@ deployment_groups:
         project_id = json.loads(self.image.cloud_credential.detail)["project_id"]
         image_name = f"image-{self.image.name}"
         zone = self.image.cloud_zone
+
+        # Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.credentials_file.as_posix()
         
         # Create a client
         client = compute_v1.ImagesClient()
 
         try:
+            # Make sure that the builder env is destroyed
+            self._destroy_builder_env()
+
             # Delete the image
             operation = client.delete(project=project_id, image=image_name)
             operation.result()
@@ -269,4 +275,8 @@ deployment_groups:
             logger.error(f"Image '{image_name}' not found in project '{project_id}' or zone '{zone}'")
 
         except Exception as e:
-            logger.error(f"An error occurred while deleting the image: {e}")
+            logger.error(f"An error occurred while deleting the image {image_name}: {e}")
+
+        finally:
+            # Clear the GOOGLE_APPLICATION_CREDENTIALS environment variable
+            os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
