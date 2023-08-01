@@ -18,7 +18,17 @@
     name: centos-release-scl
   when: ansible_distribution == 'CentOS'
 
-- name: Install Dev Tools
+- name: Install Dev Tools Rocky
+  ansible.builtin.yum:
+    name:
+    - gcc-toolset-11
+    - gcc-toolset-9
+    - cmake
+    - python2-devel
+    - python36-devel
+  when: ansible_distribution in ['Rocky']
+
+- name: Install Dev Tools CentOS
   ansible.builtin.yum:
     name:
     - devtoolset-9
@@ -26,10 +36,10 @@
     - cmake
     - python2-devel
     - python36-devel
-  when: ansible_distribution in ['CentOS', 'Rocky']
+  when: ansible_distribution in ['CentOS']
 
 
-- name: Add DevTools to default shells
+- name: Add DevTools to default shells on CentOS
   ansible.builtin.copy:
     dest: /etc/profile.d/98-devtools.sh
     content: |
@@ -37,7 +47,17 @@
     owner: root
     mode: 0755
     force: False
-  when: ansible_distribution in ['CentOS', 'Rocky']
+  when: ansible_distribution in ['CentOS']
+
+- name: Add DevTools to default shells on Rocky
+  ansible.builtin.copy:
+    dest: /etc/profile.d/98-devtools.sh
+    content: |
+      . /opt/rh/gcc-toolset-11/enable
+    owner: root
+    mode: 0755
+    force: False
+  when: ansible_distribution in ['Rocky']
 
 - name: Install Debian Dev tools
   ansible.builtin.apt:
