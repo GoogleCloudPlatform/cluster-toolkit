@@ -35,6 +35,7 @@ from ..forms import StartupScriptForm, ImageForm
 from ..cluster_manager.image import ImageBackend
 from ..cluster_manager.cloud_info import get_region_zone_info
 from ..views.asyncview import BackendAsyncView
+from pathlib import Path
 
 import logging
 
@@ -63,8 +64,8 @@ class ImagesListView(LoginRequiredMixin, generic.ListView):
             authorized_images = Image.objects.filter(authorised_users=self.request.user)
             
             # Combine the owned and authorized objects
-            startup_scripts = startup_scripts | authorized_startup_scripts
-            images = images | authorized_images
+            startup_scripts |= authorized_startup_scripts
+            images |= authorized_images
             
             return startup_scripts, images
         
@@ -104,7 +105,7 @@ class StartupScriptDetailView(LoginRequiredMixin, generic.DetailView):
 
         # Check if the user is an admin, the owner, or authorized for the startup script
         if self.is_admin_or_authorized_user(startup_script):
-            file_path = os.path.join(settings.MEDIA_ROOT, startup_script.content.name)
+            file_path = Path(settings.MEDIA_ROOT) / startup_script.content.name
             try:
                 with open(file_path, 'r') as file:
                     try:
@@ -145,7 +146,7 @@ class StartupScriptDeleteView(UserPassesTestMixin, generic.View):
 
     def post(self, request, *args, **kwargs):
         startup_script = StartupScript.objects.get(pk=self.kwargs['pk'])
-        file_path = os.path.join(settings.MEDIA_ROOT, startup_script.content.name)
+        file_path = Path(settings.MEDIA_ROOT) / startup_script.content.name
         try:
             os.remove(file_path)
             logger.info("File deleted successfully.")
@@ -284,7 +285,3 @@ class BackendListRegions(LoginRequiredMixin, generic.View):
         credentials = get_object_or_404(Credential, pk=pk)
         regions = get_region_zone_info("GCP", credentials.detail)
         return JsonResponse(regions)
-
-        
-
-        

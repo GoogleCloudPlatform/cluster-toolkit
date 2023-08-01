@@ -869,7 +869,23 @@ class WorkbenchMountPointForm(forms.ModelForm):
             self.fields[field].widget.attrs.update({"class": "form-control"})
 
 class StartupScriptForm(forms.ModelForm):
-    """Custom form for StartupScript model"""
+    """
+    Custom form for handling data input and validation for the StartupScript model.
+
+    This form class extends the `forms.ModelForm` class and is designed to work with the
+    `StartupScript` model, which represents a script executed during
+    the startup phase of a node.
+
+    Form Fields:
+        - "name": A text input field for providing a name for the startup script.
+        - "description": A textarea input field for adding a description of the script.
+        - "type": A select input field for choosing the type or category of the script.
+        - "content": A file input field for uploading the content of the startup script.
+
+    Form Validation:
+        The form automatically validates the input data based on the model field definitions
+        and any additional constraints defined in the model.
+    """
 
     class Meta:
         model = StartupScript

@@ -106,7 +106,7 @@
         </td>
         <td>
           <a href="{% url 'image-view' image.id %}" class="action-link btn-primary btn">View</a>
-          {% if admin_view == 1 and image.status == "r" %}
+          {% if admin_view == 1 and image.status == "r" or image.status = "e" %}
             <button class="action-link image-delete-button btn-danger btn" data-url="{% url 'image-delete' image.id %}">Delete</button>
           {% endif %}
         </td>

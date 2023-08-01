@@ -33,7 +33,7 @@ class ImageBackend:
 
     def __init__(self, image):
         self.config = utils.load_config()
-        self.ghpc_path = self.config["baseDir"].parent.parent / "ghpc"
+        self.ghpc_path = self.config["baseDir"].parents[1] / "ghpc"
         
         self.image = image
         self.image_dir = (
@@ -46,6 +46,34 @@ class ImageBackend:
 
 
     def prepare(self):
+        """
+        Prepare the image creation process by following these steps:
+
+        1. Create the necessary directory structure for the image.
+        2. Generate a HPC Toolkit blueprint to build the image.
+        3. Run the HPC Toolkit (`ghpc`) to create the image based on the blueprint.
+        4. Set up the builder environment on Google Cloud Platform (GCP) using Terraform.
+        5. Create the image on GCP using Packer.
+        6. Destroy the builder environment after the image creation is complete.
+
+        This method handles the entire image creation process, from setting up the necessary
+        directories and configuration files to executing HPC Toolkit and Packer to build
+        and finalize the image. If any step encounters an error, it logs the issue and marks
+        the image's status as "error" (status code 'e').
+
+        Note:
+        - This method assumes that the necessary tools (HPC Toolkit, Terraform, and Packer)
+          are properly installed and configured on the system.
+        - The credentials file required for GCP authentication is created during the image
+          directory setup.
+
+        Raises:
+            OSError: If there is an error while creating the image directory or writing to
+                     the credentials file.
+            IOError: If there is an error while writing to the credentials file.
+            subprocess.CalledProcessError: If any of the subprocess calls (ghpc, Terraform, or Packer)
+                                           encounter an error during execution.
+        """
         self._create_image_dir()
         self._create_blueprint()
         self._run_ghpc()
@@ -82,7 +110,6 @@ class ImageBackend:
             runners = ""
             for script in scripts:
                 script_path = os.path.join(settings.MEDIA_ROOT, script.content.name)
-                print(script_path)
                 runners+=f"""        
       - type: {script.type}
         destination: {script.name}
@@ -139,7 +166,7 @@ deployment_groups:
             )
         except Exception as e:
             self.update_image_status("e")
-            print(f"Error occurred while creating blueprint: {str(e)}")
+            logger.error(f"Error occurred while creating blueprint: {e}")
 
     def _run_ghpc(self):
         target_dir = self.image_dir
@@ -174,7 +201,7 @@ deployment_groups:
                 packer_dir = os.path.join(self.image_dir, f"{self.blueprint_name}/packer-image")
             except OSError as e:
                 self.update_image_status("e")
-                print(f"Error occurred while constructing terraform_dir: {e}")
+                logger.error(f"Error occurred while constructing terraform_dir: {e}")
             utils.run_terraform(terraform_dir, "init")
             utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
             logger.info("Invoking Terraform Plan for builder env.")
@@ -226,7 +253,7 @@ deployment_groups:
                 logger.info("  STDERR:\n%s\n", cpe.stderr.decode("utf-8"))
             raise
         except Exception as e:
-            logger.exception(f"Unhandled error happened durring image {self.image.id} creation.")
+            logger.exception(f"Unhandled error happened during image {self.image.id} creation.")
         
     def _destroy_builder_env(self):
         """Destroy builder environment on GCP."""
@@ -239,7 +266,7 @@ deployment_groups:
                 terraform_dir = os.path.join(self.image_dir, f"{self.blueprint_name}/builder-env")
             except OSError as e:
                 self.update_image_status("e")
-                print(f"Error occurred while constructing terraform_dir: {e}")
+                logger.error(f"Error occurred while constructing terraform_dir: {e}")
             logger.info("Invoking Terraform Destroy for builder env.")
             utils.run_terraform(terraform_dir, "destroy", extra_env=extra_env)
         except subprocess.CalledProcessError as cpe:
