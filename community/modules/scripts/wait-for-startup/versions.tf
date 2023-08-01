@@ -26,7 +26,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:wait-for-startup/v1.19.1"
+    module_name = "blueprints/terraform/hpc-toolkit:wait-for-startup/v1.21.0"
   }
 
   required_version = ">= 0.14.0"

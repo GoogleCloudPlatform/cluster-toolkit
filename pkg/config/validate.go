@@ -28,8 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -39,35 +37,12 @@ const (
 	maxLabels            = 64
 )
 
-// InvalidSettingError signifies a problem with the supplied setting name in a
-// module definition.
-type InvalidSettingError struct {
-	cause string
-}
-
-func (err *InvalidSettingError) Error() string {
-	return fmt.Sprintf("invalid setting provided to a module, cause: %v", err.cause)
-}
-
 // validate is the top-level function for running the validation suite.
-func (dc DeploymentConfig) validate() {
-	// Drop the flags for log to improve readability only for running the validation suite
-	log.SetFlags(0)
-
-	// variables should be validated before running validators
-	if err := dc.executeValidators(); err != nil {
-		log.Fatal(err)
-	}
-
-	if err := dc.validateModules(); err != nil {
-		log.Fatal(err)
-	}
-	if err := dc.validateModuleSettings(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Set it back to the initial value
-	log.SetFlags(log.LstdFlags)
+func (dc DeploymentConfig) validate() error {
+	errs := Errors{}
+	return errs.
+		Add(dc.executeValidators()).
+		Add(dc.validateModules()).OrNil()
 }
 
 // performs validation of global variables
@@ -137,111 +112,102 @@ func (dc DeploymentConfig) executeValidators() error {
 	return nil
 }
 
+func validateGlobalLabels(bp Blueprint) error {
+	if !bp.Vars.Has("labels") {
+		return nil
+	}
+	p := Root.Vars.Dot("labels")
+	labels := bp.Vars.Get("labels")
+	ty := labels.Type()
+
+	if !ty.IsObjectType() && !ty.IsMapType() {
+		return BpError{
+			p, errors.New("vars.labels must be a map of strings")} // skip further validation
+	}
+	errs := Errors{}
+	if labels.LengthInt() > maxLabels {
+		// GCP resources cannot have more than 64 labels, so enforce this upper bound here
+		// to do some early validation. Modules may add more labels, leading to potential
+		// deployment failures.
+		errs.At(p, errors.New("vars.labels cannot have more than 64 labels"))
+	}
+	for k, v := range labels.AsValueMap() {
+		// TODO: Use cty.Path to point to the specific label that is invalid
+		if v.Type() != cty.String {
+			errs.At(p, errors.New("vars.labels must be a map of strings"))
+		}
+		s := v.AsString()
+
+		// Check that label names are valid
+		if !isValidLabelName(k) {
+			errs.At(p, errors.Errorf("%s: '%s: %s'", errorMessages["labelNameReqs"], k, s))
+		}
+		// Check that label values are valid
+		if !isValidLabelValue(s) {
+			errs.At(p, errors.Errorf("%s: '%s: %s'", errorMessages["labelValueReqs"], k, s))
+		}
+	}
+	return errs.OrNil()
+}
+
 // validateVars checks the global variables for viable types
 func (dc DeploymentConfig) validateVars() error {
-	vars := dc.Config.Vars
-	nilErr := "deployment variable %s was not set"
-
-	// Check type of labels (if they are defined)
-	if vars.Has("labels") {
-		labels := vars.Get("labels")
-		ty := labels.Type()
-		if !ty.IsObjectType() && !ty.IsMapType() {
-			return errors.New("vars.labels must be a map of strings")
-		}
-		if labels.LengthInt() > maxLabels {
-			// GCP resources cannot have more than 64 labels, so enforce this upper bound here
-			// to do some early validation. Modules may add more labels, leading to potential
-			// deployment failures.
-			return errors.New("vars.labels cannot have more than 64 labels")
-		}
-		for labelName, v := range labels.AsValueMap() {
-			if v.Type() != cty.String {
-				return errors.New("vars.labels must be a map of strings")
-			}
-			labelValue := v.AsString()
-
-			// Check that label names are valid
-			if !isValidLabelName(labelName) {
-				return errors.Errorf("%s: '%s: %s'",
-					errorMessages["labelNameReqs"], labelName, labelValue)
-			}
-			// Check that label values are valid
-			if !isValidLabelValue(labelValue) {
-				return errors.Errorf("%s: '%s: %s'",
-					errorMessages["labelValueReqs"], labelName, labelValue)
-			}
-		}
-	}
-
+	errs := Errors{}
+	errs.Add(validateGlobalLabels(dc.Config))
 	// Check for any nil values
-	for key, val := range vars.Items() {
+	for key, val := range dc.Config.Vars.Items() {
 		if val.IsNull() {
-			return fmt.Errorf(nilErr, key)
+			errs.At(Root.Vars.Dot(key), fmt.Errorf("deployment variable %s was not set", key))
 		}
 	}
-
-	err := cty.Walk(vars.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
-		if e, is := IsExpressionValue(v); is {
-			return false, fmt.Errorf("can not use expressions in vars block, got %#v", e.makeYamlExpressionValue().AsString())
-		}
-		return true, nil
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return errs.OrNil()
 }
 
-func module2String(c Module) string {
-	cBytes, _ := yaml.Marshal(&c)
-	return string(cBytes)
+func validateModule(p modulePath, m Module) error {
+	errs := Errors{}
+	if m.ID == "" {
+		errs.At(p.ID, fmt.Errorf(errorMessages["emptyID"]))
+	}
+	if m.Source == "" {
+		errs.At(p.Source, fmt.Errorf(errorMessages["emptySource"]))
+	}
+	if !IsValidModuleKind(m.Kind.String()) {
+		errs.At(p.Kind, fmt.Errorf(errorMessages["wrongKind"]))
+	}
+
+	info, err := modulereader.GetModuleInfo(m.Source, m.Kind.kind)
+	if err != nil { // Can not proceed with other validations
+		return errs.Add(err)
+	}
+
+	return errs.
+		Add(validateSettings(p, m, info)).
+		Add(validateOutputs(p, m, info)).
+		OrNil()
 }
 
-func validateModule(c Module) error {
-	if c.ID == "" {
-		return fmt.Errorf("%s\n%s", errorMessages["emptyID"], module2String(c))
-	}
-	if c.Source == "" {
-		return fmt.Errorf("%s\n%s", errorMessages["emptySource"], module2String(c))
-	}
-	if !IsValidModuleKind(c.Kind.String()) {
-		return fmt.Errorf("%s\n%s", errorMessages["wrongKind"], module2String(c))
-	}
-	return nil
-}
-
-func hasIllegalChars(name string) bool {
-	return !regexp.MustCompile(`^[\w\+]+(\s*)[\w-\+\.]+$`).MatchString(name)
-}
-
-func validateOutputs(mod Module) error {
-	modInfo := mod.InfoOrDie()
-	// Only get the map if needed
-	var outputsMap map[string]modulereader.OutputInfo
-	if len(mod.Outputs) > 0 {
-		outputsMap = modInfo.GetOutputsAsMap()
-	}
+func validateOutputs(p modulePath, mod Module, info modulereader.ModuleInfo) error {
+	errs := Errors{}
+	outputs := info.GetOutputsAsMap()
 
 	// Ensure output exists in the underlying modules
-	for _, output := range mod.Outputs {
-		if _, ok := outputsMap[output.Name]; !ok {
-			return fmt.Errorf("%s, module: %s output: %s",
-				errorMessages["invalidOutput"], mod.ID, output.Name)
+	for io, output := range mod.Outputs {
+		if _, ok := outputs[output.Name]; !ok {
+			err := fmt.Errorf("%s, module: %s output: %s", errorMessages["invalidOutput"], mod.ID, output.Name)
+			errs.At(p.Outputs.At(io), err)
 		}
 	}
-	return nil
+	return errs.OrNil()
 }
 
 // validateModules ensures parameters set in modules are set correctly.
 func (dc DeploymentConfig) validateModules() error {
-	return dc.Config.WalkModules(func(m *Module) error {
-		if err := validateModule(*m); err != nil {
-			return err
-		}
-		return validateOutputs(*m)
+	errs := Errors{}
+	dc.Config.WalkModules(func(p modulePath, m *Module) error {
+		errs.Add(validateModule(p, *m))
+		return nil
 	})
+	return errs.OrNil()
 }
 
 type moduleVariables struct {
@@ -250,6 +216,7 @@ type moduleVariables struct {
 }
 
 func validateSettings(
+	p modulePath,
 	mod Module,
 	info modulereader.ModuleInfo) error {
 
@@ -261,52 +228,30 @@ func validateSettings(
 	for _, input := range info.Inputs {
 		cVars.Inputs[input.Name] = input.Required
 	}
-
+	errs := Errors{}
 	for k := range mod.Settings.Items() {
-		errData := fmt.Sprintf("Module ID: %s Setting: %s", mod.ID, k)
+		sp := p.Settings.Dot(k)
 		// Setting name included a period
 		// The user was likely trying to set a subfield which is not supported.
 		// HCL does not support periods in variables names either:
 		// https://hcl.readthedocs.io/en/latest/language_design.html#language-keywords-and-identifiers
 		if strings.Contains(k, ".") {
-			return &InvalidSettingError{
-				fmt.Sprintf("%s\n%s", errorMessages["settingWithPeriod"], errData),
-			}
+			errs.At(sp, errors.New(errorMessages["settingWithPeriod"]))
+			continue // do not perform other validations
 		}
 		// Setting includes invalid characters
 		if !regexp.MustCompile(`^[a-zA-Z-_][a-zA-Z0-9-_]*$`).MatchString(k) {
-			return &InvalidSettingError{
-				fmt.Sprintf("%s\n%s", errorMessages["settingInvalidChar"], errData),
-			}
+			errs.At(sp, errors.New(errorMessages["settingInvalidChar"]))
+			continue // do not perform other validations
 		}
-		// Module not found
+		// Setting not found
 		if _, ok := cVars.Inputs[k]; !ok {
-			return &InvalidSettingError{
-				fmt.Sprintf("%s\n%s", errorMessages["extraSetting"], errData),
-			}
+			errs.At(sp, errors.New(errorMessages["extraSetting"]))
+			continue // do not perform other validations
 		}
 
 	}
-	return nil
-}
-
-// validateModuleSettings verifies that no additional settings are provided
-// that don't have a counterpart variable in the module
-func (dc DeploymentConfig) validateModuleSettings() error {
-	for _, grp := range dc.Config.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			info, err := modulereader.GetModuleInfo(mod.Source, mod.Kind.String())
-			if err != nil {
-				errStr := "failed to get info for module at %s while validating module settings"
-				return errors.Wrapf(err, errStr, mod.Source)
-			}
-			if err = validateSettings(mod, info); err != nil {
-				errStr := "found an issue while validating settings for module at %s"
-				return errors.Wrapf(err, errStr, mod.Source)
-			}
-		}
-	}
-	return nil
+	return errs.OrNil()
 }
 
 func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) error {
@@ -322,67 +267,26 @@ func (dc *DeploymentConfig) getValidators() map[string]func(validatorConfig) err
 	return allValidators
 }
 
-// The expected use case of this function is to merge blueprint requirements
-// that are maps from project_id to string slices containing APIs or IAM roles
-// required for provisioning. It will remove duplicate elements and ensure that
-// the output is sorted for easy visual and automatic comparison.
-// Solution: merge []string of new[key] into []string of base[key], removing
-// duplicate elements and sorting the result
-func mergeBlueprintRequirements(base map[string][]string, new map[string][]string) map[string][]string {
-	dest := make(map[string][]string)
-	maps.Copy(dest, base)
-
-	// sort each value in dest in-place to ensure output is sorted when new map
-	// does not contain all keys in base
-	for _, v := range dest {
-		slices.Sort(v)
-	}
-
-	for newProject, newRequirements := range new {
-		// this code is safe even if dest[newProject] has not yet been populated
-		dest[newProject] = append(dest[newProject], newRequirements...)
-		slices.Sort(dest[newProject])
-		dest[newProject] = slices.Compact(dest[newProject])
-	}
-	return dest
-}
-
 func (dc *DeploymentConfig) testApisEnabled(c validatorConfig) error {
 	if err := c.check(testApisEnabledName, []string{}); err != nil {
 		return err
 	}
 
-	requiredApis := make(map[string][]string)
-	for _, grp := range dc.Config.DeploymentGroups {
-		for _, mod := range grp.Modules {
-			requiredApis = mergeBlueprintRequirements(requiredApis, mod.RequiredApis)
-		}
+	pv := dc.Config.Vars.Get("project_id")
+	if pv.Type() != cty.String {
+		return fmt.Errorf("the deployment variable `project_id` is either not set or is not a string")
 	}
 
-	var errored bool
-	for project, apis := range requiredApis {
-		if hasVariable(project) {
-			expr, err := SimpleVarToExpression(project)
-			if err != nil {
-				return err
-			}
-			v, err := expr.Eval(dc.Config)
-			if err != nil {
-				return err
-			}
-			if v.Type() != cty.String {
-				return fmt.Errorf("the deployment variable %s is not a string", project)
-			}
-			project = v.AsString()
+	apis := map[string]bool{}
+	dc.Config.WalkModules(func(_ modulePath, m *Module) error {
+		for _, api := range m.InfoOrDie().RequiredApis {
+			apis[api] = true
 		}
-		err := validators.TestApisEnabled(project, apis)
-		if err != nil {
-			log.Println(err)
-			errored = true
-		}
-	}
+		return nil
+	})
 
-	if errored {
+	if err := validators.TestApisEnabled(pv.AsString(), maps.Keys(apis)); err != nil {
+		log.Println(err)
 		return fmt.Errorf(funcErrorMsgTemplate, testApisEnabledName.String())
 	}
 	return nil
@@ -474,7 +378,7 @@ func (dc *DeploymentConfig) testModuleNotUsed(c validatorConfig) error {
 	}
 
 	acc := map[string][]string{}
-	dc.Config.WalkModules(func(m *Module) error {
+	dc.Config.WalkModules(func(_ modulePath, m *Module) error {
 		ids := m.listUnusedModules()
 		sids := make([]string, len(ids))
 		for i, id := range ids {

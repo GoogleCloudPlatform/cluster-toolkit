@@ -20,7 +20,7 @@ locals {
 }
 
 locals {
-  sa_email = var.service_account.email != null ? var.service_account.email : data.google_compute_default_service_account.default_sa.email
+  sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
   has_gpu = var.guest_accelerator != null || contains(["a2", "g2"], local.machine_family)
   gpu_taint = local.has_gpu ? [{
@@ -28,6 +28,9 @@ locals {
     value  = "present"
     effect = "NO_SCHEDULE"
   }] : []
+
+  autoscale_set   = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
+  static_node_set = var.static_node_count != null
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -40,10 +43,15 @@ resource "google_container_node_pool" "node_pool" {
   name           = var.name == null ? var.machine_type : var.name
   cluster        = var.cluster_id
   node_locations = var.zones
-  autoscaling {
-    total_min_node_count = var.total_min_nodes
-    total_max_node_count = var.total_max_nodes
-    location_policy      = "ANY"
+
+  node_count = var.static_node_count
+  dynamic "autoscaling" {
+    for_each = local.static_node_set ? [] : [1]
+    content {
+      total_min_node_count = var.autoscaling_total_min_nodes
+      total_max_node_count = var.autoscaling_total_max_nodes
+      location_policy      = "ANY"
+    }
   }
 
   management {
@@ -68,21 +76,37 @@ resource "google_container_node_pool" "node_pool" {
     disk_size_gb      = var.disk_size_gb
     disk_type         = var.disk_type
     resource_labels   = local.labels
-    service_account   = var.service_account.email
-    oauth_scopes      = var.service_account.scopes
+    labels            = var.kubernetes_labels
+    service_account   = var.service_account_email
+    oauth_scopes      = var.service_account_scopes
     machine_type      = var.machine_type
     spot              = var.spot
     taint             = concat(var.taints, local.gpu_taint)
     image_type        = var.image_type
     guest_accelerator = var.guest_accelerator
 
+    ephemeral_storage_local_ssd_config {
+      local_ssd_count = var.local_ssd_count_ephemeral_storage
+    }
+
+    local_nvme_ssd_block_config {
+      local_ssd_count = var.local_ssd_count_nvme_block
+    }
+
     shielded_instance_config {
-      enable_secure_boot          = true
+      enable_secure_boot          = var.enable_secure_boot
       enable_integrity_monitoring = true
     }
 
+    dynamic "gcfs_config" {
+      for_each = var.enable_gcfs ? [1] : []
+      content {
+        enabled = true
+      }
+    }
+
     gvnic {
-      enabled = true
+      enabled = var.image_type == "COS_CONTAINERD"
     }
 
     dynamic "advanced_machine_features" {
@@ -109,10 +133,23 @@ resource "google_container_node_pool" "node_pool" {
     }
   }
 
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+  }
+
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
     ]
+    precondition {
+      condition     = !local.static_node_set || !local.autoscale_set
+      error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
+    }
+    precondition {
+      condition     = !(var.local_ssd_count_ephemeral_storage > 0 && var.local_ssd_count_nvme_block > 0)
+      error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
+    }
   }
 }
 

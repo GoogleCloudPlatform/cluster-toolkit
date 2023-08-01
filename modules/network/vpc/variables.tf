@@ -190,10 +190,33 @@ variable "enable_iap_rdp_ingress" {
   default     = false
 }
 
+variable "enable_iap_winrm_ingress" {
+  type        = bool
+  description = "Enable a firewall rule to allow Windows Remote Management (WinRM) access using IAP tunnels"
+  default     = false
+}
+
 variable "enable_internal_traffic" {
   type        = bool
   description = "Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network"
   default     = true
+}
+
+variable "extra_iap_ports" {
+  type        = list(string)
+  description = "A list of TCP ports for which to create firewall rules that enable IAP for TCP forwarding (use dedicated enable_iap variables for standard ports)"
+  default     = []
+}
+
+variable "allowed_ssh_ip_ranges" {
+  type        = list(string)
+  description = "A list of CIDR IP ranges from which to allow ssh access"
+  default     = []
+
+  validation {
+    condition     = alltrue([for r in var.allowed_ssh_ip_ranges : can(cidrhost(r, 32))])
+    error_message = "Each element of var.allowed_ssh_ip_ranges must be a valid CIDR-formatted IPv4 range."
+  }
 }
 
 variable "firewall_rules" {

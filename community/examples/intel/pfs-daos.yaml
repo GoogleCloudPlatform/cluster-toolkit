@@ -21,9 +21,14 @@ vars:
   deployment_name: pfs-daos
   region: us-central1
   zone: us-central1-c
+  server_image_family: daos-server-hpc-rocky-8
+  client_image_family: daos-client-hpc-rocky-8
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+# Note: this blueprint assumes the existence of a default global network and
+# subnetwork in the region chosen above
 
 deployment_groups:
 - group: primary
@@ -31,22 +36,70 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
-  # This module creates a DAOS server. Server images MUST be created before running this.
-  # https://github.com/daos-stack/google-cloud-daos/tree/main/images
-  # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
+- group: daos-server-image
+  modules:
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/images
+  - id: daos-server-image
+    source: github.com/daos-stack/google-cloud-daos//images?ref=v0.4.1&depth=1
+    kind: packer
+    settings:
+      daos_version: 2.2.0
+      daos_repo_base_url: https://packages.daos.io
+      daos_packages_repo_file: EL8/packages/x86_64/daos_packages.repo
+      use_iap: true
+      enable_oslogin: false
+      machine_type: n2-standard-32
+      source_image_family: hpc-rocky-linux-8
+      source_image_project_id: cloud-hpc-image-public
+      image_guest_os_features: ["GVNIC"]
+      disk_size: "20"
+      state_timeout: "10m"
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+      use_internal_ip: true
+      omit_external_ip: false
+      daos_install_type: server
+      image_family: $(vars.server_image_family)
+
+- group: daos-client-image
+  modules:
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/images
+  - id: daos-client-image
+    source: github.com/daos-stack/google-cloud-daos//images?ref=v0.4.1&depth=1
+    kind: packer
+    settings:
+      daos_version: 2.2.0
+      daos_repo_base_url: https://packages.daos.io
+      daos_packages_repo_file: EL8/packages/x86_64/daos_packages.repo
+      use_iap: true
+      enable_oslogin: false
+      machine_type: n2-standard-32
+      source_image_family: hpc-rocky-linux-8
+      source_image_project_id: cloud-hpc-image-public
+      image_guest_os_features: ["GVNIC"]
+      disk_size: "20"
+      state_timeout: "10m"
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+      use_internal_ip: true
+      omit_external_ip: false
+      daos_install_type: client
+      image_family: $(vars.client_image_family)
+
+- group: daos-cluster
+  modules:
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/terraform/modules/daos_server
   - id: daos-server
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.4.0
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.4.1&depth=1
     use: [network1]
     settings:
       number_of_instances: 2
       labels: {ghpc_role: file-system}
+      os_family: $(vars.server_image_family)
 
-  # This module creates DAOS clients. Client images MUST be created before running this.
-  # https://github.com/daos-stack/google-cloud-daos/tree/main/images
-  # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_client
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/terraform/modules/daos_client
   - id: daos-client
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_client?ref=v0.4.0
+    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_client?ref=v0.4.1&depth=1
     use: [network1, daos-server]
     settings:
       number_of_instances: 2
       labels: {ghpc_role: compute}
+      os_family: $(vars.client_image_family)

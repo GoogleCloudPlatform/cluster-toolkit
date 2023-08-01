@@ -17,8 +17,11 @@
 package shell
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"os/exec"
+	"sync"
 )
 
 // ConfigurePacker errors if packer is not in the user PATH
@@ -38,12 +41,47 @@ func ConfigurePacker() error {
 func ExecPackerCmd(workingDir string, printToScreen bool, args ...string) error {
 	cmd := exec.Command("packer", args...)
 	cmd.Dir = workingDir
-	if printToScreen {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
 	}
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// capture stdout/stderr; print to screen in real-time or upon error
+	var wg sync.WaitGroup
+	var outBuf io.ReadWriter
+	var errBuf io.ReadWriter
+	if printToScreen {
+		outBuf = os.Stdout
+		errBuf = os.Stderr
+	} else {
+		outBuf = bytes.NewBuffer([]byte{})
+		errBuf = bytes.NewBuffer([]byte{})
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		io.Copy(outBuf, stdout)
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		io.Copy(errBuf, stderr)
+	}()
+	wg.Wait()
+
+	if err := cmd.Wait(); err != nil {
+		if !printToScreen {
+			io.Copy(os.Stdout, outBuf)
+			io.Copy(os.Stderr, errBuf)
+		}
 		return err
 	}
 	return nil

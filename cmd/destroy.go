@@ -64,7 +64,7 @@ func parseDestroyArgs(cmd *cobra.Command, args []string) error {
 
 func runDestroyCmd(cmd *cobra.Command, args []string) error {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
-	dc, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func runDestroyCmd(cmd *cobra.Command, args []string) error {
 		groupDir := filepath.Join(deploymentRoot, string(group.Name))
 
 		var err error
-		switch group.Kind {
+		switch group.Kind() {
 		case config.PackerKind:
 			// Packer groups are enforced to have length 1
 			// TODO: destroyPackerGroup(moduleDir)
@@ -89,7 +89,7 @@ func runDestroyCmd(cmd *cobra.Command, args []string) error {
 		case config.TerraformKind:
 			err = destroyTerraformGroup(groupDir)
 		default:
-			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind.String())
+			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String())
 		}
 		if err != nil {
 			return err

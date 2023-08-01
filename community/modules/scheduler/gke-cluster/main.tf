@@ -29,7 +29,7 @@ locals {
     security_group = var.authenticator_security_group
   }]
 
-  sa_email = var.service_account.email != null ? var.service_account.email : data.google_compute_default_service_account.default_sa.email
+  sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -154,6 +154,11 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+  }
+
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
@@ -169,6 +174,7 @@ resource "google_container_cluster" "gke_cluster" {
 # having to destroy the entire cluster.
 resource "google_container_node_pool" "system_node_pools" {
   provider = google-beta
+  count    = var.system_node_pool_enabled ? 1 : 0
 
   project = var.project_id
   name    = var.system_node_pool_name
@@ -190,8 +196,8 @@ resource "google_container_node_pool" "system_node_pools" {
 
   node_config {
     resource_labels = local.labels
-    service_account = var.service_account.email
-    oauth_scopes    = var.service_account.scopes
+    service_account = var.service_account_email
+    oauth_scopes    = var.service_account_scopes
     machine_type    = var.system_node_pool_machine_type
     taint           = var.system_node_pool_taints
 

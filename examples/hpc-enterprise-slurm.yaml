@@ -25,7 +25,7 @@ vars:
   # Visit https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
   # for a list of valid family options with Slurm
   family: schedmd-v5-slurm-22-05-9-hpc-centos-7
-  project: projects/schedmd-slurm-public/global/images/family
+  project: schedmd-slurm-public
   # Set to true for active cluster reconfiguration.
   # Note that setting this option requires additional dependencies to be installed locally.
   # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#description
@@ -33,6 +33,14 @@ vars:
   # When set, active compute nodes will be cleaned up on destroy.
   # Note that setting this option requires additional dependencies to be installed locally.
   enable_cleanup_compute: true
+
+# Recommended to use GCS backend for Terraform state
+# See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
+#
+# terraform_backend_defaults:
+#  type: gcs
+#  configuration:
+#    bucket: <<BUCKET_NAME>>
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

@@ -54,6 +54,18 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "enable_gcfs" {
+  description = "Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config)."
+  type        = bool
+  default     = false
+}
+
+variable "enable_secure_boot" {
+  description = "Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info."
+  type        = bool
+  default     = true
+}
+
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
@@ -74,17 +86,44 @@ variable "image_type" {
   default     = "COS_CONTAINERD"
 }
 
-# TODO
-variable "total_min_nodes" {
+variable "local_ssd_count_ephemeral_storage" {
+  description = <<-EOT
+  The number of local SSDs to attach to each node to back ephemeral storage.  
+  Uses NVMe interfaces.  Must be supported by `machine_type`.
+  [See above](#local-ssd-storage) for more info.
+  EOT 
+  type        = number
+  default     = 0
+}
+
+variable "local_ssd_count_nvme_block" {
+  description = <<-EOT
+  The number of local SSDs to attach to each node to back block storage.  
+  Uses NVMe interfaces.  Must be supported by `machine_type`.
+  [See above](#local-ssd-storage) for more info.
+  
+  EOT 
+  type        = number
+  default     = 0
+}
+
+
+variable "autoscaling_total_min_nodes" {
   description = "Total minimum number of nodes in the NodePool."
   type        = number
   default     = 0
 }
 
-variable "total_max_nodes" {
+variable "autoscaling_total_max_nodes" {
   description = "Total maximum number of nodes in the NodePool."
   type        = number
   default     = 1000
+}
+
+variable "static_node_count" {
+  description = "The static number of nodes in the node pool. If set, autoscaling will be disabled."
+  type        = number
+  default     = null
 }
 
 variable "auto_upgrade" {
@@ -134,16 +173,16 @@ variable "compact_placement" {
   default     = false
 }
 
-variable "service_account" {
-  description = "Service account to use with the system node pool"
-  type = object({
-    email  = string,
-    scopes = set(string)
-  })
-  default = {
-    email  = null
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-  }
+variable "service_account_email" {
+  description = "Service account e-mail address to use with the node pool"
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to to use with the node pool."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
 }
 
 variable "taints" {
@@ -163,4 +202,60 @@ variable "taints" {
 variable "labels" {
   description = "GCE resource labels to be applied to resources. Key-value pairs."
   type        = map(string)
+}
+
+variable "kubernetes_labels" {
+  description = <<-EOT
+  Kubernetes labels to be applied to each node in the node group. Key-value pairs. 
+  (The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified)
+  EOT
+  type        = map(string)
+  default     = null
+}
+
+variable "timeout_create" {
+  description = "Timeout for creating a node pool"
+  type        = string
+  default     = null
+}
+
+variable "timeout_update" {
+  description = "Timeout for updating a node pool"
+  type        = string
+  default     = null
+}
+
+# Deprecated
+
+variable "total_min_nodes" {
+  description = "DEPRECATED: Use autoscaling_total_min_nodes."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.total_min_nodes == null
+    error_message = "total_min_nodes was renamed to autoscaling_total_min_nodes and is deprecated; use autoscaling_total_min_nodes"
+  }
+}
+
+variable "total_max_nodes" {
+  description = "DEPRECATED: Use autoscaling_total_max_nodes."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.total_max_nodes == null
+    error_message = "total_max_nodes was renamed to autoscaling_total_max_nodes and is deprecated; use autoscaling_total_max_nodes"
+  }
+}
+
+variable "service_account" {
+  description = "DEPRECATED: use service_account_email and scopes."
+  type = object({
+    email  = string,
+    scopes = set(string)
+  })
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "service_account is deprecated and replaced with service_account_email and scopes."
+  }
 }

@@ -50,13 +50,16 @@ HPC deployments on the Google Cloud Platform.`,
 				log.Fatalf("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.19.1",
+		Version:     "v1.21.0",
 		Annotations: annotation,
 	}
 )
 
 // Execute the root command
 func Execute() error {
+	// Don't prefix messages with data & time to improve readability.
+	// See https://pkg.go.dev/log#pkg-constants
+	log.SetFlags(0)
 
 	mismatch, branch, hash, dir := checkGitHashMismatch()
 	if mismatch {
@@ -125,6 +128,9 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	// found. If it's the hpc-toolkit repo, return it.
 	// repo := new(git.Repository)
 	dir, err = os.Getwd()
+	if err != nil {
+		return nil, "", err
+	}
 	subdir := filepath.Dir(dir)
 	o := git.PlainOpenOptions{DetectDotGit: true}
 	repo, err = git.PlainOpenWithOptions(dir, &o)
@@ -168,8 +174,5 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 func isHpcToolkitRepo(r git.Repository) bool {
 	h := plumbing.NewHash(GitInitialHash)
 	_, err := r.CommitObject(h)
-	if err == nil {
-		return true
-	}
-	return false
+	return err == nil
 }

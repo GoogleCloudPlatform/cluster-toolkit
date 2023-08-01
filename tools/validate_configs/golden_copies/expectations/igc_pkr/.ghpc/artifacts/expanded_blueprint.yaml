@@ -16,26 +16,17 @@ blueprint_name: igc
 ghpc_version: golden
 validators:
   - validator: test_project_exists
-    inputs: {}
     skip: true
   - validator: test_apis_enabled
-    inputs: {}
     skip: true
   - validator: test_region_exists
-    inputs: {}
     skip: true
   - validator: test_zone_exists
-    inputs: {}
     skip: true
   - validator: test_zone_in_region
-    inputs: {}
     skip: true
   - validator: test_module_not_used
-    inputs: {}
-    skip: false
   - validator: test_deployment_variable_not_used
-    inputs: {}
-    skip: false
 vars:
   deployment_name: golden_copy_deployment
   labels:
@@ -46,87 +37,65 @@ vars:
   zone: us-east4-c
 deployment_groups:
   - group: zero
-    terraform_backend:
-      type: ""
-      configuration: {}
     modules:
       - source: modules/network/vpc
         kind: terraform
         id: network0
-        use: []
-        wrapsettingswith: {}
         outputs:
           - name: subnetwork_name
             description: Automatically-generated output exported for use by later deployment groups
             sensitive: true
         settings:
           deployment_name: ((var.deployment_name ))
+          enable_iap_rdp_ingress: true
+          enable_iap_winrm_ingress: true
           project_id: ((var.project_id ))
           region: ((var.region ))
-        required_apis:
-          $(vars.project_id):
-            - compute.googleapis.com
       - source: modules/file-system/filestore
         kind: terraform
         id: homefs
         use:
           - network0
-        wrapsettingswith:
-          labels:
-            - merge(
-            - )
         settings:
           deployment_name: ((var.deployment_name ))
-          labels:
-            - ((var.labels ))
-            - ghpc_role: file-system
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "file-system"
+            }) ))
           local_mount: /home
           network_id: ((module.network0.network_id ))
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))
-        required_apis:
-          $(vars.project_id):
-            - file.googleapis.com
       - source: modules/file-system/filestore
         kind: terraform
         id: projectsfs
         use:
           - network0
-        wrapsettingswith:
-          labels:
-            - merge(
-            - )
         settings:
           deployment_name: ((var.deployment_name ))
-          labels:
-            - ((var.labels ))
-            - ghpc_role: file-system
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "file-system"
+            }) ))
           local_mount: /projects
           network_id: ((module.network0.network_id ))
           project_id: ((var.project_id ))
           region: ((var.region ))
           zone: ((var.zone ))
-        required_apis:
-          $(vars.project_id):
-            - file.googleapis.com
       - source: modules/scripts/startup-script
         kind: terraform
         id: script
-        use: []
-        wrapsettingswith:
-          labels:
-            - merge(
-            - )
         outputs:
           - name: startup_script
             description: Automatically-generated output exported for use by later deployment groups
             sensitive: true
         settings:
           deployment_name: ((var.deployment_name ))
-          labels:
-            - ((var.labels ))
-            - ghpc_role: scripts
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "scripts"
+            }) ))
           project_id: ((var.project_id ))
           region: ((var.region ))
           runners:
@@ -135,14 +104,16 @@ deployment_groups:
                 echo "Hello, World!"
               destination: hello.sh
               type: shell
-        required_apis:
-          $(vars.project_id):
-            - storage.googleapis.com
-    kind: terraform
+      - source: community/modules/scripts/windows-startup-script
+        kind: terraform
+        id: windows_startup
+        outputs:
+          - name: windows_startup_ps1
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          install_nvidia_driver: true
   - group: one
-    terraform_backend:
-      type: ""
-      configuration: {}
     modules:
       - source: modules/packer/custom-image
         kind: packer
@@ -150,22 +121,15 @@ deployment_groups:
         use:
           - network0
           - script
-        wrapsettingswith: {}
+          - windows_startup
         settings:
           deployment_name: ((var.deployment_name ))
-          labels:
-            ghpc_blueprint: igc
-            ghpc_deployment: golden_copy_deployment
-            ghpc_role: packer
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "packer"
+            })))
           project_id: ((var.project_id ))
           startup_script: ((module.script.startup_script))
           subnetwork_name: ((module.network0.subnetwork_name))
+          windows_startup_ps1: ((flatten([module.windows_startup.windows_startup_ps1])))
           zone: ((var.zone ))
-        required_apis:
-          $(vars.project_id):
-            - compute.googleapis.com
-            - storage.googleapis.com
-    kind: packer
-terraform_backend_defaults:
-  type: ""
-  configuration: {}

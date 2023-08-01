@@ -19,9 +19,8 @@ locals {
   subnetwork_name = var.subnetwork_name == null ? "${var.deployment_name}-primary-subnet" : var.subnetwork_name
 
   # define a default subnetwork for cases in which no explicit subnetworks are
-  # defined in var.primary_subnetwork or var.subnetworks
-  default_primary_subnetwork_new_bits   = coalesce(try(var.primary_subnetwork.new_bits, var.subnetwork_size), var.default_primary_subnetwork_size)
-  default_primary_subnetwork_cidr_block = cidrsubnet(var.network_address_range, local.default_primary_subnetwork_new_bits, 0)
+  # defined in var.subnetworks
+  default_primary_subnetwork_cidr_block = cidrsubnet(var.network_address_range, var.default_primary_subnetwork_size, 0)
   default_primary_subnetwork = {
     subnet_name           = local.subnetwork_name
     subnet_ip             = local.default_primary_subnetwork_cidr_block
@@ -34,22 +33,14 @@ locals {
   }
 
   # Identify user-supplied primary subnetwork
-  # (1) explicit var.primary_subnetwork
-  # (2) explicit var.subnetworks[0]
-  # (3) implicit local default subnetwork
-  input_primary_subnetwork = try(coalesce(
-    var.primary_subnetwork,
-    try(var.subnetworks[0], null)
-  ), local.default_primary_subnetwork)
+  # (1) explicit var.subnetworks[0]
+  # (2) implicit local default subnetwork
+  input_primary_subnetwork = coalesce(try(var.subnetworks[0], null), local.default_primary_subnetwork)
 
   # Identify user-supplied additional subnetworks
-  # (1) explicit var.additional_subnetworks
-  # (2) explicit var.subnetworks[1:end]
-  # (3) empty list
-  input_additional_subnetworks = try(coalescelist(
-    var.additional_subnetworks,
-    try(slice(var.subnetworks, 1, length(var.subnetworks)), []),
-  ), [])
+  # (1) explicit var.subnetworks[1:end]
+  # (2) empty list
+  input_additional_subnetworks = try(slice(var.subnetworks, 1, length(var.subnetworks)), [])
 
   # at this point we have constructed a list of subnetworks but need to extract
   # user-provided CIDR blocks or calculate them from user-provided new_bits
@@ -75,12 +66,38 @@ locals {
   output_primary_subnetwork_self_link     = local.output_primary_subnetwork.self_link
   output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
 
-  allow_iap_ssh_ingress = {
-    name                    = "${local.network_name}-fw-allow-iap-ssh-ingress"
-    description             = "allow SSH access via Identity-Aware Proxy"
+  iap_ports = distinct(concat(compact([
+    var.enable_iap_rdp_ingress ? "3389" : "",
+    var.enable_iap_ssh_ingress ? "22" : "",
+    var.enable_iap_winrm_ingress ? "5986" : "",
+  ]), var.extra_iap_ports))
+
+  allow_iap_ingress = {
+    name                    = "${local.network_name}-fw-allow-iap-ingress"
+    description             = "allow TCP access via Identity-Aware Proxy"
     direction               = "INGRESS"
     priority                = null
     ranges                  = ["35.235.240.0/20"]
+    source_tags             = null
+    source_service_accounts = null
+    target_tags             = null
+    target_service_accounts = null
+    allow = [{
+      protocol = "tcp"
+      ports    = local.iap_ports
+    }]
+    deny = []
+    log_config = {
+      metadata = "INCLUDE_ALL_METADATA"
+    }
+  }
+
+  allow_ssh_ingress = {
+    name                    = "${local.network_name}-fw-allow-ssh-ingress"
+    description             = "allow SSH access"
+    direction               = "INGRESS"
+    priority                = null
+    ranges                  = var.allowed_ssh_ip_ranges
     source_tags             = null
     source_service_accounts = null
     target_tags             = null
@@ -94,27 +111,6 @@ locals {
       metadata = "INCLUDE_ALL_METADATA"
     }
   }
-
-  allow_iap_rdp_ingress = {
-    name                    = "${local.network_name}-fw-allow-iap-rdp-ingress"
-    description             = "allow Windows remote desktop access via Identity-Aware Proxy"
-    direction               = "INGRESS"
-    priority                = null
-    ranges                  = ["35.235.240.0/20"]
-    source_tags             = null
-    source_service_accounts = null
-    target_tags             = null
-    target_service_accounts = null
-    allow = [{
-      protocol = "tcp"
-      ports    = ["3389"]
-    }]
-    deny = []
-    log_config = {
-      metadata = "INCLUDE_ALL_METADATA"
-    }
-  }
-
 
   allow_internal_traffic = {
     name                    = "${local.network_name}-fw-allow-internal-traffic"
@@ -143,10 +139,11 @@ locals {
     }
   }
 
-  firewall_rules = concat(var.firewall_rules,
+  firewall_rules = concat(
+    var.firewall_rules,
+    length(var.allowed_ssh_ip_ranges) > 0 ? [local.allow_ssh_ingress] : [],
     var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
-    var.enable_iap_rdp_ingress ? [local.allow_iap_rdp_ingress] : [],
-    var.enable_iap_ssh_ingress ? [local.allow_iap_ssh_ingress] : [],
+    length(local.iap_ports) > 0 ? [local.allow_iap_ingress] : []
   )
 }
 

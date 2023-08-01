@@ -23,7 +23,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
 	"log"
-	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -77,19 +77,27 @@ var (
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
-	if err := modulewriter.WriteDeployment(dc, outputDir, overwriteDeployment); err != nil {
-		var target *modulewriter.OverwriteDeniedError
-		if errors.As(err, &target) {
-			fmt.Printf("\n%s\n", err.Error())
-			os.Exit(1)
-		} else {
-			log.Fatal(err)
-		}
-	}
+	deplName, err := dc.Config.DeploymentName()
+	cobra.CheckErr(err)
+	deplDir := filepath.Join(outputDir, deplName)
+	cobra.CheckErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
+
+	fmt.Println("To deploy your infrastructure please run:")
+	fmt.Println()
+	fmt.Printf("./ghpc deploy %s\n", deplDir)
+	fmt.Println()
+	printAdvancedInstructionsMessage(deplDir)
+}
+
+func printAdvancedInstructionsMessage(deplDir string) {
+	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
+	fmt.Println("deployment instructions at:")
+	fmt.Println()
+	fmt.Printf("%s\n", modulewriter.InstructionsPath(deplDir))
 }
 
 func expandOrDie(path string) config.DeploymentConfig {
-	dc, err := config.NewDeploymentConfig(path)
+	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -113,10 +121,48 @@ func expandOrDie(path string) config.DeploymentConfig {
 
 	// Expand the blueprint
 	if err := dc.ExpandConfig(); err != nil {
-		log.Fatal(err)
+		log.Fatal(renderError(err, ctx))
 	}
 
 	return dc
+}
+
+func findPos(path config.Path, ctx config.YamlCtx) (config.Pos, bool) {
+	pos, ok := ctx.Pos(path)
+	for !ok && path.Parent() != nil {
+		path = path.Parent()
+		pos, ok = ctx.Pos(path)
+	}
+	return pos, ok
+}
+
+func renderError(err error, ctx config.YamlCtx) string {
+	var me config.Errors
+	if errors.As(err, &me) {
+		var sb strings.Builder
+		for _, e := range me.Errors {
+			sb.WriteString(renderError(e, ctx))
+			sb.WriteString("\n")
+		}
+		return sb.String()
+	}
+
+	var be config.BpError
+	if errors.As(err, &be) {
+		if pos, ok := findPos(be.Path, ctx); ok {
+			return renderRichError(be.Err, pos, ctx)
+		}
+	}
+	return err.Error()
+}
+
+func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
+	pref := fmt.Sprintf("%d: ", pos.Line)
+	arrow := strings.Repeat(" ", len(pref)+pos.Column-1) + "^"
+	return fmt.Sprintf(`
+Error: %s
+%s%s
+%s`, err, pref, ctx.Lines[pos.Line-1], arrow)
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {
@@ -171,7 +217,7 @@ func setValidationLevel(bp *config.Blueprint, s string) error {
 	case "IGNORE":
 		bp.ValidationLevel = config.ValidationIgnore
 	default:
-		return fmt.Errorf("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
+		return errors.New("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
 	}
 	return nil
 }

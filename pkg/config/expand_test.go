@@ -24,21 +24,16 @@ import (
 
 func (s *MySuite) TestExpand(c *C) {
 	dc := getDeploymentConfigForTest()
-	fmt.Println("TEST_DEBUG: If tests die without report, check TestExpand")
-	dc.expand()
+	c.Check(dc.expand(), IsNil)
 }
 
 func (s *MySuite) TestExpandBackends(c *C) {
 	dc := getDeploymentConfigForTest()
 	deplName := dc.Config.Vars.Get("deployment_name").AsString()
 
-	// Simple test: Does Nothing
-	err := dc.expandBackends()
-	c.Assert(err, IsNil)
-
 	dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
-	err = dc.expandBackends()
-	c.Assert(err, IsNil)
+	dc.expandBackends()
+
 	grp := dc.Config.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix := grp.TerraformBackend.Configuration.Get("prefix")
@@ -50,8 +45,8 @@ func (s *MySuite) TestExpandBackends(c *C) {
 		Name: "group2",
 	}
 	dc.Config.DeploymentGroups = append(dc.Config.DeploymentGroups, newGroup)
-	err = dc.expandBackends()
-	c.Assert(err, IsNil)
+	dc.expandBackends()
+
 	newGrp := dc.Config.DeploymentGroups[1]
 	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix = newGrp.TerraformBackend.Configuration.Get("prefix")
@@ -63,23 +58,21 @@ func (s *MySuite) TestAddListValue(c *C) {
 	mod := Module{ID: "TestModule"}
 
 	setting := "newSetting"
-	nonListSetting := "not-a-list"
-	first := cty.StringVal("value1")
-	second := cty.StringVal("value2")
+	first := AsProductOfModuleUse(cty.StringVal("value1"), "mod1")
+	second := AsProductOfModuleUse(cty.StringVal("value2"), "mod2")
 
-	c.Assert(mod.addListValue(setting, first), IsNil)
-	c.Check(mod.Settings.Get(setting), DeepEquals, cty.TupleVal([]cty.Value{first}))
+	mod.addListValue(setting, first)
+	c.Check(mod.Settings.Get(setting), DeepEquals,
+		AsProductOfModuleUse(MustParseExpression(`flatten(["value1"])`).AsValue(), "mod1"))
 
-	c.Assert(mod.addListValue(setting, second), IsNil)
-	c.Check(mod.Settings.Get(setting), DeepEquals, cty.TupleVal([]cty.Value{first, second}))
-
-	mod.Settings.Set(nonListSetting, cty.StringVal("string-value"))
-	c.Assert(mod.addListValue(nonListSetting, second), NotNil)
+	mod.addListValue(setting, second)
+	c.Check(mod.Settings.Get(setting), DeepEquals,
+		AsProductOfModuleUse(MustParseExpression(`flatten(["value2", flatten(["value1"])])`).AsValue(), "mod1", "mod2"))
 }
 
 func (s *MySuite) TestUseModule(c *C) {
 	// Setup
-	usedMod := Module{
+	used := Module{
 		ID:     "UsedModule",
 		Source: "usedSource",
 	}
@@ -88,16 +81,14 @@ func (s *MySuite) TestUseModule(c *C) {
 		Type: "number",
 	}
 	ref := ModuleRef("UsedModule", "val1").AsExpression().AsValue()
-	useMark := ProductOfModuleUse{"UsedModule"}
 
 	{ // Pass: No Inputs, No Outputs
 		mod := Module{ID: "lime", Source: "modSource"}
 
 		setTestModuleInfo(mod, modulereader.ModuleInfo{})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{})
+		setTestModuleInfo(used, modulereader.ModuleInfo{})
 
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, used)
 		c.Check(mod.Settings, DeepEquals, Dict{})
 	}
 
@@ -105,11 +96,10 @@ func (s *MySuite) TestUseModule(c *C) {
 		mod := Module{ID: "lime", Source: "limeTree"}
 
 		setTestModuleInfo(mod, modulereader.ModuleInfo{})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, used)
 		c.Check(mod.Settings, DeepEquals, Dict{})
 	}
 
@@ -118,14 +108,13 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": ref.Mark(useMark),
+			"val1": AsProductOfModuleUse(ref, "UsedModule"),
 		})
 	}
 
@@ -135,29 +124,28 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{"val1"})
-		c.Check(err, IsNil)
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{"val1": ref})
 	}
 
 	{ // Pass: re-apply used modules, should be a no-op
 		// Assume no settings were in blueprint
 		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", ref.Mark(useMark))
+		mod.Settings.Set("val1", AsProductOfModuleUse(ref, "UsedModule"))
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
-		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{"val1": ref.Mark(useMark)})
+		useModule(&mod, used)
+		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
+			"val1": AsProductOfModuleUse(ref, "UsedModule")})
 	}
 
 	{ // Pass: Single Input/Output match, input is list, not already set
@@ -165,35 +153,32 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": cty.TupleVal([]cty.Value{
-				ref.Mark(useMark),
-			})})
+			"val1": AsProductOfModuleUse(
+				MustParseExpression(`flatten([module.UsedModule.val1])`).AsValue(),
+				"UsedModule")})
 	}
 
 	{ // Pass: Setting exists, Input is List, Output is not a list
 		// Assume setting was not set in blueprint
 		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", cty.TupleVal([]cty.Value{ref}))
+		mod.Settings.Set("val1", AsProductOfModuleUse(cty.TupleVal([]cty.Value{ref}), "other"))
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{})
-		c.Check(err, IsNil)
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": cty.TupleVal([]cty.Value{
-				ref,
-				ref.Mark(useMark),
-			})})
+			"val1": AsProductOfModuleUse(
+				MustParseExpression(`flatten([module.UsedModule.val1,[module.UsedModule.val1]])`).AsValue(),
+				"other", "UsedModule")})
 	}
 
 	{ // Pass: Setting exists, Input is List, Output is not a list
@@ -203,12 +188,11 @@ func (s *MySuite) TestUseModule(c *C) {
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
-		setTestModuleInfo(usedMod, modulereader.ModuleInfo{
+		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
 		})
 
-		err := useModule(&mod, usedMod, []string{"val1"})
-		c.Check(err, IsNil)
+		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"val1": cty.TupleVal([]cty.Value{ref})})
 	}
@@ -227,7 +211,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		using := Module{
 			ID:     "usingModule",
 			Source: "path/using",
-			Use:    []ModuleID{"usedModule"},
+			Use:    ModuleIDs{"usedModule"},
 		}
 		used := Module{ID: "usedModule", Source: "path/used"}
 
@@ -256,8 +240,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		c.Assert(dc.applyUseModules(), IsNil)
 		ref := ModuleRef("TestModule0", "test_inter_0").AsExpression().AsValue()
 		c.Assert(m.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"test_inter_0": ref.Mark(ProductOfModuleUse{"TestModule0"}),
-		})
+			"test_inter_0": AsProductOfModuleUse(ref, "TestModule0")})
 	}
 
 	{ // Deliberately break the match and see that no settings are added
@@ -278,7 +261,6 @@ func (s *MySuite) TestCombineLabels(c *C) {
 
 	coral := Module{
 		Source: "blue/salmon",
-		Kind:   TerraformKind,
 		ID:     "coral",
 		Settings: NewDict(map[string]cty.Value{
 			"labels": cty.ObjectVal(map[string]cty.Value{
@@ -290,20 +272,12 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	setTestModuleInfo(coral, infoWithLabels)
 
 	// has no labels set
-	khaki := Module{Source: "brown/oak", Kind: TerraformKind, ID: "khaki"}
+	khaki := Module{Source: "brown/oak", ID: "khaki"}
 	setTestModuleInfo(khaki, infoWithLabels)
 
 	// has no labels set, also module has no labels input
-	silver := Module{Source: "ivory/black", Kind: TerraformKind, ID: "silver"}
+	silver := Module{Source: "ivory/black", ID: "silver"}
 	setTestModuleInfo(silver, modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{}})
-
-	orange := Module{Source: "red/velvet", Kind: PackerKind, ID: "orange", Settings: NewDict(map[string]cty.Value{
-		"labels": cty.ObjectVal(map[string]cty.Value{
-			"olive":           cty.StringVal("teal"),
-			"ghpc_deployment": cty.StringVal("navy"),
-		}),
-	})}
-	setTestModuleInfo(orange, infoWithLabels)
 
 	dc := DeploymentConfig{
 		Config: Blueprint{
@@ -313,11 +287,10 @@ func (s *MySuite) TestCombineLabels(c *C) {
 			}),
 			DeploymentGroups: []DeploymentGroup{
 				{Name: "lime", Modules: []Module{coral, khaki, silver}},
-				{Name: "pink", Modules: []Module{orange}},
 			},
 		},
 	}
-	c.Check(dc.combineLabels(), IsNil)
+	dc.combineLabels()
 
 	// Were global labels created?
 	c.Check(dc.Config.Vars.Get("labels"), DeepEquals, cty.ObjectVal(map[string]cty.Value{
@@ -330,37 +303,26 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	lime := dc.Config.DeploymentGroups[0]
 	// Labels are set and override role
 	coral = lime.Modules[0]
-	c.Check(coral.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
-	c.Check(coral.Settings.Get("labels"), DeepEquals, cty.TupleVal([]cty.Value{
+	c.Check(coral.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
+		"merge",
 		labelsRef,
 		cty.ObjectVal(map[string]cty.Value{
-			"magenta":   cty.StringVal("orchid"),
+			"ghpc_role": cty.StringVal("blue")}),
+		cty.ObjectVal(map[string]cty.Value{
 			"ghpc_role": cty.StringVal("maroon"),
-		}),
-	}))
+			"magenta":   cty.StringVal("orchid")}),
+	).AsValue())
+
 	// Labels are not set, infer role from module.source
 	khaki = lime.Modules[1]
-	c.Check(khaki.WrapSettingsWith["labels"], DeepEquals, []string{"merge(", ")"})
-	c.Check(khaki.Settings.Get("labels"), DeepEquals, cty.TupleVal([]cty.Value{
+	c.Check(khaki.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
+		"merge",
 		labelsRef,
-		cty.ObjectVal(map[string]cty.Value{
-			"ghpc_role": cty.StringVal("brown")}),
-	}))
+		cty.ObjectVal(map[string]cty.Value{"ghpc_role": cty.StringVal("brown")}),
+	).AsValue())
 	// No labels input
 	silver = lime.Modules[2]
-	c.Check(silver.WrapSettingsWith["labels"], IsNil)
 	c.Check(silver.Settings.Get("labels"), DeepEquals, cty.NilVal)
-
-	// Packer, include global include explicitly
-	// Keep overridden ghpc_deployment=navy
-	orange = dc.Config.DeploymentGroups[1].Modules[0]
-	c.Check(orange.WrapSettingsWith["labels"], IsNil)
-	c.Check(orange.Settings.Get("labels"), DeepEquals, cty.ObjectVal(map[string]cty.Value{
-		"ghpc_blueprint":  cty.StringVal("simple"),
-		"ghpc_deployment": cty.StringVal("navy"),
-		"ghpc_role":       cty.StringVal("red"),
-		"olive":           cty.StringVal("teal"),
-	}))
 }
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {

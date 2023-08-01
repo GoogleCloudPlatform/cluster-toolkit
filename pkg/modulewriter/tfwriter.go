@@ -26,7 +26,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
-	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
@@ -42,19 +41,7 @@ const (
 )
 
 // TFWriter writes terraform to the blueprint folder
-type TFWriter struct {
-	numModules int
-}
-
-// GetNumModules getter for module count of kind terraform
-func (w *TFWriter) getNumModules() int {
-	return w.numModules
-}
-
-// AddNumModules add value to module count
-func (w *TFWriter) addNumModules(value int) {
-	w.numModules += value
-}
+type TFWriter struct{}
 
 // createBaseFile creates a baseline file for all terraform/hcl including a
 // license and any other boilerplate
@@ -222,25 +209,16 @@ func writeMain(
 		moduleBody := moduleBlock.Body()
 
 		// Add source attribute
-		moduleBody.SetAttributeValue("source", cty.StringVal(mod.DeploymentSource))
+		ds, err := DeploymentSource(mod)
+		if err != nil {
+			return err
+		}
+		moduleBody.SetAttributeValue("source", cty.StringVal(ds))
 
 		// For each Setting
 		for _, setting := range orderKeys(mod.Settings.Items()) {
 			value := mod.Settings.Get(setting)
-			if wrap, ok := mod.WrapSettingsWith[setting]; ok {
-				if len(wrap) != 2 {
-					return fmt.Errorf(
-						"invalid length of WrapSettingsWith for %s.%s, expected 2 got %d",
-						mod.ID, setting, len(wrap))
-				}
-				toks, err := tokensForWrapped(wrap[0], value, wrap[1])
-				if err != nil {
-					return fmt.Errorf("failed to process %s.%s: %v", mod.ID, setting, err)
-				}
-				moduleBody.SetAttributeRaw(setting, toks)
-			} else {
-				moduleBody.SetAttributeRaw(setting, TokensForValue(value))
-			}
+			moduleBody.SetAttributeRaw(setting, config.TokensForValue(value))
 		}
 	}
 	// Write file
@@ -250,30 +228,6 @@ func writeMain(
 		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
 	}
 	return nil
-}
-
-func tokensForWrapped(pref string, val cty.Value, suf string) (hclwrite.Tokens, error) {
-	var toks hclwrite.Tokens
-	if !val.Type().IsListType() && !val.Type().IsTupleType() {
-		return toks, fmt.Errorf(
-			"invalid value for wrapped setting, expected sequence, got %#v", val.Type())
-	}
-	toks = append(toks, simpleTokens(pref)...)
-
-	it, first := val.ElementIterator(), true
-	for it.Next() {
-		if !first {
-			toks = append(toks, &hclwrite.Token{
-				Type:  hclsyntax.TokenComma,
-				Bytes: []byte{','}})
-		}
-		_, el := it.Element()
-		toks = append(toks, TokensForValue(el)...)
-		first = false
-	}
-	toks = append(toks, simpleTokens(suf)...)
-
-	return toks, nil
 }
 
 var simpleTokens = hclwrite.TokensForIdentifier

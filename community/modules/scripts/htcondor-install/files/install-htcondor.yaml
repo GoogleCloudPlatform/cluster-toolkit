@@ -23,9 +23,12 @@
   vars:
     enable_docker: true
   become: true
+  module_defaults:
+    ansible.builtin.yum:
+      lock_timeout: 300
   tasks:
   - name: Enable EPEL repository
-    ansible.builtin.package:
+    ansible.builtin.yum:
       name:
       - epel-release
   - name: Enable HTCondor Feature Release repository
@@ -49,8 +52,8 @@
       repo_gpgcheck: true
       priority: "90"
   - name: Install HTCondor
-    ansible.builtin.package:
-      name: condor
+    ansible.builtin.yum:
+      name: condor-{{ condor_version | default("10.*") | string }}
       state: present
   - name: Ensure token directory
     ansible.builtin.file:
@@ -70,7 +73,7 @@
         gpgcheck: yes
         gpgkey: https://download.docker.com/linux/centos/gpg
     - name: Install Docker
-      ansible.builtin.package:
+      ansible.builtin.yum:
         name:
         - docker-ce
         - docker-ce-cli

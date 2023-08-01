@@ -25,3 +25,9 @@ output "startup_script_script" {
   value       = module.script.startup_script
   sensitive   = true
 }
+
+output "windows_startup_ps1_windows_startup" {
+  description = "Automatically-generated output exported for use by later deployment groups"
+  value       = module.windows_startup.windows_startup_ps1
+  sensitive   = true
+}

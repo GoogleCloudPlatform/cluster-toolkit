@@ -173,8 +173,8 @@ variable "image" {
     project = string
   })
   default = {
-    family  = "hpc-centos-7"
-    project = "cloud-hpc-image-public"
+    family  = "batch-hpc-centos-7-official"
+    project = "batch-custom-image"
   }
 }
 

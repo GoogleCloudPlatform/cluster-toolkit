@@ -25,7 +25,7 @@ type LocalSourceReader struct{}
 // GetModule copies the local source to a provided destination (the deployment directory)
 func (r LocalSourceReader) GetModule(modPath string, copyPath string) error {
 	if !IsLocalPath(modPath) {
-		return fmt.Errorf("Source is not valid: %s", modPath)
+		return fmt.Errorf("source is not valid: %s", modPath)
 	}
 
 	if _, err := os.Stat(modPath); os.IsNotExist(err) {

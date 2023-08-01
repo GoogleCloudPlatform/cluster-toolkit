@@ -1,61 +1,170 @@
 # Supported and Tested VM Images
 
-* [HPC CentOS 7 VM Image](#hpc-centos-7-vm-image)
-* [Ubuntu](#ubuntu)
+* [HPC CentOS 7](#hpc-centos-7)
+* [HPC Rocky Linux 8](#hpc-rocky-linux-8)
+* [Debian 11](#debian-11)
+* [Ubuntu 20.04 LTS](#ubuntu-2004-lts)
+* [Windows](#windows)
 * [Other Images](#other-images)
 
-## HPC CentOS 7 VM Image
+For information on customizing VM images with extra software and configuration
+settings, see [Building Images](image-building.md).
+
+Please see the [blueprint catalog](https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint-catalog) for examples.
+
+For Slurm images, please see [SchedMD's GitHub repository](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#public-image).
+
+## HPC CentOS 7
+
 The HPC Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage] as the
 primary VM image for HPC workloads on Google Cloud since it's release. Since the
 [HPC CentOS 7 VM Image][hpcimage] comes pre-tuned for optimal performance on
 typical HPC workloads, it is the default VM image in our modules, unless there
 is specific requirement for a different OS distribution.
 
-Exceptions:
-
-* [DDN-EXAScaler]: The underlying terraform module has a limitted set of
-  supported images [documented][exascalerimages] in the exascaler-cloud-terraform
-  github repo. **This requirement only applies to the servers, not the clients.**
-* [omnia-install]: Only provides support for Rocky 8.
-
 [hpcimage]: https://cloud.google.com/blog/topics/hpc/introducing-hpc-vm-images
 
-## Ubuntu
-The HPC Toolkit officially supports Ubuntu based VM images in the majority of
-our modules, with a couple exceptions:
+## HPC Rocky Linux 8
 
-* [htcondor-configure]: Only provides support for the HPC CentOS 7 image.
-* [nfs-server]: Only provides support for CentOS 7 images for the server itself.
-* [DDN-EXAScaler]: The underlying terraform module has a limitted set of
-  supported images [documented][exascalerimages] in the exascaler-cloud-terraform
-  github repo. **This requirement only applies to the servers, not the clients.**
-* [omnia-install]: Only provides support for Rocky 8.
+HPC Rocky Linux 8 is planned to become the primary supported VM image for HPC workloads on Google Cloud from 2024.
 
-HPC Toolkit modules and startup scripts
-have been evaulated against the `ubuntu-2004-lts` image family. For more
-information about the Ubuntu Google Cloud images, see the Canonical
-[documentation](https://ubuntu.com/server/docs/cloud-images/google-cloud-engine).
+## Debian 11
 
-To use the Ubuntu images with the `schedmd-slurm-gcp-v5` modules, follow
-the pattern used in the [hpc-slurm-ubuntu2004.yaml] example.
+The HPC Toolkit officially supports Debian 11 based VM images in the majority of our modules, with a couple of exceptions.
 
-In most other modules that provide the option to set a VM image, you can set it
-to use the Ubuntu image with the following:
+## Ubuntu 20.04 LTS
 
-```yaml
-...
-settings:
-  instance_image:
-    family: ubuntu-2004-lts
-    project: ubuntu-os-cloud
-```
+The HPC Toolkit officially supports Ubuntu 20.04 LTS based VM images in the majority of
+our modules, with a couple of exceptions.
 
-[htcondor-configure]: ../community/modules/scheduler/htcondor-configure/README.md
-[nfs-server]: ../community/modules/file-system/nfs-server/README.md
-[DDN-EXAScaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
-[exascalerimages]: https://github.com/DDNStorage/exascaler-cloud-terraform/blob/master/gcp/README.md#boot-image-options
-[omnia-install]: ../community/modules/scripts/omnia-install/README.md
-[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
+## Windows
+
+See [building Windows images](image-building.md#windows-support) for
+a description of our support for Windows images.
+
+## Supported features
+
+<table>
+<tr>
+  <th>Deployment Type/Scheduler</th>
+  <th>Feature</th>
+  <th></th>
+  <th>CentOS 7</th><th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th>
+</tr>
+<tr>
+  <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+</tr>
+
+<tr>
+  <th rowspan="3">Cloud Batch</th>
+  <th>Lustre</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td></td>
+  <td></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+</tr>
+<tr>
+  <th>Shared filestore</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+</tr>
+<tr>
+  <th>Startup script</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
+</tr>
+
+<tr>
+  <th rowspan="4">Slurm</th>
+  <th>Chrome Remote Desktop</th>
+  <th></th>
+  <td></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-crd.yaml">✓</a></td>
+  <td></td>
+  <td></td>
+</tr>
+<tr>
+  <th>Lustre</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml">✓</a></td>
+  <td></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml">✓</a></td>
+  <td></td>
+</tr>
+<tr>
+  <th>Shared filestore</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
+</tr>
+<tr>
+  <th>Startup script</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
+</tr>
+
+<tr>
+  <th rowspan="4">VM Instance</th>
+  <th>Chrome Remote Desktop</th>
+  <th></th>
+  <td></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
+  <td></td>
+  <td><sup><b>*</b></sup></td>
+</tr>
+<tr>
+  <th>Lustre</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
+  <td></td>
+  <td></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
+</tr>
+<tr>
+  <th>Shared filestore</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
+</tr>
+<tr>
+  <th>Startup script</th>
+  <th></th>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
+</tr>
+
+<tr>
+  <th rowspan="1">HTCondor</th>
+  <th></th>
+  <th></th>
+  <td>✓</td><td></td><td></td><td></td>
+</tr>
+
+<tr>
+  <th rowspan="1">Omnia</th>
+  <th></th>
+  <th></th>
+  <td></td><td></td><td>✓</td><td></td>
+</tr>
+</table>
+
+<sup><b>*</b></sup> Chrome Remote desktop does not support Ubuntu 20.04, but it does support Ubuntu 22.04.
 
 ## Other Images
 
@@ -96,7 +205,27 @@ These instructions apply to the following modules:
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp
 [slurm-gcp-packer]: https://github.com/SchedMD/slurm-gcp/tree/master/packer
 [slurm-gcp-images]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md
+
+[vm-instance]: ../modules/compute/vm-instance
 [hpc-toolkit-packer]: ../modules/packer/custom-image
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group
+[batch-job]: ../modules/scheduler/batch-job-template
+[batch-login]: ../modules/scheduler/batch-login-node
+[htcondor-configure]: ../community/modules/scheduler/htcondor-configure
+[omnia-install]: ../community/modules/scripts/omnia-install
+[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
+
+[htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
+[omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
+[vm-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-startup.yaml
+[vm-crd.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-crd.yaml
+[vm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml
+[vm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml
+[slurm-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml
+[slurm-crd.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-crd.yaml
+[slurm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml
+[slurm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml
+[batch-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-startup.yaml
+[batch-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml

@@ -34,6 +34,12 @@ variable "disk_size" {
   default     = null
 }
 
+variable "disk_type" {
+  description = "Type of persistent disk to provision"
+  type        = string
+  default     = "pd-balanced"
+}
+
 variable "zone" {
   description = "Cloud zone in which to provision image building VM"
   type        = string
@@ -146,6 +152,12 @@ variable "ansible_playbooks" {
 
 variable "shell_scripts" {
   description = "A list of paths to local shell scripts which will be uploaded to customize the VM image"
+  type        = list(string)
+  default     = []
+}
+
+variable "windows_startup_ps1" {
+  description = "A list of strings containing PowerShell scripts which will customize a Windows VM image (requires WinRM communicator)"
   type        = list(string)
   default     = []
 }

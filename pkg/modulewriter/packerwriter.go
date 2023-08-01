@@ -29,28 +29,17 @@ import (
 const packerAutoVarFilename = "defaults.auto.pkrvars.hcl"
 
 // PackerWriter writes packer to the blueprint folder
-type PackerWriter struct {
-	numModules int
-}
+type PackerWriter struct{}
 
-func (w *PackerWriter) getNumModules() int {
-	return w.numModules
-}
-
-func (w *PackerWriter) addNumModules(value int) {
-	w.numModules += value
-}
-
-func printPackerInstructions(w io.Writer, modPath string, modID config.ModuleID, printImportInputs bool) {
+func printPackerInstructions(w io.Writer, groupPath string, subPath string, printImportInputs bool) {
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "Packer group '%s' was successfully created in directory %s\n", modID, modPath)
+	fmt.Fprintf(w, "Packer group was successfully created in directory %s\n", groupPath)
 	fmt.Fprintln(w, "To deploy, run the following commands:")
 	fmt.Fprintln(w)
-	grpPath := filepath.Clean(filepath.Join(modPath, ".."))
 	if printImportInputs {
-		fmt.Fprintf(w, "ghpc import-inputs %s\n", grpPath)
+		fmt.Fprintf(w, "ghpc import-inputs %s\n", groupPath)
 	}
-	fmt.Fprintf(w, "cd %s\n", modPath)
+	fmt.Fprintf(w, "cd %s\n", filepath.Join(groupPath, subPath))
 	fmt.Fprintln(w, "packer init .")
 	fmt.Fprintln(w, "packer validate .")
 	fmt.Fprintln(w, "packer build .")
@@ -93,12 +82,16 @@ func (w PackerWriter) writeDeploymentGroup(
 			return err
 		}
 
-		modPath := filepath.Join(groupPath, mod.DeploymentSource)
+		ds, err := DeploymentSource(mod)
+		if err != nil {
+			return err
+		}
+		modPath := filepath.Join(groupPath, ds)
 		if err = writePackerAutovars(av.Items(), modPath); err != nil {
 			return err
 		}
 		hasIgc := len(pure.Items()) < len(mod.Settings.Items())
-		printPackerInstructions(instructionsFile, modPath, mod.ID, hasIgc)
+		printPackerInstructions(instructionsFile, groupPath, ds, hasIgc)
 	}
 
 	return nil

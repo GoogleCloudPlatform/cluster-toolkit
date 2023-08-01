@@ -28,10 +28,11 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/hashicorp/go-getter"
 )
 
 // strings that get re-used throughout this package and others
@@ -46,8 +47,6 @@ const (
 
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
-	getNumModules() int
-	addNumModules(int)
 	writeDeploymentGroup(
 		dc config.DeploymentConfig,
 		grpIdx int,
@@ -66,25 +65,9 @@ var kinds = map[string]ModuleWriter{
 //go:embed *.tmpl
 var templatesFS embed.FS
 
-func factory(kind string) ModuleWriter {
-	writer, exists := kinds[kind]
-	if !exists {
-		log.Fatalf(
-			"modulewriter: Module kind (%s) is not valid. "+
-				"kind must be in (terraform, packer).", kind)
-	}
-	return writer
-}
-
 // WriteDeployment writes a deployment directory using modules defined the
 // environment blueprint.
-func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag bool) error {
-	deploymentName, err := dc.Config.DeploymentName()
-	if err != nil {
-		return err
-	}
-	deploymentDir := filepath.Join(outputDir, deploymentName)
-
+func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwriteFlag bool) error {
 	overwrite := isOverwriteAllowed(deploymentDir, &dc.Config, overwriteFlag)
 	if err := prepDepDir(deploymentDir, overwrite); err != nil {
 		return err
@@ -98,8 +81,7 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 		return err
 	}
 
-	advancedDeployInstructions := filepath.Join(deploymentDir, "instructions.txt")
-	f, err := os.Create(advancedDeployInstructions)
+	f, err := os.Create(InstructionsPath(deploymentDir))
 	if err != nil {
 		return err
 	}
@@ -108,10 +90,10 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 	fmt.Fprintln(f, "================================")
 
 	for grpIdx, grp := range dc.Config.DeploymentGroups {
-		writer, ok := kinds[grp.Kind.String()]
+		writer, ok := kinds[grp.Kind().String()]
 		if !ok {
 			return fmt.Errorf(
-				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind)
+				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind())
 		}
 
 		err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir, f)
@@ -127,23 +109,16 @@ func WriteDeployment(dc config.DeploymentConfig, outputDir string, overwriteFlag
 	}
 
 	for _, writer := range kinds {
-		if writer.getNumModules() > 0 {
-			if err := writer.restoreState(deploymentDir); err != nil {
-				return fmt.Errorf("error trying to restore terraform state: %w", err)
-			}
+		if err := writer.restoreState(deploymentDir); err != nil {
+			return fmt.Errorf("error trying to restore terraform state: %w", err)
 		}
 	}
-
-	fmt.Println("To deploy your infrastructure please run:")
-	fmt.Println()
-	fmt.Printf("./ghpc deploy %s\n", deploymentDir)
-	fmt.Println()
-	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
-	fmt.Println("deployment instructions at:")
-	fmt.Println()
-	fmt.Printf("%s\n", f.Name())
-
 	return nil
+}
+
+// InstructionsPath returns the path to the instructions file for a deployment
+func InstructionsPath(deploymentDir string) string {
+	return filepath.Join(deploymentDir, "instructions.txt")
 }
 
 func createGroupDirs(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
@@ -160,40 +135,52 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 	return nil
 }
 
-// Get module source within deployment group
+// DeploymentSource returns module source within deployment group
 // Rules are following:
 //   - git source
-//     => keep the same source
+//   - terraform => <mod.Source>
+//   - packer    => <mod.ID>/<package_subdir>
 //   - packer
 //     => <mod.ID>
 //   - embedded (source starts with "modules" or "comunity/modules")
-//     => ./modules/embedded/<source>
+//     => ./modules/embedded/<mod.Source>
 //   - other
-//     => ./modules/<basename(source)>-<hash(abs(source))>
-func deploymentSource(mod config.Module) (string, error) {
-	if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
-		return mod.Source, nil
-	}
-	if mod.Kind == config.PackerKind {
-		return string(mod.ID), nil
-	}
-	if mod.Kind != config.TerraformKind {
+//     => ./modules/<basename(mod.Source)>-<hash(abs(mod.Source))>
+func DeploymentSource(mod config.Module) (string, error) {
+	switch mod.Kind {
+	case config.TerraformKind:
+		return tfDeploymentSource(mod)
+	case config.PackerKind:
+		return packerDeploymentSource(mod), nil
+	default:
 		return "", fmt.Errorf("unexpected module kind %#v", mod.Kind)
 	}
+}
 
+func tfDeploymentSource(mod config.Module) (string, error) {
+	if sourcereader.IsGitPath(mod.Source) {
+		return mod.Source, nil
+	}
 	if sourcereader.IsEmbeddedPath(mod.Source) {
 		return "./modules/" + filepath.Join("embedded", mod.Source), nil
 	}
 	if !sourcereader.IsLocalPath(mod.Source) {
-		return "", fmt.Errorf("unuexpected module source %s", mod.Source)
+		return "", fmt.Errorf("unexpected module source %s", mod.Source)
 	}
-
 	abs, err := filepath.Abs(mod.Source)
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute path for %#v: %v", mod.Source, err)
 	}
 	base := filepath.Base(mod.Source)
 	return fmt.Sprintf("./modules/%s-%s", base, shortHash(abs)), nil
+}
+
+func packerDeploymentSource(mod config.Module) string {
+	if sourcereader.IsGitPath(mod.Source) {
+		_, subDir := getter.SourceDirSubdir(mod.Source)
+		return filepath.Join(string(mod.ID), subDir)
+	}
+	return string(mod.ID)
 }
 
 // Returns first 4 characters of md5 sum in hex form
@@ -225,28 +212,40 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 		var copyEmbedded = false
 		for iMod := range grp.Modules {
 			mod := &grp.Modules[iMod]
-			ds, err := deploymentSource(*mod)
+			deplSource, err := DeploymentSource(*mod)
 			if err != nil {
 				return err
 			}
-			mod.DeploymentSource = ds
 
-			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.TerraformKind {
-				continue // do not download
+			if sourcereader.IsGitPath(deplSource) {
+				continue // remote deployment source means that terraform will download it, no op
 			}
-			factory(mod.Kind.String()).addNumModules(1)
 			if sourcereader.IsEmbeddedPath(mod.Source) && mod.Kind == config.TerraformKind {
 				copyEmbedded = true
 				continue // all embedded terraform modules fill be copied at once
 			}
+
 			/* Copy source files */
-			dst := filepath.Join(basePath, mod.DeploymentSource)
+			var src, dst string
+
+			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.PackerKind {
+				src, _ = getter.SourceDirSubdir(mod.Source)
+				dst = filepath.Join(basePath, string(mod.ID))
+			} else {
+				src = mod.Source
+				dst = filepath.Join(basePath, deplSource)
+			}
 			if _, err := os.Stat(dst); err == nil {
 				continue
 			}
-			reader := sourcereader.Factory(mod.Source)
-			if err := reader.GetModule(mod.Source, dst); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", mod.Source, dst, err)
+			reader := sourcereader.Factory(src)
+			if err := reader.GetModule(src, dst); err != nil {
+				return fmt.Errorf("failed to get module from %s to %s: %v", src, dst, err)
+			}
+			// remove .git directory if one exists; we do not want submodule
+			// git history in deployment directory
+			if err := os.RemoveAll(filepath.Join(dst, ".git")); err != nil {
+				return err
 			}
 		}
 		if copyEmbedded {
@@ -421,10 +420,10 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
 		grp := dc.Config.DeploymentGroups[grpIdx]
 		grpPath := filepath.Join(deploymentDir, string(grp.Name))
-		if grp.Kind == config.TerraformKind {
+		if grp.Kind() == config.TerraformKind {
 			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)
 		}
-		if grp.Kind == config.PackerKind {
+		if grp.Kind() == config.PackerKind {
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
 
 		}

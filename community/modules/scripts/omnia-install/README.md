@@ -9,7 +9,7 @@ omnia-install, see the [omnia-cluster example].
 sudo permissions. You may want to remove this user and/or it's permissions from
 each node.
 
-[omnia-cluster example]: ../../../community/examples/omnia-cluster.yaml
+[omnia-cluster example]: ../../../../community/examples/omnia-cluster.yaml
 
 ## License
 

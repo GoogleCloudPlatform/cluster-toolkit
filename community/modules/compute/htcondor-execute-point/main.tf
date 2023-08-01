@@ -63,8 +63,8 @@ module "execute_point_instance_template" {
   preemptible          = var.spot
   startup_script       = var.startup_script
   metadata             = local.metadata
-  source_image_family  = var.image.family
-  source_image_project = var.image.project
+  source_image_family  = var.instance_image.family
+  source_image_project = var.instance_image.project
 }
 
 module "mig" {

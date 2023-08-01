@@ -26,6 +26,9 @@ deployment_groups:
   modules:
   - id: network0
     source: modules/network/vpc
+    settings:
+      enable_iap_rdp_ingress: true
+      enable_iap_winrm_ingress: true
   - id: homefs
     source: modules/file-system/filestore
     use: [network0]
@@ -45,6 +48,10 @@ deployment_groups:
         content: |
           #!/bin/bash
           echo "Hello, World!"
+  - id: windows_startup
+    source: community/modules/scripts/windows-startup-script
+    settings:
+      install_nvidia_driver: true
 
 - group: one
   modules:
@@ -54,3 +61,4 @@ deployment_groups:
     use:
     - network0
     - script
+    - windows_startup

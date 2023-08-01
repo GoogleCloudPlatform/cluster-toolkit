@@ -1,7 +1,7 @@
 Advanced Deployment Instructions
 ================================
 
-Packer group 'lime' was successfully created in directory golden_copy_deployment/zero/lime
+Packer group was successfully created in directory golden_copy_deployment/zero
 To deploy, run the following commands:
 
 cd golden_copy_deployment/zero/lime
