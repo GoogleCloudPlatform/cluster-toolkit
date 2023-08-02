@@ -153,13 +153,7 @@ deployment_groups:
       task_count: 2
       mpi_mode: true
 
-  - id: login-spack-setup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(spack-setup.setup_spack_runner)
-
   - id: batch-login
     source: modules/scheduler/batch-login-node
-    use: [login-spack-setup, batch-job]
+    use: [spack-setup, batch-job]
     outputs: [instructions]
