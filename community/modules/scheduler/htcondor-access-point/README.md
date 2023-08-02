@@ -62,7 +62,7 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_access_point_instance_template"></a> [access\_point\_instance\_template](#module\_access\_point\_instance\_template) | github.com/terraform-google-modules/terraform-google-vm//modules/instance_template | 84d7959 |
-| <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | github.com/terraform-google-modules/terraform-google-vm//modules/mig | 84d7959 |
+| <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | github.com/terraform-google-modules/terraform-google-vm//modules/mig | aea74d1 |
 | <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.20.0&depth=1 |
 
 ## Resources
@@ -87,6 +87,7 @@ limitations under the License.
 | <a name="input_default_mig_id"></a> [default\_mig\_id](#input\_default\_mig\_id) | Default MIG ID for HTCondor jobs; if unset, jobs must specify MIG id | `string` | `""` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `number` | `null` | no |
+| <a name="input_distribution_policy_target_shape"></a> [distribution\_policy\_target\_shape](#input\_distribution\_policy\_target\_shape) | Target shape acoss zones for instance group managing high availability of access point | `string` | `"BALANCED"` | no |
 | <a name="input_enable_high_availability"></a> [enable\_high\_availability](#input\_enable\_high\_availability) | Provision HTCondor access point in high availability mode | `bool` | `false` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | Enable Public IPs on the access points | `bool` | `false` | no |

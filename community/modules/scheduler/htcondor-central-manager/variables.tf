@@ -41,6 +41,12 @@ variable "zones" {
   nullable    = false
 }
 
+variable "distribution_policy_target_shape" {
+  description = "Target shape for instance group managing high availability of central manager"
+  type        = string
+  default     = "BALANCED"
+}
+
 variable "network_self_link" {
   description = "The self link of the network in which the HTCondor central manager will be created."
   type        = string

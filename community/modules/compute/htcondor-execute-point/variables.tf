@@ -31,6 +31,12 @@ variable "zones" {
   nullable    = false
 }
 
+variable "distribution_policy_target_shape" {
+  description = "Target shape across zones for instance group managing execute points"
+  type        = string
+  default     = "ANY"
+}
+
 variable "deployment_name" {
   description = "HPC Toolkit deployment name. HTCondor cloud resource names will include this value."
   type        = string
