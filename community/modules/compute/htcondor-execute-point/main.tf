@@ -137,15 +137,15 @@ module "execute_point_instance_template" {
 }
 
 module "mig" {
-  source                    = "terraform-google-modules/vm/google//modules/mig"
-  version                   = "~> 8.0"
-  project_id                = var.project_id
-  region                    = var.region
-  distribution_policy_zones = local.zones
-  target_size               = var.target_size
-  hostname                  = local.name_prefix
-  mig_name                  = local.name_prefix
-  instance_template         = module.execute_point_instance_template.self_link
+  source                           = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=aea74d1"
+  project_id                       = var.project_id
+  region                           = var.region
+  distribution_policy_target_shape = var.distribution_policy_target_shape
+  distribution_policy_zones        = local.zones
+  target_size                      = var.target_size
+  hostname                         = local.name_prefix
+  mig_name                         = local.name_prefix
+  instance_template                = module.execute_point_instance_template.self_link
 
   health_check_name = "health-htcondor-${local.name_prefix}"
   health_check = {

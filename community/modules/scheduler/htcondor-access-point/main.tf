@@ -160,14 +160,15 @@ module "access_point_instance_template" {
 
 module "htcondor_ap" {
   # tflint-ignore: terraform_module_pinned_source
-  source = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=84d7959"
+  source = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=aea74d1"
 
-  project_id                = var.project_id
-  region                    = var.region
-  distribution_policy_zones = local.zones
-  target_size               = local.host_count
-  hostname                  = local.name_prefix
-  instance_template         = module.access_point_instance_template.self_link
+  project_id                       = var.project_id
+  region                           = var.region
+  distribution_policy_target_shape = var.distribution_policy_target_shape
+  distribution_policy_zones        = local.zones
+  target_size                      = local.host_count
+  hostname                         = local.name_prefix
+  instance_template                = module.access_point_instance_template.self_link
 
   health_check_name = "health-${local.name_prefix}"
   health_check = {
