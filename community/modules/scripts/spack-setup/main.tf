@@ -29,7 +29,7 @@ locals {
 
   finalize_setup_script = <<-EOF
     set -e
-    source /etc/profile.d/spack.sh
+    . /etc/profile.d/spack.sh
     spack gpg init
     spack compiler find --scope site
   EOF

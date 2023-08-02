@@ -34,6 +34,8 @@
         {{ commands }}
         echo " === Finished commands ==="
         } 2>&1 | tee -a {{ log_file }}
+      args:
+        executable: /bin/bash
       register: output
 
     always:
