@@ -129,7 +129,7 @@ a description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
   <td></td>
-  <td></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
 </tr>
 <tr>
