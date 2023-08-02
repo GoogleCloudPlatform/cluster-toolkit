@@ -23,7 +23,7 @@
   - name: Install pip3 and git
     ansible.builtin.package:
       name:
-      - python
+      - python3
       - python3-pip
       - git
     register: package
