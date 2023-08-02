@@ -56,7 +56,7 @@ variable "network_storage" {
 }
 
 variable "instance_image" {
-  description = "Instance Image. An alternative could be family  = \"ubuntu-2004-lts\" and project = \"ubuntu-os-cloud\" or family  = \"debian-11\" and project = \"debian-cloud\""
+  description = "Instance Image. An alternative could be family  = \"ubuntu-2204-lts\" and project = \"ubuntu-os-cloud\" or family  = \"debian-11\" and project = \"debian-cloud\""
   type = object({
     family  = string,
     project = string
