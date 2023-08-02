@@ -24,46 +24,19 @@ output "controller_startup_script" {
   value       = module.startup_script.startup_script
 }
 
-output "install_spack_deps_runner" {
-  description = <<-EOT
-  Runner to install dependencies for spack using an ansible playbook. The
-  startup-script module will automatically handle installation of ansible.
-  - id: example-startup-script
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(your-spack-id.install_spack_deps_runner)
-  ...
-  EOT
-  value       = local.install_spack_deps_runner
-}
-
-output "install_spack_runner" {
-  description = "Runner to install Spack using the startup-script module"
-  value       = local.combined_runner
-}
-
-output "setup_spack_runner" {
-  description = "Adds Spack setup-env.sh script to /etc/profile.d so that it is called at shell startup. Among other things this adds Spack binary to user PATH."
-  value = {
-    "type"        = "data"
-    "destination" = "/etc/profile.d/spack.sh"
-    "content"     = <<-EOT
-      #!/bin/sh
-      if [ -f ${var.install_dir}/share/spack/setup-env.sh ]; then
-              . ${var.install_dir}/share/spack/setup-env.sh
-      fi
-      EOT
-  }
-}
-
 output "spack_path" {
   description = "Path to the root of the spack installation"
   value       = var.install_dir
 }
 
 output "spack_runner" {
-  description = "Runner to install Spack using the startup-script module"
+  description = <<-EOT
+  Runner to be used with startup-script module or passed to spack-execute module.
+  - installs Spack dependencies
+  - installs Spack 
+  - generates profile.d script to enable access to Spack
+  This is safe to run in parallel by multiple machines. Use in place of deprecated `setup_spack_runner`.
+  EOT
   value       = local.combined_runner
 }
 
