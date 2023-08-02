@@ -76,7 +76,7 @@ class ClusterInfo:
         Raises:
             subprocess.CalledProcessError: If there is an error during the preparation
             process, this exception will be raised, indicating that the process failed.
-            
+
         Note:
             The required credentials can be obtained from the cloud provider's dashboard or
             by following the documentation for obtaining authentication credentials.
@@ -232,8 +232,9 @@ class ClusterInfo:
             if part.GPU_per_node > 0:
                 yaml[-1] += (
                     f"""\
-      gpu.count: {part.GPU_per_node}
-      gpu.type: {part.GPU_type}
+      guest_accelerator:
+        - type: {part.GPU_type}
+          count: {part.GPU_per_node}
 """
                 )
             refs.append(part_id)
