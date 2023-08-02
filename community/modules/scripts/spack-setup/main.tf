@@ -27,11 +27,21 @@ locals {
     fi
   EOF
 
+  supported_cache_versions = ["v0.19.0", "v0.20.0"]
+  cache_version            = contains(local.supported_cache_versions, var.spack_ref) ? var.spack_ref : "latest"
+  add_google_mirror_script = !var.configure_for_google ? "" : <<-EOF
+    if ! spack mirror list | grep -q google_binary_cache; then
+      spack mirror add --scope site google_binary_cache gs://spack/${local.cache_version}
+      spack buildcache keys --install --trust
+    fi
+  EOF
+
   finalize_setup_script = <<-EOF
     set -e
     . /etc/profile.d/spack.sh
     spack gpg init
     spack compiler find --scope site
+    ${local.add_google_mirror_script}
   EOF
 
   script_content = templatefile(

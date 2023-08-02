@@ -39,6 +39,12 @@ variable "spack_ref" {
   default     = "v0.20.0"
 }
 
+variable "configure_for_google" {
+  description = "When true, the spack installation will be configured to pull from Google's Spack binary cache."
+  type        = bool
+  default     = true
+}
+
 variable "chown_owner" {
   description = "Owner to chown the Spack clone to. Default will not modify the clone."
   default     = null
