@@ -25,6 +25,12 @@
       ansible.builtin.debug:
         msg: "{{ commands.split('\n') | ansible.builtin.to_nice_yaml }}"
 
+    - name: Streaming log info
+      ansible.builtin.debug:
+        msg: |
+          Logs from commands will not be printed here until success (or failure)
+          Streaming logs can be found at {{ log_file }}
+
     - name: Execute commands
       ansible.builtin.shell: |
         set -eo pipefail
