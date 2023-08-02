@@ -12,6 +12,11 @@ This module generates a script that performs the following:
 
 There are several options on how to consume the outputs of this module:
 
+> [!IMPORTANT]  
+> Breaking changes between after v1.21.0. `spack-install` module replaced by
+> `spack-setup` and `spack-execute` modules.
+> [Details Below](#deprecations-and-breaking-changes)
+
 ## Examples
 
 ### `use` `spack-setup` with `spack-execute`
@@ -134,6 +139,71 @@ sudo -i spack python -m pip install package-name
 
 [SPACK_PYTHON]: https://spack.readthedocs.io/en/latest/getting_started.html#shell-support
 [builds]: https://spack.readthedocs.io/en/latest/binary_caches.html
+
+## Deprecations and Breaking Changes
+
+The old `spack-install` module has been replaced by the `spack-setup` and
+`spack-execute` modules. Generally this change strives to allow for a more
+flexible definition of a Spack build by using native Spack commands.
+
+For every deprecated variable from `spack-install` there is documentation on how
+to perform the equivalent action using `commands` and `data_files`. The
+documentation can be found on the [inputs table](#inputs) below.
+
+Below is a simple example of the same functionality shown before and after the
+breaking changes.
+
+```yaml
+  # Before
+  - id: spack-install
+    source: community/modules/scripts/spack-install
+    settings:
+      install_dir: /sw/spack
+      compilers:
+      - gcc@10.3.0 target=x86_64
+      packages:
+      - intel-mpi@2018.4.274%gcc@10.3.0
+
+- id: spack-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack.install_spack_deps_runner)
+      - $(spack.install_spack_runner)
+```
+
+```yaml
+  # After
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
+    settings:
+      install_dir: /sw/spack
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
+      commands: |
+        spack install gcc@10.3.0 target=x86_64
+        spack load gcc@10.3.0 target=x86_64
+        spack compiler find --scope site
+        spack install intel-mpi@2018.4.274%gcc@10.3.0
+
+- id: spack-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack-execute.spack-runner)
+```
+
+Although the old `spack-install` module will no longer be maintained, it is
+still possible to use the old module in a blueprint by referencing an old
+version from GitHub. Note the source line in the following example.
+
+```yaml
+  - id: spack-install
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.21.0&depth=1
+```
 
 ## License
 
