@@ -132,7 +132,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack-setup.setup_spack_runner)
+      - $(spack-setup.spack_runner)
       # the following installation of AOCC may be automated in the future
       # with a clear direction to the user to read the EULA at
       # https://developer.amd.com/aocc-compiler-eula/

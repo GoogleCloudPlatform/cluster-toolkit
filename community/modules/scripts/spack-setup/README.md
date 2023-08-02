@@ -96,33 +96,12 @@ To see a full example of this module in use, see the [hpc-slurm-gromacs.yaml] ex
 [Spack installation] produces a setup script that adds `spack` to your `PATH` as
 well as some other command-line integration tools. This script can be found at
 `<install path>/share/spack/setup-env.sh`. This script will be automatically
-added to bash startup by the `spack_runner`. In the case that you are using
-Spack on a different machine than the one where Spack was installed, you can use
-the `setup_spack_runner` to make sure Spack is also available on that machine.
+added to bash startup by any machine that runs the `spack_runner`.
+
+If you have multiple machines that all want to use the same shared Spack
+installation you can just have both machines run the `spack_runner`.
 
 [Spack installation]: https://spack-tutorial.readthedocs.io/en/latest/tutorial_basics.html#installing-spack
-
-### Example using `setup_spack_runner`
-
-The following examples assumes that a different machine is running
-`$(spack.install_spack_runner)` and the Slurm login node has access to the Spack
-instal through a shared file system.
-
-```yaml
-  - id: spack
-    source: community/modules/scripts/spack-setup
-    ...
-
-  - id: spack-setup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(spack.setup_spack_runner)
-
-  - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    use: [spack-setup, ...]
-```
 
 ### Managing Spack Python dependencies
 
