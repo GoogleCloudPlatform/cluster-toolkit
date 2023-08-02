@@ -217,6 +217,8 @@ Modules that are still in development and less stable are labeled with the
 * **[spack-setup]** ![community-badge] ![experimental-badge] : Creates a startup
   script to install [Spack](https://github.com/spack/spack) on an instance or a
   slurm login or controller.
+* **[spack-execute]** ![community-badge] ![experimental-badge] : Defines a
+  software build using [Spack](https://github.com/spack/spack).
 * **[wait-for-startup]** ![community-badge] ![experimental-badge] : Waits for
   successful completion of a startup script on a compute VM.
 
@@ -232,6 +234,7 @@ Modules that are still in development and less stable are labeled with the
 [ramble-execute]: ../community/modules/scripts/ramble-execute/README.md
 [ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md
+[spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 
 ## Module Fields
