@@ -117,6 +117,40 @@ window.onload=initPage;
         <small class="form-text text-muted">{{ form.spackdir.help_text }}</small>
     </div>
 
+    <div class="form-group">
+      <a class="btn btn-primary" data-toggle="collapse" href="#advanced-options" role="button" aria-expanded="false" aria-controls="advanced-options">
+        Advanced Options
+      </a>
+    </div>  
+
+    <div id="advanced-options" class="collapse">
+      <!-- Advanced selection fields go here -->
+      <div class="form-group">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox" class="custom-control-input" id="custom-node-images-checkbox" data-toggle="collapse" data-target="#custom-node-images">
+          <label class="custom-control-label" for="custom-node-images-checkbox">Change Default Node Images</label>
+        </div>
+      </div>
+
+      <div id="custom-node-images" class="collapse">
+        <!-- Advanced form entries for custom node images -->
+
+        <div class="form-group">
+          {{ form.login_node_image.errors }}
+          {{ form.login_node_image.label_tag }}
+          {{ form.login_node_image }}
+          <small class="form-text text-muted">{{ form.login_node_image.help_text }}</small>
+        </div>
+
+        <div class="form-group">
+          {{ form.controller_node_image.errors }}
+          {{ form.controller_node_image.label_tag }}
+          {{ form.controller_node_image }}
+          <small class="form-text text-muted">{{ form.controller_node_image.help_text }}</small>
+        </div>
+      </div>
+    </div>
+
     <br/>
     <input type="submit" value="Save" class="btn btn-primary"/>
   </form>

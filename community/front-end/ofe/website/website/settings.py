@@ -34,7 +34,7 @@ import requests
 
 
 def get_listen_hosts():
-    ip_list = ["127.0.0.1"]  # Start with localhost
+    ip_list = ["127.0.0.1", "localhost"]  # Start with localhost
     try:
         # Try to get IP info from Google Metadata
         metadata_headers = {"Metadata-Flavor": "Google"}
@@ -80,6 +80,8 @@ def get_site_name():
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+MEDIA_ROOT = "/opt/gcluster/hpc-toolkit/community/front-end/website/startup-scripts:"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/

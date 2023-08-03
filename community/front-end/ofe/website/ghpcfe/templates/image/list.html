@@ -1,0 +1,224 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if loading == 1 %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+  <h2>Startup scripts</h2>
+  {% if startupscripts %}
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_cluster_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Description</th>
+        <th scope="col">Type</th>
+        <th scope="col">File name</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for script in startupscripts %}
+      <tr>
+        <th>{{ script.id }}</th>
+        <td>{{ script.name }}</td>
+        <td>{{ script.description }}</td>
+        <td>{{ script.type }}</td>
+        <td>{{ script.content }}</td>
+        <td>
+          <a href="{% url 'startup-script-view' script.id %}" class="action-link btn-primary btn">View</a>
+          {% if admin_view == 1 %}
+            <button class="action-link script-delete-button btn-danger btn" data-url="{% url 'startup-script-delete' script.id %}">Delete</button>
+          {% endif %}
+        </td>
+        
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table
+  </div>
+  {% else %}
+    <p>You have not created a startup script yet. Create one!</p>
+  {% endif %}
+
+  <br/>
+  <a href="{% url 'startup-script-create' %}" class="btn btn-primary">Add startup script</a>
+
+  <hr>
+
+  <h2>Images</h2>
+  {% if images %}
+  <div class="table-responsive" style="min-height:25em;">
+  <table class="table align-middle" id="id_image_table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Name</th>
+        <th scope="col">Family</th>
+        <th scope="col">Source project</th>
+        <th scope="col">Source family</th>
+        <th scope="col">Startup scripts</th>
+        <th scope="col">Status</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for image in images %}
+      <tr>
+        <th>{{ image.id }}</th>
+        <td>{{ image.name }}</td>
+        <td>{{ image.family }}</td>
+        <td>{{ image.source_image_project }}</td>
+        <td>{{ image.source_image_family }}</td>
+        <td>
+          {% for script in image.startup_script.all %}
+            {{ script.name }}
+            <br>
+          {% endfor %}
+        </td>
+        <td data-image-id="{{ image.id }}" id="status-{{ image.id }}">
+          <img src="" style="width:32px;height:32px;">
+        </td>
+        <td>
+          <a href="{% url 'image-view' image.id %}" class="action-link btn-primary btn">View</a>
+          {% if admin_view == 1 and image.status == "r" or image.status = "e" %}
+            <button class="action-link image-delete-button btn-danger btn" data-url="{% url 'image-delete' image.id %}">Delete</button>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table
+  </div>
+  {% else %}
+    <p>You have not created an image yet. Create one!</p>
+  {% endif %}
+
+  <br/>
+  <a href="{% url 'image-create' %}" class="btn btn-primary">Create an image</a>
+{% endblock %}
+
+
+
+{% block tailscript %}
+<script language="javascript">
+document.addEventListener("DOMContentLoaded", function() {
+  var deleteButtons = document.querySelectorAll(".script-delete-button, .image-delete-button");
+  deleteButtons.forEach(function(button) {
+    button.addEventListener("click", function() {
+      var url = this.getAttribute("data-url");
+      var confirmationMessage = "Are you sure you want to delete this ";
+      if (this.classList.contains("script-delete-button")) {
+        confirmationMessage += "startup script?";
+      } else if (this.classList.contains("image-delete-button")) {
+        confirmationMessage += "image?";
+      }
+      if (confirm(confirmationMessage)) {
+        // User confirmed, perform the delete action
+        var form = document.createElement("form");
+        form.method = "POST";
+        form.action = url;
+
+        // Create a hidden input field for the CSRF token
+        var csrfToken = document.createElement("input");
+        csrfToken.type = "hidden";
+        csrfToken.name = "csrfmiddlewaretoken";
+        csrfToken.value = "{{ csrf_token }}"; // Django template tag for CSRF token
+        form.appendChild(csrfToken);
+
+        document.body.appendChild(form);
+
+        // Submit the form via AJAX
+        var xhr = new XMLHttpRequest();
+        xhr.open(form.method, form.action);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.onload = function() {
+          if (xhr.status === 200) {
+            var response = JSON.parse(xhr.responseText);
+            if (response.success) {
+              // Reload the page
+              window.location.reload();
+            }
+          }
+        };
+        xhr.send(new FormData(form));
+
+        // Clean up the form
+        document.body.removeChild(form);
+      } else {
+        // User canceled, do nothing
+      }
+    });
+  });
+});
+
+function refreshImageStatus(imageId) {
+  $.ajax({
+    url: '/images/image-status/' + imageId,
+    dataType: 'json',
+    success: function(data) {
+      // Update the image status on the page
+      var statusElement = $('#status-' + imageId + ' img');
+
+      if (data.status === 'n' || data.status === 'c') {
+        statusElement.attr('src', '/static/img/loading.gif');
+      } else if (data.status === 'r') {
+        statusElement.attr('src', '/static/img/status-ready.png');
+      } else if (data.status === 'e') {
+        statusElement.attr('src', '/static/img/status-error.png');
+      }
+
+      // Schedule the next refresh after 5 seconds
+      setTimeout(function() {
+        refreshImageStatus(imageId);
+      }, 5000);
+    },
+    error: function(xhr, textStatus, errorThrown) {
+      console.log('Error refreshing image status:', errorThrown);
+    }
+  });
+}
+
+$(document).ready(function() {
+  // Get all image IDs in the table
+  var imageIds = [];
+  $('#id_image_table tbody tr').each(function() {
+    var imageId = $(this).find('th').text();
+    imageIds.push(imageId);
+  });
+
+  // Refresh the status for each image every 5 seconds
+  for (var i = 0; i < imageIds.length; i++) {
+    refreshImageStatus(imageIds[i]);
+  }
+});
+
+</script>
+
+
+{% endblock %}

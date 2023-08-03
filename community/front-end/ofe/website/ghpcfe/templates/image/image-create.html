@@ -1,0 +1,110 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Create a new image</h2>  
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+
+  <form action="" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+
+  {% for field in form.visible_fields %}
+    <div class="form-group">
+      {{ field.label_tag }}
+      {{ field.errors }}
+      {{ field }}
+      {% if field.help_text %}
+        <small class="form-text text-muted">{{ field.help_text }}</small>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+    <br/>  
+    <input type="submit" value="Save" class="btn btn-primary"/>
+  </form>
+
+  <script>
+    function populateRegionsAndZones() {
+      // Get the selected credential value
+      var selectedCredential = document.getElementById('id_cloud_credential').value;
+  
+      // Make the request to the backend
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', '/backend/get-regions/' + selectedCredential, true);
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+          // Parse the response as JSON
+          var response = JSON.parse(xhr.responseText);
+  
+          // Get the "Cloud region" and "Cloud zone" select elements
+          var regionSelect = document.getElementById('id_cloud_region');
+          var zoneSelect = document.getElementById('id_cloud_zone');
+  
+          // Clear the existing options
+          regionSelect.innerHTML = '';
+          zoneSelect.innerHTML = '';
+  
+          // Add new options based on the response
+          for (var region in response) {
+            if (response.hasOwnProperty(region)) {
+              // Create a new option for the region
+              var regionOption = document.createElement('option');
+              regionOption.value = region;
+              regionOption.text = region;
+              regionSelect.appendChild(regionOption);
+            }
+          }
+  
+          // Attach an event listener to the "change" event of the "Cloud region" select element
+          regionSelect.addEventListener('change', function() {
+            var selectedRegion = regionSelect.value;
+  
+            // Clear the existing options in the "Cloud zone" select element
+            zoneSelect.innerHTML = '';
+  
+            // Get the zones for the selected region
+            var zones = response[selectedRegion];
+            for (var i = 0; i < zones.length; i++) {
+              var zone = zones[i];
+              var zoneOption = document.createElement('option');
+              zoneOption.value = zone;
+              zoneOption.text = zone;
+              zoneSelect.appendChild(zoneOption);
+            }
+          });
+  
+          // Trigger the "change" event to populate the initial "Cloud zone" options
+          regionSelect.dispatchEvent(new Event('change'));
+        }
+      };
+      xhr.send();
+    }
+  
+    // Attach the function to the "change" event of the credential select element
+    var credentialSelect = document.getElementById('id_cloud_credential');
+    credentialSelect.addEventListener('change', populateRegionsAndZones);
+  
+    // Trigger the "change" event on page load to populate the initial "Cloud region" and "Cloud zone" options
+    credentialSelect.dispatchEvent(new Event('change'));
+  </script>
+  
+  
+{% endblock %}

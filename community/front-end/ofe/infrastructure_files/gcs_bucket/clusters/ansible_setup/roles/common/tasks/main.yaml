@@ -17,7 +17,7 @@
   ansible.builtin.yum:
     name:
     - environment-modules
-  when: ansible_distribution == 'CentOS'
+  when: ansible_distribution in ['CentOS', 'Rocky']
 
 - name: Create Modules directory
   ansible.builtin.file:
@@ -33,7 +33,7 @@
     owner: root
     mode: 0755
     force: False
-  when: ansible_distribution == 'CentOS'
+  when: ansible_distribution in ['CentOS', 'Rocky']
 
 - name: Enable su to OS Login
   ansible.builtin.lineinfile:

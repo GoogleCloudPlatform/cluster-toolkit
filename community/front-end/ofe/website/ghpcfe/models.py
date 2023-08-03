@@ -26,7 +26,7 @@ from allauth.socialaccount.models import SocialAccount
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MinValueValidator, RegexValidator, MaxLengthValidator
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -534,6 +534,122 @@ class MountPoint(models.Model):
     def __str__(self):
         return f"{self.mount_path} on {self.cluster}"
 
+class StartupScript(models.Model):
+    """Model representing a startup script for custom image build."""
+
+    def __str__(self):
+        return self.name
+
+    name = models.CharField(
+        max_length=30,
+        help_text="Enter a startup script name",
+    )
+    description = models.TextField(
+        max_length=4000,
+        help_text="(Optional) description of this stratup script",
+        blank=True,
+        null=True,
+    )
+    STARTUP_SCRIPT_TYPES = (
+        ("shell", "Shell script"),
+        ("ansible-local", "Ansible playbook"),
+    )
+    type = models.CharField(
+        max_length=13,
+        choices=STARTUP_SCRIPT_TYPES,
+        blank=False,
+        default="shell",
+        help_text="Type of this application installation",
+    )
+    content = models.FileField(
+        upload_to="startup-scripts/",
+        help_text="Startup script file."
+    )
+    owner = models.ForeignKey(
+        User,
+        related_name="startup_script_owner",
+        help_text="Who owns this startup script?",
+        on_delete=models.RESTRICT,
+    )
+    authorised_users = models.ManyToManyField(
+        User,
+        related_name="startup_script_authorised_users",
+        help_text="Select other users authorised to use this startup script",
+    )
+        
+class Image(CloudResource):
+    """Model representing a custom node image."""
+
+    name = models.CharField(
+        max_length=30,
+        help_text="Enter an image name",
+        unique=True,
+    )
+
+    family = models.CharField(
+        max_length=30,
+        help_text="Enter you new image family",
+        unique=True,
+    )
+
+    source_image_project = models.CharField(
+        max_length=60,
+        help_text="Enter a source image project",
+        blank=False,
+        default="schedmd-slurm-public",
+    )
+
+    source_image_family = models.CharField(
+        max_length=60,
+        help_text="Enter a soure image family",
+        blank=False,
+        default="schedmd-v5-slurm-22-05-8-rocky-linux-8",
+    )
+
+    startup_script = models.ManyToManyField(
+        StartupScript,
+        help_text="Which startup scripts to use?",
+    )
+
+    enable_os_login = models.CharField(
+        max_length=5,
+        help_text="Enable OS Login durring the image creation?",
+        choices=(("TRUE", "TRUE"),("FALSE", "FALSE")),
+        default="TRUE",
+    )
+
+    block_project_ssh_keys = models.CharField(
+        max_length=5,
+        help_text="Don't use SSH keys in project metadata to create users?",
+        choices=(("TRUE", "TRUE"),("FALSE", "FALSE")),
+        default="TRUE",
+    )
+    owner = models.ForeignKey(
+        User,
+        related_name="image_owner",
+        help_text="Who owns this image?",
+        on_delete=models.RESTRICT,
+    )
+    authorised_users = models.ManyToManyField(
+        User,
+        related_name="image_authorised_users",
+        help_text="Select other users authorised to use this image",
+    )
+    IMAGE_STATUS = (
+        ("n", "Image is being newly configured by user"),
+        ("c", "Image is being created"),
+        ("r", "Image is ready"),
+        ("e", "Image creation has failed"),
+    )
+    status = models.CharField(
+        max_length=1,
+        choices=IMAGE_STATUS,
+        default="n",
+        help_text="Status of this image",
+    )
+
+    def __str__(self):
+        return self.name
 
 class Cluster(CloudResource):
     """Model representing a cluster"""
@@ -654,6 +770,24 @@ class Cluster(CloudResource):
         null=True,
         blank=True,
     )
+    login_node_image = models.ForeignKey(
+        Image,
+        related_name="login_node_image",
+        help_text="Select login node image",
+        blank=True,
+        null=True,
+        default=None,
+        on_delete=models.SET_NULL
+    )
+    controller_node_image = models.ForeignKey(
+        Image,
+        related_name="controller_node_image",
+        help_text="Select controller node image",
+        blank=True,
+        null=True,
+        default=None,
+        on_delete=models.SET_NULL,
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
@@ -721,7 +855,18 @@ class ComputeInstance(CloudResource):
 class ClusterPartition(models.Model):
     """Compute partition on a clustero"""
 
-    name = models.CharField(max_length=80, help_text="Partition name")
+    # Define the regex pattern validator
+    name_validator = RegexValidator(
+        regex=r"^[a-z](?:[a-z0-9]{0,6})$",
+        message="Name must start with a lowercase letter and can have up to 7 characters (lowercase letters or digits).",
+    )
+    # Define the max length validator
+    max_length_validator = MaxLengthValidator(7, "Name cannot exceed 7 characters.")
+    name = models.CharField(
+        max_length=7,
+        validators=[name_validator, max_length_validator],
+        help_text="Partition name must start with a lowercase letter and can have up to 7 character (lowercase letters or digits).",
+    )
     cluster = models.ForeignKey(
         Cluster,
         related_name="partitions",
@@ -731,10 +876,14 @@ class ClusterPartition(models.Model):
         max_length=40,
         help_text="GCP Instance Type name",
     )
-    image = models.CharField(
-        max_length=4096,
-        help_text="OS Image path",
+    image = models.ForeignKey(
+        Image,
+        related_name="compute_node_image",
+        help_text="Select compute node image",
         blank=True,
+        null=True,
+        default=None,
+        on_delete=models.SET_NULL,
     )
     max_node_count = models.PositiveIntegerField(
         validators=[MinValueValidator(1)],
