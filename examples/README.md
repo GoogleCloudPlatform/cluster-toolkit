@@ -179,11 +179,12 @@ generation AMD EPYC Milan.
 * `c3` with compute-optimized [`c3-highcpu-176` nodes][c3] based on Intel Sapphire
 Rapids processors. When configured with Tier_1 networking, C3 nodes feature 200 Gbps
 low-latency networking.
+* `h3` with compute-optimized [`h3-standard-88` nodes][h3]  based on Intel Sapphire
+Rapids processors. H3 VMs can use the entire host network bandwidth and come with a default network bandwidth rate of up to 200 Gbps.
 * `a208` with [`a2-ultragpu-8g` nodes][a2] with 8 of the NVIDIA A100 GPU accelerators
 with 80GB of GPU memory each.
 * `a216` with [`a2-megagpu-16g` nodes][a2] with 16 of the NVIDIA A100 GPU accelerators
 with 40GB of GPU memory each.
-* `h3` with [`h3-standard-88` nodes][h3] TODO: add description
 
 For all partions other than `n2`, [compact placement] policies are enabled by default
 and nodes are created and destroyed on a per-job basis. Furthermore, these partitions
@@ -197,9 +198,9 @@ are configured with:
 [c2]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2_machine_types
 [c2d]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2d_machine_types
 [c3]: https://cloud.google.com/blog/products/compute/introducing-c3-machines-with-googles-custom-intel-ipu
+[h3]: https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series
 [a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
 [g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
-[h3]: TODO_add_link
 [compact placement]: https://cloud.google.com/compute/docs/instances/define-instance-placement
 [GVNIC]: https://cloud.google.com/compute/docs/networking/using-gvnic
 [Tier_1]: https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration
