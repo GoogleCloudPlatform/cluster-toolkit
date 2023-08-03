@@ -18,6 +18,10 @@ version: 2
 updates:
 - package-ecosystem: gomod
   directory: /
+  labels:
+  - dependencies
+  - go
+  - chore
   schedule:
     interval: weekly
     day: monday
@@ -26,6 +30,10 @@ updates:
   target-branch: develop
 - package-ecosystem: pip
   directory: /community/front-end/ofe/
+  labels:
+  - dependencies
+  - python
+  - chore
   schedule:
     interval: monthly
     time: "03:00"

@@ -6,52 +6,57 @@ This module performs the following tasks:
 - create a managed instance group (MIG) for execute points
 - create a Toolkit runner to configure the autoscaler to scale the MIG
 
-It is expected to be used with the [htcondor-install] and [htcondor-configure]
+It is expected to be used with the [htcondor-install] and [htcondor-setup]
 modules.
 
 [htcondor-install]: ../../scripts/htcondor-install/README.md
-[htcondor-configure]: ../../scheduler/htcondor-configure/README.md
+[htcondor-setup]: ../../scheduler/htcondor-setup/README.md
 
 ### Known limitations
 
-This module may be used exactly 1 or 2 times in a blueprint to create sets of
-execute points in an HTCondor pool. If using 1 set, it may use either Spot or
-On-demand pricing. If using 2 sets, one must use Spot and the other must
-use On-demand pricing. If you do not follow this constraint, you will likely
-receive an error while running `terraform apply` similar to that shown below.
-Future development is planned to support more than 2 sets of VM configurations,
-including all pricing options.
+This module may be used multiple times in a blueprint to create sets of
+execute points in an HTCondor pool. If used more than 1 time, the setting
+[name_prefix](#input_name_prefix) must be set to a value that is unique across
+all uses of the htcondor-execute-point module. If you do not follow this
+constraint, you will likely receive an error while running `terraform apply`
+similar to that shown below.
 
 ```text
-│     │ var.runners is list of map of string with 7 elements
-│
-│ All startup-script runners must have a unique destination.
-│
-│ This was checked by the validation rule at modules/startup-script/variables.tf:72,3-13.
+Error: Invalid value for variable
+
+  on modules/embedded/community/modules/scheduler/htcondor-access-point/main.tf line 136, in module "startup_script":
+ 136:   runners = local.all_runners
+    ├────────────────
+    │ var.runners is list of map of string with 5 elements
+
+All startup-script runners must have a unique destination.
 ```
 
-### How to run HTCondor jobs on Spot VMs
+### How to configure jobs to select execute points
 
 HTCondor access points provisioned by the Toolkit are specially configured to
-add an attribute named `RequireSpot` to each [Job ClassAd][jobad]. When this
-value is true, a job's `requirements` are automatically updated to require
-that it run on a Spot VM. When this value is false, the `requirements` are
-similarly updated to run only on On-Demand VMs. The default value of this
-attribute is false. A job submit file may override this value as shown below.
+honor an attribute named `RequireId` in each [Job ClassAd][jobad]. This value
+must be set to the ID of a MIG created by an instance of this module. The
+[htcondor-access-point] module includes a setting `var.default_mig_id` that will
+set this value automatically to the MIG ID corresponding to the module's
+execute points. If this setting is left unset each job must specify `+RequireId`
+explicitly. In all cases, the default value can be overridden explicitly as shown
+below:
 
 ```text
 universe       = vanilla
 executable     = /bin/echo
 arguments      = "Hello, World!"
-output         = out.\$(ClusterId).\$(ProcId)
-error          = err.\$(ClusterId).\$(ProcId)
-log            = log.\$(ClusterId).\$(ProcId)
+output         = out.$(ClusterId).$(ProcId)
+error          = err.$(ClusterId).$(ProcId)
+log            = log.$(ClusterId).$(ProcId)
 request_cpus   = 1
 request_memory = 100MB
-+RequireSpot   = true
++RequireId     = "htcondor-pool-ep-mig"
 queue
 ```
 
+[htcondor-access-point]: ../../scheduler/htcondor-access-point/README.md
 [jobad]: https://htcondor.readthedocs.io/en/latest/users-manual/matchmaking-with-classads.html
 
 ### Example
@@ -69,47 +74,46 @@ a startup script and network created in previous steps.
   source: community/modules/compute/htcondor-execute-point
   use:
   - network1
-  - htcondor_configure_execute_point
+  - htcondor_secrets
+  - htcondor_setup
+  - htcondor_cm
   settings:
-    service_account:
-      email: $(htcondor_configure.execute_point_service_account)
-      scopes:
-      - cloud-platform
+    instance_image:
+      project: $(vars.project_id)
+      family: $(vars.new_image_family)
+    min_idle: 2
 
 - id: htcondor_execute_point_spot
   source: community/modules/compute/htcondor-execute-point
   use:
   - network1
-  - htcondor_configure_execute_point
+  - htcondor_secrets
+  - htcondor_setup
+  - htcondor_cm
   settings:
-    service_account:
-      email: $(htcondor_configure.execute_point_service_account)
-      scopes:
-      - cloud-platform
+    instance_image:
+      project: $(vars.project_id)
+      family: $(vars.new_image_family)
+    spot: true
 
-  - id: htcondor_startup_access_point
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_install.install_htcondor_runner)
-      - $(htcondor_install.install_autoscaler_deps_runner)
-      - $(htcondor_install.install_autoscaler_runner)
-      - $(htcondor_configure.access_point_runner)
-      - $(htcondor_execute_point.configure_autoscaler_runner)
-      - $(htcondor_execute_point_spot.configure_autoscaler_runner)
-
-  - id: htcondor_access
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - htcondor_startup_access_point
-    settings:
-      name_prefix: access-point
-      machine_type: c2-standard-4
-      service_account:
-        email: $(htcondor_configure.access_point_service_account)
-        scopes:
-        - cloud-platform
+- id: htcondor_access
+  source: community/modules/scheduler/htcondor-access-point
+  use:
+  - network1
+  - htcondor_secrets
+  - htcondor_setup
+  - htcondor_cm
+  - htcondor_execute_point
+  - htcondor_execute_point_spot
+  settings:
+    default_mig_id: $(htcondor_execute_point.mig_id)
+    enable_public_ips: true
+    instance_image:
+      project: $(vars.project_id)
+      family: $(vars.new_image_family)
+  outputs:
+  - access_point_ips
+  - access_point_name
 ```
 
 ## Support
@@ -158,50 +162,66 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.1 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.0 |
 
 ## Providers
 
-No providers.
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.0 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 8.0 |
-| <a name="module_mig"></a> [mig](#module\_mig) | terraform-google-modules/vm/google//modules/mig | ~> 8.0 |
+| <a name="module_mig"></a> [mig](#module\_mig) | github.com/terraform-google-modules/terraform-google-vm//modules/mig | aea74d1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.20.0&depth=1 |
 
 ## Resources
 
-No resources.
+| Name | Type |
+|------|------|
+| [google_storage_bucket_object.execute_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [google_compute_image.htcondor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
+| [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_central_manager_ips"></a> [central\_manager\_ips](#input\_central\_manager\_ips) | List of IP addresses of HTCondor Central Managers | `list(string)` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `number` | `100` | no |
+| <a name="input_distribution_policy_target_shape"></a> [distribution\_policy\_target\_shape](#input\_distribution\_policy\_target\_shape) | Target shape across zones for instance group managing execute points | `string` | `"ANY"` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
+| <a name="input_execute_point_runner"></a> [execute\_point\_runner](#input\_execute\_point\_runner) | A list of Toolkit runners for configuring an HTCondor execute point | `list(map(string))` | `[]` | no |
+| <a name="input_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#input\_execute\_point\_service\_account\_email) | Service account for HTCondor execute point (e-mail format) | `string` | n/a | yes |
+| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `[]` | no |
+| <a name="input_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#input\_htcondor\_bucket\_name) | Name of HTCondor configuration bucket | `string` | n/a | yes |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | HTCondor execute point VM image | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-rocky-linux-8",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to HTConodr execute points | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor execute points | `string` | `"n2-standard-4"` | no |
 | <a name="input_max_size"></a> [max\_size](#input\_max\_size) | Maximum size of the HTCondor execute point pool. | `number` | `100` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor execute points | `map(string)` | `{}` | no |
 | <a name="input_min_idle"></a> [min\_idle](#input\_min\_idle) | Minimum number of idle VMs in the HTCondor pool (if pool reaches var.max\_size, this minimum is not guaranteed); set to ensure jobs beginning run more quickly. | `number` | `0` | no |
+| <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name prefix given to hostnames in this group of execute points; must be unique across all instances of this module | `string` | n/a | yes |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network HTCondor execute points will join | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HTCondor execute points will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region in which HTCondor execute points will be created | `string` | n/a | yes |
-| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to HTCondor execute points | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/cloud-platform"<br>  ]<br>}</pre> | no |
+| <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes by which to limit service account attached to central manager. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
-| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script to run at boot-time for HTCondor execute points | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork HTCondor execute points will join | `string` | `null` | no |
 | <a name="input_target_size"></a> [target\_size](#input\_target\_size) | Initial size of the HTCondor execute point pool; set to null (default) to avoid Terraform management of size. | `number` | `null` | no |
-| <a name="input_zone"></a> [zone](#input\_zone) | The default zone in which resources will be created | `string` | n/a | yes |
+| <a name="input_windows_startup_ps1"></a> [windows\_startup\_ps1](#input\_windows\_startup\_ps1) | Startup script to run at boot-time for Windows-based HTCondor execute points | `list(string)` | `[]` | no |
+| <a name="input_zones"></a> [zones](#input\_zones) | Zone(s) in which execute points may be created. If not supplied, will default to all zones in var.region. | `list(string)` | `[]` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_configure_autoscaler_runner"></a> [configure\_autoscaler\_runner](#output\_configure\_autoscaler\_runner) | Toolkit runner to configure the HTCondor autoscaler |
+| <a name="output_autoscaler_runner"></a> [autoscaler\_runner](#output\_autoscaler\_runner) | Toolkit runner to configure the HTCondor autoscaler |
+| <a name="output_mig_id"></a> [mig\_id](#output\_mig\_id) | ID of the managed instance group containing the execute points |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

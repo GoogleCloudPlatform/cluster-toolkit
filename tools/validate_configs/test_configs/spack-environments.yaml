@@ -28,21 +28,20 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
-  - id: spack
-    source: ./community/modules/scripts/spack-install
+  - id: spack-setup
+    source: ./community/modules/scripts/spack-setup
     settings:
       install_dir: /apps/spack
       spack_url: https://github.com/spack/spack
       spack_ref: v0.17.1
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
       log_file: /var/log/spack.log
-      configs:
-      - type: 'single-config'
-        scope: 'site'
-        content: 'config:install_tree:padded_length:128'
-      compilers:
-      - gcc@10.3.0 target=x86_64
-      environments:
-      - name: 'file-test'
+      data_files:
+      - destination: /apps/spack/env_file.yaml
         content: |
           spack:
             definitions:
@@ -60,24 +59,49 @@ deployment_groups:
               - - $mpi_packages
               - - $%compilers
               - - $^mpis
-      - name: 'pkg-test'
-        packages:
-        - intel-mpi@2018.4.274 %gcc@10.3.0
-        - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
-      - name: 'mixed-test'
+      - destination: /apps/spack/mixed_env_file.yaml
         content: |
           spack:
             specs:
               intel-mpi@20184.274 %gcc@10.3.0
-        packages:
-        - gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
-      - name: 'empty-test'
-      gpg_keys:
-      - type: 'file'
-        path: '/tmp/spack_key.gpg'
-      caches_to_populate:
-      - type: 'mirror'
-        path:   ##  Add GCS bucket to populate here ##
+      commands: |
+        spack config --scope site add config:install_tree:padded_length:128
+
+        spack gpg init
+        spack gpg create "Robert Pirsig" pirsig@zamm.org
+
+        spack install gcc@10.3.0 target=x86_64
+        spack load gcc@10.3.0 target=x86_64
+        spack compiler find --scope site
+
+        if ! spack env list | grep -q test-file; then
+          spack env create test-file /apps/spack/env_file.yaml
+          spack env activate test-file
+          spack concretize
+          spack install
+        fi
+
+        if ! spack env list | grep -q test-package; then
+          spack env create test-package
+        fi
+        spack env activate test-package
+        spack add intel-mpi@2018.4.274 %gcc@10.3.0
+        spack add gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+        spack concretize
+        spack install
+
+        if ! spack env list | grep -q test-mixed; then
+          spack env create test-mixed /apps/spack/mixed_env_file.yaml
+        fi
+        spack env activate test-mixed
+        spack add gromacs@2021.2 %gcc@10.3.0 ^intel-mpi@2018.4.274
+        spack concretize
+        spack install
+
+        MIRROR_URL=gs://<name of your bucket>
+        spack buildcache create --mirror-url $MIRROR_URL -af \$(spack find --format /{hash});
+        spack gpg publish --mirror-url $MIRROR_URL;
+        spack buildcache update-index --mirror-url $MIRROR_URL --keys;
 
   - id: spack-startup
     source: modules/scripts/startup-script
@@ -92,12 +116,7 @@ deployment_groups:
           mkdir /apps
           chmod a+rwx /apps
         destination: apps_create.sh
-      - type: ansible-local
-        source: modules/spack-install/scripts/install_spack_deps.yml
-        destination: install_spack_deps.yml
-      - type: shell
-        content: $(spack.startup_script)
-        destination: install_spack.sh
+      - $(spack-execute.spack_runner)
       - type: shell
         destination: shutdown.sh
         content: shutdown -h

@@ -116,7 +116,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ -name "*.yaml" -type f)
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f)
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"

@@ -39,10 +39,8 @@ deployment_groups:
 
   - id: htcondor_install_script
     source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_install.install_htcondor_runner)
-      - $(htcondor_install.install_autoscaler_deps_runner)
+    use:
+    - htcondor_install
 
 - group: packer
   modules:
@@ -59,52 +57,28 @@ deployment_groups:
 
 - group: pool
   modules:
-  - id: htcondor_configure
-    source: community/modules/scheduler/htcondor-configure
+  - id: htcondor_setup
+    source: community/modules/scheduler/htcondor-setup
     use:
     - network1
 
-  - id: htcondor_startup_central_manager
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_configure.central_manager_runner)
+  - id: htcondor_secrets
+    source: community/modules/scheduler/htcondor-pool-secrets
+    use:
+    - htcondor_setup
 
   - id: htcondor_cm
-    source: modules/compute/vm-instance
+    source: community/modules/scheduler/htcondor-central-manager
     use:
-    - htcondor_startup_central_manager
+    - network1
+    - htcondor_secrets
+    - htcondor_setup
     settings:
-      name_prefix: cm
       instance_image:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
-      add_deployment_name_before_prefix: true
-      machine_type: c2-standard-4
-      disable_public_ips: true
-      service_account:
-        email: $(htcondor_configure.central_manager_service_account)
-        scopes:
-        - cloud-platform
-      network_interfaces:
-      - network: null
-        subnetwork: $(network1.subnetwork_self_link)
-        subnetwork_project: $(vars.project_id)
-        network_ip: $(htcondor_configure.central_manager_internal_ip)
-        stack_type: null
-        access_config: []
-        ipv6_access_config: []
-        alias_ip_range: []
-        nic_type: VIRTIO_NET
-        queue_count: null
     outputs:
-    - internal_ip
-
-  - id: htcondor_startup_execute_point
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_configure.execute_point_runner)
+    - central_manager_name
 
   # the HTCondor modules support up to 2 execute points per blueprint
   # if using 1, it may use Spot or On-demand pricing
@@ -113,70 +87,45 @@ deployment_groups:
     source: community/modules/compute/htcondor-execute-point
     use:
     - network1
-    - htcondor_startup_execute_point
+    - htcondor_secrets
+    - htcondor_setup
+    - htcondor_cm
     settings:
+      name_prefix: grp1
       instance_image:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
       min_idle: 2
-      service_account:
-        email: $(htcondor_configure.execute_point_service_account)
-        scopes:
-        - cloud-platform
 
   - id: htcondor_execute_point_spot
     source: community/modules/compute/htcondor-execute-point
     use:
     - network1
-    - htcondor_startup_execute_point
+    - htcondor_secrets
+    - htcondor_setup
+    - htcondor_cm
     settings:
-      spot: true
+      name_prefix: spot
       instance_image:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
-      service_account:
-        email: $(htcondor_configure.execute_point_service_account)
-        scopes:
-        - cloud-platform
-
-  - id: htcondor_startup_access_point
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_install.install_autoscaler_runner)
-      - $(htcondor_configure.access_point_runner)
-      - $(htcondor_execute_point.configure_autoscaler_runner)
-      - $(htcondor_execute_point_spot.configure_autoscaler_runner)
-      - type: data
-        destination: /var/tmp/helloworld.sub
-        content: |
-          universe       = vanilla
-          executable     = /bin/echo
-          arguments      = "Hello, World!"
-          output         = out.\$(ClusterId).\$(ProcId)
-          error          = err.\$(ClusterId).\$(ProcId)
-          log            = log.\$(ClusterId).\$(ProcId)
-          request_cpus   = 1
-          request_memory = 100MB
-          +RequireSpot   = true # if unset, defaults to false
-          queue
+      spot: true
 
   - id: htcondor_access
-    source: modules/compute/vm-instance
+    source: community/modules/scheduler/htcondor-access-point
     use:
     - network1
-    - htcondor_startup_access_point
+    - htcondor_secrets
+    - htcondor_setup
+    - htcondor_cm
+    - htcondor_execute_point
+    - htcondor_execute_point_spot
     settings:
-      name_prefix: ap
+      default_mig_id: $(htcondor_execute_point.mig_id)
+      enable_public_ips: true
       instance_image:
         project: $(vars.project_id)
         family: $(vars.new_image_family)
-      add_deployment_name_before_prefix: true
-      machine_type: c2-standard-4
-      service_account:
-        email: $(htcondor_configure.access_point_service_account)
-        scopes:
-        - cloud-platform
     outputs:
-    - internal_ip
-    - external_ip
+    - access_point_ips
+    - access_point_name

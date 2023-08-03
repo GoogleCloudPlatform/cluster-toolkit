@@ -24,9 +24,17 @@ variable "region" {
   type        = string
 }
 
-variable "zone" {
-  description = "The default zone in which resources will be created"
+variable "zones" {
+  description = "Zone(s) in which execute points may be created. If not supplied, will default to all zones in var.region."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "distribution_policy_target_shape" {
+  description = "Target shape across zones for instance group managing execute points"
   type        = string
+  default     = "ANY"
 }
 
 variable "deployment_name" {
@@ -45,10 +53,10 @@ variable "machine_type" {
   default     = "n2-standard-4"
 }
 
-variable "startup_script" {
-  description = "Startup script to run at boot-time for HTCondor execute points"
-  type        = string
-  default     = null
+variable "execute_point_runner" {
+  description = "A list of Toolkit runners for configuring an HTCondor execute point"
+  type        = list(map(string))
+  default     = []
 }
 
 variable "network_storage" {
@@ -77,18 +85,17 @@ variable "instance_image" {
   }
 }
 
-variable "service_account" {
-  description = "Service account to attach to HTCondor execute points"
-  type = object({
-    email  = string,
-    scopes = set(string)
-  })
-  default = {
-    email = null
-    scopes = [
-      "https://www.googleapis.com/auth/cloud-platform",
-    ]
-  }
+variable "execute_point_service_account_email" {
+  description = "Service account for HTCondor execute point (e-mail format)"
+  type        = string
+}
+
+variable "service_account_scopes" {
+  description = "Scopes by which to limit service account attached to central manager."
+  type        = set(string)
+  default = [
+    "https://www.googleapis.com/auth/cloud-platform",
+  ]
 }
 
 variable "network_self_link" {
@@ -151,4 +158,46 @@ variable "disk_size_gb" {
   description = "Boot disk size in GB"
   type        = number
   default     = 100
+}
+
+variable "windows_startup_ps1" {
+  description = "Startup script to run at boot-time for Windows-based HTCondor execute points"
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "central_manager_ips" {
+  description = "List of IP addresses of HTCondor Central Managers"
+  type        = list(string)
+}
+
+variable "htcondor_bucket_name" {
+  description = "Name of HTCondor configuration bucket"
+  type        = string
+}
+
+variable "guest_accelerator" {
+  description = "List of the type and count of accelerator cards attached to the instance."
+  type = list(object({
+    type  = string,
+    count = number
+  }))
+  default  = []
+  nullable = false
+
+  validation {
+    condition     = length(var.guest_accelerator) <= 1
+    error_message = "The HTCondor module supports 0 or 1 models of accelerator card on each execute point"
+  }
+}
+
+variable "name_prefix" {
+  description = "Name prefix given to hostnames in this group of execute points; must be unique across all instances of this module"
+  type        = string
+  nullable    = false
+  validation {
+    condition     = length(var.name_prefix) > 0
+    error_message = "var.name_prefix must be a set to a non-empty string and must also be unique across all instances of htcondor-execute-point"
+  }
 }

@@ -37,14 +37,6 @@ const (
 	maxLabels            = 64
 )
 
-// validate is the top-level function for running the validation suite.
-func (dc DeploymentConfig) validate() error {
-	errs := Errors{}
-	return errs.
-		Add(dc.executeValidators()).
-		Add(dc.validateModules()).OrNil()
-}
-
 // performs validation of global variables
 func (dc DeploymentConfig) executeValidators() error {
 	var errored, warned bool
@@ -112,12 +104,12 @@ func (dc DeploymentConfig) executeValidators() error {
 	return nil
 }
 
-func validateGlobalLabels(bp Blueprint) error {
-	if !bp.Vars.Has("labels") {
+func validateGlobalLabels(vars Dict) error {
+	if !vars.Has("labels") {
 		return nil
 	}
 	p := Root.Vars.Dot("labels")
-	labels := bp.Vars.Get("labels")
+	labels := vars.Get("labels")
 	ty := labels.Type()
 
 	if !ty.IsObjectType() && !ty.IsMapType() {
@@ -151,11 +143,11 @@ func validateGlobalLabels(bp Blueprint) error {
 }
 
 // validateVars checks the global variables for viable types
-func (dc DeploymentConfig) validateVars() error {
+func validateVars(vars Dict) error {
 	errs := Errors{}
-	errs.Add(validateGlobalLabels(dc.Config))
+	errs.Add(validateGlobalLabels(vars))
 	// Check for any nil values
-	for key, val := range dc.Config.Vars.Items() {
+	for key, val := range vars.Items() {
 		if val.IsNull() {
 			errs.At(Root.Vars.Dot(key), fmt.Errorf("deployment variable %s was not set", key))
 		}
@@ -163,26 +155,31 @@ func (dc DeploymentConfig) validateVars() error {
 	return errs.OrNil()
 }
 
-func validateModule(p modulePath, m Module) error {
+func validateModule(p modulePath, m Module, bp Blueprint) error {
+	// Source/Kind validations are required to pass to perform other validations
+	if m.Source == "" {
+		return BpError{p.Source, fmt.Errorf(errorMessages["emptySource"])}
+	}
+	if err := checkMovedModule(m.Source); err != nil {
+		return BpError{p.Source, err}
+	}
+	if !IsValidModuleKind(m.Kind.String()) {
+		return BpError{p.Kind, fmt.Errorf(errorMessages["wrongKind"])}
+	}
+	info, err := modulereader.GetModuleInfo(m.Source, m.Kind.kind)
+	if err != nil {
+		return BpError{p.Source, err}
+	}
+
 	errs := Errors{}
 	if m.ID == "" {
 		errs.At(p.ID, fmt.Errorf(errorMessages["emptyID"]))
 	}
-	if m.Source == "" {
-		errs.At(p.Source, fmt.Errorf(errorMessages["emptySource"]))
-	}
-	if !IsValidModuleKind(m.Kind.String()) {
-		errs.At(p.Kind, fmt.Errorf(errorMessages["wrongKind"]))
-	}
-
-	info, err := modulereader.GetModuleInfo(m.Source, m.Kind.kind)
-	if err != nil { // Can not proceed with other validations
-		return errs.Add(err)
-	}
-
 	return errs.
 		Add(validateSettings(p, m, info)).
 		Add(validateOutputs(p, m, info)).
+		Add(validateModuleUseReferences(p, m, bp)).
+		Add(validateModuleSettingReferences(p, m, bp)).
 		OrNil()
 }
 
@@ -197,16 +194,6 @@ func validateOutputs(p modulePath, mod Module, info modulereader.ModuleInfo) err
 			errs.At(p.Outputs.At(io), err)
 		}
 	}
-	return errs.OrNil()
-}
-
-// validateModules ensures parameters set in modules are set correctly.
-func (dc DeploymentConfig) validateModules() error {
-	errs := Errors{}
-	dc.Config.WalkModules(func(p modulePath, m *Module) error {
-		errs.Add(validateModule(p, *m))
-		return nil
-	})
 	return errs.OrNil()
 }
 
@@ -278,7 +265,7 @@ func (dc *DeploymentConfig) testApisEnabled(c validatorConfig) error {
 	}
 
 	apis := map[string]bool{}
-	dc.Config.WalkModules(func(_ modulePath, m *Module) error {
+	dc.Config.WalkModules(func(m *Module) error {
 		for _, api := range m.InfoOrDie().RequiredApis {
 			apis[api] = true
 		}
@@ -378,7 +365,7 @@ func (dc *DeploymentConfig) testModuleNotUsed(c validatorConfig) error {
 	}
 
 	acc := map[string][]string{}
-	dc.Config.WalkModules(func(_ modulePath, m *Module) error {
+	dc.Config.WalkModules(func(m *Module) error {
 		ids := m.listUnusedModules()
 		sids := make([]string, len(ids))
 		for i, id := range ids {
