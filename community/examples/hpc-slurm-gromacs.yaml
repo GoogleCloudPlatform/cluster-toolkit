@@ -45,17 +45,18 @@ deployment_groups:
       local_mount: /home
 
   ## Install Scripts
-  - id: spack
-    source: community/modules/scripts/spack-install
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
     settings:
       install_dir: /sw/spack
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
       log_file: /var/log/spack.log
-      configs:
-      - type: single-config
-        scope: defaults
-        content: "config:build_stage:/sw/spack/spack-stage"
-      - type: file
-        scope: defaults
+      data_files:
+      - destination: /tmp/projections-config.yaml
         content: |
           modules:
             default:
@@ -66,23 +67,20 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      compilers:
-      - gcc@10.3.0 target=x86_64
-      packages:
-      - intel-mpi@2018.4.274%gcc@10.3.0
-      - gromacs@2023.1 %gcc@10.3.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@4.8.5
-      # Uncomment and update the name and path to add a shared or personal Spack
-      # cache location to speed up future deployments.
-      # spack_cache_url:
-      # - mirror_name: gcs_cache
-      #   mirror_url: gs://bucket-name/...
+      commands: |
+        # Un-comment and update mirror_url to install from spack cache
+        # spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
+        # spack buildcache keys --install --trust
 
-  - id: spack-startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+        spack config --scope defaults add config:build_stage:/sw/spack/spack-stage
+        spack config --scope defaults add -f /tmp/projections-config.yaml
+
+        spack install gcc@10.3.0 target=x86_64
+        spack load gcc@10.3.0 target=x86_64
+        spack compiler find --scope site
+
+        spack install intel-mpi@2018.4.274%gcc@10.3.0
+        spack install gromacs@2023.1 %gcc@10.3.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@4.8.5
 
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
@@ -111,7 +109,7 @@ deployment_groups:
     - homefs
     - appsfs
     - slurm_controller
-    - spack-startup
+    - spack-execute
     settings:
       login_machine_type: c2-standard-4
       login_scopes:

@@ -28,7 +28,7 @@ deployment_groups:
     source: modules/network/pre-existing-vpc
 
   - id: spack
-    source: community/modules/scripts/spack-install
+    source: community/modules/scripts/spack-setup
     settings:
       install_dir: /spack
 
@@ -49,8 +49,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
-      - $(spack.install_spack_runner)
+      - $(spack.spack_runner)
       - $(ramble-execute.ramble_runner)
 
   - id: ramble-vm

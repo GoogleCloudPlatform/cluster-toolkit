@@ -23,6 +23,7 @@
   - name: Install pip3 and git
     ansible.builtin.package:
       name:
+      - python3
       - python3-pip
       - git
     register: package
@@ -30,6 +31,7 @@
     retries: 5
     delay: 10
     until: package is success
+
   - name: Create virtualenv for Spack
     # Python 3.6 is minimum we wish to support due to ease of installation on
     # CentOS 7 and Rocky Linux 8. pip 21.3.1 is the *maximum* version of pip
@@ -39,6 +41,7 @@
     ansible.builtin.pip:
       name: pip>=21.3.1
       virtualenv: "{{ spack_virtualenv_path }}"
+
   - name: Add google-cloud-storage to Spack virtualenv
     ansible.builtin.pip:
       name: google-cloud-storage

@@ -113,19 +113,17 @@ deployment_groups:
 
   ### Software ###
 
-  - id: spack
-    source: community/modules/scripts/spack-install
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
     settings:
       install_dir: /apps/spack
-      configs:
-      - type: file
-        scope: defaults
-        content: |
-          config:
-            build_stage:
-              - /apps/spack/spack-stage
-      - type: file
-        scope: defaults
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use: [spack-setup]
+    settings:
+      data_files:
+      - destination: /tmp/projections-config.yaml
         content: |
           modules:
             default:
@@ -136,8 +134,7 @@ deployment_groups:
                     - '{name}'
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
-      - type: file
-        scope: site
+      - destination: /tmp/slurm-external-config.yaml
         content: |
           packages:
             slurm:
@@ -145,10 +142,7 @@ deployment_groups:
                 - spec: slurm@21-08-8-2
                   prefix: /usr/local
               buildable: False
-      compilers: [gcc@11.3.0 target=x86_64]
-      environments:
-      - name: gromacs
-        type: file
+      - destination: /share/spack/gromacs_env.yaml
         content: |
           spack:
             definitions:
@@ -176,12 +170,27 @@ deployment_groups:
                 - [$^cuda_mpis]
                 - [$%compilers]
                 - [target=skylake]
+      commands: |
+        spack config --scope defaults add config:build_stage:/apps/spack/spack-stage
+        spack config --scope defaults add -f /tmp/projections-config.yaml
+        spack config --scope site add -f /tmp/slurm-external-config.yaml
+
+        spack install gcc@11.3.0 target=x86_64
+        spack load gcc@11.3.0 target=x86_64
+        spack compiler find --scope site
+
+        if ! spack env list | grep -q gromacs; then
+          spack env create gromacs /share/spack/gromacs_env.yaml
+          spack env activate gromacs
+          spack concretize
+          spack install
+        fi
 
   - id: spack-builder-startup
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack.install_spack_deps_runner)
+      - $(spack-execute.spack_runner)
 
       - type: data
         destination: /tmp/install_spack.sh
