@@ -244,7 +244,7 @@ deployment_groups:
         scopes:
         - https://www.googleapis.com/auth/cloud-platform
 
-  # use `-p a208` to submit jobs to this partition:
+  # use `-p a216` to submit jobs to this partition:
   # ex: `srun -p a216 --gpus-per-node=16 -N 1 nvidia-smi`
   - id: a2_16_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -255,10 +255,44 @@ deployment_groups:
       # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v5-partition#compute-vm-zone-policies
       zones: $(vars.gpu_zones)
 
+  - id: h3_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 16
+      machine_type: h3-standard-88
+      bandwidth_tier: gvnic_enabled # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_network
+      instance_image:
+        family: $(vars.family)
+        project: $(vars.project)
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+      # H3 does not support pd-ssd and pd-standard
+      # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
+      disk_type: pd-balanced
+      disk_size_gb: 100
+      node_conf: # one has to specify number of CPUs and sockets for H3 machine type
+        CPUs: 88
+        CoresPerSocket: 44
+        Sockets: 2
+        ThreadsPerCore: 1
+
+  # use `-p h3` to submit jobs to this partition:
+  # ex: `srun -p h3  -N 1 hostname`
+  - id: h3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use: [h3_node_group, network1, homefs, projectsfs, scratchfs]
+    settings:
+      partition_name: h3
+      partition_conf: # one has to specify mem per CPU for H3 machine type
+        DefMemPerCPU: 3971
+
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use: [network1, homefs, projectsfs, scratchfs, n2_partition,
-          c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition]
+          c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition,
+          h3_partition]
     settings:
       instance_image:
         family: $(vars.family)
