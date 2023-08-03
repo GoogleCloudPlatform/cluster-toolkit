@@ -260,6 +260,7 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 16
       machine_type: h3-standard-88
+      bandwidth_tier: gvnic_enabled # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_network
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
@@ -267,7 +268,9 @@ deployment_groups:
         email: $(compute_sa.service_account_email)
         scopes:
         - https://www.googleapis.com/auth/cloud-platform
-      disk_type: pd-balanced # H3 does not support pd-ssd and pd-standard
+      # H3 does not support pd-ssd and pd-standard
+      # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
+      disk_type: pd-balanced
       disk_size_gb: 100
       node_conf: # one has to specify number of CPUs and sockets for H3 machine type
         CPUs: 88
