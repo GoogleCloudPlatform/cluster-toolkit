@@ -26,7 +26,7 @@ from allauth.socialaccount.models import SocialAccount
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MinValueValidator, RegexValidator, MaxLengthValidator
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -855,7 +855,18 @@ class ComputeInstance(CloudResource):
 class ClusterPartition(models.Model):
     """Compute partition on a clustero"""
 
-    name = models.CharField(max_length=80, help_text="Partition name")
+    # Define the regex pattern validator
+    name_validator = RegexValidator(
+        regex=r"^[a-z](?:[a-z0-9]{0,6})$",
+        message="Name must start with a lowercase letter and can have up to 7 characters (lowercase letters or digits).",
+    )
+    # Define the max length validator
+    max_length_validator = MaxLengthValidator(7, "Name cannot exceed 7 characters.")
+    name = models.CharField(
+        max_length=7,
+        validators=[name_validator, max_length_validator],
+        help_text="Partition name must start with a lowercase letter and can have up to 7 character (lowercase letters or digits).",
+    )
     cluster = models.ForeignKey(
         Cluster,
         related_name="partitions",
