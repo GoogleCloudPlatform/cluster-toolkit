@@ -863,7 +863,6 @@ tutorial.
 
 [tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
-
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
