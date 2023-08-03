@@ -183,6 +183,7 @@ low-latency networking.
 with 80GB of GPU memory each.
 * `a216` with [`a2-megagpu-16g` nodes][a2] with 16 of the NVIDIA A100 GPU accelerators
 with 40GB of GPU memory each.
+* `h3` with [`h3-standard-88` nodes][h3] TODO: add description
 
 For all partions other than `n2`, [compact placement] policies are enabled by default
 and nodes are created and destroyed on a per-job basis. Furthermore, these partitions
@@ -198,6 +199,7 @@ are configured with:
 [c3]: https://cloud.google.com/blog/products/compute/introducing-c3-machines-with-googles-custom-intel-ipu
 [a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
 [g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
+[h3]: TODO_add_link
 [compact placement]: https://cloud.google.com/compute/docs/instances/define-instance-placement
 [GVNIC]: https://cloud.google.com/compute/docs/networking/using-gvnic
 [Tier_1]: https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration
@@ -234,6 +236,7 @@ For this example the following is needed in the selected region:
   in `c2` partition up to 1,204
 * Compute Engine API: C2D CPUs: **112/node** active in `c2d` partition up to 2,240
 * Compute Engine API: C3 CPUs: **176/node** active in `c3` partition up to 3,520
+* Compute Engine API: H3 CPUs: **88/node** active in `h3` partition up to 1,408
 * Compute Engine API: A2 CPUs: **96/node** active in `a208` and `a216` partitions
 up to 3,072
 * Compute Engine API: NVIDIA A100 80GB GPUs: **8/node** active in `a208` partition
