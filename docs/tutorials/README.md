@@ -5,20 +5,6 @@
 Find the quickstart tutorial on
 [Google Cloud docs](https://cloud.google.com/hpc-toolkit/docs/quickstarts/slurm-cluster).
 
-## Simple Cluster Tutorial
-
-Deploy a simple HPC cluster with the HPC Toolkit in
-[cloud shell](https://cloud.google.com/shell) using the
-[hpc-slurm.yaml](../../examples/hpc-slurm.yaml) example.
-
-It is recommended to use the [Quickstart Tutorial](#quickstart-tutorial), which
-covers similar material as the Simple Cluster Tutorial and will be replacing
-this tutorial in the future.
-
-Click the button below to launch the Simple Cluster Tutorial.
-
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_open_in_editor=examples%2Fhpc-slurm.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fbasic.md)
-
 ## Intel Select Tutorial
 
 Walks through deploying an HPC cluster that is based on the
