@@ -43,22 +43,12 @@ deployment_groups:
   - id: login-script
     source: modules/scripts/startup-script
     kind: terraform
-    settings:
-      runners:
-      - type: shell
-        content: |
-          #!/bin/bash
-          ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa <<<y >/dev/null 2>&1
-          cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
-          echo -e "Host *\n StrictHostKeyChecking no" >> ~/.ssh/config
-          chmod 644 ~/.ssh/authorized_keys
-          chmod 644 ~/.ssh/config
-        destination: /tmp/permissive-ssh.sh
-
+      configure_ssh_host_patterns: ["star*"]
   - id: compute-script
     source: modules/scripts/startup-script
     kind: terraform
     settings:
+      configure_ssh_host_patterns: ["star*"]
       runners:
       - type: shell
         content: |
