@@ -91,13 +91,13 @@ func needsInit(tf *tfexec.Terraform) bool {
 func initModule(tf *tfexec.Terraform) error {
 	var err error
 	if needsInit(tf) {
-		log.Printf("initializing terraform module %s", tf.WorkingDir())
+		log.Printf("Initializing deployment group %s", tf.WorkingDir())
 		err = tf.Init(context.Background())
 	}
 
 	if err != nil {
 		return &TfError{
-			help: fmt.Sprintf("initialization of %s failed; manually resolve errors below", tf.WorkingDir()),
+			help: fmt.Sprintf("initialization of deployment group %s failed; manually resolve errors below", tf.WorkingDir()),
 			err:  err,
 		}
 	}
@@ -106,11 +106,11 @@ func initModule(tf *tfexec.Terraform) error {
 }
 
 func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
-	log.Printf("collecting terraform outputs from %s", tf.WorkingDir())
+	log.Printf("Collecting terraform outputs from %s", tf.WorkingDir())
 	output, err := tf.Output(context.Background())
 	if err != nil {
 		return map[string]cty.Value{}, &TfError{
-			help: fmt.Sprintf("collecting terraform outputs from %s failed; manually resolve errors below", tf.WorkingDir()),
+			help: fmt.Sprintf("collecting terraform outputs from deployment group %s failed; manually resolve errors below", tf.WorkingDir()),
 			err:  err,
 		}
 	}
@@ -143,7 +143,7 @@ func planModule(tf *tfexec.Terraform, path string, destroy bool) (bool, error) {
 	wantsChange, err := tf.Plan(context.Background(), outOpt, tfexec.Destroy(destroy))
 	if err != nil {
 		return false, &TfError{
-			help: fmt.Sprintf("terraform plan for %s failed; suggest running \"ghpc export-outputs\" on previous deployment groups to define inputs", tf.WorkingDir()),
+			help: fmt.Sprintf("terraform plan for deployment group %s failed; suggest running \"ghpc export-outputs\" on previous deployment groups to define inputs", tf.WorkingDir()),
 			err:  err,
 		}
 	}
@@ -165,7 +165,7 @@ func promptForApply(tf *tfexec.Terraform, path string, b ApplyBehavior) bool {
 		summary := re.FindString(plan)
 
 		if summary == "" {
-			summary = fmt.Sprintf("Please review full proposed changes for %s", tf.WorkingDir())
+			summary = fmt.Sprintf("Please review full proposed changes for deployment group %s", tf.WorkingDir())
 		}
 
 		changes := ProposedChanges{
@@ -181,7 +181,7 @@ func promptForApply(tf *tfexec.Terraform, path string, b ApplyBehavior) bool {
 
 func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 	planFileOpt := tfexec.DirOrPlan(path)
-	log.Printf("running terraform apply on group %s", tf.WorkingDir())
+	log.Printf("Running terraform apply on deployment group %s", tf.WorkingDir())
 	tf.SetStdout(os.Stdout)
 	tf.SetStderr(os.Stderr)
 	if err := tf.Apply(context.Background(), planFileOpt); err != nil {
@@ -207,7 +207,7 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
 		return err
 	}
 
-	log.Printf("testing if module in %s requires %s cloud infrastructure", tf.WorkingDir(), action)
+	log.Printf("Testing if deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
 	// capture Terraform plan in a file
 	f, err := os.CreateTemp("", "plan-)")
 	if err != nil {
@@ -221,10 +221,10 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
 
 	var apply bool
 	if wantsChange {
-		log.Printf("module in %s requires %s cloud infrastructure", tf.WorkingDir(), action)
+		log.Printf("Deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
 		apply = b == AutomaticApply || promptForApply(tf, f.Name(), b)
 	} else {
-		log.Printf("cloud infrastructure in %s is already %s", tf.WorkingDir(), pastTense)
+		log.Printf("Cloud infrastructure in deployment group %s is already %s", tf.WorkingDir(), pastTense)
 	}
 
 	if !apply {
@@ -270,11 +270,11 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 	// blueprint; edge case is that "terraform output" can be missing keys
 	// whose values are null
 	if len(outputValues) == 0 {
-		log.Printf("group %s contains no artifacts to export", thisGroup)
+		log.Printf("Deployment group %s contains no artifacts to export", thisGroup)
 		return nil
 	}
 
-	log.Printf("writing outputs artifact from group %s to file %s", thisGroup, filepath)
+	log.Printf("Writing outputs artifact from deployment group %s to file %s", thisGroup, filepath)
 	if err := modulewriter.WriteHclAttributes(outputValues, filepath); err != nil {
 		return err
 	}
@@ -362,9 +362,9 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		}
 		allInputValues = evaluatedSettings.Items()
 	default:
-		return fmt.Errorf("unexpected error: unknown module kind for group %s", g.Name)
+		return fmt.Errorf("unexpected error: unknown module kind for deployment group %s", g.Name)
 	}
-	log.Printf("writing outputs for group %s to file %s\n", g.Name, outfile)
+	log.Printf("Writing outputs for deployment group %s to file %s\n", g.Name, outfile)
 	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
 		return err
 	}
