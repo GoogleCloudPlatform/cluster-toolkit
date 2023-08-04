@@ -25,7 +25,7 @@ import (
 
 func TestAggregation(t *testing.T) {
 	type test struct {
-		limits      []int64
+		requested   []int64
 		aggregation string
 		want        []int64
 		err         bool
@@ -42,7 +42,7 @@ func TestAggregation(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(fmt.Sprintf("%s%#v", tc.aggregation, tc.limits), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s%#v", tc.aggregation, tc.requested), func(t *testing.T) {
 			fn, err := aggregation(tc.aggregation)
 			if tc.err != (err != nil) {
 				t.Errorf("got unexpected error: %s", err)
@@ -50,7 +50,7 @@ func TestAggregation(t *testing.T) {
 			if err != nil {
 				return
 			}
-			got := fn(tc.limits)
+			got := fn(tc.requested)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
@@ -83,7 +83,7 @@ func TestSatisfied(t *testing.T) {
 	}
 }
 
-func TestQuotaInBucket(t *testing.T) {
+func TestInBucket(t *testing.T) {
 	type test struct {
 		qDimensions map[string]string
 		bDimensions map[string]string
@@ -98,7 +98,7 @@ func TestQuotaInBucket(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%#v::%#v", tc.qDimensions, tc.bDimensions), func(t *testing.T) {
-			q := Quota{Dimensions: tc.qDimensions}
+			q := ResourceRequirement{Dimensions: tc.qDimensions}
 			b := sub.QuotaBucket{Dimensions: tc.bDimensions}
 
 			got := q.InBucket(&b)
@@ -109,7 +109,7 @@ func TestQuotaInBucket(t *testing.T) {
 	}
 }
 
-func TestValidateServiceMetrics(t *testing.T) {
+func TestValidateServiceLimits(t *testing.T) {
 	// Configured quotas:
 	// global: 5
 	// green_eggs: 3
@@ -133,15 +133,15 @@ func TestValidateServiceMetrics(t *testing.T) {
 			Dimensions:     map[string]string{"green": "sleeve"},
 		},
 	}
-	quotas := []Quota{
+	quotas := []ResourceRequirement{
 		{
 			Metric:      "pony",
-			Limit:       int64(4),
+			Required:    int64(4),
 			Dimensions:  map[string]string{"green": "eggs"},
 			Aggregation: "SUM",
 		}, {
 			Metric:      "pony",
-			Limit:       int64(7),
+			Required:    int64(7),
 			Dimensions:  map[string]string{"green": "sleeve"},
 			Aggregation: "SUM",
 		},
@@ -151,7 +151,7 @@ func TestValidateServiceMetrics(t *testing.T) {
 		{Metric: "pony", Dimensions: nil, EffectiveLimit: 5, Requested: 11},
 		{Metric: "pony", Dimensions: map[string]string{"green": "eggs"}, EffectiveLimit: 3, Requested: 4},
 	}
-	got, err := validateServiceMetrics(quotas, []*sub.ConsumerQuotaMetric{
+	got, err := validateServiceLimits(quotas, []*sub.ConsumerQuotaMetric{
 		{
 			Metric: "pony",
 			ConsumerQuotaLimits: []*sub.ConsumerQuotaLimit{

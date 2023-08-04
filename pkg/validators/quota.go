@@ -21,19 +21,19 @@ import (
 	sub "google.golang.org/api/serviceusage/v1beta1"
 )
 
-// Quota represents a desired quota.
-type Quota struct {
+// ResourceRequirement represents an amount of desired resource.
+type ResourceRequirement struct {
 	Consumer   string // e.g. "projects/myprojectid""
 	Service    string // e.g. "compute.googleapis.com"
 	Metric     string // e.g. "compute.googleapis.com/disks_total_storage"
-	Limit      int64
+	Required   int64
 	Dimensions map[string]string // e.g. {"region": "us-central1"}
-	// How this Quota should be aggregated with other Quotas in the same bucket.
+	// How this requirement should be aggregated with other requirements in the same bucket.
 	Aggregation string
 }
 
 // InBucket returns true if the quota is in the QuotaBucket.
-func (q Quota) InBucket(b *sub.QuotaBucket) bool {
+func (q ResourceRequirement) InBucket(b *sub.QuotaBucket) bool {
 	for d, v := range b.Dimensions {
 		if q.Dimensions[d] != v {
 			return false
@@ -56,8 +56,8 @@ func (e QuotaError) Error() string {
 	return fmt.Sprintf("QuotaError: %#v", e)
 }
 
-// ValidateQuotas validates the quotas
-func ValidateQuotas(quotas []Quota) ([]QuotaError, error) {
+// ValidateQuotas validates the resource requirements.
+func ValidateQuotas(rs []ResourceRequirement) ([]QuotaError, error) {
 	qe := []QuotaError{}
 	// Group by Consumer and Service
 	type gk struct {
@@ -65,18 +65,18 @@ func ValidateQuotas(quotas []Quota) ([]QuotaError, error) {
 		Service  string
 	}
 
-	groups := map[gk][]Quota{}
-	for _, q := range quotas {
-		k := gk{q.Consumer, q.Service}
-		groups[k] = append(groups[k], q)
+	groups := map[gk][]ResourceRequirement{}
+	for _, r := range rs {
+		k := gk{r.Consumer, r.Service}
+		groups[k] = append(groups[k], r)
 	}
 
-	for k, qs := range groups {
-		metrics, err := quotaMetrics(k.Consumer, k.Service)
+	for k, g := range groups {
+		ls, err := serviceLimits(k.Consumer, k.Service)
 		if err != nil {
 			return qe, err
 		}
-		qse, err := validateServiceMetrics(qs, metrics)
+		qse, err := validateServiceLimits(g, ls)
 		if err != nil {
 			return qe, err
 		}
@@ -86,63 +86,64 @@ func ValidateQuotas(quotas []Quota) ([]QuotaError, error) {
 	return qe, nil
 }
 
-func validateServiceMetrics(quotas []Quota, metrics []*sub.ConsumerQuotaMetric) ([]QuotaError, error) {
+func validateServiceLimits(rs []ResourceRequirement, ls []*sub.ConsumerQuotaMetric) ([]QuotaError, error) {
 	// Group by Metric and Aggregation
 	type gk struct {
 		Metric      string
 		Aggregation string
 	}
-	groups := map[gk][]Quota{}
-	for _, q := range quotas {
-		k := gk{q.Metric, q.Aggregation}
-		groups[k] = append(groups[k], q)
+	groups := map[gk][]ResourceRequirement{}
+	for _, r := range rs {
+		k := gk{r.Metric, r.Aggregation}
+		groups[k] = append(groups[k], r)
 	}
 
 	qe := []QuotaError{}
-	for k, qs := range groups {
+	for k, g := range groups {
 		agg, err := aggregation(k.Aggregation)
 		if err != nil {
 			return qe, err
 		}
 
-		limits := []*sub.ConsumerQuotaLimit{}
-		for _, m := range metrics {
-			if m.Metric == k.Metric {
-				limits = append(limits, m.ConsumerQuotaLimits...)
+		// select limits for the metric
+		ml := []*sub.ConsumerQuotaLimit{}
+		for _, l := range ls {
+			if l.Metric == k.Metric {
+				ml = append(ml, l.ConsumerQuotaLimits...)
 			}
 		}
-		if len(limits) == 0 {
+		if len(ml) == 0 {
 			return qe, fmt.Errorf("limits for metric %q were not found", k.Metric)
 		}
 
-		for _, limit := range limits {
-			qle := validateLimitQuotas(qs, limit, agg)
+		for _, limit := range ml {
+			qle := validateLimit(g, limit, agg)
 			qe = append(qe, qle...)
 		}
 	}
 	return qe, nil
 }
 
-func validateLimitQuotas(quotas []Quota, limit *sub.ConsumerQuotaLimit, agg aggFn) []QuotaError {
+func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, agg aggFn) []QuotaError {
 	qe := []QuotaError{}
 	for _, bucket := range limit.QuotaBuckets {
-		ql := []int64{}
-		for _, q := range quotas {
-			if q.InBucket(bucket) {
-				ql = append(ql, q.Limit)
+		vs := []int64{}
+		for _, r := range rs {
+			if r.InBucket(bucket) {
+				vs = append(vs, r.Required)
 			}
 		}
-		if len(ql) == 0 {
+		if len(vs) == 0 {
 			continue
 		}
-		requested := agg(ql)
-		for _, r := range requested {
+		required := agg(vs)
+		for _, r := range required {
 			if !satisfied(r, bucket.EffectiveLimit) {
-				q := quotas[0] // all should have the same consumer, service and metric
+				r0 := rs[0] // all should have the same consumer, service and metric
 				qe = append(qe, QuotaError{
-					Consumer:       q.Consumer,
-					Service:        q.Service,
-					Metric:         q.Metric,
+					Consumer:       r0.Consumer,
+					Service:        r0.Service,
+					Metric:         r0.Metric,
 					Dimensions:     bucket.Dimensions,
 					EffectiveLimit: bucket.EffectiveLimit,
 					Requested:      r,
@@ -198,7 +199,7 @@ func aggregation(agg string) (aggFn, error) {
 	}
 }
 
-func quotaMetrics(consumer string, service string) ([]*sub.ConsumerQuotaMetric, error) {
+func serviceLimits(consumer string, service string) ([]*sub.ConsumerQuotaMetric, error) {
 	ctx := context.Background()
 	s, err := sub.NewService(ctx)
 	if err != nil {
