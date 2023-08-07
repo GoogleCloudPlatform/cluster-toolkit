@@ -18,27 +18,27 @@
 changelog:
   exclude:
     labels:
-    - chore
+    - release-chore
     authors: []
   categories:
   - title: Key New Features 🎉
     labels:
-    - key-new-features
+    - release-key-new-features
   - title: New Modules 🧱
     labels:
-    - new-modules
+    - release-new-modules
   - title: Module Improvements 🛠
     labels:
-    - module-improvements
+    - release-module-improvements
   - title: Improvements
     labels:
-    - improvements
+    - release-improvements
   - title: Deprecations
     labels:
-    - deprecations
+    - release-deprecations
   - title: Version Updates
     labels:
-    - version-updates
+    - release-version-updates
   - title: Other changes
     labels:
     - "*"

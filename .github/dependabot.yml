@@ -33,7 +33,7 @@ updates:
   labels:
   - dependencies
   - python
-  - chore
+  - release-chore
   schedule:
     interval: monthly
     time: "03:00"
