@@ -17,7 +17,9 @@ package validators
 import (
 	"context"
 	"fmt"
+	"time"
 
+	cm "google.golang.org/api/monitoring/v3"
 	sub "google.golang.org/api/serviceusage/v1beta1"
 )
 
@@ -215,4 +217,57 @@ func serviceLimits(consumer string, service string) ([]*sub.ConsumerQuotaMetric,
 			return nil
 		})
 	return res, err
+}
+
+type usageKey struct {
+	Metric   string
+	Location string // either "global", region, or zone
+}
+
+type usageProvider struct {
+	u map[usageKey]int64
+}
+
+func (up *usageProvider) Usage(metric string, region string, zone string) int64 {
+	if up.u == nil {
+		return 0
+	}
+	k := usageKey{metric, "global"}
+	if region != "" {
+		k.Location = region
+	}
+	if zone != "" {
+		k.Location = zone
+	}
+	return up.u[k] // 0 if not found
+}
+
+func newUsageProvider(project_id string) (usageProvider, error) {
+	s, err := cm.NewService(context.Background())
+	if err != nil {
+		return usageProvider{}, err
+	}
+
+	u := map[usageKey]int64{}
+	err = s.Projects.TimeSeries.List("projects/"+project_id).
+		Filter(`metric.type="serviceruntime.googleapis.com/quota/allocation/usage" resource.type="consumer_quota"`).
+		IntervalEndTime(time.Now().Format(time.RFC3339)).
+		// Quota usage metrics get duplicated once a day
+		IntervalStartTime(time.Now().Add(-24*time.Hour).Format(time.RFC3339)).
+		Pages(context.Background(), func(page *cm.ListTimeSeriesResponse) error {
+			for _, ts := range page.TimeSeries {
+				usage := ts.Points[0].Value.Int64Value // Points[0] is latest
+				if *usage == 0 {
+					continue
+				}
+				metric := ts.Metric.Labels["quota_metric"]
+				location := ts.Resource.Labels["location"]
+				u[usageKey{metric, location}] = *usage
+			}
+			return nil
+		})
+	if err != nil {
+		return usageProvider{}, err
+	}
+	return usageProvider{u}, nil
 }

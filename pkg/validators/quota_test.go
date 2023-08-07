@@ -169,3 +169,35 @@ func TestValidateServiceLimits(t *testing.T) {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }
+
+func TestUsageProviderGet(t *testing.T) {
+	up := usageProvider{u: map[usageKey]int64{
+		{Metric: "pony", Location: "global"}:     17,
+		{Metric: "pony", Location: "us-west1"}:   13,
+		{Metric: "pony", Location: "us-west1-c"}: 11,
+		{Metric: "zebra", Location: "us-east1"}:  7,
+	}}
+
+	type test struct {
+		metric string
+		region string
+		zone   string
+		want   int64
+	}
+	tests := []test{
+		{"pony", "", "", 17},
+		{"zebra", "", "", 0},
+		{"pony", "us-west1", "", 13},
+		{"zebra", "us-east2", "", 0},
+		{"pony", "us-west1", "us-west1-c", 11},
+		{"zebra", "us-east1", "us-east1-b", 0},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%#v", tc), func(t *testing.T) {
+			got := up.Usage(tc.metric, tc.region, tc.zone)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
