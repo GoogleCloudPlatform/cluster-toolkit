@@ -272,11 +272,6 @@ deployment_groups:
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
       disk_type: pd-balanced
       disk_size_gb: 100
-      node_conf: # one has to specify number of CPUs and sockets for H3 machine type
-        CPUs: 88
-        CoresPerSocket: 44
-        Sockets: 2
-        ThreadsPerCore: 1
 
   # use `-p h3` to submit jobs to this partition:
   # ex: `srun -p h3  -N 1 hostname`
@@ -285,8 +280,6 @@ deployment_groups:
     use: [h3_node_group, network1, homefs, projectsfs, scratchfs]
     settings:
       partition_name: h3
-      partition_conf: # one has to specify mem per CPU for H3 machine type
-        DefMemPerCPU: 3971
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
