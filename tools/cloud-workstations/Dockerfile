@@ -40,3 +40,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/master/scripts/requirements.txt && \
     pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/hpc-toolkit/main/tools/cloud-build/requirements.txt && \
     rm -rf ~/.cache/pip/*
+
+ARG HPC_TOOL_URL=https://raw.githubusercontent.com/GoogleCloudPlatform/hpc-toolkit/main/tools/cloud-workstations
+ARG HPC_FILE=configure-hpc-toolkit.sh
+ARG HPC_CONF_FILE=030_configure-hpc-toolkit.sh
+
+RUN wget $HPC_TOOL_URL/$HPC_FILE && \
+    chmod a+x $HPC_FILE && \
+    mv $HPC_FILE /bin/
+
+RUN wget $HPC_TOOL_URL/$HPC_CONF_FILE && \
+    chmod a+x $HPC_CONF_FILE && \
+    mv $HPC_CONF_FILE /etc/workstation-startup.d/
