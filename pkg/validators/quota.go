@@ -242,14 +242,14 @@ func (up *usageProvider) Usage(metric string, region string, zone string) int64 
 	return up.u[k] // 0 if not found
 }
 
-func newUsageProvider(project_id string) (usageProvider, error) {
+func newUsageProvider(projectID string) (usageProvider, error) {
 	s, err := cm.NewService(context.Background())
 	if err != nil {
 		return usageProvider{}, err
 	}
 
 	u := map[usageKey]int64{}
-	err = s.Projects.TimeSeries.List("projects/"+project_id).
+	err = s.Projects.TimeSeries.List("projects/"+projectID).
 		Filter(`metric.type="serviceruntime.googleapis.com/quota/allocation/usage" resource.type="consumer_quota"`).
 		IntervalEndTime(time.Now().Format(time.RFC3339)).
 		// Quota usage metrics get duplicated once a day
