@@ -45,6 +45,7 @@ ARG HPC_TOOL_URL=https://raw.githubusercontent.com/cdunbar13/hpc-toolkit/CloudWo
 ARG HPC_FILE=configure-hpc-toolkit.sh
 ARG HPC_CONF_FILE=030_configure-hpc-toolkit.sh
 
+# Get the HPC config files and store them in the correct locations for startup
 RUN wget $HPC_TOOL_URL/$HPC_FILE && \
     chmod a+x $HPC_FILE && \
     mv $HPC_FILE /bin/
