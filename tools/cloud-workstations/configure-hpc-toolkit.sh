@@ -15,6 +15,9 @@
 
 set -e
 
+# Add ~/go/bin to PATH to enable use of terraform-docs
+echo "export PATH=$PATH:$HOME/go/bin" >> $HOME/.bashrc
+
 # Check if the hpc-toolkit folder exists in the user home directory
 if [ ! -d "$HOME/hpc-toolkit" ]; then
 	# If not, clone the repository
@@ -22,5 +25,4 @@ if [ ! -d "$HOME/hpc-toolkit" ]; then
 	cd "$HOME/hpc-toolkit" || exit
 	make install-dev-deps
 	pre-commit install
-    echo "export PATH=$PATH:${HOME}/go/bin" >> ${HOME}/.bashrc
 fi
