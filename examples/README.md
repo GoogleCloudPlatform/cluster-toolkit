@@ -143,6 +143,11 @@ uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `-p compute` argument when running `srun`.
 
+#### H3 Partition
+
+There is an `h3` partition that uses compute-optimized `h3-standard-88` machine type.
+You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
+
 #### Quota Requirements for hpc-slurm.yaml
 
 For this example the following is needed in the selected region:
