@@ -31,7 +31,7 @@ on:
     - develop
 
 jobs:
-  label:
+  pr-label-validation:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
@@ -41,8 +41,8 @@ jobs:
       with:
         mode: minimum
         count: 1
-        labels: "chore, key-new-features, new-modules, module-improvements, improvements, deprecations, version-updates"
-        message: "This PR is being prevented from merging because it is not labeled.  Please add a label to this PR.  Accepted labels: chore, key-new-features, new-modules, module-improvements, improvements, deprecations, version-updates"
+        labels: "release-chore, release-key-new-features, release-new-modules, release-module-improvements, release-improvements, release-deprecations, release-version-updates"
+        message: "This PR is being prevented from merging because it is not labeled.  Please add a label to this PR.  Accepted labels: release-chore, release-key-new-features, release-new-modules, release-module-improvements, release-improvements, release-deprecations, release-version-updates"
     - id: print-labels
       run: |
         echo "Current PR labels:"
