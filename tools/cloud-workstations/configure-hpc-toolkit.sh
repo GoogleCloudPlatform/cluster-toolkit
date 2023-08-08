@@ -22,4 +22,5 @@ if [ ! -d "$HOME/hpc-toolkit" ]; then
 	cd "$HOME/hpc-toolkit" || exit
 	make install-dev-deps
 	pre-commit install
+    echo "export PATH=$PATH:${HOME}/go/bin" >> ${HOME}/.bashrc
 fi

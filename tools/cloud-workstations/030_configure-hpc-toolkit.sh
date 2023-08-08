@@ -13,5 +13,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-sudo -i -u user echo "export PATH=$PATH:${HOME}/go/bin" >> ${HOME}/.bashrc
 sudo -i -b -u user bash /bin/configure-hpc-toolkit.sh
