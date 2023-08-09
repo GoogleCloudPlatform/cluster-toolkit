@@ -65,6 +65,7 @@ SELECTORS: Dict[str, Selector] = {
         "PR-test-slurm-gcp-v5-startup-scripts",
         "PR-test-slurm-gcp-v5-ubuntu2004",
         "PR-test-hpc-enterprise-slurm",
+        "PR-test-hpc-slurm-chromedesktop",
     ]),
     "spack": selector_by_name([
         "PR-test-batch-mpi",
