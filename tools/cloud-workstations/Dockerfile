@@ -12,19 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-
 # Getting Terraform and Packer
 FROM us-central1-docker.pkg.dev/cloud-workstations-images/predefined/code-oss:latest
 
 ARG TFLINT_VERSION
+# Need to get shellcheck directly as the on the repo is outdated and causes failures
+ARG SHELLCHECK_VER=v0.9.0
 
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get -y update && apt-get -y install \
     software-properties-common \
     keychain \
-    dnsutils \
-    shellcheck && \
+    dnsutils && \
     apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
     apt-get -y update && apt-get install -y unzip python3-pip python3-venv terraform packer jq && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
@@ -34,22 +33,26 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get -y update && apt-get -y install google-cloud-sdk && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+RUN wget https://github.com/koalaman/shellcheck/releases/download/v0.9.0/shellcheck-$SHELLCHECK_VER.linux.x86_64.tar.xz && \
+    tar xvf shellcheck-$SHELLCHECK_VER.linux.x86_64.tar.xz && \
+    mv shellcheck-$SHELLCHECK_VER/shellcheck /bin/shellcheck
+
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+COPY tools/cloud-build/requirements.txt requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/master/scripts/requirements.txt && \
-    pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/hpc-toolkit/main/tools/cloud-build/requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt && \
     rm -rf ~/.cache/pip/*
 
-ARG HPC_TOOL_URL=https://raw.githubusercontent.com/GoogleCloudPlatform/hpc-toolkit/main/tools/cloud-workstations
+# Get the HPC config files and store them in the correct locations for startup
+ARG CW_DIR=tools/cloud-workstations
 ARG HPC_FILE=configure-hpc-toolkit.sh
 ARG HPC_CONF_FILE=030_configure-hpc-toolkit.sh
 
-# Get the HPC config files and store them in the correct locations for startup
-RUN wget $HPC_TOOL_URL/$HPC_FILE && \
-    chmod a+x $HPC_FILE && \
-    mv $HPC_FILE /bin/
+COPY $CW_DIR/$HPC_FILE /bin/
+COPY $CW_DIR/$HPC_CONF_FILE /etc/workstation-startup.d/
 
-RUN wget $HPC_TOOL_URL/$HPC_CONF_FILE && \
-    chmod a+x $HPC_CONF_FILE && \
-    mv $HPC_CONF_FILE /etc/workstation-startup.d/
+RUN chmod a+x /bin/$HPC_FILE && \
+    chmod a+x /etc/workstation-startup.d/$HPC_CONF_FILE
