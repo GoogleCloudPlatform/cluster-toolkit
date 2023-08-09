@@ -32,14 +32,15 @@ Make sure that during the "Create Configuration" phase, you click on the `Enviro
 
 The examples below are gcloud commands that utilize the environment variable set at the top of this document.  
 
-### Example creation of a Cloud Workstation cluster:
+### Example creation of a Cloud Workstation cluster
+
 ```sh
 CLUSTER_NAME=hpc-toolkit-workstation-cluster
 
 gcloud workstations clusters create ${CLUSTER_NAME} --region=${REGION} --project=${PROJECT_ID}
 ```
 
-### Example creation of a Cloud Workstation configuration:
+### Example creation of a Cloud Workstation configuration
 This uses the latest docker image from the instruction above.  If a different image is required, please replace the `--container-custom-image` with the correct image and hash/tag.
 
 ```sh
@@ -48,7 +49,8 @@ CONFIG_NAME=hpc-toolkit-workstation-config
 gcloud workstations configs create ${CONFIG_NAME} --cluster=${CLUSTER_NAME} --region=${REGION} --project=${PROJECT_ID} --machine-type=e2-standard-8 --container-custom-image=us-docker.pkg.dev/${PROJECT_ID}/${PREFIX}-image/hpc-toolkit-workstation:latest
 ```
 
-### Example creation of Cloud Workstation:
+### Example creation of Cloud Workstation
+
 ```sh
 WORKSTATION_NAME=hpc-toolkit-workstation
 

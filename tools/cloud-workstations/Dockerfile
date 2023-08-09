@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/hpc-toolkit/main/tools/cloud-build/requirements.txt && \
     rm -rf ~/.cache/pip/*
 
-ARG HPC_TOOL_URL=https://raw.githubusercontent.com/cdunbar13/hpc-toolkit/CloudWorkstation_update/tools/cloud-workstations
+ARG HPC_TOOL_URL=https://raw.githubusercontent.com/GoogleCloudPlatform/hpc-toolkit/main/tools/cloud-workstations
 ARG HPC_FILE=configure-hpc-toolkit.sh
 ARG HPC_CONF_FILE=030_configure-hpc-toolkit.sh
 
