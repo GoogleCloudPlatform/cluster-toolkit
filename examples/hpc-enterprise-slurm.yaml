@@ -24,7 +24,7 @@ vars:
   gpu_zones: [us-central1-a, us-central1-b, us-central1-c, us-central1-f]
   # Visit https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
   # for a list of valid family options with Slurm
-  family: schedmd-v5-slurm-22-05-9-hpc-centos-7
+  family: slurm-gcp-5-7-hpc-centos-7
   project: schedmd-slurm-public
   # Set to true for active cluster reconfiguration.
   # Note that setting this option requires additional dependencies to be installed locally.
@@ -272,11 +272,6 @@ deployment_groups:
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
       disk_type: pd-balanced
       disk_size_gb: 100
-      node_conf: # one has to specify number of CPUs and sockets for H3 machine type
-        CPUs: 88
-        CoresPerSocket: 44
-        Sockets: 2
-        ThreadsPerCore: 1
 
   # use `-p h3` to submit jobs to this partition:
   # ex: `srun -p h3  -N 1 hostname`
@@ -285,8 +280,6 @@ deployment_groups:
     use: [h3_node_group, network1, homefs, projectsfs, scratchfs]
     settings:
       partition_name: h3
-      partition_conf: # one has to specify mem per CPU for H3 machine type
-        DefMemPerCPU: 3971
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
