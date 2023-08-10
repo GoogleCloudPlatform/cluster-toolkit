@@ -100,6 +100,15 @@ func (s *MySuite) TestValidateModule(c *C) {
 		c.Check(err, NotNil)
 	}
 
+	{ // Catch invalid ID
+		err := validateModule(p, Module{
+			ID:     "vars",
+			Source: "green",
+			Kind:   TerraformKind,
+		}, dummyBp)
+		c.Check(err, NotNil)
+	}
+
 	{ // Catch no Source
 		err := validateModule(p, Module{ID: "bond"}, dummyBp)
 		c.Check(err, NotNil)
