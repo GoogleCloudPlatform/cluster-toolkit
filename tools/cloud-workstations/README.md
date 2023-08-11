@@ -1,22 +1,30 @@
 # Configuring Cloud Workstations for usage with the Cloud HPC Toolkit
 
-> ***NOTE:*** If you want to redirect container registry repos to artifact registry, please see
+> **_NOTE:_** If you want to redirect container registry repos to artifact registry, please see
 > [this artifact registry guide](https://cloud.google.com/artifact-registry/docs/transition/setup-gcr-repo?&_ga=2.33584865.-1391632029.1681343137#redirect-enable).
 
 ## Create an artifact registry repository
 
-The following will create a repository called `hpc-toolkit-workstation-image` in gcloud's default cloud project.
+Set the variables to be used in the commands below.
 
-> ***NOTE:*** Replace the REGION value with a region that you want to host your workstations in.
+> **_NOTE:_** Replace the REGION value with a region that you want to host your workstations in.  The CUSTOM_IMAGE location won't exist until the image is created, but it can still be set in advance.
 
 ```sh
 PROJECT_ID=$(gcloud config get project)
 LOCATION=us
 REGION=<your region, e.g. us-central-1>
-PREFIX=hpc-toolkit-workstation
-REPO=$PREFIX-image
+WORKSTATION_NAME=hpc-toolkit-workstation
+CLUSTER_NAME=$PREFIX-cluster
+CONFIG_NAME=$PREFIX-config
+CUSTOM_IMAGE=us-docker.pkg.dev/${PROJECT_ID}/${WORKSTATION_NAME}/hpc-toolkit-workstation:latest
+MACHINE_TYPE=e2-standard-8
+SERVICE_ACCOUNT=<service account email>
+```
 
-gcloud artifacts repositories create ${REPO} --repository-format=docker --location=${LOCATION} --project=${PROJECT_ID}
+The following will create a repository called `hpc-toolkit-workstation-image` in gcloud's default cloud project.
+
+```sh
+gcloud artifacts repositories create ${WORKSTATION_NAME} --repository-format=docker --location=${LOCATION} --project=${PROJECT_ID}
 ```
 
 ## Build a Cloud Workstation container with all developer dependencies for the HPC Toolkit
@@ -37,25 +45,18 @@ The examples below are cloud shell (`gcloud`) commands that utilize the environm
 ### Example creation of a Cloud Workstation cluster
 
 ```sh
-CLUSTER_NAME=hpc-toolkit-workstation-cluster
-
 gcloud workstations clusters create ${CLUSTER_NAME} --region=${REGION} --project=${PROJECT_ID}
 ```
 
-> ***NOTE:*** If the workstation won't start and gives an error about the cluster being deprecated, you may need to enter the cloud console and update the service account to the default.
+> **_NOTE:_** If the workstation won't start and gives an error about the cluster being deprecated, you may need to enter the cloud console and update the service account to the default.
 
 ### Example creation of a Cloud Workstation configuration
 
 This uses the latest docker image from the instructions above.  If a different image is required, please replace the `--container-custom-image` with the correct image and hash/tag.
 
-> ***NOTE:*** Users should determine the service account to use with the command `gcloud iam service-accounts list`.
+> **_NOTE:_** Users should determine the service account to use with the command `gcloud iam service-accounts list`.
 
 ```sh
-CONFIG_NAME=hpc-toolkit-workstation-config
-CUSTOM_IMAGE=us-docker.pkg.dev/${PROJECT_ID}/${REPO}/hpc-toolkit-workstation:latest
-MACHINE_TYPE=e2-standard-8
-SERVICE_ACCOUNT=<service account email>
-
 gcloud workstations configs create ${CONFIG_NAME} --cluster=${CLUSTER_NAME} --region=${REGION} --project=${PROJECT_ID} --machine-type=${MACHINE_TYPE} --container-custom-image=${CUSTOM_IMAGE} --service-account=${SERVICE_ACCOUNT}
 ```
 
@@ -66,8 +67,6 @@ Once the Cloud Workstations cluster and configuration are built, workstations ca
 ### Example creation of Cloud Workstation
 
 ```sh
-WORKSTATION_NAME=hpc-toolkit-workstation
-
 gcloud workstations create ${WORKSTATION_NAME} --cluster=${CLUSTER_NAME} --config=${CONFIG_NAME} --region=${REGION} 
 ```
 
