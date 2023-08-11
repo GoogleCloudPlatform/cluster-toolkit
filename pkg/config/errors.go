@@ -33,6 +33,23 @@ func (e BpError) Unwrap() error {
 	return e.Err
 }
 
+// HintError is an error wrapper to suggest other variable names
+type HintError struct {
+	varName string
+	Err     error
+}
+
+func (e HintError) Error() string {
+	if len(e.varName) > 0 {
+		return fmt.Sprintf("%s. Did you mean \"%s\"?", e.Err, e.varName)
+	}
+	return e.Err.Error()
+}
+
+func (e HintError) Unwrap() error {
+	return e.Err
+}
+
 // InvalidSettingError signifies a problem with the supplied setting name in a
 // module definition.
 type InvalidSettingError struct {
