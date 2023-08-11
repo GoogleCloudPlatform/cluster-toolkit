@@ -15,9 +15,6 @@
 
 set -e
 
-# Add ~/go/bin to PATH to enable use of terraform-docs
-echo "export PATH=$PATH:$HOME/go/bin" >>"$HOME"/.bashrc
-
 # Check if the hpc-toolkit folder exists in the user home directory
 if [ ! -d "$HOME/hpc-toolkit" ]; then
 	# If not, clone the repository
@@ -25,4 +22,19 @@ if [ ! -d "$HOME/hpc-toolkit" ]; then
 	cd "$HOME/hpc-toolkit" || exit
 	make install-dev-deps
 	pre-commit install
+fi
+
+# Run only on initial bootup
+FLAG="$HOME/.firstboot"
+if [[ ! -f $FLAG ]]; then
+	# Set path for go binaries
+	echo "export PATH=$PATH:$HOME/go/bin" >>"$HOME"/.bashrc
+
+	# Set up Code OSS for golang
+	/opt/code-oss/bin/codeoss-cloudworkstations --install-extension golang.go
+	go install golang.org/x/tools/gopls@latest
+	go install github.com/ramya-rao-a/go-outline@v0.0.0-20210608161538-9736a4bde949
+	go install github.com/rogpeppe/godef@v1.1.2
+	go install golang.org/x/tools/cmd/guru@latest
+	touch "$FLAG"
 fi
