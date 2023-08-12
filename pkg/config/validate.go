@@ -175,6 +175,9 @@ func validateModule(p modulePath, m Module, bp Blueprint) error {
 	if m.ID == "" {
 		errs.At(p.ID, fmt.Errorf(errorMessages["emptyID"]))
 	}
+	if m.ID == "vars" { // invalid module ID
+		errs.At(p.ID, errors.New("module id cannot be 'vars'"))
+	}
 	return errs.
 		Add(validateSettings(p, m, info)).
 		Add(validateOutputs(p, m, info)).
