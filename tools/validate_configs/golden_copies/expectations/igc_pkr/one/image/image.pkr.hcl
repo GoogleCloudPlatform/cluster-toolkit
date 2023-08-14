@@ -78,42 +78,49 @@ locals {
   winrm_username = local.communicator == "winrm" ? "packer_user" : null
   winrm_insecure = local.communicator == "winrm" ? true : null
   winrm_use_ssl  = local.communicator == "winrm" ? true : null
+
+  enable_integrity_monitoring = var.enable_shielded_vm && var.shielded_instance_config.enable_integrity_monitoring
+  enable_secure_boot          = var.enable_shielded_vm && var.shielded_instance_config.enable_secure_boot
+  enable_vtpm                 = var.enable_shielded_vm && var.shielded_instance_config.enable_vtpm
 }
 
 source "googlecompute" "toolkit_image" {
-  communicator            = local.communicator
-  project_id              = var.project_id
-  image_name              = local.image_name
-  image_family            = local.image_family
-  image_labels            = var.labels
-  machine_type            = var.machine_type
-  accelerator_type        = local.accelerator_type
-  accelerator_count       = var.accelerator_count
-  on_host_maintenance     = local.on_host_maintenance
-  disk_size               = var.disk_size
-  disk_type               = var.disk_type
-  omit_external_ip        = var.omit_external_ip
-  use_internal_ip         = var.omit_external_ip
-  subnetwork              = var.subnetwork_name
-  network_project_id      = var.network_project_id
-  scopes                  = var.scopes
-  source_image            = var.source_image
-  source_image_family     = var.source_image_family
-  source_image_project_id = var.source_image_project_id
-  ssh_username            = var.ssh_username
-  tags                    = var.tags
-  use_iap                 = local.use_iap
-  use_os_login            = var.use_os_login
-  winrm_username          = local.winrm_username
-  winrm_insecure          = local.winrm_insecure
-  winrm_use_ssl           = local.winrm_use_ssl
-  zone                    = var.zone
-  labels                  = var.labels
-  metadata                = local.metadata
-  startup_script_file     = var.startup_script_file
-  wrap_startup_script     = var.wrap_startup_script
-  state_timeout           = var.state_timeout
-  image_storage_locations = var.image_storage_locations
+  communicator                = local.communicator
+  project_id                  = var.project_id
+  image_name                  = local.image_name
+  image_family                = local.image_family
+  image_labels                = var.labels
+  machine_type                = var.machine_type
+  accelerator_type            = local.accelerator_type
+  accelerator_count           = var.accelerator_count
+  on_host_maintenance         = local.on_host_maintenance
+  disk_size                   = var.disk_size
+  disk_type                   = var.disk_type
+  omit_external_ip            = var.omit_external_ip
+  use_internal_ip             = var.omit_external_ip
+  subnetwork                  = var.subnetwork_name
+  network_project_id          = var.network_project_id
+  scopes                      = var.scopes
+  source_image                = var.source_image
+  source_image_family         = var.source_image_family
+  source_image_project_id     = var.source_image_project_id
+  ssh_username                = var.ssh_username
+  tags                        = var.tags
+  use_iap                     = local.use_iap
+  use_os_login                = var.use_os_login
+  winrm_username              = local.winrm_username
+  winrm_insecure              = local.winrm_insecure
+  winrm_use_ssl               = local.winrm_use_ssl
+  zone                        = var.zone
+  labels                      = var.labels
+  metadata                    = local.metadata
+  startup_script_file         = var.startup_script_file
+  wrap_startup_script         = var.wrap_startup_script
+  state_timeout               = var.state_timeout
+  image_storage_locations     = var.image_storage_locations
+  enable_secure_boot          = local.enable_secure_boot
+  enable_vtpm                 = local.enable_vtpm
+  enable_integrity_monitoring = local.enable_integrity_monitoring
 }
 
 build {
