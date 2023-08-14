@@ -23,7 +23,6 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 
-	"github.com/agext/levenshtein"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -340,8 +339,8 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	}
 
 	if err := validateModuleReference(bp, mod, r.Module); err != nil {
-		if strings.Contains(err.Error(), errorMessages["invalidMod"]) {
-			err = HintError{closestReference(&bp, &mod, &r), err}
+		if _, ok := err.(InvalidModuleError); ok && bp.Vars.Has(r.Name) {
+			err = HintError{fmt.Sprintf("vars.%s", r.Name), err}
 		}
 		return err
 	}
@@ -548,44 +547,4 @@ func intersection(s1 []string, s2 []string) []string {
 	is := maps.Keys(both)
 	slices.Sort(is)
 	return is
-}
-
-// Find the closest module that the reference could be referring to (only ones that are defined before reference)
-// Returns a string with the closest module name (default vars)
-// Currently limited to finding strings that are at least 40% similar based on module string length and levenshtein distance
-func closestReference(bp *Blueprint, mod *Module, ref *Reference) string {
-	minDist := 0.0
-	var clMod Module
-	newRef := "vars"
-
-	if bp.Vars.Has(string(ref.Name)) {
-		return newRef
-	}
-
-top:
-	for _, g := range bp.DeploymentGroups {
-		for _, m := range g.Modules {
-			switch m.ID {
-			case mod.ID:
-				break top
-			case ref.Module:
-				clMod = m
-				minDist = 0
-				break top
-			default:
-				dist := float64(levenshtein.Distance(string(m.ID), string(ref.Module), nil)) / float64(len(string(m.ID)))
-				if minDist == 0 || dist < minDist {
-					minDist = dist
-					clMod = m
-				}
-			}
-		}
-	}
-
-	// Check if the closest mod is close enough
-	if minDist > 0 && minDist <= 0.6 {
-		newRef = string(clMod.ID)
-	}
-
-	return newRef
 }

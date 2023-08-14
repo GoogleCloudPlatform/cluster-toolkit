@@ -33,15 +33,15 @@ func (e BpError) Unwrap() error {
 	return e.Err
 }
 
-// HintError is an error wrapper to suggest other variable names
+// HintError wraps another error to suggest other values
 type HintError struct {
-	varName string
-	Err     error
+	Hint string
+	Err  error
 }
 
 func (e HintError) Error() string {
-	if len(e.varName) > 0 {
-		return fmt.Sprintf("%s. Did you mean \"%s\"?", e.Err, e.varName)
+	if len(e.Hint) > 0 {
+		return fmt.Sprintf("%s - Did you mean '%s'?", e.Err, e.Hint)
 	}
 	return e.Err.Error()
 }
@@ -58,6 +58,15 @@ type InvalidSettingError struct {
 
 func (err *InvalidSettingError) Error() string {
 	return fmt.Sprintf("invalid setting provided to a module, cause: %v", err.cause)
+}
+
+// InvalidModuleError signifies a problem with the supplied module name.
+type InvalidModuleError struct {
+	modID string
+}
+
+func (e InvalidModuleError) Error() string {
+	return fmt.Sprintf("%s: %s", errorMessages["invalidMod"], e.modID)
 }
 
 // Errors is an error wrapper to combine multiple errors

@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/agext/levenshtein"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
@@ -129,7 +130,21 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 		return nil
 	})
 	if mod == nil {
-		return nil, fmt.Errorf("%s: %s", errorMessages["invalidMod"], id)
+		err := InvalidModuleError{string(id)}
+		clMod := ""
+		minDist := -1.0
+		bp.WalkModules(func(m *Module) error {
+			dist := float64(levenshtein.Distance(string(m.ID), string(id), nil)) / float64(len(string(m.ID)))
+			if minDist == -1.0 || dist < minDist {
+				minDist = dist
+				clMod = string(m.ID)
+			}
+			return nil
+		})
+		if clMod != "" && minDist < 0.6 {
+			return nil, HintError{clMod, err}
+		}
+		return nil, err
 	}
 	return mod, nil
 }
@@ -143,7 +158,7 @@ func (bp Blueprint) ModuleGroup(mod ModuleID) (DeploymentGroup, error) {
 			}
 		}
 	}
-	return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], mod)
+	return DeploymentGroup{}, InvalidModuleError{string(mod)}
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound
