@@ -551,7 +551,7 @@ func intersection(s1 []string, s2 []string) []string {
 }
 
 // Find the closest module that the reference could be referring to (only ones that are defined before reference)
-// Returns a hint string to be part of an error message
+// Returns a string with the closest module name (default vars)
 // Currently limited to finding strings that are at least 40% similar based on module string length and levenshtein distance
 func closestReference(bp *Blueprint, mod *Module, ref *Reference) string {
 	minDist := 0.0
