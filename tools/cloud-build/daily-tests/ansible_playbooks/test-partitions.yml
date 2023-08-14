@@ -18,7 +18,15 @@
     that:
     - custom_vars.partitions is defined
     - custom_vars.mounts is defined
-
+- name: Ensure all partitions are UP
+  ansible.builtin.shell: sinfo --noheader  --all --format "%P[%a]" | grep -v "\[up\]" | cat
+  register: partitions_down
+  retries: 10
+  delay: 12
+  until: partitions_down.stdout_lines | length == 0
+- name: Print partitions down
+  ansible.builtin.debug:
+    var: partitions_down.stdout_lines
 - name: Get partition info
   ansible.builtin.command: sinfo --format='%P' --noheader
   changed_when: False
@@ -38,7 +46,6 @@
     msg: Test Check Partitions failed
   when: item not in partition_output.stdout
   loop: "{{ custom_vars.partitions }}"
-
 - name: Test partition mounts, multi-node creation, & placement (when on)
   register: srun_mounts
   changed_when: srun_mounts.rc == 0
