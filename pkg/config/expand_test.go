@@ -15,6 +15,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/modulereader"
 
@@ -230,7 +231,13 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 
 		// Use ID doesn't exists (fail)
 		g.Modules[len(g.Modules)-1].ID = "wrongID"
-		c.Assert(dc.applyUseModules(), ErrorMatches, fmt.Sprintf("%s: %s - Did you mean '%s'\\?", errorMessages["invalidMod"], used.ID, using.ID))
+		err := dc.applyUseModules()
+		c.Assert(errors.As(err, &HintError{}), Equals, true)
+		c.Assert(err.(HintError).Hint, Equals, string(using.ID))
+		c.Assert(errors.As(err, &InvalidModuleError{}), Equals, true)
+		c.Assert(err.(HintError).Err.(InvalidModuleError).modID, Equals, used.ID)
+
+		// c.Assert(dc.applyUseModules(), ErrorMatches, fmt.Sprintf("invalid module reference: \"%s\" - Did you mean \"%s\"\\?", used.ID, using.ID))
 	}
 
 	{ // test multigroup deployment with config that has a known good match

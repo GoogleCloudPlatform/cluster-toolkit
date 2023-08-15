@@ -50,7 +50,6 @@ var errorMessages = map[string]string{
 	"missingSetting":    "a required setting is missing from a module",
 	"settingsLabelType": "labels in module settings are not a map",
 	"invalidVar":        "invalid variable definition in",
-	"invalidMod":        "invalid module reference",
 	"varNotFound":       "Could not find source of variable",
 	"intergroupOrder":   "References to outputs from other groups must be to earlier groups",
 	"noOutput":          "Output not found for a variable",
@@ -130,7 +129,7 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 		return nil
 	})
 	if mod == nil {
-		err := InvalidModuleError{string(id)}
+		err := InvalidModuleError{id}
 		clMod := ""
 		minDist := -1.0
 		bp.WalkModules(func(m *Module) error {
@@ -158,7 +157,7 @@ func (bp Blueprint) ModuleGroup(mod ModuleID) (DeploymentGroup, error) {
 			}
 		}
 	}
-	return DeploymentGroup{}, InvalidModuleError{string(mod)}
+	return DeploymentGroup{}, InvalidModuleError{mod}
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound

@@ -62,11 +62,11 @@ func (err *InvalidSettingError) Error() string {
 
 // InvalidModuleError signifies a problem with the supplied module name.
 type InvalidModuleError struct {
-	modID string
+	modID ModuleID
 }
 
 func (e InvalidModuleError) Error() string {
-	return fmt.Sprintf("%s: %s", errorMessages["invalidMod"], e.modID)
+	return fmt.Sprintf("invalid module reference: \"%s\"", e.modID)
 }
 
 // Errors is an error wrapper to combine multiple errors
