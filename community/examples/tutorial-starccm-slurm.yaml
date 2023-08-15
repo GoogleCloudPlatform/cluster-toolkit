@@ -41,12 +41,13 @@ deployment_groups:
       local_mount: /home
 
   - id: login-script
-    source: modules/scripts/startup-script
     kind: terraform
+    source: modules/scripts/startup-script
+    settings:
       configure_ssh_host_patterns: ["star*"]
+
   - id: compute-script
     source: modules/scripts/startup-script
-    kind: terraform
     settings:
       configure_ssh_host_patterns: ["star*"]
       runners:
