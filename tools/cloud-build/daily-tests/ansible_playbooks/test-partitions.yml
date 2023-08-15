@@ -61,7 +61,7 @@
     label: "{{ item[1] }}"
 
 - name: Ensure all nodes are powered down
-  ansible.builtin.command: sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
+  ansible.builtin.command: sinfo -t 'POWERED_DOWN' --noheader --format "%n"
   register: final_node_count
   changed_when: False
   until: final_node_count.stdout_lines | length == initial_node_count.stdout_lines | length
