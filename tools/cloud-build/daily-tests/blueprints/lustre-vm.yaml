@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,12 @@ blueprint_name: test-workstation-lustre
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: test
+  deployment_name: test-workstation-lustre
   region: us-central1
   zone: us-central1-a
-  machine_type: e2-small
-
+  machine_type: c3-standard-8
+  disk_type: pd-ssd
+  instance_count: 1
 
 deployment_groups:
 - group: primary
@@ -49,6 +50,7 @@ deployment_groups:
     use: [network1]
     settings:
       local_mount: /lustre
+      waiter: deploymentmanager
       mgs:
         nic_type: "GVNIC"
         node_type: n2-standard-2
@@ -68,6 +70,27 @@ deployment_groups:
         node_cpu: "Intel Cascade Lake"
         public_ip: true
 
+  ###################
+  # Startup Scripts #
+  ###################
+
+  - id: startup-script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      runners:
+      - type: shell
+        destination: startup.sh
+        content: |
+          #!/bin/bash
+          set -ex
+
+          output_dir=/lustre/test
+          [[ ! -d $output_dir ]] && mkdir -m a+w $output_dir
+
+          os_name=\$(sed -nr 's/^ID="?([^"]+)"?/\1/p' /etc/os-release)
+          echo $os_name > ${output_dir}/${os_name}.txt
+
   #############
   # Simple VM #
   #############
@@ -80,7 +103,6 @@ deployment_groups:
     - startup-script
     settings:
       name_prefix: centos
-      instance_count: 1
       instance_image:
         family: centos-7
         project: centos-cloud
@@ -98,7 +120,6 @@ deployment_groups:
     - startup-script
     settings:
       name_prefix: rocky
-      instance_count: 1
       instance_image:
         family: rocky-linux-8
         project: rocky-linux-cloud
@@ -108,20 +129,19 @@ deployment_groups:
       instance_name: ((module.workstation-rocky.name[0]))
       timeout: 7200
 
-  - id: workstation-ubuntu
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - lustre
-    - startup-script
-    settings:
-      name_prefix: ubuntu
-      instance_count: 1
-      instance_image:
-        family: ubuntu-2004-lts
-        project: ubuntu-os-cloud
-  - id: wait-ubuntu
-    source: community/modules/scripts/wait-for-startup
-    settings:
-      instance_name: ((module.workstation-ubuntu.name[0]))
-      timeout: 7200
+  # - id: workstation-ubuntu
+  #   source: modules/compute/vm-instance
+  #   use:
+  #   - network1
+  #   - lustre
+  #   - startup-script
+  #   settings:
+  #     name_prefix: ubuntu
+  #     instance_image:
+  #       family: ubuntu-2004-lts
+  #       project: ubuntu-os-cloud
+  # - id: wait-ubuntu
+  #   source: community/modules/scripts/wait-for-startup
+  #   settings:
+  #     instance_name: ((module.workstation-ubuntu.name[0]))
+  #     timeout: 7200

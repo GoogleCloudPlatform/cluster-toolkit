@@ -55,7 +55,7 @@
 - name: Test partition mounts, multi-node creation, & placement (when on)
   register: srun_mounts
   changed_when: srun_mounts.rc == 0
-  ansible.builtin.command: "srun -N 2 -p {{ item }} mount"
+  ansible.builtin.command: "srun -N {{ custom_vars.num_slurm_nodes | default(2) }} -p {{ item }} mount"
   loop: "{{ custom_vars.partitions }}"
 
 - name: Fail if partitions unmounted

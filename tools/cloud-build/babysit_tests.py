@@ -22,7 +22,7 @@ import subprocess
 
 DESCRIPTION = """
 babysit_tests is a tool to approve & retry CloudBuild tests.
-It monitors status of builds referenced by PR commit SHA, 
+It monitors status of builds referenced by PR commit SHA,
 it will approve and retry tests accoding to configured concurrency and retry policies.
 The tool will terminate itself once there is no more actions to take or no reasons to wait for status changes.
 The subset of tests to monitor can be configured by using test_selectors, e.g. "all", exact_name_of_test.
@@ -66,10 +66,14 @@ SELECTORS: Dict[str, Selector] = {
         "PR-test-slurm-gcp-v5-ubuntu2004",
         "PR-test-hpc-enterprise-slurm",
         "PR-test-hpc-slurm-chromedesktop",
+        "PR-test-lustre-slurm",
     ]),
     "spack": selector_by_name([
         "PR-test-batch-mpi",
         "PR-test-spack-gromacs",
+    ]),
+    "vm": selector_by_name([
+        "PR-test-lustre-vm",
     ]),
 }
 
