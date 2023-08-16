@@ -29,6 +29,7 @@ deployment_groups:
     kind: terraform
     id: startup
     settings:
+      configure_ssh_host_patterns: ["star*"]
       runners:
       - type: shell
         content: |
