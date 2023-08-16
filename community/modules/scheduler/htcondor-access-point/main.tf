@@ -47,7 +47,23 @@ locals {
     EOT
   }
 
+  native_fstype = []
+  startup_script_network_storage = [
+    for ns in var.network_storage :
+    ns if !contains(local.native_fstype, ns.fs_type)
+  ]
+  storage_client_install_runners = [
+    for ns in local.startup_script_network_storage :
+    ns.client_install_runner if ns.client_install_runner != null
+  ]
+  mount_runners = [
+    for ns in local.startup_script_network_storage :
+    ns.mount_runner if ns.mount_runner != null
+  ]
+
   all_runners = concat(
+    local.storage_client_install_runners,
+    local.mount_runners,
     var.access_point_runner,
     [local.schedd_runner],
     var.autoscaler_runner,
