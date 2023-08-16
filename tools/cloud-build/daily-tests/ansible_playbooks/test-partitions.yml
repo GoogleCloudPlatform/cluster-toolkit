@@ -19,6 +19,12 @@
     - custom_vars.partitions is defined
     - custom_vars.mounts is defined
 - name: Ensure all partitions are UP
+  # Find all unavailable partitions
+  # `| cat` is needed to ignore rc==1 by grep if no lines were selected.
+  # TODO: Make it "ansible-native" way, options:
+  # *`failed_when: false`
+  # *`failed_when: partitions_down.rc == 2`
+  # *`until: partitions_down.rc == 1`
   ansible.builtin.shell: sinfo --noheader  --all --format "%P[%a]" | grep -v "\[up\]" | cat
   register: partitions_down
   retries: 10
