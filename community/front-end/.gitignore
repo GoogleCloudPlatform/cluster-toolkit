@@ -25,3 +25,4 @@ terraform.tfvars
 tf/.tkfe.lock
 tf/tfapply.log
 tf/tfdestroy.log
+config.yaml

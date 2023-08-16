@@ -68,15 +68,27 @@ func (e Errors) OrNil() error {
 	}
 }
 
+func (e *Errors) addDedup(err error) {
+	msg := err.Error() // Do message comparison
+	for _, e := range e.Errors {
+		if msg == e.Error() {
+			return
+		}
+	}
+	e.Errors = append(e.Errors, err)
+}
+
 // Add adds an error to the Errors and returns itself
 func (e *Errors) Add(err error) *Errors {
 	if err == nil {
 		return e
 	}
 	if multi, ok := err.(*Errors); ok {
-		e.Errors = append(e.Errors, multi.Errors...)
+		for _, c := range multi.Errors {
+			e.addDedup(c)
+		}
 	} else {
-		e.Errors = append(e.Errors, err)
+		e.addDedup(err)
 	}
 	return e
 }

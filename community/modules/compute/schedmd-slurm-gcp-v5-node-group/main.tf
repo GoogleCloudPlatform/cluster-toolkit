@@ -54,7 +54,7 @@ locals {
     enable_confidential_vm   = var.enable_confidential_vm
     enable_oslogin           = var.enable_oslogin
     enable_shielded_vm       = var.enable_shielded_vm
-    gpu                      = var.gpu != null ? var.gpu : one(local.guest_accelerator)
+    gpu                      = one(local.guest_accelerator)
     labels                   = local.labels
     machine_type             = var.machine_type
     metadata                 = var.metadata

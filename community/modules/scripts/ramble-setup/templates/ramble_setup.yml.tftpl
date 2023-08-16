@@ -1,0 +1,84 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Install Software
+  hosts: localhost
+  vars:
+    sw_name: ${sw_name}
+    profile_script: ${profile_script}
+    install_dir: ${install_dir}
+    git_url: ${git_url}
+    git_ref: ${git_ref}
+    chmod_mode: ${chmod_mode}
+    chown_owner: ${chown_owner}
+    chgrp_group: ${chgrp_group}
+    finalize_setup_script: ${finalize_setup_script}
+  tasks:
+  - name: Print software name
+    ansible.builtin.debug:
+      msg: "Running installation for software: {{  sw_name  }}"
+
+  - name: Add profile script for software
+    ansible.builtin.copy:
+      dest: /etc/profile.d/{{ sw_name }}.sh
+      mode: '0644'
+      content: "{{ profile_script }}"
+    when: profile_script
+
+  - name: Create parent of install directory
+    ansible.builtin.file:
+      path: "{{ install_dir | dirname }}"
+      state: directory
+
+  - name: Set lock dir
+    ansible.builtin.set_fact:
+      lock_dir: "{{ install_dir | dirname }}/.install_{{ sw_name }}_lock"
+
+  - name: Acquire lock
+    ansible.builtin.command:
+      mkdir "{{ lock_dir }}"
+    register: lock_out
+    changed_when: lock_out.rc == 0
+    failed_when: false
+
+  - name: Clones into installation directory
+    ansible.builtin.command: git clone --branch {{ git_ref }} {{ git_url }} {{ install_dir }}
+    when: lock_out.rc == 0
+
+  - name: Set ownership and permissions
+    ansible.builtin.file:
+      path: "{{ install_dir }}"
+      mode: "{{ chmod_mode | default(omit, true)  }}"
+      owner: "{{ chown_owner | default(omit, true) }}"
+      group: "{{ chgrp_group | default(omit, true)  }}"
+      recurse: true
+    when: lock_out.rc == 0
+
+  - name: Finalize setup
+    ansible.builtin.shell: "{{ finalize_setup_script }}"
+    when: lock_out.rc == 0 and finalize_setup_script
+
+  - name: Release lock
+    ansible.builtin.file:
+      path:  "{{ lock_dir }}/done"
+      state: touch
+    when: lock_out.rc == 0
+
+  - name: Wait for lock
+    ansible.builtin.wait_for:
+      path: "{{ lock_dir }}/done"
+      state: present
+      timeout: 600
+      sleep: 10
+    when: lock_out.rc != 0

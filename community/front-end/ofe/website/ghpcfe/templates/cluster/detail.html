@@ -71,6 +71,18 @@ window.onload=function(event) {
       {% endif %}
     </p>
 
+    <div class="form-group">
+      <div class="custom-control custom-checkbox">
+        <input type="checkbox" class="custom-control-input" id="show-advanced-features" data-toggle="collapse" data-target="#advanced-features">
+        <label class="custom-control-label" for="show-advanced-features">Show Advanced Details</label>
+      </div>
+    </div>
+    
+    <div id="advanced-features" class="collapse">
+      <p><b>Login node image:</b> {{ object.login_node_image.name }}</p>
+      <p><b>Controller node image:</b> {{ object.controller_node_image.name }}</p>
+    </div>
+
     <hr>
     <p style="text-decoration: underline; font-size: large;">Partitions</p>
     <div class="table-responsive">

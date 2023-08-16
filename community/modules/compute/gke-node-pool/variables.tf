@@ -69,8 +69,11 @@ variable "enable_secure_boot" {
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
-    type               = string
-    count              = number
+    type  = string
+    count = number
+    gpu_driver_installation_config = list(object({
+      gpu_driver_version = string
+    }))
     gpu_partition_size = string
     gpu_sharing_config = list(object({
       gpu_sharing_strategy       = string

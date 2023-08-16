@@ -212,7 +212,7 @@ variable "image" {
   # })
   default = {
     project = "ddn-public"
-    family  = "exascaler-cloud-6-1-centos"
+    family  = "exascaler-cloud-6-2-rocky-linux-8-optimized-gcp"
   }
   validation {
     condition     = lookup(var.image, "name", null) == null && lookup(var.image, "project", null) != null && lookup(var.image, "family", null) != null

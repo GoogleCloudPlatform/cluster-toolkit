@@ -3,7 +3,7 @@
 ## Supported modules
 
 * [vm-instance] and therefore any module that relies on `vm-instance` including:
-  * HTCondor modules including [htcondor-install], [htcondor-configure] and
+  * HTCondor modules including [htcondor-install], [htcondor-setup] and
     [htcondor-execute-point].
   * [omnia-install]
 * Slurm on GCP modules where applicable, both version 4 and version 5
@@ -47,7 +47,7 @@ cannot be determined automatically like with `a2`.
 [login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-login
 [omnia-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/omnia-install
 [htcondor-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/htcondor-install
-[htcondor-configure]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/htcondor-configure
+[htcondor-setup]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/htcondor-setup
 [htcondor-execute-point]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/htcondor-execute-point
 
 ## Troubleshooting and tips

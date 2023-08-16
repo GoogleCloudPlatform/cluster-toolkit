@@ -56,9 +56,8 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     SG_EXAMPLE=examples/serverless-batch-mpi.yaml
 
-    sed -i "s/# spack_cache_url:/spack_cache_url:/" $${SG_EXAMPLE}
-    sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" $${SG_EXAMPLE}
-    sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
+    sed -i "s/# spack mirror add .*/spack mirror add --scope site gcs_cache $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
+    sed -i "s/# spack buildcache keys .*/spack buildcache keys --install --trust/" $${SG_EXAMPLE}
 
     echo '  - id: wait'                                           >> $${SG_EXAMPLE}
     echo '    source: community/modules/scripts/wait-for-startup' >> $${SG_EXAMPLE}

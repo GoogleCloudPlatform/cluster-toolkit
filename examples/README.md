@@ -120,7 +120,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.4/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.5/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -142,6 +142,11 @@ performance analysis should be done on the `compute` partition. By default it
 uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `-p compute` argument when running `srun`.
+
+#### H3 Partition
+
+There is an `h3` partition that uses compute-optimized `h3-standard-88` machine type.
+You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
 
 #### Quota Requirements for hpc-slurm.yaml
 
@@ -179,6 +184,8 @@ generation AMD EPYC Milan.
 * `c3` with compute-optimized [`c3-highcpu-176` nodes][c3] based on Intel Sapphire
 Rapids processors. When configured with Tier_1 networking, C3 nodes feature 200 Gbps
 low-latency networking.
+* `h3` with compute-optimized [`h3-standard-88` nodes][h3]  based on Intel Sapphire
+Rapids processors. H3 VMs can use the entire host network bandwidth and come with a default network bandwidth rate of up to 200 Gbps.
 * `a208` with [`a2-ultragpu-8g` nodes][a2] with 8 of the NVIDIA A100 GPU accelerators
 with 80GB of GPU memory each.
 * `a216` with [`a2-megagpu-16g` nodes][a2] with 16 of the NVIDIA A100 GPU accelerators
@@ -196,6 +203,7 @@ are configured with:
 [c2]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2_machine_types
 [c2d]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2d_machine_types
 [c3]: https://cloud.google.com/blog/products/compute/introducing-c3-machines-with-googles-custom-intel-ipu
+[h3]: https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series
 [a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
 [g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
 [compact placement]: https://cloud.google.com/compute/docs/instances/define-instance-placement
@@ -234,6 +242,7 @@ For this example the following is needed in the selected region:
   in `c2` partition up to 1,204
 * Compute Engine API: C2D CPUs: **112/node** active in `c2d` partition up to 2,240
 * Compute Engine API: C3 CPUs: **176/node** active in `c3` partition up to 3,520
+* Compute Engine API: H3 CPUs: **88/node** active in `h3` partition up to 1,408
 * Compute Engine API: A2 CPUs: **96/node** active in `a208` and `a216` partitions
 up to 3,072
 * Compute Engine API: NVIDIA A100 80GB GPUs: **8/node** active in `a208` partition
@@ -441,8 +450,9 @@ This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
 The blueprint contains the following:
 
 * A shared `filestore` filesystem.
-* A `spack-install` module that builds a script to install Spack and the WRF
-  application onto the shared `filestore`.
+* A `spack-setup` module that generates a script to install Spack
+* A `spack-execute` module that builds the WRF application onto the shared
+  `filestore`.
 * A `startup-script` module which uses the above script and stages job data.
 * A builder `vm-instance` which performs the Spack install and then shuts down.
 * A `batch-job-template` that builds a Batch job to execute the WRF job.
@@ -525,7 +535,7 @@ For this example the following is needed in the selected region:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.4/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.5/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -662,13 +672,14 @@ bucket:
 
 Spack is an HPC software package manager. This example creates a small Slurm
 cluster with software installed using the
-[spack-install module](../community/modules/scripts/spack-install/README.md) The
-controller will install and configure spack, and install
+[spack-setup](../community/modules/scripts/spack-setup/README.md) and
+[spack-execute](../community/modules/scripts/spack-execute/README.md) modules.
+The controller will install and configure spack, and install
 [gromacs](https://www.gromacs.org/) using spack. Spack is installed in a shared
 location (/sw) via filestore. This build leverages the
 [startup-script module](../modules/scripts/startup-script/README.md) and can be
-applied in any cluster by using the output of spack-install or
-startup-script modules.
+applied in any cluster by using the output of spack-setup or startup-script
+modules.
 
 The installation will occur as part of the Slurm startup-script, a warning
 message will be displayed upon SSHing to the login node indicating

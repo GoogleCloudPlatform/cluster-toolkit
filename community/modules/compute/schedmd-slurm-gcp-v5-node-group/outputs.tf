@@ -19,7 +19,11 @@ output "node_groups" {
   value       = local.node_group
 
   precondition {
-    condition     = (substr(var.machine_type, 0, 3) != "c3-") || (var.disk_type != "pd-standard")
-    error_message = "A disk_type of pd-standard cannot be used with c3 machines."
+    condition = !contains([
+      "c3-:pd-standard",
+      "h3-:pd-standard",
+      "h3-:pd-ssd",
+    ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
+    error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
   }
 }
