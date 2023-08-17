@@ -137,7 +137,7 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 
 // SuggestModuleIDHint return a correct spelling of given ModuleID id if one
 // is close enough (based on maxHintDist)
-func (bp *Blueprint) SuggestModuleIDHint(id ModuleID) (string, bool) {
+func (bp Blueprint) SuggestModuleIDHint(id ModuleID) (string, bool) {
 	clMod := ""
 	minDist := -1
 	bp.WalkModules(func(m *Module) error {
