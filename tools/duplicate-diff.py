@@ -37,6 +37,7 @@ duplicates = [
     ],
     [
         "modules/compute/vm-instance/gpu_definition.tf",
+        "community/modules/compute/htcondor-execute-point/gpu_definition.tf",
         "community/modules/compute/schedmd-slurm-gcp-v5-node-group/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-login/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/gpu_definition.tf",
@@ -49,6 +50,14 @@ duplicates = [
         "community/modules/compute/schedmd-slurm-gcp-v5-node-group/source_image_logic.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/source_image_logic.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-login/source_image_logic.tf",
+    ],
+    [
+        "community/modules/scripts/ramble-execute/templates/ramble_execute.yml.tpl",
+        "community/modules/scripts/spack-execute/templates/execute_commands.yml.tpl",
+    ],
+    [
+        "community/modules/scripts/spack-setup/templates/spack_setup.yml.tftpl",
+        "community/modules/scripts/ramble-setup/templates/ramble_setup.yml.tftpl",
     ],
 ]
 

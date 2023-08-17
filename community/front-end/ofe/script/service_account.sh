@@ -53,6 +53,7 @@ sa_expand() {
 declare -a SA_ROLES
 SA_ROLES=('aiplatform.admin'
 	'compute.admin'
+	'storage.admin'
 	'file.editor'
 	'iam.serviceAccountAdmin'
 	'iam.serviceAccountUser'

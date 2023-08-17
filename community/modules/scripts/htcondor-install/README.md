@@ -13,39 +13,47 @@ Debian or Ubuntu distributions.
 It also exports a list of Google Cloud APIs which must be enabled prior to
 provisioning an HTCondor Pool.
 
-It is expected to be used with the [htcondor-configure] and
+It is expected to be used with the [htcondor-setup] and
 [htcondor-execute-point] modules.
 
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[htcondor-configure]: ../../scheduler/htcondor-configure/README.md
+[htcondor-setup]: ../../scheduler/htcondor-setup/README.md
 [htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
 
 ### Example
 
 The following code snippet uses this module to create startup scripts that
-install the HTCondor software and adds custom configurations using
-[htcondor-configure] and [htcondor-execute-point].
+install the HTCondor software into a custom VM image.
 
 ```yaml
-- id: htcondor_install
-  source: community/modules/scripts/htcondor-install
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    outputs:
+    - network_name
 
-- id: htcondor_startup_central_manager
-  source: modules/scripts/startup-script
-  settings:
-    runners:
-    - $(htcondor_install.install_htcondor_runner)
-    - $(htcondor_configure.central_manager_runner)
+  - id: htcondor_install
+    source: community/modules/scripts/htcondor-install
 
-- id: htcondor_startup_access_point
-  source: modules/scripts/startup-script
-  settings:
-    runners:
-    - $(htcondor_install.install_htcondor_runner)
-    - $(htcondor_install.install_autoscaler_deps_runner)
-    - $(htcondor_install.install_autoscaler_runner)
-    - $(htcondor_configure.access_point_runner)
-    - $(htcondor_execute_point.configure_autoscaler_runner)
+  - id: htcondor_install_script
+    source: modules/scripts/startup-script
+    use:
+    - htcondor_install
+
+- group: packer
+  modules:
+  - id: custom-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - network1
+    - htcondor_install_script
+    settings:
+      disk_size: 50
+      source_image_family: hpc-rocky-linux-8
+      image_family: "htcondor-10x"
 ```
 
 A full example can be found in the [examples README][htc-example].
@@ -134,7 +142,6 @@ No resources.
 | Name | Description |
 |------|-------------|
 | <a name="output_gcp_service_list"></a> [gcp\_service\_list](#output\_gcp\_service\_list) | Google Cloud APIs required by HTCondor |
-| <a name="output_install_autoscaler_deps_runner"></a> [install\_autoscaler\_deps\_runner](#output\_install\_autoscaler\_deps\_runner) | Toolkit Runner to install HTCondor autoscaler dependencies |
-| <a name="output_install_autoscaler_runner"></a> [install\_autoscaler\_runner](#output\_install\_autoscaler\_runner) | Toolkit Runner to install HTCondor autoscaler |
-| <a name="output_install_htcondor_runner"></a> [install\_htcondor\_runner](#output\_install\_htcondor\_runner) | Runner to install HTCondor using startup-scripts |
+| <a name="output_runners"></a> [runners](#output\_runners) | Runner to install HTCondor using startup-scripts |
+| <a name="output_windows_startup_ps1"></a> [windows\_startup\_ps1](#output\_windows\_startup\_ps1) | Windows PowerShell script to install HTCondor |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

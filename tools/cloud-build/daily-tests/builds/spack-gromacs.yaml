@@ -55,9 +55,8 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     SG_EXAMPLE=community/examples/hpc-slurm-gromacs.yaml
 
-    sed -i "s/# spack_cache_url:/spack_cache_url:/" $${SG_EXAMPLE}
-    sed -i "s/# - mirror_name: gcs_cache/- mirror_name: gcs_cache/" $${SG_EXAMPLE}
-    sed -i "s/#   mirror_url: .*/  mirror_url: $${SPACK_CACHE//\//\\\/}/" $${SG_EXAMPLE}
+    sed -i "s/# spack mirror add .*/spack mirror add --scope site gcs_cache $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
+    sed -i "s/# spack buildcache keys .*/spack buildcache keys --install --trust/" $${SG_EXAMPLE}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

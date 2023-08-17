@@ -114,6 +114,7 @@ an A100 GPU:
         count: 1
         gpu_partition_size: 1g.5gb
         gpu_sharing_config: null
+        gpu_driver_installation_config: null
 ```
 
 > **Note**: Once we define the [`guest_accelerator`] block, all fields must be
@@ -138,6 +139,7 @@ The following is an example of
         gpu_sharing_config:
         - gpu_sharing_strategy: TIME_SHARING
           max_shared_clients_per_gpu: 3
+        gpu_driver_installation_config: null
 ```
 
 Finally, the following is an example of using a GPU attached to an `n1` machine:
@@ -153,6 +155,7 @@ Finally, the following is an example of using a GPU attached to an `n1` machine:
         count: 2
         gpu_partition_size: null
         gpu_sharing_config: null
+        gpu_driver_installation_config: null
 ```
 
 ## License
@@ -177,15 +180,15 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.61.0, <= 4.74.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.61.0, <= 4.74.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.75.1, < 5.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.75.1, < 5.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 4.61.0, <= 4.74.0 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.61.0, <= 4.74.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.75.1, < 5.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.75.1, < 5.0 |
 
 ## Modules
 
@@ -217,7 +220,7 @@ No modules.
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `"pd-standard"` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
 | <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
-| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type               = string<br>    count              = number<br>    gpu_partition_size = string<br>    gpu_sharing_config = list(object({<br>      gpu_sharing_strategy       = string<br>      max_shared_clients_per_gpu = number<br>    }))<br>  }))</pre> | `null` | no |
+| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string<br>    count = number<br>    gpu_driver_installation_config = list(object({<br>      gpu_driver_version = string<br>    }))<br>    gpu_partition_size = string<br>    gpu_sharing_config = list(object({<br>      gpu_sharing_strategy       = string<br>      max_shared_clients_per_gpu = number<br>    }))<br>  }))</pre> | `null` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |

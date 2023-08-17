@@ -1,0 +1,66 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h2>Image Detail</h2>
+  <p><b>ID:</b> {{ object.id }}</p>
+  <p><b>Owner:</b> {{ object.owner }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Family:</b> {{ object.family }}</p>
+  <p><b>Source Image Project:</b> {{ object.source_image_project }}</p>
+  <p><b>Source Image Family:</b> {{ object.source_image_family }}</p>
+  <p><b>Enable OS Login:</b> {{ object.enable_os_login }}</p>
+  <p><b>Block Project SSH Keys:</b> {{ object.block_project_ssh_keys }}</p>
+  <p><b>Startup Scripts:</b></p>
+  {% if object.startup_script.all %}
+  <div>
+  <div class="table-responsive"></div>
+    <table class="table align-middle" id="id_script_table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+          <th>Type</th>
+          <th>File</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for script in object.startup_script.all %}
+          <tr>
+            <td><a href="{% url 'startup-script-view' script.id %}">{{ script.name }}</a></td>
+            <td>{{ script.description }}</td>
+            <td>{{ script.type }}</td>
+            <td>{{ script.content }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4">No startup scripts associated with this image.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p>No startup scripts associated with this image.</p>
+  {% endif %}
+  </ul>
+  <div>
+    <a href="/images" class="btn btn-primary">Back to list</a>
+  </div>
+</div>
+{% endblock %}

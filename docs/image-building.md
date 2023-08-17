@@ -141,8 +141,8 @@ The Toolkit supports Packer modules developed by 3rd parties -- including ones
 that you have developed! -- hosted via git or GitHub. We recommend reading the
 module documentation on:
 
-- [GitHub-hosted modules and packages](https://github.com/tpdownes/hpc-toolkit/blob/packer_documentation/modules/README.md#github-hosted-modules-and-packages)
-- [GitHub-hosted Packer modules](https://github.com/tpdownes/hpc-toolkit/blob/packer_documentation/modules/README.md#github-hosted-packer-modules)
+- [GitHub-hosted modules and packages](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md#github-hosted-modules-and-packages)
+- [GitHub-hosted Packer modules](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md#github-hosted-packer-modules)
 
 In particular, the Toolkit recommends using double-slash (`//`) notation to
 identify the root of the git repository. Doing so will ensure that the Packer
@@ -168,7 +168,7 @@ deployment_groups:
 - group: packer
   modules:
   - id: custom-image
-    source: github.com/SchedMD/slurm-gcp//packer?ref=5.7.4&depth=1
+    source: github.com/SchedMD/slurm-gcp//packer?ref=5.7.5&depth=1
     kind: packer
     settings:
       use_iap: true

@@ -1,0 +1,20 @@
+# create directory for local condor_config customizations
+$config_dir = 'C:\Condor\config'
+if(!(test-path -PathType container -Path $config_dir)) {
+      New-Item -ItemType Directory -Path $config_dir
+}
+
+# update local condor_config if blueprint has changed
+$config_file = "$config_dir\50-ghpc-managed"
+if (Test-Path -Path $config_file -PathType Leaf) {
+    $local_hash = gcloud --format="value(md5_hash)" storage hash $config_file
+} else {
+    $local_hash = "INVALID-HASH"
+}
+
+$remote_hash = gcloud --format="value(md5_hash)" storage hash ${config_object}
+if ($local_hash -cne $remote_hash) {
+    Write-Output "Updating condor configuration"
+    gcloud storage cp ${config_object} $config_file
+    Restart-Service condor
+}

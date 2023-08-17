@@ -46,7 +46,7 @@ repos:
     entry: python3 tools/duplicate-diff.py
     language: python
     language_version: python3
-    files: '.*(\.sh|\.tf)$'
+    files: '.*(\.sh|\.tf|\.tftpl)$'
     pass_filenames: true
     require_serial: true
   - id: module-label-check

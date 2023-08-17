@@ -47,7 +47,10 @@ locals {
   windows_packer_user = "packer_user"
   windows_user_metadata = {
     sysprep-specialize-script-cmd = "winrm quickconfig -quiet & net user /add ${local.windows_packer_user} & net localgroup administrators ${local.windows_packer_user} /add & winrm set winrm/config/service/auth @{Basic=\\\"true\\\"}"
-    windows-shutdown-script-cmd   = "net user /delete ${local.windows_packer_user}"
+    windows-shutdown-script-cmd   = <<-EOT
+      net user /delete ${local.windows_packer_user}
+      GCESysprep -no_shutdown
+      EOT
   }
   user_metadata = local.communicator == "winrm" ? local.windows_user_metadata : local.linux_user_metadata
 

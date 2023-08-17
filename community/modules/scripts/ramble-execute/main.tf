@@ -20,10 +20,9 @@ locals {
   execute_contents = templatefile(
     "${path.module}/templates/ramble_execute.yml.tpl",
     {
-      spack_path  = var.spack_path
-      ramble_path = var.ramble_path
-      log_file    = var.log_file
-      commands    = local.commands_content
+      pre_script = ". ${var.spack_path}/share/spack/setup-env.sh && . ${var.ramble_path}/share/ramble/setup-env.sh"
+      log_file   = var.log_file
+      commands   = local.commands_content
     }
   )
 
