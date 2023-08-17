@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/agext/levenshtein"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
@@ -35,6 +36,7 @@ const (
 	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
 	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
 	unexpectedConnectionKind string = "connectionKind must be useConnection or deploymentConnection"
+	maxHintDist              int    = 3 // Maximum levenshtein distance where we suggest a hint
 )
 
 var errorMessages = map[string]string{
@@ -49,7 +51,6 @@ var errorMessages = map[string]string{
 	"missingSetting":    "a required setting is missing from a module",
 	"settingsLabelType": "labels in module settings are not a map",
 	"invalidVar":        "invalid variable definition in",
-	"invalidMod":        "invalid module reference",
 	"varNotFound":       "Could not find source of variable",
 	"intergroupOrder":   "References to outputs from other groups must be to earlier groups",
 	"noOutput":          "Output not found for a variable",
@@ -129,9 +130,30 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 		return nil
 	})
 	if mod == nil {
-		return nil, fmt.Errorf("%s: %s", errorMessages["invalidMod"], id)
+		return nil, UnknownModuleError{id}
 	}
 	return mod, nil
+}
+
+// SuggestModuleIDHint return a correct spelling of given ModuleID id if one
+// is close enough (based on maxHintDist)
+func (bp Blueprint) SuggestModuleIDHint(id ModuleID) (string, bool) {
+	clMod := ""
+	minDist := -1
+	bp.WalkModules(func(m *Module) error {
+		dist := levenshtein.Distance(string(m.ID), string(id), nil)
+		if minDist == -1.0 || dist < minDist {
+			minDist = dist
+			clMod = string(m.ID)
+		}
+		return nil
+	})
+
+	if clMod != "" && minDist <= maxHintDist {
+		return clMod, true
+	}
+
+	return "", false
 }
 
 // ModuleGroup returns the group containing the module
@@ -143,7 +165,7 @@ func (bp Blueprint) ModuleGroup(mod ModuleID) (DeploymentGroup, error) {
 			}
 		}
 	}
-	return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], mod)
+	return DeploymentGroup{}, UnknownModuleError{mod}
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound
