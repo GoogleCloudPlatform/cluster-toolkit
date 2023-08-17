@@ -56,7 +56,6 @@ deployment_groups:
           #!/bin/bash
           google_mpi_tuning --hpcthroughput
           google_mpi_tuning --nomitigation
-          yum -y install libExt libXext.x86_64 nmap
         destination: /tmp/tune-mpi.sh
 
   - id: debug_node_group
