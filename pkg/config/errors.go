@@ -41,7 +41,7 @@ type HintError struct {
 
 func (e HintError) Error() string {
 	if len(e.Hint) > 0 {
-		return fmt.Sprintf("%s - Did you mean \"%s\"?", e.Err, e.Hint)
+		return fmt.Sprintf("%s - %s", e.Err, e.Hint)
 	}
 	return e.Err.Error()
 }

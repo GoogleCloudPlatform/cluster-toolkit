@@ -311,7 +311,7 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	to, err := bp.Module(toID)
 	if err != nil {
 		if hint, ok := bp.SuggestModuleIDHint(toID); ok {
-			return HintError{hint, err}
+			return HintError{fmt.Sprintf("Did you mean \"%s\"?", hint), err}
 		}
 		return err
 	}
@@ -346,7 +346,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	if err := validateModuleReference(bp, mod, r.Module); err != nil {
 		var unkModErr UnknownModuleError
 		if errors.As(err, &unkModErr) && levenshtein.Distance(string(unkModErr.ID), "vars", nil) <= 2 {
-			return HintError{"vars", unkModErr}
+			return HintError{"Did you mean \"vars\"?", unkModErr}
 		}
 		return err
 	}
