@@ -232,9 +232,9 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		// Use ID doesn't exists (fail)
 		g.Modules[len(g.Modules)-1].ID = "wrongID"
 		err := dc.applyUseModules()
-		invModErr := InvalidModuleError{used.ID}
-		c.Assert(errors.Is(err, invModErr), Equals, true)
-		c.Assert(errors.Is(err, HintError{string(using.ID), invModErr}), Equals, true)
+		unkModErr := UnknownModuleError{used.ID}
+		c.Check(errors.Is(err, unkModErr), Equals, true)
+		c.Check(errors.Is(err, HintError{string(using.ID), unkModErr}), Equals, false)
 	}
 
 	{ // test multigroup deployment with config that has a known good match

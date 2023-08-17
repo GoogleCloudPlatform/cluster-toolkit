@@ -36,6 +36,7 @@ const (
 	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
 	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
 	unexpectedConnectionKind string = "connectionKind must be useConnection or deploymentConnection"
+	maxHintDist              int    = 3 // Maximum levenshtein distance where we suggest a hint
 )
 
 var errorMessages = map[string]string{
@@ -129,23 +130,30 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 		return nil
 	})
 	if mod == nil {
-		err := InvalidModuleError{id}
-		clMod := ""
-		minDist := -1.0
-		bp.WalkModules(func(m *Module) error {
-			dist := float64(levenshtein.Distance(string(m.ID), string(id), nil)) / float64(len(string(m.ID)))
-			if minDist == -1.0 || dist < minDist {
-				minDist = dist
-				clMod = string(m.ID)
-			}
-			return nil
-		})
-		if clMod != "" && minDist < 0.6 {
-			return nil, HintError{clMod, err}
-		}
-		return nil, err
+		return nil, UnknownModuleError{id}
 	}
 	return mod, nil
+}
+
+// SuggestModuleIDHint return a correct spelling of given ModuleID id if one
+// is close enough (based on maxHintDist)
+func (bp *Blueprint) SuggestModuleIDHint(id ModuleID) (string, bool) {
+	clMod := ""
+	minDist := -1
+	bp.WalkModules(func(m *Module) error {
+		dist := levenshtein.Distance(string(m.ID), string(id), nil)
+		if minDist == -1.0 || dist < minDist {
+			minDist = dist
+			clMod = string(m.ID)
+		}
+		return nil
+	})
+
+	if clMod != "" && minDist <= maxHintDist {
+		return clMod, true
+	}
+
+	return "", false
 }
 
 // ModuleGroup returns the group containing the module
@@ -157,7 +165,7 @@ func (bp Blueprint) ModuleGroup(mod ModuleID) (DeploymentGroup, error) {
 			}
 		}
 	}
-	return DeploymentGroup{}, InvalidModuleError{mod}
+	return DeploymentGroup{}, UnknownModuleError{mod}
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound

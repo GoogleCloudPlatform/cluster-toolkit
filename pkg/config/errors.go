@@ -41,7 +41,7 @@ type HintError struct {
 
 func (e HintError) Error() string {
 	if len(e.Hint) > 0 {
-		return fmt.Sprintf("%s - Did you mean '%s'?", e.Err, e.Hint)
+		return fmt.Sprintf("%s - Did you mean \"%s\"?", e.Err, e.Hint)
 	}
 	return e.Err.Error()
 }
@@ -60,13 +60,13 @@ func (err *InvalidSettingError) Error() string {
 	return fmt.Sprintf("invalid setting provided to a module, cause: %v", err.cause)
 }
 
-// InvalidModuleError signifies a problem with the supplied module name.
-type InvalidModuleError struct {
-	modID ModuleID
+// UnknownModuleError signifies a problem with the supplied module name.
+type UnknownModuleError struct {
+	ID ModuleID
 }
 
-func (e InvalidModuleError) Error() string {
-	return fmt.Sprintf("invalid module reference: \"%s\"", e.modID)
+func (e UnknownModuleError) Error() string {
+	return fmt.Sprintf("invalid module id: \"%s\"", e.ID)
 }
 
 // Errors is an error wrapper to combine multiple errors

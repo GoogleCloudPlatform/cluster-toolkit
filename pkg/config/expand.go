@@ -15,6 +15,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -23,6 +24,7 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 
+	"github.com/agext/levenshtein"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -308,6 +310,9 @@ func AutomaticOutputName(outputName string, moduleID ModuleID) string {
 func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	to, err := bp.Module(toID)
 	if err != nil {
+		if hint, ok := bp.SuggestModuleIDHint(toID); ok {
+			return HintError{hint, err}
+		}
 		return err
 	}
 
@@ -339,8 +344,9 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	}
 
 	if err := validateModuleReference(bp, mod, r.Module); err != nil {
-		if _, ok := err.(InvalidModuleError); ok && bp.Vars.Has(r.Name) {
-			err = HintError{fmt.Sprintf("vars.%s", r.Name), err}
+		var unkModErr UnknownModuleError
+		if errors.As(err, &unkModErr) && levenshtein.Distance(string(unkModErr.ID), "vars", nil) <= 2 {
+			return HintError{"vars", unkModErr}
 		}
 		return err
 	}

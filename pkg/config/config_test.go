@@ -1033,8 +1033,24 @@ func (s *MySuite) TestValidateModuleSettingReference(c *C) {
 	// FAIL. missing output
 	c.Check(vld(bp, mod22, ModuleRef("mod21", "kale")), NotNil)
 
-	// Fail. packer module
+	// FAIL. packer module
 	c.Check(vld(bp, mod21, ModuleRef("pkr", "outPkr")), NotNil)
+
+	// FAIL. get global hint
+	mod := ModuleID("var")
+	unkModErr := UnknownModuleError{mod}
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{"vars", unkModErr}), Equals, true)
+
+	// FAIL. get module ID hint
+	mod = ModuleID("pkp")
+	unkModErr = UnknownModuleError{mod}
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{string(pkr.ID), unkModErr}), Equals, true)
+
+	// FAIL. get no hint
+	mod = ModuleID("test")
+	unkModErr = UnknownModuleError{mod}
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{string(pkr.ID), unkModErr}), Equals, false)
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), unkModErr), Equals, true)
 }
 
 func (s *MySuite) TestValidateModuleSettingReferences(c *C) {
