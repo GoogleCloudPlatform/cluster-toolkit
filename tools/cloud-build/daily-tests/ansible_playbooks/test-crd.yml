@@ -1,0 +1,75 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - custom_vars.partitions is defined
+
+- name: Get partition info
+  ansible.builtin.command: sinfo --format='%P' --noheader
+  changed_when: False
+  register: partition_output
+  retries: 10
+  delay: 12
+  until: partition_output.rc == 0
+
+- name: Count Slurm nodes
+  ansible.builtin.shell:
+    sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
+  args:
+    executable: /bin/bash
+  changed_when: False
+  register: initial_node_count
+
+- name: Check partitions exist
+  ansible.builtin.fail:
+    msg: Test Check Partitions failed
+  when: item not in partition_output.stdout
+  loop: "{{ custom_vars.partitions }}"
+
+- name: Test chrome remote desktop installed
+  register: crd_status
+  failed_when: crd_status.rc != 0
+  ansible.builtin.command: |
+    srun -N 1 -p desktop bash -c '
+    disable_sleep_yml=/usr/local/ghpc/disable-sleep.yml
+    retries=20
+    retry_interval=10
+    attempt=1
+    while [ "$attempt" -le "$retries" ]; do
+    if [ -f "$disable_sleep_yml" ]; then
+      echo "file found"
+      exit 0
+      else
+      echo "file not found, retrying..."
+      sleep $retry_interval
+      attempt=$((attempt+1))
+    fi
+    done
+    echo "file not found, retry exhausted"
+    exit 1'
+
+- name: Print debug output
+  ansible.builtin.debug:
+    var: crd_status.stdout_lines
+
+- name: Ensure all nodes are powered down
+  ansible.builtin.command: sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
+  register: final_node_count
+  changed_when: False
+  until: final_node_count.stdout_lines | length == initial_node_count.stdout_lines | length
+  retries: 40
+  delay: 15
