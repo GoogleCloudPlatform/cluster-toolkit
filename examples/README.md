@@ -33,6 +33,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
+  * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
@@ -863,6 +864,15 @@ For more information see:
 * [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
 
 [htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
+
+### [tutorial-starccm-slurm.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+
+tutorial.
+
+> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-starccm-slurm/run-workload).
+
+[tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 
