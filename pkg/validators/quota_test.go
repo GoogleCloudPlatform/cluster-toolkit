@@ -148,6 +148,7 @@ func TestValidateServiceLimits(t *testing.T) {
 			Aggregation: "SUM",
 		},
 	}
+	up := usageProvider{}
 
 	want := []QuotaError{
 		{Metric: "pony", Dimensions: map[string]string{"green": "eggs"}, EffectiveLimit: 3, Requested: 4},
@@ -159,7 +160,7 @@ func TestValidateServiceLimits(t *testing.T) {
 			ConsumerQuotaLimits: []*sub.ConsumerQuotaLimit{
 				{Metric: "pony", QuotaBuckets: buckets}},
 		},
-	})
+	}, &up)
 
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
