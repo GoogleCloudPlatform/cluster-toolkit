@@ -136,12 +136,12 @@ func (s *MySuite) TestRenderError(c *C) {
 		got := renderError(err, config.YamlCtx{})
 		c.Check(got, Equals, "arbuz")
 	}
-	{ // has pos, but context is missing
+	{ // has pos, but context doesn't contain it
 		ctx := config.NewYamlCtx([]byte(``))
 		pth := config.Root.Vars.Dot("kale")
 		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
 		got := renderError(err, ctx)
-		c.Check(got, Equals, "vars.kale: arbuz")
+		c.Check(got, Equals, "arbuz")
 	}
 	{ // has pos, has context
 		ctx := config.NewYamlCtx([]byte(`
