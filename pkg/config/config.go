@@ -40,21 +40,18 @@ const (
 )
 
 var errorMessages = map[string]string{
-	// general
-	"appendToNonList": "cannot append to a setting whose type is not a list",
 	// config
 	"fileLoadError":      "failed to read the input yaml",
 	"yamlUnmarshalError": "failed to parse the blueprint in %s, check YAML syntax for errors, err=%w",
 	"yamlMarshalError":   "failed to export the configuration to a blueprint yaml file",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
-	"missingSetting":    "a required setting is missing from a module",
-	"settingsLabelType": "labels in module settings are not a map",
-	"invalidVar":        "invalid variable definition in",
-	"varNotFound":       "Could not find source of variable",
-	"intergroupOrder":   "References to outputs from other groups must be to earlier groups",
-	"noOutput":          "Output not found for a variable",
-	"cannotUsePacker":   "Packer modules cannot be used by other modules",
+	"missingSetting":  "a required setting is missing from a module",
+	"invalidVar":      "invalid variable definition in",
+	"varNotFound":     "Could not find source of variable",
+	"intergroupOrder": "References to outputs from other groups must be to earlier groups",
+	"noOutput":        "Output not found for a variable",
+	"cannotUsePacker": "Packer modules cannot be used by other modules",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
