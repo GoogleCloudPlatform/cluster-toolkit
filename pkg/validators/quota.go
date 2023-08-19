@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"strings"
 	"time"
 
 	"github.com/zclconf/go-cty/cty"
@@ -291,29 +292,93 @@ type rrInputs struct {
 	IgnoreUsage  bool                  `cty:"ignore_usage"`
 }
 
-func parseResourceRequirementsInputs(inputs config.Dict) (rrInputs, error) {
-	ty := cty.ObjectWithOptionalAttrs(map[string]cty.Type{
-		"requirements": cty.List(cty.Object(map[string]cty.Type{
-			"metric":      cty.String,
-			"service":     cty.String,
-			"consumer":    cty.String,
-			"required":    cty.Number,
-			"aggregation": cty.String,
-			"dimensions":  cty.Map(cty.String),
-		})),
+func ifNull(v cty.Value, d cty.Value) cty.Value {
+	if v.IsNull() {
+		return d
+	}
+	return v
+}
+
+func extractServiceName(metric string) (string, error) {
+	// metric is in the form of "service.googleapis.com/metric"
+	// we want to extract the "service.googleapis.com" part
+	parts := strings.Split(metric, "/")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("can not deduce service from metric %q", metric)
+	}
+	return parts[0], nil
+}
+
+func parseResourceRequirementsInputs(bp config.Blueprint, inputs config.Dict) (rrInputs, error) {
+	// sanitize inputs dict by matching with type
+	rty := cty.ObjectWithOptionalAttrs(map[string]cty.Type{
+		"metric":      cty.String,
+		"service":     cty.String,
+		"consumer":    cty.String,
+		"required":    cty.Number,
+		"aggregation": cty.String,
+		"dimensions":  cty.Map(cty.String),
+	},
+		/*optional=*/ []string{"service", "consumer", "aggregation", "dimensions"})
+	ity := cty.ObjectWithOptionalAttrs(map[string]cty.Type{
+		"requirements": cty.List(rty),
 		"ignore_usage": cty.Bool,
 	},
-		/*optional=*/ []string{}) // TODO: make ignore_usage optional
-	clean, err := convert.Convert(inputs.AsObject(), ty)
+		/*optional=*/ []string{"ignore_usage"})
+	clean, err := convert.Convert(inputs.AsObject(), ity)
 	if err != nil {
 		return rrInputs{}, err
 	}
+
+	// fill in default values
+	ignoreUsage := ifNull(clean.GetAttr("ignore_usage"), cty.False)
+	reqs := []cty.Value{}
+	rit := clean.GetAttr("requirements").ElementIterator()
+	for rit.Next() {
+		_, r := rit.Element()
+		defConsumer := fmt.Sprintf("projects/%s", bp.Vars.Get("project_id").AsString()) // !!! unsafe
+		defService, err := extractServiceName(r.GetAttr("metric").AsString())
+		if err != nil {
+			return rrInputs{}, err
+		}
+		defDims := map[string]cty.Value{}
+		if bp.Vars.Has("region") {
+			defDims["region"] = bp.Vars.Get("region")
+		}
+		if bp.Vars.Has("zone") {
+			defDims["zone"] = bp.Vars.Get("zone")
+		}
+		defDimsVal := cty.MapValEmpty(cty.String)
+		if len(defDims) > 0 {
+			defDimsVal = cty.MapVal(defDims)
+		}
+
+		reqs = append(reqs, cty.ObjectVal(map[string]cty.Value{
+			"metric":      r.GetAttr("metric"),
+			"service":     ifNull(r.GetAttr("service"), cty.StringVal(defService)),
+			"consumer":    ifNull(r.GetAttr("consumer"), cty.StringVal(defConsumer)),
+			"required":    r.GetAttr("required"),
+			"aggregation": ifNull(r.GetAttr("aggregation"), cty.StringVal("SUM")),
+			"dimensions":  ifNull(r.GetAttr("dimensions"), defDimsVal),
+		}))
+	}
+
+	reqsVal := cty.ListValEmpty(rty)
+	if len(reqs) > 0 {
+		reqsVal = cty.ListVal(reqs)
+	}
+
+	full := cty.ObjectVal(map[string]cty.Value{
+		"requirements": reqsVal,
+		"ignore_usage": ignoreUsage,
+	})
+
 	var s rrInputs
-	return s, gocty.FromCtyValue(clean, &s)
+	return s, gocty.FromCtyValue(full, &s)
 }
 
 func testResourceRequirements(bp config.Blueprint, inputs config.Dict) error {
-	in, err := parseResourceRequirementsInputs(inputs)
+	in, err := parseResourceRequirementsInputs(bp, inputs)
 	if err != nil {
 		return err
 	}
