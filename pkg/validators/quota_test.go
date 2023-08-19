@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/zclconf/go-cty/cty"
 	sub "google.golang.org/api/serviceusage/v1beta1"
 	"gopkg.in/yaml.v3"
 )
@@ -213,29 +214,45 @@ func TestParseResourceRequirementsInputs(t *testing.T) {
 	}
 	tests := []test{
 		{`# empty
-ignore_usage: false
 requirements: []`, rrInputs{Requirements: []ResourceRequirement{}}, false},
-		{`# missing ignore_usage
-requirements: []`, rrInputs{}, true},
 		{`# complete
 ignore_usage: true
 requirements:
-- metric: pony
+- metric: pony.api/friendship
   consumer: redhat
-  service: friendship
-  required: 1
+  service: zebra.api
+  required: 22
   dimensions: {"x": "y", "left": "right"}
   aggregation: "SUM"`, rrInputs{
 			IgnoreUsage: true,
 			Requirements: []ResourceRequirement{
 				{
-					Metric:   "pony",
+					Metric:   "pony.api/friendship",
 					Consumer: "redhat",
-					Service:  "friendship",
-					Required: 1,
+					Service:  "zebra.api",
+					Required: 22,
 					Dimensions: map[string]string{
 						"x":    "y",
 						"left": "right",
+					},
+					Aggregation: "SUM",
+				},
+			},
+		}, false},
+		{`# fill in
+requirements:
+- metric: pony.api/friendship
+  required: 33`, rrInputs{
+			IgnoreUsage: false,
+			Requirements: []ResourceRequirement{
+				{
+					Metric:   "pony.api/friendship",
+					Service:  "pony.api",
+					Consumer: "projects/apple",
+					Required: 33,
+					Dimensions: map[string]string{
+						"region": "narnia",
+						"zone":   "narnia-51",
 					},
 					Aggregation: "SUM",
 				},
@@ -245,12 +262,17 @@ requirements:
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%s", tc.yml), func(t *testing.T) {
 			var in config.Dict
+			bp := config.Blueprint{}
+			bp.Vars.
+				Set("project_id", cty.StringVal("apple")).
+				Set("region", cty.StringVal("narnia")).
+				Set("zone", cty.StringVal("narnia-51"))
 			if err := yaml.Unmarshal([]byte(tc.yml), &in); err != nil {
 				t.Fatal("failed to unmarshal yaml")
 			}
-			rr, err := parseResourceRequirementsInputs(in)
+			rr, err := parseResourceRequirementsInputs(bp, in)
 			if (err == nil) == tc.err {
-				t.Errorf("unexpected error %v", err)
+				t.Fatalf("unexpected error: %v", err)
 			}
 			if diff := cmp.Diff(tc.want, rr); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)

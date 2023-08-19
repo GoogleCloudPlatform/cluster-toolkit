@@ -305,9 +305,9 @@ func testApisEnabled(bp config.Blueprint, inputs config.Dict) error {
 	if err := checkInputs(inputs, []string{}); err != nil {
 		return err
 	}
-	pv := bp.Vars.Get("project_id")
-	if pv.Type() != cty.String {
-		return fmt.Errorf("the deployment variable `project_id` is either not set or is not a string")
+	p, err := bp.ProjectID()
+	if err != nil {
+		return err
 	}
 	apis := map[string]bool{}
 	bp.WalkModules(func(m *config.Module) error {
@@ -316,7 +316,7 @@ func testApisEnabled(bp config.Blueprint, inputs config.Dict) error {
 		}
 		return nil
 	})
-	return TestApisEnabled(pv.AsString(), maps.Keys(apis))
+	return TestApisEnabled(p, maps.Keys(apis))
 }
 
 func testProjectExists(bp config.Blueprint, inputs config.Dict) error {
