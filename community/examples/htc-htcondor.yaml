@@ -22,6 +22,7 @@ vars:
   zone: us-central1-c
   disk_size_gb: 100
   new_image_family: htcondor-10x
+  enable_shielded_vm: true
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
