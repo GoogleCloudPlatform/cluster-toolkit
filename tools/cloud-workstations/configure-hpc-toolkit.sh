@@ -31,7 +31,7 @@ if [[ ! -f $FLAG ]]; then
 	echo "export PATH=$PATH:$HOME/go/bin" >>"$HOME"/.bashrc
 
 	# Set up Code OSS for golang
-	/opt/code-oss/bin/codeoss-cloudworkstations --install-extension golang.go
+	grep -v '^#' </etc/hpc-toolkit-config/code_oss_requirements.txt | xargs -L1 /opt/code-oss/bin/codeoss-cloudworkstations --install-extension
 	go install golang.org/x/tools/gopls@latest
 	go install github.com/ramya-rao-a/go-outline@v0.0.0-20210608161538-9736a4bde949
 	go install github.com/rogpeppe/godef@v1.1.2
