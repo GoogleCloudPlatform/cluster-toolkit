@@ -155,6 +155,10 @@ module "execute_point_instance_template" {
   startup_script = local.is_windows_image ? null : module.startup_script.startup_script
   metadata       = local.metadata
   source_image   = data.google_compute_image.htcondor.self_link
+
+  # secure boot
+  enable_shielded_vm       = var.enable_shielded_vm
+  shielded_instance_config = var.shielded_instance_config
 }
 
 module "mig" {
