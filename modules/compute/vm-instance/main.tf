@@ -238,6 +238,13 @@ resource "google_compute_instance" "compute_vm" {
       error_message = "Exactly one of network_interfaces or network_self_link/subnetwork_self_link must be specified."
     }
     precondition {
+      condition     = alltrue([for interface in var.network_interfaces : interface.network_ip == null]) || var.instance_count == 1
+      error_message = <<-EOT
+                        The network_ip cannot be statically set on vm-instance when the VM instance_count is greater than 1.
+                        Either set the network_ip to null to allow it to be set dynamically for all instances, or create modules for each VM instance with its own network interface.
+                        EOT
+    }
+    precondition {
       condition = !contains([
         "c3-:pd-standard",
         "h3-:pd-standard",
