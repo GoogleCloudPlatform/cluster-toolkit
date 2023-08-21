@@ -127,3 +127,8 @@ func (e *Errors) At(path Path, err error) *Errors {
 	}
 	return e.Add(BpError{Path: path, Err: err})
 }
+
+// Any returns true if there are any errors
+func (e *Errors) Any() bool {
+	return len(e.Errors) > 0
+}

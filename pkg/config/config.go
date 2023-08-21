@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"regexp"
 	"sort"
 	"strings"
@@ -224,20 +223,6 @@ func (mk ModuleKind) String() string {
 	return mk.kind
 }
 
-type validatorName uint8
-
-const (
-	// Undefined will be default and potentially throw errors if used
-	Undefined validatorName = iota
-	testProjectExistsName
-	testRegionExistsName
-	testZoneExistsName
-	testModuleNotUsedName
-	testZoneInRegionName
-	testApisEnabledName
-	testDeploymentVariableNotUsedName
-)
-
 // this enum will be used to control how fatal validator failures will be
 // treated during blueprint creation
 const (
@@ -250,57 +235,11 @@ func isValidValidationLevel(level int) bool {
 	return !(level > ValidationIgnore || level < ValidationError)
 }
 
-func (v validatorName) String() string {
-	switch v {
-	case testProjectExistsName:
-		return "test_project_exists"
-	case testRegionExistsName:
-		return "test_region_exists"
-	case testZoneExistsName:
-		return "test_zone_exists"
-	case testZoneInRegionName:
-		return "test_zone_in_region"
-	case testApisEnabledName:
-		return "test_apis_enabled"
-	case testModuleNotUsedName:
-		return "test_module_not_used"
-	case testDeploymentVariableNotUsedName:
-		return "test_deployment_variable_not_used"
-	default:
-		return "unknown_validator"
-	}
-}
-
-type validatorConfig struct {
+// Validator defines a validation step to be run on a blueprint
+type Validator struct {
 	Validator string
 	Inputs    Dict `yaml:"inputs,omitempty"`
 	Skip      bool `yaml:"skip,omitempty"`
-}
-
-func (v *validatorConfig) check(name validatorName, requiredInputs []string) error {
-	if v.Validator != name.String() {
-		return fmt.Errorf("passed wrong validator to %s implementation", name.String())
-	}
-
-	var errored bool
-	for _, inp := range requiredInputs {
-		if !v.Inputs.Has(inp) {
-			log.Printf("a required input %s was not provided to %s!", inp, v.Validator)
-			errored = true
-		}
-	}
-
-	if errored {
-		return fmt.Errorf("at least one required input was not provided to %s", v.Validator)
-	}
-
-	// ensure that no extra inputs were provided by comparing length
-	if len(requiredInputs) != len(v.Inputs.Items()) {
-		errStr := "only %v inputs %s should be provided to %s"
-		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, v.Validator)
-	}
-
-	return nil
 }
 
 // ModuleID is a unique identifier for a module in a blueprint
@@ -336,10 +275,10 @@ func (m Module) InfoOrDie() modulereader.ModuleInfo {
 // unless it has been set to a non-default value; the implementation as an
 // integer is primarily for internal purposes even if it can be set in blueprint
 type Blueprint struct {
-	BlueprintName            string            `yaml:"blueprint_name"`
-	GhpcVersion              string            `yaml:"ghpc_version,omitempty"`
-	Validators               []validatorConfig `yaml:"validators,omitempty"`
-	ValidationLevel          int               `yaml:"validation_level,omitempty"`
+	BlueprintName            string      `yaml:"blueprint_name"`
+	GhpcVersion              string      `yaml:"ghpc_version,omitempty"`
+	Validators               []Validator `yaml:"validators,omitempty"`
+	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict
 	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults,omitempty"`
@@ -359,13 +298,7 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	if err := validateBlueprint(dc.Config); err != nil {
 		return err
 	}
-	if err := dc.expand(); err != nil {
-		return err
-	}
-	if err := dc.executeValidators(); err != nil {
-		return err
-	}
-	return nil
+	return dc.expand()
 }
 
 func (bp *Blueprint) setGlobalLabels() {
@@ -374,9 +307,9 @@ func (bp *Blueprint) setGlobalLabels() {
 	}
 }
 
-// listUnusedModules provides a list modules that are in the
+// ListUnusedModules provides a list modules that are in the
 // "use" field, but not actually used.
-func (m Module) listUnusedModules() ModuleIDs {
+func (m Module) ListUnusedModules() ModuleIDs {
 	used := map[ModuleID]bool{}
 	// Recurse through objects/maps/lists checking each element for having `ProductOfModuleUse` mark.
 	cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
@@ -406,7 +339,8 @@ func GetUsedDeploymentVars(val cty.Value) []string {
 	return res
 }
 
-func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
+// ListUnusedVariables returns a list of variables that are defined but not used
+func (bp Blueprint) ListUnusedVariables() []string {
 	// these variables are required or automatically constructed and applied;
 	// these should not be listed unused otherwise no blueprints are valid
 	var usedVars = map[string]bool{
@@ -414,7 +348,7 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 		"deployment_name": true,
 	}
 
-	dc.Config.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(m *Module) error {
 		for _, v := range GetUsedDeploymentVars(m.Settings.AsObject()) {
 			usedVars[v] = true
 		}
@@ -422,7 +356,7 @@ func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
 	})
 
 	unusedVars := []string{}
-	for k := range dc.Config.Vars.Items() {
+	for k := range bp.Vars.Items() {
 		if _, ok := usedVars[k]; !ok {
 			unusedVars = append(unusedVars, k)
 		}
@@ -574,7 +508,7 @@ func validateBlueprint(bp Blueprint) error {
 // if no validator is present, adds one, marked as skipped.
 func (dc *DeploymentConfig) SkipValidator(name string) error {
 	if dc.Config.Validators == nil {
-		dc.Config.Validators = []validatorConfig{}
+		dc.Config.Validators = []Validator{}
 	}
 	skipped := false
 	for i, v := range dc.Config.Validators {
@@ -584,7 +518,7 @@ func (dc *DeploymentConfig) SkipValidator(name string) error {
 		}
 	}
 	if !skipped {
-		dc.Config.Validators = append(dc.Config.Validators, validatorConfig{Validator: name, Skip: true})
+		dc.Config.Validators = append(dc.Config.Validators, Validator{Validator: name, Skip: true})
 	}
 	return nil
 }
@@ -786,7 +720,6 @@ func (bp *Blueprint) evalVars() error {
 			}
 		}
 	}
-
 	bp.Vars = res
 	return nil
 }

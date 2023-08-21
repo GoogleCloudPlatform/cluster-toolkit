@@ -51,7 +51,6 @@ func (dc *DeploymentConfig) expand() error {
 		return err
 	}
 	dc.expandBackends()
-	dc.addDefaultValidators()
 	dc.combineLabels()
 
 	if err := dc.applyUseModules(); err != nil {
@@ -370,85 +369,6 @@ func isSimpleVariable(str string) bool {
 // hasVariable checks to see if any variable exists in a string
 func hasVariable(str string) bool {
 	return anyVariableExp.MatchString(str)
-}
-
-// this function adds default validators to the blueprint.
-// default validators are only added for global variables that exist
-func (dc *DeploymentConfig) addDefaultValidators() {
-	if dc.Config.Validators == nil {
-		dc.Config.Validators = []validatorConfig{}
-	}
-
-	projectIDExists := dc.Config.Vars.Has("project_id")
-	projectRef := GlobalRef("project_id").AsExpression().AsValue()
-
-	regionExists := dc.Config.Vars.Has("region")
-	regionRef := GlobalRef("region").AsExpression().AsValue()
-
-	zoneExists := dc.Config.Vars.Has("zone")
-	zoneRef := GlobalRef("zone").AsExpression().AsValue()
-
-	defaults := []validatorConfig{
-		{Validator: testModuleNotUsedName.String()},
-		{Validator: testDeploymentVariableNotUsedName.String()}}
-
-	// always add the project ID validator before subsequent validators that can
-	// only succeed if credentials can access the project. If the project ID
-	// validator fails, all remaining validators are not executed.
-	if projectIDExists {
-		defaults = append(defaults, validatorConfig{
-			Validator: testProjectExistsName.String(),
-			Inputs:    NewDict(map[string]cty.Value{"project_id": projectRef}),
-		})
-	}
-
-	// it is safe to run this validator even if vars.project_id is undefined;
-	// it will likely fail but will do so helpfully to the user
-	defaults = append(defaults,
-		validatorConfig{Validator: "test_apis_enabled"})
-
-	if projectIDExists && regionExists {
-		defaults = append(defaults, validatorConfig{
-			Validator: testRegionExistsName.String(),
-			Inputs: NewDict(map[string]cty.Value{
-				"project_id": projectRef,
-				"region":     regionRef,
-			},
-			)})
-	}
-
-	if projectIDExists && zoneExists {
-		defaults = append(defaults, validatorConfig{
-			Validator: testZoneExistsName.String(),
-			Inputs: NewDict(map[string]cty.Value{
-				"project_id": projectRef,
-				"zone":       zoneRef,
-			}),
-		})
-	}
-
-	if projectIDExists && regionExists && zoneExists {
-		defaults = append(defaults, validatorConfig{
-			Validator: testZoneInRegionName.String(),
-			Inputs: NewDict(map[string]cty.Value{
-				"project_id": projectRef,
-				"region":     regionRef,
-				"zone":       zoneRef,
-			}),
-		})
-	}
-
-	used := map[string]bool{}
-	for _, v := range dc.Config.Validators {
-		used[v.Validator] = true
-	}
-
-	for _, v := range defaults {
-		if used[v.Validator] {
-			continue
-		}
-		dc.Config.Validators = append(dc.Config.Validators, v)
-	}
 }
 
 // FindAllIntergroupReferences finds all intergroup references within the group

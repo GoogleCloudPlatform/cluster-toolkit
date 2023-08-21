@@ -25,8 +25,6 @@ validators:
     skip: true
   - validator: test_zone_in_region
     skip: true
-  - validator: test_module_not_used
-  - validator: test_deployment_variable_not_used
 vars:
   deployment_name: golden_copy_deployment
   labels:

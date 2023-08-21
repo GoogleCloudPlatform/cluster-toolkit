@@ -150,9 +150,16 @@ vars:
 		pth := config.Root.Vars.Dot("kale")
 		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
 		got := renderError(err, ctx)
-		c.Check(got, Equals, `
-Error: arbuz
+		c.Check(got, Equals, `Error: arbuz
 3:   kale: dos
            ^`)
 	}
+}
+
+func (s *MySuite) TestValidateMaybeDie(c *C) {
+	bp := config.Blueprint{
+		Validators:      []config.Validator{{Validator: "invalid"}},
+		ValidationLevel: config.ValidationWarning,
+	}
+	validateMaybeDie(bp, config.NewYamlCtx([]byte{})) // smoke test
 }
