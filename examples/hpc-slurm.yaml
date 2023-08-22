@@ -21,6 +21,10 @@ vars:
   deployment_name: hpc-small
   region: us-central1
   zone: us-central1-a
+  debug_nodes: 4
+  compute_nodes: 200
+  h3_nodes: 13
+  num_parallel_jobs: 1 # could be $(vars.compute_nodes)
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -43,7 +47,7 @@ deployment_groups:
   - id: debug_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
-      node_count_dynamic_max: 4
+      node_count_dynamic_max: $(vars.debug_nodes)
       machine_type: n2-standard-2
 
   - id: debug_partition
@@ -61,7 +65,7 @@ deployment_groups:
   - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.compute_nodes)
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -75,7 +79,7 @@ deployment_groups:
   - id: h3_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.h3_nodes)
       machine_type: h3-standard-88
       # H3 does not support pd-ssd and pd-standard
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
@@ -109,3 +113,30 @@ deployment_groups:
     settings:
       machine_type: n2-standard-4
       disable_login_public_ips: false
+
+validators:
+- validator: test_resource_requirements
+  inputs:
+    requirements:
+    # Storage
+    - metric: file.googleapis.com/standard-storage-gb-per-region # Basic HDD (Standard)
+      required: 1024
+    - metric: compute.googleapis.com/ssd_total_storage # Persistent Disk SSD
+      required: 100500 # actually need 50, exaturated for showing "usage"
+    - metric: compute.googleapis.com/disks_total_storage # Persistent Disk Standard
+      required: (( 50 + 50 * (var.debug_nodes + var.compute_nodes) ))
+    # CPUs
+    - metric: compute.googleapis.com/c2_cpus
+      required: (( 4 + 60 * var.compute_nodes ))
+    - metric: compute.googleapis.com/cpus_per_vm_family
+      dimensions:
+        vm_family : H3
+        region: $(vars.region) # TODO: to be populated automatically
+      required: (( 88 * var.h3_nodes ))
+    # Others
+    - metric: compute.googleapis.com/affinity_groups
+      required: $(vars.num_parallel_jobs)
+    - metric: compute.googleapis.com/resource_policies
+      required: $(vars.num_parallel_jobs)
+    
+    
