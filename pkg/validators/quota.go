@@ -55,6 +55,7 @@ type QuotaError struct {
 	Metric         string
 	Dimensions     map[string]string
 	EffectiveLimit int64
+	Usage          int64
 	Requested      int64
 }
 
@@ -63,12 +64,14 @@ func (e QuotaError) Error() string {
 	if len(e.Dimensions) > 0 {
 		loc = fmt.Sprintf(" in %v", e.Dimensions)
 	}
-	return fmt.Sprintf("not enough quota for resource %q%s, limit=%d < requested=%d ",
-		e.Metric, loc, e.EffectiveLimit, e.Requested)
+	rhs := fmt.Sprintf("requested=%d", e.Requested)
+	if e.Usage > 0 {
+		rhs = fmt.Sprintf("requested=%d + usage=%d", e.Requested, e.Usage)
+	}
+	return fmt.Sprintf("not enough quota for resource %q%s, limit=%d < %s", e.Metric, loc, e.EffectiveLimit, rhs)
 }
 
-// ValidateQuotas validates the resource requirements.
-func ValidateQuotas(rs []ResourceRequirement) ([]QuotaError, error) {
+func validateResourceRequirements(rs []ResourceRequirement, up *usageProvider) ([]QuotaError, error) {
 	qe := []QuotaError{}
 	// Group by Consumer and Service
 	type gk struct {
@@ -87,7 +90,7 @@ func ValidateQuotas(rs []ResourceRequirement) ([]QuotaError, error) {
 		if err != nil {
 			return qe, err
 		}
-		qse, err := validateServiceLimits(g, ls)
+		qse, err := validateServiceLimits(g, ls, up)
 		if err != nil {
 			return qe, err
 		}
@@ -97,7 +100,7 @@ func ValidateQuotas(rs []ResourceRequirement) ([]QuotaError, error) {
 	return qe, nil
 }
 
-func validateServiceLimits(rs []ResourceRequirement, ls []*sub.ConsumerQuotaMetric) ([]QuotaError, error) {
+func validateServiceLimits(rs []ResourceRequirement, ls []*sub.ConsumerQuotaMetric, up *usageProvider) ([]QuotaError, error) {
 	// Group by Metric and Aggregation
 	type gk struct {
 		Metric      string
@@ -128,14 +131,14 @@ func validateServiceLimits(rs []ResourceRequirement, ls []*sub.ConsumerQuotaMetr
 		}
 
 		for _, limit := range ml {
-			qle := validateLimit(g, limit, agg)
+			qle := validateLimit(g, limit, up, agg)
 			qe = append(qe, qle...)
 		}
 	}
 	return qe, nil
 }
 
-func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, agg aggFn) []QuotaError {
+func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, up *usageProvider, agg aggFn) []QuotaError {
 	qe := []QuotaError{}
 	for _, bucket := range limit.QuotaBuckets {
 		vs := []int64{}
@@ -147,9 +150,10 @@ func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, agg 
 		if len(vs) == 0 {
 			continue
 		}
+		usage := up.Usage(limit.Metric, bucket.Dimensions["region"], bucket.Dimensions["zone"])
 		required := agg(vs)
 		for _, r := range required {
-			if !satisfied(r, bucket.EffectiveLimit) {
+			if !satisfied(r+usage, bucket.EffectiveLimit) {
 				r0 := rs[0] // all should have the same consumer, service and metric
 				qe = append(qe, QuotaError{
 					Consumer:       r0.Consumer,
@@ -157,6 +161,7 @@ func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, agg 
 					Metric:         r0.Metric,
 					Dimensions:     bucket.Dimensions,
 					EffectiveLimit: bucket.EffectiveLimit,
+					Usage:          usage,
 					Requested:      r,
 				})
 			}
@@ -259,7 +264,7 @@ func newUsageProvider(projectID string) (usageProvider, error) {
 
 	u := map[usageKey]int64{}
 	err = s.Projects.TimeSeries.List("projects/"+projectID).
-		Filter(`metric.type="serviceruntime.googleapis.com/quota/allocation/usage" resource.type="consumer_quota"`).
+		Filter(`metric.type="serviceruntime.googleapis.com/quota/allocation/usage"`).
 		IntervalEndTime(time.Now().Format(time.RFC3339)).
 		// Quota usage metrics get duplicated once a day
 		IntervalStartTime(time.Now().Add(-24*time.Hour).Format(time.RFC3339)).
@@ -312,11 +317,19 @@ func testResourceRequirements(bp config.Blueprint, inputs config.Dict) error {
 	if err != nil {
 		return err
 	}
-	if !in.IgnoreUsage {
-		return fmt.Errorf("\"ignore_usage=false\" is not supported yet")
-	}
 	errs := config.Errors{}
-	qerrs, err := ValidateQuotas(in.Requirements)
+	up := usageProvider{}
+	if !in.IgnoreUsage {
+		pv := bp.Vars.Get("project_id")
+		if pv.Type() != cty.String {
+			errs.Add(fmt.Errorf("the variable `project_id` is either not set or is not a string"))
+		} else {
+			up, err = newUsageProvider(pv.AsString())
+			errs.Add(err) // don't terminate fallback to ignore usage
+		}
+	}
+
+	qerrs, err := validateResourceRequirements(in.Requirements, &up)
 	for _, qe := range qerrs {
 		errs.Add(qe)
 	}
