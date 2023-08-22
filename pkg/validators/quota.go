@@ -17,21 +17,25 @@ package validators
 import (
 	"context"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"time"
 
+	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/convert"
+	"github.com/zclconf/go-cty/cty/gocty"
 	cm "google.golang.org/api/monitoring/v3"
 	sub "google.golang.org/api/serviceusage/v1beta1"
 )
 
 // ResourceRequirement represents an amount of desired resource.
 type ResourceRequirement struct {
-	Consumer   string // e.g. "projects/myprojectid""
-	Service    string // e.g. "compute.googleapis.com"
-	Metric     string // e.g. "compute.googleapis.com/disks_total_storage"
-	Required   int64
-	Dimensions map[string]string // e.g. {"region": "us-central1"}
+	Consumer   string            `cty:"consumer"` // e.g. "projects/myprojectid""
+	Service    string            `cty:"service"`  // e.g. "compute.googleapis.com"
+	Metric     string            `cty:"metric"`   // e.g. "compute.googleapis.com/disks_total_storage"
+	Required   int64             `cty:"required"`
+	Dimensions map[string]string `cty:"dimensions"` // e.g. {"region": "us-central1"}
 	// How this requirement should be aggregated with other requirements in the same bucket.
-	Aggregation string
+	Aggregation string `cty:"aggregation"`
 }
 
 // InBucket returns true if the quota is in the QuotaBucket.
@@ -55,7 +59,12 @@ type QuotaError struct {
 }
 
 func (e QuotaError) Error() string {
-	return fmt.Sprintf("QuotaError: %#v", e)
+	loc := ""
+	if len(e.Dimensions) > 0 {
+		loc = fmt.Sprintf(" in %v", e.Dimensions)
+	}
+	return fmt.Sprintf("not enough quota for resource %q%s, limit=%d < requested=%d ",
+		e.Metric, loc, e.EffectiveLimit, e.Requested)
 }
 
 // ValidateQuotas validates the resource requirements.
@@ -270,4 +279,47 @@ func newUsageProvider(projectID string) (usageProvider, error) {
 		return usageProvider{}, err
 	}
 	return usageProvider{u}, nil
+}
+
+type rrInputs struct {
+	Requirements []ResourceRequirement `cty:"requirements"`
+	IgnoreUsage  bool                  `cty:"ignore_usage"`
+}
+
+func parseResourceRequirementsInputs(inputs config.Dict) (rrInputs, error) {
+	ty := cty.ObjectWithOptionalAttrs(map[string]cty.Type{
+		"requirements": cty.List(cty.Object(map[string]cty.Type{
+			"metric":      cty.String,
+			"service":     cty.String,
+			"consumer":    cty.String,
+			"required":    cty.Number,
+			"aggregation": cty.String,
+			"dimensions":  cty.Map(cty.String),
+		})),
+		"ignore_usage": cty.Bool,
+	},
+		/*optional=*/ []string{}) // TODO: make ignore_usage optional
+	clean, err := convert.Convert(inputs.AsObject(), ty)
+	if err != nil {
+		return rrInputs{}, err
+	}
+	var s rrInputs
+	return s, gocty.FromCtyValue(clean, &s)
+}
+
+func testResourceRequirements(bp config.Blueprint, inputs config.Dict) error {
+	in, err := parseResourceRequirementsInputs(inputs)
+	if err != nil {
+		return err
+	}
+	if !in.IgnoreUsage {
+		return fmt.Errorf("\"ignore_usage=false\" is not supported yet")
+	}
+	errs := config.Errors{}
+	qerrs, err := ValidateQuotas(in.Requirements)
+	for _, qe := range qerrs {
+		errs.Add(qe)
+	}
+	errs.Add(err)
+	return errs.OrNil()
 }

@@ -16,11 +16,13 @@ package validators
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	sub "google.golang.org/api/serviceusage/v1beta1"
+	"gopkg.in/yaml.v3"
 )
 
 func TestAggregation(t *testing.T) {
@@ -148,8 +150,8 @@ func TestValidateServiceLimits(t *testing.T) {
 	}
 
 	want := []QuotaError{
-		{Metric: "pony", Dimensions: nil, EffectiveLimit: 5, Requested: 11},
 		{Metric: "pony", Dimensions: map[string]string{"green": "eggs"}, EffectiveLimit: 3, Requested: 4},
+		{Metric: "pony", Dimensions: nil, EffectiveLimit: 5, Requested: 11},
 	}
 	got, err := validateServiceLimits(quotas, []*sub.ConsumerQuotaMetric{
 		{
@@ -196,6 +198,60 @@ func TestUsageProviderGet(t *testing.T) {
 		t.Run(fmt.Sprintf("%#v", tc), func(t *testing.T) {
 			got := up.Usage(tc.metric, tc.region, tc.zone)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestParseResourceRequirementsInputs(t *testing.T) {
+	type test struct {
+		yml  string
+		want rrInputs
+		err  bool
+	}
+	tests := []test{
+		{`# empty
+ignore_usage: false
+requirements: []`, rrInputs{Requirements: []ResourceRequirement{}}, false},
+		{`# missing ignore_usage
+requirements: []`, rrInputs{}, true},
+		{`# complete
+ignore_usage: true
+requirements:
+- metric: pony
+  consumer: redhat
+  service: friendship
+  required: 1
+  dimensions: {"x": "y", "left": "right"}
+  aggregation: "SUM"`, rrInputs{
+			IgnoreUsage: true,
+			Requirements: []ResourceRequirement{
+				{
+					Metric:   "pony",
+					Consumer: "redhat",
+					Service:  "friendship",
+					Required: 1,
+					Dimensions: map[string]string{
+						"x":    "y",
+						"left": "right",
+					},
+					Aggregation: "SUM",
+				},
+			},
+		}, false},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%s", tc.yml), func(t *testing.T) {
+			var in config.Dict
+			if err := yaml.Unmarshal([]byte(tc.yml), &in); err != nil {
+				t.Fatal("failed to unmarshal yaml")
+			}
+			rr, err := parseResourceRequirementsInputs(in)
+			if (err == nil) == tc.err {
+				t.Errorf("unexpected error %v", err)
+			}
+			if diff := cmp.Diff(tc.want, rr); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
 		})

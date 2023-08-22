@@ -172,30 +172,24 @@ func findPos(path config.Path, ctx config.YamlCtx) (config.Pos, bool) {
 }
 
 func renderError(err error, ctx config.YamlCtx) string {
-	var me config.Errors
-	if errors.As(err, &me) {
+	switch te := err.(type) {
+	case config.Errors:
 		var sb strings.Builder
-		for _, e := range me.Errors {
+		for _, e := range te.Errors {
 			sb.WriteString(renderError(e, ctx))
 			sb.WriteString("\n")
 		}
 		return sb.String()
-	}
-
-	var ve validators.ValidatorError
-	if errors.As(err, &ve) {
-		return fmt.Sprintf(
-			"validator %q failed:\n%v\n",
-			ve.Validator, renderError(ve.Err, ctx))
-	}
-
-	var be config.BpError
-	if errors.As(err, &be) {
-		if pos, ok := findPos(be.Path, ctx); ok {
-			return renderRichError(be.Err, pos, ctx)
+	case validators.ValidatorError:
+		return fmt.Sprintf("validator %q failed:\n%v\n", te.Validator, renderError(te.Err, ctx))
+	case config.BpError:
+		if pos, ok := findPos(te.Path, ctx); ok {
+			return renderRichError(te.Err, pos, ctx)
 		}
+		return renderError(te.Err, ctx)
+	default:
+		return err.Error()
 	}
-	return err.Error()
 }
 
 func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
