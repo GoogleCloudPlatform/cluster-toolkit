@@ -39,20 +39,25 @@ RUN wget https://github.com/koalaman/shellcheck/releases/download/v0.9.0/shellch
 
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
-COPY tools/cloud-build/requirements.txt requirements.txt
+COPY tools/cloud-build/requirements.txt cloud_build_requirements.txt
+COPY docs/hybrid-slurm-cluster/requirements.txt slurm_requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/master/scripts/requirements.txt && \
-    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r cloud_build_requirements.txt && \
+    pip install --no-cache-dir -r slurm_requirements.txt && \
     rm -rf ~/.cache/pip/*
 
 # Get the HPC config files and store them in the correct locations for startup
 ARG CW_DIR=tools/cloud-workstations
 ARG HPC_FILE=configure-hpc-toolkit.sh
-ARG HPC_CONF_FILE=030_configure-hpc-toolkit.sh
+ARG HPC_CONF_FILE=030_configure-hpc-toolkit.sh 
 
 COPY $CW_DIR/$HPC_FILE /bin/
 COPY $CW_DIR/$HPC_CONF_FILE /etc/workstation-startup.d/
 
 RUN chmod a+x /bin/$HPC_FILE && \
     chmod a+x /etc/workstation-startup.d/$HPC_CONF_FILE
+
+RUN mkdir /etc/hpc-toolkit-config
+COPY $CW_DIR/code_oss_requirements.txt /etc/hpc-toolkit-config

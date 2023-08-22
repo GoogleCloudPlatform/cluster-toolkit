@@ -32,7 +32,7 @@ gcloud artifacts repositories create ${WORKSTATION_NAME} --repository-format=doc
 To build the Cloud workstation container as defined in the [Dockerfile](./Dockerfile), run the following command from the root of the HPC-Toolkit repo:
 
 ```sh
-gcloud builds submit --config=tools/cloud-workstations/workstation-image.yaml --substitutions _LOCATION=${LOCATION},_REPO=${REPO} --project ${PROJECT_ID}
+gcloud builds submit --config=tools/cloud-workstations/workstation-image.yaml --substitutions _LOCATION=${LOCATION},_REPO=${WORKSTATION_NAME} --project ${PROJECT_ID}
 ```
 
 ## Create the Cloud Workstations cluster and configuration
