@@ -21,7 +21,7 @@ updates:
   labels:
   - dependencies
   - go
-  - chore
+  - release-chore
   schedule:
     interval: weekly
     day: monday
