@@ -184,6 +184,13 @@
 
     ## Always cleanup, even on failure
     always:
+    - name: Get partition info after test
+      ansible.builtin.command: sinfo
+      changed_when: False
+      register: partition_post_run_output
+    - name: Print Slurm sinfo output
+      ansible.builtin.debug:
+        var: partition_post_run_output.stdout_lines
     - name: Recover Setup Log
       become: true
       changed_when: false
