@@ -343,26 +343,32 @@ func GetUsedDeploymentVars(val cty.Value) []string {
 func (bp Blueprint) ListUnusedVariables() []string {
 	// these variables are required or automatically constructed and applied;
 	// these should not be listed unused otherwise no blueprints are valid
-	var usedVars = map[string]bool{
+	var used = map[string]bool{
 		"labels":          true,
 		"deployment_name": true,
 	}
 
 	bp.WalkModules(func(m *Module) error {
 		for _, v := range GetUsedDeploymentVars(m.Settings.AsObject()) {
-			usedVars[v] = true
+			used[v] = true
 		}
 		return nil
 	})
 
-	unusedVars := []string{}
-	for k := range bp.Vars.Items() {
-		if _, ok := usedVars[k]; !ok {
-			unusedVars = append(unusedVars, k)
+	for _, v := range bp.Validators {
+		for _, v := range GetUsedDeploymentVars(v.Inputs.AsObject()) {
+			used[v] = true
 		}
 	}
 
-	return unusedVars
+	unused := []string{}
+	for k := range bp.Vars.Items() {
+		if _, ok := used[k]; !ok {
+			unused = append(unused, k)
+		}
+	}
+
+	return unused
 }
 
 func checkMovedModule(source string) error {
@@ -585,6 +591,19 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 	}
 
 	return s, nil
+}
+
+// ProjectID returns the project_id
+func (bp Blueprint) ProjectID() (string, error) {
+	pid := "project_id"
+	if !bp.Vars.Has(pid) {
+		return "", BpError{Root.Vars, fmt.Errorf("%q variable is not specified", pid)}
+	}
+	v := bp.Vars.Get(pid)
+	if v.Type() != cty.String {
+		return "", BpError{Root.Vars.Dot(pid), fmt.Errorf("%q variable is not a string", pid)}
+	}
+	return v.AsString(), nil
 }
 
 // checkBlueprintName returns an error if blueprint_name does not comply with
