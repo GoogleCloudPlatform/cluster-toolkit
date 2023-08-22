@@ -106,7 +106,7 @@ install the client and mount the file system. See the following example:
 
 ```
 
-[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
+[matrix]: ../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 
