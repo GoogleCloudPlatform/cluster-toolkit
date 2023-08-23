@@ -15,6 +15,12 @@
  */
 
 locals {
+  # Currently supported images and projects
+  supported_project_families = {
+    "schedmd-slurm-public" = ["slurm-gcp-5-7-debian-11", "slurm-gcp-5-7-hpc-rocky-linux-8", "slurm-gcp-5-7-ubuntu-2004-lts",
+    "slurm-gcp-5-7-ubuntu-2204-lts-arm64", "slurm-gcp-5-7-hpc-centos-7-k80", "slurm-gcp-5-7-hpc-centos-7"]
+  }
+
   source_image         = lookup(var.instance_image, "name", "")
   source_image_family  = lookup(var.instance_image, "family", "")
   source_image_project = lookup(var.instance_image, "project", "")
@@ -23,4 +29,28 @@ locals {
     ? local.source_image_project
     : "projects/${local.source_image_project}/global/images/family"
   )
+}
+
+data "google_compute_image" "slurm" {
+  family  = contains(keys(var.instance_image), "family") ? var.instance_image["family"] : null
+  name    = contains(keys(var.instance_image), "name") ? var.instance_image["name"] : null
+  project = var.instance_image["project"]
+
+  lifecycle {
+    postcondition {
+      condition     = var.instance_image_override ? true : contains(keys(local.supported_project_families), self.project) ? contains(local.supported_project_families[self.project], self.family) : false
+      error_message = <<-EOD
+        The image specified in the blueprint was found, but it is not supported by the HPC Toolkit for Slurm. The currently supported image families are:
+
+        ${join("\n", [for proj in keys(local.supported_project_families) : "Project: ${proj}\nFamiliies:\n${join("\n", [for family in local.supported_project_families[proj] : family])}"])}
+
+        Images that are not within this family may not have Slurm installed by default.  If you are attempting to deploy a custom Slurm image, or a image with an unexpected version, please set the "image_instance_override" variable to "true", in the blueprint.
+        See https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/docs/vm-images.md for more information.
+        EOD
+    }
+    postcondition {
+      condition     = var.disk_size_gb > self.disk_size_gb
+      error_message = "The disk size specified in the blueprint (\"disk_size_gb: ${var.disk_size_gb}\") is smaller than the image size (${self.disk_size_gb}GB), please increase the blueprint disk size"
+    }
+  }
 }

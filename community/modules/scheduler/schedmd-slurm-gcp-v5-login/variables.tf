@@ -308,6 +308,19 @@ variable "instance_image" {
   }
 }
 
+variable "instance_image_override" {
+  description = <<-EOD
+  A flag that designates that the user is aware that they are requesting
+  a custom image that is not supported by Slurm on GCP.
+
+  If the field is set to false, only the supported families and project
+  names are to be accepted.  The deployment will fail with any other image
+  family or name.  If set to true, no checks will be done.
+  EOD
+  type        = bool
+  default     = false
+}
+
 variable "source_image_project" {
   type        = string
   description = "DEPRECATED: Use `instance_image` instead."

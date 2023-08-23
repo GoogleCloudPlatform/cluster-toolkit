@@ -20,6 +20,7 @@ locals {
 }
 
 locals {
+
   ghpc_startup_script_controller = [{
     filename = "ghpc_startup.sh"
     content  = var.controller_startup_script
@@ -115,9 +116,9 @@ module "slurm_controller_template" {
   region                   = var.region
   shielded_instance_config = var.shielded_instance_config
   slurm_instance_role      = "controller"
-  source_image_family      = local.source_image_family             # requires source_image_logic.tf
-  source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
-  source_image             = local.source_image                    # requires source_image_logic.tf
+  source_image_family      = local.source_image_family == "" ? "" : data.google_compute_image.slurm.family # requires source_image_logic.tf
+  source_image_project     = local.source_image_project_normalized                                         # requires source_image_logic.tf
+  source_image             = local.source_image == "" ? "" : data.google_compute_image.slurm.name          # requires source_image_logic.tf
   network                  = var.network_self_link == null ? "" : var.network_self_link
   subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link

@@ -10,14 +10,12 @@
   * [Ubuntu 20.04 LTS](#ubuntu-2004-lts)
   * [Windows](#windows)
   * [Other Images](#other-images)
-  * [Slurm on GCP Custom Images](#slurm-on-gcp-custom-images)
+  * [Slurm on GCP](#slurm-on-gcp)
 
 For information on customizing VM images with extra software and configuration
 settings, see [Building Images](image-building.md).
 
 Please see the [blueprint catalog](https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint-catalog) for examples.
-
-For Slurm images, please see [SchedMD's GitHub repository](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#public-image).
 
 ## Specifying Blueprint Image
 
@@ -249,7 +247,17 @@ support images not listed here, other public and custom images should work with
 the majority of modules with or without further customization, such as custom
 startup-scripts.
 
-### Slurm on GCP Custom Images
+### Slurm on GCP
+
+For Slurm images, please see [SchedMD's GitHub repository](https://github.com/SchedMD/slurm-gcp/blob/5.7.6/docs/images.md#public-image).
+
+#### Publically Published Images
+
+SchedMD publishes "Slurm on GCP" public images, which have the following [documentation][slurm-gcp-images]. From there, you can see which public images are available and which software is installed on them.
+
+> **_Note:_** Currently, the HPC Toolkit expects users to use the *Slurm on GCP v5.7* family of images for their deployments.  Earlier versions are still supported, but will require the use of the `instance_image_override` setting.  If later versions are used, there will likely be unexpected behavior.
+
+#### Custom Images
 
 HPC Toolkit modules based on terraform modules in [Slurm on GCP][slurm-gcp]
 allow custom images via custom instance templates and directly through the
@@ -257,19 +265,16 @@ allow custom images via custom instance templates and directly through the
 correctly with the Slurm cluster. We recommend one of two options for creating a
 custom image for these modules:
 
+> **_Note:_** Set the `image_instance_override` to `true` in the blueprint to let terraform know you are aware that you are using a custom image.
+
 1. Use the [packer templates][slurm-gcp-packer] hosted in the
    [Slurm on GCP][slurm-gcp] github repository directly. The
    `example.pkrvars.hcl` file can be customized to your needs, by supplying a
    different base image or through the `extra_ansible_provisioners` variable.
-1. Create a custom image with a HPC Toolkit [packer module][hpc-toolkit-packer]
+2. Create a custom image with a HPC Toolkit [packer module][hpc-toolkit-packer]
    using one of the Slurm on GCP images as the base image. The image can be
    customized via `shell_scripts`, `ansible_playbooks` or a provided
    `startup_script`.
-
-For more information on the Slurm on GCP public images, see their
-[documentation][slurm-gcp-images]. From there, you can see which public images
-are available, which software is installed on them and more information on how
-to customize them using option 1 listed above.
 
 These instructions apply to the following modules:
 
@@ -278,8 +283,9 @@ These instructions apply to the following modules:
 * [schedmd-slurm-gcp-v5-node-group]
 
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp
-[slurm-gcp-packer]: https://github.com/SchedMD/slurm-gcp/tree/master/packer
-[slurm-gcp-images]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md
+[slurm-gcp-packer]: https://github.com/SchedMD/slurm-gcp/tree/5.7.6/packer
+[slurm-gcp-images]: https://github.com/SchedMD/slurm-gcp/blob/5.7.6/docs/images.md
+[gcloud-compute-images]: https://cloud.google.com/sdk/gcloud/reference/compute/images/create
 
 [vm-instance]: ../modules/compute/vm-instance
 [hpc-toolkit-packer]: ../modules/packer/custom-image
