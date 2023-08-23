@@ -130,7 +130,7 @@ deployment_groups:
       enable_placement: false  # the default is: true
       is_default: true
       partition_conf:
-        SuspendTime: 1200 # time (in secs) the nodes in this partition stay active after their tasks have completed
+        SuspendTime: 300 # time (in secs) the nodes in this partition stay active after their tasks have completed
 
   - id: c2_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
