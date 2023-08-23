@@ -16,6 +16,6 @@
 - name: Ensure a file exists for each OS type
   with_items: "{{ custom_vars.vm_os_types }}"
   ansible.builtin.shell: |
-    test $(cat {{ custom_vars.output_dir }}/{{ item }}.txt) == '{{ item }}' || exit 1
+    test $(cat {{ custom_vars.output_dir }}/{{ item }}.txt) == '{{ item }}'
   args:
     executable: /bin/bash
