@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The hello world integration test exists to demonstrate the test interaction between test files
 ---
 test_name: ofe-deployment
 deployment_name: ofe-deployment-{{ build }}
