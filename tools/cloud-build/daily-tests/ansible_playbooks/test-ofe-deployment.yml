@@ -18,7 +18,7 @@
 
 ---
 - name: Generate random secret using Python for admin password
-  ansible.builtin.command: | 
+  ansible.builtin.command: |
     python3 -c "import secrets; print(secrets.token_hex(20))"
   register: admin_password
   changed_when: false  # Marking this task as unchanged
@@ -37,7 +37,7 @@
 
 - name: Deploy OFE using deployment script
   block:
-  - name: Run deploy.sh 
+  - name: Run deploy.sh
     ansible.builtin.shell: |
       ./deploy.sh --config config.yaml
     args:
@@ -70,8 +70,8 @@
   ansible.builtin.pause:
     minutes: 15
 
-# Addressing this error: Status code was -1 and not [200]: An unknown error occurred: 
-# ~/.netrc access too permissive: access permissions must restrict access to 
+# Addressing this error: Status code was -1 and not [200]: An unknown error occurred:
+# ~/.netrc access too permissive: access permissions must restrict access to
 # only the owner (/builder/home/.netrc, line 2)
 - name: Change .netrc permissions before making HTTP request to OFE
   ansible.builtin.file:
