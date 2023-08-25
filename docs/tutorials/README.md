@@ -72,3 +72,9 @@ graph TB
     A --> G
     F --> G
 ```
+
+### Qwiklabs Tutorial
+
+The [hpc-slurm-qwiklabs.yaml](hpc-slurm-qwiklabs.yaml) blueprint is meant for
+use in Qwiklabs tutorials and uses machine types that are compatible with
+Qwiklabs.
