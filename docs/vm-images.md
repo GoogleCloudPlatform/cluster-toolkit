@@ -251,11 +251,11 @@ startup-scripts.
 
 For Slurm images, please see [SchedMD's GitHub repository](https://github.com/SchedMD/slurm-gcp/blob/5.7.6/docs/images.md#public-image).
 
-#### Publically Published Images
+#### Publicly Published Images
 
 SchedMD publishes "Slurm on GCP" public images, which have the following [documentation][slurm-gcp-images]. From there, you can see which public images are available and which software is installed on them.
 
-> **_Note:_** Currently, the HPC Toolkit expects users to use the *Slurm on GCP v5.7* family of images for their deployments.  Earlier versions are still supported, but will require the use of the `instance_image_override` setting.  If later versions are used, there will likely be unexpected behavior.
+> **_Note:_** Currently, the HPC Toolkit modules depend on users utilizing the **Slurm on GCP v5.7** family of images for their deployments.  Earlier versions may still function, but will require the use of the `instance_image_custom` setting.  If later versions are used, the outcome is unpredictable and will likely lead to failures during creation, deployment, or runtime.
 
 #### Custom Images
 
@@ -265,7 +265,7 @@ allow custom images via custom instance templates and directly through the
 correctly with the Slurm cluster. We recommend one of two options for creating a
 custom image for these modules:
 
-> **_Note:_** Set the `image_instance_override` to `true` in the blueprint to let terraform know you are aware that you are using a custom image.
+> **_Note:_** Set the `instance_image_custom` to `true` in the blueprint to let terraform know you are aware that you are using a custom image.
 
 1. Use the [packer templates][slurm-gcp-packer] hosted in the
    [Slurm on GCP][slurm-gcp] github repository directly. The

@@ -308,17 +308,20 @@ variable "instance_image" {
   }
 }
 
-variable "instance_image_override" {
+variable "instance_image_custom" {
   description = <<-EOD
-  A flag that designates that the user is aware that they are requesting
-  a custom image that is not supported by Slurm on GCP.
+    A flag that designates that the user is aware that they are requesting
+    to use a custom and potentially incompatible image for this Slurm on 
+    GCP module.
 
-  If the field is set to false, only the supported families and project
-  names are to be accepted.  The deployment will fail with any other image
-  family or name.  If set to true, no checks will be done.
-  EOD
+    If the field is set to false, only the compatible families and project
+    names will be accepted.  The deployment will fail with any other image
+    family or name.  If set to true, no checks will be done.
+
+    See: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/docs/vm-images.md#slurm-on-gcp 
+    EOD
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "source_image_project" {
