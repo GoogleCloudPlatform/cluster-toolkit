@@ -17,33 +17,44 @@
 locals {
   # Currently supported images and projects
   known_project_families = {
-    "schedmd-slurm-public" = ["slurm-gcp-5-7-debian-11", "slurm-gcp-5-7-hpc-rocky-linux-8", "slurm-gcp-5-7-ubuntu-2004-lts",
-    "slurm-gcp-5-7-ubuntu-2204-lts-arm64", "slurm-gcp-5-7-hpc-centos-7-k80", "slurm-gcp-5-7-hpc-centos-7"]
+    schedmd-slurm-public = [
+      "slurm-gcp-5-7-debian-11",
+      "slurm-gcp-5-7-hpc-rocky-linux-8",
+      "slurm-gcp-5-7-ubuntu-2004-lts",
+      "slurm-gcp-5-7-ubuntu-2204-lts-arm64",
+      "slurm-gcp-5-7-hpc-centos-7-k80",
+      "slurm-gcp-5-7-hpc-centos-7"
+    ]
   }
 
-  source_image         = lookup(var.instance_image, "name", "")
-  source_image_project = lookup(var.instance_image, "project", "")
-  source_image_project_normalized = (
-    local.source_image != "" || length(regexall("/", local.source_image_project)) > 0
-    ? local.source_image_project
-    : "projects/${local.source_image_project}/global/images/family"
+  # This approach to "hacking" the project name allows a chain of Terraform
+  # calls to set the instance source_image (boot disk) with a "relative 
+  # resource name" that passes muster with VPC Service Control rules
+  #
+  # https://github.com/terraform-google-modules/terraform-google-vm/blob/735bd415fc5f034d46aa0de7922e8fada2327c0c/modules/instance_template/main.tf#L28
+  # https://cloud.google.com/apis/design/resource_names#relative_resource_name
+  source_image_project_normalized = (can(var.instance_image.family) ?
+    "projects/${data.google_compute_image.slurm.project}/global/images/family" :
+    "projects/${data.google_compute_image.slurm.project}/global/images"
   )
+  source_image_family = can(var.instance_image.family) ? data.google_compute_image.slurm.family : ""
+  source_image        = can(var.instance_image.name) ? data.google_compute_image.slurm.name : ""
 }
 
 data "google_compute_image" "slurm" {
   family  = try(var.instance_image.family, null)
   name    = try(var.instance_image.name, null)
-  project = local.source_image_project
+  project = var.instance_image.project
 
   lifecycle {
     postcondition {
-      condition     = !var.instance_image_custom || try(contains(keys(local.known_project_families), self.project), false)
+      condition     = var.instance_image_custom || contains(keys(local.known_project_families), self.project)
       error_message = <<-EOD
       '${self.project}' is not a known project with compatible Slurm image families. Use the 'instance_image_custom' flag to deploy custom images. See: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/docs/vm-images.md#slurm-on-gcp.
       EOD
     }
     postcondition {
-      condition     = !var.instance_image_custom || !try(contains(keys(local.known_project_families), self.project), false) || try(contains(local.known_project_families[self.project], self.family), false)
+      condition     = !contains(keys(local.known_project_families), self.project) || try(contains(local.known_project_families[self.project], self.family), false)
       error_message = <<-EOD
       '${self.family}', within project '${self.project}', is not a known family of compatible Slurm images. Use the 'instance_image_custom' flag to deploy custom images. See https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/docs/vm-images.md#slurm-on-gcp.
       EOD

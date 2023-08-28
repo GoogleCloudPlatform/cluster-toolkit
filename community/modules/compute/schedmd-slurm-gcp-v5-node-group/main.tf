@@ -63,9 +63,9 @@ locals {
     preemptible              = var.preemptible
     reservation_name         = var.reservation_name
     shielded_instance_config = var.shielded_instance_config
-    source_image_family      = data.google_compute_image.slurm.family
+    source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
-    source_image             = data.google_compute_image.slurm.name
+    source_image             = local.source_image                    # requires source_image_logic.tf
     tags                     = var.tags
     access_config            = local.access_config
     service_account = var.service_account != null ? var.service_account : {

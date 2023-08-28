@@ -247,25 +247,35 @@ support images not listed here, other public and custom images should work with
 the majority of modules with or without further customization, such as custom
 startup-scripts.
 
-### Slurm on GCP
+## Slurm on GCP
 
-For Slurm images, please see [SchedMD's GitHub repository](https://github.com/SchedMD/slurm-gcp/blob/5.7.6/docs/images.md#public-image).
+### Publicly Published Slurm Images
 
-#### Publicly Published Images
+SchedMD publishes "Slurm on GCP" public images, which are documented
+[here][slurm-gcp-images]. This documentation covers which images are available
+and what software is installed on them.
 
-SchedMD publishes "Slurm on GCP" public images, which have the following [documentation][slurm-gcp-images]. From there, you can see which public images are available and which software is installed on them.
+> **_Note:_** When deploying a Slurm cluster, the HPC Toolkit Terraform wrapper
+modules enforce that specific image versions are used, to ensure compatibility.
+Currently, the **slurm-gcp-5-7** image families are enforced for the Slurm v5
+modules provided in the HPC Toolkit.
 
-> **_Note:_** Currently, the HPC Toolkit modules depend on users utilizing the **Slurm on GCP v5.7** family of images for their deployments.  Earlier versions may still function, but will require the use of the `instance_image_custom` setting.  If later versions are used, the outcome is unpredictable and will likely lead to failures during creation, deployment, or runtime.
+For Slurm images, please see
+[SchedMD's GitHub repository](https://github.com/SchedMD/slurm-gcp/blob/5.7.6/docs/images.md#public-image).
 
-#### Custom Images
+### Custom Slurm Images
+
+> **_Warning:_** When building custom images, the Terraform and Packer modules
+must share the same version.
 
 HPC Toolkit modules based on terraform modules in [Slurm on GCP][slurm-gcp]
 allow custom images via custom instance templates and directly through the
 `instance_image` variable, but they have explicit requirements to function
-correctly with the Slurm cluster. We recommend one of two options for creating a
-custom image for these modules:
+correctly with the Slurm cluster. We recommend one of two options for creating
+a custom image for these modules:
 
-> **_Note:_** Set the `instance_image_custom` to `true` in the blueprint to let terraform know you are aware that you are using a custom image.
+> **_Note:_** Set the `instance_image_custom` to `true` in the blueprint to let
+terraform know you are aware that you are using a custom image.
 
 1. Use the [packer templates][slurm-gcp-packer] hosted in the
    [Slurm on GCP][slurm-gcp] github repository directly. The

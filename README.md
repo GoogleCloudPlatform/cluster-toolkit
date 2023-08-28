@@ -117,7 +117,9 @@ For more information on these and other images, see
 
 ### Slurm Images
 
-The HPC Toolkit also provides modules and examples for implementing pre-built Slurm VM images, see [Slurm on GCP Custom Images](docs/vm-images.md#slurm-on-gcp-custom-images)
+> **_Warning:_** Slurm Terraform modules cannot be directly used on the standard OS images. They must be used in combination with images built for the versioned release of the Terraform module.
+
+The HPC Toolkit provides modules and examples for implementing pre-built and custom Slurm VM images, see [Slurm on GCP](docs/vm-images.md#slurm-on-gcp)
 
 ## Blueprint Validation
 
