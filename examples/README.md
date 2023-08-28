@@ -258,7 +258,7 @@ to 256
 ### [ml-slurm.yaml] ![core-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the
-machine learning frameworks [PyTorch] and [TensorFlow] pre-installed on every
+machine learning frameworks PyTorch and TensorFlow pre-installed on every
 VM. The cluster has 2 partitions:
 
 * [A2 family VMs][a2] with the NVIDIA A100 GPU accelerator
@@ -295,8 +295,7 @@ sbatch -N 1 torch_test.sh
 When you are done, clean up the resources in reverse order of creation:
 
 ```text
-terraform -chdir=ml-example/cluster destroy
-terraform -chdir=ml-example/primary destroy
+./ghpc destroy ml-example
 ```
 
 Finally, browse to the [Cloud Console][console-images] to delete your custom
