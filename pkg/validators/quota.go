@@ -39,7 +39,7 @@ type ResourceRequirement struct {
 	Dimensions map[string]string `cty:"dimensions"` // e.g. {"region": "us-central1"}
 }
 
-// InBucket returns true if the quota is in the QuotaBucket.
+// InBucket returns true if all dimensions specified in the bucket match dimensions the requirement.
 func (q ResourceRequirement) InBucket(b *sub.QuotaBucket) bool {
 	for d, v := range b.Dimensions {
 		if q.Dimensions[d] != v {
@@ -110,7 +110,19 @@ func validateResourceRequirements(rs []ResourceRequirement, up *usageProvider) (
 	return qerrs, errs.OrNil()
 }
 
-// Validate requirements for a single consume & service pair.
+// Validate requirements for a single consumer & service pair.
+// The `ServiceUsage.ConsumerQuotaMetrics` API call returns following structure:
+//
+// list[ConsumerQuotaMetric] - one per metric/quota, e.g. compute.googleapis.com/n2_cpus for `N2 CPUs`.
+// ├Metric
+// └list[ConsumerQuotaLimit] - one per quota scope (e.g. regional or zonal)
+// ....|.......................for N2 CPUs there are two: `N2-CPUS-per-project-region` & `N2-CPUS-per-project-zone`
+// ....├Unit - e.g. '1/{project}/{region}' for regional "scope"
+// ....└list[QuotaBucket] - represents the "slice" of the "scope" with specified limit
+// ........|................e.g. for `N2-CPUS-per-project-region` there will be buckets with specific region: `{'region': 'asia-east1'}`,
+// ........|................and one bucket, named `N2 CPUs (default)` in the UI, without `dimensions={}` to act as a wildcard and provide default limit.
+// ........├EffectiveLimit
+// ........└Dimensions - e.g. {"region": "us-central1"}
 func validateServiceRequirements(consumer string, service string, rs []ResourceRequirement, up *usageProvider) ([]QuotaError, error) {
 	qms, err := queryMetrics(consumer, service)
 	if err != nil {
@@ -141,7 +153,7 @@ func findBucket(r ResourceRequirement, ql *sub.ConsumerQuotaLimit) (*sub.QuotaBu
 		fmt.Errorf("unexpected default-less ConsumerQuotaLimit: %q", ql.Name)
 }
 
-// Set of requirements to the single bucket with context attached
+// Set of requirements that fall into the specific bucket with context attached
 type bucketRequirements struct {
 	QuotaMetric  *sub.ConsumerQuotaMetric
 	QuotaLimit   *sub.ConsumerQuotaLimit
@@ -182,6 +194,8 @@ func gatherBucketsRequirements(rs []ResourceRequirement, qms map[string]*sub.Con
 	return maps.Values(res), errs.OrNil()
 }
 
+// validateBucket aggregates (sum) all requirements and usage for the given bucket
+// and returns QuotaError if the bucket quota limit is not sufficient.
 func validateBucket(br bucketRequirements, up *usageProvider) []QuotaError {
 	if len(br.Requirements) == 0 {
 		return nil
@@ -242,6 +256,7 @@ type usageKey struct {
 	Location string // either "global", region, or zone
 }
 
+// usageProvider provides usage for a given metric and location.
 type usageProvider struct {
 	u map[usageKey]int64
 }
