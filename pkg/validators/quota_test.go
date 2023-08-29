@@ -17,7 +17,6 @@ package validators
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -25,41 +24,6 @@ import (
 	sub "google.golang.org/api/serviceusage/v1beta1"
 	"gopkg.in/yaml.v3"
 )
-
-func TestAggregation(t *testing.T) {
-	type test struct {
-		requested   []int64
-		aggregation string
-		want        []int64
-		err         bool
-	}
-	tests := []test{
-		{[]int64{1, 3, 2}, "SUM", []int64{6}, false},
-		{[]int64{1, 3, 2}, "MAX", []int64{3}, false},
-		{[]int64{}, "SUM", []int64{0}, false},
-		{[]int64{}, "MAX", []int64{0}, false},
-		{[]int64{1, -1, 2}, "SUM", []int64{-1}, false},
-		{[]int64{1, -1, 2}, "MAX", []int64{-1}, false},
-		{[]int64{1, -1, 2}, "DO_NOT_AGGREGATE", []int64{1, -1, 2}, false},
-		{[]int64{1, -1, 2}, "KARL_MAX", nil, true},
-	}
-
-	for _, tc := range tests {
-		t.Run(fmt.Sprintf("%s%#v", tc.aggregation, tc.requested), func(t *testing.T) {
-			fn, err := aggregation(tc.aggregation)
-			if tc.err != (err != nil) {
-				t.Errorf("got unexpected error: %s", err)
-			}
-			if err != nil {
-				return
-			}
-			got := fn(tc.requested)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
 
 func TestSatisfied(t *testing.T) {
 	type test struct {
@@ -72,8 +36,6 @@ func TestSatisfied(t *testing.T) {
 		{1, 2, true},
 		{2, 1, false},
 		{1, -1, true},
-		{-1, 1, false},
-		{-1, -1, true},
 	}
 
 	for _, tc := range tests {
@@ -112,65 +74,54 @@ func TestInBucket(t *testing.T) {
 	}
 }
 
-func TestValidateServiceLimits(t *testing.T) {
-	// Configured quotas:
-	// global: 5
-	// green_eggs: 3
-	// green_sleeve: -1
-	//
-	// Requested:
-	// green_eggs: 4
-	// green_sleeve: 7
-	//
-	// Expected errors:
-	// green_eggs: 4 > 3
-	// global: 11 > 5
-	buckets := []*sub.QuotaBucket{
-		{
-			EffectiveLimit: int64(5),
-		}, {
-			EffectiveLimit: int64(3),
-			Dimensions:     map[string]string{"green": "eggs"},
-		}, {
-			EffectiveLimit: int64(-1),
-			Dimensions:     map[string]string{"green": "sleeve"},
+func TestValidateBucket(t *testing.T) {
+	qm := sub.ConsumerQuotaMetric{Metric: "pony.api/friendship", DisplayName: "apple"}
+	ql := sub.ConsumerQuotaLimit{Unit: "1/{road}"}
+	b := sub.QuotaBucket{
+		EffectiveLimit: 10,
+		Dimensions:     map[string]string{"zone": "ponyland"},
+	}
+	br := bucketRequirements{
+		QuotaMetric: &qm,
+		QuotaLimit:  &ql,
+		Bucket:      &b,
+		Requirements: []ResourceRequirement{
+			{
+				Consumer: "redhat",
+				Service:  "pony.api",
+				Metric:   "pony.api/friendship",
+				Required: 5,
+			},
+			{
+				Consumer: "redhat",
+				Service:  "pony.api",
+				Metric:   "pony.api/friendship",
+				Required: 4,
+			},
 		},
 	}
-	quotas := []ResourceRequirement{
-		{
-			Metric:      "pony",
-			Required:    int64(4),
-			Dimensions:  map[string]string{"green": "eggs"},
-			Aggregation: "SUM",
-		}, {
-			Metric:      "pony",
-			Required:    int64(7),
-			Dimensions:  map[string]string{"green": "sleeve"},
-			Aggregation: "SUM",
-		},
-	}
-	up := usageProvider{}
+	up := usageProvider{u: map[usageKey]int64{
+		{Metric: "pony.api/friendship", Location: "ponyland"}: 3,
+	}}
 
-	want := []QuotaError{
-		{Metric: "pony", Dimensions: map[string]string{"green": "eggs"}, EffectiveLimit: 3, Requested: 4},
-		{Metric: "pony", Dimensions: nil, EffectiveLimit: 5, Requested: 11},
-	}
-	got, err := validateServiceLimits(quotas, []*sub.ConsumerQuotaMetric{
-		{
-			Metric: "pony",
-			ConsumerQuotaLimits: []*sub.ConsumerQuotaLimit{
-				{Metric: "pony", QuotaBuckets: buckets}},
-		},
-	}, &up)
-
-	if err != nil {
-		t.Errorf("got unexpected error: %s", err)
-		return
-	}
-	// Sort by error message to make test deterministic
-	sort.Slice(got, func(i, j int) bool { return got[i].Error() < got[j].Error() })
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("diff (-want +got):\n%s", diff)
+	errs := validateBucket(br, &up)
+	if len(errs) != 1 {
+		t.Errorf("got %d errors, want 1", len(errs))
+	} else {
+		want := QuotaError{
+			Metric:         "pony.api/friendship",
+			Consumer:       "redhat",
+			Service:        "pony.api",
+			DisplayName:    "apple",
+			Unit:           "1/{road}",
+			Dimensions:     map[string]string{"zone": "ponyland"},
+			Requested:      5 + 4,
+			Usage:          3,
+			EffectiveLimit: 10,
+		}
+		if diff := cmp.Diff(want, errs[0]); diff != "" {
+			t.Errorf("diff (-want +got):\n%s", diff)
+		}
 	}
 }
 
@@ -222,8 +173,7 @@ requirements:
   consumer: redhat
   service: zebra.api
   required: 22
-  dimensions: {"x": "y", "left": "right"}
-  aggregation: "SUM"`, rrInputs{
+  dimensions: {"x": "y", "left": "right"}`, rrInputs{
 			IgnoreUsage: true,
 			Requirements: []ResourceRequirement{
 				{
@@ -235,7 +185,6 @@ requirements:
 						"x":    "y",
 						"left": "right",
 					},
-					Aggregation: "SUM",
 				},
 			},
 		}, false},
@@ -254,7 +203,6 @@ requirements:
 						"region": "narnia",
 						"zone":   "narnia-51",
 					},
-					Aggregation: "SUM",
 				},
 			},
 		}, false},
@@ -278,5 +226,78 @@ requirements:
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestQuotaError(t *testing.T) {
+	type test struct {
+		err  QuotaError
+		want string
+	}
+	tests := []test{
+		{QuotaError{
+			DisplayName:    "zebra",
+			Unit:           "1/{road}",
+			Dimensions:     map[string]string{"zone": "zoo"},
+			Requested:      10,
+			Usage:          5,
+			EffectiveLimit: 13,
+		}, `not enough quota "zebra" as "1/{road}" in [zone:zoo], limit=13 < requested=10 + usage=5`},
+		{QuotaError{
+			DisplayName:    "zebra",
+			Unit:           "1/{road}",
+			Requested:      10,
+			Usage:          5,
+			EffectiveLimit: 13,
+		}, `not enough quota "zebra" as "1/{road}", limit=13 < requested=10 + usage=5`},
+		{QuotaError{
+			DisplayName:    "zebra",
+			Unit:           "1/{road}",
+			Requested:      10,
+			EffectiveLimit: 13,
+		}, `not enough quota "zebra" as "1/{road}", limit=13 < requested=10`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.want, func(t *testing.T) {
+			if diff := cmp.Diff(tc.want, tc.err.Error()); diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGatherBucketsRequirements(t *testing.T) {
+	b0 := sub.QuotaBucket{
+		EffectiveLimit: 10,
+		Dimensions:     map[string]string{"zone": "ponyland"},
+	}
+	ql := sub.ConsumerQuotaLimit{
+		Unit:         "1/{road}",
+		QuotaBuckets: []*sub.QuotaBucket{&b0},
+	}
+	qm := sub.ConsumerQuotaMetric{ConsumerQuotaLimits: []*sub.ConsumerQuotaLimit{&ql}}
+	qms := map[string]*sub.ConsumerQuotaMetric{"pony.api/friendship": &qm}
+	r0 := ResourceRequirement{Metric: "not_gonna_find_me"}
+	r1 := ResourceRequirement{
+		Metric:     "pony.api/friendship",
+		Dimensions: map[string]string{"zone": "ponyland"},
+	}
+	rs := []ResourceRequirement{r0, r1}
+	br, err := gatherBucketsRequirements(rs, qms)
+
+	brWant := []bucketRequirements{
+		{
+			QuotaMetric:  &qm,
+			QuotaLimit:   &ql,
+			Bucket:       &b0,
+			Requirements: []ResourceRequirement{r1},
+		},
+	}
+	if diff := cmp.Diff(brWant, br); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+	wantErr := `can't find quota for metric "not_gonna_find_me"`
+	if diff := cmp.Diff(wantErr, err.Error()); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }
