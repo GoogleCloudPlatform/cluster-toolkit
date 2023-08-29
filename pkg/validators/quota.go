@@ -141,14 +141,18 @@ func validateServiceRequirements(consumer string, service string, rs []ResourceR
 
 // Find a bucket in the ConsumerQuotaLimit that matches the ResourceRequirement.
 func findBucket(r ResourceRequirement, ql *sub.ConsumerQuotaLimit) (*sub.QuotaBucket, error) {
-	// Iterate buckets in order from most to less specific
+	// Iterate buckets in order from most to less specific, see:
+	// https://cloud.google.com/service-usage/docs/reference/rest/v1beta1/services.consumerQuotaMetrics.limits
+	// | QuotaBuckets: Summary of the enforced quota buckets, organized by
+	// | quota dimension, ordered from least specific to most specific (for
+	// | example, the global default bucket, with no quota dimensions, will
+	// | always appear first).
 	for i := len(ql.QuotaBuckets) - 1; i >= 0; i-- {
 		if r.InBucket(ql.QuotaBuckets[i]) {
 			return ql.QuotaBuckets[i], nil
 		}
 	}
-	// According to docs the top bucket should be a wildcard `dimensions={}`
-	// So we should never end up here, return fake "unlimited" bucket and report error.
+	// We should never end up here, do not panic, return fake "unlimited" bucket and report error.
 	return &sub.QuotaBucket{Dimensions: map[string]string{}, EffectiveLimit: -1},
 		fmt.Errorf("unexpected default-less ConsumerQuotaLimit: %q", ql.Name)
 }
