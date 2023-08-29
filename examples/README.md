@@ -128,7 +128,7 @@ Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
 `/home`.
 
-There are 2 partitions in this example: `debug` and `compute`. The `debug`
+There are 3 partitions in this example: `debug` `compute`, and `h3`. The `debug`
 partition uses `n2-standard-2` VMs, which should work out of the box without
 needing to request additional quota. The purpose of the `debug` partition is to
 make sure that first time users are not immediately blocked by quota
@@ -157,13 +157,15 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
   GB/node** up to 1,250 GB
-* Compute Engine API: N2 CPUs: **12**
-* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
-  in `compute` partition up to 1,204
+* Compute Engine API: N2 CPUs: **2** for the login node and **2/node** active 
+  in the `debug` partition up to 12
+* Compute Engine API: C2 CPUs: **4** for the controller node and **60/node** 
+  active in the `compute` partition up to 1,204
+* Compute Engine API: H3 CPUs: **88/node** active in the `h3` partition up to 1760
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
+  needed for the `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
+  _only needed for the `compute` partition_
 
 ### [hpc-enterprise-slurm.yaml] ![core-badge]
 
