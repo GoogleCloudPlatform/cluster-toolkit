@@ -157,11 +157,16 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
 * Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
   GB/node** up to 1,250 GB
-* Compute Engine API: N2 CPUs: **2** for the login node and **2/node** active 
+* Compute Engine API: N2 CPUs: **2** for the login node and **2/node** active
   in the `debug` partition up to 12
-* Compute Engine API: C2 CPUs: **4** for the controller node and **60/node** 
+* Compute Engine API: C2 CPUs: **4** for the controller node and **60/node**
   active in the `compute` partition up to 1,204
-* Compute Engine API: H3 CPUs: **88/node** active in the `h3` partition up to 1760
+* Compute Engine API: H3 CPUs: **88/node** active in the `h3` partition up to
+  1760
+  * The H3 CPU quota can be increased on the Cloud Console by navigating to
+  `IAM & Admin`->`Quotas` or searching `All Quotas` and entering `vm_family:H3`
+  into the filter bar.  From there, the quotas for each region may be selected
+  and edited.
 * Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
   needed for the `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
