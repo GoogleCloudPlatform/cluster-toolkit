@@ -12,7 +12,7 @@ This module generates a script that performs the following:
 
 There are several options on how to consume the outputs of this module:
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > Breaking changes between after v1.21.0. `spack-install` module replaced by
 > `spack-setup` and `spack-execute` modules.
 > [Details Below](#deprecations-and-breaking-changes)
@@ -181,7 +181,7 @@ version from GitHub. Note the source line in the following example.
 
 ```yaml
   - id: spack-install
-    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.21.0&depth=1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.22.1&depth=1
 ```
 
 ## License
@@ -220,7 +220,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.19.1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.22.1 |
 
 ## Resources
 

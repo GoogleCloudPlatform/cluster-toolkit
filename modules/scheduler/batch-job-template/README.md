@@ -77,7 +77,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners: ...
-          
+
   - id: batch-compute-template
     source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
     use: [batch-startup-script]
@@ -135,7 +135,7 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 8.0 |
-| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 185837b5 |
+| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.22.1 |
 
 ## Resources
 
