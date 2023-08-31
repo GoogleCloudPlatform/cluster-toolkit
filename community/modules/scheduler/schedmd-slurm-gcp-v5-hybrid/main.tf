@@ -28,7 +28,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=5.7.6"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid?ref=5.8.0"
 
   project_id                      = var.project_id
   slurm_cluster_name              = local.slurm_cluster_name
@@ -37,6 +37,7 @@ module "slurm_controller_instance" {
   enable_cleanup_subscriptions    = var.enable_cleanup_subscriptions
   enable_reconfigure              = var.enable_reconfigure
   enable_bigquery_load            = var.enable_bigquery_load
+  enable_slurm_gcp_plugins        = var.enable_slurm_gcp_plugins
   compute_startup_scripts         = local.ghpc_startup_script_compute
   compute_startup_scripts_timeout = var.compute_startup_scripts_timeout
   prolog_scripts                  = var.prolog_scripts

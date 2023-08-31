@@ -140,6 +140,7 @@ deployment_groups:
         min_cpu_platform: null
         on_host_maintenance: TERMINATE
         preemptible: false
+        reservation_name: null
         service_account: null
         shielded_instance_config: null
         spot_instance_config: null

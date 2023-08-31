@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.6
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
 
 variable "deployment_name" {
   description = "Name of the deployment."
@@ -226,6 +226,7 @@ variable "node_groups" {
     min_cpu_platform    = string
     on_host_maintenance = string
     preemptible         = bool
+    reservation_name    = string
     service_account = object({
       email  = string
       scopes = list(string)

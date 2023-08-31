@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.6
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
 
 variable "project_id" {
   type        = string
@@ -379,4 +379,23 @@ variable "additional_disks" {
   }))
   description = "List of maps of disks."
   default     = []
+}
+
+variable "enable_reconfigure" {
+  description = <<EOD
+Enables automatic Slurm reconfigure on when Slurm configuration changes (e.g.
+slurm.conf.tpl, partition details).
+
+NOTE: Requires Google Pub/Sub API.
+EOD
+  type        = bool
+  default     = false
+}
+
+variable "pubsub_topic" {
+  description = <<EOD
+The cluster pubsub topic created by the controller when enable_reconfigure=true.
+EOD
+  type        = string
+  default     = null
 }

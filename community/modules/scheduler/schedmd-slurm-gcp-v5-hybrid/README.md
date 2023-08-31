@@ -38,7 +38,7 @@ manually. This will require addition configuration and verification of
 permissions. For more information see the [hybrid.md] documentation on
 [slurm-gcp].
 
-[slurm-controller-hybrid]: https://github.com/SchedMD/slurm-gcp/tree/5.7.6/terraform/slurm_cluster/modules/slurm_controller_hybrid
+[slurm-controller-hybrid]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0/terraform/slurm_cluster/modules/slurm_controller_hybrid
 
 > **_NOTE:_** The hybrid module requires the following dependencies to be
 > installed on the system deploying the module:
@@ -58,15 +58,15 @@ permissions. For more information see the [hybrid.md] documentation on
 [pyyaml]: https://pypi.org/project/PyYAML/
 [google-api-python-client]: https://pypi.org/project/google-api-python-client/
 [google-cloud-pubsub]: https://pypi.org/project/google-cloud-pubsub/
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.7.6/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/scripts/requirements.txt
 
 ### Manual Configuration
 This module *does not* complete the installation of hybrid partitions on your
 slurm cluster. After deploying, you must follow the steps listed out in the
 [hybrid.md] documentation under [manual steps].
 
-[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/5.7.6/docs/hybrid.md
-[manual steps]: https://github.com/SchedMD/slurm-gcp/blob/5.7.6/docs/hybrid.md#manual-configurations
+[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/docs/hybrid.md
+[manual steps]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/docs/hybrid.md#manual-configurations
 
 ### Example Usage
 The hybrid module can be added to a blueprint as follows:
@@ -146,10 +146,10 @@ strongly advise only using versions 21 or 22 when using this module. Attempting
 to use this module with any version older than 21 may lead to unexpected
 results.
 
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.7.6
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
 [pre-existing-network-storage]: ../../../../modules/file-system/pre-existing-network-storage/
 [schedmd-slurm-gcp-v5-partition]: ../../compute/schedmd-slurm-gcp-v5-partition/
-[packer templates]: https://github.com/SchedMD/slurm-gcp/tree/5.7.6/packer
+[packer templates]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0/packer
 
 ## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -181,7 +181,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.7.6 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.8.0 |
 
 ## Resources
 
@@ -201,6 +201,7 @@ No resources.
 | <a name="input_enable_cleanup_subscriptions"></a> [enable\_cleanup\_subscriptions](#input\_enable\_cleanup\_subscriptions) | Enables automatic cleanup of pub/sub subscriptions managed by this module, when<br>cluster is destroyed.<br>NOTE: Requires Python and script dependencies.<br>*WARNING*: Toggling this may temporarily impact var.enable\_reconfigure behavior. | `bool` | `false` | no |
 | <a name="input_enable_devel"></a> [enable\_devel](#input\_enable\_devel) | Enables development mode. Not for production use. | `bool` | `false` | no |
 | <a name="input_enable_reconfigure"></a> [enable\_reconfigure](#input\_enable\_reconfigure) | Enables automatic Slurm reconfigure on when Slurm configuration changes (e.g.<br>slurm.conf.tpl, partition details). Compute instances and resource policies<br>(e.g. placement groups) will be destroyed to align with new configuration.<br>NOTE: Requires Python and Google Pub/Sub API.<br>*WARNING*: Toggling this will impact the running workload. Deployed compute nodes<br>will be destroyed and their jobs will be requeued. | `bool` | `false` | no |
+| <a name="input_enable_slurm_gcp_plugins"></a> [enable\_slurm\_gcp\_plugins](#input\_enable\_slurm\_gcp\_plugins) | Enables calling hooks in scripts/slurm\_gcp\_plugins during cluster resume and suspend. | `bool` | `false` | no |
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br>on every node when a user's job completes.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
 | <a name="input_google_app_cred_path"></a> [google\_app\_cred\_path](#input\_google\_app\_cred\_path) | Path to Google Applicaiton Credentials. | `string` | `null` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory where the hybrid configuration directory will be installed on the<br>on-premise controller. This updates the prefix path for the resume and<br>suspend scripts in the generated `cloud.conf` file. The value defaults to<br>output\_dir if not specified. | `string` | `null` | no |
