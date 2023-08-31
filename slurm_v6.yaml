@@ -1,0 +1,55 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: slurm_v6
+
+vars:
+  project_id:  io-playground
+  deployment_name: slurm_v6
+  region: us-central1
+  #zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: nw
+    source: modules/network/pre-existing-vpc
+
+  - id: ns
+    source: ./community/modules/slurm/nodeset
+    use: [nw]
+    settings:
+      name: ns
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      enable_placement: false # the default is: true
+      enable_public_ip: true
+
+  - id: pt
+    source: ./community/modules/slurm/partition
+    use: [ns]
+    settings:
+      name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+
+  - id: ctrl
+    source: ./community/modules/slurm/controller
+    use: [pt, nw]
+    settings:
+      name: gg
+      enable_public_ip: true
+    
