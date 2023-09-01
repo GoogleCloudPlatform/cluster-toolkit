@@ -1,0 +1,68 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-slurm-v6
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hpc-slurm-v6
+  region: us-central1
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  - id: slurm_cluster
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-cluster
+    settings:
+      slurm_cluster_name: simple
+      partitions: [{
+        partition_conf: {
+          Default = "YES"
+        },
+        partition_name: "debug",
+        partition_nodeset: ["c2s4"],
+      }]
+      nodeset: [{
+        nodeset_name: "c2s4",
+        node_count_dynamic_max: 10,
+        disk_size_gb: 32,
+        enable_public_ip: true,
+        machine_type: "c2-standard-4",
+        subnetwork: $(network1.subnetwork_self_link),
+      }]
+      controller_instance_config: {
+        disk_size_gb: 32,
+        disk_type: "pd-standard",
+        machine_type: "n1-standard-4",
+        enable_public_ip: true,
+        subnetwork: $(network1.subnetwork_self_link),
+      }
+      login_nodes: [{
+        group_name: "l0",
+        disk_size_gb: 32,
+        disk_type: "pd-standard",
+        machine_type: "n1-standard-2",
+        enable_public_ip: true,
+        subnetwork: $(network1.subnetwork_self_link),
+      }]
