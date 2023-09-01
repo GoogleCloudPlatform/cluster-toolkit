@@ -28,7 +28,7 @@ locals {
   }
 
   # This approach to "hacking" the project name allows a chain of Terraform
-  # calls to set the instance source_image (boot disk) with a "relative 
+  # calls to set the instance source_image (boot disk) with a "relative
   # resource name" that passes muster with VPC Service Control rules
   #
   # https://github.com/terraform-google-modules/terraform-google-vm/blob/735bd415fc5f034d46aa0de7922e8fada2327c0c/modules/instance_template/main.tf#L28
@@ -50,17 +50,18 @@ data "google_compute_image" "slurm" {
     postcondition {
       condition     = var.instance_image_custom || contains(keys(local.known_project_families), self.project)
       error_message = <<-EOD
-      '${self.project}' is not a known project with compatible Slurm image families. Use the 'instance_image_custom' flag to deploy custom images. See: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/docs/vm-images.md#slurm-on-gcp.
+      Images in project ${self.project} are not published by SchedMD. Images must be created by compatible releases of the Terraform and Packer modules following the guidance at https://goo.gle/hpc-slurm-images. Set var.instance_image_custom to true to silence this error and acknowledge that you are using a compatible image.
       EOD
     }
     postcondition {
       condition     = !contains(keys(local.known_project_families), self.project) || try(contains(local.known_project_families[self.project], self.family), false)
       error_message = <<-EOD
-      '${self.family}', within project '${self.project}', is not a known family of compatible Slurm images. Use the 'instance_image_custom' flag to deploy custom images. See https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/docs/vm-images.md#slurm-on-gcp.
+      Image family ${self.family} published by SchedMD in project ${self.project} is not compatible with this release of the Terraform Slurm modules. Select from known compatible releases:
+      ${join("\n", [for p in try(local.known_project_families[self.project], []) : "\t\"${p}\""])}
       EOD
     }
     postcondition {
-      condition     = var.disk_size_gb > self.disk_size_gb
+      condition     = var.disk_size_gb >= self.disk_size_gb
       error_message = "'disk_size_gb: ${var.disk_size_gb}' is smaller than the image size (${self.disk_size_gb}GB), please increase the blueprint disk size"
     }
   }

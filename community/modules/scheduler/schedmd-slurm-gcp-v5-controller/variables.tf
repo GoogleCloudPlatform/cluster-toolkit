@@ -569,7 +569,7 @@ variable "instance_image_custom" {
     names will be accepted.  The deployment will fail with any other image
     family or name.  If set to true, no checks will be done.
 
-    See: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/docs/vm-images.md#slurm-on-gcp
+    See: https://goo.gle/hpc-slurm-images
     EOD
   type        = bool
   default     = false
