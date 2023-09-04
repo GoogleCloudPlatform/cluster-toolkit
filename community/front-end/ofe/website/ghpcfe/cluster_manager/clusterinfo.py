@@ -217,7 +217,7 @@ class ClusterInfo:
     settings:
       enable_smt: {part.enable_hyperthreads}
       machine_type: {part.machine_type}
-      node_count_dynamic_max: {part.max_node_count}
+      node_count_dynamic_max: {part.dynamic_node_count}
       node_count_static: {part.static_node_count}
       {instance_image_yaml}
 """
@@ -343,6 +343,8 @@ deployment_groups:
     kind: terraform
     id: slurm_controller
     settings:
+      cloud_parameters:
+        resume_timeout: 500
       machine_type: {self.cluster.controller_instance_type}
       disk_type: {self.cluster.controller_disk_type}
       disk_size_gb: {self.cluster.controller_disk_size}

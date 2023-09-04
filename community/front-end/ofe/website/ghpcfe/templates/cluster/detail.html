@@ -103,7 +103,7 @@ window.onload=function(event) {
         <td>{{ part.vCPU_per_node }}</td>
 	<td>{% if part.GPU_per_node > 0 %}{{ part.GPU_type }}{% else %}-{% endif %}</td>
 	<td>{% if part.GPU_per_node > 0 %}{{ part.GPU_per_node }}{% else %}-{% endif %}</td>
-        <td>{{ part.max_node_count }}</td>
+        <td>{{ part.dynamic_node_count }}</td>
         <td>{{ part.static_node_count }}</td>
       </tr>
       {% endfor %}
