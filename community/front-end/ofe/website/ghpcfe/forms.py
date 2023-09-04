@@ -245,6 +245,7 @@ class ClusterPartitionForm(forms.ModelForm):
             "machine_type",
             "image",
             "max_node_count",
+            "static_node_count",
             "enable_placement",
             "enable_hyperthreads",
             "enable_node_reuse",

@@ -886,9 +886,14 @@ class ClusterPartition(models.Model):
         on_delete=models.SET_NULL,
     )
     max_node_count = models.PositiveIntegerField(
-        validators=[MinValueValidator(1)],
-        help_text="The maximum number of nodes in the partition",
+        validators=[MinValueValidator(0)],
+        help_text="The maximum number of dynamic nodes in the partition",
         default=2,
+    )
+    static_node_count = models.PositiveIntegerField(
+        validators=[MinValueValidator(0)],
+        help_text="The number of statically created nodes in the partition",
+        default=0,
     )
     enable_placement = models.BooleanField(
         default=True,

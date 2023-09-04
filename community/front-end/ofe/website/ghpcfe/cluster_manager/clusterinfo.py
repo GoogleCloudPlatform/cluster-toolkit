@@ -218,6 +218,7 @@ class ClusterInfo:
       enable_smt: {part.enable_hyperthreads}
       machine_type: {part.machine_type}
       node_count_dynamic_max: {part.max_node_count}
+      node_count_static: {part.static_node_count}
       {instance_image_yaml}
 """
             )
