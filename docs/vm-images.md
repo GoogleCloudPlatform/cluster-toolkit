@@ -1,11 +1,16 @@
 # Supported and Tested VM Images
 
-* [HPC CentOS 7](#hpc-centos-7)
-* [HPC Rocky Linux 8](#hpc-rocky-linux-8)
-* [Debian 11](#debian-11)
-* [Ubuntu 20.04 LTS](#ubuntu-2004-lts)
-* [Windows](#windows)
+* [General Information](#general-information)
+  * [Instance Image](#instance-images)
+  * [Pinning Specific Images](#pinning-specifics-images)
+* [VM Image Specifics](#vm-image-specifics)
+  * [HPC CentOS 7](#hpc-centos-7)
+  * [HPC Rocky Linux 8](#hpc-rocky-linux-8)
+  * [Debian 11](#debian-11)
+  * [Ubuntu 20.04 LTS](#ubuntu-2004-lts)
+  * [Windows](#windows)
 * [Other Images](#other-images)
+* [Slurm on GCP Custom Images](#slurm-on-gcp-custom-images)
 
 For information on customizing VM images with extra software and configuration
 settings, see [Building Images](image-building.md).
@@ -14,7 +19,47 @@ Please see the [blueprint catalog](https://cloud.google.com/hpc-toolkit/docs/set
 
 For Slurm images, please see [SchedMD's GitHub repository](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#public-image).
 
-## HPC CentOS 7
+## General Information
+
+### Instance Images
+
+> **_Note:_** This information is applicable for most source modules, but there are some modules that have their own image specification.  Please read the documentation for any module utilized.
+
+When an HPC Toolkit blueprint points to a predefined source module (e.g. `community/modules/compute/schedmd-slurm-gcp-v5-node-group`), generally the module has a default image defined.  In order to override this default image, a user may specify the `instance_image` setting in the yaml blueprint, within either the specific module definition or the global variables.  The `instance_image` setting is defined by three parameters within the blueprint:
+
+```yaml
+instance_image:
+  project: centos-cloud
+  family: centos-v7        # If family is defined, omit name
+  name: centos-7-v20230809 # If name is defined, omit family
+```
+
+The `project` setting defines the space where the image will be found.  Either this is set to a known project where images are hosted (`centos-cloud`, `cloud-hpc-image-public`, `schedmd-slurm-public`, etc.) or to a team's or your own project where you have built your own images.
+
+The `family` setting defines a group of images built with the same label, and generally with some underlying similarities, usually an OS version or a software version installed on top of the OS.  When this is specified, instances will be created with the latest image within the family.  This will keep software more up to date, but will be less deterministic.
+
+The `name` setting defines a specific image.  These images are not likely to change frequently, but it cannot be guaranteed.  
+
+> **_Note:_** The `name` setting is not always available, depending on the source module.  In these cases, please default back to the family setting.
+
+### Pinning Specifics Images
+
+Users may want to be able to guarantee that an image has not been changed across multiple HPC deployments. One way to guarantee that the same image is used, would be to either create a custom image ([Image Building](docs/image-building.md)), or to copy an image to a personal or team project and reference that.
+
+The following command will copy a specified image from a source project to your own:
+
+```shell
+# Copy image from one project to another
+gcloud compute images create <new_image_name> --project=<your project> --source-image=<source_image_name> --source-image-project=<source_project>
+```
+
+Alternatively, a user can specify a family of images you wish to pull from (i.e. `--source-image-family` instead of `--source-image`).  See more on [gcloud compute images create](gcloud-compute-images).
+
+Once the image has been created or copied, the user can specify their own project and the new image name in the `instance_image` field discussed in [Instance Images](#instance-images)
+
+## VM Image Specifics
+
+### HPC CentOS 7
 
 The HPC Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage] as the
 primary VM image for HPC workloads on Google Cloud since it's release. Since the
@@ -24,25 +69,25 @@ is specific requirement for a different OS distribution.
 
 [hpcimage]: https://cloud.google.com/blog/topics/hpc/introducing-hpc-vm-images
 
-## HPC Rocky Linux 8
+### HPC Rocky Linux 8
 
 HPC Rocky Linux 8 is planned to become the primary supported VM image for HPC workloads on Google Cloud from 2024.
 
-## Debian 11
+### Debian 11
 
 The HPC Toolkit officially supports Debian 11 based VM images in the majority of our modules, with a couple of exceptions.
 
-## Ubuntu 20.04 LTS
+### Ubuntu 20.04 LTS
 
 The HPC Toolkit officially supports Ubuntu 20.04 LTS based VM images in the majority of
 our modules, with a couple of exceptions.
 
-## Windows
+### Windows
 
 See [building Windows images](image-building.md#windows-support) for
 a description of our support for Windows images.
 
-## Supported features
+### Supported features
 
 <table>
 <tr>
