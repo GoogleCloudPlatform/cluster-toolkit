@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.6
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -251,6 +251,14 @@ variable "enable_bigquery_load" {
   default     = false
 }
 
+variable "enable_slurm_gcp_plugins" {
+  description = <<EOD
+Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
+EOD
+  type        = bool
+  default     = false
+}
+
 variable "enable_oslogin" {
   type        = bool
   description = <<-EOD
@@ -399,6 +407,7 @@ variable "partition" {
         group_name             = string
         instance_template      = string
         node_conf              = map(string)
+        reservation_name       = string
         spot_instance_config = object({
           termination_action = string
         })

@@ -23,3 +23,8 @@ output "cloud_logging_filter" {
   description = "Cloud Logging filter to cluster errors."
   value       = module.slurm_controller_instance.cloud_logging_filter
 }
+
+output "pubsub_topic" {
+  description = "Cluster Pub/Sub topic."
+  value       = module.slurm_controller_instance.pubsub_topic
+}

@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.6
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -279,6 +279,12 @@ variable "preemptible" {
   description = "Should use preemptibles to burst."
   type        = bool
   default     = false
+}
+
+variable "reservation_name" {
+  description = "Name of the reservation the compute instance is in, leave it unset to not use one."
+  type        = string
+  default     = null
 }
 
 variable "service_account" {
