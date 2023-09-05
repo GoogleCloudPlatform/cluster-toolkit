@@ -175,6 +175,7 @@ deployment_groups:
         spack config --scope defaults add -f /tmp/projections-config.yaml
         spack config --scope site add -f /tmp/slurm-external-config.yaml
 
+        NVCC_PREPEND_FLAGS='-arch=all'
         spack install gcc@11.3.0 target=x86_64
         spack load gcc@11.3.0 target=x86_64
         spack compiler find --scope site
@@ -191,13 +192,6 @@ deployment_groups:
     settings:
       runners:
       - $(spack-execute.spack_runner)
-
-      - type: data
-        destination: /tmp/install_spack.sh
-        content: $(spack.startup_script)
-      - type: shell
-        destination: run_install_spack_with_env.sh
-        content: NVCC_PREPEND_FLAGS='-arch=all' bash /tmp/install_spack.sh
 
       - type: shell
         destination: data_staging.sh
