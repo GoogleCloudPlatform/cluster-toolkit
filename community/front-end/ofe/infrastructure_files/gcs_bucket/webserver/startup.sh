@@ -57,6 +57,14 @@ chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
 tar xfa /tmp/shellcheck.tar.xz --strip=1 --directory /usr/local/bin
 
+# Packages for https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_enable_cleanup_compute
+pip3.8 install google-api-python-client \
+	google-cloud-secret-manager \
+	google.cloud.pubsub \
+	pyyaml addict httplib2
+
+# Set Python3.8 as default Python3
+echo '2' | update-alternatives --config python3
 # Download configuration file
 #
 gsutil cp "gs://${config_bucket}/webserver/config" /tmp/config
