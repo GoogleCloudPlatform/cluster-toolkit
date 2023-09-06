@@ -1,16 +1,16 @@
-# Supported and Tested VM Images
+# VM Images
 
-* [General Information](#general-information)
+* [Specifying Blueprint Images](#specifying-blueprint-image)
   * [Instance Image](#instance-images)
   * [Pinning Specific Images](#pinning-specifics-images)
-* [VM Image Specifics](#vm-image-specifics)
+* [HPC Toolkit Supported Images](#hpc-toolkit-supported-images)
   * [HPC CentOS 7](#hpc-centos-7)
   * [HPC Rocky Linux 8](#hpc-rocky-linux-8)
   * [Debian 11](#debian-11)
   * [Ubuntu 20.04 LTS](#ubuntu-2004-lts)
   * [Windows](#windows)
-* [Other Images](#other-images)
-* [Slurm on GCP Custom Images](#slurm-on-gcp-custom-images)
+  * [Other Images](#other-images)
+  * [Slurm on GCP Custom Images](#slurm-on-gcp-custom-images)
 
 For information on customizing VM images with extra software and configuration
 settings, see [Building Images](image-building.md).
@@ -19,13 +19,21 @@ Please see the [blueprint catalog](https://cloud.google.com/hpc-toolkit/docs/set
 
 For Slurm images, please see [SchedMD's GitHub repository](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#public-image).
 
-## General Information
+## Specifying Blueprint Image
 
 ### Instance Images
 
-> **_Note:_** This information is applicable for most source modules, but there are some modules that have their own image specification.  Please read the documentation for any module utilized.
+> [!NOTE]
+> This information is applicable for most source modules, but there are some
+> modules that have their own image specification. Please read the
+> documentation for any module utilized.
 
-When an HPC Toolkit blueprint points to a predefined source module (e.g. `community/modules/compute/schedmd-slurm-gcp-v5-node-group`), generally the module has a default image defined.  In order to override this default image, a user may specify the `instance_image` setting in the yaml blueprint, within either the specific module definition or the global variables.  The `instance_image` setting is defined by three parameters within the blueprint:
+When an HPC Toolkit blueprint points to a predefined source module (e.g.
+`community/modules/compute/schedmd-slurm-gcp-v5-node-group`), generally the
+module has a default image defined. In order to override this default image, a
+user may specify the `instance_image` setting in the yaml blueprint, within
+either the specific module definition or the global variables. The
+`instance_image` setting is defined by three parameters within the blueprint:
 
 ```yaml
 instance_image:
@@ -34,58 +42,80 @@ instance_image:
   name: centos-7-v20230809 # If name is defined, omit family
 ```
 
-The `project` setting defines the space where the image will be found.  Either this is set to a known project where images are hosted (`centos-cloud`, `cloud-hpc-image-public`, `schedmd-slurm-public`, etc.) or to a team's or your own project where you have built your own images.
+The `project` setting defines the space where the image will be found. Either
+this is set to a known project where HPC images are hosted (e.g
+`cloud-hpc-image-public`, `schedmd-slurm-public`, etc.) or a private project
+owned by you or your team.
 
-The `family` setting defines a group of images built with the same label, and generally with some underlying similarities, usually an OS version or a software version installed on top of the OS.  When this is specified, instances will be created with the latest image within the family.  This will keep software more up to date, but will be less deterministic.
+The `family` setting defines a group of images built with the same label, and
+generally with some underlying similarities, usually an OS version or a software
+version installed on top of the OS. When this is specified, instances will be
+created with the latest image within the family. This will keep software more up
+to date, but will be less deterministic.
 
-The `name` setting defines a specific image.  These images are not likely to change frequently, but it cannot be guaranteed.  
+The `name` setting defines a specific static image. While these images are less
+likely to be modified, it cannot be guaranteed. It is possible that an image
+publisher may choose to delete and re-publish images with the same name.
 
-> **_Note:_** The `name` setting is not always available, depending on the source module.  In these cases, please default back to the family setting.
+> [!NOTE]
+> The `name` setting is not always available, depending on the source module.
+> In these cases, please default back to the family setting.
 
 ### Pinning Specifics Images
 
-Users may want to be able to guarantee that an image has not been changed across multiple HPC deployments. One way to guarantee that the same image is used, would be to either create a custom image ([Image Building](docs/image-building.md)), or to copy an image to a personal or team project and reference that.
+Users may want to be able to guarantee that an image has not been changed across
+multiple HPC deployments. One way to guarantee that the same image is used,
+would be to either create a custom image
+([Image Building](docs/image-building.md)), or to copy an image to a personal or
+team project and reference that.
 
-The following command will copy a specified image from a source project to your own:
+The following command will copy a specified image from a source project to your
+own:
 
 ```shell
 # Copy image from one project to another
 gcloud compute images create <new_image_name> --project=<your project> --source-image=<source_image_name> --source-image-project=<source_project>
 ```
 
-Alternatively, a user can specify a family of images you wish to pull from (i.e. `--source-image-family` instead of `--source-image`).  See more on [gcloud compute images create](gcloud-compute-images).
+Alternatively, a user can specify a family of images you wish to pull from (i.e.
+`--source-image-family` instead of `--source-image`). See more on
+[gcloud compute images create](gcloud-compute-images).
 
-Once the image has been created or copied, the user can specify their own project and the new image name in the `instance_image` field discussed in [Instance Images](#instance-images)
+Once the image has been created or copied, the user can specify their own
+project and the new image name in the `instance_image` field discussed in
+[Instance Images](#instance-images)
 
-## VM Image Specifics
+## HPC Toolkit Supported Images
 
 ### HPC CentOS 7
 
-The HPC Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage] as the
-primary VM image for HPC workloads on Google Cloud since it's release. Since the
-[HPC CentOS 7 VM Image][hpcimage] comes pre-tuned for optimal performance on
-typical HPC workloads, it is the default VM image in our modules, unless there
-is specific requirement for a different OS distribution.
+The HPC Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage]
+as the primary VM image for HPC workloads on Google Cloud since it's release.
+Since the [HPC CentOS 7 VM Image][hpcimage] comes pre-tuned for optimal
+performance on typical HPC workloads, it is the default VM image in our modules,
+unless there is specific requirement for a different OS distribution.
 
 [hpcimage]: https://cloud.google.com/blog/topics/hpc/introducing-hpc-vm-images
 
 ### HPC Rocky Linux 8
 
-HPC Rocky Linux 8 is planned to become the primary supported VM image for HPC workloads on Google Cloud from 2024.
+HPC Rocky Linux 8 is planned to become the primary supported VM image for HPC
+workloads on Google Cloud from 2024.
 
 ### Debian 11
 
-The HPC Toolkit officially supports Debian 11 based VM images in the majority of our modules, with a couple of exceptions.
+The HPC Toolkit officially supports Debian 11 based VM images in the majority of
+our modules, with a couple of exceptions.
 
 ### Ubuntu 20.04 LTS
 
-The HPC Toolkit officially supports Ubuntu 20.04 LTS based VM images in the majority of
-our modules, with a couple of exceptions.
+The HPC Toolkit officially supports Ubuntu 20.04 LTS based VM images in the
+majority of our modules, with a couple of exceptions.
 
 ### Windows
 
-See [building Windows images](image-building.md#windows-support) for
-a description of our support for Windows images.
+See [building Windows images](image-building.md#windows-support) for a
+description of our support for Windows images.
 
 ### Supported features
 
@@ -211,7 +241,7 @@ a description of our support for Windows images.
 
 <sup><b>*</b></sup> Chrome Remote desktop does not support Ubuntu 20.04, but it does support Ubuntu 22.04.
 
-## Other Images
+### Other Images
 
 The HPC Toolkit strives to provide flexibility wherever possible. It is possible
 to set a VM image in many HPC Toolkit modules. While we do not officially
@@ -219,7 +249,7 @@ support images not listed here, other public and custom images should work with
 the majority of modules with or without further customization, such as custom
 startup-scripts.
 
-## Slurm on GCP Custom Images
+### Slurm on GCP Custom Images
 
 HPC Toolkit modules based on terraform modules in [Slurm on GCP][slurm-gcp]
 allow custom images via custom instance templates and directly through the
