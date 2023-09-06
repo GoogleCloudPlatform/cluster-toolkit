@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "spack-setup" })
+  labels = merge(var.labels, { ghpc_module = "spack-setup", ghpc_role = "scripts" })
 }
 
 locals {

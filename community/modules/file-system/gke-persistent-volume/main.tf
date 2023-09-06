@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "gke-persistent-volume" })
+  labels = merge(var.labels, { ghpc_module = "gke-persistent-volume", ghpc_role = "file-system" })
 }
 
 locals {

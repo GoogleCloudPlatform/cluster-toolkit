@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "nfs-server" })
+  labels = merge(var.labels, { ghpc_module = "nfs-server", ghpc_role = "file-system" })
 }
 
 resource "random_id" "resource_name_suffix" {

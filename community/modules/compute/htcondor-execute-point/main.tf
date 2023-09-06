@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "htcondor-execute-point" })
+  labels = merge(var.labels, { ghpc_module = "htcondor-execute-point", ghpc_role = "compute" })
 }
 
 locals {
