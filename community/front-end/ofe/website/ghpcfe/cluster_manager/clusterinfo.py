@@ -343,6 +343,8 @@ deployment_groups:
     kind: terraform
     id: slurm_controller
     settings:
+      enable_cleanup_compute: True
+      enable_cleanup_subscriptions: True
       cloud_parameters:
         resume_rate: 0
         resume_timeout: 500
