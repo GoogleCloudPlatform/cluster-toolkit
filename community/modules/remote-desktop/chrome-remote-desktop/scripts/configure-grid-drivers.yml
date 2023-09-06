@@ -67,7 +67,13 @@
   - name: Install GRID driver if not existing
     when: nvidiasmi_result is failed
     block:
-    - name: Download GPU driver
+    - name: Download GPU driver 15.3
+      ansible.builtin.get_url:
+        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU15.3/NVIDIA-Linux-x86_64-525.125.06-grid.run
+        dest: /tmp/
+        mode: "0755"
+        timeout: 30
+    - name: Download GPU driver 14.2
       ansible.builtin.get_url:
         url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
         dest: /tmp/
@@ -83,7 +89,7 @@
       ansible.builtin.shell: |
         #jinja2: trim_blocks: "True"
         {% if ansible_distribution_release == "jammy" %}
-        CC=gcc-12 /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run --silent
+        CC=gcc-12 /tmp/NVIDIA-Linux-x86_64-525.125.06-grid.run --silent
         {% else %}
         /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run --silent
         {% endif %}
