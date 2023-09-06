@@ -217,7 +217,8 @@ class ClusterInfo:
     settings:
       enable_smt: {part.enable_hyperthreads}
       machine_type: {part.machine_type}
-      node_count_dynamic_max: {part.max_node_count}
+      node_count_dynamic_max: {part.dynamic_node_count}
+      node_count_static: {part.static_node_count}
       {instance_image_yaml}
 """
             )
@@ -342,6 +343,14 @@ deployment_groups:
     kind: terraform
     id: slurm_controller
     settings:
+      enable_cleanup_compute: True
+      enable_cleanup_subscriptions: True
+      cloud_parameters:
+        resume_rate: 0
+        resume_timeout: 500
+        suspend_rate: 0
+        suspend_timeout: 300
+        no_comma_params: false
       machine_type: {self.cluster.controller_instance_type}
       disk_type: {self.cluster.controller_disk_type}
       disk_size_gb: {self.cluster.controller_disk_size}

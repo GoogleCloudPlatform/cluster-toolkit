@@ -230,7 +230,7 @@ class ClusterCreateView2(LoginRequiredMixin, CreateView):
             **{
                 "name": "batch",
                 "machine_type": self.find_default_instance_type(),
-                "max_node_count": 4,
+                "dynamic_node_count": 4,
                 "vCPU_per_node": self.find_default_instance_type_vcpus(),
             }
         )
