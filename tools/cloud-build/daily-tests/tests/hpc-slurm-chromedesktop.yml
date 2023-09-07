@@ -14,10 +14,10 @@
 ---
 
 test_name: hpc-slurm-chromedesktop
-deployment_name: "enter-{{ build }}"
+deployment_name: "slm-crd-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
-slurm_cluster_name: "enter{{ build[0:5] }}"
+slurm_cluster_name: "slmcrd{{ build[0:4] }}"
 zone: europe-west1-d
 cli_deployment_vars:
   region: europe-west1
