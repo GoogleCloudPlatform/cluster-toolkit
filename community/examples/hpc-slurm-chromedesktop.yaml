@@ -59,6 +59,7 @@ deployment_groups:
       node_count_dynamic_max: 3
       disable_public_ips: false
       instance_image: $(vars.instance_image_crd)
+      instance_image_custom: true
       guest_accelerator:
       - type: nvidia-tesla-t4-vws
         count: 1

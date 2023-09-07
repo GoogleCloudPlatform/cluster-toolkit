@@ -29,6 +29,7 @@ vars:
     # family: slurm-gcp-5-7-hpc-centos-7
     family: slurm-gcp-5-7-hpc-rocky-linux-8
     project: schedmd-slurm-public
+  instance_image_custom: true
 
 deployment_groups:
 - group: primary
