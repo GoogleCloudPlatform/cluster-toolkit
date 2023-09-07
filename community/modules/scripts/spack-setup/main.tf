@@ -91,7 +91,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.19.1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.22.1"
 
   labels          = local.labels
   project_id      = var.project_id

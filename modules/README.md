@@ -335,7 +335,7 @@ release of the filestore module:
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
   ...
   - id: homefs
-    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.10.0&depth=1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.22.1&depth=1
 ```
 
 Because Terraform modules natively support this syntax, ghpc will not copy
@@ -383,7 +383,7 @@ Specific versions can be selected as for HTTPS:
 
 ```yaml
   - id: network1
-    source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc?ref=v1.10.0&depth=1
+    source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc?ref=v1.22.1&depth=1
 ```
 
 ##### Generic Git Modules

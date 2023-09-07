@@ -22,7 +22,7 @@ systems and test installed software before submitting a Google Cloud Batch job.
 - id: batch-job
   source: modules/scheduler/batch-job-template
   ...
-  
+
 - id: batch-login
   source: modules/scheduler/batch-login-node
   use: [batch-job]
@@ -89,7 +89,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_login_startup_script"></a> [login\_startup\_script](#module\_login\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 185837b5 |
+| <a name="module_login_startup_script"></a> [login\_startup\_script](#module\_login\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.22.1 |
 
 ## Resources
 
