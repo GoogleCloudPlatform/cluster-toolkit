@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,9 +18,15 @@ blueprint_name: slurm-crd
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: slurm-chromedesktop
+  deployment_name: slurm-crd-01
   region: us-central1
   zone: us-central1-c
+  instance_image_crd:
+    family: slurm-gcp-5-8-debian-11
+    project: schedmd-slurm-public
+  instance_image:
+    family: slurm-gcp-5-8-hpc-centos-7
+    project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -50,11 +56,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       machine_type: n1-standard-8
-      node_count_dynamic_max: 1
+      node_count_dynamic_max: 3
       disable_public_ips: false
-      instance_image:
-        family: slurm-gcp-5-7-debian-11
-        project: schedmd-slurm-public
+      instance_image: $(vars.instance_image_crd)
       guest_accelerator:
       - type: nvidia-tesla-t4-vws
         count: 1
@@ -74,8 +78,8 @@ deployment_groups:
   - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
-      machine_type: n2-standard-4
-      node_count_dynamic_max: 1
+      machine_type: n2d-standard-16
+      node_count_dynamic_max: 20
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -109,5 +113,5 @@ deployment_groups:
     - network1
     - slurm_controller
     settings:
-      machine_type: n2-standard-4
+      machine_type: n2d-standard-4
       disable_login_public_ips: false
