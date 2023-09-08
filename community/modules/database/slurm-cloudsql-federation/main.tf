@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "slurm-cloudsql-federation" })
+  labels = merge(var.labels, { ghpc_module = "slurm-cloudsql-federation", ghpc_role = "database" })
 }
 
 resource "random_id" "resource_name_suffix" {

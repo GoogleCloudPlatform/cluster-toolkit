@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "pbspro-server" })
+  labels = merge(var.labels, { ghpc_module = "pbspro-server", ghpc_role = "scheduler" })
 }
 
 locals {
