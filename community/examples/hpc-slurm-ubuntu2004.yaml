@@ -26,6 +26,7 @@ vars:
     # https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
     family: slurm-gcp-5-7-ubuntu-2004-lts
     project: schedmd-slurm-public
+  instance_image_custom: true
 
 
 deployment_groups:

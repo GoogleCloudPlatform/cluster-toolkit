@@ -20,6 +20,7 @@ locals {
 }
 
 locals {
+
   ghpc_startup_script_controller = [{
     filename = "ghpc_startup.sh"
     content  = var.controller_startup_script

@@ -75,6 +75,7 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
+      instance_image_custom: true
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -96,6 +97,7 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
+      instance_image_custom: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
@@ -108,3 +110,4 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
+      instance_image_custom: true

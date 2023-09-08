@@ -103,6 +103,8 @@ minutes. Please consider it only for blueprints that are quickly deployed.
 
 ## VM Image Support
 
+### Standard Images
+
 The HPC Toolkit officially supports the following VM images:
 
 * HPC CentOS 7
@@ -112,6 +114,12 @@ The HPC Toolkit officially supports the following VM images:
 
 For more information on these and other images, see
 [docs/vm-images.md](docs/vm-images.md).
+
+### Slurm Images
+
+> **_Warning:_** Slurm Terraform modules cannot be directly used on the standard OS images. They must be used in combination with images built for the versioned release of the Terraform module.
+
+The HPC Toolkit provides modules and examples for implementing pre-built and custom Slurm VM images, see [Slurm on GCP](docs/vm-images.md#slurm-on-gcp)
 
 ## Blueprint Validation
 

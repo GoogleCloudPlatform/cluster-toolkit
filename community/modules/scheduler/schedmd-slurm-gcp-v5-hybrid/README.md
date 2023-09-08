@@ -138,7 +138,7 @@ slurm version on the cloud VMs created by the hybrid partitions. The version
 on the cloud VMs will be dictated by the version on the disk image that can be
 set when defining the partitions using [schedmd-slurm-gcp-v5-partition].
 
-If the publically available images do not suffice, [slurm-gcp] provides
+If the publicly available images do not suffice, [slurm-gcp] provides
 [packer templates] for creating custom disk images.
 
 SchedMD only supports the current and last major version of slurm, therefore we
