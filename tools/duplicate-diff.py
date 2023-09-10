@@ -41,6 +41,8 @@ duplicates = [
         "community/modules/compute/schedmd-slurm-gcp-v5-node-group/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-login/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/gpu_definition.tf",
+        "community/modules/slurm/controller/gpu_definition.tf",
+        "community/modules/slurm/nodeset/gpu_definition.tf",
     ],
     [
         "community/modules/compute/gke-node-pool/threads_per_core_calc.tf",
@@ -58,6 +60,10 @@ duplicates = [
     [
         "community/modules/scripts/spack-setup/templates/spack_setup.yml.tftpl",
         "community/modules/scripts/ramble-setup/templates/ramble_setup.yml.tftpl",
+    ],
+    [
+        "community/modules/slurm/nodeset/variables_instance.tf",
+        "community/modules/slurm/controller/variables_instance.tf",
     ],
 ]
 

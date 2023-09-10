@@ -1,0 +1,51 @@
+{
+  "controller_instance_config" = {
+    "disable_smt" = true
+    "disk_type" = "pd-standard"
+    "gpu" = null
+    "instance_image" = {}
+    "machine_type" = "n1-standard-4"
+    "region" = "narnia"
+    "source_image" = ""
+    "source_image_family" = ""
+    "source_image_project" = ""
+    "spot" = false
+    "subnetwork" = "projects/zoro/regions/narnia/subnetworks/default"
+    "subnetwork_self_link" = "projects/zoro/regions/narnia/subnetworks/default"
+    "termination_action" = null
+  }
+  "nodeset" = [
+    {
+      "disable_smt" = true
+      "gpu" = null
+      "instance_image" = {}
+      "machine_type" = "n1-standard-4"
+      "name" = "defaultns"
+      "nodeset_name" = "defaultns"
+      "region" = "narnia"
+      "source_image" = ""
+      "source_image_family" = ""
+      "source_image_project" = ""
+      "spot" = false
+      "subnetwork" = "projects/zoro/regions/narnia/subnetworks/default"
+      "subnetwork_self_link" = "projects/zoro/regions/narnia/subnetworks/default"
+      "termination_action" = null
+    },
+  ]
+  "partitions" = [
+    {
+      "default" = true
+      "enable_job_exclusive" = true
+      "exclusive" = true
+      "is_default" = true
+      "name" = "default"
+      "partition_name" = "default"
+      "partition_nodeset" = [
+        "defaultns",
+      ]
+    },
+  ]
+  "project_id" = "zoro"
+  "region" = "narnia"
+  "slurm_cluster_name" = "test1"
+}
