@@ -14,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/afero v1.9.5
 	github.com/spf13/cobra v1.7.0
-	github.com/zclconf/go-cty v1.13.2
+	github.com/zclconf/go-cty v1.14.0
 	golang.org/x/exp v0.0.0-20230108222341-4b8118a2686a
 	google.golang.org/genproto v0.0.0-20230803162519-f966b187b2e5 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
@@ -24,17 +24,18 @@ require (
 require (
 	github.com/go-git/go-billy/v5 v5.4.1
 	github.com/google/go-cmp v0.5.9
-	github.com/hashicorp/terraform-exec v0.18.1
+	github.com/hashicorp/terraform-exec v0.19.0
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
 	google.golang.org/api v0.138.0
 )
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
+	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
-	github.com/hashicorp/terraform-json v0.15.0 // indirect
+	github.com/hashicorp/terraform-json v0.17.1 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
-	golang.org/x/mod v0.9.0 // indirect
+	golang.org/x/mod v0.12.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230803162519-f966b187b2e5 // indirect
@@ -63,7 +64,6 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-safetemp v1.0.0 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
-	github.com/hashicorp/hc-install v0.5.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
