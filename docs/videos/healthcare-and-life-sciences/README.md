@@ -2,7 +2,7 @@
 
 The Healthcare and Life Science (HCLS) [blueprint](./hcls-blueprint.yaml) in
 this folder captures an advanced architecture that can be used to run GROMACS
-with GPUs on Google Cloud.
+with GPUs or CPUs on Google Cloud.
 
 ## Getting Started
 
@@ -36,6 +36,25 @@ The blueprint includes:
 
 ### Deployment Stages
 
+> [!WARNING]
+> The `hcls-blueprint.yaml` blueprint can deploy up to 20 `a2-highgpu-1g` and
+> `c2-standard-60` VMs.  This requires that a project, that fully deploys the
+> blueprint, has the quota for:
+> - 12 CPUs * 20 VMs = **120 `A2 CPUs`**
+> - 1 GPU * 20 VMs = **20 `NVIDIA A100 GPUs`**
+> - 60 CPUs * 20 VMs = **1200 `C2 CPUs`**
+>
+> The [Water Benchmark Example](#water-benchmark-example-instructions) example
+> below only deploys one computational VM from the blueprint, as such you will
+> only need quota for either:
+> - GPU: 12 `A2 CPUs` and 1 `NVIDIA A100 GPUs`
+> - CPU: 60 `C2 CPUs`
+>
+> Note that these quotas are in addition to the quota requirements for the
+> slurm login node (2x `N2 CPUs`) and  slurm controller VM (4x `C2 CPUs`). The
+> `spack-builder` VM should have completed and stopped, freeing their CPU quota
+> usage, before the computational VMs are deployed up.
+
 This blueprint has 4 deployment groups:
 
 - `enable_apis`: Ensure that all of the needed apis are enabled before deploying
@@ -52,8 +71,8 @@ storage intact and b) you can build software before you deploy your cluster.
 
 ## Deployment Instructions
 
-> **Warning**: This tutorial uses the following billable components of Google
-> Cloud:
+> [!WARNING]
+> This tutorial uses the following billable components of Google Cloud:
 >
 > - Compute Engine
 > - Filestore
@@ -78,61 +97,42 @@ storage intact and b) you can build software before you deploy your cluster.
    make
    ```
 
-1. Generate the deployment folder
-
-   Starting with the command below, populate the `project_id` and the three
-   bucket name variables with unique bucket names for your deployment. The three
-   buckets will be created as part of the deployment and used as follows:
-
-   - **bucket_name_inputs:** name for GCS bucket that will be used as a library
-     of pre-loaded static inputs (protein library, benchmarks, examples).
-   - **bucket_name_outputs:** name for GCS bucket that will be used to retain,
-     share, and utilize results in downstream analysis.
-   - **bucket_name_software:** name for GCS bucket where users can upload
-     software to be utilized by the cluster. See *Upload VMD tarball* step
-     below.
-
-   The `homefs_server_ip` and `appsfs_server_ip` will be populated after the
-   setup stage is complete. For now we will populate with a dummy value to allow
-   HPC Toolkit to run.
+1. Generate the deployment folder after replacing `<project>` with the project id.
 
    ```bash
-   ./ghpc create docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml -w \
-       --vars project_id=<project> \
-       --vars bucket_name_inputs=<input_bucket_name> \
-       --vars bucket_name_outputs=<output_bucket_name> \
-       --vars bucket_name_software=<software_bucket_name> \
-       --vars homefs_server_ip=1.1.1.1 \
-       --vars appsfs_server_ip=1.1.1.1
+   ./ghpc create docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml -w --vars project_id=<project>
    ```
 
 1. Deploy the `enable_apis` group
 
-   Call the following terraform commands to deploy the `enable_apis` deployment
-   group.
+   Call the following ghpc command to deploy the the hcls blueprint.
 
    ```bash
-   terraform -chdir=hcls-01/enable_apis init && terraform -chdir=hcls-01/enable_apis apply
+   ./ghpc deploy hcls-01
    ```
+
+   This will prompt you to display, apply, stop, or continue without applying
+   the `enable_apis` group. Select apply.
 
    This will ensure that all of the needed apis are enabled before deploying the
    cluster.
 
+   > [!NOTE]
+   > This ghpc command will run through 4 groups (`enable_apis`, `setup`,
+   > `software_installation`, and `cluster`) and prompt you to apply each one.
+   > If the command is cancelled or exited by accident before finishing, it can
+   > be rerun to continue deploying the blueprint.
+
 1. Deploy the `setup` group
+
+   The next `ghpc` prompt will again ask you to display, apply, stop, or
+   continue without applying the `setup` group. Select apply.
 
    This group will create a network and file systems to be used by the cluster.
 
-   Call the following terraform commands to deploy the `setup` deployment
-   group.
-
-   ```bash
-   terraform -chdir=hcls-01/setup init && terraform -chdir=hcls-01/setup apply
-   ```
-
-   > **Note**: You may have to tinker with bucket names to find an unused
-   > namespace. If you get errors that the bucket already exists update the
-   > bucket names in the `ghpc create` command above and repeat the sequence.
-   > (`ghpc create ...`, `terraform init`, `terraform apply`).
+   > [!NOTE]
+   > At this point do not proceed with the ghpc prompt for the `cluster` group.
+   > Continue with the steps below before proceding.
 
 1. Upload VMD tarball
 
@@ -155,42 +155,14 @@ storage intact and b) you can build software before you deploy your cluster.
    1. click on `UPLOAD FILES`.
    1. select the `tar.gz` file for VMD.
 
-1. Re-generate the deployment folder with updated Filestore IP addresses
-
-   Now that the Filestores have been deployed, we need to populate their IP
-   addresses so subsequent deployment groups can use them. Look up the IP
-   addresses for the `appsshare` and `homeshare` file system and populate them
-   in the command below.
-
-   > **Note**: You can use the following command to list information about
-   > filestores, including their IP address.
-
-   ```bash
-   gcloud filestore instances list --project <project_id>
-   ```
-
-   ```bash
-   ./ghpc create docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml -w \
-       --vars project_id=<project_id> \
-       --vars bucket_name_inputs=<input_bucket_name> \
-       --vars bucket_name_outputs=<output_bucket_name> \
-       --vars bucket_name_software=<software_bucket_name> \
-       --vars homefs_server_ip=<home_ip> \
-       --vars appsfs_server_ip=<apps_ip>
-   ```
-
 1. Deploy the `software_installation` group.
+
+   Once the file from the prior step has been completely uploaded, you can apply
+   the `software_installation` set of proposed changes from the ghpc deploy
+   command.
 
    This group will deploy a builder VM that will build GROMACS and save the
    compiled application on the apps Filestore.
-
-   Call the following terraform commands to deploy the `software_installation`
-   deployment group.
-
-   ```bash
-   terraform -chdir=hcls-01/software_installation init && \
-     terraform -chdir=hcls-01/software_installation apply
-   ```
 
    This will take **several hours** to run. After the software installation is
    complete the builder VM will automatically shut itself down. This allows you
@@ -206,15 +178,14 @@ storage intact and b) you can build software before you deploy your cluster.
 
 1. Deploy the `cluster` group
 
+   Next, you can apply the `cluster` set of proposed changes on the ghpc deploy
+   command.
+
    This deployment group contains the Slurm cluster and the Chrome remote
    desktop visualization node.
 
    Call the following terraform commands to deploy the `cluster` deployment
    group.
-
-   ```bash
-   terraform -chdir=hcls-01/cluster init && terraform -chdir=hcls-01/cluster apply
-   ```
 
 1. Set up Chrome Remote Desktop
 
@@ -224,31 +195,26 @@ storage intact and b) you can build software before you deploy your cluster.
 
 ## Teardown Instructions
 
-> **Note**: If you created a new project for this tutorial, the easiest way to
-> eliminate billing is to delete the project.
+> [!NOTE]
+> If you created a new project for this tutorial, the easiest way to eliminate
+> billing is to delete the project.
 
 When you would like to tear down the deployment, each stage must be destroyed,
 with the exception of the `enable_apis` stage. Since the `software_installation`
 and `cluster` depend on the network deployed in the `setup` stage, they must be
 destroyed first. You can use the following commands to destroy the deployment.
 
-> **Warning**: If you do not destroy all three deployment groups then there may
-> be continued associated costs.
+> [!WARNING]
+> If you do not destroy all three deployment groups then there may be continued
+> associated costs.
 
 ```bash
-# cluster
-terraform -chdir=hcls-01/cluster init && \
-   terraform -chdir=hcls-01/cluster destroy --auto-approve
-# software_installation
-terraform -chdir=hcls-01/software_installation init && \
-   terraform -chdir=hcls-01/software_installation destroy --auto-approve
-# setup
-terraform -chdir=hcls-01/setup init && \
-   terraform -chdir=hcls-01/setup destroy --auto-approve
+./ghpc destroy hcls-01
 ```
 
-> **Note**: You may have to clean out items added to the Cloud Storage buckets
-> before terraform will be able to destroy them.
+> [!NOTE]
+> You may have to clean out items added to the Cloud Storage buckets before
+> terraform will be able to destroy them.
 
 ## Water Benchmark Example Instructions
 
@@ -257,14 +223,12 @@ As part of deployment, the GROMACS water benchmark has been placed in the
 scripts have been placed in the `/apps/gromacs` directory, one uses CPUs and the
 other uses GPUs.
 
-> **Note**: Make sure that you have followed all of the
+> [!NOTE]
+> Make sure that you have followed all of the
 > [deployment instructions](#deployment-instructions) before running this
 > example.
 
 <!--  -->
-
-> **Note**: To run this example you will need quota for `A2 CPUs` (12) and
-> `NVIDIA A100 GPUs` (1).
 
 1. SSH into the Slurm login node
 
