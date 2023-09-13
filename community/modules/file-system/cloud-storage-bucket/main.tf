@@ -40,4 +40,5 @@ resource "google_storage_bucket" "bucket" {
   location                    = var.region
   storage_class               = "REGIONAL"
   labels                      = local.labels
+  force_destroy               = var.force_destroy
 }
