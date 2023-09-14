@@ -134,7 +134,7 @@ variable "ephemeral_volumes" {
   validation {
     condition = alltrue([
       for v in var.ephemeral_volumes :
-      contains(["local-ssd"], v.type)
+      contains(["memory", "local-ssd"], v.type)
     ])
     error_message = "TODO"
   }

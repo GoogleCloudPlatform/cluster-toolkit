@@ -94,8 +94,12 @@ deployment_groups:
     source: community/modules/compute/gke-job-template
     use: [local-ssd-pool]
     settings:
-      name: ephemeral-storage-job
+      name: local-ssd-job
       ephemeral_volumes:  # below shows all options, usually only 1 is needed
+
+      - type: memory  # backed by node memory
+        mount_path: /scratch-mem
+        size_gb: 5
 
       - type: local-ssd  # node pool must specify local_ssd_count_ephemeral_storage
         mount_path: /scratch-local-ssd

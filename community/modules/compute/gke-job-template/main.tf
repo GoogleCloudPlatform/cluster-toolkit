@@ -41,6 +41,12 @@ locals {
   cpu_request_string = local.millicpu >= 0 ? "${local.millicpu}m" : null
   full_node_request  = local.min_allocatable_cpu >= 0 && var.requested_cpu_per_pod < 0
 
+  memory_request_value = try(sum([for ed in var.ephemeral_volumes :
+    ed.size_gb
+    if ed.type == "memory"
+  ]), 0)
+  memory_request_string = local.memory_request_value > 0 ? "${local.memory_request_value}Gi" : null
+
   ephemeral_request_value = try(sum([for ed in var.ephemeral_volumes :
     ed.size_gb
     if ed.type == "local-ssd"
@@ -66,7 +72,7 @@ locals {
       size_limit = "${ed.size_gb}Gi"
       in_memory  = ed.type == "memory"
     }
-    if contains(["local-ssd"], ed.type)
+    if contains(["memory", "local-ssd"], ed.type)
   ]
 
   pvc_volumes = [for pvc in var.persistent_volume_claims :
@@ -112,6 +118,7 @@ locals {
       empty_dir_volumes = local.empty_dir_volumes
       pvc_volumes       = local.pvc_volumes
       volume_mounts     = local.volume_mounts
+      memory_request    = local.memory_request_string
       ephemeral_request = local.ephemeral_request_string
     }
   )

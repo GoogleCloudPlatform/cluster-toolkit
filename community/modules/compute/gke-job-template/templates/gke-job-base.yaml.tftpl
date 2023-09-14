@@ -50,13 +50,16 @@ spec:
             # https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
             nvidia.com/gpu: ${gpu_limit}
           %{~ endif ~}
-          %{~ if cpu_request != null || ephemeral_request != null ~}
+          %{~ if cpu_request != null || memory_request != null || ephemeral_request != null ~}
           requests:
             %{~ if full_node_request ~}
             # cpu request attempts full node per pod
             %{~ endif ~}
             %{~ if cpu_request != null ~}
             cpu: ${cpu_request}
+            %{~ endif ~}
+            %{~ if memory_request != null ~}
+            memory: ${memory_request}
             %{~ endif ~}
             %{~ if ephemeral_request != null ~}
             ephemeral-storage: ${ephemeral_request}
