@@ -13,7 +13,7 @@ First you will want deploy the blueprint following the
 
 Once deployed, you can test the cluster by running an example workload:
 
-- [Water Benchmark Example](#water-benchmark-example-instructions): All the
+- [Water Benchmark Example](#water-benchmark-example): All the
   inputs needed to run this example are included as part of the blueprint. This
   makes this example an easy test case to run GROMACS and confirm that the
   cluster is working as expected.
@@ -73,7 +73,7 @@ storage intact and b) you can build software before you deploy your cluster.
 > autoscaling cluster that, when fully scaled up, can deploy up to 20
 > `a2-highgpu-1g` and `c2-standard-60` VMs.
 >
-> To fully scale up this deployment, the project would require quota for (at least):
+> To fully scale up this cluster, the project would require quota for (at least):
 >
 > - GPU Node Group
 >   - 12 CPUs * 20 VMs = **120 `A2 CPUs`**
@@ -86,7 +86,7 @@ storage intact and b) you can build software before you deploy your cluster.
 >   - **4 `C2 CPUs`**
 >
 > Neither the Water Benchmark Example or the Lysozyme Example require the
-> deployment to fully scale up. Please see:
+> cluster to fully scale up. Please see:
 >
 > - Water Benchmark Example [Quota Requirements](#quota-requirements)
 > - Lysozyme Example [Quota Requirements](./lysozyme-example/README.md#quota-requirements)
@@ -124,7 +124,7 @@ storage intact and b) you can build software before you deploy your cluster.
    This will ensure that all of the needed apis are enabled before deploying the
    cluster.
 
-   > [!NOTE]
+   > [!WARNING]
    > This ghpc command will run through 4 groups (`enable_apis`, `setup`,
    > `software_installation`, and `cluster`) and prompt you to apply each one.
    > If the command is cancelled or exited by accident before finishing, it can
@@ -211,9 +211,6 @@ storage intact and b) you can build software before you deploy your cluster.
 
    This deployment group contains the Slurm cluster and the Chrome remote
    desktop visualization node.
-
-   Call the following terraform commands to deploy the `cluster` deployment
-   group.
 
 1. Set up Chrome Remote Desktop
 
