@@ -53,8 +53,11 @@ deployment_groups:
     source: community/modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
+      name: debug
       zones: [$(vars.zone)]
-      machine_type: n2-standard-2
+      machine_type: n2d-standard-2
+
+  ### Filestore ###
 
   - id: sharedfs
     source: modules/file-system/filestore
@@ -65,7 +68,7 @@ deployment_groups:
     source: community/modules/file-system/gke-persistent-volume
     use: [gke_cluster, sharedfs]
 
-  - id: job-template
+  - id: shared-fs-job
     source: community/modules/compute/gke-job-template
     use: [debug_pool, sharedfs-pv]
     settings:
@@ -75,4 +78,46 @@ deployment_groups:
       - -c
       - echo \$(date) >> /shared/timestamp.log; cat /shared/timestamp.log
       node_count: 3
+    outputs: [instructions]
+
+  ### Ephemeral Storage ###
+
+  - id: local-ssd-pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      name: local-ssd
+      machine_type: n2d-standard-2
+      local_ssd_count_ephemeral_storage: 1
+
+  - id: ephemeral-storage-job
+    source: community/modules/compute/gke-job-template
+    use: [local-ssd-pool]
+    settings:
+      name: ephemeral-storage-job
+      ephemeral_volumes:  # below shows all options, usually only 1 is needed
+
+      - type: local-ssd  # node pool must specify local_ssd_count_ephemeral_storage
+        mount_path: /scratch-local-ssd
+        size_gb: 280  # System holds back some of 375 GiB
+
+      image: ljishen/fio
+      command:  # https://cloud.google.com/compute/docs/disks/benchmarking-pd-performance
+      - fio
+      - --name=write_throughput
+      - --directory=/scratch-local-ssd
+      - --numjobs=16
+      - --size=5G
+      - --time_based
+      - --runtime=30s
+      - --ramp_time=2s
+      - --ioengine=libaio
+      - --direct=1
+      - --verify=0
+      - --bs=1M
+      - --iodepth=64
+      - --rw=write
+      - --group_reporting=1
+      - --iodepth_batch_submit=64
+      - --iodepth_batch_complete_max=64
     outputs: [instructions]

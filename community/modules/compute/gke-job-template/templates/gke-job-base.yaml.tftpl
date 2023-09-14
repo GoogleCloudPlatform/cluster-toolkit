@@ -28,7 +28,7 @@ spec:
       %{~ if length(node_selectors) > 0 ~}
       nodeSelector:
       %{~ for selector in node_selectors ~}
-        ${selector.key}: ${selector.value}
+        ${selector.key}: "${selector.value}"
       %{~ endfor ~}
       %{~ endif ~}
       tolerations:
@@ -50,27 +50,40 @@ spec:
             # https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
             nvidia.com/gpu: ${gpu_limit}
           %{~ endif ~}
-          %{~ if cpu_request != null ~}
+          %{~ if cpu_request != null || ephemeral_request != null ~}
           requests:
             %{~ if full_node_request ~}
             # cpu request attempts full node per pod
             %{~ endif ~}
+            %{~ if cpu_request != null ~}
             cpu: ${cpu_request}
+            %{~ endif ~}
+            %{~ if ephemeral_request != null ~}
+            ephemeral-storage: ${ephemeral_request}
+            %{~ endif ~}
           %{~ endif ~}
         %{~ endif ~}
-        %{~ if length(volumes) > 0 ~}
+        %{~ if length(volume_mounts) > 0 ~}
         volumeMounts:
-        %{~ for v in volumes ~}
+        %{~ for v in volume_mounts ~}
         - name: ${v.name}
           mountPath: ${v.mount_path}
         %{~ endfor ~}
         %{~ endif ~}
-      %{~ if length(volumes) > 0 ~}
+      %{~ if length(volume_mounts) > 0 ~}
       volumes:
-      %{~ for v in volumes ~}
-      - name: ${v.name}
+      %{~ for ed in empty_dir_volumes ~}
+      - name: ${ed.name}
+        emptyDir:
+          sizeLimit: ${ed.size_limit}
+          %{~ if ed.in_memory ~}
+          medium: "Memory"
+          %{~ endif ~}
+      %{~ endfor ~}
+      %{~ for pvc in pvc_volumes ~}
+      - name: ${pvc.name}
         persistentVolumeClaim:
-          claimName: ${v.claim_name}
+          claimName: ${pvc.claim_name}
       %{~ endfor ~}
       %{~ endif ~}
       restartPolicy: ${restart_policy}

@@ -123,6 +123,30 @@ variable "persistent_volume_claims" {
   default = []
 }
 
+variable "ephemeral_volumes" {
+  description = "TODO"
+  type = list(object({
+    type       = string
+    mount_path = string
+    size_gb    = number
+  }))
+  default = []
+  validation {
+    condition = alltrue([
+      for v in var.ephemeral_volumes :
+      contains(["local-ssd"], v.type)
+    ])
+    error_message = "TODO"
+  }
+  validation {
+    condition = alltrue([
+      for v in var.ephemeral_volumes :
+      length(regexall("^/.*", v.mount_path)) > 0
+    ])
+    error_message = "Mount path must start with the '/' character."
+  }
+}
+
 variable "labels" {
   description = "Labels to add to the GKE job template. Key-value pairs."
   type        = map(string)

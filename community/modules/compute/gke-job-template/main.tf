@@ -41,15 +41,46 @@ locals {
   cpu_request_string = local.millicpu >= 0 ? "${local.millicpu}m" : null
   full_node_request  = local.min_allocatable_cpu >= 0 && var.requested_cpu_per_pod < 0
 
+  ephemeral_request_value = try(sum([for ed in var.ephemeral_volumes :
+    ed.size_gb
+    if ed.type == "local-ssd"
+  ]), 0)
+  ephemeral_request_string = local.ephemeral_request_value > 0 ? "${local.ephemeral_request_value}Gi" : null
+
+  uses_local_ssd = anytrue([for ed in var.ephemeral_volumes :
+    ed.type == "local-ssd"
+  ])
+  local_ssd_node_selector = local.uses_local_ssd ? [{
+    key   = "cloud.google.com/gke-ephemeral-storage-local-ssd"
+    value = "true"
+  }] : []
+
   # arbitrarily, user can edit in template.
   # May come from node pool in future.
   gpu_limit_string = alltrue(var.has_gpu) ? "1" : null
 
-  volumes = [for v in var.persistent_volume_claims :
+  empty_dir_volumes = [for ed in var.ephemeral_volumes :
     {
-      name       = "vol-${v.name}"
+      name       = replace(trim(ed.mount_path, "/"), "/", "-")
+      mount_path = ed.mount_path
+      size_limit = "${ed.size_gb}Gi"
+      in_memory  = ed.type == "memory"
+    }
+    if contains(["local-ssd"], ed.type)
+  ]
+
+  pvc_volumes = [for pvc in var.persistent_volume_claims :
+    {
+      name       = replace(trim(pvc.mount_path, "/"), "/", "-")
+      mount_path = pvc.mount_path
+      claim_name = pvc.name
+    }
+  ]
+
+  volume_mounts = [for v in concat(local.empty_dir_volumes, local.pvc_volumes) :
+    {
+      name       = v.name
       mount_path = v.mount_path
-      claim_name = v.name
     }
   ]
 
@@ -58,7 +89,7 @@ locals {
     key   = "cloud.google.com/machine-family"
     value = var.machine_family
   }] : []
-  node_selectors = concat(local.machine_family_node_selector, var.node_selectors)
+  node_selectors = concat(local.machine_family_node_selector, local.local_ssd_node_selector, var.node_selectors)
 
   job_template_contents = templatefile(
     "${path.module}/templates/gke-job-base.yaml.tftpl",
@@ -77,7 +108,11 @@ locals {
       backoff_limit     = var.backoff_limit
       tolerations       = distinct(var.tolerations)
       labels            = local.labels
-      volumes           = local.volumes
+
+      empty_dir_volumes = local.empty_dir_volumes
+      pvc_volumes       = local.pvc_volumes
+      volume_mounts     = local.volume_mounts
+      ephemeral_request = local.ephemeral_request_string
     }
   )
 
