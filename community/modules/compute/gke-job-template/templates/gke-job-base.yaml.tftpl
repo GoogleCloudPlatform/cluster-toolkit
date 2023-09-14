@@ -83,6 +83,17 @@ spec:
           medium: "Memory"
           %{~ endif ~}
       %{~ endfor ~}
+      %{~ for pd in ephemeral_pd_volumes ~}
+      - name: ${pd.name}
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              storageClassName: ${pd.storage_class_name}
+              resources:
+                requests:
+                  storage: ${pd.storage}
+      %{~ endfor ~}
       %{~ for pvc in pvc_volumes ~}
       - name: ${pvc.name}
         persistentVolumeClaim:

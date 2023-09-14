@@ -75,6 +75,16 @@ locals {
     if contains(["memory", "local-ssd"], ed.type)
   ]
 
+  ephemeral_pd_volumes = [for pd in var.ephemeral_volumes :
+    {
+      name               = replace(trim(pd.mount_path, "/"), "/", "-")
+      mount_path         = pd.mount_path
+      storage_class_name = pd.type == "pd-ssd" ? "premium-rwo" : "standard-rwo"
+      storage            = "${pd.size_gb}Gi"
+    }
+    if contains(["pd-balanced", "pd-ssd"], pd.type)
+  ]
+
   pvc_volumes = [for pvc in var.persistent_volume_claims :
     {
       name       = replace(trim(pvc.mount_path, "/"), "/", "-")
@@ -83,7 +93,7 @@ locals {
     }
   ]
 
-  volume_mounts = [for v in concat(local.empty_dir_volumes, local.pvc_volumes) :
+  volume_mounts = [for v in concat(local.empty_dir_volumes, local.ephemeral_pd_volumes, local.pvc_volumes) :
     {
       name       = v.name
       mount_path = v.mount_path
@@ -115,11 +125,12 @@ locals {
       tolerations       = distinct(var.tolerations)
       labels            = local.labels
 
-      empty_dir_volumes = local.empty_dir_volumes
-      pvc_volumes       = local.pvc_volumes
-      volume_mounts     = local.volume_mounts
-      memory_request    = local.memory_request_string
-      ephemeral_request = local.ephemeral_request_string
+      empty_dir_volumes    = local.empty_dir_volumes
+      ephemeral_pd_volumes = local.ephemeral_pd_volumes
+      pvc_volumes          = local.pvc_volumes
+      volume_mounts        = local.volume_mounts
+      memory_request       = local.memory_request_string
+      ephemeral_request    = local.ephemeral_request_string
     }
   )
 

@@ -124,7 +124,7 @@ variable "persistent_volume_claims" {
 }
 
 variable "ephemeral_volumes" {
-  description = "TODO"
+  description = "Will create an emptyDir or ephemeral volume that is backed by the specified type: `memory`, `local-ssd`, `pd-balanced`, `pd-ssd`. `size_gb` is provided in GiB."
   type = list(object({
     type       = string
     mount_path = string
@@ -134,9 +134,9 @@ variable "ephemeral_volumes" {
   validation {
     condition = alltrue([
       for v in var.ephemeral_volumes :
-      contains(["memory", "local-ssd"], v.type)
+      contains(["pd-balanced", "pd-ssd", "memory", "local-ssd"], v.type)
     ])
-    error_message = "TODO"
+    error_message = "Type must be one of 'pd-balanced', 'pd-ssd', 'memory', 'local-ssd'."
   }
   validation {
     condition = alltrue([

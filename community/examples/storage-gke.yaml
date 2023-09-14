@@ -94,7 +94,7 @@ deployment_groups:
     source: community/modules/compute/gke-job-template
     use: [local-ssd-pool]
     settings:
-      name: local-ssd-job
+      name: ephemeral-storage-job
       ephemeral_volumes:  # below shows all options, usually only 1 is needed
 
       - type: memory  # backed by node memory
@@ -104,6 +104,14 @@ deployment_groups:
       - type: local-ssd  # node pool must specify local_ssd_count_ephemeral_storage
         mount_path: /scratch-local-ssd
         size_gb: 280  # System holds back some of 375 GiB
+
+      - type: pd-ssd
+        mount_path: /pd-ssd
+        size_gb: 100
+
+      - type: pd-balanced
+        mount_path: /pd-balanced
+        size_gb: 100
 
       image: ljishen/fio
       command:  # https://cloud.google.com/compute/docs/disks/benchmarking-pd-performance
