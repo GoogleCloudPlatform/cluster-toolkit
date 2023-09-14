@@ -51,7 +51,6 @@ deployment_groups:
       network_name: hcls-cluster-net
       subnetwork_name: primary-subnet
 
-
   ### Resource Monitoring ###
 
   - id: hpc-dash
@@ -77,8 +76,9 @@ deployment_groups:
     source: community/modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: hcls-user-provided-software
-      local_mount: /user_provided_software
       random_suffix: true
+      local_mount: /user_provided_software
+    outputs: [gcs_bucket_path]
 
   - id: bucket-input
     source: community/modules/file-system/cloud-storage-bucket
