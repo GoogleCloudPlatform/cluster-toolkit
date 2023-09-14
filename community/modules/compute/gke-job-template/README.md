@@ -28,6 +28,21 @@ The following example creates a GKE job template file.
 
 Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
+### Storage Options
+
+This module natively supports:
+
+* Filestore as a shared file system between pods/nodes.
+* Pod level ephemeral storage options:
+  * memory backed emptyDir
+  * local SSD backed emptyDir
+  * SSD persistent disk backed ephemeral volume
+  * balanced persistent disk backed ephemeral volume
+
+See the [storage-gke.yaml blueprint](../../../examples/storage-gke.yaml) and the
+associated [documentation](../../../../examples/README.md#storage-gkeyaml--) for
+examples of how to use Filestore and ephemeral storage with this module.
+
 ### Requested Resources
 
 When one or more `gke-node-pool` modules are referenced with the `use` field.
