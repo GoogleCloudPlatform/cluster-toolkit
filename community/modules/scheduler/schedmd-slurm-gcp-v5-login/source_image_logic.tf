@@ -47,6 +47,11 @@ data "google_compute_image" "slurm" {
   project = var.instance_image.project
 
   lifecycle {
+    precondition {
+      condition     = length(regexall("^projects/.+?/global/images/family$", var.instance_image.project)) == 0
+      error_message = "The \"project\" field in var.instance_image no longer supports a long-form ending in \"family\". Specify only the project ID."
+    }
+
     postcondition {
       condition     = var.instance_image_custom || contains(keys(local.known_project_families), self.project)
       error_message = <<-EOD
