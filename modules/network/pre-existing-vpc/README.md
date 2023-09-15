@@ -20,7 +20,7 @@ VM will be created.
 - id: network1
   source: modules/network/pre-existing-vpc
   settings:
-  - project_id: $(vars.project_id)
+    project_id: $(vars.project_id)
     region: us-central1
 
 - id: example_vm
