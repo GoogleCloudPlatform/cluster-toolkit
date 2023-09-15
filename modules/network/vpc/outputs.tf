@@ -15,54 +15,54 @@
 */
 
 output "network_name" {
-  description = "The name of the network created"
+  description = "Name of the new VPC network"
   value       = module.vpc.network_name
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "network_id" {
-  description = "The ID of the network created"
+  description = "ID of the new VPC network"
   value       = module.vpc.network_id
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "network_self_link" {
-  description = "The URI of the VPC being created"
+  description = "Self link of the new VPC network"
   value       = module.vpc.network_self_link
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetworks" {
-  description = "All subnetwork resources created by this module"
+  description = "Full list of subnetwork objects belonging to the new VPC network"
   value       = module.vpc.subnets
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork" {
-  description = "The primary subnetwork object created by the input variable primary_subnetwork"
+  description = "Primary subnetwork object"
   value       = local.output_primary_subnetwork
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork_name" {
-  description = "The name of the primary subnetwork"
+  description = "Name of the primary subnetwork"
   value       = local.output_primary_subnetwork_name
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork_self_link" {
-  description = "The self-link to the primary subnetwork"
+  description = "Self link of the primary subnetwork"
   value       = local.output_primary_subnetwork_self_link
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "subnetwork_address" {
-  description = "The address range of the primary subnetwork"
+  description = "IP address range of the primary subnetwork"
   value       = local.output_primary_subnetwork_ip_cidr_range
   depends_on  = [module.vpc, module.cloud_router]
 }
 
 output "nat_ips" {
-  description = "the external IPs assigned to the NAT"
+  description = "External IPs of the Cloud NAT from which outbound internet traffic will arrive (empty list if no NAT is used)"
   value       = flatten([for ipmod in module.nat_ip_addresses : ipmod.addresses])
 }
