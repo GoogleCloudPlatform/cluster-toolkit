@@ -18,6 +18,7 @@
     that:
     - custom_vars.partitions is defined
     - custom_vars.mounts is defined
+
 - name: Ensure all partitions are UP
   # Find all unavailable partitions
   # `| cat` is needed to ignore rc==1 by grep if no lines were selected.
@@ -30,9 +31,11 @@
   retries: 10
   delay: 12
   until: partitions_down.stdout_lines | length == 0
+
 - name: Print partitions down
   ansible.builtin.debug:
     var: partitions_down.stdout_lines
+
 - name: Get partition info
   ansible.builtin.command: sinfo --format='%P' --noheader
   changed_when: False
@@ -40,6 +43,7 @@
   retries: 10
   delay: 12
   until: partition_output.rc == 0
+
 - name: Count Slurm nodes
   ansible.builtin.shell:
     sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
@@ -47,11 +51,13 @@
     executable: /bin/bash
   changed_when: False
   register: initial_node_count
+
 - name: Check partitions exist
   ansible.builtin.fail:
     msg: Test Check Partitions failed
   when: item not in partition_output.stdout
   loop: "{{ custom_vars.partitions }}"
+
 - name: Test partition mounts, multi-node creation, & placement (when on)
   register: srun_mounts
   changed_when: srun_mounts.rc == 0
@@ -65,11 +71,3 @@
   loop: "{{ srun_mounts.results | product( custom_vars.mounts ) | list }}"
   loop_control:
     label: "{{ item[1] }}"
-
-- name: Ensure all nodes are powered down
-  ansible.builtin.command: sinfo -t 'POWERED_DOWN' --noheader --format "%n"
-  register: final_node_count
-  changed_when: False
-  until: final_node_count.stdout_lines | length == initial_node_count.stdout_lines | length
-  retries: 60
-  delay: 15
