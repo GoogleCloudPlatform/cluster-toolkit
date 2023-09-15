@@ -141,7 +141,7 @@ variable "ephemeral_volumes" {
   validation {
     condition = alltrue([
       for v in var.ephemeral_volumes :
-      length(regexall("^/.*", v.mount_path)) > 0
+      substr(v.mount_path, 0, 1) == "/"
     ])
     error_message = "Mount path must start with the '/' character."
   }
