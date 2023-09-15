@@ -115,8 +115,9 @@ storage intact and b) you can build software before you deploy your cluster.
    ```
 
    The `bucket_force_delete` variable makes it easier to tear down the
-   deployment. If it is set to `false`, buckets with objects (files) will not be
-   deleted and the `./ghpc destroy` command will fail partway through.
+   deployment. If it is set to the default value of `false`, buckets with
+   objects (files) will not be deleted and the `./ghpc destroy` command will
+   fail partway through.
 
    If the data stored in the buckets should be preseverved, remove the
    `--vars bucket_force_delete=true` portion of the command or set it to `false`
