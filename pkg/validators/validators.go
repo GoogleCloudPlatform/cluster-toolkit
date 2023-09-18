@@ -18,9 +18,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"hpc-toolkit/pkg/config"
 	"strings"
 
+	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/maps"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -35,51 +37,20 @@ const zoneInRegionError = "zone %s is not in region %s in project ID %s or your 
 const computeDisabledError = "Compute Engine API has not been used in project"
 const computeDisabledMsg = "the Compute Engine API must be enabled in project %s to validate blueprint global variables"
 const serviceDisabledMsg = "the Service Usage API must be enabled in project %s to validate that all APIs needed by the blueprint are enabled"
-const unusedModuleMsg = "module %s uses module %s, but matching setting and outputs were not found. This may be because the value is set explicitly or set by a prior used module"
-const unusedModuleError = "One or more used modules could not have their settings and outputs linked."
-const unusedDeploymentVariableMsg = "the deployment variable \"%s\" was not used in this blueprint"
-const unusedDeploymentVariableError = "one or more deployment variables was not used by any modules"
+const unusedModuleMsg = "module %q uses module %q, but matching setting and outputs were not found. This may be because the value is set explicitly or set by a prior used module"
 
 func handleClientError(e error) error {
 	if strings.Contains(e.Error(), "could not find default credentials") {
-		log.Println("load application default credentials following instructions at https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/README.md#supplying-cloud-credentials-to-terraform")
-		return fmt.Errorf("could not find application default credentials")
-
+		return hint(
+			fmt.Errorf("could not find application default credentials"),
+			"load application default credentials following instructions at https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/README.md#supplying-cloud-credentials-to-terraform")
 	}
 	return e
 }
 
-// TestDeploymentVariablesNotUsed errors if there are any unused deployment
-// variables and prints any to the output for the user
-func TestDeploymentVariablesNotUsed(unusedVariables []string) error {
-	for _, v := range unusedVariables {
-		log.Printf(unusedDeploymentVariableMsg, v)
-	}
-
-	if len(unusedVariables) > 0 {
-		return fmt.Errorf(unusedDeploymentVariableError)
-	}
-
-	return nil
-}
-
-// TestModuleNotUsed validates that all modules referenced in the "use" field
-// of the blueprint are actually used, i.e. the outputs and settings are
-// connected.
-func TestModuleNotUsed(unusedModules map[string][]string) error {
-	any := false
-	for mod, unusedMods := range unusedModules {
-		for _, unusedMod := range unusedMods {
-			log.Printf(unusedModuleMsg, mod, unusedMod)
-			any = true
-		}
-	}
-
-	if any {
-		return fmt.Errorf(unusedModuleError)
-	}
-
-	return nil
+// TODO: use HintError trait once its implemented
+func hint(err error, h string) error {
+	return fmt.Errorf("%w\n%s", err, h)
 }
 
 // TestApisEnabled tests whether APIs are enabled in given project
@@ -93,8 +64,7 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 
 	s, err := serviceusage.NewService(ctx, option.WithQuotaProject(projectID))
 	if err != nil {
-		err = handleClientError(err)
-		return err
+		return handleClientError(err)
 	}
 
 	prefix := "projects/" + projectID
@@ -115,8 +85,9 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 		}
 		switch reason {
 		case "SERVICE_DISABLED":
-			log.Printf(enableAPImsg, "serviceusage.googleapis.com", projectID)
-			return fmt.Errorf(serviceDisabledMsg, projectID)
+			return hint(
+				fmt.Errorf(serviceDisabledMsg, projectID),
+				fmt.Sprintf(enableAPImsg, "serviceusage.googleapis.com", projectID))
 		case "SERVICE_CONFIG_NOT_FOUND_OR_PERMISSION_DENIED":
 			return fmt.Errorf("service %s does not exist in project %s", metadata["services"], projectID)
 		case "USER_PROJECT_DENIED":
@@ -129,18 +100,15 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 		}
 	}
 
-	var errored bool
+	errs := config.Errors{}
 	for _, service := range resp.Services {
 		if service.State == "DISABLED" {
-			errored = true
-			log.Printf("%s: service is disabled in project %s", service.Config.Name, projectID)
-			log.Printf(enableAPImsg, service.Config.Name, projectID)
+			errs.Add(hint(
+				fmt.Errorf("%s: service is disabled in project %s", service.Config.Name, projectID),
+				fmt.Sprintf(enableAPImsg, service.Config.Name, projectID)))
 		}
 	}
-	if errored {
-		return fmt.Errorf("one or more required APIs are disabled in project %s, please enable them as instructed above", projectID)
-	}
-	return nil
+	return errs.OrNil()
 }
 
 // TestProjectExists whether projectID exists / is accessible with credentials
@@ -154,10 +122,14 @@ func TestProjectExists(projectID string) error {
 	_, err = s.Projects.Get(projectID).Fields().Do()
 	if err != nil {
 		if strings.Contains(err.Error(), computeDisabledError) {
-			log.Printf(computeDisabledMsg, projectID)
-			log.Printf(serviceDisabledMsg, projectID)
-			log.Printf(enableAPImsg, "serviceusage.googleapis.com", projectID)
-			return fmt.Errorf(enableAPImsg, "compute.googleapis.com", projectID)
+			errs := config.Errors{}
+			return errs.
+				Add(hint(
+					fmt.Errorf(computeDisabledMsg, projectID),
+					fmt.Sprintf(enableAPImsg, "serviceusage.googleapis.com", projectID))).
+				Add(hint(
+					fmt.Errorf(serviceDisabledMsg, projectID),
+					fmt.Sprintf(enableAPImsg, "serviceusage.googleapis.com", projectID)))
 		}
 		return fmt.Errorf(projectError, projectID)
 	}
@@ -232,4 +204,280 @@ func TestZoneInRegion(projectID string, zone string, region string) error {
 	}
 
 	return nil
+}
+
+const (
+	testApisEnabledName               = "test_apis_enabled"
+	testProjectExistsName             = "test_project_exists"
+	testRegionExistsName              = "test_region_exists"
+	testZoneExistsName                = "test_zone_exists"
+	testZoneInRegionName              = "test_zone_in_region"
+	testModuleNotUsedName             = "test_module_not_used"
+	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
+	testResourceRequirementsName      = "test_resource_requirements"
+)
+
+func implementations() map[string]func(config.Blueprint, config.Dict) error {
+	return map[string]func(config.Blueprint, config.Dict) error{
+		testApisEnabledName:               testApisEnabled,
+		testProjectExistsName:             testProjectExists,
+		testRegionExistsName:              testRegionExists,
+		testZoneExistsName:                testZoneExists,
+		testZoneInRegionName:              testZoneInRegion,
+		testModuleNotUsedName:             testModuleNotUsed,
+		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
+		testResourceRequirementsName:      testResourceRequirements,
+	}
+}
+
+// ValidatorError is an error wrapper for errors that occurred during validation
+type ValidatorError struct {
+	Validator string
+	Err       error
+}
+
+func (e ValidatorError) Unwrap() error {
+	return e.Err
+}
+
+func (e ValidatorError) Error() string {
+	return fmt.Sprintf("validator %q failed:\n%v", e.Validator, e.Err)
+}
+
+// Execute runs all validators on the blueprint
+func Execute(bp config.Blueprint) error {
+	if bp.ValidationLevel == config.ValidationIgnore {
+		return nil
+	}
+	impl := implementations()
+	errs := config.Errors{}
+	for iv, v := range validators(bp) {
+		p := config.Root.Validators.At(iv)
+		if v.Skip {
+			continue
+		}
+
+		f, ok := impl[v.Validator]
+		if !ok {
+			errs.At(p.Validator, fmt.Errorf("unknown validator %q", v.Validator))
+			continue
+		}
+
+		inp, err := v.Inputs.Eval(bp)
+		if err != nil {
+			errs.At(p.Inputs, err)
+			continue
+		}
+
+		if err := f(bp, inp); err != nil {
+			errs.Add(ValidatorError{v.Validator, err})
+			// do not bother running further validators if project ID could not be found
+			if v.Validator == "test_project_exists" {
+				break
+			}
+		}
+	}
+	return errs.OrNil()
+}
+
+func checkInputs(inputs config.Dict, required []string) error {
+	errs := config.Errors{}
+	for _, inp := range required {
+		if !inputs.Has(inp) {
+			errs.Add(fmt.Errorf("a required input %q was not provided", inp))
+		}
+	}
+
+	if errs.Any() {
+		return errs
+	}
+
+	// ensure that no extra inputs were provided by comparing length
+	if len(required) != len(inputs.Items()) {
+		errStr := "only %v inputs %s should be provided"
+		return fmt.Errorf(errStr, len(required), required)
+	}
+
+	return nil
+}
+
+func testApisEnabled(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{}); err != nil {
+		return err
+	}
+	p, err := bp.ProjectID()
+	if err != nil {
+		return err
+	}
+	apis := map[string]bool{}
+	bp.WalkModules(func(m *config.Module) error {
+		for _, api := range m.InfoOrDie().RequiredApis {
+			apis[api] = true
+		}
+		return nil
+	})
+	return TestApisEnabled(p, maps.Keys(apis))
+}
+
+func testProjectExists(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{"project_id"}); err != nil {
+		return err
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+	return TestProjectExists(m["project_id"])
+}
+
+func testRegionExists(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{"project_id", "region"}); err != nil {
+		return err
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+	return TestRegionExists(m["project_id"], m["region"])
+}
+
+func testZoneExists(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{"project_id", "zone"}); err != nil {
+		return err
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+	return TestZoneExists(m["project_id"], m["zone"])
+}
+
+func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{"project_id", "region", "zone"}); err != nil {
+		return err
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
+}
+
+func testModuleNotUsed(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{}); err != nil {
+		return err
+	}
+	errs := config.Errors{}
+	bp.WalkModules(func(m *config.Module) error {
+		for _, u := range m.ListUnusedModules() {
+			// TODO: add yaml position to the error
+			errs.Add(fmt.Errorf(unusedModuleMsg, m.ID, u))
+		}
+		return nil
+	})
+	return errs.OrNil()
+}
+
+func testDeploymentVariableNotUsed(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{}); err != nil {
+		return err
+	}
+	errs := config.Errors{}
+	for _, v := range bp.ListUnusedVariables() {
+		errs.At(
+			config.Root.Vars.Dot(v),
+			fmt.Errorf("the variable %q was not used in this blueprint", v))
+	}
+	return errs.OrNil()
+}
+
+// Helper function to sure that all input values are strings.
+func inputsAsStrings(inputs config.Dict) (map[string]string, error) {
+	ms := map[string]string{}
+	for k, v := range inputs.Items() {
+		if v.Type() != cty.String {
+			return nil, fmt.Errorf("validator inputs must be strings, %s is a %s", k, v.Type())
+		}
+		ms[k] = v.AsString()
+	}
+	return ms, nil
+}
+
+// Creates a list of default validators for the given blueprint,
+// inspect the blueprint for global variables that exist and add an appropriate validators.
+func defaults(bp config.Blueprint) []config.Validator {
+	projectIDExists := bp.Vars.Has("project_id")
+	projectRef := config.GlobalRef("project_id").AsExpression().AsValue()
+
+	regionExists := bp.Vars.Has("region")
+	regionRef := config.GlobalRef("region").AsExpression().AsValue()
+
+	zoneExists := bp.Vars.Has("zone")
+	zoneRef := config.GlobalRef("zone").AsExpression().AsValue()
+
+	defaults := []config.Validator{
+		{Validator: testModuleNotUsedName},
+		{Validator: testDeploymentVariableNotUsedName}}
+
+	// always add the project ID validator before subsequent validators that can
+	// only succeed if credentials can access the project. If the project ID
+	// validator fails, all remaining validators are not executed.
+	if projectIDExists {
+		defaults = append(defaults, config.Validator{
+			Validator: testProjectExistsName,
+			Inputs:    config.NewDict(map[string]cty.Value{"project_id": projectRef}),
+		})
+	}
+
+	// it is safe to run this validator even if vars.project_id is undefined;
+	// it will likely fail but will do so helpfully to the user
+	defaults = append(defaults,
+		config.Validator{Validator: testApisEnabledName})
+
+	if projectIDExists && regionExists {
+		defaults = append(defaults, config.Validator{
+			Validator: testRegionExistsName,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"region":     regionRef,
+			},
+			)})
+	}
+
+	if projectIDExists && zoneExists {
+		defaults = append(defaults, config.Validator{
+			Validator: testZoneExistsName,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
+		})
+	}
+
+	if projectIDExists && regionExists && zoneExists {
+		defaults = append(defaults, config.Validator{
+			Validator: testZoneInRegionName,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"region":     regionRef,
+				"zone":       zoneRef,
+			}),
+		})
+	}
+	return defaults
+}
+
+// Returns a list of validators for the given blueprint with any default validators appended.
+func validators(bp config.Blueprint) []config.Validator {
+	used := map[string]bool{}
+	for _, v := range bp.Validators {
+		used[v.Validator] = true
+	}
+	vs := append([]config.Validator{}, bp.Validators...) // clone
+	for _, v := range defaults(bp) {
+		if !used[v.Validator] {
+			vs = append(vs, v)
+		}
+	}
+	return vs
 }

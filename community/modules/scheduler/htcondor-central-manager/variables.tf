@@ -134,3 +134,24 @@ variable "htcondor_bucket_name" {
   description = "Name of HTCondor configuration bucket"
   type        = string
 }
+
+variable "enable_shielded_vm" {
+  type        = bool
+  default     = false
+  description = "Enable the Shielded VM configuration (var.shielded_instance_config)."
+}
+
+variable "shielded_instance_config" {
+  description = "Shielded VM configuration for the instance (must set var.enabled_shielded_vm)"
+  type = object({
+    enable_secure_boot          = bool
+    enable_vtpm                 = bool
+    enable_integrity_monitoring = bool
+  })
+
+  default = {
+    enable_secure_boot          = true
+    enable_vtpm                 = true
+    enable_integrity_monitoring = true
+  }
+}

@@ -47,7 +47,23 @@ locals {
     EOT
   }
 
+  native_fstype = []
+  startup_script_network_storage = [
+    for ns in var.network_storage :
+    ns if !contains(local.native_fstype, ns.fs_type)
+  ]
+  storage_client_install_runners = [
+    for ns in local.startup_script_network_storage :
+    ns.client_install_runner if ns.client_install_runner != null
+  ]
+  mount_runners = [
+    for ns in local.startup_script_network_storage :
+    ns.mount_runner if ns.mount_runner != null
+  ]
+
   all_runners = concat(
+    local.storage_client_install_runners,
+    local.mount_runners,
     var.access_point_runner,
     [local.schedd_runner],
     var.autoscaler_runner,
@@ -156,6 +172,10 @@ module "access_point_instance_template" {
   startup_script = module.startup_script.startup_script
   metadata       = local.metadata
   source_image   = data.google_compute_image.htcondor.self_link
+
+  # secure boot
+  enable_shielded_vm       = var.enable_shielded_vm
+  shielded_instance_config = var.shielded_instance_config
 }
 
 module "htcondor_ap" {

@@ -21,13 +21,13 @@ terraform {
       version = ">= 3.54"
     }
     random = {
+      source  = "hashicorp/random"
       version = ">= 3.0"
     }
   }
 
   required_version = ">= 0.12.31"
 }
-
 
 provider "google" {
   project = var.project

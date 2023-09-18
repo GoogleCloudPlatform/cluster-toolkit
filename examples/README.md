@@ -33,6 +33,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
+  * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
@@ -120,7 +121,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.5/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.6/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -257,7 +258,7 @@ to 256
 ### [ml-slurm.yaml] ![core-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the
-machine learning frameworks [PyTorch] and [TensorFlow] pre-installed on every
+machine learning frameworks PyTorch and TensorFlow pre-installed on every
 VM. The cluster has 2 partitions:
 
 * [A2 family VMs][a2] with the NVIDIA A100 GPU accelerator
@@ -294,8 +295,7 @@ sbatch -N 1 torch_test.sh
 When you are done, clean up the resources in reverse order of creation:
 
 ```text
-terraform -chdir=ml-example/cluster destroy
-terraform -chdir=ml-example/primary destroy
+./ghpc destroy ml-example
 ```
 
 Finally, browse to the [Cloud Console][console-images] to delete your custom
@@ -535,7 +535,7 @@ For this example the following is needed in the selected region:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.5/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.7.6/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -863,6 +863,15 @@ For more information see:
 * [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
 
 [htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
+
+### [tutorial-starccm-slurm.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+
+tutorial.
+
+> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-starccm-slurm/run-workload).
+
+[tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 

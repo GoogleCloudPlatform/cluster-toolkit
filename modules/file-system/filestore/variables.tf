@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "deployment_name" {
-  description = "Name of the HPC deployment, used as name of the filestore instace if no name is specified."
+  description = "Name of the HPC deployment, used as name of the filestore instance if no name is specified."
   type        = string
 }
 

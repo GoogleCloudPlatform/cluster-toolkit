@@ -22,23 +22,18 @@ changelog:
     authors: []
   categories:
   - title: Key New Features 🎉
-    labels:
-    - release-key-new-features
+    labels: [release-key-new-features]
   - title: New Modules 🧱
-    labels:
-    - release-new-modules
-  - title: Module Improvements 🛠
-    labels:
-    - release-module-improvements
-  - title: Improvements
-    labels:
-    - release-improvements
-  - title: Deprecations
-    labels:
-    - release-deprecations
-  - title: Version Updates
-    labels:
-    - release-version-updates
+    labels: [release-new-modules]
+  - title: Module Improvements 🔨
+    labels: [release-module-improvements]
+  - title: Improvements 🛠
+    labels: [release-improvements]
+  - title: Deprecations 💤
+    labels: [release-deprecations]
+  - title: Version Updates ⏫
+    labels: [release-version-updates]
+  - title: Bug fixes 🐞
+    labels: [release-bugfix]
   - title: Other changes
-    labels:
-    - "*"
+    labels: ["*"]

@@ -17,21 +17,26 @@ package validators
 import (
 	"context"
 	"fmt"
+	"hpc-toolkit/pkg/config"
+	"strings"
 	"time"
 
+	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/convert"
+	"github.com/zclconf/go-cty/cty/gocty"
 	cm "google.golang.org/api/monitoring/v3"
 	sub "google.golang.org/api/serviceusage/v1beta1"
 )
 
 // ResourceRequirement represents an amount of desired resource.
 type ResourceRequirement struct {
-	Consumer   string // e.g. "projects/myprojectid""
-	Service    string // e.g. "compute.googleapis.com"
-	Metric     string // e.g. "compute.googleapis.com/disks_total_storage"
-	Required   int64
-	Dimensions map[string]string // e.g. {"region": "us-central1"}
+	Consumer   string            `cty:"consumer"` // e.g. "projects/myprojectid""
+	Service    string            `cty:"service"`  // e.g. "compute.googleapis.com"
+	Metric     string            `cty:"metric"`   // e.g. "compute.googleapis.com/disks_total_storage"
+	Required   int64             `cty:"required"`
+	Dimensions map[string]string `cty:"dimensions"` // e.g. {"region": "us-central1"}
 	// How this requirement should be aggregated with other requirements in the same bucket.
-	Aggregation string
+	Aggregation string `cty:"aggregation"`
 }
 
 // InBucket returns true if the quota is in the QuotaBucket.
@@ -51,15 +56,23 @@ type QuotaError struct {
 	Metric         string
 	Dimensions     map[string]string
 	EffectiveLimit int64
+	Usage          int64
 	Requested      int64
 }
 
 func (e QuotaError) Error() string {
-	return fmt.Sprintf("QuotaError: %#v", e)
+	loc := ""
+	if len(e.Dimensions) > 0 {
+		loc = fmt.Sprintf(" in %v", e.Dimensions)
+	}
+	rhs := fmt.Sprintf("requested=%d", e.Requested)
+	if e.Usage > 0 {
+		rhs = fmt.Sprintf("requested=%d + usage=%d", e.Requested, e.Usage)
+	}
+	return fmt.Sprintf("not enough quota for resource %q%s, limit=%d < %s", e.Metric, loc, e.EffectiveLimit, rhs)
 }
 
-// ValidateQuotas validates the resource requirements.
-func ValidateQuotas(rs []ResourceRequirement) ([]QuotaError, error) {
+func validateResourceRequirements(rs []ResourceRequirement, up *usageProvider) ([]QuotaError, error) {
 	qe := []QuotaError{}
 	// Group by Consumer and Service
 	type gk struct {
@@ -78,7 +91,7 @@ func ValidateQuotas(rs []ResourceRequirement) ([]QuotaError, error) {
 		if err != nil {
 			return qe, err
 		}
-		qse, err := validateServiceLimits(g, ls)
+		qse, err := validateServiceLimits(g, ls, up)
 		if err != nil {
 			return qe, err
 		}
@@ -88,7 +101,7 @@ func ValidateQuotas(rs []ResourceRequirement) ([]QuotaError, error) {
 	return qe, nil
 }
 
-func validateServiceLimits(rs []ResourceRequirement, ls []*sub.ConsumerQuotaMetric) ([]QuotaError, error) {
+func validateServiceLimits(rs []ResourceRequirement, ls []*sub.ConsumerQuotaMetric, up *usageProvider) ([]QuotaError, error) {
 	// Group by Metric and Aggregation
 	type gk struct {
 		Metric      string
@@ -119,14 +132,14 @@ func validateServiceLimits(rs []ResourceRequirement, ls []*sub.ConsumerQuotaMetr
 		}
 
 		for _, limit := range ml {
-			qle := validateLimit(g, limit, agg)
+			qle := validateLimit(g, limit, up, agg)
 			qe = append(qe, qle...)
 		}
 	}
 	return qe, nil
 }
 
-func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, agg aggFn) []QuotaError {
+func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, up *usageProvider, agg aggFn) []QuotaError {
 	qe := []QuotaError{}
 	for _, bucket := range limit.QuotaBuckets {
 		vs := []int64{}
@@ -138,9 +151,10 @@ func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, agg 
 		if len(vs) == 0 {
 			continue
 		}
+		usage := up.Usage(limit.Metric, bucket.Dimensions["region"], bucket.Dimensions["zone"])
 		required := agg(vs)
 		for _, r := range required {
-			if !satisfied(r, bucket.EffectiveLimit) {
+			if !satisfied(r+usage, bucket.EffectiveLimit) {
 				r0 := rs[0] // all should have the same consumer, service and metric
 				qe = append(qe, QuotaError{
 					Consumer:       r0.Consumer,
@@ -148,6 +162,7 @@ func validateLimit(rs []ResourceRequirement, limit *sub.ConsumerQuotaLimit, agg 
 					Metric:         r0.Metric,
 					Dimensions:     bucket.Dimensions,
 					EffectiveLimit: bucket.EffectiveLimit,
+					Usage:          usage,
 					Requested:      r,
 				})
 			}
@@ -250,7 +265,7 @@ func newUsageProvider(projectID string) (usageProvider, error) {
 
 	u := map[usageKey]int64{}
 	err = s.Projects.TimeSeries.List("projects/"+projectID).
-		Filter(`metric.type="serviceruntime.googleapis.com/quota/allocation/usage" resource.type="consumer_quota"`).
+		Filter(`metric.type="serviceruntime.googleapis.com/quota/allocation/usage"`).
 		IntervalEndTime(time.Now().Format(time.RFC3339)).
 		// Quota usage metrics get duplicated once a day
 		IntervalStartTime(time.Now().Add(-24*time.Hour).Format(time.RFC3339)).
@@ -270,4 +285,122 @@ func newUsageProvider(projectID string) (usageProvider, error) {
 		return usageProvider{}, err
 	}
 	return usageProvider{u}, nil
+}
+
+type rrInputs struct {
+	Requirements []ResourceRequirement `cty:"requirements"`
+	IgnoreUsage  bool                  `cty:"ignore_usage"`
+}
+
+func ifNull(v cty.Value, d cty.Value) cty.Value {
+	if v.IsNull() {
+		return d
+	}
+	return v
+}
+
+func extractServiceName(metric string) (string, error) {
+	// metric is in the form of "service.googleapis.com/metric"
+	// we want to extract the "service.googleapis.com" part
+	parts := strings.Split(metric, "/")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("can not deduce service from metric %q", metric)
+	}
+	return parts[0], nil
+}
+
+func parseResourceRequirementsInputs(bp config.Blueprint, inputs config.Dict) (rrInputs, error) {
+	// sanitize inputs dict by matching with type
+	rty := cty.ObjectWithOptionalAttrs(map[string]cty.Type{
+		"metric":      cty.String,
+		"service":     cty.String,
+		"consumer":    cty.String,
+		"required":    cty.Number,
+		"aggregation": cty.String,
+		"dimensions":  cty.Map(cty.String),
+	},
+		/*optional=*/ []string{"service", "consumer", "aggregation", "dimensions"})
+	ity := cty.ObjectWithOptionalAttrs(map[string]cty.Type{
+		"requirements": cty.List(rty),
+		"ignore_usage": cty.Bool,
+	},
+		/*optional=*/ []string{"ignore_usage"})
+	clean, err := convert.Convert(inputs.AsObject(), ity)
+	if err != nil {
+		return rrInputs{}, err
+	}
+
+	// fill in default values
+	ignoreUsage := ifNull(clean.GetAttr("ignore_usage"), cty.False)
+	projectID, err := bp.ProjectID()
+	if err != nil {
+		return rrInputs{}, err
+	}
+	reqs := []cty.Value{}
+	rit := clean.GetAttr("requirements").ElementIterator()
+	for rit.Next() {
+		_, r := rit.Element()
+		defConsumer := fmt.Sprintf("projects/%s", projectID)
+		defService, err := extractServiceName(r.GetAttr("metric").AsString())
+		if err != nil {
+			return rrInputs{}, err
+		}
+		defDims := map[string]cty.Value{}
+		if bp.Vars.Has("region") {
+			defDims["region"] = bp.Vars.Get("region")
+		}
+		if bp.Vars.Has("zone") {
+			defDims["zone"] = bp.Vars.Get("zone")
+		}
+		defDimsVal := cty.MapValEmpty(cty.String)
+		if len(defDims) > 0 {
+			defDimsVal = cty.MapVal(defDims)
+		}
+
+		reqs = append(reqs, cty.ObjectVal(map[string]cty.Value{
+			"metric":      r.GetAttr("metric"),
+			"service":     ifNull(r.GetAttr("service"), cty.StringVal(defService)),
+			"consumer":    ifNull(r.GetAttr("consumer"), cty.StringVal(defConsumer)),
+			"required":    r.GetAttr("required"),
+			"aggregation": ifNull(r.GetAttr("aggregation"), cty.StringVal("SUM")),
+			"dimensions":  ifNull(r.GetAttr("dimensions"), defDimsVal),
+		}))
+	}
+
+	reqsVal := cty.ListValEmpty(rty)
+	if len(reqs) > 0 {
+		reqsVal = cty.ListVal(reqs)
+	}
+
+	full := cty.ObjectVal(map[string]cty.Value{
+		"requirements": reqsVal,
+		"ignore_usage": ignoreUsage,
+	})
+
+	var s rrInputs
+	return s, gocty.FromCtyValue(full, &s)
+}
+
+func testResourceRequirements(bp config.Blueprint, inputs config.Dict) error {
+	in, err := parseResourceRequirementsInputs(bp, inputs)
+	if err != nil {
+		return err
+	}
+	errs := config.Errors{}
+	up := usageProvider{}
+	if !in.IgnoreUsage {
+		p, err := bp.ProjectID()
+		errs.Add(err)
+		if p != "" {
+			up, err = newUsageProvider(p)
+			errs.Add(err) // don't terminate fallback to ignore usage
+		}
+	}
+
+	qerrs, err := validateResourceRequirements(in.Requirements, &up)
+	for _, qe := range qerrs {
+		errs.Add(qe)
+	}
+	errs.Add(err)
+	return errs.OrNil()
 }

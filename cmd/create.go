@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
+	"hpc-toolkit/pkg/validators"
 	"log"
 	"path/filepath"
 	"strings"
@@ -124,7 +125,41 @@ func expandOrDie(path string) config.DeploymentConfig {
 		log.Fatal(renderError(err, ctx))
 	}
 
+	validateMaybeDie(dc.Config, ctx)
 	return dc
+}
+
+func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
+	err := validators.Execute(bp)
+	if err == nil {
+		return
+	}
+	log.Println(renderError(err, ctx))
+
+	log.Println("One or more blueprint validators has failed. See messages above for suggested")
+	log.Println("actions. General troubleshooting guidance and instructions for configuring")
+	log.Println("validators are shown below.")
+	log.Println("")
+	log.Println("- https://goo.gle/hpc-toolkit-troubleshooting")
+	log.Println("- https://goo.gle/hpc-toolkit-validation")
+	log.Println("")
+	log.Println("Validators can be silenced or treated as warnings or errors:")
+	log.Println("")
+	log.Println("- https://goo.gle/hpc-toolkit-validation-levels")
+	log.Println("")
+
+	switch bp.ValidationLevel {
+	case config.ValidationWarning:
+		{
+			log.Println("Validation failures were treated as a warning, continuing to create blueprint.")
+			log.Println("")
+		}
+	case config.ValidationError:
+		{
+			log.Fatal("validation failed due to the issues listed above")
+		}
+	}
+
 }
 
 func findPos(path config.Path, ctx config.YamlCtx) (config.Pos, bool) {
@@ -137,30 +172,30 @@ func findPos(path config.Path, ctx config.YamlCtx) (config.Pos, bool) {
 }
 
 func renderError(err error, ctx config.YamlCtx) string {
-	var me config.Errors
-	if errors.As(err, &me) {
+	switch te := err.(type) {
+	case config.Errors:
 		var sb strings.Builder
-		for _, e := range me.Errors {
+		for _, e := range te.Errors {
 			sb.WriteString(renderError(e, ctx))
 			sb.WriteString("\n")
 		}
 		return sb.String()
-	}
-
-	var be config.BpError
-	if errors.As(err, &be) {
-		if pos, ok := findPos(be.Path, ctx); ok {
-			return renderRichError(be.Err, pos, ctx)
+	case validators.ValidatorError:
+		return fmt.Sprintf("validator %q failed:\n%v\n", te.Validator, renderError(te.Err, ctx))
+	case config.BpError:
+		if pos, ok := findPos(te.Path, ctx); ok {
+			return renderRichError(te.Err, pos, ctx)
 		}
+		return renderError(te.Err, ctx)
+	default:
+		return err.Error()
 	}
-	return err.Error()
 }
 
 func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
 	pref := fmt.Sprintf("%d: ", pos.Line)
 	arrow := strings.Repeat(" ", len(pref)+pos.Column-1) + "^"
-	return fmt.Sprintf(`
-Error: %s
+	return fmt.Sprintf(`Error: %s
 %s%s
 %s`, err, pref, ctx.Lines[pos.Line-1], arrow)
 }

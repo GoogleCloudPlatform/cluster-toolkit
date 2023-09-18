@@ -21,13 +21,8 @@ vars:
   deployment_name: test
   region: us-central1
   zone: us-central1-a
-  machine_type: n1-standard-2
-  # instance_image:
-  #   family: ubuntu-2004-lts
-  #   project: ubuntu-os-cloud
-  instance_image:
-    family: centos-7
-    project: centos-cloud
+  machine_type: e2-small
+
 
 deployment_groups:
 - group: primary
@@ -41,7 +36,7 @@ deployment_groups:
   # as a prefix. To refer to a local resource, prefix with ./, ../ or /
   # Example - ./resources/network/vpc
   - id: network1
-    source: modules/network/vpc
+    source: modules/network/pre-existing-vpc
 
   ###########
   # Storage #
@@ -77,19 +72,56 @@ deployment_groups:
   # Simple VM #
   #############
 
-  - id: workstation
+  - id: workstation-centos
     source: modules/compute/vm-instance
     use:
     - network1
     - lustre
+    - startup-script
     settings:
-      name_prefix: workstation-
-      instance_count: 2
-  - id: wait0
+      name_prefix: centos
+      instance_count: 1
+      instance_image:
+        family: centos-7
+        project: centos-cloud
+  - id: wait-centos
     source: community/modules/scripts/wait-for-startup
     settings:
-      instance_name: ((module.workstation.name[0]))
-  - id: wait1
+      instance_name: ((module.workstation-centos.name[0]))
+      timeout: 7200
+
+  - id: workstation-rocky
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - lustre
+    - startup-script
+    settings:
+      name_prefix: rocky
+      instance_count: 1
+      instance_image:
+        family: rocky-linux-8
+        project: rocky-linux-cloud
+  - id: wait-rocky
     source: community/modules/scripts/wait-for-startup
     settings:
-      instance_name: ((module.workstation.name[1]))
+      instance_name: ((module.workstation-rocky.name[0]))
+      timeout: 7200
+
+  - id: workstation-ubuntu
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - lustre
+    - startup-script
+    settings:
+      name_prefix: ubuntu
+      instance_count: 1
+      instance_image:
+        family: ubuntu-2004-lts
+        project: ubuntu-os-cloud
+  - id: wait-ubuntu
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.workstation-ubuntu.name[0]))
+      timeout: 7200

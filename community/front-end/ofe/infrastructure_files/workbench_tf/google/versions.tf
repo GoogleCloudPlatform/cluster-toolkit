@@ -18,8 +18,17 @@ terraform {
   required_version = "~> 1.0"
 
   required_providers {
-    google = ">= 3.87.0"
-    random = ">= 2.0"
-    time   = ">= 0.7.2"
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 3.87.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 2.0"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = ">= 0.7.2"
+    }
   }
 }

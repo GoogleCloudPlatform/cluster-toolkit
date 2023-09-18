@@ -33,6 +33,23 @@ func (e BpError) Unwrap() error {
 	return e.Err
 }
 
+// HintError wraps another error to suggest other values
+type HintError struct {
+	Hint string
+	Err  error
+}
+
+func (e HintError) Error() string {
+	if len(e.Hint) > 0 {
+		return fmt.Sprintf("%s - %s", e.Err, e.Hint)
+	}
+	return e.Err.Error()
+}
+
+func (e HintError) Unwrap() error {
+	return e.Err
+}
+
 // InvalidSettingError signifies a problem with the supplied setting name in a
 // module definition.
 type InvalidSettingError struct {
@@ -41,6 +58,15 @@ type InvalidSettingError struct {
 
 func (err *InvalidSettingError) Error() string {
 	return fmt.Sprintf("invalid setting provided to a module, cause: %v", err.cause)
+}
+
+// UnknownModuleError signifies a problem with the supplied module name.
+type UnknownModuleError struct {
+	ID ModuleID
+}
+
+func (e UnknownModuleError) Error() string {
+	return fmt.Sprintf("invalid module id: \"%s\"", e.ID)
 }
 
 // Errors is an error wrapper to combine multiple errors
@@ -100,4 +126,9 @@ func (e *Errors) At(path Path, err error) *Errors {
 		return e
 	}
 	return e.Add(BpError{Path: path, Err: err})
+}
+
+// Any returns true if there are any errors
+func (e *Errors) Any() bool {
+	return len(e.Errors) > 0
 }

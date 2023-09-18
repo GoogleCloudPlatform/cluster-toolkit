@@ -56,8 +56,16 @@ gcp_machine_table = defaultdict(
 
 
 def _get_arch_for_node_type_gcp(instance):
-    (family, group, _) = instance.split("-")
-    return gcp_machine_table[family][group]
+    try:
+        logger.info(instance.split("-"))
+        family, group, _ = instance.split("-", maxsplit=2)
+        return gcp_machine_table[family][group]
+    except ValueError:
+        logger.error(f"Invalid instance format: {instance}")
+        return None
+    except KeyError:
+        logger.error(f"Keys not found in gcp_machine_table: {instance}")
+        return None
 
 
 def _get_gcp_client(credentials, service="compute", api_version="v1"):

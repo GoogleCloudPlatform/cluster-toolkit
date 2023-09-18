@@ -189,10 +189,6 @@ func getDeploymentConfigForTest() DeploymentConfig {
 	dc := DeploymentConfig{Config: testBlueprint}
 	setTestModuleInfo(testModule, testModuleInfo)
 	setTestModuleInfo(testModuleWithLabels, testModuleInfo)
-
-	// the next step simulates relevant step in ghpc expand
-	dc.addDefaultValidators()
-
 	return dc
 }
 
@@ -341,8 +337,6 @@ func getMultiGroupDeploymentConfig() DeploymentConfig {
 			DeploymentGroups: []DeploymentGroup{grp0, grp1},
 		},
 	}
-
-	dc.addDefaultValidators()
 	return dc
 }
 
@@ -378,11 +372,6 @@ func getDeploymentConfigWithTestModuleEmptyKind() DeploymentConfig {
 // config.go
 func (s *MySuite) TestExpandConfig(c *C) {
 	dc := getBasicDeploymentConfigWithTestModule()
-	for v := range dc.getValidators() { // skip all validators
-		dc.Config.Validators = append(
-			dc.Config.Validators,
-			validatorConfig{Validator: v, Skip: true})
-	}
 	c.Check(dc.ExpandConfig(), IsNil)
 }
 
@@ -425,7 +414,7 @@ func (s *MySuite) TestCheckModulesAndGroups(c *C) {
 func (s *MySuite) TestListUnusedModules(c *C) {
 	{ // No modules in "use"
 		m := Module{ID: "m"}
-		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{})
+		c.Check(m.ListUnusedModules(), DeepEquals, ModuleIDs{})
 	}
 
 	{ // Useful
@@ -434,7 +423,7 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 			Use: ModuleIDs{"w"},
 			Settings: NewDict(map[string]cty.Value{
 				"x": AsProductOfModuleUse(cty.True, "w")})}
-		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{})
+		c.Check(m.ListUnusedModules(), DeepEquals, ModuleIDs{})
 	}
 
 	{ // Unused
@@ -443,21 +432,21 @@ func (s *MySuite) TestListUnusedModules(c *C) {
 			Use: ModuleIDs{"w", "u"},
 			Settings: NewDict(map[string]cty.Value{
 				"x": AsProductOfModuleUse(cty.True, "w")})}
-		c.Check(m.listUnusedModules(), DeepEquals, ModuleIDs{"u"})
+		c.Check(m.ListUnusedModules(), DeepEquals, ModuleIDs{"u"})
 	}
 }
 
-func (s *MySuite) TestListUnusedDeploymentVariables(c *C) {
+func (s *MySuite) TestListUnusedVariables(c *C) {
 	dc := getDeploymentConfigForTest()
 	dc.applyGlobalVariables()
 
-	unusedVars := dc.listUnusedDeploymentVariables()
+	unusedVars := dc.Config.ListUnusedVariables()
 	c.Assert(unusedVars, DeepEquals, []string{"project_id"})
 
 	dc = getMultiGroupDeploymentConfig()
 	dc.applyGlobalVariables()
 
-	unusedVars = dc.listUnusedDeploymentVariables()
+	unusedVars = dc.Config.ListUnusedVariables()
 	c.Assert(unusedVars, DeepEquals, []string{"unused_key"})
 }
 
@@ -788,64 +777,6 @@ func (s *MySuite) TestCheckMovedModules(c *C) {
 	c.Assert(checkMovedModule("./community/modules/scheduler/cloud-batch-job"), NotNil)
 }
 
-func (s *MySuite) TestValidatorConfigCheck(c *C) {
-	const vn = testProjectExistsName // some valid name
-
-	{ // FAIL: names mismatch
-		v := validatorConfig{Validator: "who_is_this"}
-		err := v.check(vn, []string{})
-		c.Check(err, ErrorMatches, "passed wrong validator to test_project_exists implementation")
-	}
-
-	{ // OK: names match
-		v := validatorConfig{Validator: vn.String()}
-		c.Check(v.check(vn, []string{}), IsNil)
-	}
-
-	{ // OK: Inputs is equal to required inputs without regard to ordering
-		v := validatorConfig{
-			Validator: vn.String(),
-			Inputs: NewDict(map[string]cty.Value{
-				"in0": cty.NilVal,
-				"in1": cty.NilVal})}
-		c.Check(v.check(vn, []string{"in0", "in1"}), IsNil)
-		c.Check(v.check(vn, []string{"in1", "in0"}), IsNil)
-	}
-
-	{ // FAIL: inputs are a proper subset of required inputs
-		v := validatorConfig{
-			Validator: vn.String(),
-			Inputs: NewDict(map[string]cty.Value{
-				"in0": cty.NilVal,
-				"in1": cty.NilVal})}
-		err := v.check(vn, []string{"in0", "in1", "in2"})
-		c.Check(err, ErrorMatches, missingRequiredInputRegex)
-	}
-
-	{ // FAIL: inputs intersect with required inputs but are not a proper subset
-		v := validatorConfig{
-			Validator: vn.String(),
-			Inputs: NewDict(map[string]cty.Value{
-				"in0": cty.NilVal,
-				"in1": cty.NilVal,
-				"in3": cty.NilVal})}
-		err := v.check(vn, []string{"in0", "in1", "in2"})
-		c.Check(err, ErrorMatches, missingRequiredInputRegex)
-	}
-
-	{ // FAIL inputs are a proper superset of required inputs
-		v := validatorConfig{
-			Validator: vn.String(),
-			Inputs: NewDict(map[string]cty.Value{
-				"in0": cty.NilVal,
-				"in1": cty.NilVal,
-				"in2": cty.NilVal,
-				"in3": cty.NilVal})}
-		err := v.check(vn, []string{"in0", "in1", "in2"})
-		c.Check(err, ErrorMatches, "only 3 inputs \\[in0 in1 in2\\] should be provided to test_project_exists")
-	}
-}
-
 func (s *MySuite) TestCheckBackends(c *C) {
 	// Helper to create blueprint with backend blocks only (first one is defaults)
 	// and run checkBackends.
@@ -930,42 +861,42 @@ func (s *MySuite) TestSkipValidator(c *C) {
 	{
 		dc := DeploymentConfig{Config: Blueprint{Validators: nil}}
 		c.Check(dc.SkipValidator("zebra"), IsNil)
-		c.Check(dc.Config.Validators, DeepEquals, []validatorConfig{
+		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "zebra", Skip: true}})
 	}
 	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: []validatorConfig{
+		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"}}}}
 		c.Check(dc.SkipValidator("zebra"), IsNil)
-		c.Check(dc.Config.Validators, DeepEquals, []validatorConfig{
+		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
 	}
 	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: []validatorConfig{
+		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra"}}}}
 		c.Check(dc.SkipValidator("zebra"), IsNil)
-		c.Check(dc.Config.Validators, DeepEquals, []validatorConfig{
+		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
 	}
 	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: []validatorConfig{
+		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}}}}
 		c.Check(dc.SkipValidator("zebra"), IsNil)
-		c.Check(dc.Config.Validators, DeepEquals, []validatorConfig{
+		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
 	}
 	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: []validatorConfig{
+		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "zebra"},
 			{Validator: "pony"},
 			{Validator: "zebra"}}}}
 		c.Check(dc.SkipValidator("zebra"), IsNil)
-		c.Check(dc.Config.Validators, DeepEquals, []validatorConfig{
+		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "zebra", Skip: true},
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
@@ -1033,8 +964,24 @@ func (s *MySuite) TestValidateModuleSettingReference(c *C) {
 	// FAIL. missing output
 	c.Check(vld(bp, mod22, ModuleRef("mod21", "kale")), NotNil)
 
-	// Fail. packer module
+	// FAIL. packer module
 	c.Check(vld(bp, mod21, ModuleRef("pkr", "outPkr")), NotNil)
+
+	// FAIL. get global hint
+	mod := ModuleID("var")
+	unkModErr := UnknownModuleError{mod}
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{"Did you mean \"vars\"?", unkModErr}), Equals, true)
+
+	// FAIL. get module ID hint
+	mod = ModuleID("pkp")
+	unkModErr = UnknownModuleError{mod}
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("Did you mean \"%s\"?", string(pkr.ID)), unkModErr}), Equals, true)
+
+	// FAIL. get no hint
+	mod = ModuleID("test")
+	unkModErr = UnknownModuleError{mod}
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("Did you mean \"%s\"?", string(pkr.ID)), unkModErr}), Equals, false)
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), unkModErr), Equals, true)
 }
 
 func (s *MySuite) TestValidateModuleSettingReferences(c *C) {

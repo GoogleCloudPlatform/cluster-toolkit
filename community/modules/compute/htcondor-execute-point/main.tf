@@ -69,6 +69,27 @@ locals {
     ])
   }
 
+  native_fstype = []
+  startup_script_network_storage = [
+    for ns in var.network_storage :
+    ns if !contains(local.native_fstype, ns.fs_type)
+  ]
+  storage_client_install_runners = [
+    for ns in local.startup_script_network_storage :
+    ns.client_install_runner if ns.client_install_runner != null
+  ]
+  mount_runners = [
+    for ns in local.startup_script_network_storage :
+    ns.mount_runner if ns.mount_runner != null
+  ]
+
+  all_runners = concat(
+    local.storage_client_install_runners,
+    local.mount_runners,
+    var.execute_point_runner,
+    [local.execute_runner],
+  )
+
   execute_config_windows_startup_ps1 = templatefile(
     "${path.module}/templates/download-condor-config.ps1.tftpl",
     {
@@ -110,7 +131,7 @@ module "startup_script" {
   labels          = local.labels
   deployment_name = var.deployment_name
 
-  runners = flatten([var.execute_point_runner, local.execute_runner])
+  runners = local.all_runners
 }
 
 module "execute_point_instance_template" {
@@ -134,6 +155,10 @@ module "execute_point_instance_template" {
   startup_script = local.is_windows_image ? null : module.startup_script.startup_script
   metadata       = local.metadata
   source_image   = data.google_compute_image.htcondor.self_link
+
+  # secure boot
+  enable_shielded_vm       = var.enable_shielded_vm
+  shielded_instance_config = var.shielded_instance_config
 }
 
 module "mig" {

@@ -16,11 +16,14 @@ package validators
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/zclconf/go-cty/cty"
 	sub "google.golang.org/api/serviceusage/v1beta1"
+	"gopkg.in/yaml.v3"
 )
 
 func TestAggregation(t *testing.T) {
@@ -146,10 +149,11 @@ func TestValidateServiceLimits(t *testing.T) {
 			Aggregation: "SUM",
 		},
 	}
+	up := usageProvider{}
 
 	want := []QuotaError{
-		{Metric: "pony", Dimensions: nil, EffectiveLimit: 5, Requested: 11},
 		{Metric: "pony", Dimensions: map[string]string{"green": "eggs"}, EffectiveLimit: 3, Requested: 4},
+		{Metric: "pony", Dimensions: nil, EffectiveLimit: 5, Requested: 11},
 	}
 	got, err := validateServiceLimits(quotas, []*sub.ConsumerQuotaMetric{
 		{
@@ -157,7 +161,7 @@ func TestValidateServiceLimits(t *testing.T) {
 			ConsumerQuotaLimits: []*sub.ConsumerQuotaLimit{
 				{Metric: "pony", QuotaBuckets: buckets}},
 		},
-	})
+	}, &up)
 
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
@@ -196,6 +200,81 @@ func TestUsageProviderGet(t *testing.T) {
 		t.Run(fmt.Sprintf("%#v", tc), func(t *testing.T) {
 			got := up.Usage(tc.metric, tc.region, tc.zone)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestParseResourceRequirementsInputs(t *testing.T) {
+	type test struct {
+		yml  string
+		want rrInputs
+		err  bool
+	}
+	tests := []test{
+		{`# empty
+requirements: []`, rrInputs{Requirements: []ResourceRequirement{}}, false},
+		{`# complete
+ignore_usage: true
+requirements:
+- metric: pony.api/friendship
+  consumer: redhat
+  service: zebra.api
+  required: 22
+  dimensions: {"x": "y", "left": "right"}
+  aggregation: "SUM"`, rrInputs{
+			IgnoreUsage: true,
+			Requirements: []ResourceRequirement{
+				{
+					Metric:   "pony.api/friendship",
+					Consumer: "redhat",
+					Service:  "zebra.api",
+					Required: 22,
+					Dimensions: map[string]string{
+						"x":    "y",
+						"left": "right",
+					},
+					Aggregation: "SUM",
+				},
+			},
+		}, false},
+		{`# fill in
+requirements:
+- metric: pony.api/friendship
+  required: 33`, rrInputs{
+			IgnoreUsage: false,
+			Requirements: []ResourceRequirement{
+				{
+					Metric:   "pony.api/friendship",
+					Service:  "pony.api",
+					Consumer: "projects/apple",
+					Required: 33,
+					Dimensions: map[string]string{
+						"region": "narnia",
+						"zone":   "narnia-51",
+					},
+					Aggregation: "SUM",
+				},
+			},
+		}, false},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%s", tc.yml), func(t *testing.T) {
+			var in config.Dict
+			bp := config.Blueprint{}
+			bp.Vars.
+				Set("project_id", cty.StringVal("apple")).
+				Set("region", cty.StringVal("narnia")).
+				Set("zone", cty.StringVal("narnia-51"))
+			if err := yaml.Unmarshal([]byte(tc.yml), &in); err != nil {
+				t.Fatal("failed to unmarshal yaml")
+			}
+			rr, err := parseResourceRequirementsInputs(bp, in)
+			if (err == nil) == tc.err {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tc.want, rr); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
 		})

@@ -19,11 +19,11 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/agext/levenshtein"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
@@ -35,25 +35,22 @@ const (
 	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
 	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
 	unexpectedConnectionKind string = "connectionKind must be useConnection or deploymentConnection"
+	maxHintDist              int    = 3 // Maximum levenshtein distance where we suggest a hint
 )
 
 var errorMessages = map[string]string{
-	// general
-	"appendToNonList": "cannot append to a setting whose type is not a list",
 	// config
 	"fileLoadError":      "failed to read the input yaml",
 	"yamlUnmarshalError": "failed to parse the blueprint in %s, check YAML syntax for errors, err=%w",
 	"yamlMarshalError":   "failed to export the configuration to a blueprint yaml file",
 	"fileSaveError":      "failed to write the expanded yaml",
 	// expand
-	"missingSetting":    "a required setting is missing from a module",
-	"settingsLabelType": "labels in module settings are not a map",
-	"invalidVar":        "invalid variable definition in",
-	"invalidMod":        "invalid module reference",
-	"varNotFound":       "Could not find source of variable",
-	"intergroupOrder":   "References to outputs from other groups must be to earlier groups",
-	"noOutput":          "Output not found for a variable",
-	"cannotUsePacker":   "Packer modules cannot be used by other modules",
+	"missingSetting":  "a required setting is missing from a module",
+	"invalidVar":      "invalid variable definition in",
+	"varNotFound":     "Could not find source of variable",
+	"intergroupOrder": "References to outputs from other groups must be to earlier groups",
+	"noOutput":        "Output not found for a variable",
+	"cannotUsePacker": "Packer modules cannot be used by other modules",
 	// validator
 	"emptyID":            "a module id cannot be empty",
 	"emptySource":        "a module source cannot be empty",
@@ -129,9 +126,30 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 		return nil
 	})
 	if mod == nil {
-		return nil, fmt.Errorf("%s: %s", errorMessages["invalidMod"], id)
+		return nil, UnknownModuleError{id}
 	}
 	return mod, nil
+}
+
+// SuggestModuleIDHint return a correct spelling of given ModuleID id if one
+// is close enough (based on maxHintDist)
+func (bp Blueprint) SuggestModuleIDHint(id ModuleID) (string, bool) {
+	clMod := ""
+	minDist := -1
+	bp.WalkModules(func(m *Module) error {
+		dist := levenshtein.Distance(string(m.ID), string(id), nil)
+		if minDist == -1.0 || dist < minDist {
+			minDist = dist
+			clMod = string(m.ID)
+		}
+		return nil
+	})
+
+	if clMod != "" && minDist <= maxHintDist {
+		return clMod, true
+	}
+
+	return "", false
 }
 
 // ModuleGroup returns the group containing the module
@@ -143,7 +161,7 @@ func (bp Blueprint) ModuleGroup(mod ModuleID) (DeploymentGroup, error) {
 			}
 		}
 	}
-	return DeploymentGroup{}, fmt.Errorf("%s: %s", errorMessages["invalidMod"], mod)
+	return DeploymentGroup{}, UnknownModuleError{mod}
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound
@@ -205,20 +223,6 @@ func (mk ModuleKind) String() string {
 	return mk.kind
 }
 
-type validatorName uint8
-
-const (
-	// Undefined will be default and potentially throw errors if used
-	Undefined validatorName = iota
-	testProjectExistsName
-	testRegionExistsName
-	testZoneExistsName
-	testModuleNotUsedName
-	testZoneInRegionName
-	testApisEnabledName
-	testDeploymentVariableNotUsedName
-)
-
 // this enum will be used to control how fatal validator failures will be
 // treated during blueprint creation
 const (
@@ -231,57 +235,11 @@ func isValidValidationLevel(level int) bool {
 	return !(level > ValidationIgnore || level < ValidationError)
 }
 
-func (v validatorName) String() string {
-	switch v {
-	case testProjectExistsName:
-		return "test_project_exists"
-	case testRegionExistsName:
-		return "test_region_exists"
-	case testZoneExistsName:
-		return "test_zone_exists"
-	case testZoneInRegionName:
-		return "test_zone_in_region"
-	case testApisEnabledName:
-		return "test_apis_enabled"
-	case testModuleNotUsedName:
-		return "test_module_not_used"
-	case testDeploymentVariableNotUsedName:
-		return "test_deployment_variable_not_used"
-	default:
-		return "unknown_validator"
-	}
-}
-
-type validatorConfig struct {
+// Validator defines a validation step to be run on a blueprint
+type Validator struct {
 	Validator string
 	Inputs    Dict `yaml:"inputs,omitempty"`
 	Skip      bool `yaml:"skip,omitempty"`
-}
-
-func (v *validatorConfig) check(name validatorName, requiredInputs []string) error {
-	if v.Validator != name.String() {
-		return fmt.Errorf("passed wrong validator to %s implementation", name.String())
-	}
-
-	var errored bool
-	for _, inp := range requiredInputs {
-		if !v.Inputs.Has(inp) {
-			log.Printf("a required input %s was not provided to %s!", inp, v.Validator)
-			errored = true
-		}
-	}
-
-	if errored {
-		return fmt.Errorf("at least one required input was not provided to %s", v.Validator)
-	}
-
-	// ensure that no extra inputs were provided by comparing length
-	if len(requiredInputs) != len(v.Inputs.Items()) {
-		errStr := "only %v inputs %s should be provided to %s"
-		return fmt.Errorf(errStr, len(requiredInputs), requiredInputs, v.Validator)
-	}
-
-	return nil
 }
 
 // ModuleID is a unique identifier for a module in a blueprint
@@ -317,10 +275,10 @@ func (m Module) InfoOrDie() modulereader.ModuleInfo {
 // unless it has been set to a non-default value; the implementation as an
 // integer is primarily for internal purposes even if it can be set in blueprint
 type Blueprint struct {
-	BlueprintName            string            `yaml:"blueprint_name"`
-	GhpcVersion              string            `yaml:"ghpc_version,omitempty"`
-	Validators               []validatorConfig `yaml:"validators,omitempty"`
-	ValidationLevel          int               `yaml:"validation_level,omitempty"`
+	BlueprintName            string      `yaml:"blueprint_name"`
+	GhpcVersion              string      `yaml:"ghpc_version,omitempty"`
+	Validators               []Validator `yaml:"validators,omitempty"`
+	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict
 	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults,omitempty"`
@@ -340,13 +298,7 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	if err := validateBlueprint(dc.Config); err != nil {
 		return err
 	}
-	if err := dc.expand(); err != nil {
-		return err
-	}
-	if err := dc.executeValidators(); err != nil {
-		return err
-	}
-	return nil
+	return dc.expand()
 }
 
 func (bp *Blueprint) setGlobalLabels() {
@@ -355,9 +307,9 @@ func (bp *Blueprint) setGlobalLabels() {
 	}
 }
 
-// listUnusedModules provides a list modules that are in the
+// ListUnusedModules provides a list modules that are in the
 // "use" field, but not actually used.
-func (m Module) listUnusedModules() ModuleIDs {
+func (m Module) ListUnusedModules() ModuleIDs {
 	used := map[ModuleID]bool{}
 	// Recurse through objects/maps/lists checking each element for having `ProductOfModuleUse` mark.
 	cty.Walk(m.Settings.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
@@ -387,29 +339,36 @@ func GetUsedDeploymentVars(val cty.Value) []string {
 	return res
 }
 
-func (dc *DeploymentConfig) listUnusedDeploymentVariables() []string {
+// ListUnusedVariables returns a list of variables that are defined but not used
+func (bp Blueprint) ListUnusedVariables() []string {
 	// these variables are required or automatically constructed and applied;
 	// these should not be listed unused otherwise no blueprints are valid
-	var usedVars = map[string]bool{
+	var used = map[string]bool{
 		"labels":          true,
 		"deployment_name": true,
 	}
 
-	dc.Config.WalkModules(func(m *Module) error {
+	bp.WalkModules(func(m *Module) error {
 		for _, v := range GetUsedDeploymentVars(m.Settings.AsObject()) {
-			usedVars[v] = true
+			used[v] = true
 		}
 		return nil
 	})
 
-	unusedVars := []string{}
-	for k := range dc.Config.Vars.Items() {
-		if _, ok := usedVars[k]; !ok {
-			unusedVars = append(unusedVars, k)
+	for _, v := range bp.Validators {
+		for _, v := range GetUsedDeploymentVars(v.Inputs.AsObject()) {
+			used[v] = true
 		}
 	}
 
-	return unusedVars
+	unused := []string{}
+	for k := range bp.Vars.Items() {
+		if _, ok := used[k]; !ok {
+			unused = append(unused, k)
+		}
+	}
+
+	return unused
 }
 
 func checkMovedModule(source string) error {
@@ -555,7 +514,7 @@ func validateBlueprint(bp Blueprint) error {
 // if no validator is present, adds one, marked as skipped.
 func (dc *DeploymentConfig) SkipValidator(name string) error {
 	if dc.Config.Validators == nil {
-		dc.Config.Validators = []validatorConfig{}
+		dc.Config.Validators = []Validator{}
 	}
 	skipped := false
 	for i, v := range dc.Config.Validators {
@@ -565,7 +524,7 @@ func (dc *DeploymentConfig) SkipValidator(name string) error {
 		}
 	}
 	if !skipped {
-		dc.Config.Validators = append(dc.Config.Validators, validatorConfig{Validator: name, Skip: true})
+		dc.Config.Validators = append(dc.Config.Validators, Validator{Validator: name, Skip: true})
 	}
 	return nil
 }
@@ -632,6 +591,19 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 	}
 
 	return s, nil
+}
+
+// ProjectID returns the project_id
+func (bp Blueprint) ProjectID() (string, error) {
+	pid := "project_id"
+	if !bp.Vars.Has(pid) {
+		return "", BpError{Root.Vars, fmt.Errorf("%q variable is not specified", pid)}
+	}
+	v := bp.Vars.Get(pid)
+	if v.Type() != cty.String {
+		return "", BpError{Root.Vars.Dot(pid), fmt.Errorf("%q variable is not a string", pid)}
+	}
+	return v.AsString(), nil
 }
 
 // checkBlueprintName returns an error if blueprint_name does not comply with
@@ -767,7 +739,6 @@ func (bp *Blueprint) evalVars() error {
 			}
 		}
 	}
-
 	bp.Vars = res
 	return nil
 }
