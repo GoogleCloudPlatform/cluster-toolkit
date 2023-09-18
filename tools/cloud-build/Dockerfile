@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Getting Terraform and Packer
-FROM golang:bullseye
+FROM golang:1.18-bullseye
 ARG TFLINT_VERSION
 ARG SHELLCHECK_VERSION
 
