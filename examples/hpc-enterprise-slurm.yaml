@@ -82,6 +82,7 @@ deployment_groups:
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
+      - pubsub.subscriber
       - storage.objectCreator
 
   - id: homefs
