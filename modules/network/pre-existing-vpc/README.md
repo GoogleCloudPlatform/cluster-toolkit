@@ -1,13 +1,18 @@
 ## Description
 
-This module defines a VPC network that already exists in GCP so that it can be
-used by other modules. For example, rather than creating a VPC network from
-scratch for a simple deployment, the "default" network can be used from a
-project. The pre-existing-vpc can be referenced in the same ways as the
-[vpc module](../vpc/README.md).
+This module discovers a VPC network that already exists in Google Cloud and
+outputs network attributes that uniquely identify it for use by other modules.
+The module outputs are aligned with the [vpc module][vpc] so that it can be used
+as a drop-in substitute when a VPC already exists.
 
-Using a pre-existing VPC created in another deployment group can be a good way of
-sharing a single network module between deployment groups.
+For example, the blueprint below discovers the "default" global network and the
+"default" regional subnetwork in us-central1. With the `use` keyword, the
+[vm-instance] module accepts the `network_self_link` and `subnetwork_self_link`
+input variables that uniquely identify the network and subnetwork in which the
+VM will be created.
+
+[vpc]: ../vpc/README.md
+[vm-instance]: ../../compute/vm-instance/README.md
 
 ### Example
 
@@ -15,15 +20,20 @@ sharing a single network module between deployment groups.
 - id: network1
   source: modules/network/pre-existing-vpc
   settings:
-  - project_id: $(vars.project_id)
+    project_id: $(vars.project_id)
+    region: us-central1
+
+- id: example_vm
+  source: modules/compute/vm-instance
+  use:
+  - network1
+  settings:
+    name_prefix: example
+    machine_type: c2-standard-4
 ```
 
-This creates a pre-existing-vpc module based on the "default" VPC network in the
-GCP project. "default" is the default for `network_name` unless otherwise
-provided.
-
-> **_NOTE:_** The `project_id` setting would be inferred from the deployment
-> variable of the same name, but it was included here for clarity.
+> **_NOTE:_** The `project_id` and `region` settings would be inferred from the
+> deployment variables of the same name, but they are included here for clarity.
 
 ## License
 
@@ -70,20 +80,20 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network whose attributes will be found | `string` | `"default"` | no |
+| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Name of the existing VPC network | `string` | `"default"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | The region where Cloud NAT and Cloud Router will be configured | `string` | n/a | yes |
-| <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the subnetwork to returned, will use network name if null. | `string` | `null` | no |
+| <a name="input_region"></a> [region](#input\_region) | Region in which to search for primary subnetwork | `string` | n/a | yes |
+| <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | Name of the pre-existing VPC subnetwork; defaults to var.network\_name if set to null. | `string` | `null` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The ID of the existing network |
-| <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The name of the existing network |
-| <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The URI of the existing network |
-| <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | The subnetwork in the specified primary region |
-| <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | The subnetwork address in the specified primary region |
-| <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | The name of the subnetwork in the specified primary region |
-| <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | The subnetwork self-link in the specified primary region |
+| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | ID of the existing VPC network |
+| <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Name of the existing VPC network |
+| <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Self link of the existing VPC network |
+| <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | Full subnetwork object in the primary region |
+| <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | Subnetwork IP range in the primary region |
+| <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | Name of the subnetwork in the primary region |
+| <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | Subnetwork self-link in the primary region |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

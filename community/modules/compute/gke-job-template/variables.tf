@@ -123,6 +123,30 @@ variable "persistent_volume_claims" {
   default = []
 }
 
+variable "ephemeral_volumes" {
+  description = "Will create an emptyDir or ephemeral volume that is backed by the specified type: `memory`, `local-ssd`, `pd-balanced`, `pd-ssd`. `size_gb` is provided in GiB."
+  type = list(object({
+    type       = string
+    mount_path = string
+    size_gb    = number
+  }))
+  default = []
+  validation {
+    condition = alltrue([
+      for v in var.ephemeral_volumes :
+      contains(["pd-balanced", "pd-ssd", "memory", "local-ssd"], v.type)
+    ])
+    error_message = "Type must be one of 'pd-balanced', 'pd-ssd', 'memory', 'local-ssd'."
+  }
+  validation {
+    condition = alltrue([
+      for v in var.ephemeral_volumes :
+      substr(v.mount_path, 0, 1) == "/"
+    ])
+    error_message = "Mount path must start with the '/' character."
+  }
+}
+
 variable "labels" {
   description = "Labels to add to the GKE job template. Key-value pairs."
   type        = map(string)

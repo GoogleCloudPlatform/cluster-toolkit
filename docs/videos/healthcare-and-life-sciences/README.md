@@ -104,11 +104,23 @@ storage intact and b) you can build software before you deploy your cluster.
    make
    ```
 
-1. Generate the deployment folder after replacing `<project>` with the project id.
+1. Generate the deployment folder after replacing `<project>` with the project
+   id.
+
+   If you are running this as a test, and don't care about the files created in
+   the cloud buckets being destroyed, it is recommneded you run:
 
    ```bash
-   ./ghpc create docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml -w --vars project_id=<project>
+   ./ghpc create docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml -w --vars project_id=<project> --vars bucket_force_delete=true
    ```
+
+   The `bucket_force_delete` variable makes it easier to tear down the
+   deployment. If it is set to the default value of `false`, buckets with
+   objects (files) will not be deleted and the `./ghpc destroy` command will
+   fail partway through.
+
+   If the data stored in the buckets should be preseverved, remove the
+   `--vars bucket_force_delete=true` portion of the command or set it to `false`
 
 1. Deploy the `enable_apis` group
 
@@ -238,8 +250,10 @@ destroyed first. You can use the following commands to destroy the deployment.
 ```
 
 > [!NOTE]
-> You may have to clean out items added to the Cloud Storage buckets before
-> terraform will be able to destroy them.
+> If you did not create the deployment with `bucket_force_destroy` set to true,
+> you may have to clean out items added to the Cloud Storage buckets before
+> terraform will be able to destroy them.  This can be done on the GCP Cloud
+> Console.
 
 ## Water Benchmark Example
 

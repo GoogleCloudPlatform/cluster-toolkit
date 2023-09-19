@@ -21,6 +21,7 @@ vars:
   deployment_name: hcls-01
   region: us-central1
   zone: us-central1-c
+  bucket_force_destroy: false
 
 deployment_groups:
 - group: enable_apis
@@ -78,6 +79,7 @@ deployment_groups:
       name_prefix: hcls-user-provided-software
       random_suffix: true
       local_mount: /user_provided_software
+      force_destroy: $(vars.bucket_force_destroy)
     outputs: [gcs_bucket_path]
 
   - id: bucket-input
@@ -87,6 +89,7 @@ deployment_groups:
       random_suffix: true
       local_mount: /data_input
       mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
+      force_destroy: $(vars.bucket_force_destroy)
 
   - id: bucket-output
     source: community/modules/file-system/cloud-storage-bucket
@@ -95,6 +98,7 @@ deployment_groups:
       random_suffix: true
       local_mount: /data_output
       mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
+      force_destroy: $(vars.bucket_force_destroy)
 
 - group: software_installation
   modules:

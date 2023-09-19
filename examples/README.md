@@ -835,13 +835,25 @@ This blueprint shows how to use different storage options with GKE in the toolki
 The blueprint contains the following:
 
 * A K8s Job that uses a Filestore as a shared file system between pods.
-* More coming in the future...
+* A K8s Job that demonstrates different ephemeral storage options:
+  * memory backed emptyDir
+  * local SSD backed emptyDir
+  * SSD persistent disk backed ephemeral volume
+  * balanced persistent disk backed ephemeral volume
 
-> **Note**: The Kubernetes API server will only allow requests from authorized
-> networks. The `gke-persistent-volume` module needs access to the Kubernetes
-> API server to create a Persistent Volume and a Persistent Volume Claim. **You
-> must use the `authorized_cidr` variable to supply an authorized network which
-> contains the IP address of the machine deploying the blueprint, for example
+Note that when type `local-ssd` is used, the specified node pool must have
+`local_ssd_count_ephemeral_storage` specified.
+
+When using either `pd-ssd` or `pd-balanced` ephemeral storage, a persistent disk
+will be created when the job is submitted. The disk will be automatically
+cleaned up when the job is deleted.
+
+> [!Note]
+> The Kubernetes API server will only allow requests from authorized networks.
+> The `gke-persistent-volume` module needs access to the Kubernetes API server
+> to create a Persistent Volume and a Persistent Volume Claim. **You must use
+> the `authorized_cidr` variable to supply an authorized network which contains
+> the IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
