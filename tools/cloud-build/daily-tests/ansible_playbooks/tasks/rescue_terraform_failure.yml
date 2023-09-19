@@ -38,3 +38,30 @@
   ansible.builtin.command:
     cmd: terraform destroy -auto-approve
     chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+
+- name: List Leftover Nodes
+  register: leftover_nodes
+  ansible.builtin.command:
+    argv:
+    - gcloud
+    - compute
+    - instances
+    - list
+    - --format="csv[no-heading](name)"
+    - --filter="labels.ghpc_deployment={{ deployment_name }}"
+
+- name: Print Leftover Nodes
+  ansible.builtin.debug:
+    var: leftover_nodes.stdout_lines
+
+- name: Delete Leftover Nodes
+  with_items: "{{ leftover_nodes.stdout_lines }}"
+  ansible.builtin.command:
+    argv:
+    - gcloud
+    - compute
+    - instances
+    - delete
+    - "{{ item }}"
+    - --quiet
+    - --delete-disks=all
