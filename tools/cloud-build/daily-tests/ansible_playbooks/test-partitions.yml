@@ -44,14 +44,6 @@
   delay: 12
   until: partition_output.rc == 0
 
-- name: Count Slurm nodes
-  ansible.builtin.shell:
-    sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
-  args:
-    executable: /bin/bash
-  changed_when: False
-  register: initial_node_count
-
 - name: Check partitions exist
   ansible.builtin.fail:
     msg: Test Check Partitions failed
