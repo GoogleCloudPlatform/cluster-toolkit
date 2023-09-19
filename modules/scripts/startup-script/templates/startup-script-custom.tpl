@@ -38,6 +38,7 @@ stdlib::runner() {
   stdlib::info "=== $object finished with exit_code=$exit_code ==="
   if [ "$exit_code" -ne "0" ] ; then
     stdlib::error "=== execution of $object failed, exiting ==="
+    stdlib::announce_runners_end "$exit_code"
     exit $exit_code
   fi
 }
@@ -46,10 +47,12 @@ stdlib::load_runners(){
   tmpdir="$(mktemp -d)"
 
   stdlib::debug "=== BEGIN Running runners ==="
+  stdlib::announce_runners_start
 
   %{for r in runners ~}
   stdlib::runner "${r.type}" "${r.object}" "${r.destination}" $${tmpdir} "${r.args}"
   %{endfor ~}
 
+  stdlib::announce_runners_end "0"
   stdlib::debug "=== END Running runners ==="
 }
