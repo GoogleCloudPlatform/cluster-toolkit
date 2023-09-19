@@ -26,6 +26,29 @@ locals {
     destination = "install_cloud_ops_agent_automatic.sh"
   }] : []
 
+  script_warning = [
+    {
+      type        = "data"
+      content     = file("${path.module}/files/running-script-warning.sh")
+      destination = "/usr/local/ghpc/running-script-warning.sh"
+    },
+    {
+      type        = "data"
+      content     = "bash /usr/local/ghpc/running-script-warning.sh"
+      destination = "/etc/profile.d/20-running-script-warning.sh"
+    },
+    {
+      type        = "data"
+      content     = file("${path.module}/files/end-script-notification.sh")
+      destination = "/usr/local/ghpc/end-script-notification.sh"
+    },
+    {
+      type        = "shell"
+      content     = "bash /usr/local/ghpc/end-script-notification.sh > /dev/null 2>&1 & disown"
+      destination = "end-script-notification-run.sh"
+    }
+  ]
+
   configure_ssh = length(var.configure_ssh_host_patterns) > 0
   host_args = {
     host_name_prefix = var.configure_ssh_host_patterns
@@ -67,7 +90,7 @@ locals {
     args        = var.ansible_virtualenv_path
   }] : []
 
-  runners = concat(local.ops_agent_installer, local.ansible_installer, local.configure_ssh_runners, var.runners)
+  runners = concat(local.script_warning, local.ops_agent_installer, local.ansible_installer, local.configure_ssh_runners, var.runners)
 
   bucket_regex               = "^gs://([^/]*)/*(.*)"
   gcs_bucket_path_trimmed    = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")
