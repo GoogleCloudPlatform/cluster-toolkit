@@ -13,10 +13,10 @@
 # limitations under the License.
 
 resource "google_cloudbuild_trigger" "pr_go_1_18_build_test" {
-  name        = "PR-Go-1-18-Build-Test"
+  name        = "PR-Go-1-18-build-test"
   description = "Test that the PR builds with Go 1.18"
 
-  filename = "tools/cloud-build/provision/pr-go1-18-build-test.tf"
+  filename = "tools/cloud-build/build-test-go1-18.yaml"
 
   github {
     owner = "GoogleCloudPlatform"
