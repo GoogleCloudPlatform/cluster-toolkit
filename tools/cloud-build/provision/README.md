@@ -33,6 +33,7 @@
 |------|------|
 | [google_cloudbuild_trigger.daily_project_cleanup](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.daily_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
+| [google_cloudbuild_trigger.pr_go_1_18_build_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.pr_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.pr_validation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.release_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
