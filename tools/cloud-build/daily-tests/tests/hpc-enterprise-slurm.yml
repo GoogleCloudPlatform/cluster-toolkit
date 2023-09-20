@@ -22,7 +22,6 @@ zone: europe-west1-d
 cli_deployment_vars:
   region: europe-west1
   zone: "{{ zone }}"
-  enable_cleanup_compute: true
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm.yaml"
 network: "default"
