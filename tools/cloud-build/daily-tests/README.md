@@ -16,6 +16,13 @@ To run the tests on your own project, with your own files, use:
 gcloud builds submit --config tools/cloud-build/daily-tests/builds/test_name.yaml
 ```
 
+Note: If you are testing `ofe-deployment-integration-test` locally,
+you need to first disable gcloudignore.
+
+```shell
+gcloud config set gcloudignore/enabled false
+```
+
 ## Hello World Integration Test
 
 The hello world integration test exists to demonstrate the test interaction
