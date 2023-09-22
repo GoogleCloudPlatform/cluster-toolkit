@@ -26,26 +26,16 @@ locals {
     destination = "install_cloud_ops_agent_automatic.sh"
   }] : []
 
-  script_warning = [
+  warnings = [
+    {
+      type        = "shell"
+      content     = "chmod -R o+r /var/log/journal"
+      destination = "access_joural.sh"
+    },
     {
       type        = "data"
       content     = file("${path.module}/files/running-script-warning.sh")
-      destination = "/usr/local/ghpc/running-script-warning.sh"
-    },
-    {
-      type        = "data"
-      content     = "bash /usr/local/ghpc/running-script-warning.sh"
       destination = "/etc/profile.d/20-running-script-warning.sh"
-    },
-    {
-      type        = "data"
-      content     = file("${path.module}/files/end-script-notification.sh")
-      destination = "/usr/local/ghpc/end-script-notification.sh"
-    },
-    {
-      type        = "shell"
-      content     = "bash /usr/local/ghpc/end-script-notification.sh > /dev/null 2>&1 & disown"
-      destination = "end-script-notification-run.sh"
     }
   ]
 
@@ -80,7 +70,6 @@ locals {
     }
   ] : []
 
-
   has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"]) || local.configure_ssh
   install_ansible     = var.install_ansible == null ? local.has_ansible_runners : var.install_ansible
   ansible_installer = local.install_ansible ? [{
@@ -90,7 +79,7 @@ locals {
     args        = var.ansible_virtualenv_path
   }] : []
 
-  runners = concat(local.script_warning, local.ops_agent_installer, local.ansible_installer, local.configure_ssh_runners, var.runners)
+  runners = concat(local.warnings, local.ops_agent_installer, local.ansible_installer, local.configure_ssh_runners, var.runners)
 
   bucket_regex               = "^gs://([^/]*)/*(.*)"
   gcs_bucket_path_trimmed    = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")

@@ -1,6 +1,7 @@
 #!/bin/sh
 
-RESULT_FILE=/usr/local/ghpc/script-complete
+FINISH_LINE="startup-script exit status"
+ACTIVE=^activ
 WARNING=$(
 	cat <<EOF
 ** WARNING **: The VM startup scripts for this have not been completed and
@@ -21,33 +22,23 @@ ERROR_NOTICE=$(
 	cat <<EOF
 ** ERROR **: The VM startup scripts have finished running, but produced an error. 
 
-Please see GCP instance console output or journalctl to determine the cause of
-the startup script failure.
+Please see GCP Cloud Console "Logs Explorer" tool or journalctl to determine
+the cause of the startup script failure.
 
-The following commands can also help display relevant information (replace the
-variables in the <> brackets).
+The following command can also help display relevant information.
 
 Local shell:
 $ sudo journalctl -u google-startup-scripts.service
-
-Cloud Shell (or system with gcloud installed):
-$ gcloud compute instances get-serial-port-output <instance name> --port 1 \
-         --zone <zone> --project <project id> | grep google_metadata | less
 EOF
 )
 
 # Check if end of startup scripts has been detected
-if [ -f "${RESULT_FILE}" ]; then
-	STATUS=$(cat "${RESULT_FILE}")
-	if [ "${STATUS}" != 0 ]; then
-		echo
-		echo "${ERROR_NOTICE}"
-		echo
-	fi
-fi
+IS_ACTIVE=$(systemctl is-active google-startup-scripts.service | grep "${ACTIVE}")
+END_FOUND=$(journalctl -b 0 -u google-startup-scripts.service | grep "${FINISH_LINE}")
+STATUS=$(echo "${END_FOUND}" | sed -r 's/.*([0-9]+)\s*$/\1/' | uniq)
 
 # Present user with warning if scripts have not completed
-if [ -z "${STATUS}" ]; then
+if [ -n "${IS_ACTIVE}" ]; then
 	clear
 	echo "${WARNING}"
 	echo
@@ -58,4 +49,11 @@ if [ -z "${STATUS}" ]; then
 	stty "$old"
 	clear
 	run-parts /etc/update-motd.d/
+else
+	# If there was an error, let the user know
+	if [ "${STATUS}" -ne 0 ]; then
+		echo
+		echo "${ERROR_NOTICE}"
+		echo
+	fi
 fi

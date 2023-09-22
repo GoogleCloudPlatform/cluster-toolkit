@@ -30,6 +30,45 @@ readonly E_RUN_OR_DIE=5
 readonly E_MISSING_MANDATORY_ARG=9
 readonly E_UNKNOWN_ARG=10
 
+SUCCESS_MESSAGE=$(
+	cat <<-EOF
+		** NOTICE **: The VM startup scripts have finished running successfully.  
+		It is now safe to start using the system.
+	EOF
+)
+readonly SUCCESS_MESSAGE
+ERROR_MESSAGE=$(
+	cat <<-EOF
+		** ERROR **: The VM startup scripts have finished running, but produced an error. 
+
+		Please see GCP Cloud Console "Logs Explorer" tool or journalctl to determine
+		the cause of the startup script failure.
+
+		The following command can also help display relevant information.
+
+		Local shell:
+		$ sudo journalctl -u google-startup-scripts.service
+	EOF
+)
+readonly ERROR_MESSAGE
+WARNING_MESSAGE=$(
+	cat <<-EOF
+		** WARNING **: The VM startup scripts for this have not been completed and
+		system services may not be configured yet.
+
+		Attempting to make changes to the system may lead to undefined behavior.
+		It is advised that you wait for the startup scripts to complete.
+		An alert will be written to all logged in users confirming that the startup
+		scripts have completed.
+
+		Another way to check the status of the startup scripts is to run:
+		$ systemctl status google-startup-scripts.service
+
+		If the "Active" status is no longer "active", the scripts have completed.
+	EOF
+)
+readonly WARNING_MESSAGE
+
 stdlib::debug() {
 	[[ -z ${DEBUG:-} ]] && return 0
 	local ds msg
@@ -55,6 +94,25 @@ stdlib::error() {
 	ds="$(date +"${DATE_FMT}") "
 	logger -p "${SYSLOG_ERROR_PRIORITY}" -t "${PROG}[$$]" -- "${msg}"
 	echo -e "${RED}${ds}Error [$$]: ${msg}${NC}" >&2
+}
+
+stdlib::announce_runners_start() {
+	if [ -z "$recursive_proc" ]; then
+		wall -n "$WARNING_MESSAGE"
+	fi
+	export recursive_proc=$((${recursive_proc:=0} + 1))
+}
+
+stdlib::announce_runners_end() {
+	exit_code=$1
+	export recursive_proc=$((${recursive_proc:=0} - 1))
+	if [ "$recursive_proc" -le "0" ]; then
+		if [ "$exit_code" -ne "0" ]; then
+			wall -n "$ERROR_MESSAGE"
+		else
+			wall -n "$SUCCESS_MESSAGE"
+		fi
+	fi
 }
 
 # The main initialization function of this library.  This should be kept to the
