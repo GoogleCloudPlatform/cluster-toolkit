@@ -298,9 +298,10 @@ variable "preemptible" {
 }
 
 variable "reservation_name" {
-  description = "Name of the reservation the compute instance is in, leave it unset to not use one."
+  description = "Name of the reservation to use for VM resources; set to empty string if no reservation is used."
   type        = string
-  default     = null
+  default     = ""
+  nullable    = false
 }
 
 variable "service_account" {
