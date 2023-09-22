@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.0
 
 variable "deployment_name" {
   description = "Name of the deployment."

@@ -123,6 +123,7 @@ deployment_groups:
         group_name: expl
         node_conf: {}
         additional_disks: []
+        additional_networks: []
         bandwidth_tier: null
         can_ip_forward: false
         disable_smt: false
