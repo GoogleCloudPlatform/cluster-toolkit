@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v5-node-group" })
+  labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v5-node-group", ghpc_role = "compute" })
 }
 
 locals {
@@ -61,6 +61,7 @@ locals {
     min_cpu_platform         = var.min_cpu_platform
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible
+    reservation_name         = var.reservation_name
     shielded_instance_config = var.shielded_instance_config
     source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf

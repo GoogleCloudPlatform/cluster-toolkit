@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "vm-instance" })
+  labels = merge(var.labels, { ghpc_module = "vm-instance", ghpc_role = "compute" })
 }
 
 locals {

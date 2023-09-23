@@ -12,20 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.2"
+resource "google_cloudbuild_trigger" "pr_go_1_18_build_test" {
+  name        = "PR-Go-1-18-build-test"
+  description = "Test that the PR builds with Go 1.18"
 
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.75.1, < 5.0"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.75.1, < 5.0"
+  filename = "tools/cloud-build/build-test-go1-18.yaml"
+
+  github {
+    owner = "GoogleCloudPlatform"
+    name  = "hpc-toolkit"
+    pull_request {
+      branch          = ".*"
+      comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
     }
   }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.23.0"
-  }
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 }

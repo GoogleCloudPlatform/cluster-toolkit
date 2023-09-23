@@ -14,13 +14,9 @@
 
 ---
 
-test_name: omnia
-deployment_name: "omnia-{{ build }}"
-zone: us-west3-c
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/omnia-cluster.yaml"
-network: "default"
-remote_node: "*omnia-manager-0"
-post_deploy_tests: []
-cli_deployment_vars:
-  machine_type: "c2-standard-4"
+steps:
+- name: golang:1.18
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - make ghpc test-engine

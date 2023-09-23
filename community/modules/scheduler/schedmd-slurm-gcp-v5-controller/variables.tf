@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.6
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -251,6 +251,14 @@ variable "enable_bigquery_load" {
   default     = false
 }
 
+variable "enable_slurm_gcp_plugins" {
+  description = <<EOD
+Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
+EOD
+  type        = bool
+  default     = false
+}
+
 variable "enable_oslogin" {
   type        = bool
   description = <<-EOD
@@ -399,6 +407,7 @@ variable "partition" {
         group_name             = string
         instance_template      = string
         node_conf              = map(string)
+        reservation_name       = string
         spot_instance_config = object({
           termination_action = string
         })
@@ -523,7 +532,7 @@ variable "instance_template" {
 
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the Slurm controller VM instance. 
+    Defines the image that will be used in the Slurm controller VM instance.
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -535,19 +544,35 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-5-7-hpc-centos-7"
+    family  = "slurm-gcp-5-8-hpc-centos-7"
     project = "schedmd-slurm-public"
   }
 
   validation {
-    condition = length(var.instance_image) == 0 || (
-    can(var.instance_image["family"]) || can(var.instance_image["name"])) == can(var.instance_image["project"])
-    error_message = "The \"project\" is required if \"family\" or \"name\" are provided in var.instance_image."
+    condition     = can(var.instance_image.project) && try(var.instance_image.project, "") != ""
+    error_message = "The \"project\" field is required for var.instance_image and cannot be the empty string."
   }
+
   validation {
-    condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
+    condition     = can(var.instance_image.name) != can(var.instance_image.family)
     error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
   }
+}
+
+variable "instance_image_custom" {
+  description = <<-EOD
+    A flag that designates that the user is aware that they are requesting
+    to use a custom and potentially incompatible image for this Slurm on
+    GCP module.
+
+    If the field is set to false, only the compatible families and project
+    names will be accepted.  The deployment will fail with any other image
+    family or name.  If set to true, no checks will be done.
+
+    See: https://goo.gle/hpc-slurm-images
+    EOD
+  type        = bool
+  default     = false
 }
 
 variable "source_image_project" {

@@ -64,8 +64,9 @@ deployment_groups:
       name: c30
       machine_type: c2-standard-30
       instance_image:
-        family: slurm-gcp-5-7-debian-11
+        family: slurm-gcp-5-8-debian-11
         project: schedmd-slurm-public
+      instance_image_custom: true
 
   - id: node_group2
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
@@ -82,8 +83,9 @@ deployment_groups:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: slurm-gcp-5-7-hpc-centos-7
+        family: slurm-gcp-5-8-hpc-centos-7
         project: schedmd-slurm-public
+      instance_image_custom: true
       enable_smt: true
 
   - id: node_group4
@@ -140,6 +142,7 @@ deployment_groups:
         min_cpu_platform: null
         on_host_maintenance: TERMINATE
         preemptible: false
+        reservation_name: null # will be replaced by default value empty string
         service_account: null
         shielded_instance_config: null
         spot_instance_config: null

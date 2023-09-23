@@ -15,36 +15,36 @@
 */
 
 output "network_name" {
-  description = "The name of the existing network"
+  description = "Name of the existing VPC network"
   value       = data.google_compute_network.vpc.name
 }
 
 output "network_id" {
-  description = "The ID of the existing network"
+  description = "ID of the existing VPC network"
   value       = data.google_compute_network.vpc.id
 }
 
 output "network_self_link" {
-  description = "The URI of the existing network"
+  description = "Self link of the existing VPC network"
   value       = data.google_compute_network.vpc.self_link
 }
 
 output "subnetwork" {
-  description = "The subnetwork in the specified primary region"
+  description = "Full subnetwork object in the primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork
 }
 
 output "subnetwork_name" {
-  description = "The name of the subnetwork in the specified primary region"
+  description = "Name of the subnetwork in the primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork.name
 }
 
 output "subnetwork_self_link" {
-  description = "The subnetwork self-link in the specified primary region"
+  description = "Subnetwork self-link in the primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork.self_link
 }
 
 output "subnetwork_address" {
-  description = "The subnetwork address in the specified primary region"
+  description = "Subnetwork IP range in the primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork.ip_cidr_range
 }

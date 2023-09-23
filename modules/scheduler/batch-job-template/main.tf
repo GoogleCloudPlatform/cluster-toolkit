@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "batch-job-template" })
+  labels = merge(var.labels, { ghpc_module = "batch-job-template", ghpc_role = "scheduler" })
 }
 
 locals {

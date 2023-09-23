@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "filestore" })
+  labels = merge(var.labels, { ghpc_module = "filestore", ghpc_role = "file-system" })
 }
 
 resource "random_id" "resource_name_suffix" {
@@ -28,7 +28,7 @@ locals {
   server_ip     = google_filestore_instance.filestore_instance.networks[0].ip_addresses[0]
   remote_mount  = format("/%s", google_filestore_instance.filestore_instance.file_shares[0].name)
   fs_type       = "nfs"
-  mount_options = "defaults,_netdev"
+  mount_options = var.mount_options
 
   install_nfs_client_runner = {
     "type"        = "shell"

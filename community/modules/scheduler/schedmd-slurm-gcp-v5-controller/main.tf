@@ -16,10 +16,11 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v5-controller" })
+  labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v5-controller", ghpc_role = "scheduler" })
 }
 
 locals {
+
   ghpc_startup_script_controller = [{
     filename = "ghpc_startup.sh"
     content  = var.controller_startup_script
@@ -54,7 +55,7 @@ data "google_compute_default_service_account" "default" {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=5.7.6"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=5.8.0"
 
   access_config                      = local.access_config
   slurm_cluster_name                 = local.slurm_cluster_name
@@ -79,6 +80,7 @@ module "slurm_controller_instance" {
   enable_cleanup_subscriptions       = var.enable_cleanup_subscriptions
   enable_reconfigure                 = var.enable_reconfigure
   enable_bigquery_load               = var.enable_bigquery_load
+  enable_slurm_gcp_plugins           = var.enable_slurm_gcp_plugins
   epilog_scripts                     = var.epilog_scripts
   disable_default_mounts             = var.disable_default_mounts
   login_network_storage              = var.network_storage
@@ -90,7 +92,7 @@ module "slurm_controller_instance" {
 }
 
 module "slurm_controller_template" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.7.6"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.8.0"
 
   additional_disks         = local.additional_disks
   can_ip_forward           = var.can_ip_forward

@@ -52,6 +52,10 @@ SELECTORS: Dict[str, Selector] = {
         "PR-test-batch-mpi",
         "PR-test-cloud-batch",
     ]),
+    "crd": selector_by_name([
+        "PR-test-chrome-remote-desktop",
+        "PR-test-hpc-slurm-chromedesktop",
+    ]),
     "pr_legacy": selector_by_name([
         "PR-legacy-test-integration-group-1",
         "PR-legacy-test-integration-group-2",

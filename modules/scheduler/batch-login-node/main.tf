@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "batch-login-node" })
+  labels = merge(var.labels, { ghpc_module = "batch-login-node", ghpc_role = "scheduler" })
 }
 
 data "google_compute_instance_template" "batch_instance_template" {
@@ -46,10 +46,10 @@ locals {
 
   Submit your job from login node:
     gcloud ${var.gcloud_version} batch jobs submit ${job.id} --config=${var.batch_job_directory}/${job.filename} --location=${var.region} --project=${var.project_id}
-  
+
   Check status:
     gcloud ${var.gcloud_version} batch jobs describe ${job.id} --location=${var.region} --project=${var.project_id} | grep state:
-  
+
   Delete job:
     gcloud ${var.gcloud_version} batch jobs delete ${job.id} --location=${var.region} --project=${var.project_id}
 
@@ -70,7 +70,7 @@ locals {
 
   Use the following commands to:
   ${local.list_all_jobs}
-  
+
   ${local.batch_command_instructions}
   EOT
 
@@ -94,7 +94,7 @@ locals {
 }
 
 module "login_startup_script" {
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=185837b5"
+  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.22.1"
   labels          = local.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name

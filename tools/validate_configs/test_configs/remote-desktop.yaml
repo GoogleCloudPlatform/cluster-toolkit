@@ -21,6 +21,8 @@ vars:
   deployment_name: remote-desktop
   region: us-central1
   zone: us-central1-f
+  add_deployment_name_before_prefix: true
+  install_nvidia_driver: true  # Must be set to true to accept Nvidia ToS for driver install
 
 deployment_groups:
 - group: primary
@@ -28,13 +30,27 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
 
-  - id: remote-desktop
+  - id: remote-desktop-ubuntu
     source: community/modules/remote-desktop/chrome-remote-desktop
     use: [network1]
     settings:
-      install_nvidia_driver: true  # Must be set to true to accept Nvidia ToS for driver install
+      name_prefix: crd-default
 
   # This module makes terraform wait until the remote-desktop setup is complete
-  - id: wait
+  - id: wait-ubuntu
     source: community/modules/scripts/wait-for-startup
-    use: [remote-desktop]
+    use: [remote-desktop-ubuntu]
+
+  - id: remote-desktop-debian
+    source: community/modules/remote-desktop/chrome-remote-desktop
+    use: [network1]
+    settings:
+      name_prefix: crd-debian
+      instance_image:
+        family: debian-11
+        project: debian-cloud
+
+  # This module makes terraform wait until the remote-desktop setup is complete
+  - id: wait-debian
+    source: community/modules/scripts/wait-for-startup
+    use: [remote-desktop-debian]
