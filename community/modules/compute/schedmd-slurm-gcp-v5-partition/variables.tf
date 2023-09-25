@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.0
 
 variable "deployment_name" {
   description = "Name of the deployment."
@@ -189,6 +189,7 @@ variable "node_groups" {
     EOT
   type = list(object({
     access_config = list(object({
+      nat_ip       = string
       network_tier = string
     }))
     node_count_static      = number
@@ -203,6 +204,26 @@ variable "node_groups" {
       disk_labels  = map(string)
       auto_delete  = bool
       boot         = bool
+    }))
+    additional_networks = list(object({
+      network            = string
+      subnetwork         = string
+      subnetwork_project = string
+      network_ip         = string
+      nic_type           = string
+      stack_type         = string
+      queue_count        = number
+      access_config = list(object({
+        nat_ip       = string
+        network_tier = string
+      }))
+      ipv6_access_config = list(object({
+        network_tier = string
+      }))
+      alias_ip_range = list(object({
+        ip_cidr_range         = string
+        subnetwork_range_name = string
+      }))
     }))
     bandwidth_tier         = string
     can_ip_forward         = bool

@@ -168,7 +168,7 @@ deployment_groups:
 - group: packer
   modules:
   - id: custom-image
-    source: github.com/SchedMD/slurm-gcp//packer?ref=5.8.0&depth=1
+    source: github.com/SchedMD/slurm-gcp//packer?ref=5.9.0&depth=1
     kind: packer
     settings:
       use_iap: true

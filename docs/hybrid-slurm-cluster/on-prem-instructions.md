@@ -39,9 +39,9 @@ detail, as well as how to customize many of these assumptions to fit your needs.
 deployments in their [hybrid.md] documentation.
 
 [hybridmodule]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.9.0
 [slurm\_controller\_hybrid]: https://github.com/SchedMD/slurm-gcp/tree/master/terraform/slurm_cluster/modules/slurm_controller_hybrid
-[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/docs/hybrid.md
+[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/5.9.0/docs/hybrid.md
 
 ### NFS Mounts
 
@@ -235,12 +235,12 @@ image created with slurm 21.08.8:
     partition_name: compute
 ```
 
-[slurmgcppacker]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0/packer
-[example.pkrvars.hcl]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0/packer/example.pkrvars.hcl
-[slurmversion]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/packer/variables.pkr.hcl#L97
-[`service_account_scopes`]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/packer/variables.pkr.hcl#L166
-[`munge_user`]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/ansible/roles/munge/defaults/main.yml#L17
-[`slurm_user`]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/ansible/roles/slurm/defaults/main.yml#L31
+[slurmgcppacker]: https://github.com/SchedMD/slurm-gcp/tree/5.9.0/packer
+[example.pkrvars.hcl]: https://github.com/SchedMD/slurm-gcp/tree/5.9.0/packer/example.pkrvars.hcl
+[slurmversion]: https://github.com/SchedMD/slurm-gcp/blob/5.9.0/packer/variables.pkr.hcl#L97
+[`service_account_scopes`]: https://github.com/SchedMD/slurm-gcp/blob/5.9.0/packer/variables.pkr.hcl#L166
+[`munge_user`]: https://github.com/SchedMD/slurm-gcp/blob/5.9.0/ansible/roles/munge/defaults/main.yml#L17
+[`slurm_user`]: https://github.com/SchedMD/slurm-gcp/blob/5.9.0/ansible/roles/slurm/defaults/main.yml#L31
 
 ## On Premise Setup
 
