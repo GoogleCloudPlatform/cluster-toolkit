@@ -50,7 +50,8 @@ data "google_compute_default_service_account" "default" {
 }
 
 module "slurm_login_template" {
-  source                      = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.9.0"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.9.0"
+
   access_config               = local.access_config
   additional_disks            = local.additional_disks
   additional_networks         = var.additional_networks

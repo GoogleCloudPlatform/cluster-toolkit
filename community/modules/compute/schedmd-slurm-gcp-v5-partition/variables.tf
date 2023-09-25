@@ -188,14 +188,14 @@ variable "node_groups" {
     group in a blueprint.
     EOT
   type = list(object({
-    access_config = list(object({
-      nat_ip       = string
-      network_tier = string
-    }))
     node_count_static      = number
     node_count_dynamic_max = number
     group_name             = string
     node_conf              = map(string)
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
     additional_disks = list(object({
       disk_name    = string
       device_name  = string
