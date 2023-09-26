@@ -12,7 +12,7 @@ require (
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20221020162138-81db043ad408
 	github.com/otiai10/copy v1.12.0
 	github.com/pkg/errors v0.9.1
-	github.com/spf13/afero v1.9.5
+	github.com/spf13/afero v1.10.0
 	github.com/spf13/cobra v1.7.0
 	github.com/zclconf/go-cty v1.14.0
 	golang.org/x/exp v0.0.0-20230108222341-4b8118a2686a
@@ -26,7 +26,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/hashicorp/terraform-exec v0.19.0
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
-	google.golang.org/api v0.141.0
+	google.golang.org/api v0.142.0
 )
 
 require (
@@ -40,7 +40,7 @@ require (
 	golang.org/x/sync v0.3.0 // indirect
 	golang.org/x/tools v0.13.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230803162519-f966b187b2e5 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20230911183012-2d3300fd4832 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20230913181813-007df8e322eb // indirect
 )
 
 require (

@@ -100,13 +100,13 @@ variable "instance_image" {
   }
 
   validation {
-    condition     = can(var.instance_image.project) && try(var.instance_image.project, "") != ""
-    error_message = "The \"project\" field is required for var.instance_image and cannot be the empty string."
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
   }
 
   validation {
-    condition     = can(var.instance_image.name) != can(var.instance_image.family)
-    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
   }
 }
 
