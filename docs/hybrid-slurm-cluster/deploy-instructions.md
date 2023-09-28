@@ -65,42 +65,44 @@ will be set based on your configuration via the command line:
 > `static_control_addr` should be set to the IP address of the static
 > controller.
 
+The hybrid-configuration.yaml is configured to connect to a VPC network that has
+already been deployed with a `network_name: compute-vpc-network` and a
+`subnetwork_name: primary-subnet`. If you have not already set up a network
+(_through a static cluster deployed in another project or otherwise_) then
+uncomment the `create_network` deployment group to also create a network with
+this blueprint.
+
 To create the deployment directory with deployment variables passed through the
 command line, run the following command with the updated values for
 `<<Controller_Hostname>>` and `<<Project_ID>>`:
 
 ```shell
-ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml \
-  --vars project_id="<<Project_ID>>"
-  --vars static_controller_hostname="<<Controller_Hostname>>"
-  [--vars static_controller_addr="<<Controller_Address>>"]
+./ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml \
+  --vars project_id=<<bursting project>> \
+  --vars static_controller_hostname=<<fully qualified controller hostname>> \
+  --vars static_controller_addr=<<Controller_Address>>
 ```
 
-If successful, this command will provide a set of terraform operations that can be
-performed to deploy the deployment groups. They should look similar to the
-following:
+If successful, this command will create a deployment folder. Use the following
+command to deploy the hybrid configuration:
 
-```shell
-Terraform group was successfully created in directory hybrid-config/create_network
-To deploy, run the following commands:
-  terraform -chdir=hybrid-config/create_network init
-  terraform -chdir=hybrid-config/create_network validate
-  terraform -chdir=hybrid-config/create_network apply
-Terraform group was successfully created in directory hybrid-config/primary
-To deploy, run the following commands:
-  terraform -chdir=hybrid-config/primary init
-  terraform -chdir=hybrid-config/primary validate
-  terraform -chdir=hybrid-config/primary apply
+```sh
+./ghpc deploy hybrid-config
 ```
 
-If a VPC network still needs to be created in the cloud bursting project, then
-follow the first set of terraform commands targeting the group created in
-`hybrid-config/create_network`.
+`ghpc` reports the changes that Terraform is proposing to make for your
+cluster. Optionally, you may review them by typing `d` and pressing `enter`. To
+deploy the cluster, accept the proposed changes by typing `a` and pressing
+`enter`.
 
-Next, execute the second set of terraform commands to create the hybrid
-configuration. After, a directory in `hybrid-configuration/primary` named `hybrid/`
+After deployment, a directory in `hybrid-configuration/primary` named `hybrid/`
 should be created which contains a `cloud.conf` file, `cloud_gres.conf` file and
 a set of support scripts.
+
+> [!WARNING]
+> There is a known issue that may prevent deployment when terraform is being run
+> on a machine other than the controller. The error looks like:
+> `FileNotFoundError: [Errno 2] No such file or directory: '/slurm/custom_scripts/prolog.d'`.
 
 [hybridmodule]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 [hybrid-configuration.yaml]: ./blueprints/hybrid-configuration.yaml
@@ -179,6 +181,8 @@ sudo chmod -R 755 $SLURM_CONF_DIR/hybrid
 >
 > Depending on the configuration of the static partitions, the `SuspendExcNodes`
 > may not be included.
+>
+> Also remove `State=CLOUD` text when copying this over.
 >
 > These lines can be copied to the bottom of the `slurm.conf` file.
 
