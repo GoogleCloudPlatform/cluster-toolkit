@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.0
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -95,18 +95,18 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-5-8-hpc-centos-7"
+    family  = "slurm-gcp-5-9-hpc-centos-7"
     project = "schedmd-slurm-public"
   }
 
   validation {
-    condition     = can(var.instance_image.project) && try(var.instance_image.project, "") != ""
-    error_message = "The \"project\" field is required for var.instance_image and cannot be the empty string."
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
   }
 
   validation {
-    condition     = can(var.instance_image.name) != can(var.instance_image.family)
-    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
   }
 }
 
@@ -378,9 +378,35 @@ variable "bandwidth_tier" {
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the node group instances can be accessed via the internet."
   type = list(object({
+    nat_ip       = string
     network_tier = string
   }))
   default = []
+}
+
+variable "additional_networks" {
+  description = "Additional network interface details for GCE, if any."
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
 }
 
 variable "disable_public_ips" {

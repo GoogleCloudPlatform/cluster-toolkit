@@ -38,7 +38,7 @@ manually. This will require addition configuration and verification of
 permissions. For more information see the [hybrid.md] documentation on
 [slurm-gcp].
 
-[slurm-controller-hybrid]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0/terraform/slurm_cluster/modules/slurm_controller_hybrid
+[slurm-controller-hybrid]: https://github.com/SchedMD/slurm-gcp/tree/5.9.0/terraform/slurm_cluster/modules/slurm_controller_hybrid
 
 > **_NOTE:_** The hybrid module requires the following dependencies to be
 > installed on the system deploying the module:
@@ -58,15 +58,15 @@ permissions. For more information see the [hybrid.md] documentation on
 [pyyaml]: https://pypi.org/project/PyYAML/
 [google-api-python-client]: https://pypi.org/project/google-api-python-client/
 [google-cloud-pubsub]: https://pypi.org/project/google-cloud-pubsub/
-[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/scripts/requirements.txt
+[requirements.txt]: https://github.com/SchedMD/slurm-gcp/blob/5.9.0/scripts/requirements.txt
 
 ### Manual Configuration
 This module *does not* complete the installation of hybrid partitions on your
 slurm cluster. After deploying, you must follow the steps listed out in the
 [hybrid.md] documentation under [manual steps].
 
-[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/docs/hybrid.md
-[manual steps]: https://github.com/SchedMD/slurm-gcp/blob/5.8.0/docs/hybrid.md#manual-configurations
+[hybrid.md]: https://github.com/SchedMD/slurm-gcp/blob/5.9.0/docs/hybrid.md
+[manual steps]: https://github.com/SchedMD/slurm-gcp/blob/5.9.0/docs/hybrid.md#manual-configurations
 
 ### Example Usage
 The hybrid module can be added to a blueprint as follows:
@@ -146,10 +146,10 @@ strongly advise only using versions 21 or 22 when using this module. Attempting
 to use this module with any version older than 21 may lead to unexpected
 results.
 
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.9.0
 [pre-existing-network-storage]: ../../../../modules/file-system/pre-existing-network-storage/
 [schedmd-slurm-gcp-v5-partition]: ../../compute/schedmd-slurm-gcp-v5-partition/
-[packer templates]: https://github.com/SchedMD/slurm-gcp/tree/5.8.0/packer
+[packer templates]: https://github.com/SchedMD/slurm-gcp/tree/5.9.0/packer
 
 ## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -181,7 +181,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.8.0 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.9.0 |
 
 ## Resources
 
@@ -208,7 +208,7 @@ No resources.
 | <a name="input_munge_mount"></a> [munge\_mount](#input\_munge\_mount) | Remote munge mount for compute and login nodes to acquire the munge.key.<br><br>By default, the munge mount server will be assumed to be the<br>`var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when<br>`server_ip=null`. | <pre>object({<br>    server_ip     = string<br>    remote_mount  = string<br>    fs_type       = string<br>    mount_options = string<br>  })</pre> | <pre>{<br>  "fs_type": "nfs",<br>  "mount_options": "",<br>  "remote_mount": "/etc/munge/",<br>  "server_ip": null<br>}</pre> | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on all instances. | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_output_dir"></a> [output\_dir](#input\_output\_dir) | Directory where this module will write its files to. These files include:<br>cloud.conf; cloud\_gres.conf; config.yaml; resume.py; suspend.py; and util.py.<br>If not specified explicitly, this will also be used as the default value<br>for the `install_dir` variable. | `string` | `null` | no |
-| <a name="input_partition"></a> [partition](#input\_partition) | Cluster partitions as a list. | <pre>list(object({<br>    compute_list = list(string)<br>    partition = object({<br>      enable_job_exclusive    = bool<br>      enable_placement_groups = bool<br>      network_storage = list(object({<br>        server_ip     = string<br>        remote_mount  = string<br>        local_mount   = string<br>        fs_type       = string<br>        mount_options = string<br>      }))<br>      partition_conf    = map(string)<br>      partition_feature = string<br>      partition_name    = string<br>      partition_nodes = map(object({<br>        bandwidth_tier         = string<br>        node_count_dynamic_max = number<br>        node_count_static      = number<br>        enable_spot_vm         = bool<br>        group_name             = string<br>        instance_template      = string<br>        node_conf              = map(string)<br>        access_config = list(object({<br>          network_tier = string<br>        }))<br>        spot_instance_config = object({<br>          termination_action = string<br>        })<br>      }))<br>      partition_startup_scripts_timeout = number<br>      subnetwork                        = string<br>      zone_policy_allow                 = list(string)<br>      zone_policy_deny                  = list(string)<br>      zone_target_shape                 = string<br>    })<br>  }))</pre> | `[]` | no |
+| <a name="input_partition"></a> [partition](#input\_partition) | Cluster partitions as a list. | <pre>list(object({<br>    compute_list = list(string)<br>    partition = object({<br>      enable_job_exclusive    = bool<br>      enable_placement_groups = bool<br>      network_storage = list(object({<br>        server_ip     = string<br>        remote_mount  = string<br>        local_mount   = string<br>        fs_type       = string<br>        mount_options = string<br>      }))<br>      partition_conf    = map(string)<br>      partition_feature = string<br>      partition_name    = string<br>      partition_nodes = map(object({<br>        bandwidth_tier         = string<br>        node_count_dynamic_max = number<br>        node_count_static      = number<br>        enable_spot_vm         = bool<br>        group_name             = string<br>        instance_template      = string<br>        node_conf              = map(string)<br>        access_config = list(object({<br>          nat_ip       = string<br>          network_tier = string<br>        }))<br>        spot_instance_config = object({<br>          termination_action = string<br>        })<br>      }))<br>      partition_startup_scripts_timeout = number<br>      subnetwork                        = string<br>      zone_policy_allow                 = list(string)<br>      zone_policy_deny                  = list(string)<br>      zone_target_shape                 = string<br>    })<br>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_prolog_scripts"></a> [prolog\_scripts](#input\_prolog\_scripts) | List of scripts to be used for Prolog. Programs for the slurmd to execute<br>whenever it is asked to run a job step from a new job allocation.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
 | <a name="input_slurm_bin_dir"></a> [slurm\_bin\_dir](#input\_slurm\_bin\_dir) | Path to directroy of Slurm binary commands (e.g. scontrol, sinfo). If 'null',<br>then it will be assumed that binaries are in $PATH. | `string` | `null` | no |

@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.8.0
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.0
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -38,6 +38,31 @@ variable "additional_disks" {
   }))
   description = "List of maps of disks."
   default     = []
+}
+
+variable "additional_networks" {
+  description = "Additional network interface details for GCE, if any."
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
 }
 
 variable "can_ip_forward" {
@@ -150,10 +175,10 @@ variable "disable_controller_public_ips" {
 variable "disable_default_mounts" {
   description = <<-EOD
     Disable default global network storage from the controller
-    * /usr/local/etc/slurm
-    * /etc/munge
-    * /home
-    * /apps
+    - /usr/local/etc/slurm
+    - /etc/munge
+    - /home
+    - /apps
     Warning: If these are disabled, the slurm etc and munge dirs must be added
     manually, or some other mechanism must be used to synchronize the slurm conf
     files and the munge key across the cluster.
@@ -373,6 +398,12 @@ variable "network_storage" {
   default = []
 }
 
+variable "nic_type" {
+  description = "Valid values are \"VIRTIO_NET\", \"GVNIC\" or set to null to accept API default behavior."
+  type        = string
+  default     = null
+}
+
 variable "on_host_maintenance" {
   type        = string
   description = "Instance availability Policy."
@@ -544,18 +575,18 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-5-8-hpc-centos-7"
+    family  = "slurm-gcp-5-9-hpc-centos-7"
     project = "schedmd-slurm-public"
   }
 
   validation {
-    condition     = can(var.instance_image.project) && try(var.instance_image.project, "") != ""
-    error_message = "The \"project\" field is required for var.instance_image and cannot be the empty string."
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
   }
 
   validation {
-    condition     = can(var.instance_image.name) != can(var.instance_image.family)
-    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
   }
 }
 
@@ -633,6 +664,12 @@ variable "tags" {
   type        = list(string)
   description = "Network tag list."
   default     = []
+}
+
+variable "total_egress_bandwidth_tier" {
+  type        = string
+  description = "Egress bandwidth tier setting for supported VM families"
+  default     = "DEFAULT"
 }
 
 variable "zone" {

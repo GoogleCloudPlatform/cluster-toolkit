@@ -64,7 +64,7 @@ deployment_groups:
       name: c30
       machine_type: c2-standard-30
       instance_image:
-        family: slurm-gcp-5-8-debian-11
+        family: slurm-gcp-5-9-debian-11
         project: schedmd-slurm-public
       instance_image_custom: true
 
@@ -83,7 +83,7 @@ deployment_groups:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: slurm-gcp-5-8-hpc-centos-7
+        family: slurm-gcp-5-9-hpc-centos-7
         project: schedmd-slurm-public
       instance_image_custom: true
       enable_smt: true
@@ -123,6 +123,7 @@ deployment_groups:
         group_name: expl
         node_conf: {}
         additional_disks: []
+        additional_networks: []
         bandwidth_tier: null
         can_ip_forward: false
         disable_smt: false
