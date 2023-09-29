@@ -63,7 +63,7 @@
       owner: "{{ chown_owner | default(omit, true) }}"
       group: "{{ chgrp_group | default(omit, true)  }}"
       recurse: true
-    when: lock_out.rc == 0
+    when: (lock_out.rc == 0) and ((chmod_mode != None) or (chown_owner != None) or (chgrp_group != None))
 
   - name: Finalize setup
     ansible.builtin.shell: "{{ finalize_setup_script }}"
