@@ -40,31 +40,6 @@ variable "additional_disks" {
   default     = []
 }
 
-variable "additional_networks" {
-  description = "Additional network interface details for GCE, if any."
-  default     = []
-  type = list(object({
-    network            = string
-    subnetwork         = string
-    subnetwork_project = string
-    network_ip         = string
-    nic_type           = string
-    stack_type         = string
-    queue_count        = number
-    access_config = list(object({
-      nat_ip       = string
-      network_tier = string
-    }))
-    ipv6_access_config = list(object({
-      network_tier = string
-    }))
-    alias_ip_range = list(object({
-      ip_cidr_range         = string
-      subnetwork_range_name = string
-    }))
-  }))
-}
-
 variable "can_ip_forward" {
   type        = bool
   description = "Enable IP forwarding, for NAT instances for example."
@@ -398,12 +373,6 @@ variable "network_storage" {
   default = []
 }
 
-variable "nic_type" {
-  description = "Valid values are \"VIRTIO_NET\", \"GVNIC\" or set to null to accept API default behavior."
-  type        = string
-  default     = null
-}
-
 variable "on_host_maintenance" {
   type        = string
   description = "Instance availability Policy."
@@ -664,12 +633,6 @@ variable "tags" {
   type        = list(string)
   description = "Network tag list."
   default     = []
-}
-
-variable "total_egress_bandwidth_tier" {
-  type        = string
-  description = "Egress bandwidth tier setting for supported VM families"
-  default     = "DEFAULT"
 }
 
 variable "zone" {
