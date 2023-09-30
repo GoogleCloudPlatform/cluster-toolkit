@@ -121,6 +121,9 @@ source "googlecompute" "toolkit_image" {
   enable_secure_boot          = local.enable_secure_boot
   enable_vtpm                 = local.enable_vtpm
   enable_integrity_monitoring = local.enable_integrity_monitoring
+  image_licenses = [
+    "projects/click-to-deploy-images/global/licenses/hpc-toolkit-vm-image"
+  ]
 }
 
 build {
