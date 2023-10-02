@@ -52,39 +52,35 @@ data "google_compute_default_service_account" "default" {
 module "slurm_login_template" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.9.0"
 
-  access_config               = local.access_config
-  additional_disks            = local.additional_disks
-  additional_networks         = var.additional_networks
-  can_ip_forward              = var.can_ip_forward
-  slurm_cluster_name          = local.slurm_cluster_name
-  disable_smt                 = var.disable_smt
-  disk_auto_delete            = var.disk_auto_delete
-  disk_labels                 = merge(var.disk_labels, local.labels)
-  disk_size_gb                = var.disk_size_gb
-  disk_type                   = var.disk_type
-  enable_confidential_vm      = var.enable_confidential_vm
-  enable_oslogin              = var.enable_oslogin
-  enable_shielded_vm          = var.enable_shielded_vm
-  gpu                         = one(local.guest_accelerator)
-  labels                      = local.labels
-  machine_type                = var.machine_type
-  metadata                    = var.metadata
-  min_cpu_platform            = var.min_cpu_platform
-  nic_type                    = var.nic_type
-  on_host_maintenance         = var.on_host_maintenance
-  preemptible                 = var.preemptible
-  project_id                  = var.project_id
-  region                      = var.region
-  shielded_instance_config    = var.shielded_instance_config
-  slurm_instance_role         = "login"
-  source_image_family         = local.source_image_family             # requires source_image_logic.tf
-  source_image_project        = local.source_image_project_normalized # requires source_image_logic.tf
-  source_image                = local.source_image                    # requires source_image_logic.tf
-  network                     = var.network_self_link == null ? "" : var.network_self_link
-  subnetwork_project          = var.subnetwork_project == null ? "" : var.subnetwork_project
-  subnetwork                  = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
-  tags                        = concat([local.slurm_cluster_name], var.tags)
-  total_egress_bandwidth_tier = var.total_egress_bandwidth_tier
+  additional_disks         = local.additional_disks
+  can_ip_forward           = var.can_ip_forward
+  slurm_cluster_name       = local.slurm_cluster_name
+  disable_smt              = var.disable_smt
+  disk_auto_delete         = var.disk_auto_delete
+  disk_labels              = merge(var.disk_labels, local.labels)
+  disk_size_gb             = var.disk_size_gb
+  disk_type                = var.disk_type
+  enable_confidential_vm   = var.enable_confidential_vm
+  enable_oslogin           = var.enable_oslogin
+  enable_shielded_vm       = var.enable_shielded_vm
+  gpu                      = one(local.guest_accelerator)
+  labels                   = local.labels
+  machine_type             = var.machine_type
+  metadata                 = var.metadata
+  min_cpu_platform         = var.min_cpu_platform
+  on_host_maintenance      = var.on_host_maintenance
+  preemptible              = var.preemptible
+  project_id               = var.project_id
+  region                   = var.region
+  shielded_instance_config = var.shielded_instance_config
+  slurm_instance_role      = "login"
+  source_image_family      = local.source_image_family             # requires source_image_logic.tf
+  source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
+  source_image             = local.source_image                    # requires source_image_logic.tf
+  network                  = var.network_self_link == null ? "" : var.network_self_link
+  subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
+  subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
+  tags                     = concat([local.slurm_cluster_name], var.tags)
   service_account = var.service_account != null ? var.service_account : {
     email  = data.google_compute_default_service_account.default.email
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]

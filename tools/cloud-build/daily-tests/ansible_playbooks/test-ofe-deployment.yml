@@ -1,0 +1,108 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Ansible Playbook for OFE (Open Front-End) Deployment and Testing
+# This playbook automates the process of deploying the OFE application,
+# testing its functionality, and tearing it down.
+
+---
+- name: Generate random secret using Python for admin password
+  ansible.builtin.command: |
+    python3 -c "import secrets; print(secrets.token_hex(20))"
+  register: admin_password
+  changed_when: false  # Marking this task as unchanged
+
+- name: Create YAML configuration file for OFE deployment
+  ansible.builtin.blockinfile:
+    path: /workspace/community/front-end/ofe/config.yaml
+    create: yes
+    block: |
+      deployment_name: {{ deployment_name }}
+      project_id: {{ project }}
+      zone: {{ zone }}
+      django_superuser_username: sysadm
+      django_superuser_password: {{ admin_password.stdout }}
+      django_superuser_email: sysadm@example.com
+
+- name: Deploy OFE using deployment script
+  block:
+  - name: Run deploy.sh
+    ansible.builtin.shell: |
+      ./deploy.sh --config config.yaml
+    args:
+      chdir: /workspace/community/front-end/ofe
+    register: ofe_deploy_output
+  - name: Display OFE deployment output
+    ansible.builtin.debug:
+      var: ofe_deploy_output
+  rescue:
+  - name: Cleanup deployment in case of failure
+    ansible.builtin.shell: |
+      ./teardown.sh -y
+    args:
+      chdir: /workspace/community/front-end/ofe
+    failed_when: true
+
+- name: Extract full OFE IP address string from output
+  set_fact:
+    extracted_ip: "{{ ofe_deploy_output.stdout_lines | regex_search('server_ip = \"([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)\"') }}"
+
+- name: Extract only IP address
+  set_fact:
+    ip_only: "{{ extracted_ip | regex_replace('.*\"([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)\".*', '\\1') }}"
+
+- name: Display OFE external IP address
+  ansible.builtin.debug:
+    var: ip_only
+
+- name: Pause for 15 minutes waiting for OFE to deploy
+  ansible.builtin.pause:
+    minutes: 15
+
+# Addressing this error: Status code was -1 and not [200]: An unknown error occurred:
+# ~/.netrc access too permissive: access permissions must restrict access to
+# only the owner (/builder/home/.netrc, line 2)
+- name: Change .netrc permissions before making HTTP request to OFE
+  ansible.builtin.file:
+    path: /builder/home/.netrc
+    mode: '0600'
+
+- name: Make HTTP request
+  block:
+  - name: Make a HTTP request to OFE server
+    ansible.builtin.uri:
+      url: "http://{{ ip_only }}"
+      return_content: yes
+    register: http_response
+  - name: Print out HTTP Response code
+    ansible.builtin.debug:
+      msg: "HTTP response code is {{ http_response.status }}"
+  rescue:
+  - name: Handle request failure
+    ansible.builtin.shell: |
+      ./teardown.sh -y
+    args:
+      chdir: /workspace/community/front-end/ofe
+    failed_when: true
+
+- name: Tear down OFE using script
+  ansible.builtin.shell: |
+    ./teardown.sh -y
+  args:
+    chdir: /workspace/community/front-end/ofe
+  register: ofe_teardown_output
+
+- name: Display OFE tear down output
+  ansible.builtin.debug:
+    var: ofe_teardown_output

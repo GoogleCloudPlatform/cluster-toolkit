@@ -43,6 +43,8 @@ def list_builds(start_time=30, end_time=5*60):
     interval = (end_time - start_time) // max(1, len(builds) - 1)
     res = {}
     for b in builds:
+        if b == "ofe-deployment":  # Skip ofe-deployment test.
+          continue
         h, m = start_time // 60, start_time % 60
         res[b] = f"{m} {h} * * MON-FRI"
         start_time += interval
