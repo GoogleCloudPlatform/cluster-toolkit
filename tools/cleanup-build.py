@@ -50,8 +50,40 @@ def cp_from_gcs(gcs_source_uri: str, local_destination_path: str, project_id: st
     return destination
 
 def unpack_tgz(tar_file: str, destination_folder: str):
-  with tarfile.open(tar_file, "r:gz") as tar:
-    tar.extractall(destination_folder)
+    with tarfile.open(tar_file, "r:gz") as tar:
+        tar.extractall(destination_folder)
+
+# For multi-group deployments - attempt to export all group variables, and 
+# import them to downstream groups.  Dependent on blueprints needing groups to
+# be in dependent order top to bottom
+def export_import_vars(deployment_folder: str):
+    import re, mmap, subprocess, sys
+    # Simple check for multi-group (if all we have is primary and .ghpc we move on)
+    if len(os.listdir(deployment_folder)) > 2:
+        ordered_dirs = []
+        # Get order of folder to simplify import and export order
+        with open(deployment_folder + '/.ghpc/artifacts/expanded_blueprint.yaml', mode="r") as f:
+            for l in f:
+                tmp = re.search(r'\s*- group:\s*([0-9a-z\-_]+)', l)
+                if tmp:
+                    ordered_dirs.append(tmp.group(1))
+        # Run imports and exports
+        for d in ordered_dirs:
+            try:
+                subdir = deployment_folder + "/" + d
+                print("Importing to " + subdir)
+                process = subprocess.Popen(["./ghpc" , "import-inputs", subdir], stdout=subprocess.PIPE)
+                for line in iter(lambda: process.stdout.read(1), b""):
+                    sys.stdout.buffer.write(line)
+                process.wait()
+                print("Exporting to to " + subdir)
+                process = subprocess.Popen(["./ghpc" , "export-outputs", subdir], stdout=subprocess.PIPE)
+                for line in iter(lambda: process.stdout.read(1), b""):
+                    sys.stdout.buffer.write(line)
+                process.wait()
+            except Exception as e:
+                print(e)
+                continue
 
 def destroy(deployment_folder: str):
     import subprocess
@@ -82,6 +114,9 @@ def main():
     print('Extracting tgz file')
     deployment_folder, _ = os.path.splitext(tgz_file)
     unpack_tgz(tgz_file, os.path.dirname(tgz_file))
+
+    print('Exporting and importing variables to groups (if applicable)')
+    export_import_vars(deployment_folder)
 
     print('Destroying deployment')
     destroy(deployment_folder)
