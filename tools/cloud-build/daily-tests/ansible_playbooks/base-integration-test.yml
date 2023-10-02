@@ -27,6 +27,17 @@
     community.crypto.openssh_keypair:
       path: "/builder/home/.ssh/id_rsa"
 
+  ## Get builder IP address
+  - name: Get Builder IP
+    register: build_ip
+    changed_when: false
+    args:
+      executable: /bin/bash
+    ansible.builtin.shell: |
+      set -e -o pipefail
+      dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
+          awk -F'"' '{print $2}'
+
   ## Create cluster
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
@@ -79,15 +90,6 @@
         var: remote_ip
 
     ## Setup firewall for cloud build
-    - name: Get Builder IP
-      register: build_ip
-      changed_when: false
-      args:
-        executable: /bin/bash
-      ansible.builtin.shell: |
-        set -e -o pipefail
-        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
-            awk -F'"' '{print $2}'
     - name: Create firewall rule
       register: fw_result
       changed_when: fw_result.rc == 0

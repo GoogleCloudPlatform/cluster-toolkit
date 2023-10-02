@@ -1,4 +1,18 @@
+# Provisioning Cloud Build Triggers
+
 `provision` module creates CloudBuilds triggers and schedules.
+
+Usage:
+
+```sh
+cd tools/cloud-build/provision
+terraform init
+terraform plan
+terraform apply
+```
+
+When prompted for gcs bucket, use `<team name>-dev-automation`.\
+When prompted for project, use integration test project.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
