@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# OFE test is specially configured to only run as a PR trigger and does not
+# run on as a nightly build
+
 resource "google_cloudbuild_trigger" "pr_ofe_test" {
   name        = "PR-OFE-test"
   description = "OFE test while submitting PR"
