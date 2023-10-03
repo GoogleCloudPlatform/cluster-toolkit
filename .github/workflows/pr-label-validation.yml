@@ -41,8 +41,8 @@ jobs:
       with:
         mode: minimum
         count: 1
-        labels: "release-bugfix, release-chore, release-key-new-features, release-new-modules, release-module-improvements, release-improvements, release-deprecations, release-version-updates"
-        message: "This PR is being prevented from merging because it is not labeled.  Please add a label to this PR.  Accepted labels: release-bugfix, release-chore, release-key-new-features, release-new-modules, release-module-improvements, release-improvements, release-deprecations, release-version-updates"
+        labels: "release-chore, release-key-new-features, release-new-modules, release-module-improvements, release-improvements, release-deprecations, release-version-updates, release-bugfix"
+        message: "This PR is being prevented from merging because it is not labeled.  Please add a label to this PR.  Accepted labels: release-chore, release-key-new-features, release-new-modules, release-module-improvements, release-improvements, release-deprecations, release-version-updates, release-bugfix"
     - id: print-labels
       run: |
         echo "Current PR labels:"
