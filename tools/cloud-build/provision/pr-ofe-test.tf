@@ -20,6 +20,9 @@ resource "google_cloudbuild_trigger" "pr_ofe_test" {
   description = "OFE test while submitting PR"
 
   filename = "tools/cloud-build/daily-tests/builds/ofe-deployment.yaml"
+  approval_config {
+    approval_required = true
+  }
 
   github {
     owner = "GoogleCloudPlatform"
