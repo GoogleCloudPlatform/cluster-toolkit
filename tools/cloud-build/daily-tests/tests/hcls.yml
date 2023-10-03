@@ -20,18 +20,17 @@ deployment_name: "hcls-{{ build }}"
 # removed by HPC Toolkit slurm wrappers, which will break the playbook
 slurm_cluster_name: "hcls{{ build[0:6] }}"
 zone: europe-west1-d
-network: "{{ deployment_name }}-net"
-cli_deployment_vars:
-  region: europe-west1
-  zone: "{{ zone }}"
-  network_name: "{{ network }}"
-  disable_login_public_ips: false
-  disable_controller_public_ips: false
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml"
 max_nodes: 5
+network: "{{ deployment_name }}-net"
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
+cli_deployment_vars:
+  region: europe-west1
+  zone: "{{ zone }}"
+  disable_login_public_ips: "false"
+  disable_controller_public_ips: "false"
 post_deploy_tests:
 - test-mounts.yml
 - test-partitions.yml
