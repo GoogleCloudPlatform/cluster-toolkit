@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,27 +20,26 @@ deployment_name: "hcls-{{ build }}"
 # removed by HPC Toolkit slurm wrappers, which will break the playbook
 slurm_cluster_name: "hcls{{ build[0:6] }}"
 zone: europe-west1-d
+network: "{{ deployment_name }}-net"
 cli_deployment_vars:
   region: europe-west1
   zone: "{{ zone }}"
+  network_name: "{{ network }}"
+  disable_login_public_ips: false
+  disable_controller_public_ips: false
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml"
-network: "{{ deployment_name }}-net"
 max_nodes: 5
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-# post_deploy_tests:
-# - test-mounts.yml
-# - test-partitions.yml
-# - test-crd.yml
-# - test-spack.yml
-# custom_vars:
-#   partitions:
-#   - compute_partition
-#   - gpu_partition
-#   mounts:
-#   - /home
-#   - /apps
-#   - /data_input
-#   - /data_output
-#   - /user_provided_software
+post_deploy_tests:
+- test-mounts.yml
+- test-partitions.yml
+custom_vars:
+  partitions:
+  - compute
+  mounts:
+  - /home
+  - /apps
+  - /data_input
+  - /data_output

@@ -20,7 +20,7 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hcls-01
   region: us-central1
-  zone: us-central1-f
+  zone: us-central1-c
   bucket_force_destroy: false
 
 deployment_groups:
@@ -48,6 +48,9 @@ deployment_groups:
 
   - id: network1
     source: modules/network/vpc
+    settings:
+      network_name: hcls-cluster-net
+      subnetwork_name: primary-subnet
 
   ### Resource Monitoring ###
 

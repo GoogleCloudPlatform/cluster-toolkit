@@ -46,7 +46,7 @@
 
   - name: Create Infrastructure and test
     block:
-    - name: Execute ghpc deploy
+    - name: Create Cluster with GHPC
       register: deployment
       changed_when: deployment.changed
       ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
@@ -84,7 +84,10 @@
       ansible.builtin.set_fact:
         login_ip: "{{ get_login_ip.stdout }}"
       when: '"*" in login_node'
-
+    - name: Check that login IP is set
+      ansible.builtin.assert:
+        that:
+        - login_ip != ""
     - name: Print login public IP
       ansible.builtin.debug:
         var: login_ip
