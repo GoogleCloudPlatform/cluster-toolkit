@@ -81,6 +81,7 @@ deployment_groups:
 
         spack config --scope defaults add config:build_stage:/share/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
+        spack config --scope site add packages:all:permissions:write:user
 
         spack install gcc@8.2.0 target=x86_64
         spack load gcc@8.2.0 target=x86_64
