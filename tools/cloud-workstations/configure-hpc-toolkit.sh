@@ -36,5 +36,11 @@ if [[ ! -f $FLAG ]]; then
 	go install github.com/ramya-rao-a/go-outline@v0.0.0-20210608161538-9736a4bde949
 	go install github.com/rogpeppe/godef@v1.1.2
 	go install golang.org/x/tools/cmd/guru@latest
+
+	# Install compatible version of shellcheck
+	SHELLCHECK_VERSION=v0.9.0
+	wget -qO- "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION?}.linux.x86_64.tar.xz" | tar -xJv
+	cp "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/bin/
+
 	touch "$FLAG"
 fi
