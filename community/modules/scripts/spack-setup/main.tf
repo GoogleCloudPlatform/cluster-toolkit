@@ -40,7 +40,6 @@ locals {
     set -e
     . /etc/profile.d/spack.sh
     spack config --scope site add 'packages:all:permissions:read:world'
-    spack config --scope site add 'packages:all:permissions:write:group'
     spack gpg init
     spack compiler find --scope site
     ${local.add_google_mirror_script}
