@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - cli_deployment_vars.region is defined
+
 - name: Include wait for startup script
   ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
   vars:
@@ -23,10 +28,10 @@
   - name: Submit batch job
     register: batch_submission
     changed_when: batch_submission.rc == 0
-    ansible.builtin.command: gcloud alpha batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/cloud-batch-{{ deployment_name }}.json --location=us-central1 --project={{ custom_vars.project }}
+    ansible.builtin.command: gcloud alpha batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/cloud-batch-{{ deployment_name }}.json --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
   - name: Wait for job to run
     changed_when: false
-    ansible.builtin.command: gcloud alpha batch jobs describe {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}
+    ansible.builtin.command: gcloud alpha batch jobs describe {{ deployment_name }} --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
     register: result
     until: result.stdout.find("SUCCEEDED") != -1
     retries: 60
@@ -39,4 +44,4 @@
   - name: Delete job
     register: batch_deletion
     changed_when: batch_deletion.rc == 0
-    ansible.builtin.command: gcloud alpha batch jobs delete {{ deployment_name }} --location=us-central1 --project={{ custom_vars.project }}
+    ansible.builtin.command: gcloud alpha batch jobs delete {{ deployment_name }} --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
