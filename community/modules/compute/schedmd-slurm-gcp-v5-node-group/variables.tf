@@ -356,6 +356,15 @@ variable "spot_instance_config" {
   default = null
 }
 
+variable "scheduling" {
+  description = <<EOT
+  Specifies the scheduling options for the instances.
+  See: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_scheduling
+  EOT
+  type = map(string)
+  default = {}
+}
+
 variable "bandwidth_tier" {
   description = <<EOT
   Configures the network interface card and the maximum egress bandwidth for VMs.

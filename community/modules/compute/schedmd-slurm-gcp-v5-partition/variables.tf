@@ -260,6 +260,7 @@ variable "node_groups" {
     spot_instance_config = object({
       termination_action = string
     })
+    scheduling = map(string)
     source_image_family  = string
     source_image_project = string
     source_image         = string

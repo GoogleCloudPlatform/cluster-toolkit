@@ -64,6 +64,7 @@ locals {
     preemptible              = var.preemptible
     reservation_name         = var.reservation_name
     shielded_instance_config = var.shielded_instance_config
+    scheduling               = var.scheduling
     source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
     source_image             = local.source_image                    # requires source_image_logic.tf

@@ -411,6 +411,7 @@ variable "partition" {
         spot_instance_config = object({
           termination_action = string
         })
+        scheduling = map(string)
       }))
       partition_startup_scripts_timeout = number
       subnetwork                        = string
