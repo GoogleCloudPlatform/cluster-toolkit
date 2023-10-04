@@ -140,7 +140,7 @@
           delegate_to: localhost
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
-        file: tasks/rescue_terraform_failure.yml
+        file: tasks/rescue_ghpc_failure.yml
         apply:
           delegate_to: localhost
       vars:
@@ -174,7 +174,7 @@
     always:
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
-        file: tasks/rescue_terraform_failure.yml
+        file: tasks/rescue_ghpc_failure.yml
         apply:
           delegate_to: localhost
       vars:
