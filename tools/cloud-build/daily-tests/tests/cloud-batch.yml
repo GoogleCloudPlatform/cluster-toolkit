@@ -25,3 +25,6 @@ post_deploy_tests:
 custom_vars:
   project: "{{ project }}"
   mounts: [/sw]
+cli_deployment_vars:
+  region: us-central1
+  zone: "{{ zone }}"
