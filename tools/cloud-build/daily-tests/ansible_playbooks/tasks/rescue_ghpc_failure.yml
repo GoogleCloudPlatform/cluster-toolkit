@@ -33,7 +33,7 @@
 - name: Destroy deployment
   register: ghpc_destroy
   changed_when: ghpc_destroy.changed
-  ignore_errors: true
+  run_once: true
   ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
   args:
     chdir: "{{ workspace }}"

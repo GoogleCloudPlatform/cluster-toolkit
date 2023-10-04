@@ -84,10 +84,13 @@
       ansible.builtin.set_fact:
         login_ip: "{{ get_login_ip.stdout }}"
       when: '"*" in login_node'
+
     - name: Check that login IP is set
       ansible.builtin.assert:
         that:
+        - login_ip is defined
         - login_ip != ""
+
     - name: Print login public IP
       ansible.builtin.debug:
         var: login_ip
@@ -152,6 +155,7 @@
         file: tasks/gather_startup_script_logs.yml
         apply:
           delegate_to: localhost
+
     - name: Include rescue from ghpc failure
       ansible.builtin.include_tasks:
         file: tasks/rescue_ghpc_failure.yml
