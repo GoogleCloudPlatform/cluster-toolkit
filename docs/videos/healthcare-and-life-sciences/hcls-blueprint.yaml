@@ -48,9 +48,6 @@ deployment_groups:
 
   - id: network1
     source: modules/network/vpc
-    settings:
-      network_name: hcls-cluster-net
-      subnetwork_name: primary-subnet
 
   ### Resource Monitoring ###
 

@@ -46,19 +46,14 @@
 
   - name: Create Infrastructure and test
     block:
-    - name: Create Cluster with Terraform
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+    - name: Create Cluster with GHPC
+      register: deployment
+      changed_when: deployment.changed
+      ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
       args:
-        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
+        chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      register: terraform_output
-      with_items:
-      - "terraform init"
-      - "terraform apply -auto-approve -no-color"
-
     - name: Print instance IDs of VMs
       ansible.builtin.include_tasks:
         file: tasks/get_instance_ids.yml
@@ -89,6 +84,12 @@
       ansible.builtin.set_fact:
         login_ip: "{{ get_login_ip.stdout }}"
       when: '"*" in login_node'
+
+    - name: Check that login IP is set
+      ansible.builtin.assert:
+        that:
+        - login_ip is defined
+        - login_ip != ""
 
     - name: Print login public IP
       ansible.builtin.debug:
@@ -146,19 +147,18 @@
 
     ## Cleanup and fail gracefully
     rescue:
-    - name: Capture terraform stderr
+    - name: Capture ghpc stderr
       ansible.builtin.set_fact:
-        terraform_apply_stderr_one_line: "{{ terraform_output.results.1.stderr | replace('\n',' ') }}"
-
+        terraform_apply_stderr_one_line: "{{ deployment.stderr }}"
     - name: Gather logs
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml
         apply:
           delegate_to: localhost
 
-    - name: Include rescue from terraform failure
+    - name: Include rescue from ghpc failure
       ansible.builtin.include_tasks:
-        file: tasks/rescue_terraform_failure.yml
+        file: tasks/rescue_ghpc_failure.yml
         apply:
           delegate_to: localhost
       vars:
@@ -267,7 +267,7 @@
 
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
-        file: tasks/rescue_terraform_failure.yml
+        file: tasks/rescue_ghpc_failure.yml
         apply:
           delegate_to: localhost
       vars:
