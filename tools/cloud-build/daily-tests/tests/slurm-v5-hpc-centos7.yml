@@ -24,6 +24,7 @@ cli_deployment_vars:
   enable_cleanup_compute: true
   region: us-west4
   zone: "{{ zone }}"
+  zones: "[us-west4-a,us-west4-b,us-west4-c]"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-slurm.yaml"
 network: "{{ deployment_name }}-net"
