@@ -27,11 +27,7 @@ variable "instance_count" {
 
 variable "instance_image" {
   description = "Instance Image"
-  type = object({
-    project = string,
-    family  = optional(string),
-    name    = optional(string)
-  })
+  type        = map(string)
   default = {
     project = "cloud-hpc-image-public"
     family  = "hpc-centos-7"
