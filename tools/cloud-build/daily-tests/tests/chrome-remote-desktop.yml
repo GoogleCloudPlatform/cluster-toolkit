@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-test_name: chrome-remote-desktop
+test_name: remote-desktop
 deployment_name: chrome-remote-desktop-{{ build }}
 zone: us-central1-f
 workspace: /workspace
