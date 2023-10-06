@@ -557,7 +557,6 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 
 [Other operating systems]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
 [hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
 
 #### Quota Requirements for hpc-slurm-ubuntu2004.yaml
 
