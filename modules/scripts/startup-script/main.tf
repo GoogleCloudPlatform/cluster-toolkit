@@ -26,6 +26,14 @@ locals {
     destination = "install_cloud_ops_agent_automatic.sh"
   }] : []
 
+  warnings = [
+    {
+      type        = "data"
+      content     = file("${path.module}/files/running-script-warning.sh")
+      destination = "/etc/profile.d/99-running-script-warning.sh"
+    }
+  ]
+
   configure_ssh = length(var.configure_ssh_host_patterns) > 0
   host_args = {
     host_name_prefix = var.configure_ssh_host_patterns
@@ -57,7 +65,6 @@ locals {
     }
   ] : []
 
-
   has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"]) || local.configure_ssh
   install_ansible     = var.install_ansible == null ? local.has_ansible_runners : var.install_ansible
   ansible_installer = local.install_ansible ? [{
@@ -67,7 +74,7 @@ locals {
     args        = var.ansible_virtualenv_path
   }] : []
 
-  runners = concat(local.ops_agent_installer, local.ansible_installer, local.configure_ssh_runners, var.runners)
+  runners = concat(local.warnings, local.ops_agent_installer, local.ansible_installer, local.configure_ssh_runners, var.runners)
 
   bucket_regex               = "^gs://([^/]*)/*(.*)"
   gcs_bucket_path_trimmed    = var.gcs_bucket_path == null ? null : trimsuffix(var.gcs_bucket_path, "/")
