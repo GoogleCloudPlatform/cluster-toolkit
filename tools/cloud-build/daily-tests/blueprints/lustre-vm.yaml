@@ -103,6 +103,7 @@ deployment_groups:
     - startup-script
     settings:
       name_prefix: centos
+      add_deployment_name_before_prefix: true
       instance_image:
         family: centos-7
         project: centos-cloud
@@ -120,6 +121,7 @@ deployment_groups:
     - startup-script
     settings:
       name_prefix: rocky
+      add_deployment_name_before_prefix: true
       instance_image:
         family: rocky-linux-8
         project: rocky-linux-cloud
