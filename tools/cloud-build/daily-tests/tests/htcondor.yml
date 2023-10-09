@@ -14,7 +14,7 @@
 
 ---
 
-test_name: htcondor
+test_name: htc-htcondor
 deployment_name: "htcondor-{{ build }}"
 zone: us-central1-c
 workspace: /workspace

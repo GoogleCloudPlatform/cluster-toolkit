@@ -14,7 +14,7 @@
 
 ---
 
-test_name: lustre-vm
+test_name: test-workstation-lustre
 deployment_name: "lustre-vm-{{ build }}"
 zone: us-central1-a
 workspace: /workspace

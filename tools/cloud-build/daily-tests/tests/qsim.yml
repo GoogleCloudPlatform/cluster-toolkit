@@ -14,7 +14,7 @@
 
 ---
 
-test_name: qsim
+test_name: quantum-circuit
 deployment_name: "qsim-{{ build }}"
 zone: us-central1-f
 workspace: /workspace

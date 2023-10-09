@@ -13,7 +13,7 @@
 # limitations under the License.
 ---
 
-test_name: lustre-vm
+test_name: test-slurm-lustre
 deployment_name: "lustr-{{ build }}"
 region: us-central1
 zone: us-central1-c
