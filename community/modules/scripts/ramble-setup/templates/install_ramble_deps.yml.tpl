@@ -17,17 +17,24 @@
   hosts: localhost
   vars:
     ramble_ref: ${ramble_ref}
+    ramble_virtualenv_path: "/usr/local/ramble-python"
   tasks:
   - name: Install dependencies through system package manager
     ansible.builtin.package:
       name:
-      - python
+      - python3
       - python3-pip
       - git
+    register: package
+    changed_when: package.changed
+    retries: 5
+    delay: 10
+    until: package is success
 
   - name: Ensure a recent copy of pip
     ansible.builtin.pip:
       name: pip>=21.3.1
+      virtualenv: "{{ ramble_virtualenv_path }}"
 
   - name: Download ramble requirements file
     ansible.builtin.get_url:
@@ -37,3 +44,4 @@
   - name: Install ramble dependencies
     ansible.builtin.pip:
       requirements: /tmp/requirements.txt
+      virtualenv: "{{ ramble_virtualenv_path }}"
