@@ -14,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/afero v1.10.0
 	github.com/spf13/cobra v1.7.0
-	github.com/zclconf/go-cty v1.14.0
+	github.com/zclconf/go-cty v1.14.1
 	golang.org/x/exp v0.0.0-20230108222341-4b8118a2686a
 	google.golang.org/genproto v0.0.0-20230913181813-007df8e322eb // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
