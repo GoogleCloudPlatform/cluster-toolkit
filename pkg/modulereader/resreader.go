@@ -23,7 +23,6 @@ import (
 	"io/ioutil"
 	"log"
 	"path"
-	"strings"
 
 	"github.com/hashicorp/go-getter"
 	"gopkg.in/yaml.v3"
@@ -98,9 +97,9 @@ func enforceMapKeys(input map[string]interface{}, allowedKeys map[string]bool) e
 
 // ModuleInfo stores information about a module
 type ModuleInfo struct {
-	Inputs       []VarInfo
-	Outputs      []OutputInfo
-	RequiredApis []string
+	Inputs   []VarInfo
+	Outputs  []OutputInfo
+	Metadata Metadata
 }
 
 // GetOutputsAsMap returns the outputs list as a map for quicker access
@@ -161,18 +160,7 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	if err != nil {
 		return ModuleInfo{}, err
 	}
-
-	// add APIs required by the module, if known
-	if sourcereader.IsEmbeddedPath(source) {
-		mi.RequiredApis = defaultAPIList(modPath)
-	} else if sourcereader.IsLocalPath(source) {
-		if idx := strings.Index(modPath, "/community/modules/"); idx != -1 {
-			mi.RequiredApis = defaultAPIList(modPath[idx+1:])
-		} else if idx := strings.Index(modPath, "/modules/"); idx != -1 {
-			mi.RequiredApis = defaultAPIList(modPath[idx+1:])
-		}
-	}
-
+	mi.Metadata = GetMetadataSafe(modPath)
 	modInfoCache[key] = mi
 	return mi, nil
 }
@@ -200,160 +188,4 @@ func Factory(kind string) ModReader {
 		log.Fatalf("Invalid request to create a reader of kind %s", kind)
 	}
 	return r
-}
-
-func defaultAPIList(source string) []string {
-	// API lists at
-	// https://console.cloud.google.com/apis/dashboard and
-	// https://console.cloud.google.com/apis/library
-	staticAPIMap := map[string][]string{
-		"community/modules/compute/SchedMD-slurm-on-gcp-partition": {
-			"compute.googleapis.com",
-		},
-		"community/modules/compute/htcondor-execute-point": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/compute/pbspro-execution": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/compute/schedmd-slurm-gcp-v5-partition": {
-			"compute.googleapis.com",
-		},
-		"community/modules/database/slurm-cloudsql-federation": {
-			"bigqueryconnection.googleapis.com",
-			"sqladmin.googleapis.com",
-		},
-		"community/modules/file-system/DDN-EXAScaler": {
-			"compute.googleapis.com",
-			"deploymentmanager.googleapis.com",
-			"iam.googleapis.com",
-			"runtimeconfig.googleapis.com",
-		},
-		"community/modules/file-system/Intel-DAOS": {
-			"compute.googleapis.com",
-			"iam.googleapis.com",
-			"secretmanager.googleapis.com",
-		},
-		"community/modules/file-system/nfs-server": {
-			"compute.googleapis.com",
-		},
-		"community/modules/project/new-project": {
-			"admin.googleapis.com",
-			"cloudresourcemanager.googleapis.com",
-			"cloudbilling.googleapis.com",
-			"iam.googleapis.com",
-		},
-		"community/modules/project/service-account": {
-			"iam.googleapis.com",
-		},
-		"community/modules/project/service-enablement": {
-			"serviceusage.googleapis.com",
-		},
-		"community/modules/scheduler/SchedMD-slurm-on-gcp-controller": {
-			"compute.googleapis.com",
-		},
-		"community/modules/scheduler/SchedMD-slurm-on-gcp-login-node": {
-			"compute.googleapis.com",
-		},
-		"community/modules/compute/gke-node-pool": {
-			"container.googleapis.com",
-		},
-		"community/modules/scheduler/gke-cluster": {
-			"container.googleapis.com",
-		},
-		"modules/scheduler/batch-job-template": {
-			"batch.googleapis.com",
-			"compute.googleapis.com",
-		},
-		"modules/scheduler/batch-login-node": {
-			"batch.googleapis.com",
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scheduler/htcondor-access-point": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scheduler/htcondor-central-manager": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scheduler/htcondor-pool-secrets": {
-			"iam.googleapis.com",
-			"secretmanager.googleapis.com",
-		},
-		"community/modules/scheduler/htcondor-setup": {
-			"iam.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scheduler/pbspro-client": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scheduler/pbspro-server": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scheduler/schedmd-slurm-gcp-v5-controller": {
-			"compute.googleapis.com",
-			"iam.googleapis.com",
-			"pubsub.googleapis.com",
-			"secretmanager.googleapis.com",
-		},
-		"community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid": {
-			"compute.googleapis.com",
-			"pubsub.googleapis.com",
-		},
-		"community/modules/scheduler/schedmd-slurm-gcp-v5-login": {
-			"compute.googleapis.com",
-		},
-		"community/modules/scripts/htcondor-install": {},
-		"community/modules/scripts/omnia-install":    {},
-		"community/modules/scripts/pbspro-preinstall": {
-			"iam.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scripts/pbspro-install": {},
-		"community/modules/scripts/pbspro-qmgr":    {},
-		"community/modules/scripts/spack-setup": {
-			"storage.googleapis.com",
-		},
-		"community/modules/scripts/wait-for-startup": {
-			"compute.googleapis.com",
-		},
-		"modules/compute/vm-instance": {
-			"compute.googleapis.com",
-		},
-		"modules/file-system/filestore": {
-			"file.googleapis.com",
-		},
-		"modules/file-system/cloud-storage-bucket": {
-			"storage.googleapis.com",
-		},
-		"modules/file-system/pre-existing-network-storage": {},
-		"modules/monitoring/dashboard": {
-			"stackdriver.googleapis.com",
-		},
-		"modules/network/pre-existing-vpc": {
-			"compute.googleapis.com",
-		},
-		"modules/network/vpc": {
-			"compute.googleapis.com",
-		},
-		"modules/packer/custom-image": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"modules/scripts/startup-script": {
-			"storage.googleapis.com",
-		},
-	}
-
-	requiredAPIs, found := staticAPIMap[source]
-	if !found {
-		return []string{}
-	}
-	return requiredAPIs
 }

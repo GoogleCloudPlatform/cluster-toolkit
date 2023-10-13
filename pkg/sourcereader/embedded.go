@@ -28,12 +28,11 @@ import (
 // hpc-toolkit/modules are not accessible at the package level.
 var ModuleFS BaseFS
 
-// BaseFS is an extension of the fs.FS interface with the functionality needed
-// in CopyDirFromModules. Works with embed.FS and afero.FS
+// BaseFS is an join interface with the functionality needed
+// in copyDirFromModules. Works with embed.FS and afero.FS
 type BaseFS interface {
-	fs.FS
-	ReadDir(string) ([]fs.DirEntry, error)
-	ReadFile(string) ([]byte, error)
+	fs.ReadDirFS
+	fs.ReadFileFS
 }
 
 // EmbeddedSourceReader reads modules from a local directory
