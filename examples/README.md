@@ -566,7 +566,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: T4 GPUs: **1/node** active in `desktop` partition up to 5
 * Compute Engine API: N2 CPUs: **8** for login and **16** for controller
 
-[cae/cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
+[cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
 
 ### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
