@@ -129,23 +129,7 @@ fi
 useradd -r -m -d /opt/gcluster gcluster
 
 if [ "${deploy_mode}" == "git" ]; then
-	printf "Adding deployment keys..\n"
-	mkdir -p /opt/gcluster/.ssh
-
-	echo "$DEPLOY_KEY1" >/opt/gcluster/.ssh/gcluster-deploykey
-	sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-deploykey
-	cat >>/opt/gcluster/.ssh/config <<+
-
-host github.com
-        hostname github.com
-        IdentityFile ~/.ssh/gcluster-deploykey
-        StrictHostKeyChecking=accept-new
-+
-	chmod 700 /opt/gcluster/.ssh
-	chmod 600 /opt/gcluster/.ssh/*
-	chown gcluster -R /opt/gcluster/.ssh
-
-	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" git@github.com:${repo_fork}/hpc-toolkit.git"
+	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" https://github.com:${repo_fork}/hpc-toolkit.git"
 
 elif [ "${deploy_mode}" == "tarball" ]; then
 	printf "\n####################\n#### Download web application files\n####################\n"
