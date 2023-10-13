@@ -14,10 +14,25 @@
  * limitations under the License.
  */
 
+output "startup_script" {
+  description = "Path to the Ramble installation script."
+  value       = module.startup_script.startup_script
+}
+
+output "controller_startup_script" {
+  description = "Path to the Ramble installation script, duplicate for SLURM controller."
+  value       = module.startup_script.startup_script
+}
+
 output "ramble_runner" {
   description = <<-EOT
   Runner to execute Ramble commands using an ansible playbook. The startup-script module
   will automatically handle installation of ansible.
   EOT
-  value       = local.ramble_execute_runner
+  value       = local.combined_runner
+}
+
+output "gcs_bucket_path" {
+  description = "Bucket containing the startup scripts for ramble, to be reused by ramble-execute module."
+  value       = var.gcs_bucket_path
 }
