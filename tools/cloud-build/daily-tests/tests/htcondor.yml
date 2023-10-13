@@ -23,4 +23,4 @@ network: "{{ deployment_name }}-net"
 access_point: "access-point-0"
 central_manager: "central-manager-0"
 post_deploy_tests:
-- test-htcondor-access-point.yml
+- test-validation/test-htcondor-access-point.yml
