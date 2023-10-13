@@ -81,8 +81,6 @@ storage intact and b) you can build software before you deploy your cluster.
 >   - **5 `T4 GPUs`**
 > - Slurm Login & Controler VM
 >   - **24 `N2 CPUs`**
-> - Software Builder VM
->   - **16 `C2 CPUs`**
 > - Filestore
 >   - **2x `Basic SSD`**
 >   - **1x `High Scale SSD`**
