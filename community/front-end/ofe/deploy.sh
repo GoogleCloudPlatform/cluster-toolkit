@@ -558,10 +558,10 @@ TFVARS
 		if [ "${deployment_mode}" == "git" ]; then
 			echo "Will clone hpc-toolkit from github.com/${repo_fork}.git branch ${repo_branch}."
 
-			cat >>terraform.tfvars <<+
+			cat <<-END >> terraform.tfvars
 			repo_fork = "${repo_fork}"
 			repo_branch = "${repo_branch}"
-			+
+			END
 		fi
 
 		echo ""
