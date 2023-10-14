@@ -223,6 +223,7 @@
 
     - name: Get partition info after test
       ansible.builtin.command: sinfo
+      failed_when: False
       changed_when: False
       register: partition_post_run_output
 
