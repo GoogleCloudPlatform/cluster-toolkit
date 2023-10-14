@@ -31,5 +31,5 @@ output "spack_runner" {
 
 output "gcs_bucket_path" {
   description = "Bucket containing the startup scripts for spack, to be reused by spack-execute module."
-  value       = var.gcs_bucket_path
+  value       = var.gcs_bucket_path != null ? var.gcs_bucket_path : "gs://${google_storage_bucket.bucket[0].name}"
 }

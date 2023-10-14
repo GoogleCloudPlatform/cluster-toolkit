@@ -85,6 +85,10 @@ variable "ramble_runner" {
 }
 
 variable "gcs_bucket_path" {
-  description = "The GCS path for storage bucket and the object, starting with `gs://`."
+  description = <<-EOT
+    The GCS path for storage bucket and the object, starting with `gs://`.
+    If not set, this module will create a new bucket, to isolate its scripts.
+  EOT
   type        = string
+  default     = null
 }

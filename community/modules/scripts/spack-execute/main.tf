@@ -40,7 +40,8 @@ locals {
     destination = "spack_execute_${local.execute_md5}.yml"
   }
 
-  runners = concat([var.spack_runner], local.data_runners, [local.execute_runner])
+  previous_runners = var.spack_runner != null ? [var.spack_runner] : []
+  runners          = concat(local.previous_runners, local.data_runners, [local.execute_runner])
 
   # Destinations should be unique while also being known at time of apply
   combined_unique_string = join("\n", [for runner in local.runners : runner["destination"]])
@@ -50,6 +51,19 @@ locals {
     content     = module.startup_script.startup_script
     destination = "combined_install_spack_${local.combined_md5}.sh"
   }
+
+  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 4)
+  bucket_name = "ramble-scripts-${local.bucket_md5}-${local.combined_md5}"
+}
+
+resource "google_storage_bucket" "bucket" {
+  count                       = var.gcs_bucket_path != null ? 0 : 1
+  project                     = var.project_id
+  name                        = local.bucket_name
+  uniform_bucket_level_access = true
+  location                    = var.region
+  storage_class               = "REGIONAL"
+  labels                      = local.labels
 }
 
 module "startup_script" {
@@ -60,7 +74,7 @@ module "startup_script" {
   deployment_name = var.deployment_name
   region          = var.region
   runners         = local.runners
-  gcs_bucket_path = var.gcs_bucket_path
+  gcs_bucket_path = var.gcs_bucket_path != null ? var.gcs_bucket_path : "gs://${google_storage_bucket.bucket[0].name}"
 }
 
 resource "local_file" "debug_file_ansible_execute" {

@@ -64,13 +64,15 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.42 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.42 |
 | <a name="provider_local"></a> [local](#provider\_local) | >= 2.0.0 |
 
 ## Modules
@@ -83,6 +85,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [google_storage_bucket.bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket) | resource |
 | [local_file.debug_file_ansible_execute](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 
 ## Inputs
@@ -92,7 +95,7 @@ limitations under the License.
 | <a name="input_commands"></a> [commands](#input\_commands) | String of commands to run within this module | `string` | `null` | no |
 | <a name="input_data_files"></a> [data\_files](#input\_data\_files) | A list of files to be transferred prior to running commands. <br>It must specify one of 'source' (absolute local file path) or 'content' (string).<br>It must specify a 'destination' with absolute path where file should be placed. | `list(map(string))` | `[]` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of deployment, used to name bucket containing spack scripts. | `string` | n/a | yes |
-| <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object, starting with `gs://`. | `string` | n/a | yes |
+| <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object, starting with `gs://`.<br>If not set, this module will create a new bucket, to isolate its scripts. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Key-value pairs of labels to be added to created resources. | `map(string)` | n/a | yes |
 | <a name="input_log_file"></a> [log\_file](#input\_log\_file) | Log file to write output from Ramble execute steps into | `string` | `"/var/log/ramble-execute.log"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
