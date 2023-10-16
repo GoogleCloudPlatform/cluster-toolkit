@@ -85,10 +85,33 @@ variable "ramble_runner" {
 }
 
 variable "gcs_bucket_path" {
-  description = <<-EOT
-    The GCS path for storage bucket and the object, starting with `gs://`.
-    If not set, this module will create a new bucket, to isolate its scripts.
-  EOT
+  description = "The GCS path for storage bucket and the object, starting with `gs://`."
   type        = string
   default     = null
+}
+
+variable "spack_profile_script_path" {
+  description = "Path to the Spack profile.d script. Created by an instance of spack-setup"
+  type        = string
+  default     = null
+  validation {
+    condition     = var.spack_profile_script_path != null
+    error_message = <<-EOT
+      The spack_profile_script_path variable is required.
+      This can be accomplished by adding the spack-setup module to this module's `use` list.
+    EOT
+  }
+}
+
+variable "ramble_profile_script_path" {
+  description = "Path to the Ramble profile.d script. Created by an instance of ramble-setup"
+  type        = string
+  default     = null
+  validation {
+    condition     = var.ramble_profile_script_path != null
+    error_message = <<-EOT
+      The ramble_profile_script_path variable is required.
+      This can be accomplised by adding the ramble-setup module to your `use` line.
+    EOT
+  }
 }

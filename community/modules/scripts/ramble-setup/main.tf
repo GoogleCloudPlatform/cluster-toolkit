@@ -31,15 +31,16 @@ locals {
   script_content = templatefile(
     "${path.module}/templates/ramble_setup.yml.tftpl",
     {
-      sw_name               = "ramble"
-      profile_script        = indent(4, yamlencode(local.profile_script))
-      install_dir           = var.install_dir
-      git_url               = var.ramble_url
-      git_ref               = var.ramble_ref
-      chown_owner           = var.chown_owner == null ? "" : var.chown_owner
-      chgrp_group           = var.chgrp_group == null ? "" : var.chgrp_group
-      chmod_mode            = var.chmod_mode == null ? "" : var.chmod_mode
-      finalize_setup_script = "echo 'no finalize setup script'"
+      sw_name                    = "ramble"
+      profile_script             = indent(4, yamlencode(local.profile_script))
+      install_dir                = var.install_dir
+      git_url                    = var.ramble_url
+      git_ref                    = var.ramble_ref
+      chown_owner                = var.chown_owner == null ? "" : var.chown_owner
+      chgrp_group                = var.chgrp_group == null ? "" : var.chgrp_group
+      chmod_mode                 = var.chmod_mode == null ? "" : var.chmod_mode
+      finalize_setup_script      = "echo 'no finalize setup script'"
+      ramble_profile_script_path = var.ramble_profile_script_path
     }
   )
 

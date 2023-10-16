@@ -15,12 +15,12 @@
  */
 
 output "startup_script" {
-  description = "Path to the Spack installation script."
+  description = "Ramble installation script."
   value       = module.startup_script.startup_script
 }
 
 output "controller_startup_script" {
-  description = "Path to the Spack installation script, duplicate for SLURM controller."
+  description = "Ramble installation script, duplicate for SLURM controller."
   value       = module.startup_script.startup_script
 }
 
@@ -46,6 +46,11 @@ output "ramble_ref" {
 }
 
 output "gcs_bucket_path" {
-  description = "Bucket containing the startup scripts for spack, to be reused by spack-execute module."
+  description = "Bucket containing the startup scripts for Ramble, to be reused by ramble-execute module."
   value       = "gs://${google_storage_bucket.bucket.name}"
+}
+
+output "ramble_profile_script_path" {
+  description = "Path to Ramble profile script."
+  value       = var.ramble_profile_script_path
 }

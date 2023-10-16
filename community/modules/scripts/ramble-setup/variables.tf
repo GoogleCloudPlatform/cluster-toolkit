@@ -79,3 +79,9 @@ variable "labels" {
   description = "Key-value pairs of labels to be added to created resources."
   type        = map(string)
 }
+
+variable "ramble_profile_script_path" {
+  description = "Path to the Ramble profile.d script. Created by this module"
+  type        = string
+  default     = "/etc/profile.d/ramble.sh"
+}

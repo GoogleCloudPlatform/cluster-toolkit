@@ -106,6 +106,7 @@ limitations under the License.
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Destination directory of installation of Ramble. | `string` | `"/apps/ramble"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Key-value pairs of labels to be added to created resources. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
+| <a name="input_ramble_profile_script_path"></a> [ramble\_profile\_script\_path](#input\_ramble\_profile\_script\_path) | Path to the Ramble profile.d script. Created by this module | `string` | `"/etc/profile.d/ramble.sh"` | no |
 | <a name="input_ramble_ref"></a> [ramble\_ref](#input\_ramble\_ref) | Git ref to checkout for Ramble. | `string` | `"develop"` | no |
 | <a name="input_ramble_url"></a> [ramble\_url](#input\_ramble\_url) | URL for Ramble repository to clone. | `string` | `"https://github.com/GoogleCloudPlatform/ramble"` | no |
 | <a name="input_ramble_virtualenv_path"></a> [ramble\_virtualenv\_path](#input\_ramble\_virtualenv\_path) | Virtual environment path in which to install Ramble Python interpreter and other dependencies | `string` | `"/usr/local/ramble-python"` | no |
@@ -115,10 +116,11 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Path to the Spack installation script, duplicate for SLURM controller. |
-| <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | Bucket containing the startup scripts for spack, to be reused by spack-execute module. |
+| <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Ramble installation script, duplicate for SLURM controller. |
+| <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | Bucket containing the startup scripts for Ramble, to be reused by ramble-execute module. |
 | <a name="output_ramble_path"></a> [ramble\_path](#output\_ramble\_path) | Location ramble is installed into. |
+| <a name="output_ramble_profile_script_path"></a> [ramble\_profile\_script\_path](#output\_ramble\_profile\_script\_path) | Path to Ramble profile script. |
 | <a name="output_ramble_ref"></a> [ramble\_ref](#output\_ramble\_ref) | Git ref the ramble install is checked out to use |
 | <a name="output_ramble_runner"></a> [ramble\_runner](#output\_ramble\_runner) | Runner to be used with startup-script module or passed to ramble-execute module.<br>- installs Ramble dependencies<br>- installs Ramble<br>- generates profile.d script to enable access to Ramble<br>This is safe to run in parallel by multiple machines. |
-| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Path to the Spack installation script. |
+| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Ramble installation script. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

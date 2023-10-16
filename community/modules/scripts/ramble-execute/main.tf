@@ -25,7 +25,7 @@ locals {
   execute_contents = templatefile(
     "${path.module}/templates/ramble_execute.yml.tpl",
     {
-      pre_script = ". /etc/profile.d/spack.sh && . /etc/profile.d/ramble.sh"
+      pre_script = "if [ -f ${var.spack_profile_script_path} ]; then . ${var.spack_profile_script_path}; fi; if [ -f ${var.ramble_profile_script_path} ]; then . ${var.ramble_profile_script_path}; fi;"
       log_file   = var.log_file
       commands   = local.commands_content
     }
@@ -51,19 +51,6 @@ locals {
     content     = module.startup_script.startup_script
     destination = "combined_install_spack_${local.combined_md5}.sh"
   }
-
-  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 4)
-  bucket_name = "ramble-scripts-${local.bucket_md5}-${local.combined_md5}"
-}
-
-resource "google_storage_bucket" "bucket" {
-  count                       = var.gcs_bucket_path != null ? 0 : 1
-  project                     = var.project_id
-  name                        = local.bucket_name
-  uniform_bucket_level_access = true
-  location                    = var.region
-  storage_class               = "REGIONAL"
-  labels                      = local.labels
 }
 
 module "startup_script" {
@@ -74,7 +61,7 @@ module "startup_script" {
   deployment_name = var.deployment_name
   region          = var.region
   runners         = local.runners
-  gcs_bucket_path = var.gcs_bucket_path != null ? var.gcs_bucket_path : "gs://${google_storage_bucket.bucket[0].name}"
+  gcs_bucket_path = var.gcs_bucket_path
 }
 
 resource "local_file" "debug_file_ansible_execute" {
