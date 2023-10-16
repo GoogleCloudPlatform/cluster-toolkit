@@ -104,8 +104,8 @@ func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
 	}
 
 	{ // Invalid: Unsupported source
-		_, err := GetModuleInfo("gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules", tfKindString)
-		c.Check(err, ErrorMatches, "source is not valid: .*")
+		_, err := GetModuleInfo("wut::hpc-toolkit/modules", tfKindString)
+		c.Check(err, NotNil)
 	}
 }
 
@@ -114,14 +114,12 @@ func (s *MySuite) TestGetModuleInfo_Git(c *C) {
 	// Invalid git repository - path does not exists
 	badGitRepo := "github.com:not/exist.git"
 	_, err := GetModuleInfo(badGitRepo, tfKindString)
-	expectedErr := "failed to clone git module at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Check(err, NotNil)
 
 	// Invalid: Unsupported Module Source
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	_, err = GetModuleInfo(badSource, tfKindString)
-	expectedErr = "source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Check(err, NotNil)
 }
 
 func (s *MySuite) TestGetModuleInfo_Local(c *C) {
@@ -153,8 +151,8 @@ func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 	}
 
 	{ // Invalid: Unsupported Module Source
-		_, err := GetModuleInfo("gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules", tfKindString)
-		c.Assert(err, ErrorMatches, "source is not valid: .*")
+		_, err := GetModuleInfo("wut:://hpc-toolkit/modules", tfKindString)
+		c.Assert(err, NotNil)
 	}
 }
 

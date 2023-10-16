@@ -29,7 +29,7 @@ func (r LocalSourceReader) GetModule(modPath string, copyPath string) error {
 	}
 
 	if _, err := os.Stat(modPath); os.IsNotExist(err) {
-		return fmt.Errorf("Local module doesn't exist at %s", modPath)
+		return fmt.Errorf("local module doesn't exist at %s", modPath)
 	}
 
 	return copyFromPath(modPath, copyPath)

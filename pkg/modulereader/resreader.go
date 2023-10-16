@@ -130,7 +130,9 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 
 	var modPath string
 	switch {
-	case sourcereader.IsGitPath(source):
+	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
+		modPath = source
+	default:
 		tmpDir, err := ioutil.TempDir("", "module-*")
 		if err != nil {
 			return ModuleInfo{}, err
@@ -140,19 +142,12 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 		modPath = path.Join(pkgPath, subDir)
 		sourceReader := sourcereader.Factory(pkgAddr)
 		if err = sourceReader.GetModule(pkgAddr, pkgPath); err != nil {
-			if subDir != "" {
+			if subDir != "" && kind == "packer" {
 				err = fmt.Errorf("module source %s included \"//\" package syntax; "+
 					"the \"//\" should typically be placed at the root of the repository:\n%w", source, err)
-
 			}
 			return ModuleInfo{}, err
 		}
-
-	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
-		modPath = source
-
-	default:
-		return ModuleInfo{}, fmt.Errorf("source is not valid: %s", source)
 	}
 
 	reader := Factory(kind)

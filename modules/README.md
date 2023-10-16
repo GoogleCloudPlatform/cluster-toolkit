@@ -259,11 +259,15 @@ repository:
 * Filesystem paths
   * modules embedded in the `ghpc` executable
   * modules in the local filesystem
-* Remote modules hosted on github.com or any `git::` repository
-  * when modules are in a subdirectory of the git repository, a special
-  double-slash "//" notation can be required as described below
+* Remote modules using [Terraform URL syntax](https://developer.hashicorp.com/terraform/language/modules/sources)
+  * Hosted on [GitHub](https://developer.hashicorp.com/terraform/language/modules/sources#github)
+  * Google Cloud Storage [Buckets](https://developer.hashicorp.com/terraform/language/modules/sources#gcs-bucket)
+  * Generic [git repositories](https://developer.hashicorp.com/terraform/language/modules/sources#generic-git-repository)
+  
+  when modules are in a subdirectory of the git repository, a special
+  double-slash `//` notation can be required as described below
 
-An important distinction is that git URLs are natively supported by Terraform so
+An important distinction is that those URLs are natively supported by Terraform so
 they are not copied to your deployment directory. Packer does not have native
 support for git-hosted modules so the Toolkit will copy these modules into the
 deployment folder on your behalf.
@@ -394,6 +398,13 @@ are supported, `git::https://` for HTTPS or `git::git@github.com` for SSH.
 
 Additional formatting and features after `git::` are identical to that of the
 [GitHub Modules](#github-modules) described above.
+
+##### Google Cloud Storage Modules
+
+To use a Terraform module available in a Google Cloud Storage bucket, set the source
+to a URL with the special `gcs::` prefix, followed by a [GCS bucket object URL](https://cloud.google.com/storage/docs/request-endpoints#typical).
+
+For example:  `gcs::https://www.googleapis.com/storage/v1/BUCKET_NAME/PATH_TO_MODULE`
 
 ### Kind (May be Required)
 
