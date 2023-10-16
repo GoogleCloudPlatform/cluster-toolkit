@@ -80,8 +80,6 @@ GOOGLE_CLIENT_SECRET=$(/usr/local/bin/yq e '.google_client_secret' /tmp/config)
 repo_fork=$(/usr/local/bin/yq e '.git_fork' /tmp/config)
 repo_branch=$(/usr/local/bin/yq e '.git_branch' /tmp/config)
 # 'yq' does not handle multi-line string properly, need to restore the correct key format
-DEPLOY_KEY1=$(/usr/local/bin/yq e '.deploy_key1' /tmp/config | tr ' ' '\n' | base64 -d)
-rm -f /tmp/config
 
 # Install go from golang as repo version is too low for hpc-toolkit
 #
@@ -129,7 +127,7 @@ fi
 useradd -r -m -d /opt/gcluster gcluster
 
 if [ "${deploy_mode}" == "git" ]; then
-	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" https://github.com:${repo_fork}/hpc-toolkit.git"
+	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" https://github.com/${repo_fork}/hpc-toolkit.git"
 
 elif [ "${deploy_mode}" == "tarball" ]; then
 	printf "\n####################\n#### Download web application files\n####################\n"
