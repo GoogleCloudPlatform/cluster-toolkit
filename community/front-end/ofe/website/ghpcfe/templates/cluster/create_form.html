@@ -116,6 +116,12 @@ window.onload=initPage;
       {{ form.spackdir }}
         <small class="form-text text-muted">{{ form.spackdir.help_text }}</small>
     </div>
+    <div class="form-group">
+      {{ form.use_cloudsql.errors }}
+      {{ form.use_cloudsql.label_tag }}
+      {{ form.use_cloudsql }}
+        <small class="form-text text-muted">{{ form.use_cloudsql.help_text }}</small>
+    </div>
 
     <div class="form-group">
       <a class="btn btn-primary" data-toggle="collapse" href="#advanced-options" role="button" aria-expanded="false" aria-controls="advanced-options">

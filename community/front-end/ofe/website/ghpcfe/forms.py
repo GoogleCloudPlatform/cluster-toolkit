@@ -178,6 +178,7 @@ class ClusterForm(forms.ModelForm):
             "login_node_disk_size",
             "login_node_image",
             "controller_node_image",
+            "use_cloudsql",
         )
 
         widgets = {
@@ -216,6 +217,7 @@ class ClusterForm(forms.ModelForm):
                                                        "id": "controller-node-image",
                                                        "name": "controller_node_image",
                                                        "value": "",}),
+            "use_cloudsql": forms.CheckboxInput(attrs={"class": "required checkbox"}),
         }
 
 

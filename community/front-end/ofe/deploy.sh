@@ -53,6 +53,8 @@ PRJ_API['iam.googleapis.com']='Identity and Access Management (IAM) API'
 PRJ_API['oslogin.googleapis.com']='Cloud OS Login API'
 PRJ_API['cloudbilling.googleapis.com']='Cloud Billing API'
 PRJ_API['aiplatform.googleapis.com']='Vertex AI API'
+PRJ_API['bigqueryconnection.googleapis.com']='BigQuery Connection API'
+PRJ_API['sqladmin.googleapis.com']='Cloud SQL Admin API'
 
 # Location for output credential file = pwd/credential.json
 #

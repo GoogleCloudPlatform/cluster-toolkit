@@ -788,6 +788,12 @@ class Cluster(CloudResource):
         default=None,
         on_delete=models.SET_NULL,
     )
+    use_cloudsql = models.BooleanField(
+        default=False,
+        help_text=(
+            "Would you like to use Cloud SQL for Slurm accounting database?"
+        ),
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)

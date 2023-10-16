@@ -292,7 +292,22 @@ class ClusterInfo:
             """
             else:
                 controller_image_yaml = ""
-                
+
+            if self.cluster.use_cloudsql:
+                controller_uses = self._yaml_refs_to_uses(
+                ["hpc_network"] + partitions_references + filesystems_references + ["slurm-sql"]
+                )
+                slurmdbd_cloudsql_yaml = f"""  - source: community/modules/database/slurm-cloudsql-federation
+    kind: terraform
+    id: slurm-sql
+    use: [hpc_network]
+    settings:
+      sql_instance_name: slurm-sql8-ofe
+      tier: "db-g1-small"
+    """
+            else:
+                slurmdbd_cloudsql_yaml = ""
+
             with yaml_file.open("w") as f:
                 f.write(
             f"""
@@ -338,6 +353,8 @@ deployment_groups:
       - compute.networkAdmin
 
 {partitions_yaml}
+
+{slurmdbd_cloudsql_yaml}
 
   - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     kind: terraform
