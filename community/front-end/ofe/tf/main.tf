@@ -149,6 +149,13 @@ resource "google_compute_instance" "server_vm" {
     ghpcfe-c2-topic         = module.pubsub.topic,
     hostname                = var.webserver_hostname
     deploy_mode             = var.deployment_mode
+    google-logging-config   = jsonencode({
+      "custom" = {
+        "logging" = {
+          "log_level" = "ERROR"
+        }
+      }
+    })
   }
 
   service_account {
