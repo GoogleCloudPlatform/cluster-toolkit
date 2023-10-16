@@ -146,7 +146,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   cd /opt/gcluster
   ${fetch_hpc_toolkit}
 
-  cd /opt/gcluster/hpc-toolkit/community/front-end
+  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe
 
   printf "\nDownloading Frontend dependencies...\n"
   mkdir dependencies
@@ -169,7 +169,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nUpgrading pip...\n"
   pip install --upgrade pip
   printf "\nInstalling pip requirements...\n"
-  pip install -r /opt/gcluster/hpc-toolkit/community/front-end/requirements.txt
+  pip install -r /opt/gcluster/hpc-toolkit/community/front-end/ofe/requirements.txt
 
   printf "Generating configuration file for backend..."
   echo "config:" > configuration.yaml
@@ -216,7 +216,7 @@ sed -i \
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]
 process_name=%(program_name)s_%(process_num)02d
-directory=/opt/gcluster/hpc-toolkit/community/front-end/website
+directory=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website
 command=/opt/gcluster/django-env/bin/uvicorn website.asgi:application --reload --host 127.0.0.1 --port 8001
 autostart=true
 autorestart=true
@@ -233,8 +233,8 @@ After=supervisord.service grafana-server.service
 
 [Service]
 Type=forking
-ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/website/nginx.conf
-ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/website/nginx.conf -s stop
+ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/ofe/website/nginx.conf
+ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/ofe/website/nginx.conf -s stop
 PIDFile=/opt/gcluster/run/nginx.pid
 Restart=no
 
@@ -252,7 +252,7 @@ systemctl status gcluster.service
 #
 sudo su - gcluster -c /bin/bash <<EOF
   source /opt/gcluster/django-env/bin/activate
-  cd /opt/gcluster/hpc-toolkit/community/front-end/website
+  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe/website
   python manage.py setup_grafana "${DJANGO_EMAIL}"
 EOF
 
@@ -260,7 +260,7 @@ EOF
 #
 if [ -n "${SERVER_HOSTNAME}" ]; then
 	printf "Installing LetsEncrypt Certificate"
-	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
+	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
 
 	printf "Installing Cron entry to keep Cert up to date"
 	tmpcron=$(mktemp)
@@ -268,7 +268,7 @@ if [ -n "${SERVER_HOSTNAME}" ]; then
 	echo "0 12 * * * /usr/bin/certbot renew --quiet" >>"${tmpcron}"
 
 	# .. if something more forceful/complete is needed:
-	#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
+	#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
 
 	crontab -u root "${tmpcron}"
 	rm "${tmpcron}"
