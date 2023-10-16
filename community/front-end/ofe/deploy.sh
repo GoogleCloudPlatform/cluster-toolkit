@@ -556,7 +556,7 @@ TFVARS
 		fi
 
 		if [ "${deployment_mode}" == "git" ]; then
-			echo "Will clone hpc-toolkit from github.com/${repo_fork}.git branch ${repo_branch}."
+			echo "Will clone hpc-toolkit from github.com/${repo_fork}.git ${repo_branch} branch."
 
 			cat <<-END >> terraform.tfvars
 			repo_fork = "${repo_fork}"
@@ -845,15 +845,15 @@ SERVICEACC
 
 	echo ""
 	echo "Please select deployment method of server software:"
-	echo "  1) Use a copy of the code from this computer"
-	echo "  2) Clone the git repo when server deploys"
+	echo "  1) Clone the git repo when server deploys"
+	echo "  2) Use a copy of the code from this computer"
 	deploy_choice=$(ask "  Please choose one of the above options", "1")
 	if [ "${deploy_choice}" == "1" ]; then
-		deployment_mode="tarball"
-	elif [ "${deploy_choice}" == "2" ]; then
 		deployment_mode="git"
 		repo_fork=$(ask "Please specify the forked repo owner (or just press Enter)", "GoogleCloudPlatform")
 		repo_branch=$(ask "Please specify the forked repo branch (or just press Enter)", "main")
+	elif [ "${deploy_choice}" == "2" ]; then
+		deployment_mode="tarball"
 	else
 		error "Invalid selection"
 		exit 1
