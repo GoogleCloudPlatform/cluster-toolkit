@@ -174,10 +174,11 @@ storage intact and b) you can build software before you deploy your cluster.
 When you would like to tear down the deployment, each stage must be destroyed.
 Since the `software_installation` and `cluster` depend on the network deployed
 in the `setup` stage, they must be destroyed first. You can use the following
-commands to destroy the deployment.
+commands to destroy the deployment in this reverse order. You will be prompted
+to confirm the deletion of each stage.
 
 ```bash
-./ghpc destroy cae-slurm --auto-approve
+./ghpc destroy cae-slurm
 ```
 
 > [!WARNING]
