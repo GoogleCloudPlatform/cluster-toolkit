@@ -87,18 +87,14 @@ variable "spack_runner" {
 variable "gcs_bucket_path" {
   description = "The GCS path for storage bucket and the object, starting with `gs://`."
   type        = string
-  default     = null
 }
 
 variable "spack_profile_script_path" {
-  description = "Path to the Spack profile.d script. Created by an instance of spack-setup"
+  description = <<-EOT
+    Path to the Spack profile.d script. Created by an instance of spack-setup.
+    Can be defined explicitly, or by chaining an instance of a spack-setup module
+    through a `use` setting.
+    Defaults to /etc/profile.d/spack.sh if not set.
+  EOT
   type        = string
-  default     = null
-  validation {
-    condition     = var.spack_profile_script_path != null
-    error_message = <<-EOT
-      The spack_profile_script_path variable is required.
-      This can be accomplished by adding the spack-setup module to this module's 'use' list.
-    EOT
-  }
 }

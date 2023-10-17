@@ -48,16 +48,16 @@ locals {
   script_content = templatefile(
     "${path.module}/templates/spack_setup.yml.tftpl",
     {
-      sw_name                   = "spack"
-      profile_script            = indent(4, yamlencode(local.profile_script))
-      install_dir               = var.install_dir
-      git_url                   = var.spack_url
-      git_ref                   = var.spack_ref
-      chown_owner               = var.chown_owner == null ? "" : var.chown_owner
-      chgrp_group               = var.chgrp_group == null ? "" : var.chgrp_group
-      chmod_mode                = var.chmod_mode == null ? "" : var.chmod_mode
-      finalize_setup_script     = indent(4, yamlencode(local.finalize_setup_script))
-      spack_profile_script_path = var.spack_profile_script_path
+      sw_name               = "spack"
+      profile_script        = indent(4, yamlencode(local.profile_script))
+      install_dir           = var.install_dir
+      git_url               = var.spack_url
+      git_ref               = var.spack_ref
+      chown_owner           = var.chown_owner == null ? "" : var.chown_owner
+      chgrp_group           = var.chgrp_group == null ? "" : var.chgrp_group
+      chmod_mode            = var.chmod_mode == null ? "" : var.chmod_mode
+      finalize_setup_script = indent(4, yamlencode(local.finalize_setup_script))
+      profile_script_path   = var.spack_profile_script_path
     }
   )
   install_spack_deps_runner = {
