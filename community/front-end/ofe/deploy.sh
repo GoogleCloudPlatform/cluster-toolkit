@@ -128,6 +128,9 @@ HELP1
     subnet_name:                 Name of the subnet to use for the deployment
     dns_hostname:                Hostname to assign to the deployment's IP address
     ip_address:                  Static IP address to use for the deployment
+	deployment_mode:             The mode used to deploy the FrontEnd, which must be either 'git' or 'tarball'
+	repo_fork:					 The GitHub owner of the forked repo that is used for the deployment, if the 'git' deployment mode is used
+	repo_branch:				 The git branch of the forked repo that is used for the deployment, if the 'git' deployment mode is used
   
   To set the Django superuser password securely, you can set the DJANGO_SUPERUSER_PASSWORD
   environment variable with the password you want to use, like this:
@@ -156,6 +159,9 @@ HELP1
   django_superuser_username: sysadm
   django_superuser_password: Passw0rd! (optional if DJANGO_SUPERUSER_PASSWORD is passed)
   django_superuser_email: sysadmin@example.com
+  deployment_mode: git (optional)
+  repo_fork: GoogleCloudPlatform (optional)
+  repo_branch: develop (optional)
 
 HELP2
 }
@@ -506,7 +512,7 @@ deploy() {
 		cp -R "${basedir}" ${tdir}/
 		(
 			cd ${tdir}
-			#
+#
 			# Shuffle contents to put paths where they are expected to be
 			# TODO: remove hardwired paths in TKFE source code
 			#
