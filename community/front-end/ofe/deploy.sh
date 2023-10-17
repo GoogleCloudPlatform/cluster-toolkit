@@ -506,18 +506,11 @@ deploy() {
 	if [ "${deployment_mode}" == "tarball" ]; then
 
 		basedir=$(git rev-parse --show-toplevel)
-		sdir=${SCRIPT_DIR#"${basedir}"}
 		tdir=/tmp/hpc-toolkit
 
 		cp -R "${basedir}" ${tdir}/
 		(
 			cd ${tdir}
-#
-			# Shuffle contents to put paths where they are expected to be
-			# TODO: remove hardwired paths in TKFE source code
-			#
-			mkdir -p community/front-end
-			mv ${tdir}"${sdir}"/* community/front-end/
 
 			tar -zcf "${SCRIPT_DIR}"/tf/deployment.tar.gz \
 				--exclude=.terraform \
@@ -526,6 +519,7 @@ deploy() {
 				--directory=/tmp \
 				./hpc-toolkit 2>/dev/null
 		)
+
 		rm -rf ${tdir}
 	fi
 
