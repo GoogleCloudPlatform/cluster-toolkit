@@ -32,7 +32,7 @@ EOF
 	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
 		RELEASE=$(lsb_release -c -s)
 		export GCSFUSE_REPO="gcsfuse-${RELEASE}"
-		echo "deb http://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
+		echo "deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
 		curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 
 		sudo apt-get update
