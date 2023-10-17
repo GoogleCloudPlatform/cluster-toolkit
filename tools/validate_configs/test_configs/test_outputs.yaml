@@ -37,8 +37,7 @@ deployment_groups:
     settings:
       tier: tier
       sql_instance_name: name
-      nat_ips:
-      - ip
+      network_id: networkid
 
   - id: filestore
     source: modules/file-system/filestore
