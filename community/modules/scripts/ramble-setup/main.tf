@@ -17,6 +17,8 @@
 locals {
   profile_script = <<-EOF
     if [ -f ${var.install_dir}/share/ramble/setup-env.sh ]; then
+          echo "** Ramble's python virtualenv (/usr/local/ramble-python) is actiavted. Call 'deactivate' to deactivate."
+          . /usr/local/ramble-python/bin/activate
           . ${var.install_dir}/share/ramble/setup-env.sh
     fi
   EOF

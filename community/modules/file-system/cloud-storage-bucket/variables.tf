@@ -63,3 +63,9 @@ variable "random_suffix" {
   type        = bool
   default     = false
 }
+
+variable "force_destroy" {
+  description = "If true will destroy bucket with all objects stored within."
+  type        = bool
+  default     = false
+}

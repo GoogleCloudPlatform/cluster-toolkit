@@ -107,3 +107,9 @@ variable "connect_mode" {
   type        = string
   default     = "DIRECT_PEERING"
 }
+
+variable "mount_options" {
+  description = "NFS mount options to mount file system."
+  type        = string
+  default     = "defaults,_netdev"
+}

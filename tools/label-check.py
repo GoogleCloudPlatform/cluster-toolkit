@@ -15,16 +15,9 @@
 import os
 import glob
 import sys
+import re
 
 from typing import List
-
-LOCALS_TEMPLATE = '''
-locals {{
-  # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, {{ ghpc_module = \"{module_label}\" }})
-}}
-'''
-
 
 class ModulePath:
     """Convenience class to get various path related information about a module"""
@@ -68,6 +61,10 @@ class ModulePath:
 
     def _filepath(self, name: str) -> str:
         return os.path.join(self.module_path, name)
+    
+    def role(self) -> str:
+        role = os.path.basename(os.path.dirname(self.module_path))
+        return role if role not in ["..", ".", "/"] else "other"
 
 
 def get_module_paths(root_dir:str="./") -> List[ModulePath]:
@@ -86,33 +83,35 @@ def has_labels_variable(module_path: ModulePath) -> bool:
         return 'variable "labels"' in var_file.read()
 
 
-def check_for_labels_local_block(module_path: ModulePath) -> bool:
-    check_string = LOCALS_TEMPLATE.format(
-        module_label=module_path.name_label())
-    file_to_check = module_path.primary_file()
+
+
+def check_for_labels_local_block(module: ModulePath) -> bool:
+    regex = re.compile(r'''locals {
+  \# .*
+  labels = merge\(var.labels, { ghpc_module = "([\w-]+)", ghpc_role = "([\w-]+)" }\)
+}''', re.MULTILINE)
+    
+    file_to_check = module.primary_file()
     with open(file_to_check, encoding="utf-8") as file:
-        return check_string in file.read()
+        match = regex.search(file.read())
+    if not match:
+        print(f"""{module.primary_file()} does not define a local.labels with required fields. Add:
+locals {{
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, {{ ghpc_module = \"{module.name_label()}\", ghpc_role = \"{module.role()}\" }})
+}}
+""")
+        return False
+    ghpc_module, ghpc_role, = match.groups()
+    if module.name_label() != ghpc_module:
+        print(f"{module.primary_file()} defines label {ghpc_module=} but module name is `{module.name_label()}`")
+        return False
 
+    if module.role() != ghpc_role:
+        print(f"{module.primary_file()} defines label {ghpc_role=} but module role is `{module.role()}`")
+        return False
 
-def add_labels_local_block(module_path: ModulePath):
-    file_to_write = module_path.primary_file()
-    with open(file_to_write, 'r', encoding="utf-8") as main_file:
-        insert_at = -1
-        lines = main_file.readlines()
-        for num, line in enumerate(lines):
-            if '*/' in line:
-                insert_at = num + 1
-                break
-        if insert_at < 0:
-            print('Could not find "*/" in {}'.format(file_to_write))
-            sys.exit(1)
-
-    lines.insert(insert_at, LOCALS_TEMPLATE.format(
-        module_label=module_path.name_label()))
-
-    with open(file_to_write, 'w', encoding="utf-8") as main_file:
-        main_file.writelines(lines)
-
+    return True
 
 def check_label_usage(module_path: ModulePath) -> bool:
     passed = True
@@ -151,8 +150,7 @@ def check_module(module_path: ModulePath) -> bool:
     if not has_labels_variable(module_path):
         return passed
     if not check_for_labels_local_block(module_path):
-        passed = False
-        add_labels_local_block(module_path)
+        return False
     return check_label_usage(module_path) and passed
 
 def main() -> bool:

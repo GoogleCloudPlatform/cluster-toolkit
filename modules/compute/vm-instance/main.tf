@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "vm-instance" })
+  labels = merge(var.labels, { ghpc_module = "vm-instance", ghpc_role = "compute" })
 }
 
 locals {
@@ -87,7 +87,8 @@ locals {
 }
 
 data "google_compute_image" "compute_image" {
-  family  = var.instance_image.family
+  family  = try(var.instance_image.family, null)
+  name    = try(var.instance_image.name, null)
   project = var.instance_image.project
 }
 

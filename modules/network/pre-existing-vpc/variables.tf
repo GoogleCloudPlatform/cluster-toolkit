@@ -20,18 +20,18 @@ variable "project_id" {
 }
 
 variable "network_name" {
-  description = "The name of the network whose attributes will be found"
+  description = "Name of the existing VPC network"
   type        = string
   default     = "default"
 }
 
 variable "subnetwork_name" {
-  description = "The name of the subnetwork to returned, will use network name if null."
+  description = "Name of the pre-existing VPC subnetwork; defaults to var.network_name if set to null."
   type        = string
   default     = null
 }
 
 variable "region" {
-  description = "The region where Cloud NAT and Cloud Router will be configured"
+  description = "Region in which to search for primary subnetwork"
   type        = string
 }

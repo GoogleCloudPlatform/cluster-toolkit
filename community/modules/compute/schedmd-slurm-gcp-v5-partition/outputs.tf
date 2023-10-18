@@ -32,4 +32,11 @@ output "partition" {
     condition     = var.enable_placement == false || (lookup(var.partition_conf, "SuspendTime", null) == null)
     error_message = "If var.enable_placement is true, var.partition_conf[\"SuspendTime\"] should be undefined."
   }
+  precondition {
+    condition     = var.enable_placement == false || alltrue([for v in var.node_groups : v.reservation_name == ""])
+    error_message = <<-EOT
+      If `reservation_name` is specified in at least one node group, `var.enable_placement` must be false.
+      If you want to use placement policies with reservations, the placement policy must be attached to the reservation.
+      EOT
+  }
 }

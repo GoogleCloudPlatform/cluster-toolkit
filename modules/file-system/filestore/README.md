@@ -26,6 +26,24 @@ creation will fail when you run `terraform apply`.
 
 [tiers]: https://cloud.google.com/filestore/docs/service-tiers
 
+### Filestore mount options
+After Filestore instance is created, you can mount this to the compute node
+using different mount options. Toolkit uses [default mount options](https://linux.die.net/man/8/mount)
+for all tier services. Filestore has recommended mount options for different
+service tiers which may overall improve performance. These can be found here:
+[recommended mount options.](https://cloud.google.com/filestore/docs/mounting-fileshares)
+While creating filestore module, you can overwrite these mount options as
+mentioned below.
+
+```yaml
+- id: homefs
+  source: modules/file-system/filestore
+  use: [network1]
+  settings:
+    local_mount: /homefs
+    mount_options: defaults,hard,timeo=600,retrans=3,_netdev
+```
+
 ### Filestore quota
 
 Your project must have unused quota for Cloud Filestore in the region you will
@@ -161,6 +179,7 @@ No modules.
 | <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_HDD"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the filestore instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this filestore instance. Note: If set to the same as the `filestore_share_name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md)). | `string` | `"/shared"` | no |
+| <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | NFS mount options to mount file system. | `string` | `"defaults,_netdev"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Filestore instance will be created. | `string` | n/a | yes |

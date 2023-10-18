@@ -58,6 +58,9 @@ terraform.rc
 packer-manifest.json
 *.auto.pkrvars.hcl
 
+#### Python Virtual Environments
+venv*/
+
 #### Exclude from gitingore
 !tools/validate_configs/golden_copies/expectations/*/*/*/defaults.auto.pkrvars.hcl
 !tools/validate_configs/golden_copies/expectations/*/*/terraform.tfvars

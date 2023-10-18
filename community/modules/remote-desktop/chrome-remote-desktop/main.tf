@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "chrome-remote-desktop" })
+  labels = merge(var.labels, { ghpc_module = "chrome-remote-desktop", ghpc_role = "remote-desktop" })
 }
 
 locals {
@@ -55,7 +55,7 @@ locals {
 }
 
 module "client_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=185837b5"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.22.1"
 
   deployment_name = var.deployment_name
   project_id      = var.project_id
@@ -71,11 +71,12 @@ module "client_startup_script" {
 }
 
 module "instances" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=69848ab"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=v1.22.1"
 
-  instance_count = var.instance_count
-  name_prefix    = var.name_prefix
-  spot           = var.spot
+  instance_count                    = var.instance_count
+  name_prefix                       = var.name_prefix
+  add_deployment_name_before_prefix = var.add_deployment_name_before_prefix
+  spot                              = var.spot
 
   deployment_name = var.deployment_name
   project_id      = var.project_id

@@ -182,7 +182,7 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.2.1
-[slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
+[slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
@@ -335,7 +335,7 @@ release of the filestore module:
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
   ...
   - id: homefs
-    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.10.0&depth=1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.22.1&depth=1
 ```
 
 Because Terraform modules natively support this syntax, ghpc will not copy
@@ -383,7 +383,7 @@ Specific versions can be selected as for HTTPS:
 
 ```yaml
   - id: network1
-    source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc?ref=v1.10.0&depth=1
+    source: git@github.com:GoogleCloudPlatform/hpc-toolkit.git//modules/network/vpc?ref=v1.22.1&depth=1
 ```
 
 ##### Generic Git Modules

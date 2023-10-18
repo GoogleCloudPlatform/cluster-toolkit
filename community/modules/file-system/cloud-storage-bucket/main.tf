@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "cloud-storage-bucket" })
+  labels = merge(var.labels, { ghpc_module = "cloud-storage-bucket", ghpc_role = "file-system" })
 }
 
 locals {
@@ -40,4 +40,5 @@ resource "google_storage_bucket" "bucket" {
   location                    = var.region
   storage_class               = "REGIONAL"
   labels                      = local.labels
+  force_destroy               = var.force_destroy
 }

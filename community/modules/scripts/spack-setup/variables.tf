@@ -63,7 +63,7 @@ variable "chmod_mode" {
     For usage information see:
     https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode
     EOT
-  default     = "a+rwxs"
+  default     = null
   type        = string
 }
 

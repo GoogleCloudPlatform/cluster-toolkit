@@ -31,26 +31,6 @@ import (
 const (
 	pkrKindString = "packer"
 	tfKindString  = "terraform"
-	testMainTf    = `
-module "test_module" {
-	source = "testSource"
-}
-data "test_data" "test_data_name" {
-	name = "test_data_name"
-}
-`
-	testVariablesTf = `
-variable "test_variable" {
-	description = "This is just a test"
-	type        = string
-}
-`
-	testOutputsTf = `
-output "test_output" {
-	description = "This is just a test"
-	value       = "test_value"
-}
-`
 )
 
 var (
@@ -96,23 +76,37 @@ func (s *MySuite) TestFactory(c *C) {
 func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
 	sourcereader.ModuleFS = testModuleFS
 
-	// Success
-	moduleInfo, err := GetModuleInfo("modules/test_role/test_module", tfKindString)
-	c.Assert(err, IsNil)
-	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
-	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
+	{ // Success
+		mi, err := GetModuleInfo("modules/test_role/test_module", tfKindString)
+		c.Assert(err, IsNil)
+		c.Check(mi, DeepEquals, ModuleInfo{
+			Inputs: []VarInfo{{
+				Name:        "test_variable",
+				Type:        "string",
+				Description: "This is just a test",
+				Required:    true}},
+			Outputs: []OutputInfo{{
+				Name:        "test_output",
+				Description: "This is just a test",
+				Sensitive:   false}},
+			Metadata: Metadata{
+				Spec: MetadataSpec{
+					Requirements: MetadataRequirements{
+						Services: []string{
+							"room.service.vip",
+							"protection.service.GCPD",
+						}}}}})
+	}
 
-	// Invalid: No embedded modules
-	badEmbeddedMod := "modules/does/not/exist"
-	moduleInfo, err = GetModuleInfo(badEmbeddedMod, tfKindString)
-	expectedErr := "failed to get info using tfconfig for terraform module at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	{ // Invalid: No embedded modules
+		_, err := GetModuleInfo("modules/does/not/exist", tfKindString)
+		c.Check(err, ErrorMatches, "failed to get info using tfconfig for terraform module at .*")
+	}
 
-	// Invalid: Unsupported Module Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
-	moduleInfo, err = GetModuleInfo(badSource, tfKindString)
-	expectedErr = "source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	{ // Invalid: Unsupported source
+		_, err := GetModuleInfo("gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules", tfKindString)
+		c.Check(err, ErrorMatches, "source is not valid: .*")
+	}
 }
 
 func (s *MySuite) TestGetModuleInfo_Git(c *C) {
@@ -131,24 +125,37 @@ func (s *MySuite) TestGetModuleInfo_Git(c *C) {
 }
 
 func (s *MySuite) TestGetModuleInfo_Local(c *C) {
+	{ // Success
+		mi, err := GetModuleInfo(terraformDir, tfKindString)
+		c.Assert(err, IsNil)
+		c.Check(mi, DeepEquals, ModuleInfo{
+			Inputs: []VarInfo{{
+				Name:        "test_variable",
+				Type:        "string",
+				Description: "This is just a test",
+				Required:    true}},
+			Outputs: []OutputInfo{{
+				Name:        "test_output",
+				Description: "This is just a test",
+				Sensitive:   false}},
+			Metadata: Metadata{
+				Spec: MetadataSpec{
+					Requirements: MetadataRequirements{
+						Services: []string{
+							"room.service.vip",
+							"protection.service.GCPD",
+						}}}}})
+	}
 
-	// Success
-	moduleInfo, err := GetModuleInfo(terraformDir, tfKindString)
-	c.Assert(err, IsNil)
-	c.Assert(moduleInfo.Inputs[0].Name, Equals, "test_variable")
-	c.Assert(moduleInfo.Outputs[0].Name, Equals, "test_output")
+	{ // Invalid source path - path does not exists
+		_, err := GetModuleInfo("./not/a/real/path", tfKindString)
+		c.Assert(err, ErrorMatches, "failed to get info using tfconfig for terraform module at .*")
+	}
 
-	// Invalid source path - path does not exists
-	badLocalMod := "./not/a/real/path"
-	moduleInfo, err = GetModuleInfo(badLocalMod, tfKindString)
-	expectedErr := "failed to get info using tfconfig for terraform module at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Invalid: Unsupported Module Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
-	moduleInfo, err = GetModuleInfo(badSource, tfKindString)
-	expectedErr = "source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	{ // Invalid: Unsupported Module Source
+		_, err := GetModuleInfo("gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules", tfKindString)
+		c.Assert(err, ErrorMatches, "source is not valid: .*")
+	}
 }
 
 func (s *MySuite) TestGetHCLInfo(c *C) {
@@ -188,17 +195,25 @@ func (s *MySuite) TestGetInfo_TFReder(c *C) {
 
 // packerreader.go
 func (s *MySuite) TestGetInfo_PackerReader(c *C) {
-	// Didn't already exist, succeeds
 	reader := NewPackerReader()
-	info, err := reader.GetInfo(packerDir)
-	c.Assert(err, IsNil)
-	c.Check(info, DeepEquals, ModuleInfo{
-		Inputs: []VarInfo{{Name: "test_variable", Type: "string", Description: "This is just a test", Required: true}}})
+	exp := ModuleInfo{
+		Inputs: []VarInfo{{
+			Name:        "test_variable",
+			Type:        "string",
+			Description: "This is just a test",
+			Required:    true}}}
 
-	// Already exists, succeeds
-	infoAgain, err := reader.GetInfo(packerDir)
-	c.Assert(err, IsNil)
-	c.Check(infoAgain, DeepEquals, info)
+	{ // Didn't already exist, succeeds
+		info, err := reader.GetInfo(packerDir)
+		c.Assert(err, IsNil)
+		c.Check(info, DeepEquals, exp)
+	}
+
+	{ // Already exists, succeeds
+		info, err := reader.GetInfo(packerDir)
+		c.Assert(err, IsNil)
+		c.Check(info, DeepEquals, exp)
+	}
 }
 
 // metareader.go
@@ -250,84 +265,24 @@ func (s *MySuite) TestUnmarshalOutputInfo(c *C) {
 }
 
 // Util Functions
-func createTmpModule() {
+func copyEmbeddedModules() {
 	var err error
-	tmpModuleDir, err = ioutil.TempDir("", "modulereader_tests_*")
-	if err != nil {
+	if tmpModuleDir, err = ioutil.TempDir("", "modulereader_tests_*"); err != nil {
 		log.Fatalf(
 			"Failed to create temp dir for module in modulereader_test, %v", err)
 	}
-
-	// Create terraform module dir
-	terraformDir = filepath.Join(tmpModuleDir, "terraformModule")
-	err = os.Mkdir(terraformDir, 0755)
-	if err != nil {
-		log.Fatalf("error creating test terraform module dir: %e", err)
+	sourcereader.ModuleFS = testModuleFS
+	rdr := sourcereader.EmbeddedSourceReader{}
+	if err = rdr.CopyDir("modules", tmpModuleDir); err != nil {
+		log.Fatalf("failed to copy embedded modules, %v", err)
 	}
 
-	// main.tf file
-	mainFile, err := os.Create(filepath.Join(terraformDir, "main.tf"))
-	if err != nil {
-		log.Fatalf("Failed to create main.tf: %v", err)
-	}
-	_, err = mainFile.WriteString(testMainTf)
-	if err != nil {
-		log.Fatalf("modulereader_test: Failed to write main.tf test file. %v", err)
-	}
-
-	// variables.tf file
-	varFile, err := os.Create(filepath.Join(terraformDir, "variables.tf"))
-	if err != nil {
-		log.Fatalf("Failed to create variables.tf: %v", err)
-	}
-	_, err = varFile.WriteString(testVariablesTf)
-	if err != nil {
-		log.Fatalf(
-			"modulereader_test: Failed to write variables.tf test file. %v", err)
-	}
-
-	// outputs.tf file
-	outFile, err := os.Create(filepath.Join(terraformDir, "outputs.tf"))
-	if err != nil {
-		log.Fatalf("Failed to create outputs.tf: %v", err)
-	}
-	_, err = outFile.WriteString(testOutputsTf)
-	if err != nil {
-		log.Fatalf("modulereader_test: Failed to write outputs.tf test file. %v", err)
-	}
-
-	// Create packer module dir
-	packerDir = filepath.Join(tmpModuleDir, "packerModule")
-	err = os.Mkdir(packerDir, 0755)
-	if err != nil {
-		log.Fatalf("error creating test packer module dir: %e", err)
-	}
-
-	// main.pkr.hcl file
-	mainFile, err = os.Create(filepath.Join(packerDir, "main.pkr.hcl"))
-	if err != nil {
-		log.Fatalf("Failed to create main.pkr.hcl: %v", err)
-	}
-	_, err = mainFile.WriteString(testMainTf)
-	if err != nil {
-		log.Fatalf("modulereader_test: Failed to write main.pkr.hcl test file. %v", err)
-	}
-
-	// variables.pkr.hcl file
-	varFile, err = os.Create(filepath.Join(packerDir, "variables.pkr.hcl"))
-	if err != nil {
-		log.Fatalf("Failed to create variables.pkr.hcl: %v", err)
-	}
-	_, err = varFile.WriteString(testVariablesTf)
-	if err != nil {
-		log.Fatalf(
-			"modulereader_test: Failed to write variables.pkr.hcl test file. %v", err)
-	}
+	terraformDir = filepath.Join(tmpModuleDir, "test_role", "test_module")
+	packerDir = filepath.Join(tmpModuleDir, "imaginarium", "zebra")
 }
 
 func teardownTmpModule() {
-	err := os.RemoveAll(tmpModuleDir)
-	if err != nil {
+	if err := os.RemoveAll(tmpModuleDir); err != nil {
 		log.Fatalf(
 			"modulereader_test: Failed to delete contents of test directory %s, %v",
 			tmpModuleDir, err)
@@ -335,7 +290,7 @@ func teardownTmpModule() {
 }
 
 func TestMain(m *testing.M) {
-	createTmpModule()
+	copyEmbeddedModules()
 	code := m.Run()
 	teardownTmpModule()
 	os.Exit(code)

@@ -82,6 +82,10 @@ locals {
   enable_integrity_monitoring = var.enable_shielded_vm && var.shielded_instance_config.enable_integrity_monitoring
   enable_secure_boot          = var.enable_shielded_vm && var.shielded_instance_config.enable_secure_boot
   enable_vtpm                 = var.enable_shielded_vm && var.shielded_instance_config.enable_vtpm
+
+  image_licenses = [
+    "projects/click-to-deploy-images/global/licenses/hpc-toolkit-vm-image"
+  ]
 }
 
 source "googlecompute" "toolkit_image" {
@@ -121,6 +125,7 @@ source "googlecompute" "toolkit_image" {
   enable_secure_boot          = local.enable_secure_boot
   enable_vtpm                 = local.enable_vtpm
   enable_integrity_monitoring = local.enable_integrity_monitoring
+  image_licenses              = local.image_licenses
 }
 
 build {

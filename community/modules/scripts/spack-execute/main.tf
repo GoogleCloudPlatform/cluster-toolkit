@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "spack-execute" })
+  labels = merge(var.labels, { ghpc_module = "spack-execute", ghpc_role = "scripts" })
 }
 
 locals {
@@ -53,7 +53,7 @@ locals {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.20.0"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.22.1"
 
   labels          = local.labels
   project_id      = var.project_id

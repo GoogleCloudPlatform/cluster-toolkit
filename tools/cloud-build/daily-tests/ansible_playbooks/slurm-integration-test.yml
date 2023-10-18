@@ -23,31 +23,41 @@
       path: "/builder/home/.ssh"
       state: directory
       mode: 0700
+
   - name: Create SSH Key
     community.crypto.openssh_keypair:
       path: "/builder/home/.ssh/id_rsa"
+
+  ## Get builder IP address
+  - name: Get Builder IP
+    register: build_ip
+    changed_when: false
+    args:
+      executable: /bin/bash
+    ansible.builtin.shell: |
+      set -e -o pipefail
+      dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
+          awk -F'"' '{print $2}'
 
   ## Create cluster
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
       file: tasks/create_deployment_directory.yml
+
   - name: Create Infrastructure and test
     block:
-    - name: Create Cluster with Terraform
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+    - name: Create Cluster with GHPC
+      register: deployment
+      changed_when: deployment.changed
+      ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
       args:
-        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
+        chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      register: terraform_output
-      with_items:
-      - "terraform init"
-      - "terraform apply -auto-approve -no-color"
     - name: Print instance IDs of VMs
       ansible.builtin.include_tasks:
         file: tasks/get_instance_ids.yml
+
     - name: Get IP of a login node - Exact name provided
       changed_when: false
       register: get_login_ip
@@ -55,10 +65,12 @@
         gcloud compute instances describe --zone={{ zone }} {{ login_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
       when: '"*" not in login_node'
+
     - name: Set login_ip variable - Exact name provided
       ansible.builtin.set_fact:
         login_ip: "{{ get_login_ip.stdout }}"
       when: '"*" not in login_node'
+
     - name: Get IP of a login node - Name pattern provided
       changed_when: false
       register: get_login_ip
@@ -67,33 +79,34 @@
           --format='get(networkInterfaces[0].accessConfigs[0].natIP)' --limit=1 \
           --filter=NAME:{{ login_node }}
       when: '"*" in login_node'
+
     - name: Set login_ip variable - Name pattern provided
       ansible.builtin.set_fact:
         login_ip: "{{ get_login_ip.stdout }}"
       when: '"*" in login_node'
+
+    - name: Check that login IP is set
+      ansible.builtin.assert:
+        that:
+        - login_ip is defined
+        - login_ip != ""
+
     - name: Print login public IP
       ansible.builtin.debug:
         var: login_ip
+
     - name: Get Controller IP
       changed_when: false
       register: controller_ip
       ansible.builtin.command: >-
         gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+
     - name: Print controller public IP
       ansible.builtin.debug:
         var: controller_ip.stdout_lines
 
     ## Setup firewall for cloud build
-    - name: Get Builder IP
-      register: build_ip
-      changed_when: false
-      args:
-        executable: /bin/bash
-      ansible.builtin.shell: |
-        set -e -o pipefail
-        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
-            awk -F'"' '{print $2}'
     - name: Create firewall rule
       register: fw_created
       changed_when: fw_created.rc == 0
@@ -111,6 +124,7 @@
         - --action=ALLOW
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
+
     - name: 'Add SSH Keys to OS-Login'
       register: key_created
       changed_when: key_created.rc == 0
@@ -124,6 +138,7 @@
         - --ttl
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
+
     - name: Add Login node as host
       ansible.builtin.add_host:
         hostname: "{{ login_ip }}"
@@ -132,22 +147,24 @@
 
     ## Cleanup and fail gracefully
     rescue:
-    - name: Capture terraform stderr
+    - name: Capture ghpc stderr
       ansible.builtin.set_fact:
-        terraform_apply_stderr_one_line: "{{ terraform_output.results.1.stderr | replace('\n',' ') }}"
+        terraform_apply_stderr_one_line: "{{ deployment.stderr }}"
     - name: Gather logs
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml
         apply:
           delegate_to: localhost
-    - name: Include rescue from terraform failure
+
+    - name: Include rescue from ghpc failure
       ansible.builtin.include_tasks:
-        file: tasks/rescue_terraform_failure.yml
+        file: tasks/rescue_ghpc_failure.yml
         apply:
           delegate_to: localhost
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
+
     - name: Trigger failure (rescue blocks otherwise revert failures)
       ansible.builtin.fail:
         msg: "Failed while setting up test infrastructure"
@@ -167,12 +184,23 @@
       ansible.builtin.wait_for_connection:
         delay: 60
         timeout: 300
+
     - name: Gather facts
       ansible.builtin.setup:
+
     - name: Wait until Munge is active
       ansible.builtin.wait_for:
         path: /var/run/munge/munge.socket.2
         timeout: 600
+
+    - name: Count Slurm nodes
+      ansible.builtin.shell:
+        sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
+      args:
+        executable: /bin/bash
+      changed_when: False
+      register: initial_node_count
+
     - name: Run Integration tests for HPC toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       vars:
@@ -184,13 +212,25 @@
 
     ## Always cleanup, even on failure
     always:
+    - name: Ensure all nodes are powered down
+      ansible.builtin.command: sinfo -t 'POWERED_DOWN' --noheader --format "%n"
+      register: final_node_count
+      changed_when: False
+      when: initial_node_count is defined and initial_node_count.stdout_lines is iterable
+      until: final_node_count.stdout_lines | length == initial_node_count.stdout_lines | length
+      retries: 60
+      delay: 15
+
     - name: Get partition info after test
       ansible.builtin.command: sinfo
+      failed_when: False
       changed_when: False
       register: partition_post_run_output
+
     - name: Print Slurm sinfo output
       ansible.builtin.debug:
         var: partition_post_run_output.stdout_lines
+
     - name: Recover Setup Log
       become: true
       changed_when: false
@@ -198,9 +238,11 @@
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
       ansible.builtin.command: cat /slurm/scripts/setup.log
       register: setup_output
+
     - name: Print Slurm setup.log
       ansible.builtin.debug:
         var: setup_output.stdout_lines
+
     - name: Recover Resume Log
       become: true
       changed_when: false
@@ -208,9 +250,11 @@
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
       ansible.builtin.command: cat /var/log/slurm/resume.log
       register: resume_output
+
     - name: Print Slurm resume.log
       ansible.builtin.debug:
         var: resume_output.stdout_lines
+
     - name: Recover Suspend Log
       become: true
       changed_when: false
@@ -218,12 +262,14 @@
       delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
       ansible.builtin.command: cat /var/log/slurm/suspend.log
       register: suspend_output
+
     - name: Print Slurm suspend.log
       ansible.builtin.debug:
         var: suspend_output.stdout_lines
+
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
-        file: tasks/rescue_terraform_failure.yml
+        file: tasks/rescue_ghpc_failure.yml
         apply:
           delegate_to: localhost
       vars:

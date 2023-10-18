@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "spack-setup" })
+  labels = merge(var.labels, { ghpc_module = "spack-setup", ghpc_role = "scripts" })
 }
 
 locals {
@@ -39,6 +39,7 @@ locals {
   finalize_setup_script = <<-EOF
     set -e
     . /etc/profile.d/spack.sh
+    spack config --scope site add 'packages:all:permissions:read:world'
     spack gpg init
     spack compiler find --scope site
     ${local.add_google_mirror_script}
@@ -91,7 +92,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.19.1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.22.1"
 
   labels          = local.labels
   project_id      = var.project_id
