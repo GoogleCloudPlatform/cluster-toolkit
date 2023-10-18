@@ -23,6 +23,11 @@
       - gdebi-core
       - mesa-utils
       - gdm3
+      bookworm:
+      - build-essential
+      - gdebi-core
+      - mesa-utils
+      - gdm3
       jammy:
       - build-essential
       - gdebi-core
@@ -36,7 +41,7 @@
     ansible.builtin.assert:
       that:
       - ansible_os_family in ["Debian", "Ubuntu"]
-      - ansible_distribution_release in ["bullseye", "jammy"]
+      - ansible_distribution_release in ["bullseye", "jammy", "bookworm"]
       fail_msg: "ansible_os_family: {{ ansible_os_family }} or ansible_distribution_release: {{ansible_distribution_release}} was not acceptable."
 
   - name: Check if GRID driver installed
@@ -73,12 +78,21 @@
         dest: /tmp/
         mode: "0755"
         timeout: 30
+      when: ansible_distribution_release == "jammy"
+    - name: Download GPU driver 15.2
+      ansible.builtin.get_url:
+        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU15.2/NVIDIA-Linux-x86_64-525.105.17-grid.run
+        dest: /tmp/
+        mode: "0755"
+        timeout: 30
+      when: ansible_distribution_release == "bookworm"
     - name: Download GPU driver 14.2
       ansible.builtin.get_url:
         url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
         dest: /tmp/
         mode: "0755"
         timeout: 30
+      when: ansible_distribution_release != "jammy" and ansible_distribution_release != "bookworm"
 
     - name: Stop gdm service
       ansible.builtin.systemd:
@@ -88,8 +102,10 @@
     - name: Install GPU driver
       ansible.builtin.shell: |
         #jinja2: trim_blocks: "True"
-        {% if ansible_distribution_release == "jammy" %}
+        {% if ansible_distribution_release == "jammy"  %}
         CC=gcc-12 /tmp/NVIDIA-Linux-x86_64-525.125.06-grid.run --silent
+        {% elif ansible_distribution_release == "bookworm" %}
+        /tmp/NVIDIA-Linux-x86_64-525.105.17-grid.run --silent
         {% else %}
         /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run --silent
         {% endif %}

@@ -62,8 +62,8 @@ variable "instance_image" {
     project = string
   })
   default = {
-    family  = "ubuntu-2204-lts"
-    project = "ubuntu-os-cloud"
+    family  = "debian-12"
+    project = "debian-cloud"
   }
 }
 
