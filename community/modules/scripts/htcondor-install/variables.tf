@@ -24,4 +24,13 @@ variable "condor_version" {
   description = "Yum/DNF-compatible version string; leave unset to default to 10.x series (examples: \"10.5.1\",\"10.*\"))"
   type        = string
   default     = "10.*"
+
+  validation {
+    error_message = "var.condor_version must be set to \"10.*\" for latest 10.X release or to a specific \"10.x.y\" release."
+    condition = var.condor_version == "10.*" || (
+      length(split(".", var.condor_version)) == 3 && alltrue([
+        for v in split(".", var.condor_version) : can(tonumber(v))
+      ]) && split(".", var.condor_version)[0] == "10"
+    )
+  }
 }
