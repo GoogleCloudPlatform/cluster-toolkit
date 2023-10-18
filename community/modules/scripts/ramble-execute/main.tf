@@ -25,7 +25,7 @@ locals {
   execute_contents = templatefile(
     "${path.module}/templates/ramble_execute.yml.tpl",
     {
-      pre_script = "if [ -f ${var.spack_profile_script_path} ]; then . ${var.spack_profile_script_path}; fi; if [ -f ${var.ramble_profile_script_path} ]; then . ${var.ramble_profile_script_path}; fi;"
+      pre_script = "if [ -f ${var.spack_profile_script_path} ]; then . ${var.spack_profile_script_path}; fi; . ${var.ramble_profile_script_path}"
       log_file   = var.log_file
       commands   = local.commands_content
     }

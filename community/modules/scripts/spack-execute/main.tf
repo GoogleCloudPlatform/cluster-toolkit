@@ -25,7 +25,7 @@ locals {
   execute_contents = templatefile(
     "${path.module}/templates/execute_commands.yml.tpl",
     {
-      pre_script = "if [ -f ${var.spack_profile_script_path} ]; then . ${var.spack_profile_script_path}; fi;"
+      pre_script = ". ${var.spack_profile_script_path}"
       log_file   = var.log_file
       commands   = local.commands_content
     }
@@ -40,8 +40,7 @@ locals {
     destination = "spack_execute_${local.execute_md5}.yml"
   }
 
-  previous_runners = var.spack_runner != null ? [var.spack_runner] : []
-  runners          = concat(local.previous_runners, local.data_runners, [local.execute_runner])
+  runners = concat([var.spack_runner], local.data_runners, [local.execute_runner])
 
   # Destinations should be unique while also being known at time of apply
   combined_unique_string = join("\n", [for runner in local.runners : runner["destination"]])
