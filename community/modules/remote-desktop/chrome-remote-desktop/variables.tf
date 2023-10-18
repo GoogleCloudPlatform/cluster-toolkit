@@ -56,14 +56,18 @@ variable "network_storage" {
 }
 
 variable "instance_image" {
-  description = "Instance Image. An alternative could be family  = \"ubuntu-2204-lts\" and project = \"ubuntu-os-cloud\" or family  = \"debian-11\" and project = \"debian-cloud\""
+  description = <<-EOT
+    Image used to build chrome remote desktop node. The default image is from
+    family= \"debian-11\" and project = \"debian-cloud\". An alternative image is
+    from family  = \"ubuntu-2204-lts\" and project = \"ubuntu-os-cloud\".
+    EOT
   type = object({
     family  = string,
     project = string
   })
   default = {
-    family  = "ubuntu-2204-lts"
-    project = "ubuntu-os-cloud"
+    family  = "debian-11"
+    project = "debian-cloud"
   }
 }
 
