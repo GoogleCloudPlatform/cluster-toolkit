@@ -86,9 +86,23 @@ variable "auto_delete_boot_disk" {
 }
 
 variable "name_prefix" {
-  description = "Name Prefix"
+  description = <<-EOT
+    An optional name for all VM and disk resources. 
+    If not supplied, `deployment_name` will be used. 
+    When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set, 
+    then resources are named by "<`deployment_name`>-<`name_prefix`>-<#>".
+    EOT
   type        = string
   default     = null
+}
+
+variable "add_deployment_name_before_prefix" {
+  description = <<-EOT
+    If true, the names of VMs and disks will always be prefixed with `deployment_name` to enable uniqueness across deployments.
+    See `name_prefix` for further details on resource naming behavior.
+    EOT
+  type        = bool
+  default     = false
 }
 
 variable "enable_public_ips" {

@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-test_name: batch-mpi
+test_name: serverless-batch-mpi
 deployment_name: batch-mpi-{{ build }}
-zone: us-central1-c
+zone: us-west4-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/serverless-batch-mpi.yaml"
 network: "default"
@@ -25,3 +25,6 @@ post_deploy_tests:
 custom_vars:
   project: "{{ project }}"
   mounts: [/share]
+cli_deployment_vars:
+  region: us-west4
+  zone: "{{ zone }}"

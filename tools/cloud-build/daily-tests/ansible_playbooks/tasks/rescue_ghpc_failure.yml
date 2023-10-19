@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,11 +30,12 @@
     - delete
     - "{{ deployment_name }}"
 
-- name: Tear Down Cluster
-  changed_when: true  # assume something destroyed
+- name: Destroy deployment
+  register: ghpc_destroy
+  changed_when: ghpc_destroy.changed
   run_once: true
+  ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
+  args:
+    chdir: "{{ workspace }}"
   environment:
     TF_IN_AUTOMATION: "TRUE"
-  ansible.builtin.command:
-    cmd: terraform destroy -auto-approve
-    chdir: "{{ workspace }}/{{ deployment_name }}/primary"

@@ -24,7 +24,7 @@ vars:
   gpu_zones: [us-central1-a, us-central1-b, us-central1-c, us-central1-f]
   # Visit https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
   # for a list of valid family options with Slurm
-  family: slurm-gcp-5-7-hpc-centos-7
+  family: slurm-gcp-5-9-hpc-centos-7
   project: schedmd-slurm-public
   # Set to true for active cluster reconfiguration.
   # Note that setting this option requires additional dependencies to be installed locally.
@@ -116,6 +116,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       service_account:
         email: $(compute_sa.service_account_email)
         scopes:
@@ -140,6 +141,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
@@ -167,6 +169,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
@@ -189,6 +192,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
@@ -212,6 +216,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       disk_type: pd-ssd
       disk_size_gb: 100
       node_conf:
@@ -246,6 +251,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       disk_type: pd-ssd
       disk_size_gb: 100
       node_conf:
@@ -280,6 +286,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       service_account:
         email: $(compute_sa.service_account_email)
         scopes:
@@ -306,6 +313,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       # the following allow for longer boot time
       # which is useful for large GPU nodes
       cloud_parameters:
@@ -332,6 +340,7 @@ deployment_groups:
       instance_image:
         family: $(vars.family)
         project: $(vars.project)
+      instance_image_custom: true
       machine_type: n2-standard-4
       disable_login_public_ips: false
       service_account:

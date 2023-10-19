@@ -86,6 +86,14 @@ variable "enable_bigquery_load" {
   default     = false
 }
 
+variable "enable_slurm_gcp_plugins" {
+  description = <<EOD
+Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
+EOD
+  type        = bool
+  default     = false
+}
+
 variable "slurm_control_host" {
   type        = string
   description = <<EOD
@@ -228,6 +236,7 @@ variable "partition" {
         instance_template      = string
         node_conf              = map(string)
         access_config = list(object({
+          nat_ip       = string
           network_tier = string
         }))
         spot_instance_config = object({

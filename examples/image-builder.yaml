@@ -58,7 +58,7 @@ deployment_groups:
     settings:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: slurm-gcp-5-7-hpc-centos-7
+      source_image_family: slurm-gcp-5-9-hpc-centos-7
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size)
@@ -75,6 +75,7 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
+      instance_image_custom: true
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -96,6 +97,7 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
+      instance_image_custom: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
@@ -108,3 +110,4 @@ deployment_groups:
       instance_image:
         family: $(vars.new_image_family)
         project: $(vars.project_id)
+      instance_image_custom: true

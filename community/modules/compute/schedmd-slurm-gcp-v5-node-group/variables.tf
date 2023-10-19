@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.6
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -83,7 +83,7 @@ variable "metadata" {
 
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the node group VM instances. 
+    Defines the image that will be used in the Slurm node group VM instances.
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -95,19 +95,35 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-5-7-hpc-centos-7"
+    family  = "slurm-gcp-5-9-hpc-centos-7"
     project = "schedmd-slurm-public"
   }
 
   validation {
-    condition = length(var.instance_image) == 0 || (
-    can(var.instance_image["family"]) || can(var.instance_image["name"])) == can(var.instance_image["project"])
-    error_message = "The \"project\" is required if \"family\" or \"name\" are provided in var.instance_image."
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
   }
+
   validation {
-    condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
-    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
   }
+}
+
+variable "instance_image_custom" {
+  description = <<-EOD
+    A flag that designates that the user is aware that they are requesting
+    to use a custom and potentially incompatible image for this Slurm on
+    GCP module.
+
+    If the field is set to false, only the compatible families and project
+    names will be accepted.  The deployment will fail with any other image
+    family or name.  If set to true, no checks will be done.
+
+    See: https://goo.gle/hpc-slurm-images
+    EOD
+  type        = bool
+  default     = false
 }
 
 variable "source_image_project" {
@@ -281,6 +297,13 @@ variable "preemptible" {
   default     = false
 }
 
+variable "reservation_name" {
+  description = "Name of the reservation to use for VM resources; set to empty string if no reservation is used."
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
 variable "service_account" {
   type = object({
     email  = string
@@ -355,9 +378,35 @@ variable "bandwidth_tier" {
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the node group instances can be accessed via the internet."
   type = list(object({
+    nat_ip       = string
     network_tier = string
   }))
   default = []
+}
+
+variable "additional_networks" {
+  description = "Additional network interface details for GCE, if any."
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
 }
 
 variable "disable_public_ips" {

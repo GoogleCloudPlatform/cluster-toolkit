@@ -14,7 +14,7 @@
 
 ---
 
-test_name: hpc-high-io
+test_name: hpc-slurm-legacy
 deployment_name: "hpc-high-io-{{ build }}"
 zone: us-west4-c
 workspace: /workspace

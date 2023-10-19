@@ -21,15 +21,7 @@ vars:
   deployment_name: hcls-01
   region: us-central1
   zone: us-central1-c
-
-  network_name: hcls-cluster-net
-  subnetwork_name: primary-subnet
-  bucket_name_software: ## Set User Provided Software Bucket Name Here ##
-  bucket_name_inputs: ## Set Inputs Bucket Name Here ##
-  bucket_name_outputs: ## Set Outputs Bucket Name Here ##
-  use_deployment_name_in_bucket_name: false
-  homefs_server_ip:  ## Set Home Filestore IP Here ##
-  appsfs_server_ip:  ## Set Apps Filestore IP Here ##
+  bucket_force_destroy: false
 
 deployment_groups:
 - group: enable_apis
@@ -54,7 +46,7 @@ deployment_groups:
 
   ### Network ###
 
-  - id: network-create
+  - id: network1
     source: modules/network/vpc
 
   ### Resource Monitoring ###
@@ -64,52 +56,49 @@ deployment_groups:
 
   ### Storage ###
 
-  - id: homefs-create
+  - id: homefs
     source: modules/file-system/filestore
-    use: [network-create]
-    settings: {filestore_share_name: homeshare}
+    use: [network1]
+    settings:
+      filestore_share_name: homeshare
+      local_mount: /home
 
-  - id: appsfs-create
+  - id: appsfs
     source: modules/file-system/filestore
-    use: [network-create]
-    settings: {filestore_share_name: appsshare}
+    use: [network1]
+    settings:
+      filestore_share_name: appsshare
+      local_mount: /apps
 
-  - id: bucket-software-create
+  - id: bucket-software
     source: community/modules/file-system/cloud-storage-bucket
     settings:
-      name_prefix: $(vars.bucket_name_software)
+      name_prefix: hcls-user-provided-software
+      random_suffix: true
+      local_mount: /user_provided_software
+      force_destroy: $(vars.bucket_force_destroy)
+    outputs: [gcs_bucket_path]
 
-  - id: bucket-input-create
+  - id: bucket-input
     source: community/modules/file-system/cloud-storage-bucket
     settings:
-      name_prefix: $(vars.bucket_name_inputs)
+      name_prefix: hcls-inputs
+      random_suffix: true
+      local_mount: /data_input
+      mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
+      force_destroy: $(vars.bucket_force_destroy)
 
-  - id: bucket-output-create
+  - id: bucket-output
     source: community/modules/file-system/cloud-storage-bucket
     settings:
-      name_prefix: $(vars.bucket_name_outputs)
+      name_prefix: hcls-outputs
+      random_suffix: true
+      local_mount: /data_output
+      mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
+      force_destroy: $(vars.bucket_force_destroy)
 
 - group: software_installation
   modules:
-
-  - id: network-install  # This will reuse network created in setup group
-    source: modules/network/pre-existing-vpc
-
-  - id: appsfs-install
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      server_ip: $(vars.appsfs_server_ip)
-      remote_mount: appsshare
-      local_mount: /apps
-      fs_type: nfs
-
-  - id: bucket-input-install
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(vars.bucket_name_inputs)
-      local_mount: /data_input
-      fs_type: gcsfuse
-      mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
 
   ### Software ###
 
@@ -175,6 +164,7 @@ deployment_groups:
         spack config --scope defaults add -f /tmp/projections-config.yaml
         spack config --scope site add -f /tmp/slurm-external-config.yaml
 
+        NVCC_PREPEND_FLAGS='-arch=all'
         spack install gcc@11.3.0 target=x86_64
         spack load gcc@11.3.0 target=x86_64
         spack compiler find --scope site
@@ -191,13 +181,6 @@ deployment_groups:
     settings:
       runners:
       - $(spack-execute.spack_runner)
-
-      - type: data
-        destination: /tmp/install_spack.sh
-        content: $(spack.startup_script)
-      - type: shell
-        destination: run_install_spack_with_env.sh
-        content: NVCC_PREPEND_FLAGS='-arch=all' bash /tmp/install_spack.sh
 
       - type: shell
         destination: data_staging.sh
@@ -276,7 +259,7 @@ deployment_groups:
 
   - id: spack-builder
     source: modules/compute/vm-instance
-    use: [network-install, appsfs-install, bucket-input-install, spack-builder-startup]
+    use: [network1, appsfs, bucket-input, spack-builder-startup]
     settings:
       name_prefix: spack-builder
       add_deployment_name_before_prefix: true
@@ -285,49 +268,6 @@ deployment_groups:
 
 - group: cluster
   modules:
-
-  - id: network1  # This will reuse network created in setup group
-    source: modules/network/pre-existing-vpc
-
-  - id: homefs
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      server_ip: $(vars.homefs_server_ip)
-      remote_mount: homeshare
-      local_mount: /home
-      fs_type: nfs
-
-  - id: appsfs
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      server_ip: $(vars.appsfs_server_ip)
-      remote_mount: appsshare
-      local_mount: /apps
-      fs_type: nfs
-
-  - id: bucket-software
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(vars.bucket_name_software)
-      local_mount: /user_provided_software
-      fs_type: gcsfuse
-      mount_options: defaults,_netdev,implicit_dirs
-
-  - id: bucket-input
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(vars.bucket_name_inputs)
-      local_mount: /data_input
-      fs_type: gcsfuse
-      mount_options: defaults,_netdev,implicit_dirs,allow_other
-
-  - id: bucket-output
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(vars.bucket_name_outputs)
-      local_mount: /data_output
-      fs_type: gcsfuse
-      mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766
 
   ### Remote Desktop ###
 

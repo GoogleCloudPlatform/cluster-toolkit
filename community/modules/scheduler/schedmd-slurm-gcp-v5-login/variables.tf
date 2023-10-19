@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.7.6
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
 
 variable "project_id" {
   type        = string
@@ -204,12 +204,12 @@ variable "shielded_instance_config" {
   description = <<-EOD
     Shielded VM configuration for the instance. Note: not used unless
     enable_shielded_vm is 'true'.
-    * enable_integrity_monitoring : Compare the most recent boot measurements to the
+    - enable_integrity_monitoring : Compare the most recent boot measurements to the
       integrity policy baseline and return a pair of pass/fail results depending on
       whether they match or not.
-    * enable_secure_boot : Verify the digital signature of all boot components, and
+    - enable_secure_boot : Verify the digital signature of all boot components, and
       halt the boot process if signature verification fails.
-    * enable_vtpm : Use a virtualized trusted platform module, which is a
+    - enable_vtpm : Use a virtualized trusted platform module, which is a
       specialized computer chip you can use to encrypt objects like keys and
       certificates.
     EOD
@@ -281,7 +281,7 @@ variable "instance_template" {
 
 variable "instance_image" {
   description = <<-EOD
-    Defines the image that will be used in the Slurm login node VM instances. 
+    Defines the image that will be used in the Slurm login node VM instances.
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -293,19 +293,35 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-5-7-hpc-centos-7"
+    family  = "slurm-gcp-5-9-hpc-centos-7"
     project = "schedmd-slurm-public"
   }
 
   validation {
-    condition = length(var.instance_image) == 0 || (
-    can(var.instance_image["family"]) || can(var.instance_image["name"])) == can(var.instance_image["project"])
-    error_message = "The \"project\" is required if \"family\" or \"name\" are provided in var.instance_image."
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
   }
+
   validation {
-    condition     = length(var.instance_image) == 0 || can(var.instance_image["family"]) != can(var.instance_image["name"])
-    error_message = "Exactly one of \"family\" and \"name\" must be provided in var.instance_image."
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
   }
+}
+
+variable "instance_image_custom" {
+  description = <<-EOD
+    A flag that designates that the user is aware that they are requesting
+    to use a custom and potentially incompatible image for this Slurm on
+    GCP module.
+
+    If the field is set to false, only the compatible families and project
+    names will be accepted.  The deployment will fail with any other image
+    family or name.  If set to true, no checks will be done.
+
+    See: https://goo.gle/hpc-slurm-images
+    EOD
+  type        = bool
+  default     = false
 }
 
 variable "source_image_project" {
@@ -379,4 +395,23 @@ variable "additional_disks" {
   }))
   description = "List of maps of disks."
   default     = []
+}
+
+variable "enable_reconfigure" {
+  description = <<EOD
+Enables automatic Slurm reconfigure on when Slurm configuration changes (e.g.
+slurm.conf.tpl, partition details).
+
+NOTE: Requires Google Pub/Sub API.
+EOD
+  type        = bool
+  default     = false
+}
+
+variable "pubsub_topic" {
+  description = <<EOD
+The cluster pubsub topic created by the controller when enable_reconfigure=true.
+EOD
+  type        = string
+  default     = null
 }

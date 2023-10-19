@@ -30,6 +30,28 @@ readonly E_RUN_OR_DIE=5
 readonly E_MISSING_MANDATORY_ARG=9
 readonly E_UNKNOWN_ARG=10
 
+SUCCESS_MESSAGE=$(
+	cat <<-EOF
+		** NOTICE **: The VM startup scripts have finished running successfully.  
+		Systems are configured and running.
+	EOF
+)
+readonly SUCCESS_MESSAGE
+ERROR_MESSAGE=$(
+	cat <<-EOF
+		** ERROR **: The VM startup scripts have finished running, but produced an error.
+		Systems may be in an unhealthy state.
+	EOF
+)
+readonly ERROR_MESSAGE
+WARNING_MESSAGE=$(
+	cat <<-EOF
+		** WARNING **: The VM startup scripts for this machine have started.
+		Systems may not be configured or running.
+	EOF
+)
+readonly WARNING_MESSAGE
+
 stdlib::debug() {
 	[[ -z ${DEBUG:-} ]] && return 0
 	local ds msg
@@ -55,6 +77,25 @@ stdlib::error() {
 	ds="$(date +"${DATE_FMT}") "
 	logger -p "${SYSLOG_ERROR_PRIORITY}" -t "${PROG}[$$]" -- "${msg}"
 	echo -e "${RED}${ds}Error [$$]: ${msg}${NC}" >&2
+}
+
+stdlib::announce_runners_start() {
+	if [ -z "$recursive_proc" ]; then
+		wall -n "$WARNING_MESSAGE"
+	fi
+	export recursive_proc=$((${recursive_proc:=0} + 1))
+}
+
+stdlib::announce_runners_end() {
+	exit_code=$1
+	export recursive_proc=$((${recursive_proc:=0} - 1))
+	if [ "$recursive_proc" -le "0" ]; then
+		if [ "$exit_code" -ne "0" ]; then
+			wall -n "$ERROR_MESSAGE"
+		else
+			wall -n "$SUCCESS_MESSAGE"
+		fi
+	fi
 }
 
 # The main initialization function of this library.  This should be kept to the

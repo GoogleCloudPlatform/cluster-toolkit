@@ -18,7 +18,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 3.83"
+      version = ">= 3.83, <5.0"
     }
     random = {
       source  = "hashicorp/random"
@@ -26,7 +26,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-pool-secrets/v1.23.0"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-pool-secrets/v1.24.0"
   }
 
   required_version = ">= 0.13.0"

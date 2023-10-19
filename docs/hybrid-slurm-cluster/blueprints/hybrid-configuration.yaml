@@ -17,20 +17,21 @@
 blueprint_name: hpc-cluster-hybrid-v5
 
 vars:
-  project_id:  ## <<Project_B>>
+  project_id:  ## <<bursting project (Project B)>>
   deployment_name: hybrid-config
   region: us-central1
   zone: us-central1-c
   static_controller_hostname:  ## <<instance name>>.c.<<Project_A>>.internal
-  static_controller_addr: null ## IP Address of the controller
+  static_controller_addr: ## IP Address of the controller
   network_name: compute-vpc-network
   subnetwork_name: primary-subnet
 
 deployment_groups:
-- group: create_network
-  modules:
-  - id: created_network
-    source: modules/network/vpc
+# Uncomment the below section if network used for bursting has not been created
+# - group: create_network
+#   modules:
+#   - id: created_network
+#     source: modules/network/vpc
 
 - group: primary
   modules:
@@ -55,6 +56,7 @@ deployment_groups:
     settings:
       partition_name: debug
       exclusive: false
+      enable_placement: false
       is_default: false
 
   - id: compute_node_group

@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "htcondor-access-point" })
+  labels = merge(var.labels, { ghpc_module = "htcondor-access-point", ghpc_role = "scheduler" })
 }
 
 locals {
@@ -142,7 +142,7 @@ resource "google_storage_bucket_object" "ap_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.20.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.22.1&depth=1"
 
   project_id      = var.project_id
   region          = var.region

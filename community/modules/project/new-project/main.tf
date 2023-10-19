@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "new-project" })
+  labels = merge(var.labels, { ghpc_module = "new-project", ghpc_role = "project" })
 }
 
 locals {

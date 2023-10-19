@@ -14,12 +14,17 @@
 
 ---
 
-test_name: slurm-gcp-v5-hpc-centos7
+test_name: hpc-slurm
 deployment_name: "cent-v5-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
 slurm_cluster_name: "centv5{{ build[0:4] }}"
-zone: us-central1-a
+zone: us-west4-c
+cli_deployment_vars:
+  enable_cleanup_compute: true
+  region: us-west4
+  zone: "{{ zone }}"
+  zones: "[us-west4-a,us-west4-b,us-west4-c]"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-slurm.yaml"
 network: "{{ deployment_name }}-net"
