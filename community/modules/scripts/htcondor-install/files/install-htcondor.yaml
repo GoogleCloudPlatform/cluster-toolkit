@@ -22,6 +22,8 @@
   hosts: all
   vars:
     enable_docker: true
+    htcondor_key: https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-10.x-Key
+    docker_key: https://download.docker.com/linux/centos/gpg
   become: true
   module_defaults:
     ansible.builtin.yum:
@@ -31,13 +33,24 @@
     ansible.builtin.yum:
       name:
       - epel-release
+  - name: Directly install RPM verification keys
+    ansible.builtin.rpm_key:
+      state: present
+      key: "{{ item }}"
+    loop:
+    - "{{ htcondor_key }}"
+    - "{{ docker_key }}"
+    register: key_install
+    retries: 10
+    delay: 60
+    until: key_install is success
   - name: Enable HTCondor Feature Release repository
     ansible.builtin.yum_repository:
       name: htcondor-feature
       description: HTCondor Feature Releases (10.x.0)
       file: htcondor
       baseurl: https://research.cs.wisc.edu/htcondor/repo/10.x/el$releasever/$basearch/release
-      gpgkey: https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-10.x-Key
+      gpgkey: "{{ htcondor_key }}"
       gpgcheck: true
       repo_gpgcheck: true
       priority: "90"
@@ -71,7 +84,7 @@
         baseurl: https://download.docker.com/linux/centos/$releasever/$basearch/stable
         enabled: yes
         gpgcheck: yes
-        gpgkey: https://download.docker.com/linux/centos/gpg
+        gpgkey: "{{ docker_key }}"
     - name: Install Docker
       ansible.builtin.yum:
         name:
