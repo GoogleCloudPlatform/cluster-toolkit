@@ -267,6 +267,15 @@
       ansible.builtin.debug:
         var: suspend_output.stdout_lines
 
+    - name: Check for stockout errors
+      ansible.builtin.include_tasks:
+        file: tasks/check_stockout.yml
+        apply:
+          delegate_to: localhost
+      vars:
+        slurm_cluster_name: "{{ slurm_cluster_name }}"
+        project: "{{ project }}"
+
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
         file: tasks/rescue_ghpc_failure.yml
