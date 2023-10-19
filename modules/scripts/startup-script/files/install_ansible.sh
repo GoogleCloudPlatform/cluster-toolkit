@@ -39,7 +39,8 @@ apt_wait() {
 install_python_deps() {
 	if [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
 		grep -qi ubuntu /etc/os-release 2>/dev/null; then
-		apt-get install -y python3-distutils
+		apt-get update
+		apt-get install -y python3-distutils python3-venv
 	fi
 }
 
@@ -81,7 +82,7 @@ install_python3_yum() {
 		echo "Unsupported version of centos/RHEL/Rocky"
 		return 1
 	fi
-	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3 python3-pip
+	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3 python3-pip python3-venv
 	python_path=$(rpm -ql python3 | grep 'bin/python3$')
 }
 
@@ -89,7 +90,8 @@ install_python3_yum() {
 # newly installed packaged.
 install_python3_apt() {
 	apt_wait
-	apt-get install -y python3 python3-distutils python3-pip
+	apt-get update
+	apt-get install -y python3 python3-distutils python3-pip python3-venv
 	python_path=$(command -v python3)
 }
 
@@ -170,16 +172,17 @@ main() {
 			return 1
 		fi
 	fi
-	pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
-	pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
-	if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
-		${python_path} -m pip install --upgrade pip
-	fi
 
 	# Create pip virtual environment for HPC Toolkit
-	${python_path} -m pip install virtualenv
-	${python_path} -m virtualenv "${venv_path}"
+	${python_path} -m venv "${venv_path}"
 	venv_python_path=${venv_path}/bin/python3
+
+	# Upgrade pip if necesary
+	pip_version=$(${venv_python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
+	pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
+	if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
+		${venv_python_path} -m pip install --upgrade pip
+	fi
 
 	# configure ansible to always use correct Python binary
 	if [ ! -f /etc/ansible/ansible.cfg ]; then
