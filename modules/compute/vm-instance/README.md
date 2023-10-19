@@ -83,19 +83,20 @@ Use the following settings for compact placement:
       collocation: "COLLOCATED"
 ```
 
-When `vm_count` is not set, as shown in the example above, then the VMs will be
-added to the placement policy incrementally. This is the **recommended way** to
-use placement policies.
+By default the above placement policy will always result in the most compact set
+of VMs available. If you would like that provisioning failed if some level of
+compactness is not obtainable, you can enforce this with the [`max_distance`
+setting](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies):
 
-If `vm_count` is specified then VMs will stay in pending state until the
-specified number of VMs are created. See the warning below if using this field.
-
-> **Warning** When creating a compact placement with more than 10 VMs, you must
-> add `-parallelism=<n>` argument on apply. For example if you have 15 VMs in a
-> placement group: `terraform apply -parallelism=15`. This is because terraform
-> self limits to 10 parallel requests by default but the create instance
-> requests will not succeed until all VMs in the placement group have been
-> requested, forming a deadlock.
+```yaml
+  ...
+  settings:
+    instance_count: 4
+    machine_type: c2-standard-60
+    placement_policy:
+      collocation: "COLLOCATED"
+      max_distance: 1
+```
 
 Use the following settings for spread placement:
 
@@ -108,10 +109,20 @@ Use the following settings for spread placement:
       availability_domain_count: 2
 ```
 
-> **_NOTE:_** Due to
-> [this open issue](https://github.com/hashicorp/terraform-provider-google/issues/11483),
-> it may be required to specify the `vm_count`. Once this issue is resolved,
-> `vm_count` will no longer be mandatory.
+When `vm_count` is not set, as shown in the examples above, then the VMs will be
+added to the placement policy incrementally. This is the **recommended way** to
+use placement policies.
+
+If `vm_count` is specified then VMs will stay in pending state until the
+specified number of VMs are created. See the warning below if using this field.
+
+> [!WARNING]
+> When creating a compact placement using `vm_count` with more than 10 VMs, you
+> must add `-parallelism=<n>` argument on apply. For example if you have 15 VMs
+> in a placement group: `terraform apply -parallelism=15`. This is because
+> terraform self limits to 10 parallel requests by default but the create
+> instance requests will not succeed until all VMs in the placement group have
+> been requested, forming a deadlock.
 
 ### GPU Support
 
