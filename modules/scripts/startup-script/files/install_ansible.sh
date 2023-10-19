@@ -15,6 +15,8 @@
 
 REQ_ANSIBLE_VERSION=2.11
 REQ_ANSIBLE_PIP_VERSION=4.10.0
+REQ_PIP_WHEEL_VERSION=0.41.2
+REQ_PIP_SETUPTOOLS_VERSION=59.6.0
 REQ_PIP_MAJOR_VERSION=21
 REQ_PYTHON3_VERSION=6
 
@@ -183,6 +185,8 @@ main() {
 	if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
 		${venv_python_path} -m pip install --upgrade pip
 	fi
+
+	${venv_python_path} -m pip install -U wheel==${REQ_PIP_WHEEL_VERSION} setuptools==${REQ_PIP_SETUPTOOLS_VERSION}
 
 	# configure ansible to always use correct Python binary
 	if [ ! -f /etc/ansible/ansible.cfg ]; then
