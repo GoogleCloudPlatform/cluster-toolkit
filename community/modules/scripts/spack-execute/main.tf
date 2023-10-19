@@ -25,7 +25,7 @@ locals {
   execute_contents = templatefile(
     "${path.module}/templates/execute_commands.yml.tpl",
     {
-      pre_script = ". /etc/profile.d/spack.sh"
+      pre_script = ". ${var.spack_profile_script_path}"
       log_file   = var.log_file
       commands   = local.commands_content
     }

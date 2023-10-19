@@ -14,18 +14,25 @@
  * limitations under the License.
  */
 
+output "startup_script" {
+  description = "Ramble installation script."
+  value       = module.startup_script.startup_script
+}
+
+output "controller_startup_script" {
+  description = "Ramble installation script, duplicate for SLURM controller."
+  value       = module.startup_script.startup_script
+}
+
 output "ramble_runner" {
   description = <<-EOT
-  Runner to setup Ramble using an ansible playbook. The startup-script module
-  will automatically handle installation of ansible.
-  - id: example-startup-script
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(your-ramble-id.ramble_setup_runner)
-  ...
+  Runner to be used with startup-script module or passed to ramble-execute module.
+  - installs Ramble dependencies
+  - installs Ramble
+  - generates profile.d script to enable access to Ramble
+  This is safe to run in parallel by multiple machines.
   EOT
-  value       = local.ramble_setup_runner
+  value       = local.combined_runner
 }
 
 output "ramble_path" {
@@ -36,4 +43,14 @@ output "ramble_path" {
 output "ramble_ref" {
   description = "Git ref the ramble install is checked out to use"
   value       = var.ramble_ref
+}
+
+output "gcs_bucket_path" {
+  description = "Bucket containing the startup scripts for Ramble, to be reused by ramble-execute module."
+  value       = "gs://${google_storage_bucket.bucket.name}"
+}
+
+output "ramble_profile_script_path" {
+  description = "Path to Ramble profile script."
+  value       = var.ramble_profile_script_path
 }

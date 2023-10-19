@@ -24,6 +24,7 @@
     chown_owner: ${chown_owner}
     chgrp_group: ${chgrp_group}
     finalize_setup_script: ${finalize_setup_script}
+    profile_script_path: ${profile_script_path}
   tasks:
   - name: Print software name
     ansible.builtin.debug:
@@ -31,7 +32,7 @@
 
   - name: Add profile script for software
     ansible.builtin.copy:
-      dest: /etc/profile.d/{{ sw_name }}.sh
+      dest: "{{ profile_script_path }}"
       mode: '0644'
       content: "{{ profile_script }}"
     when: profile_script

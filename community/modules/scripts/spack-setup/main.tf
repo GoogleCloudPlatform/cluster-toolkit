@@ -39,7 +39,7 @@ locals {
 
   finalize_setup_script = <<-EOF
     set -e
-    . /etc/profile.d/spack.sh
+    . ${var.spack_profile_script_path}
     spack config --scope site add 'packages:all:permissions:read:world'
     spack gpg init
     spack compiler find --scope site
@@ -58,6 +58,7 @@ locals {
       chgrp_group           = var.chgrp_group == null ? "" : var.chgrp_group
       chmod_mode            = var.chmod_mode == null ? "" : var.chmod_mode
       finalize_setup_script = indent(4, yamlencode(local.finalize_setup_script))
+      profile_script_path   = var.spack_profile_script_path
     }
   )
   install_spack_deps_runner = {

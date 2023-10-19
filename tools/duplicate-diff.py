@@ -66,4 +66,4 @@ for group in duplicates:
     for second in group[1:]:
         if not filecmp.cmp(first, second):  # true if files are the same
             print(f'found diff between {first} and {second}')
-            sys.exit(1)        
+            sys.exit(1)

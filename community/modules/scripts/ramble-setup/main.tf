@@ -15,6 +15,11 @@
  */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "ramble-setup", ghpc_role = "scripts" })
+}
+
+locals {
   profile_script = <<-EOF
     if [ -f ${var.install_dir}/share/ramble/setup-env.sh ]; then
           echo "** Ramble's python virtualenv (/usr/local/ramble-python) is actiavted. Call 'deactivate' to deactivate."
@@ -23,7 +28,7 @@ locals {
     fi
   EOF
 
-  setup_file = templatefile(
+  script_content = templatefile(
     "${path.module}/templates/ramble_setup.yml.tftpl",
     {
       sw_name               = "ramble"
@@ -35,24 +40,63 @@ locals {
       chgrp_group           = var.chgrp_group == null ? "" : var.chgrp_group
       chmod_mode            = var.chmod_mode == null ? "" : var.chmod_mode
       finalize_setup_script = "echo 'no finalize setup script'"
+      profile_script_path   = var.ramble_profile_script_path
     }
   )
 
-  deps_file = templatefile(
+  deps_content = templatefile(
     "${path.module}/templates/install_ramble_deps.yml.tpl",
     {
       ramble_ref = var.ramble_ref
     }
   )
 
-  ramble_runner_content = <<-EOT
-   ${local.setup_file}
-   ${local.deps_file}
-  EOT
-
-  ramble_setup_runner = {
+  install_ramble_deps_runner = {
     "type"        = "ansible-local"
-    "content"     = local.ramble_runner_content
-    "destination" = "ramble_setup.yml"
+    "content"     = local.deps_content
+    "destination" = "install_ramble_deps.yml"
+    "args"        = "-e ramble_virtualenv_path=${var.ramble_virtualenv_path}"
   }
+
+  install_ramble_runner = {
+    "type"        = "ansible-local"
+    "content"     = local.script_content
+    "destination" = "install_ramble.yml"
+  }
+
+  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 4)
+  bucket_name = "ramble-scripts-${local.bucket_md5}"
+  runners     = [local.install_ramble_deps_runner, local.install_ramble_runner]
+
+  combined_runner = {
+    "type"        = "shell"
+    "content"     = module.startup_script.startup_script
+    "destination" = "ramble-install-and-setup.sh"
+  }
+
+}
+
+resource "google_storage_bucket" "bucket" {
+  project                     = var.project_id
+  name                        = local.bucket_name
+  uniform_bucket_level_access = true
+  location                    = var.region
+  storage_class               = "REGIONAL"
+  labels                      = local.labels
+}
+
+module "startup_script" {
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.22.1"
+
+  labels          = local.labels
+  project_id      = var.project_id
+  deployment_name = var.deployment_name
+  region          = var.region
+  runners         = local.runners
+  gcs_bucket_path = "gs://${google_storage_bucket.bucket.name}"
+}
+
+resource "local_file" "debug_file_shell_install" {
+  content  = local.script_content
+  filename = "${path.module}/debug_install.yml"
 }
