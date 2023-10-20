@@ -17,31 +17,40 @@
   hosts: localhost
   become: true
   vars:
-    packages:
+    dist_settings:
       bullseye:
-      - build-essential
-      - gdebi-core
-      - mesa-utils
-      - gdm3
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        grid_fn: NVIDIA-Linux-x86_64-510.85.02-grid.run
+        grid_ver: vGPU14.2
       bookworm:
-      - build-essential
-      - gdebi-core
-      - mesa-utils
-      - gdm3
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        grid_fn: NVIDIA-Linux-x86_64-525.105.17-grid.run
+        grid_ver: vGPU15.2
       jammy:
-      - build-essential
-      - gdebi-core
-      - mesa-utils
-      - gdm3
-      - gcc-12 # must match compiler used to build kernel on latest Ubuntu 22
-      - pkg-config # observed to be necessary for GRID driver installation on latest Ubuntu 22
-      - libglvnd-dev # observed to be necessary for GRID driver installation on latest Ubuntu 22
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        - gcc-12 # must match compiler used to build kernel on latest Ubuntu 22
+        - pkg-config # observed to be necessary for GRID driver installation on latest Ubuntu 22
+        - libglvnd-dev # observed to be necessary for GRID driver installation on latest Ubuntu 22
+        grid_fn: NVIDIA-Linux-x86_64-525.125.06-grid.run
+        grid_ver: vGPU15.3
   tasks:
   - name: Fail if using wrong OS
     ansible.builtin.assert:
       that:
       - ansible_os_family in ["Debian", "Ubuntu"]
-      - ansible_distribution_release in ["bullseye", "jammy", "bookworm"]
+      - ansible_distribution_release in {{ dist_settings.keys()|list }}
       fail_msg: "ansible_os_family: {{ ansible_os_family }} or ansible_distribution_release: {{ansible_distribution_release}} was not acceptable."
 
   - name: Check if GRID driver installed
@@ -57,7 +66,7 @@
 
   - name: Set all packages
     ansible.builtin.set_fact:
-      all_packages: '{{ packages[ansible_distribution_release] + ["linux-headers-" + uname_result.stdout] }}'
+      all_packages: '{{ dist_settings[ansible_distribution_release]["packages"] + ["linux-headers-" + uname_result.stdout] }}'
 
   - name: Install binaries for GRID drivers
     ansible.builtin.apt:
@@ -72,27 +81,12 @@
   - name: Install GRID driver if not existing
     when: nvidiasmi_result is failed
     block:
-    - name: Download GPU driver 15.3
+    - name: Download GPU driver
       ansible.builtin.get_url:
-        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU15.3/NVIDIA-Linux-x86_64-525.125.06-grid.run
+        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/{{ dist_settings[ansible_distribution_release]["grid_ver"] }}/{{ dist_settings[ansible_distribution_release]["grid_fn"] }}
         dest: /tmp/
         mode: "0755"
         timeout: 30
-      when: ansible_distribution_release == "jammy"
-    - name: Download GPU driver 15.2
-      ansible.builtin.get_url:
-        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU15.2/NVIDIA-Linux-x86_64-525.105.17-grid.run
-        dest: /tmp/
-        mode: "0755"
-        timeout: 30
-      when: ansible_distribution_release == "bookworm"
-    - name: Download GPU driver 14.2
-      ansible.builtin.get_url:
-        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU14.2/NVIDIA-Linux-x86_64-510.85.02-grid.run
-        dest: /tmp/
-        mode: "0755"
-        timeout: 30
-      when: ansible_distribution_release != "jammy" and ansible_distribution_release != "bookworm"
 
     - name: Stop gdm service
       ansible.builtin.systemd:
@@ -103,11 +97,9 @@
       ansible.builtin.shell: |
         #jinja2: trim_blocks: "True"
         {% if ansible_distribution_release == "jammy"  %}
-        CC=gcc-12 /tmp/NVIDIA-Linux-x86_64-525.125.06-grid.run --silent
-        {% elif ansible_distribution_release == "bookworm" %}
-        /tmp/NVIDIA-Linux-x86_64-525.105.17-grid.run --silent
+        CC=gcc-12 /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }} --silent
         {% else %}
-        /tmp/NVIDIA-Linux-x86_64-510.85.02-grid.run --silent
+        /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }} --silent
         {% endif %}
       register: result
       changed_when: result.rc == 0
