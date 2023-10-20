@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # The instructions for installing HTCondor may change with time, although we
-# anticipate that they will stay fixed for the 10.x releases. Find up-to-date
+# anticipate that they will stay fixed for the 23.0 releases. Find up-to-date
 # recommendations at:
 ## https://htcondor.readthedocs.io/en/latest/getting-htcondor/from-our-repositories.html
 
@@ -22,7 +22,7 @@
   hosts: all
   vars:
     enable_docker: true
-    htcondor_key: https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-10.x-Key
+    htcondor_key: https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-23.0-Key
     docker_key: https://download.docker.com/linux/centos/gpg
   become: true
   module_defaults:
@@ -47,26 +47,16 @@
   - name: Enable HTCondor Feature Release repository
     ansible.builtin.yum_repository:
       name: htcondor-feature
-      description: HTCondor Feature Releases (10.x.0)
+      description: HTCondor LTS Release (23.0)
       file: htcondor
-      baseurl: https://research.cs.wisc.edu/htcondor/repo/10.x/el$releasever/$basearch/release
+      baseurl: https://research.cs.wisc.edu/htcondor/repo/23.0/el$releasever/$basearch/release
       gpgkey: "{{ htcondor_key }}"
-      gpgcheck: true
-      repo_gpgcheck: true
-      priority: "90"
-  - name: Enable HTCondor Feature Release Updates repository
-    ansible.builtin.yum_repository:
-      name: htcondor-feature-update
-      description: HTCondor Feature Release Updates (10.x.y)
-      file: htcondor
-      baseurl: https://research.cs.wisc.edu/htcondor/repo/10.x/el$releasever/$basearch/update
-      gpgkey: https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-10.x-Key
       gpgcheck: true
       repo_gpgcheck: true
       priority: "90"
   - name: Install HTCondor
     ansible.builtin.yum:
-      name: condor-{{ condor_version | default("10.*") | string }}
+      name: condor-{{ condor_version | default("23.*") | string }}
       state: present
   - name: Ensure token directory
     ansible.builtin.file:
