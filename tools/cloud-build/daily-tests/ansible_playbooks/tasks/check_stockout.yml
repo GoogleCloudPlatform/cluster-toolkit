@@ -18,25 +18,33 @@
     that:
     - project is defined
 
-- name: Check compute stockout
-  changed_when: false
-  register: stockout
-  until: stockout.rc == 0
-  retries: 5
-  delay: 10
+- name: Check for capacity issues on compute nodes
   vars:
-    stockout_string: Region does not currently have sufficient capacity for the requested resources.
-  ansible.builtin.command: >-
-    gcloud logging --project {{ project }} read
-    'protoPayload.response.error.errors.message="{{ stockout_string }}" AND protoPayload.request.perInstanceProperties.key=~".*{{ slurm_cluster_name }}.*"'
-    --flatten="protoPayload.request.perInstanceProperties"
-    --format='table(protoPayload.request.perInstanceProperties.key:label=INSTANCE_ID,protoPayload.response.error.errors.message.list():label=ERROR_MESSAGE)'
-    --limit=5
+    check_strings:
+    - Region does not currently have sufficient capacity for the requested resources.
+    - No eligible zone could be found in this region for given properties
   when: slurm_cluster_name is defined
+  block:
+  - name: Check logs for stockout on compute nodes
+    changed_when: false
+    register: stockout
+    until: stockout.rc == 0
+    retries: 5
+    delay: 10
+    ansible.builtin.command: >-
+      gcloud logging --project {{ project }} read
+      'protoPayload.response.error.errors.message="{{ item }}" AND protoPayload.request.perInstanceProperties.key=~".*{{ slurm_cluster_name }}.*"'
+      --flatten="protoPayload.request.perInstanceProperties"
+      --format='table(protoPayload.request.perInstanceProperties.key:label=INSTANCE_ID,protoPayload.response.error.errors.message.list():label=ERROR_MESSAGE)'
+      --limit=5
+    with_items: "{{ check_strings }}"
 
-- name: Log stockout error
-  ansible.builtin.debug:
-    msg: |
-      "Abbreviated listing of nodes that could not be created:"
-      "{{ stockout.stdout }}"
-  when: stockout is defined
+  - name: Log compute stockout error
+    ansible.builtin.debug:
+      msg: |
+        "Abbreviated listing of nodes that could not be created:"
+        "{{ item.stdout }}"
+    when: item.stdout != ""
+    with_items: "{{ stockout.results }}"
+    loop_control:
+      label: "{{ item.item }}"
