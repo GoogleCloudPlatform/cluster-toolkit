@@ -40,10 +40,9 @@ const (
 
 var errorMessages = map[string]string{
 	// config
-	"fileLoadError":      "failed to read the input yaml",
-	"yamlUnmarshalError": "failed to parse the blueprint in %s, check YAML syntax for errors, err=%w",
-	"yamlMarshalError":   "failed to export the configuration to a blueprint yaml file",
-	"fileSaveError":      "failed to write the expanded yaml",
+	"fileLoadError":    "failed to read the input yaml",
+	"yamlMarshalError": "failed to export the configuration to a blueprint yaml file",
+	"fileSaveError":    "failed to write the expanded yaml",
 	// expand
 	"missingSetting":  "a required setting is missing from a module",
 	"invalidVar":      "invalid variable definition in",
@@ -384,7 +383,7 @@ func checkMovedModule(source string) error {
 func NewDeploymentConfig(configFilename string) (DeploymentConfig, YamlCtx, error) {
 	bp, ctx, err := importBlueprint(configFilename)
 	if err != nil {
-		return DeploymentConfig{}, YamlCtx{}, err
+		return DeploymentConfig{}, ctx, err
 	}
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
@@ -558,14 +557,15 @@ func isValidLabelValue(value string) bool {
 
 // DeploymentName returns the deployment_name from the config and does approperate checks.
 func (bp *Blueprint) DeploymentName() (string, error) {
+	path := Root.Vars.Dot("deployment_name")
+
 	if !bp.Vars.Has("deployment_name") {
-		return "", InputValueError{
+		return "", BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errorMessages["varNotFound"],
-		}
+		}}
 	}
 
-	path := Root.Vars.Dot("deployment_name")
 	v := bp.Vars.Get("deployment_name")
 	if v.Type() != cty.String {
 		return "", BpError{path, InputValueError{

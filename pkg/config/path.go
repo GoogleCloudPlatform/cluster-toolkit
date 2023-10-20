@@ -115,12 +115,12 @@ type groupPath struct {
 
 type modulePath struct {
 	basePath
-	Source   basePath               `path:".source"`
-	Kind     basePath               `path:".kind"`
-	ID       basePath               `path:".id"`
-	Use      arrayPath[backendPath] `path:".use"`
-	Outputs  arrayPath[outputPath]  `path:".outputs"`
-	Settings dictPath               `path:".settings"`
+	Source   basePath              `path:".source"`
+	Kind     basePath              `path:".kind"`
+	ID       basePath              `path:".id"`
+	Use      arrayPath[basePath]   `path:".use"`
+	Outputs  arrayPath[outputPath] `path:".outputs"`
+	Settings dictPath              `path:".settings"`
 }
 
 type outputPath struct {
@@ -132,6 +132,9 @@ type outputPath struct {
 
 // Root is a starting point for creating a Blueprint Path
 var Root rootPath
+
+// internalPath is to be used to report problems outside of Blueprint schema (e.g. YAML parsing error position)
+var internalPath = mapPath[basePath]{basePath{nil, "__internal_path__"}}
 
 func init() {
 	initPath(&Root, nil, "")

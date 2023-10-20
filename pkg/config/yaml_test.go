@@ -138,7 +138,10 @@ terraform_backend_defaults:
 		{Root.Backend.Type, Pos{44, 9}},
 	}
 
-	ctx := NewYamlCtx([]byte(data))
+	ctx, err := NewYamlCtx([]byte(data))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range tests {
 		t.Run(tc.path.String(), func(t *testing.T) {
 			got, ok := ctx.Pos(tc.path)
