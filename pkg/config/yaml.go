@@ -36,7 +36,15 @@ func (p yPath) At(i int) yPath {
 	return yPath(fmt.Sprintf("%s[%d]", p, i))
 }
 
-// Dot is a builder method for a path of a child in a mapping.
+// Key is a builder method for a path of a child in a mapping, pointing at key
+func (p yPath) Key(k string) yPath {
+	if p == "" {
+		return yPath(k)
+	}
+	return yPath(fmt.Sprintf("%s#%s", p, k))
+}
+
+// Dot is a builder method for a path of a child in a mapping, pointing at value
 func (p yPath) Dot(k string) yPath {
 	if p == "" {
 		return yPath(k)
@@ -136,7 +144,9 @@ func NewYamlCtx(data []byte) YamlCtx {
 		m[p] = Pos{n.Line, n.Column}
 		if n.Kind == yaml.MappingNode {
 			for i := 0; i < len(n.Content); i += 2 {
-				walk(n.Content[i+1], p.Dot(n.Content[i].Value))
+				key := n.Content[i].Value
+				walk(n.Content[i], p.Key(key))
+				walk(n.Content[i+1], p.Dot(key))
 			}
 		} else if n.Kind == yaml.SequenceNode {
 			for i, c := range n.Content {

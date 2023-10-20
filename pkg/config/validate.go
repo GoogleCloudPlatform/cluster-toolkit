@@ -74,7 +74,7 @@ func validateVars(vars Dict) error {
 	// Check for any nil values
 	for key, val := range vars.Items() {
 		if val.IsNull() {
-			errs.At(Root.Vars.Dot(key), fmt.Errorf("deployment variable %s was not set", key))
+			errs.At(Root.Vars.Key(key), fmt.Errorf("deployment variable %s was not set", key))
 		}
 	}
 	return errs.OrNil()
@@ -145,7 +145,7 @@ func validateSettings(
 	}
 	errs := Errors{}
 	for k := range mod.Settings.Items() {
-		sp := p.Settings.Dot(k)
+		sp := p.Settings.Key(k)
 		// Setting name included a period
 		// The user was likely trying to set a subfield which is not supported.
 		// HCL does not support periods in variables names either:

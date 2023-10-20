@@ -56,6 +56,12 @@ func (p mapPath[E]) Dot(k string) E {
 	return e
 }
 
+func (p mapPath[E]) Key(k string) basePath {
+	var e basePath
+	initPath(&e, &p, fmt.Sprintf("#%s", k))
+	return e
+}
+
 func initPath(p any, prev any, piece string) {
 	r := reflect.Indirect(reflect.ValueOf(p))
 	ty := reflect.TypeOf(p).Elem()

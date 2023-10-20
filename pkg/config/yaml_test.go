@@ -91,6 +91,7 @@ terraform_backend_defaults:
 		{Root.Validators, Pos{8, 1}},
 		{Root.Validators.At(0), Pos{8, 3}},
 		{Root.Validators.At(0).Inputs, Pos{10, 5}},
+		{Root.Validators.At(0).Inputs.Key("spice"), Pos{10, 5}},
 		{Root.Validators.At(0).Inputs.Dot("spice"), Pos{10, 12}},
 		{Root.Validators.At(0).Validator, Pos{8, 14}},
 		{Root.Validators.At(1), Pos{11, 3}},
@@ -98,6 +99,7 @@ terraform_backend_defaults:
 		{Root.Validators.At(1).Validator, Pos{11, 14}},
 		{Root.ValidationLevel, Pos{14, 19}},
 		{Root.Vars, Pos{17, 3}},
+		{Root.Vars.Key("red"), Pos{17, 3}},
 		{Root.Vars.Dot("red"), Pos{17, 8}},
 		{Root.Groups, Pos{20, 1}},
 		{Root.Groups.At(0), Pos{20, 3}},
@@ -106,6 +108,7 @@ terraform_backend_defaults:
 		{Root.Groups.At(0).Backend, Pos{22, 5}},
 		{Root.Groups.At(0).Backend.Type, Pos{22, 11}},
 		{Root.Groups.At(0).Backend.Configuration, Pos{24, 7}},
+		{Root.Groups.At(0).Backend.Configuration.Key("carrot"), Pos{24, 7}},
 		{Root.Groups.At(0).Backend.Configuration.Dot("carrot"), Pos{24, 15}},
 
 		{Root.Groups.At(0).Modules, Pos{26, 3}},
@@ -124,6 +127,7 @@ terraform_backend_defaults:
 		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Description, Pos{33, 20}},
 		{Root.Groups.At(0).Modules.At(0).Outputs.At(1).Sensitive, Pos{34, 18}},
 		{Root.Groups.At(0).Modules.At(0).Settings, Pos{36, 7}},
+		{Root.Groups.At(0).Modules.At(0).Settings.Key("dijon"), Pos{36, 7}},
 		{Root.Groups.At(0).Modules.At(0).Settings.Dot("dijon"), Pos{36, 14}},
 
 		{Root.Groups.At(1), Pos{38, 3}},

@@ -41,6 +41,7 @@ func TestPath(t *testing.T) {
 		{r.Validators.At(2).Inputs, "validators[2].inputs"},
 		{r.Validators.At(2).Inputs.Dot("zebra"), "validators[2].inputs.zebra"},
 
+		{r.Vars.Key("red"), "vars#red"},
 		{r.Vars.Dot("red"), "vars.red"},
 
 		{r.Groups.At(3), "deployment_groups[3]"},
@@ -60,10 +61,12 @@ func TestPath(t *testing.T) {
 		{m.Outputs.At(2).Description, "deployment_groups[3].modules[1].outputs[2].description"},
 		{m.Outputs.At(2).Sensitive, "deployment_groups[3].modules[1].outputs[2].sensitive"},
 		{m.Settings, "deployment_groups[3].modules[1].settings"},
+		{m.Settings.Key("lime"), "deployment_groups[3].modules[1].settings#lime"},
 		{m.Settings.Dot("lime"), "deployment_groups[3].modules[1].settings.lime"},
 
 		{r.Backend.Type, "terraform_backend_defaults.type"},
 		{r.Backend.Configuration, "terraform_backend_defaults.configuration"},
+		{r.Backend.Configuration.Key("goo"), "terraform_backend_defaults.configuration#goo"},
 		{r.Backend.Configuration.Dot("goo"), "terraform_backend_defaults.configuration.goo"},
 	}
 	for _, tc := range tests {
@@ -87,6 +90,7 @@ func TestPathParent(t *testing.T) {
 		{r.Groups, r},
 		{r.Groups.At(3), r.Groups},
 		{r.Groups.At(3).Modules, r.Groups.At(3)},
+		{r.Vars.Key("red"), r.Vars},
 		{r.Vars.Dot("red"), r.Vars},
 	}
 	for _, tc := range tests {

@@ -715,7 +715,7 @@ func (bp *Blueprint) evalVars() error {
 			}
 			if used[ref.Name] == 1 {
 				return BpError{
-					Root.Vars.Dot(n),
+					Root.Vars.Key(n),
 					fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name),
 				}
 			}

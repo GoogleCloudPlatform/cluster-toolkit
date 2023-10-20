@@ -1058,7 +1058,7 @@ func (s *MySuite) TestEvalVars(c *C) {
 		err := bp.evalVars()
 		var berr BpError
 		if errors.As(err, &berr) {
-			if berr.Path.String() != "vars.uro" && berr.Path.String() != "vars.ros" {
+			if berr.Path.String() != "vars#uro" && berr.Path.String() != "vars#ros" {
 				c.Error(berr, " should point to vars.uro or vars.ros")
 			}
 		} else {

@@ -386,7 +386,7 @@ func testDeploymentVariableNotUsed(bp config.Blueprint, inputs config.Dict) erro
 	errs := config.Errors{}
 	for _, v := range bp.ListUnusedVariables() {
 		errs.At(
-			config.Root.Vars.Dot(v),
+			config.Root.Vars.Key(v),
 			fmt.Errorf("the variable %q was not used in this blueprint", v))
 	}
 	return errs.OrNil()
