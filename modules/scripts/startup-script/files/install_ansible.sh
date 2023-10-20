@@ -15,7 +15,7 @@
 
 REQ_ANSIBLE_VERSION=2.11
 REQ_ANSIBLE_PIP_VERSION=4.10.0
-REQ_PIP_WHEEL_VERSION=0.41.2
+REQ_PIP_WHEEL_VERSION=0.37.1
 REQ_PIP_SETUPTOOLS_VERSION=59.6.0
 REQ_PIP_MAJOR_VERSION=21
 REQ_PYTHON3_VERSION=6
@@ -172,6 +172,16 @@ main() {
 	if ! ${python_path} -m pip --version 2>/dev/null; then
 		if ! install_pip3; then
 			return 1
+		fi
+	fi
+
+	# Upgrade pip if necesary
+	# Only run if OS is not Debian 12 - Debian 12 does not allow for system level pip installs
+	if [ ! -f /etc/debian_version ] || [ "$(lsb_release -a 2>/dev/null | sed -n 's/Release:\s\+\([0-9]\+\).\?.*/\1/p')" -ne "12" ]; then
+		pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
+		pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
+		if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
+			${python_path} -m pip install --upgrade pip
 		fi
 	fi
 
