@@ -157,22 +157,27 @@ func NewYamlCtx(data []byte) (YamlCtx, error) {
 		return YamlCtx{m, lines}, errs
 	}
 
-	var walk func(n *yaml.Node, p yPath)
-	walk = func(n *yaml.Node, p yPath) {
+	var walk func(n *yaml.Node, p yPath, posOf *yaml.Node)
+	walk = func(n *yaml.Node, p yPath, posOf *yaml.Node) {
 		n = normalizeYamlNode(p, n)
-		m[p] = Pos{n.Line, n.Column}
+		if posOf == nil { // use position of node itself if posOf is not set
+			posOf = n
+		}
+		m[p] = Pos{posOf.Line, posOf.Column}
+
 		if n.Kind == yaml.MappingNode {
 			for i := 0; i < len(n.Content); i += 2 {
-				walk(n.Content[i+1], p.Dot(n.Content[i].Value))
+				// for mapping items use position of the key
+				walk(n.Content[i+1], p.Dot(n.Content[i].Value), n.Content[i])
 			}
 		} else if n.Kind == yaml.SequenceNode {
 			for i, c := range n.Content {
-				walk(c, p.At(i))
+				walk(c, p.At(i), nil)
 			}
 		}
 	}
 	if c.n != nil {
-		walk(c.n, "")
+		walk(c.n, "", nil)
 	}
 	return YamlCtx{m, lines}, nil
 }

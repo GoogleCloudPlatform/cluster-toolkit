@@ -152,7 +152,7 @@ vars:
 		got := renderError(err, ctx)
 		c.Check(got, Equals, `Error: arbuz
 3:   kale: dos
-           ^`)
+     ^`)
 	}
 }
 
