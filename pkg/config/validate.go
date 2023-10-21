@@ -51,7 +51,8 @@ func validateGlobalLabels(vars Dict) error {
 	for k, v := range labels.AsValueMap() {
 		// TODO: Use cty.Path to point to the specific label that is invalid
 		if v.Type() != cty.String {
-			errs.At(p, errors.New("vars.labels must be a map of strings"))
+			errs.At(p, fmt.Errorf("vars.labels must be a map of strings, got %q: %q (of type %s)", k, v, v.Type()))
+			continue
 		}
 		s := v.AsString()
 
