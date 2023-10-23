@@ -281,6 +281,7 @@ deployment_groups:
     - bucket-output
     - bucket-software
     settings:
+      add_deployment_name_before_prefix: true
       name_prefix: chrome-remote-desktop
       install_nvidia_driver: true
       startup_script: |
