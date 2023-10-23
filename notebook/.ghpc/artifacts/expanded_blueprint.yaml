@@ -1,0 +1,125 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: ai-notebook-example
+ghpc_version: v1.23.0-284-g4f2d4158-dirty
+validation_level: 1
+vars:
+  deployment_name: notebook
+  labels:
+    ghpc_blueprint: ai-notebook-example
+    ghpc_deployment: notebook
+  project_id: nextflow-2023
+  region: us-central1
+  zone: us-central1-a
+deployment_groups:
+  - group: primary
+    modules:
+      - source: ./community/modules/compute/notebook
+        kind: terraform
+        id: new-notebook
+        use:
+          - fsi_bucket
+          - bq-table
+          - pubsub_topic
+        settings:
+          create_tutorial: fsi
+          dataset_id: ((module.bq-table.dataset_id ))
+          deployment_name: ((var.deployment_name ))
+          gcs_bucket_path: ((module.fsi_bucket.gcs_bucket_path ))
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "compute"
+            }) ))
+          machine_type: n1-standard-4
+          mount_runner: ((module.fsi_bucket.mount_runner ))
+          name_prefix: notebook
+          project_id: ((var.project_id ))
+          region: ((var.region ))
+          table_id: ((module.bq-table.table_id ))
+          topic_id: ((module.pubsub_topic.topic_id ))
+          topic_schema: ((module.pubsub_topic.topic_schema ))
+          zone: ((var.zone ))
+      - source: community/modules/file-system/cloud-storage-bucket
+        kind: terraform
+        id: fsi_bucket
+        settings:
+          deployment_name: ((var.deployment_name ))
+          force_destroy: true
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "file-system"
+            }) ))
+          local_mount: /home/jupyter/fsi
+          name_prefix: fsi_bucket
+          project_id: ((var.project_id ))
+          random_suffix: true
+          region: ((var.region ))
+      - source: ./community/modules/pubsub/topic
+        kind: terraform
+        id: pubsub_topic
+        settings:
+          deployment_name: ((var.deployment_name ))
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "pubsub"
+            }) ))
+          project_id: ((var.project_id ))
+          region: ((var.region ))
+          topic_id: fsi_output
+      - source: ./community/modules/pubsub/subscription
+        kind: terraform
+        id: bq_subscription
+        use:
+          - bq-table
+          - pubsub_topic
+        settings:
+          dataset_id: ((module.bq-table.dataset_id ))
+          deployment_name: ((var.deployment_name ))
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "pubsub"
+            }) ))
+          project_id: ((var.project_id ))
+          region: ((var.region ))
+          table_id: ((module.bq-table.table_id ))
+          topic_id: ((module.pubsub_topic.topic_id ))
+      - source: ./community/modules/database/bigquery_dataset
+        kind: terraform
+        id: bq-dataset
+        settings:
+          dataset_id: fsi_dataset
+          deployment_name: ((var.deployment_name ))
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "database"
+            }) ))
+          project_id: ((var.project_id ))
+          region: ((var.region ))
+      - source: ./community/modules/database/bigquery_table
+        kind: terraform
+        id: bq-table
+        use:
+          - bq-dataset
+        settings:
+          dataset_id: ((module.bq-dataset.dataset_id ))
+          deployment_name: ((var.deployment_name ))
+          labels: |-
+            ((merge(var.labels, {
+              ghpc_role = "database"
+            }) ))
+          project_id: ((var.project_id ))
+          region: ((var.region ))
+          table_id: fsi_table
+          table_schema: ' [ { "name": "subscription_name", "type": "STRING" }, { "name": "message_id", "type": "STRING" }, { "name": "publish_time", "type": "TIMESTAMP" }, { "name": "simulation_results", "type": "RECORD", "mode": "REPEATED", "fields": [ { "name" : "price", "type" : "NUMERIC" } ] }, { "name": "ticker", "type": "STRING" } ,{ "name": "epoch_time", "type": "INT64" } ,{ "name": "iteration", "type": "INT64" } ,{ "name": "start_date", "type": "STRING" } ,{ "name": "end_date", "type": "STRING" } ,{ "name": "attributes", "type": "STRING" } ] '

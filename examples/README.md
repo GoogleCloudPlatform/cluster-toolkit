@@ -19,6 +19,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
+  * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
@@ -262,6 +263,73 @@ to 256
   _not needed for `n2` partition_
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
+
+## [fsi-montecarlo-on-batch.yaml](../community/examples/fsi-montecarlo-on-batch.yaml) ![community-badge]
+## Monte Carlo Simulations for Value at Risk
+
+## Basic getting started
+
+1. Clone the repo
+1. Change to the directory: 
+ ```
+ cd hpc-toolkit
+ ```
+3. Make `ghpc` if you have not already
+ ```
+ make
+ ```
+4. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml`
+
+```
+./ghpc create community/examples/fsi-montecarlo-on-batch.yaml
+```
+
+If successful, you will see output similar to:
+```
+To deploy your infrastructure please run:
+
+./ghpc deploy fsimontecarlo
+```
+
+This will create a directory called `fsimontecarlo`
+
+
+5. Deploy the blueprint
+
+```
+./ghpc deploy fsimontecarlo
+```
+If successful, this will prompt you:
+```
+Summary of proposed changes: Plan: 20 to add, 0 to change, 0 to destroy.
+(D)isplay full proposed changes,
+(A)pply proposed changes,
+(S)top and exit,
+(C)ontinue without applying
+Please select an option [d,a,s,c]:
+```
+Respond with `apply`, "a".
+
+
+When the job is complete it will indicate `Succeeded`. You can then proceed to the next section.
+
+## Open Vertex AI Workbench
+
+1. Go to the Vertex AI Workbench Notebooks instances in the Google Cloud Console:
+  > https://console.cloud.google.com/vertex-ai/workbench/user-managed
+2. Open JupyterLab 
+  > Click on `OPEN JUPYTERLAB` link
+3. Clone the repository discussed in the previous steps
+  > Click on the Git icon
+
+  > Select `Clone a Repository`
+
+  > Enter `https://github.com/GoogleCloudPlatform/scientific-computing-examples.git`
+
+4. Navigate to the directory with the notebook
+  > `scientific-computing -> hpc-monte-carlo`
+
+
 
 ### [ml-slurm.yaml] ![core-badge]
 
