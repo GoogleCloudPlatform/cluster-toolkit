@@ -107,6 +107,11 @@ workloads on Google Cloud from 2024.
 The HPC Toolkit officially supports Debian 11 based VM images in the majority of
 our modules, with a couple of exceptions.
 
+### Debian 12
+
+The HPC Toolkit officially supports Debian 12 based VM images for the
+chrome-remote-desktop module.
+
 ### Ubuntu 20.04 LTS
 
 The HPC Toolkit officially supports Ubuntu 20.04 LTS based VM images in the
@@ -124,7 +129,7 @@ description of our support for Windows images.
   <th>Deployment Type/Scheduler</th>
   <th>Feature</th>
   <th></th>
-  <th>CentOS 7</th><th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th>
+  <th>CentOS 7</th><th>Debian 11</th><th>Debian 12</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th>
 </tr>
 <tr>
   <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
@@ -137,6 +142,7 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td></td>
   <td></td>
+  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
 </tr>
 <tr>
@@ -144,7 +150,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td></td>  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
 </tr>
 <tr>
@@ -152,6 +158,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
+  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
 </tr>
@@ -162,6 +169,7 @@ description of our support for Windows images.
   <th></th>
   <td></td>
   <td><a href="../community/examples/hpc-slurm-chromedesktop.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-chromedesktop.yaml">✓</a></td>
   <td></td>
   <td></td>
 </tr>
@@ -169,6 +177,7 @@ description of our support for Windows images.
   <th>Lustre</th>
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml">✓</a></td>
+  <td></td>
   <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml">✓</a></td>
   <td></td>
@@ -178,6 +187,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
+  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
 </tr>
@@ -186,6 +196,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
+  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
 </tr>
@@ -196,6 +207,7 @@ description of our support for Windows images.
   <th></th>
   <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
   <td></td>
   <td><sup><b>*</b></sup></td>
 </tr>
@@ -203,6 +215,7 @@ description of our support for Windows images.
   <th>Lustre</th>
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
+  <td></td>
   <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
@@ -212,6 +225,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
+  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
 </tr>
@@ -220,22 +234,29 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
+  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
 </tr>
-
 <tr>
   <th rowspan="1">HTCondor</th>
   <th></th>
   <th></th>
-  <td>✓</td><td></td><td>✓</td><td></td>
+  <td></td>
+  <td>✓</td>
+  <td></td>
+  <td>✓</td>
+  <td></td>
 </tr>
-
 <tr>
   <th rowspan="1">Omnia</th>
   <th></th>
   <th></th>
-  <td></td><td></td><td>✓</td><td></td>
+  <td></td>
+  <td></td>
+  <td></td>
+  <td>✓</td>
+  <td></td>
 </tr>
 </table>
 
