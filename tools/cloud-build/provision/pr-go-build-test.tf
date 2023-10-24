@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "google_cloudbuild_trigger" "pr_go_1_18_build_test" {
-  name        = "PR-Go-1-18-build-test"
-  description = "Test that the PR builds with Go 1.18"
 
-  filename = "tools/cloud-build/build-test-go1-18.yaml"
+resource "google_cloudbuild_trigger" "pr_go_build_test" {
+  for_each = toset(["1.20", "1.21"])
+
+  name        = "PR-Go-${replace(each.key, ".", "-")}-build-test"
+  description = "Test that the PR builds with Go ${each.key}"
+
+  filename = "tools/cloud-build/build-test-go.yaml"
 
   github {
     owner = "GoogleCloudPlatform"
@@ -27,4 +30,8 @@ resource "google_cloudbuild_trigger" "pr_go_1_18_build_test" {
     }
   }
   include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _GO_VERSION = each.key
+  }
 }
