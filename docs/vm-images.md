@@ -110,7 +110,8 @@ our modules, with a couple of exceptions.
 ### Debian 12
 
 The HPC Toolkit officially supports Debian 12 based VM images for the
-chrome-remote-desktop module.
+chrome-remote-desktop module. Other modules may work, but are currently
+untested.
 
 ### Ubuntu 20.04 LTS
 
@@ -150,7 +151,8 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
-  <td></td>  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td>†</td>  
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
 </tr>
 <tr>
@@ -158,7 +160,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
-  <td></td>
+  <td>†</td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
 </tr>
@@ -168,7 +170,7 @@ description of our support for Windows images.
   <th>Chrome Remote Desktop</th>
   <th></th>
   <td></td>
-  <td><a href="../community/examples/hpc-slurm-chromedesktop.yaml">✓</a></td>
+  <td></td>
   <td><a href="../community/examples/hpc-slurm-chromedesktop.yaml">✓</a></td>
   <td></td>
   <td></td>
@@ -187,7 +189,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
-  <td></td>
+  <td>†</td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
 </tr>
@@ -196,7 +198,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
-  <td></td>
+  <td>†</td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
 </tr>
@@ -206,7 +208,7 @@ description of our support for Windows images.
   <th>Chrome Remote Desktop</th>
   <th></th>
   <td></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
+  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
   <td></td>
   <td><sup><b>*</b></sup></td>
@@ -225,7 +227,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
-  <td></td>
+  <td>†</td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
 </tr>
@@ -234,7 +236,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
-  <td></td>
+  <td>†</td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
 </tr>
@@ -244,7 +246,7 @@ description of our support for Windows images.
   <th></th>
   <td></td>
   <td>✓</td>
-  <td></td>
+  <td>†</td>
   <td>✓</td>
   <td></td>
 </tr>
@@ -261,6 +263,8 @@ description of our support for Windows images.
 </table>
 
 <sup><b>*</b></sup> Chrome Remote desktop does not support Ubuntu 20.04, but it does support Ubuntu 22.04.
+
+<sup><b>†</b></sup> May support these modules, but is currently untested.
 
 ### Other Images
 

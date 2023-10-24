@@ -56,7 +56,11 @@ variable "network_storage" {
 }
 
 variable "instance_image" {
-  description = "Instance Image. An alternative could be family  = \"ubuntu-2204-lts\" and project = \"ubuntu-os-cloud\" or family  = \"debian-11\" and project = \"debian-cloud\""
+  description = <<-EOT
+    Image used to build chrome remote desktop node. The default image is from
+    family= \"debian-12\" and project = \"debian-cloud\". An alternative image is
+    from family  = \"ubuntu-2204-lts\" and project = \"ubuntu-os-cloud\".
+    EOT
   type = object({
     family  = string,
     project = string
@@ -64,6 +68,16 @@ variable "instance_image" {
   default = {
     family  = "debian-12"
     project = "debian-cloud"
+  }
+
+  validation {
+    condition     = contains(["ubuntu-2204-lts", "debian-12"], var.instance_image.family)
+    error_message = "In var.instance_image, the 'family' field must be 'ubuntu-2204-lts' or 'debian-12'."
+  }
+
+  validation {
+    condition     = contains(["ubuntu-os-cloud", "debian-cloud"], var.instance_image.project)
+    error_message = "In var.instance_image, the 'project' field must be 'ubuntu-os-cloud' or 'debian-cloud'."
   }
 }
 

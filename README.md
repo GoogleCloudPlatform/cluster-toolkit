@@ -110,6 +110,7 @@ The HPC Toolkit officially supports the following VM images:
 * HPC CentOS 7
 * HPC Rocky Linux 8
 * Debian 11
+* Debian 12
 * Ubuntu 20.04 LTS
 
 For more information on these and other images, see
