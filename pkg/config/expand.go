@@ -61,8 +61,42 @@ func (dc *DeploymentConfig) expand() error {
 		return err
 	}
 
+	if err := validateInputsAllModules(dc.Config); err != nil {
+		return err
+	}
+
 	dc.Config.populateOutputs()
 	return nil
+}
+
+func validateInputsAllModules(bp Blueprint) error {
+	errs := Errors{}
+	for ig, g := range bp.DeploymentGroups {
+		for im, m := range g.Modules {
+			p := Root.Groups.At(ig).Modules.At(im)
+			errs.Add(validateModuleInputs(p, m, bp))
+		}
+	}
+	return errs.OrNil()
+}
+
+func validateModuleInputs(mp modulePath, m Module, bp Blueprint) error {
+	mi := m.InfoOrDie()
+	errs := Errors{}
+	for _, input := range mi.Inputs {
+		ip := mp.Settings.Dot(input.Name)
+
+		if !m.Settings.Has(input.Name) {
+			if input.Required {
+				errs.At(ip, fmt.Errorf("%s: Module ID: %s Setting: %s",
+					errorMessages["missingSetting"], m.ID, input.Name))
+			}
+			continue
+		}
+
+		// TODO: Check set value and input dtypes convertability
+	}
+	return errs.OrNil()
 }
 
 func (dc *DeploymentConfig) expandBackends() {
@@ -275,16 +309,7 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
 		if bp.Vars.Has(input.Name) {
 			ref := GlobalRef(input.Name)
 			mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
-			continue
 		}
-
-		if input.Required {
-			// It's not explicitly set, and not global is set
-			// Fail if no default has been set
-			return fmt.Errorf("%s: Module ID: %s Setting: %s",
-				errorMessages["missingSetting"], mod.ID, input.Name)
-		}
-		// Default exists, the module will handle it
 	}
 	return nil
 }
