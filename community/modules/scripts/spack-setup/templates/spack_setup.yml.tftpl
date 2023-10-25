@@ -53,9 +53,18 @@
     changed_when: lock_out.rc == 0
     failed_when: false
 
-  - name: Clones into installation directory
+  - name: Clone branch or tag into installation directory
     ansible.builtin.command: git clone --branch {{ git_ref }} {{ git_url }} {{ install_dir }}
+    failed_when: false
+    register: clone_res
     when: lock_out.rc == 0
+
+  - name: Clone commit hash into installation directory
+    ansible.builtin.command: "{{ item }}"
+    with_items:
+      - git clone {{ git_url }} {{ install_dir }}
+      - git --git-dir={{ install_dir }}/.git checkout {{ git_ref }}
+    when: lock_out.rc == 0 and clone_res.rc != 0
 
   - name: Set ownership and permissions
     ansible.builtin.file:
