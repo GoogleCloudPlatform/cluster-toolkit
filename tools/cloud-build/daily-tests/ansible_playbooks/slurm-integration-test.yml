@@ -210,16 +210,6 @@
       loop_control:
         loop_var: test
 
-    rescue:
-    - name: Check for stockout errors
-      ansible.builtin.include_tasks:
-        file: tasks/check_stockout.yml
-        apply:
-          delegate_to: localhost
-      vars:
-        slurm_cluster_name: "{{ slurm_cluster_name }}"
-        project: "{{ project }}"
-
     ## Always cleanup, even on failure
     always:
     - name: Ensure all nodes are powered down
