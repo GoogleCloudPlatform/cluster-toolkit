@@ -35,6 +35,7 @@
     ansible.builtin.pip:
       name: pip>=21.3.1
       virtualenv: "{{ ramble_virtualenv_path }}"
+      virtualenv_command: /usr/bin/python3 -m venv
 
   - name: Download ramble requirements file
     ansible.builtin.get_url:
@@ -45,3 +46,4 @@
     ansible.builtin.pip:
       requirements: /tmp/requirements.txt
       virtualenv: "{{ ramble_virtualenv_path }}"
+      virtualenv_command: /usr/bin/python3 -m venv
