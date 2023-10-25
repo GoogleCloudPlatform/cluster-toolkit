@@ -2,6 +2,8 @@
 
 # Built Binary
 ghpc
+# Expand artifact
+expanded.yaml
 # macOS Desktop Services Store
 .DS_Store
 # workspace level vscode settings
