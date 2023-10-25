@@ -498,9 +498,8 @@ func checkBackends(bp Blueprint) error {
 // validateBlueprint runs a set of simple early checks on the imported input YAML
 func validateBlueprint(bp Blueprint) error {
 	errs := Errors{}
-
-	_, err := bp.DeploymentName()
-	return errs.Add(err).
+	return errs.
+		Add(checkDeploymentName(bp)).
 		Add(bp.checkBlueprintName()).
 		Add(validateVars(bp.Vars)).
 		Add(checkModulesAndGroups(bp)).
@@ -555,42 +554,42 @@ func isValidLabelValue(value string) bool {
 	return matchLabelValueExp.MatchString(value)
 }
 
-// DeploymentName returns the deployment_name from the config and does approperate checks.
-func (bp *Blueprint) DeploymentName() (string, error) {
+func checkDeploymentName(bp Blueprint) error {
 	path := Root.Vars.Dot("deployment_name")
 
 	if !bp.Vars.Has("deployment_name") {
-		return "", BpError{path, InputValueError{
+		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["varNotFound"],
-		}}
+			cause:    errorMessages["varNotFound"]}}
 	}
 
 	v := bp.Vars.Get("deployment_name")
 	if v.Type() != cty.String {
-		return "", BpError{path, InputValueError{
+		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["valueNotString"],
-		}}
+			cause:    errorMessages["valueNotString"]}}
 	}
 
 	s := v.AsString()
 	if len(s) == 0 {
-		return "", BpError{path, InputValueError{
+		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["valueEmptyString"],
-		}}
+			cause:    errorMessages["valueEmptyString"]}}
 	}
 
-	// Check that deployment_name is a valid label
 	if !isValidLabelValue(s) {
-		return "", BpError{path, InputValueError{
+		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["labelValueReqs"],
-		}}
+			cause:    errorMessages["labelValueReqs"]}}
 	}
+	return nil
+}
 
-	return s, nil
+// DeploymentName returns the deployment_name variable value.
+func (bp *Blueprint) DeploymentName() string {
+	// will panic if value is not string
+	// blueprint needs to be validated before calling this function
+	return bp.Vars.Get("deployment_name").AsString()
 }
 
 // ProjectID returns the project_id

@@ -30,28 +30,28 @@ func (s *MySuite) TestExpand(c *C) {
 
 func (s *MySuite) TestExpandBackends(c *C) {
 	dc := getDeploymentConfigForTest()
-	deplName := dc.Config.Vars.Get("deployment_name").AsString()
+	bp := &dc.Config
 
-	dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
+	bp.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
 	dc.expandBackends()
 
-	grp := dc.Config.DeploymentGroups[0]
+	grp := bp.DeploymentGroups[0]
 	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix := grp.TerraformBackend.Configuration.Get("prefix")
-	expPrefix := fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName, deplName, grp.Name)
+	expPrefix := fmt.Sprintf("%s/%s/%s", bp.BlueprintName, bp.DeploymentName(), grp.Name)
 	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
 
 	// Add a new resource group, ensure each group name is included
 	newGroup := DeploymentGroup{
 		Name: "group2",
 	}
-	dc.Config.DeploymentGroups = append(dc.Config.DeploymentGroups, newGroup)
+	bp.DeploymentGroups = append(bp.DeploymentGroups, newGroup)
 	dc.expandBackends()
 
-	newGrp := dc.Config.DeploymentGroups[1]
+	newGrp := bp.DeploymentGroups[1]
 	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
 	gotPrefix = newGrp.TerraformBackend.Configuration.Get("prefix")
-	expPrefix = fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName, deplName, newGrp.Name)
+	expPrefix = fmt.Sprintf("%s/%s/%s", bp.BlueprintName, bp.DeploymentName(), newGrp.Name)
 	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
 }
 

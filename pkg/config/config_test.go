@@ -515,45 +515,31 @@ func (s *MySuite) TestDeploymentName(c *C) {
 
 	// Is deployment_name a valid string?
 	bp.Vars.Set("deployment_name", cty.StringVal("yellow"))
-	dn, err := bp.DeploymentName()
-	c.Assert(dn, Equals, "yellow")
-	c.Assert(err, IsNil)
+	c.Check(checkDeploymentName(bp), IsNil)
 
 	// Is deployment_name an empty string?
 	bp.Vars.Set("deployment_name", cty.StringVal(""))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	c.Check(errors.As(checkDeploymentName(bp), &e), Equals, true)
 
 	// Is deployment_name not a string?
 	bp.Vars.Set("deployment_name", cty.NumberIntVal(100))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	c.Check(errors.As(checkDeploymentName(bp), &e), Equals, true)
 
 	// Is deployment_names longer than 63 characters?
 	bp.Vars.Set("deployment_name", cty.StringVal("deployment_name-deployment_name-deployment_name-deployment_name-0123"))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	c.Check(errors.As(checkDeploymentName(bp), &e), Equals, true)
 
 	// Does deployment_name contain special characters other than dashes or underscores?
 	bp.Vars.Set("deployment_name", cty.StringVal("deployment.name"))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	c.Check(errors.As(checkDeploymentName(bp), &e), Equals, true)
 
 	// Does deployment_name contain capital letters?
 	bp.Vars.Set("deployment_name", cty.StringVal("Deployment_name"))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	c.Check(errors.As(checkDeploymentName(bp), &e), Equals, true)
 
 	// Is deployment_name not set?
 	bp.Vars = Dict{}
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	c.Check(errors.As(checkDeploymentName(bp), &e), Equals, true)
 }
 
 func (s *MySuite) TestCheckBlueprintName(c *C) {

@@ -78,9 +78,7 @@ var (
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
-	deplName, err := dc.Config.DeploymentName()
-	cobra.CheckErr(err)
-	deplDir := filepath.Join(outputDir, deplName)
+	deplDir := filepath.Join(outputDir, dc.Config.DeploymentName())
 	cobra.CheckErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
 
 	fmt.Println("To deploy your infrastructure please run:")
