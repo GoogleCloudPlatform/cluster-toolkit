@@ -1,4 +1,7 @@
 [codespell]
-skip = .git,*.pdf,*.svg
+# js/ folder seems to contain vendored code
+skip = .git,*.pdf,*.svg,*.min.js,*.js.map,js
+# docs/videos/healthcare-and-life-sciences/lysozyme-example/submit.sh has CONECT - might be "legit"
+ignore-regex = HETATM -e CONECT
 #
-# ignore-words-list =
+ignore-words-list = namd,tempdate,te,ue,startd
