@@ -19,7 +19,13 @@ resource "google_cloudbuild_trigger" "pr_go_build_test" {
   name        = "PR-Go-${replace(each.key, ".", "-")}-build-test"
   description = "Test that the PR builds with Go ${each.key}"
 
-  filename = "tools/cloud-build/build-test-go.yaml"
+  build {
+    step {
+      name       = "golang:${each.key}"
+      entrypoint = "/bin/bash"
+      args       = ["-c", "make ghpc test-engine"]
+    }
+  }
 
   github {
     owner = "GoogleCloudPlatform"
@@ -30,8 +36,4 @@ resource "google_cloudbuild_trigger" "pr_go_build_test" {
     }
   }
   include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
-
-  substitutions = {
-    _GO_VERSION = each.key
-  }
 }
