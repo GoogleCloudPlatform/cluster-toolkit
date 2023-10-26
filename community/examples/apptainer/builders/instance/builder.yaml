@@ -1,0 +1,60 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: apptainer-builder
+
+vars:
+  deployment_name: apptr-bldr
+  project_id: wkh-as-vpc-fluxfw
+  region: us-central1
+  zone: us-central1-a
+  disk_size: 32
+  instance_image:
+    family: rocky-linux-8-optimized-gcp 
+    project: rocky-linux-cloud
+
+deployment_groups:
+- group: scripts
+  modules:
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: apptainer-installation
+    settings:
+      runners:
+      - type: shell
+        content: |
+          #!/usr/bin/env bash
+          dnf install -y epel-release
+          dnf install -y apptainer
+        destination: /tmp/install-apptainer.sh
+
+- group: network
+  modules:
+  - source: modules/network/vpc
+    kind: terraform
+    id: builder-network
+
+- group: builder
+  modules:
+  - source: modules/compute/vm-instance
+    kind: terraform
+    id: builder-vm
+    use:
+    - builder-network
+    - apptainer-installation
+    settings:
+      machine_type: e2-standard-8
+      disk_size_gb: $(vars.disk_size)
+      instance_count: 1
+      disable_public_ips: true

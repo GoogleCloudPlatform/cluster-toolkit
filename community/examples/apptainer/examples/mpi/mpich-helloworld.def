@@ -1,0 +1,23 @@
+Bootstrap: oras
+From: us-docker.pkg.dev/wkh-as-vpc-fluxfw/sifs/mpich-pmi2:latest
+Stage: mpi
+
+%files
+    mpi_hello_world.c /usr/local/src/mpich/mpi_hello_world.c
+
+%post
+    /opt/mpich/4.1.2/bin/mpicc -o /usr/local/bin/mpi_hello_world /usr/local/src/mpich/mpi_hello_world.c
+
+Bootstrap: docker
+From: rockylinux/rockylinux:latest
+Stage: runtime
+
+%files from mpi
+    /opt/mpich/4.1.2 /opt/mpich/4.1.2
+    /usr/local/bin/mpi_hello_world /usr/local/bin/mpi_hello_world
+
+%post
+    dnf -y install epel-release
+    crb enable
+    dnf -y install slurm-pmi librdmacm
+    dnf -y clean all

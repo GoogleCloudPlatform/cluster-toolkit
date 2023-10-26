@@ -1,0 +1,13 @@
+Bootstrap: docker
+From: ubuntu:20.04
+
+%post
+    apt-get update -y
+    apt-get -y install cowsay lolcat
+
+%environment
+    export LC_ALL=C
+    export PATH=/usr/games:$PATH
+
+%runscript
+    date | cowsay | lolcat

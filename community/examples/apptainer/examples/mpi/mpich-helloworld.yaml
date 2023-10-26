@@ -1,0 +1,15 @@
+# In this directory, run the following command to build this builder.
+# $ gcloud builds submit . --config=cloudbuild.yaml
+
+steps:
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'build'
+  - '--fakeroot'
+  - 'mpich-helloworld.sif'
+  - 'mpich-helloworld.def'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'push'
+  - 'mpich-helloworld.sif'
+  - 'oras://us-docker.pkg.dev/$PROJECT_ID/sifs/mpich-helloworld:latest'

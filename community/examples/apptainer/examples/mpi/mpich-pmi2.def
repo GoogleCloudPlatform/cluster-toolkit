@@ -1,0 +1,22 @@
+Bootstrap: docker
+From: rockylinux/rockylinux:latest
+
+%post
+    dnf -y group install "Development tools"
+    dnf -y install epel-release
+    crb enable
+    dnf -y install wget
+    dnf -y install hwloc hwloc-devel slurm-pmi slurm-pmi-devel
+    dnf -y clean all
+    wget https://www.mpich.org/static/downloads/4.1.2/mpich-4.1.2.tar.gz
+    tar zxvf mpich-4.1.2.tar.gz && rm mpich-4.1.2.tar.gz
+    cd mpich-4.1.2
+    ./configure --prefix=/opt/mpich/4.1.2 \
+      --disable-fortran \
+      --with-hwloc   \
+      --with-pmi=pmi2 \
+      --with-pmilib=slurm \
+      --with-slurm-lib=/usr/lib64/slurm \
+      --with-slurm-include=/usr/include/slurm
+    make -j $(nproc)
+    make install
