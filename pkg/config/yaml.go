@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
@@ -72,7 +73,7 @@ func importBlueprint(f string) (Blueprint, YamlCtx, error) {
 			if yep.pos.Line != 0 {
 				yamlCtx.pathToPos[yPath(path.String())] = yep.pos
 			}
-			errs.At(path, fmt.Errorf("YAML parsing error: %s", yep.errMsg))
+			errs.At(path, errors.New(yep.errMsg))
 		}
 		return Blueprint{}, yamlCtx, errs
 	}
@@ -152,7 +153,7 @@ func NewYamlCtx(data []byte) (YamlCtx, error) {
 			if yep.pos.Line != 0 {
 				m[yPath(path.String())] = yep.pos
 			}
-			errs.At(path, fmt.Errorf("YAML parsing error: %s", yep.errMsg))
+			errs.At(path, errors.New(yep.errMsg))
 		}
 		return YamlCtx{m, lines}, errs
 	}
@@ -248,7 +249,7 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	}
 	ty, err := gocty.ImpliedType(s)
 	if err != nil {
-		return err
+		return fmt.Errorf("line %d: %w", n.Line, err)
 	}
 	if y.v, err = gocty.ToCtyValue(s, ty); err != nil {
 		return err
@@ -257,13 +258,15 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	if l, is := IsYamlExpressionLiteral(y.v); is { // HCL literal
 		var e Expression
 		if e, err = ParseExpression(l); err != nil {
-			return err
+			// TODO: point to exact location within expression, see Diagnostic.Subject
+			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
 		y.v = e.AsValue()
 	} else if y.v.Type() == cty.String && hasVariable(y.v.AsString()) { // "simple" variable
 		e, err := SimpleVarToExpression(y.v.AsString())
 		if err != nil {
-			return err
+			// TODO: point to exact location within expression, see Diagnostic.Subject
+			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
 		y.v = e.AsValue()
 	}
