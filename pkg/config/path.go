@@ -17,6 +17,9 @@ package config
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/pkg/errors"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // Path is unique identifier of a piece of configuration.
@@ -56,6 +59,49 @@ func (p mapPath[E]) Dot(k string) E {
 	return e
 }
 
+// ctyPath is a specialization of Path that can be extended with cty.Path
+type ctyPath struct{ basePath }
+
+// Cty builds a path chain that starts with p and each link corresponds to a step in cty.Path
+// If any step in cty.Path is not supported, the path chain will be built up to that point.
+// E.g.
+// Root.Vars.Dot("alpha").Cty(cty.Path{}.IndexInt(6)) == "vars.alpha[6]"
+func (p ctyPath) Cty(cp cty.Path) basePath {
+	cur := p.basePath
+	for _, s := range cp {
+		prev := cur
+		var nxt basePath
+		piece, err := ctyStepToString(s)
+		if err != nil {
+			return cur // fall back to longest path build up to this point
+		}
+		initPath(&nxt, &prev, piece)
+		cur = nxt
+	}
+	return cur
+}
+
+func ctyStepToString(s cty.PathStep) (string, error) {
+	switch s := s.(type) {
+	case cty.GetAttrStep:
+		return fmt.Sprintf(".%s", s.Name), nil // equivalent to mapPath.Dot
+	case cty.IndexStep:
+		switch s.Key.Type() {
+		case cty.Number:
+			return fmt.Sprintf("[%s]", s.Key.AsBigFloat().String()), nil // equivalent to arrayPath.At
+		case cty.String:
+			return fmt.Sprintf(".%s", s.Key.AsString()), nil // equivalent to mapPath.Dot
+		default:
+			return "", errors.New("key value not number or string")
+		}
+	default:
+		return "", errors.Errorf("unknown cty.PathStep type: %#v", s)
+	}
+}
+
+// initPath walks through all child paths of p and initializes them. E.g.
+// initPath(&Root, nil, "") will trigger
+// -> initPath(&Root.BlueprintName, &Root, "blueprint_name")
 func initPath(p any, prev any, piece string) {
 	r := reflect.Indirect(reflect.ValueOf(p))
 	ty := reflect.TypeOf(p).Elem()
@@ -98,7 +144,7 @@ type validatorCfgPath struct {
 	Skip      basePath `path:".skip"`
 }
 
-type dictPath struct{ mapPath[basePath] }
+type dictPath struct{ mapPath[ctyPath] }
 
 type backendPath struct {
 	basePath
