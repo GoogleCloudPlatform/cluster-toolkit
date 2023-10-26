@@ -160,7 +160,7 @@ create_service_account() {
 	set -e
 
 	# Add all required roles to new service account
-	# - can assume we can do this if account creation above worke
+	# - can assume we can do this if account creation above works
 	#
 	sa_fullname=$(sa_expand "${project}" "${account}")
 	for role in "${SA_ROLES[@]}"; do
