@@ -223,19 +223,23 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
 </tr>
-
 <tr>
   <th rowspan="1">HTCondor</th>
   <th></th>
   <th></th>
-  <td>✓</td><td></td><td>✓</td><td></td>
+  <td></td>
+  <td>✓</td>
+  <td>✓</td>
+  <td></td>
 </tr>
-
 <tr>
   <th rowspan="1">Omnia</th>
   <th></th>
   <th></th>
-  <td></td><td></td><td>✓</td><td></td>
+  <td></td>
+  <td></td>
+  <td>✓</td>
+  <td></td>
 </tr>
 </table>
 

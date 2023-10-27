@@ -34,7 +34,10 @@ deployment_groups:
     source: community/modules/remote-desktop/chrome-remote-desktop
     use: [network1]
     settings:
-      name_prefix: crd-default
+      name_prefix: crd-ubuntu
+      instance_image:
+        family: ubuntu-2204-lts
+        project: ubuntu-os-cloud
 
   # This module makes terraform wait until the remote-desktop setup is complete
   - id: wait-ubuntu
@@ -45,10 +48,7 @@ deployment_groups:
     source: community/modules/remote-desktop/chrome-remote-desktop
     use: [network1]
     settings:
-      name_prefix: crd-debian
-      instance_image:
-        family: debian-11
-        project: debian-cloud
+      name_prefix: crd-default
 
   # This module makes terraform wait until the remote-desktop setup is complete
   - id: wait-debian
