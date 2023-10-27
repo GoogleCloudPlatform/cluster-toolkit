@@ -88,7 +88,7 @@ variable "bucket_dir" {
 #####################
 
 #########
-# LOGIN # TODO
+# LOGIN #
 #########
 
 variable "enable_login" {
@@ -99,7 +99,6 @@ EOD
   default     = true
 }
 
-# REVIEWER_NOTE: copied from V6 cluster module as is
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
@@ -164,7 +163,7 @@ variable "login_nodes" {
 ############
 # NODESETS #
 ############
-# REVIEWER_NOTE: copied from V6 cluster module as is
+
 variable "nodeset" {
   description = "Define nodesets, as a list."
   type = list(object({
