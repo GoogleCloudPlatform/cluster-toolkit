@@ -36,7 +36,7 @@ locals {
 resource "google_compute_global_address" "private_ip_address" {
   provider = google-beta
 
-  name          = "slurm-cloudsql-private-ip"
+  name          = "slurm-cloudsql-private-ip-${random_id.resource_name_suffix.hex}"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
   prefix_length = 16

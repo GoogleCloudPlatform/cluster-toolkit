@@ -49,8 +49,25 @@
         <th>{{ cluster.id }}</th>
         <td><a href="{% url 'cluster-detail' cluster.id %}">{{ cluster.name }}</a></td>
         <td>{{ cluster.cloud_zone }}</td>
-        <td>{% if cluster.controller_node %}{{ cluster.controller_node.public_ip }}{% endif %}</td>
-        <td>{% if cluster.login_nodes.count %}{% for login in cluster.login_nodes.all %}{{ login.public_ip }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</td>
+        <td>
+          {% if cluster.controller_node.public_ip %}
+            {{ cluster.controller_node.public_ip }}
+          {% else %}
+            {{ cluster.controller_node.internal_ip }}
+          {% endif %}
+        </td>
+        <td>
+          {% if cluster.login_nodes.count %}
+            {% for login in cluster.login_nodes.all %}
+              {% if login.public_ip %}
+                {{ login.public_ip }}
+              {% else %}
+                {{ login.internal_ip }}
+              {% endif %}
+              {% if not forloop.last %}, {% endif %}
+            {% endfor %}
+          {% endif %}
+        </td>        
         <td>
           {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" %}
           <img src="/static/img/loading.gif" style="width:32px;height:32px;">
@@ -121,6 +138,7 @@
 
   <br/>
   <a href="{% url 'cluster-create' %}" class="btn btn-primary">Add cluster</a>
+  <hr>
 {% endblock %}
 
 {% block tailscript %}

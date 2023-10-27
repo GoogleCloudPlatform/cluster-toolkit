@@ -57,7 +57,6 @@ gcp_machine_table = defaultdict(
 
 def _get_arch_for_node_type_gcp(instance):
     try:
-        logger.info(instance.split("-"))
         family, group, _ = instance.split("-", maxsplit=2)
         return gcp_machine_table[family][group]
     except ValueError:

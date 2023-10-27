@@ -115,23 +115,6 @@ class ClusterForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
 
         super().__init__(*args, **kwargs)
-        credential = self._get_creds(kwargs)
-
-        self.fields["subnet"].queryset = VirtualSubnet.objects.filter(
-            cloud_credential=credential
-        ).filter(Q(cloud_state="i") | Q(cloud_state="m"))
-
-        if self.instance.cloud_state not in ["nm"]:
-            # Need to disable things
-            for field in self.fields.keys():
-                self.field[field].disabled = True
-
-        self.fields["cloud_zone"].widget.choices = [
-            (
-                self.instance.cloud_zone,
-                self.instance.cloud_zone
-            )
-        ]
 
         # For machine types, will use JS to get valid types dependant on
         # cloud zone. So bypass cleaning and choices
@@ -163,10 +146,11 @@ class ClusterForm(forms.ModelForm):
         model = Cluster
 
         fields = (
+            "cloud_credential",
             "name",
             "subnet",
+            "cloud_region",
             "cloud_zone",
-            "cloud_credential",
             "authorised_users",
             "spackdir",
             "controller_instance_type",
@@ -184,10 +168,13 @@ class ClusterForm(forms.ModelForm):
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_credential": forms.Select(
-                attrs={"class": "form-control", "disabled": True}
+                attrs={"class": "form-control"}
             ),
             "subnet": forms.Select(attrs={"class": "form-control"}),
+            "cloud_region": forms.Select(attrs={"class": "form-control", "readonly": "readonly"}),
             "cloud_zone": forms.Select(attrs={"class": "form-control"}),
+            "authorised_users": forms.SelectMultiple(attrs={"class": "form-control"}),
+            "spackdir": forms.TextInput(attrs={"class": "form-control"}),
             "controller_instance_type": forms.Select(
                 attrs={"class": "form-control machine_type_select"}
             ),
@@ -253,6 +240,8 @@ class ClusterPartitionForm(forms.ModelForm):
             "enable_node_reuse",
             "GPU_type",
             "GPU_per_node",
+            "boot_disk_size",
+            "boot_disk_type",
         )
 
     def __init__(self, *args, **kwargs):
@@ -264,24 +253,34 @@ class ClusterPartitionForm(forms.ModelForm):
                 self.fields[field].widget.attrs.update(
                     {"title": self.fields[field].help_text}
                 )
+        
+        if self.fields["boot_disk_type"]:
+            self.fields[field].widget = forms.Select(attrs={"class": "form-control disk_type_select"})  # Set the widget to forms.Select
 
         self.fields["machine_type"].widget.attrs[
             "class"
         ] += " machine_type_select"
-        # NOTE:  This is a just a hack...
-        # We need to set choices such that the current value is valid,
-        # so that the current 'value' is valid, and gets selected.
-        self.fields["machine_type"].widget.choices = [
-            (self.instance.machine_type, self.instance.machine_type)
-        ]
-        self.fields["GPU_type"].widget.choices = [
-            (self.instance.GPU_type, self.instance.GPU_type)
-        ]
 
-        # NOTE: Hack to bypass cleaning 'machine_type' & GPU_type here,
-        # and do so in form_valid
-        self.fields["machine_type"].clean = lambda value: value
-        self.fields["GPU_type"].clean = lambda value: value
+        def prep_dynamic_select(field, value):
+            self.fields[field].widget.choices = [
+                ( value, value )
+            ]
+            self.fields[field].clean = lambda value: value
+
+        prep_dynamic_select(
+            "boot_disk_type",
+            self.instance.boot_disk_type
+        )
+
+        prep_dynamic_select(
+            "machine_type",
+            self.instance.machine_type
+        )
+
+        prep_dynamic_select(
+            "GPU_type",
+            self.instance.GPU_type
+        )
 
     def clean(self):
         cleaned_data = super().clean()
