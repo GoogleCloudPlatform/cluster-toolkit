@@ -192,8 +192,8 @@ func IsYamlExpressionLiteral(v cty.Value) (string, bool) {
 
 // Expression is a representation of expressions in Blueprint
 type Expression interface {
-	// Eval evaluates the expression in the context of Blueprint
-	Eval(bp Blueprint) (cty.Value, error)
+	// Eval evaluates the expression in the given context
+	Eval(ctx hcl.EvalContext) (cty.Value, error)
 	// Tokenize returns Tokens to be used for marshalling HCL
 	Tokenize() hclwrite.Tokens
 	// References return Reference for all variables used in the expression
@@ -254,16 +254,20 @@ type BaseExpression struct {
 }
 
 // Eval evaluates the expression in the context of Blueprint
-func (e BaseExpression) Eval(bp Blueprint) (cty.Value, error) {
-	ctx := hcl.EvalContext{
-		Variables: map[string]cty.Value{"var": bp.Vars.AsObject()},
-		Functions: functions(),
-	}
+func (e BaseExpression) Eval(ctx hcl.EvalContext) (cty.Value, error) {
 	v, diag := e.e.Value(&ctx)
 	if diag.HasErrors() {
 		return cty.NilVal, diag
 	}
 	return v, nil
+}
+
+// BlueprintEvalContext build an evaluation context of blueprint
+func BlueprintEvalContext(bp Blueprint) hcl.EvalContext {
+	return hcl.EvalContext{
+		Variables: map[string]cty.Value{"var": bp.Vars.AsObject()},
+		Functions: functions(),
+	}
 }
 
 // Tokenize returns Tokens to be used for marshalling HCL
@@ -449,10 +453,10 @@ func valueReferences(v cty.Value) []Reference {
 	return maps.Keys(r)
 }
 
-func evalValue(v cty.Value, bp Blueprint) (cty.Value, error) {
+func evalValue(v cty.Value, ctx hcl.EvalContext) (cty.Value, error) {
 	return cty.Transform(v, func(p cty.Path, v cty.Value) (cty.Value, error) {
 		if e, is := IsExpressionValue(v); is {
-			return e.Eval(bp)
+			return e.Eval(ctx)
 		}
 		return v, nil
 	})

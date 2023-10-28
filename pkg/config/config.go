@@ -727,7 +727,8 @@ func (bp *Blueprint) evalVars() error {
 		}
 
 		used[n] = 2 // remove from stack and evaluate
-		ev, err := evalValue(v, Blueprint{Vars: res})
+		ctx := BlueprintEvalContext(Blueprint{Vars: res})
+		ev, err := evalValue(v, ctx)
 		res.Set(n, ev)
 		return err
 	}

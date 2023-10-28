@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"strings"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	compute "google.golang.org/api/compute/v1"
@@ -244,11 +245,19 @@ func (e ValidatorError) Error() string {
 	return fmt.Sprintf("validator %q failed:\n%v", e.Validator, e.Err)
 }
 
+func makeEvalCtx(bp config.Blueprint) hcl.EvalContext {
+	ctx := config.BlueprintEvalContext(bp)
+	ctx.Functions["quota_cpu"] = CPUQuotaFunc
+	return ctx
+}
+
 // Execute runs all validators on the blueprint
 func Execute(bp config.Blueprint) error {
 	if bp.ValidationLevel == config.ValidationIgnore {
 		return nil
 	}
+	evalCtx := makeEvalCtx(bp)
+
 	impl := implementations()
 	errs := config.Errors{}
 	for iv, v := range validators(bp) {
@@ -263,7 +272,7 @@ func Execute(bp config.Blueprint) error {
 			continue
 		}
 
-		inp, err := v.Inputs.Eval(bp)
+		inp, err := v.Inputs.Eval(evalCtx)
 		if err != nil {
 			errs.At(p.Inputs, err)
 			continue

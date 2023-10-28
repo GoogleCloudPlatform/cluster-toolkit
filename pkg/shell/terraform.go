@@ -356,7 +356,8 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 
 		varsValues := dc.Config.Vars.Items()
 		mergeMapsWithoutLoss(allInputValues, varsValues)
-		evaluatedSettings, err := newModule.Settings.Eval(config.Blueprint{Vars: config.NewDict(allInputValues)})
+		ctx := config.BlueprintEvalContext(config.Blueprint{Vars: config.NewDict(allInputValues)})
+		evaluatedSettings, err := newModule.Settings.Eval(ctx)
 		if err != nil {
 			return err
 		}

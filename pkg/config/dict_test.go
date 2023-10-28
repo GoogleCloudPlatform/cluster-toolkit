@@ -97,7 +97,8 @@ func TestEval(t *testing.T) {
 			"white": cty.StringVal("stripes"),
 			"green": cty.StringVal("grass"),
 		})})
-	got, err := d.Eval(bp)
+	ctx := BlueprintEvalContext(bp)
+	got, err := d.Eval(ctx)
 	if err != nil {
 		t.Fatalf("failed to eval: %v", err)
 	}

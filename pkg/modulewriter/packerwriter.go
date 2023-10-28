@@ -63,6 +63,7 @@ func (w PackerWriter) writeDeploymentGroup(
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
 	groupPath := filepath.Join(deployDir, string(depGroup.Name))
 	igcInputs := map[string]bool{}
+	evalCtx := config.BlueprintEvalContext(dc.Config)
 
 	for _, mod := range depGroup.Modules {
 		pure := config.Dict{}
@@ -77,7 +78,7 @@ func (w PackerWriter) writeDeploymentGroup(
 			}
 		}
 
-		av, err := pure.Eval(dc.Config)
+		av, err := pure.Eval(evalCtx)
 		if err != nil {
 			return err
 		}

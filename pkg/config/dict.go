@@ -17,6 +17,7 @@ package config
 import (
 	"fmt"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -89,10 +90,10 @@ func (d Dict) IsZero() bool {
 
 // Eval returns a copy of this Dict, where all Expressions
 // are evaluated and replaced by result of evaluation.
-func (d Dict) Eval(bp Blueprint) (Dict, error) {
+func (d Dict) Eval(ctx hcl.EvalContext) (Dict, error) {
 	var res Dict
 	for k, v := range d.Items() {
-		r, err := evalValue(v, bp)
+		r, err := evalValue(v, ctx)
 		if err != nil {
 			return Dict{}, fmt.Errorf("error while trying to evaluate %#v: %w", k, err)
 		}

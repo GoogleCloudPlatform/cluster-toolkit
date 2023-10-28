@@ -190,6 +190,7 @@ func TestFlattenFunctionCallExpression(t *testing.T) {
 	bp := Blueprint{Vars: NewDict(map[string]cty.Value{
 		"three": cty.NumberIntVal(3),
 	})}
+	ctx := BlueprintEvalContext(bp)
 	expr := FunctionCallExpression("flatten", cty.TupleVal([]cty.Value{
 		cty.TupleVal([]cty.Value{cty.NumberIntVal(1), cty.NumberIntVal(2)}),
 		GlobalRef("three").AsExpression().AsValue(),
@@ -200,7 +201,7 @@ func TestFlattenFunctionCallExpression(t *testing.T) {
 		cty.NumberIntVal(2),
 		cty.NumberIntVal(3)})
 
-	got, err := expr.Eval(bp)
+	got, err := expr.Eval(ctx)
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
 	}
@@ -215,6 +216,8 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 			"two": cty.NumberIntVal(2),
 		}),
 	})}
+	ctx := BlueprintEvalContext(bp)
+
 	expr := FunctionCallExpression("merge",
 		cty.ObjectVal(map[string]cty.Value{
 			"one": cty.NumberIntVal(1),
@@ -228,7 +231,7 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 		"two": cty.NumberIntVal(2),
 	})
 
-	got, err := expr.Eval(bp)
+	got, err := expr.Eval(ctx)
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
 	}
