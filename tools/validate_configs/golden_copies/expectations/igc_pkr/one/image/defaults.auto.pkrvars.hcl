@@ -19,7 +19,6 @@ deployment_name = "golden_copy_deployment"
 labels = {
   ghpc_blueprint  = "igc"
   ghpc_deployment = "golden_copy_deployment"
-  ghpc_role       = "packer"
 }
 
 project_id = "invalid-project"

@@ -20,8 +20,6 @@ import (
 	"regexp"
 	"strings"
 
-	"path/filepath"
-
 	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/agext/levenshtein"
@@ -33,7 +31,6 @@ import (
 const (
 	blueprintLabel  string = "ghpc_blueprint"
 	deploymentLabel string = "ghpc_deployment"
-	roleLabel       string = "ghpc_role"
 )
 
 var (
@@ -229,22 +226,8 @@ func moduleHasInput(m Module, n string) bool {
 	return false
 }
 
-// Returns enclosing directory of source directory.
-func getRole(source string) string {
-	role := filepath.Base(filepath.Dir(source))
-	// Returned by base if containing directory was not explicit
-	invalidRoles := []string{"..", ".", "/"}
-	for _, ir := range invalidRoles {
-		if role == ir {
-			return "other"
-		}
-	}
-	return role
-}
-
 // combineLabels sets defaults for labels based on other variables and merges
-// the global labels defined in Vars with module setting labels. It also
-// determines the role and sets it for each module independently.
+// the global labels defined in Vars with module setting labels.
 func (dc *DeploymentConfig) combineLabels() {
 	vars := &dc.Config.Vars
 	defaults := map[string]cty.Value{
@@ -270,17 +253,15 @@ func combineModuleLabels(mod *Module, dc DeploymentConfig) {
 		return // no op
 	}
 
-	extra := map[string]cty.Value{
-		roleLabel: cty.StringVal(getRole(mod.Source))}
-	args := []cty.Value{
-		GlobalRef(labels).AsExpression().AsValue(),
-		cty.ObjectVal(extra),
-	}
-	if !mod.Settings.Get(labels).IsNull() {
-		args = append(args, mod.Settings.Get(labels))
-	}
+	ref := GlobalRef(labels).AsExpression().AsValue()
+	set := mod.Settings.Get(labels)
 
-	mod.Settings.Set(labels, FunctionCallExpression("merge", args...).AsValue())
+	if !set.IsNull() {
+		merged := FunctionCallExpression("merge", ref, set).AsValue()
+		mod.Settings.Set(labels, merged) // = merge(vars.labels, {...labels_from_settings...})
+	} else {
+		mod.Settings.Set(labels, ref) // = vars.labels
+	}
 }
 
 // mergeMaps takes an arbitrary number of maps, and returns a single map that contains

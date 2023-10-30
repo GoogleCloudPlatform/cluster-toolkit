@@ -56,10 +56,7 @@ deployment_groups:
           - network0
         settings:
           deployment_name: ((var.deployment_name ))
-          labels: |-
-            ((merge(var.labels, {
-              ghpc_role = "file-system"
-            }) ))
+          labels: ((var.labels ))
           local_mount: /home
           network_id: ((module.network0.network_id ))
           project_id: ((var.project_id ))
@@ -72,10 +69,7 @@ deployment_groups:
           - network0
         settings:
           deployment_name: ((var.deployment_name ))
-          labels: |-
-            ((merge(var.labels, {
-              ghpc_role = "file-system"
-            }) ))
+          labels: ((var.labels ))
           local_mount: /projects
           network_id: ((module.network0.network_id ))
           project_id: ((var.project_id ))
@@ -90,10 +84,7 @@ deployment_groups:
             sensitive: true
         settings:
           deployment_name: ((var.deployment_name ))
-          labels: |-
-            ((merge(var.labels, {
-              ghpc_role = "scripts"
-            }) ))
+          labels: ((var.labels ))
           project_id: ((var.project_id ))
           region: ((var.region ))
           runners:
@@ -122,10 +113,7 @@ deployment_groups:
           - windows_startup
         settings:
           deployment_name: ((var.deployment_name ))
-          labels: |-
-            ((merge(var.labels, {
-              ghpc_role = "packer"
-            })))
+          labels: ((var.labels ))
           project_id: ((var.project_id ))
           startup_script: ((module.script.startup_script))
           subnetwork_name: ((module.network0.subnetwork_name))

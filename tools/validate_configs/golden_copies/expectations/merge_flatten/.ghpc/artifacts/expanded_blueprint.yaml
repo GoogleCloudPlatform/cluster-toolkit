@@ -50,10 +50,7 @@ deployment_groups:
           - network
         settings:
           deployment_name: ((var.deployment_name ))
-          labels: |-
-            ((merge(var.labels, {
-              ghpc_role = "file-system"
-            }) ))
+          labels: ((var.labels ))
           local_mount: /first
           network_id: ((module.network.network_id ))
           project_id: ((var.project_id ))
@@ -66,10 +63,7 @@ deployment_groups:
           - network
         settings:
           deployment_name: ((var.deployment_name ))
-          labels: |-
-            ((merge(var.labels, {
-              ghpc_role = "file-system"
-            }) ))
+          labels: ((var.labels ))
           local_mount: /first
           network_id: ((module.network.network_id ))
           project_id: ((var.project_id ))
@@ -84,8 +78,6 @@ deployment_groups:
           deployment_name: ((var.deployment_name ))
           labels: |-
             ((merge(var.labels, {
-              ghpc_role = "compute"
-              }, {
               green = "sleeves"
             }) ))
           network_storage: ((flatten([module.first-fs.network_storage]) ))
@@ -100,10 +92,7 @@ deployment_groups:
           - second-fs
         settings:
           deployment_name: ((var.deployment_name ))
-          labels: |-
-            ((merge(var.labels, {
-              ghpc_role = "compute"
-            }) ))
+          labels: ((var.labels ))
           network_storage: ((flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])]) ))
           project_id: ((var.project_id ))
           region: ((var.region ))
