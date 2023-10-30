@@ -35,8 +35,8 @@ EOF
 		echo "deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
 		curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 
-		sudo apt-get update
-		sudo apt-get -y install gcsfuse
+		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
+		apt-get -y install gcsfuse
 	else
 		echo 'Unsuported distribution'
 		return 1
