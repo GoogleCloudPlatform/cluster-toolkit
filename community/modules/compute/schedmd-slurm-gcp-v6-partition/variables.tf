@@ -128,3 +128,38 @@ variable "nodeset" {
     error_message = "All nodesets must have a unique name."
   }
 }
+
+variable "nodeset_tpu" {
+  description = "Define TPU nodesets, as a list."
+  type = list(object({
+    node_count_static      = optional(number, 0)
+    node_count_dynamic_max = optional(number, 1)
+    nodeset_name           = string
+    enable_public_ip       = optional(bool, false)
+    node_type              = string
+    accelerator_config = optional(object({
+      topology = string
+      version  = string
+      }), {
+      topology = ""
+      version  = ""
+    })
+    tf_version   = string
+    preemptible  = optional(bool, false)
+    preserve_tpu = optional(bool, true)
+    zone         = string
+    data_disks   = optional(list(string), [])
+    docker_image = optional(string, "")
+    subnetwork   = optional(string, "")
+    service_account = optional(object({
+      email  = optional(string)
+      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
+    }))
+  }))
+  default = []
+
+  validation {
+    condition     = length(distinct([for x in var.nodeset_tpu : x.nodeset_name])) == length(var.nodeset_tpu)
+    error_message = "All TPU nodesets must have a unique name."
+  }
+}
