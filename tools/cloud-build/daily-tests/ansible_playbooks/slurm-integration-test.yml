@@ -168,6 +168,7 @@
     - name: Trigger failure (rescue blocks otherwise revert failures)
       ansible.builtin.fail:
         msg: "Failed while setting up test infrastructure"
+      when: true
 
 - name: Run Integration Tests
   hosts: remote_host
@@ -218,10 +219,6 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         project: "{{ project }}"
-
-    - name: Trigger failure (rescue blocks otherwise revert failures)
-      ansible.builtin.fail:
-        msg: "Failed during the integration tests (see above)"
 
     ## Always cleanup, even on failure
     always:
