@@ -12,17 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-locals {
-
-  use_placement = [for ns in var.partition_conf : ns.nodeset_name if ns.enable_placement]
-
-  partition = {
-    default               = var.is_default
-    enable_job_exclusive  = var.exclusive
-    network_storage       = var.network_storage
-    partition_conf        = var.partition_conf
-    partition_name        = var.partition_name
-    partition_nodeset     = [for ns in var.nodeset : ns.nodeset_name]
-    partition_nodeset_tpu = [for ns in var.nodeset_tpu : ns.nodeset_name]
-  }
+output "nodeset_tpu" {
+  description = "Details of the nodeset tpu. Typically used as input to `schedmd-slurm-gcp-v6-partition`."
+  value       = local.nodeset_tpu
 }

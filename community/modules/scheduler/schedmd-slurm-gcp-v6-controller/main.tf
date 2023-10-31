@@ -120,7 +120,8 @@ module "slurm_cluster" {
   enable_login = var.enable_login
   login_nodes  = var.login_nodes
 
-  nodeset = var.nodeset
+  nodeset     = var.nodeset
+  nodeset_tpu = var.nodeset_tpu
 
   partitions = var.partitions
 
